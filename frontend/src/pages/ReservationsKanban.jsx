@@ -554,7 +554,7 @@ function NewReservationModal({ onClose, onCreated, branches, userBranchId, isCCO
             <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors">
               إلغاء
             </button>
-          </div>
+         </div>
         </div>
       </div>
     </div>
@@ -589,6 +589,11 @@ export default function ReservationsKanban() {
     }).then(r => r.data.results || r.data),
     refetchInterval: 30_000,
   })
+ 
+  const rawList = reservationsQuery.data
+  const reservationsList = Array.isArray(rawList) ? rawList : []
+  const isLoading = reservationsQuery.isLoading
+  const reservationsError = reservationsQuery.error
 
   const rawList = reservationsQuery.data
   const reservationsList = Array.isArray(rawList) ? rawList : []
@@ -625,7 +630,11 @@ export default function ReservationsKanban() {
     } catch { setOpenModal(r); setDetailData(r) }
   }
 
-  // Group by status, applying filters
+
+  // Guard against unexpected API payloads to avoid runtime blank screens
+  const safeList = Array.isArray(rawList) ? rawList : []
+
+   // Group by status, applying filters
   const grouped = COLUMNS.reduce((acc, col) => {
     acc[col.key] = reservationsList.filter(r => {
       if (r.status !== col.key) return false
@@ -667,12 +676,7 @@ export default function ReservationsKanban() {
         {isCCOrAdmin && (
           <select
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
-            value={filterBranch}
-            onChange={e => setFilterBranch(e.target.value)}
-          >
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
+@@ -671,50 +674,55 @@ export default function ReservationsKanban() {
         )}
 
         {/* Priority filter */}
@@ -698,6 +702,11 @@ export default function ReservationsKanban() {
       {/* Kanban board */}
       <div className="flex-1 overflow-x-auto">
         <div className="flex gap-3 p-4 h-full" style={{ width: 'max-content', minWidth: '100%' }}>
+          {reservationsError && (
+            <div className="w-full bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+              تعذر تحميل الحجوزات حالياً. يرجى تحديث الصفحة أو التأكد من تسجيل الدخول.
+            </div>
+          )}
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
               جاري التحميل...
