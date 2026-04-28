@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = new URL('../src/', import.meta.url)
-const PATTERN = /^(<<<<<<<|=======|>>>>>>>|@@\s+-\d+,\d+\s+\+\d+,\d+\s+@@)/m
+const PATTERN = /^\s*(<<<<<<<|=======|>>>>>>>|@@\s+-\d+,\d+\s+\+\d+,\d+\s+@@)/m
 const EXTS = new Set(['.js', '.jsx', '.ts', '.tsx', '.css', '.html'])
 
 function walk(dir, files = []) {
