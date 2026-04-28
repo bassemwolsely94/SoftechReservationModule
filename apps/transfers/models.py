@@ -45,6 +45,8 @@ class TransferRequest(models.Model):
     destination_branch = models.ForeignKey(
         'branches.Branch',
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name='incoming_requests',
         verbose_name='الفرع المصدر',
     )
@@ -60,11 +62,13 @@ class TransferRequest(models.Model):
 
     # ── People ────────────────────────────────────────────────────────────────
     created_by = models.ForeignKey(
-        'users.StaffProfile',
-        on_delete=models.PROTECT,
-        related_name='created_transfer_requests',
-        verbose_name='أنشئ بواسطة',
-    )
+    'users.StaffProfile',
+    on_delete=models.PROTECT,
+    null=True,
+    blank=True,
+    related_name='created_transfer_requests',
+    verbose_name='أنشئ بواسطة',
+)
     reviewed_by = models.ForeignKey(
         'users.StaffProfile',
         on_delete=models.SET_NULL,
@@ -180,6 +184,8 @@ class TransferRequestItem(models.Model):
         on_delete=models.CASCADE,
         related_name='items',
         verbose_name='الطلب',
+        null=True,
+        blank=True
     )
     item = models.ForeignKey(
         'catalog.Item',

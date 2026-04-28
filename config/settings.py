@@ -171,3 +171,8 @@ SYBASE_HOST     = config('SYBASE_HOST', default='localhost')
 SYBASE_PORT     = config('SYBASE_PORT', default='5000')
 SYBASE_USER     = config('SYBASE_USER', default='')
 SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
+
+
+MIDDLEWARE += [
+    'core.middleware.db_cleanup.CloseConnectionsMiddleware',
+]
