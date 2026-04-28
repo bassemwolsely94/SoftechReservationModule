@@ -579,7 +579,7 @@ export default function ReservationsKanban() {
     queryFn: () => branchesApi.list().then(r => r.data),
   })
 
-  const { data: rawList = [], isLoading, error: reservationsError } = useQuery({
+  const reservationsQuery = useQuery({
     queryKey: ['reservations-kanban', filterBranch, filterPriority, search],
     queryFn: () => reservationsApi.list({
       branch: filterBranch || undefined,
@@ -589,6 +589,11 @@ export default function ReservationsKanban() {
     }).then(r => r.data.results || r.data),
     refetchInterval: 30_000,
   })
+ 
+  const rawList = reservationsQuery.data
+  const reservationsList = Array.isArray(rawList) ? rawList : []
+  const isLoading = reservationsQuery.isLoading
+  const reservationsError = reservationsQuery.error
 
   // Status change mutation
   const changeMutation = useMutation({
@@ -620,13 +625,13 @@ export default function ReservationsKanban() {
     } catch { setOpenModal(r); setDetailData(r) }
   }
 
+
   // Guard against unexpected API payloads to avoid runtime blank screens
   const safeList = Array.isArray(rawList) ? rawList : []
 
-  // Group by status, applying filters
+   // Group by status, applying filters
   const grouped = COLUMNS.reduce((acc, col) => {
-    acc[col.key] = rawList.filter(r => {
-    acc[col.key] = safeList.filter(r => {
+    acc[col.key] = reservationsList.filter(r => {
       if (r.status !== col.key) return false
       if (!isCCOrAdmin && r.branch_id !== user?.branch_id) return false
       return true
@@ -636,14 +641,12 @@ export default function ReservationsKanban() {
 
   // Merged cancelled + expired
   grouped.cancelled = [
-    ...(rawList.filter(r => r.status === 'cancelled')),
-    ...(rawList.filter(r => r.status === 'expired')),
-    ...(safeList.filter(r => r.status === 'cancelled')),
-    ...(safeList.filter(r => r.status === 'expired')),
+    ...(reservationsList.filter(r => r.status === 'cancelled')),
+    ...(reservationsList.filter(r => r.status === 'expired')),
   ]
 
-  const totalActive = rawList.filter(r => !['fulfilled','cancelled','expired'].includes(r.status)).length
-  const totalActive = safeList.filter(r => !['fulfilled','cancelled','expired'].includes(r.status)).length
+  const totalActive = reservationsList.filter(r => !['fulfilled','cancelled','expired'].includes(r.status)).length
+
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
@@ -703,6 +706,10 @@ export default function ReservationsKanban() {
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
               جاري التحميل...
+            </div>
+             )) : reservationsError ? (
+            <div className="flex-1 flex items-center justify-center text-red-500 text-sm">
+              حدث خطأ أثناء تحميل الحجوزات.
             </div>
           ) : (
             COLUMNS.map(col => (
