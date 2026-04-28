@@ -595,6 +595,11 @@ export default function ReservationsKanban() {
   const isLoading = reservationsQuery.isLoading
   const reservationsError = reservationsQuery.error
 
+  const rawList = reservationsQuery.data
+  const reservationsList = Array.isArray(rawList) ? rawList : []
+  const isLoading = reservationsQuery.isLoading
+  const reservationsError = reservationsQuery.error
+
   // Status change mutation
   const changeMutation = useMutation({
     mutationFn: ({ id, status, note }) => reservationsApi.changeStatus(id, status, note || ''),
@@ -646,7 +651,6 @@ export default function ReservationsKanban() {
   ]
 
   const totalActive = reservationsList.filter(r => !['fulfilled','cancelled','expired'].includes(r.status)).length
-
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
@@ -707,7 +711,7 @@ export default function ReservationsKanban() {
             <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
               جاري التحميل...
             </div>
-             )) : reservationsError ? (
+          ) : reservationsError ? (
             <div className="flex-1 flex items-center justify-center text-red-500 text-sm">
               حدث خطأ أثناء تحميل الحجوزات.
             </div>
