@@ -592,6 +592,7 @@ export default function ReservationsKanban() {
  
   const rawList = reservationsQuery.data
   const reservationsList = Array.isArray(rawList) ? rawList : []
+  const hasData = reservationsList.length > 0
   const isLoading = reservationsQuery.isLoading
   const reservationsError = reservationsQuery.error
 
@@ -626,10 +627,7 @@ export default function ReservationsKanban() {
   }
 
 
-  // Guard against unexpected API payloads to avoid runtime blank screens
-  const safeList = Array.isArray(rawList) ? rawList : []
-
-   // Group by status, applying filters
+  // Group by status, applying filters
   const grouped = COLUMNS.reduce((acc, col) => {
     acc[col.key] = reservationsList.filter(r => {
       if (r.status !== col.key) return false
@@ -664,6 +662,7 @@ export default function ReservationsKanban() {
         <input
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-48 focus:outline-none focus:border-blue-300"
           placeholder="بحث..."
+          aria-label="بحث في الحجوزات"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -672,6 +671,7 @@ export default function ReservationsKanban() {
         {isCCOrAdmin && (
   <>
     <select
+      aria-label="تصفية حسب الفرع"
       className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
       value={filterBranch}
       onChange={e => setFilterBranch(e.target.value)}
@@ -688,6 +688,7 @@ export default function ReservationsKanban() {
 
 {/* Priority filter */}
 <select
+  aria-label="تصفية حسب الأولوية"
   className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
   value={filterPriority}
   onChange={e => setFilterPriority(e.target.value)}
@@ -709,31 +710,33 @@ export default function ReservationsKanban() {
       {/* Kanban board */}
       <div className="flex-1 overflow-x-auto">
         <div className="flex gap-3 p-4 h-full" style={{ width: 'max-content', minWidth: '100%' }}>
-          {reservationsError && (
-            <div className="w-full bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              تعذر تحميل الحجوزات حالياً. يرجى تحديث الصفحة أو التأكد من تسجيل الدخول.
-            </div>
-          )}
           {isLoading ? (
-  <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-    جاري التحميل...
-  </div>
-) : reservationsError ? (
-  <div className="flex-1 flex items-center justify-center text-red-500 text-sm">
-    حدث خطأ أثناء تحميل الحجوزات.
-  </div>
-) : (
-  COLUMNS.map(col => (
-    <KanbanColumn
-      key={col.key}
-      col={col}
-      cards={grouped[col.key] || []}
-      onStatusChange={(id, status, note) => changeMutation.mutate({ id, status, note })}
-      onOpen={openDetail}
-      isCCOrAdmin={isCCOrAdmin}
-    />
-  ))
-)}
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm" role="status" aria-live="polite">
+              جاري تحميل الحجوزات...
+            </div>
+          ) : reservationsError ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">حدث خطأ أثناء تحميل الحجوزات.</div>
+              <button className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" onClick={() => reservationsQuery.refetch()}>
+                إعادة المحاولة
+              </button>
+            </div>
+          ) : !hasData ? (
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+              لا توجد حجوزات حالياً حسب الفلاتر المحددة.
+            </div>
+          ) : (
+            COLUMNS.map(col => (
+              <KanbanColumn
+                key={col.key}
+                col={col}
+                cards={grouped[col.key] || []}
+                onStatusChange={(id, status, note) => changeMutation.mutate({ id, status, note })}
+                onOpen={openDetail}
+                isCCOrAdmin={isCCOrAdmin}
+              />
+            ))
+          )}
         </div>
       </div>
 

@@ -42,10 +42,10 @@ QUERY_STOCK = """
 # We keep ptcode IN ('10','11') but exclude insurance ptclassifcodes
 QUERY_CUSTOMERS = """
     SELECT
-        p.personcode, p.personname, p.personadd1, p.personadd2,
+        p.ptcode, p.personname, p.personadd1, p.personadd2,
         p.persondofbirth, p.branchcode, p.personnote, p.ptcode,
         p.ptclassifcode, p.custdiscp, p.personsstatus
-    FROM SOFTECHDB9.dbo.personsdata p
+    FROM SOFTECHDB9.dbo.localcustomers p
     WHERE p.ptcode IN ('10', '11')
       AND p.ptclassifcode NOT IN ('15', '16', '17', '18', '20', '25', '30')
       AND (p.personsstatus IS NULL OR p.personsstatus != 'X')
@@ -53,10 +53,10 @@ QUERY_CUSTOMERS = """
 
 # ── CUSTOMER PHONES ───────────────────────────────────────────────────────────
 QUERY_CUSTOMER_PHONES = """
-    SELECT ph.personcode, ph.phoneno, ph.phonetype
+    SELECT ph.ptcode, ph.phoneno, ph.phonetype
     FROM SOFTECHDB9.dbo.personphones ph
     WHERE ph.ptcode IN ('10', '11') AND ph.phoneblock = 0
-    ORDER BY ph.personcode, ph.phonetype
+    ORDER BY ph.ptcode, ph.phonetype
 """
 
 # ── SALES LINES — incremental (last 10 min) ───────────────────────────────────
