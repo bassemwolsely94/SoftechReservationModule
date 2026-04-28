@@ -1,0 +1,321 @@
+/* ─── Google Fonts ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+/* ─── Base ──────────────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    direction: rtl;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'Cairo', sans-serif;
+    background-color: #f8faf9;
+    color: #1a2e24;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100dvh;
+  }
+
+  /* Custom scrollbar — webkit */
+  ::-webkit-scrollbar          { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track    { background: transparent; }
+  ::-webkit-scrollbar-thumb    { background: #d1d5db; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+  /* Remove default number input spinners */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  /* Smooth focus rings */
+  *:focus-visible {
+    outline: 2px solid #1B6B3A;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* ─── Component layer ───────────────────────────────────────────────────────── */
+@layer components {
+
+  /* ── Buttons ────────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 active:bg-brand-800
+           text-white font-semibold px-4 py-2 rounded-lg
+           transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           inline-flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100
+           text-gray-700 font-medium px-4 py-2 rounded-lg
+           transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           inline-flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 active:bg-red-800
+           text-white font-semibold px-4 py-2 rounded-lg
+           transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed
+           inline-flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+
+  .btn-ghost {
+    @apply text-gray-500 hover:text-gray-800 hover:bg-gray-100
+           font-medium px-3 py-1.5 rounded-lg
+           transition-colors duration-150
+           inline-flex items-center justify-center gap-1.5 whitespace-nowrap;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+  }
+
+  .card-hover {
+    @apply card cursor-pointer
+           hover:shadow-md hover:border-gray-200
+           transition-all duration-150;
+  }
+
+  /* ── Form elements ──────────────────────────────────────────────────────── */
+  .input-field {
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+           bg-white text-gray-800 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent
+           transition-colors duration-150;
+  }
+
+  .label {
+    @apply block text-xs font-semibold text-gray-600 mb-1;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .badge-dot {
+    @apply w-1.5 h-1.5 rounded-full inline-block mr-1;
+  }
+
+  /* ── Skeleton loader ────────────────────────────────────────────────────── */
+  .skeleton {
+    @apply bg-gray-100 rounded-xl animate-pulse;
+  }
+
+  .skeleton-text {
+    @apply h-3 bg-gray-100 rounded-full animate-pulse;
+  }
+
+  .skeleton-avatar {
+    @apply rounded-full bg-gray-100 animate-pulse flex-shrink-0;
+  }
+
+  /* ── Page header — sticky top bar shared across all pages ───────────────── */
+  .page-header {
+    @apply bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-20;
+  }
+
+  .page-body {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-6;
+  }
+
+  /* ── Section title ───────────────────────────────────────────────────────── */
+  .section-title {
+    @apply text-sm font-bold text-gray-700 flex items-center gap-2 mb-4;
+  }
+
+  /* ── Table ───────────────────────────────────────────────────────────────── */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table thead tr {
+    @apply bg-gray-50 border-b border-gray-100;
+  }
+
+  .data-table thead th {
+    @apply text-right px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-gray-50 last:border-0
+           hover:bg-brand-50 transition-colors duration-100;
+  }
+
+  .data-table tbody td {
+    @apply px-4 py-3 text-gray-700;
+  }
+
+  /* ── Divider ─────────────────────────────────────────────────────────────── */
+  .divider {
+    @apply border-t border-gray-100 my-4;
+  }
+
+  /* ── Empty state container ───────────────────────────────────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-14 text-center px-6;
+  }
+
+  /* ── Mobile bottom nav safe area ────────────────────────────────────────── */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* ─── Utility layer ─────────────────────────────────────────────────────────── */
+@layer utilities {
+
+  /* Shimmer variant of skeleton — more polished than pure pulse */
+  .shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 37%, #f0f0f0 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+
+  /* RTL-safe truncate */
+  .truncate-rtl {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: right;
+  }
+
+  /* Tabular numerals for KPIs */
+  .tabnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Readable line-height for Arabic prose */
+  .prose-ar {
+    line-height: 1.8;
+    letter-spacing: 0.01em;
+  }
+
+  /* Hide scrollbar but keep scroll */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Glass card */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  /* Gradient brand text */
+  .text-brand-gradient {
+    background: linear-gradient(135deg, #1B6B3A 0%, #38916a 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* ─── Keyframes ─────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(100%); }
+}
+
+/* ─── Animation classes (supplement Tailwind) ───────────────────────────────── */
+.animate-fade-in     { animation: fadeIn     0.25s ease-out both; }
+.animate-slide-in    { animation: slideIn    0.22s ease-out both; }
+.animate-slide-left  { animation: slideInLeft 0.22s ease-out both; }
+.animate-scale-in    { animation: scaleIn    0.2s  ease-out both; }
+.animate-toast-in    { animation: toastIn    0.3s  ease-out both; }
+.animate-toast-out   { animation: toastOut   0.25s ease-in  both; }
+
+/* Stagger children — add to a parent, children get sequential delays */
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+
+/* ─── Toast portal ───────────────────────────────────────────────────────────── */
+#toast-root {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+/* ─── Mobile responsive overrides ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .card {
+    @apply rounded-xl p-4;
+  }
+  .page-body {
+    @apply px-3 py-4;
+  }
+  .data-table thead th,
+  .data-table tbody td {
+    @apply px-3 py-2.5;
+  }
+}
+
+/* ─── Print ──────────────────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .card { box-shadow: none; border: 1px solid #e5e7eb; }
+}

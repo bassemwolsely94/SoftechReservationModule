@@ -1,0 +1,28 @@
+================================================================
+DEMAND ENGINE — SETTINGS & URLS PATCH
+================================================================
+
+1. config/settings.py — add to INSTALLED_APPS:
+   'apps.demand',
+
+2. config/urls.py — add:
+   path('api/demand/', include('apps.demand.urls')),
+
+3. Run migrations:
+   python manage.py migrate
+
+4. Create the app directory:
+   apps/demand/
+     __init__.py      (empty)
+     apps.py
+     models.py
+     service.py
+     serializers.py
+     views.py
+     urls.py
+     admin.py
+     migrations/
+       __init__.py    (empty)
+       0001_initial.py
+
+================================================================
