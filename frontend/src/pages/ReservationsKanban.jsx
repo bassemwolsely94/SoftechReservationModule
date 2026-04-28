@@ -670,22 +670,33 @@ export default function ReservationsKanban() {
 
         {/* Branch filter (CC/admin only) */}
         {isCCOrAdmin && (
-          <select
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
-@@ -671,50 +674,55 @@ export default function ReservationsKanban() {
-        )}
+  <>
+    <select
+      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
+      value={filterBranch}
+      onChange={e => setFilterBranch(e.target.value)}
+    >
+      <option value="">كل الفروع</option>
+      {branches.map(b => (
+        <option key={b.id} value={b.id}>
+          {b.name_ar || b.name}
+        </option>
+      ))}
+    </select>
+  </>
+)}
 
-        {/* Priority filter */}
-        <select
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
-          value={filterPriority}
-          onChange={e => setFilterPriority(e.target.value)}
-        >
-          <option value="">كل الأولويات</option>
-          <option value="urgent">عاجل</option>
-          <option value="chronic">مزمن</option>
-          <option value="normal">عادي</option>
-        </select>
+{/* Priority filter */}
+<select
+  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
+  value={filterPriority}
+  onChange={e => setFilterPriority(e.target.value)}
+>
+  <option value="">كل الأولويات</option>
+  <option value="urgent">عاجل</option>
+  <option value="chronic">مزمن</option>
+  <option value="normal">عادي</option>
+</select>
 
         <button
           onClick={() => setShowNew(true)}
@@ -704,25 +715,25 @@ export default function ReservationsKanban() {
             </div>
           )}
           {isLoading ? (
-            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-              جاري التحميل...
-            </div>
-             )) : reservationsError ? (
-            <div className="flex-1 flex items-center justify-center text-red-500 text-sm">
-              حدث خطأ أثناء تحميل الحجوزات.
-            </div>
-          ) : (
-            COLUMNS.map(col => (
-              <KanbanColumn
-                key={col.key}
-                col={col}
-                cards={grouped[col.key] || []}
-                onStatusChange={(id, status, note) => changeMutation.mutate({ id, status, note })}
-                onOpen={openDetail}
-                isCCOrAdmin={isCCOrAdmin}
-              />
-            ))
-          )}
+  <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+    جاري التحميل...
+  </div>
+) : reservationsError ? (
+  <div className="flex-1 flex items-center justify-center text-red-500 text-sm">
+    حدث خطأ أثناء تحميل الحجوزات.
+  </div>
+) : (
+  COLUMNS.map(col => (
+    <KanbanColumn
+      key={col.key}
+      col={col}
+      cards={grouped[col.key] || []}
+      onStatusChange={(id, status, note) => changeMutation.mutate({ id, status, note })}
+      onOpen={openDetail}
+      isCCOrAdmin={isCCOrAdmin}
+    />
+  ))
+)}
         </div>
       </div>
 
