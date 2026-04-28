@@ -579,7 +579,6 @@ export default function ReservationsKanban() {
     queryFn: () => branchesApi.list().then(r => r.data),
   })
 
-  const { data: rawList = [], isLoading } = useQuery({
   const { data: rawList = [], isLoading, error: reservationsError } = useQuery({
     queryKey: ['reservations-kanban', filterBranch, filterPriority, search],
     queryFn: () => reservationsApi.list({
