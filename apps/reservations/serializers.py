@@ -91,8 +91,8 @@ class ReservationActivityCreateSerializer(serializers.ModelSerializer):
 # ── Reservation List ──────────────────────────────────────────────────────────
 
 class ReservationListSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(source='customer.name', read_only=True)
-    customer_phone = serializers.CharField(source='customer.phone', read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
     branch_name = serializers.CharField(source='branch.name_ar', read_only=True)
@@ -104,6 +104,14 @@ class ReservationListSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source='status_label_ar', read_only=True)
     image_url = serializers.SerializerMethodField()
     activity_count = serializers.SerializerMethodField()
+
+    def get_customer_name(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'name', None) or obj.contact_name or 'عميل'
+
+    def get_customer_phone(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'phone', None) or obj.contact_phone or ''
 
     def get_image_url(self, obj):
         if obj.image:
@@ -135,9 +143,9 @@ class ReservationListSerializer(serializers.ModelSerializer):
 # ── Reservation Detail ────────────────────────────────────────────────────────
 
 class ReservationDetailSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(source='customer.name', read_only=True)
-    customer_phone = serializers.CharField(source='customer.phone', read_only=True)
-    customer_id = serializers.IntegerField(source='customer.id', read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    customer_id = serializers.SerializerMethodField()
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
     item_scientific = serializers.CharField(source='item.name_scientific', read_only=True)
@@ -154,6 +162,18 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
 
     # Live stock at all branches for this item
     stock_by_branch = serializers.SerializerMethodField()
+
+    def get_customer_name(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'name', None) or obj.contact_name or 'عميل'
+
+    def get_customer_phone(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'phone', None) or obj.contact_phone or ''
+
+    def get_customer_id(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'id', None)
 
     def get_image_url(self, obj):
         if obj.image:
