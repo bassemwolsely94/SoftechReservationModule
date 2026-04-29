@@ -47,6 +47,13 @@ QUERY_CUSTOMERS = """
         lc.branchcustclassif, 0 AS custdiscp, '' AS personsstatus, lc.custbranchcode
     FROM SOFTECHDB9.dbo.localcustomers lc
     WHERE lc.phcode IS NOT NULL AND lc.phcode != ''
+        p.ptcode, p.personname, p.personadd1, p.personadd2,
+        p.persondofbirth, p.branchcode, p.personnote, p.ptcode,
+        p.ptclassifcode, p.custdiscp, p.personsstatus
+    FROM SOFTECHDB9.dbo.localcustomers p
+    WHERE p.ptcode IN ('10', '11')
+      AND p.ptclassifcode NOT IN ('15', '16', '17', '18', '20', '25', '30')
+      AND (p.personsstatus IS NULL OR p.personsstatus != 'X')
 """
 
 # ── CUSTOMER PHONES ───────────────────────────────────────────────────────────
@@ -64,6 +71,10 @@ QUERY_CUSTOMER_PHONES = """
       AND lc.branchcustphone IS NOT NULL AND lc.branchcustphone != ''
 
     ORDER BY 1, 3
+    SELECT ph.ptcode, ph.phoneno, ph.phonetype
+    FROM SOFTECHDB9.dbo.personphones ph
+    WHERE ph.ptcode IN ('10', '11') AND ph.phoneblock = 0
+    ORDER BY ph.ptcode, ph.phonetype
 """
 
 # ── SALES LINES — incremental (last 10 min) ───────────────────────────────────
