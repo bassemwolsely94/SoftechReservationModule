@@ -44,6 +44,13 @@ function formatDate(d) {
 
 // ── Card component ────────────────────────────────────────────────────────────
 function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin }) {
+  const openCard = () => onOpen(reservation)
+  const onCardKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      openCard()
+    }
+  }
   const col = COLUMNS.find(c => c.key === reservation.status) || COLUMNS[0]
   const pri = PRIORITY_BADGE[reservation.priority] || PRIORITY_BADGE.normal
   const transitions = STATUS_TRANSITIONS[reservation.status] || []
@@ -51,7 +58,11 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin }) {
   return (
     <div
       className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all duration-150 select-none"
-      onClick={() => onOpen(reservation)}
+      onClick={openCard}
+      onKeyDown={onCardKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label={`فتح تفاصيل الحجز رقم ${reservation.id} للعميل ${reservation.customer_name || 'عميل'}`}
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -111,7 +122,8 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin }) {
                 key={s}
                 onClick={() => onStatusChange(reservation.id, s)}
                 style={{ borderColor: tc?.dot, color: tc?.color }}
-                className="text-xs border rounded px-2 py-0.5 hover:opacity-80 transition-opacity bg-white"
+                className="text-xs border rounded px-2 py-0.5 hover:opacity-80 transition-opacity bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-500"
+                aria-label={`تغيير حالة الحجز رقم ${reservation.id} إلى ${tc?.label || s}`}
               >
                 → {tc?.label}
               </button>

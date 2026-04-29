@@ -229,9 +229,10 @@ def sync_customers(conn, sync_run):
             phone_alt = alts[0] if alts else ''
 
             preferred_branch = None
-            if row[5]:
+            preferred_branch_code = (str(row[11]).strip() if len(row) > 11 and row[11] else str(row[5]).strip() if row[5] else '')
+            if preferred_branch_code:
                 preferred_branch = Branch.objects.filter(
-                    softech_branch_id=str(row[5]).strip()
+                    softech_branch_id=preferred_branch_code
                 ).first()
 
             Customer.objects.update_or_create(

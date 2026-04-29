@@ -42,6 +42,11 @@ QUERY_STOCK = """
 # We keep ptcode IN ('10','11') but exclude insurance ptclassifcodes
 QUERY_CUSTOMERS = """
     SELECT
+        lc.phcode, lc.branchcustname, lc.branchcustaddress1, lc.branchcustaddress2,
+        lc.custdofbirth, lc.branchcode, '' AS personnote, lc.branchcustcode,
+        lc.branchcustclassif, 0 AS custdiscp, '' AS personsstatus, lc.custbranchcode
+    FROM SOFTECHDB9.dbo.localcustomers lc
+    WHERE lc.phcode IS NOT NULL AND lc.phcode != ''
         p.ptcode, p.personname, p.personadd1, p.personadd2,
         p.persondofbirth, p.branchcode, p.personnote, p.ptcode,
         p.ptclassifcode, p.custdiscp, p.personsstatus
@@ -53,6 +58,19 @@ QUERY_CUSTOMERS = """
 
 # ── CUSTOMER PHONES ───────────────────────────────────────────────────────────
 QUERY_CUSTOMER_PHONES = """
+    SELECT lc.phcode, lc.mobileno, '40' AS phonetype
+    FROM SOFTECHDB9.dbo.localcustomers lc
+    WHERE lc.phcode IS NOT NULL AND lc.phcode != ''
+      AND lc.mobileno IS NOT NULL AND lc.mobileno != ''
+
+    UNION ALL
+
+    SELECT lc.phcode, lc.branchcustphone, '10' AS phonetype
+    FROM SOFTECHDB9.dbo.localcustomers lc
+    WHERE lc.phcode IS NOT NULL AND lc.phcode != ''
+      AND lc.branchcustphone IS NOT NULL AND lc.branchcustphone != ''
+
+    ORDER BY 1, 3
     SELECT ph.ptcode, ph.phoneno, ph.phonetype
     FROM SOFTECHDB9.dbo.personphones ph
     WHERE ph.ptcode IN ('10', '11') AND ph.phoneblock = 0
