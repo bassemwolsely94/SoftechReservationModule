@@ -255,7 +255,7 @@ def sync_customers(conn, sync_run):
 
     SyncLog.objects.create(
         sync_run=sync_run,
-        table_name='personsdata+personphones',
+        table_name='localcustomers',
         records_processed=count
     )
     return count
