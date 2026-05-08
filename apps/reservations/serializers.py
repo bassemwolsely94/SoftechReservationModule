@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Reservation, ReservationStatusLog, ReservationActivity
+from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment
 
 
 # ── Status Log ────────────────────────────────────────────────────────────────
@@ -238,6 +238,7 @@ class ReservationUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
+            'branch',
             'assigned_to', 'quantity_requested', 'priority',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date', 'image',
@@ -247,3 +248,30 @@ class ReservationUpdateSerializer(serializers.ModelSerializer):
 class ChangeStatusSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[s[0] for s in Reservation.STATUS_CHOICES])
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class ReservationDownpaymentSerializer(serializers.ModelSerializer):
+    received_by_name = serializers.CharField(source='received_by.full_name', read_only=True)
+    payment_method_label = serializers.CharField(
+        source='get_payment_method_display', read_only=True
+    )
+
+    class Meta:
+        model = ReservationDownpayment
+        fields = [
+            'id', 'amount', 'payment_method', 'payment_method_label',
+            'reference_number', 'notes',
+            'received_by_name', 'received_at',
+        ]
+        read_only_fields = ['received_at']
+
+
+class ReservationDownpaymentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReservationDownpayment
+        fields = ['amount', 'payment_method', 'reference_number', 'notes']
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('المبلغ يجب أن يكون أكبر من صفر')
+        return value

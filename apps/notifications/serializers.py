@@ -31,6 +31,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             'is_read',
             'reservation',
             'transfer_request_id_ref',
+            'demand_id_ref',
             'created_at', 'time_ago',
         ]
         read_only_fields = ['created_at']

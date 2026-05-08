@@ -25,6 +25,7 @@ class Item(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     unit_sale_price = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     medicine_type = models.CharField(max_length=2, blank=True)         # itemmedicine
+    phcode = models.CharField(max_length=20, blank=True, db_index=True)  # ATC/phcode
     requires_fridge = models.BooleanField(default=False)               # fridgeitem='1'
     comment = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
@@ -73,3 +74,32 @@ class ItemStock(models.Model):
             'low_stock': 'مخزون منخفض',
             'in_stock': 'متاح',
         }.get(self.stock_status, 'غير معروف')
+
+
+class ChronicMedication(models.Model):
+    """
+    Persisted tagging of catalog items as chronic medications.
+    Populated by: python manage.py tag_chronic_items
+    Detection logic lives in apps/catalog/chronic.py.
+    """
+    item = models.OneToOneField(
+        Item, on_delete=models.CASCADE,
+        related_name='chronic_tag',
+        verbose_name='الصنف',
+    )
+    category_label = models.CharField(
+        max_length=100, blank=True,
+        verbose_name='تصنيف المرض المزمن',
+        help_text='مثل: ضغط الدم، السكر، الغدة الدرقية ...',
+    )
+    is_active = models.BooleanField(default=True)
+    tagged_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'دواء مزمن'
+        verbose_name_plural = 'الأدوية المزمنة'
+        ordering = ['item__name']
+
+    def __str__(self):
+        return f'{self.item.name} [{self.category_label}]'

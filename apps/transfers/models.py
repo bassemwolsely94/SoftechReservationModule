@@ -96,6 +96,23 @@ class TransferRequest(models.Model):
         verbose_name='أُرسل للـ ERP بواسطة',
     )
 
+    # ── Delivery tracking ─────────────────────────────────────────────────────
+    delivery_person_name = models.CharField(
+        max_length=255, blank=True,
+        verbose_name='اسم مندوب التوصيل',
+    )
+    dispatched_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='وقت الإرسال',
+    )
+    dispatched_by = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='dispatched_transfers',
+        verbose_name='أُرسل بواسطة',
+    )
+
     # ── Timestamps ────────────────────────────────────────────────────────────
     submitted_at  = models.DateTimeField(null=True, blank=True)
     reviewed_at   = models.DateTimeField(null=True, blank=True)
@@ -150,6 +167,10 @@ class TransferRequest(models.Model):
     @property
     def can_send_to_erp(self):
         return self.status == 'approved'
+
+    @property
+    def can_dispatch(self):
+        return self.status == 'sent_to_erp' and not self.dispatched_at
 
     @property
     def can_cancel(self):

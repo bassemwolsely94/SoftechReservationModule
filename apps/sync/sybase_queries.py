@@ -22,7 +22,8 @@ QUERY_ITEMS = """
         i.itemcode, i.itemname, i.itemname_scientific, i.itembarcode,
         i.itemclassifcode, i.suppcode, i.itemsaleprice, i.unitsaleprice,
         i.itemnomoreuse, i.itemarchive, i.familycode, i.fridgeitem,
-        i.itemmedicine, i.itemcomment, i.itemlastupdate
+        i.itemmedicine, i.itemcomment, i.itemlastupdate,
+        i.phcode
     FROM SOFTECHDB9.dbo.items i
     WHERE i.itemnomoreuse != '1' AND i.itemarchive = 0
 """
@@ -104,3 +105,48 @@ QUERY_USERS = """
 """
 
 QUERY_EXISTING_RESERVATIONS = None
+
+# ── STKTRANS REFERENCE VALIDATION ─────────────────────────────────────────────
+# Used when the supplying branch enters an ERP transaction number on a transfer.
+# Validates that the docnumber exists in stktrans for the given branch and doccode.
+QUERY_VALIDATE_STKTRANS = """
+    SELECT sm.docnumber, sm.doccode, sm.branchcode, sm.docdate, sm.docvalue,
+           sm.usercode, sm.storecode
+    FROM SOFTECHDB9.dbo.stktransm sm
+    WHERE sm.docnumber = ?
+      AND sm.branchcode = ?
+      AND sm.doccode IN ('110', '115', '501', '502')
+"""
+
+# ── ITEM SEARCH (live from SOFTECH, includes public price) ────────────────────
+# Used by transfer/reservation create screens to search items with real-time price.
+QUERY_ITEM_SEARCH = """
+    SELECT TOP 30
+        i.itemcode, i.itemname, i.itemname_scientific, i.itembarcode,
+        i.itemclassifcode, i.itemsaleprice, i.unitsaleprice,
+        i.itemnomoreuse, i.itemarchive, i.fridgeitem, i.itemmedicine
+    FROM SOFTECHDB9.dbo.items i
+    WHERE i.itemnomoreuse != '1'
+      AND i.itemarchive = 0
+      AND (
+          i.itemcode LIKE ?
+          OR i.itemname LIKE ?
+          OR i.itembarcode LIKE ?
+      )
+    ORDER BY i.itemname
+"""
+
+# ── CHRONIC MEDICATIONS (PHCODE-based classification) ─────────────────────────
+# phcode field on items identifies therapeutic group / ATC code.
+# Chronic medications are typically long-course drugs (anti-hypertensives,
+# diabetics, thyroid, anticoagulants, etc.) identifiable by phcode prefix.
+QUERY_CHRONIC_ITEMS = """
+    SELECT i.itemcode, i.itemname, i.phcode, ic.itemsclassifname
+    FROM SOFTECHDB9.dbo.items i
+    LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic ON i.itemclassifcode = ic.itemsclassifcode
+    WHERE i.itemnomoreuse != '1'
+      AND i.itemarchive = 0
+      AND i.phcode IS NOT NULL
+      AND i.phcode != ''
+    ORDER BY i.phcode, i.itemname
+"""

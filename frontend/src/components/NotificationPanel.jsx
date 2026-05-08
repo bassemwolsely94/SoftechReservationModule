@@ -12,12 +12,30 @@
  * grouped by day, with mark-read and navigate-to-source actions.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi } from '../api/client'
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns'
 import { ar } from 'date-fns/locale'
+
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1)
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.4)
+  } catch {
+    // AudioContext not available — silent fallback
+  }
+}
 
 // ── Type config ───────────────────────────────────────────────────────────────
 
@@ -67,26 +85,29 @@ function timeAgo(dt) {
 
 // ── Single notification row ───────────────────────────────────────────────────
 
-function NotifRow({ notif, onRead, onNavigate }) {
+function NotifRow({ notif, onRead, onNavigate, onDelete }) {
   const cfg = TYPE_CONFIG[notif.notification_type] || TYPE_CONFIG.system
+  const hasTarget = notif.reservation || notif.transfer_request_id_ref || notif.demand_id_ref
 
   return (
     <div
-      className={`flex gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-gray-50 ${
+      className={`group flex gap-3 px-4 py-3 transition-colors hover:bg-gray-50 ${
         !notif.is_read ? 'bg-blue-50/40' : ''
       }`}
-      onClick={() => {
-        if (!notif.is_read) onRead(notif.id)
-        onNavigate(notif)
-      }}
     >
       {/* Icon */}
-      <div className={`w-9 h-9 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0 text-base`}>
+      <div
+        className={`w-9 h-9 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0 text-base cursor-pointer`}
+        onClick={() => { if (!notif.is_read) onRead(notif.id); onNavigate(notif) }}
+      >
         {cfg.icon}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div
+        className="flex-1 min-w-0 cursor-pointer"
+        onClick={() => { if (!notif.is_read) onRead(notif.id); onNavigate(notif) }}
+      >
         <div className={`text-sm font-semibold leading-tight ${notif.is_read ? 'text-gray-700' : 'text-gray-900'}`}>
           {notif.title}
         </div>
@@ -98,10 +119,21 @@ function NotifRow({ notif, onRead, onNavigate }) {
         <div className="text-xs text-gray-400 mt-1">{timeAgo(notif.created_at)}</div>
       </div>
 
-      {/* Unread dot */}
-      {!notif.is_read && (
-        <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
-      )}
+      {/* Actions */}
+      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+        {!notif.is_read && (
+          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5" />
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(notif.id) }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 p-0.5 rounded"
+          title="حذف الإشعار"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
@@ -112,16 +144,24 @@ export default function NotificationPanel({ collapsed }) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('all') // 'all' | 'unread'
   const panelRef = useRef()
+  const prevCountRef = useRef(0)
   const navigate = useNavigate()
   const qc = useQueryClient()
 
-  // Unread count — polled every 60s
+  // Unread count — polled every 30s; play sound when count increases
   const { data: countData } = useQuery({
     queryKey: ['notif-unread-count'],
     queryFn: () => notificationsApi.unreadCount().then(r => r.data),
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
   })
-  const unreadCount = countData?.count || 0
+  const unreadCount = countData?.count ?? 0
+
+  useEffect(() => {
+    if (unreadCount > prevCountRef.current && prevCountRef.current !== 0) {
+      playNotificationSound()
+    }
+    prevCountRef.current = unreadCount
+  }, [unreadCount])
 
   // Full notification list — only loaded when panel is open
   const { data: notifications = [], isLoading } = useQuery({
@@ -151,6 +191,24 @@ export default function NotificationPanel({ collapsed }) {
     },
   })
 
+  // Delete single notification
+  const deleteOneMutation = useMutation({
+    mutationFn: (id) => notificationsApi.deleteOne(id),
+    onSuccess: () => {
+      qc.invalidateQueries(['notifications'])
+      qc.invalidateQueries(['notif-unread-count'])
+    },
+  })
+
+  // Clear all notifications
+  const clearAllMutation = useMutation({
+    mutationFn: () => notificationsApi.clearAll(),
+    onSuccess: () => {
+      qc.invalidateQueries(['notifications'])
+      qc.invalidateQueries(['notif-unread-count'])
+    },
+  })
+
   // Close panel when clicking outside
   useEffect(() => {
     if (!open) return
@@ -170,6 +228,8 @@ export default function NotificationPanel({ collapsed }) {
       navigate(`/reservations/${notif.reservation}`)
     } else if (notif.transfer_request_id_ref) {
       navigate(`/transfers/${notif.transfer_request_id_ref}`)
+    } else if (notif.demand_id_ref) {
+      navigate(`/demand/${notif.demand_id_ref}`)
     }
   }
 
@@ -229,6 +289,20 @@ export default function NotificationPanel({ collapsed }) {
                     className="text-xs text-brand-600 hover:text-brand-800 font-medium disabled:opacity-50"
                   >
                     {markAllMutation.isPending ? '...' : 'قراءة الكل'}
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('هل تريد حذف جميع الإشعارات؟')) {
+                        clearAllMutation.mutate()
+                      }
+                    }}
+                    disabled={clearAllMutation.isPending}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                    title="حذف الكل"
+                  >
+                    {clearAllMutation.isPending ? '...' : 'حذف الكل'}
                   </button>
                 )}
                 <button
@@ -304,6 +378,7 @@ export default function NotificationPanel({ collapsed }) {
                         notif={notif}
                         onRead={(id) => markReadMutation.mutate(id)}
                         onNavigate={handleNavigate}
+                        onDelete={(id) => deleteOneMutation.mutate(id)}
                       />
                     ))}
                   </div>
@@ -314,7 +389,7 @@ export default function NotificationPanel({ collapsed }) {
             {/* Footer */}
             <div className="border-t border-gray-100 px-4 py-3">
               <p className="text-xs text-gray-400 text-center">
-                آخر 50 إشعار · يتجدد كل 60 ثانية
+                آخر 50 إشعار · يتجدد كل 30 ثانية
               </p>
             </div>
           </div>

@@ -42,10 +42,9 @@ export default function NotificationBell() {
   const fetchCount = useCallback(async () => {
     try {
       const { data } = await notificationsApi.unreadCount()
-      const newCount = data.unread_count
+      const newCount = data.count  // API returns {"count": N}
 
       if (newCount > prevCount.current && prevCount.current !== null) {
-        // New notification arrived
         setFlashing(true)
         playNotificationSound()
         setTimeout(() => setFlashing(false), 3000)
@@ -60,8 +59,10 @@ export default function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     try {
       const { data } = await notificationsApi.list()
-      setNotifications(data.notifications || [])
-      setUnreadCount(data.unread_count || 0)
+      // API returns a plain array
+      setNotifications(Array.isArray(data) ? data : [])
+      const unread = (Array.isArray(data) ? data : []).filter(n => !n.is_read).length
+      setUnreadCount(unread)
     } catch {
       // Silently fail
     }

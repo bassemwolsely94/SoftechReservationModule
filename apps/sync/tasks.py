@@ -152,6 +152,7 @@ def sync_items(conn, sync_run):
                     'requires_fridge': row[11] == '1', # fridgeitem
                     'medicine_type': row[12] or '', # itemmedicine
                     'comment': row[13] or '',      # itemcomment
+                    'phcode': str(row[15] or '').strip() if len(row) > 15 else '',
                     'is_active': True,
                 }
             )

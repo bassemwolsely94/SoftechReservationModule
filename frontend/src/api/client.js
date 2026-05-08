@@ -121,10 +121,12 @@ export const dashboardApi = {
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export const notificationsApi = {
-  list:       () => api.get('/notifications/'),
-  unreadCount:() => api.get('/notifications/unread-count/'),
-  markRead:   (id) => api.post(`/notifications/${id}/read/`),
-  markAllRead:() => api.post('/notifications/mark-all-read/'),
+  list:        (params = {}) => api.get('/notifications/', { params }),
+  unreadCount: ()            => api.get('/notifications/unread-count/'),
+  markRead:    (id)          => api.post(`/notifications/${id}/read/`),
+  markAllRead: ()            => api.post('/notifications/mark-all-read/'),
+  deleteOne:   (id)          => api.delete(`/notifications/${id}/`),
+  clearAll:    ()            => api.delete('/notifications/clear-all/'),
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────────

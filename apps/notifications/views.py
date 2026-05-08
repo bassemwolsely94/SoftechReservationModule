@@ -91,3 +91,27 @@ def delete_old(request):
         recipient=profile, is_read=True, created_at__lt=cutoff
     ).delete()
     return Response({'deleted': deleted})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_notification(request, pk):
+    """DELETE /api/notifications/{id}/ — delete a single notification."""
+    profile = get_profile(request)
+    if not profile:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+    deleted, _ = Notification.objects.filter(pk=pk, recipient=profile).delete()
+    if not deleted:
+        return Response({'detail': 'لم يتم العثور على الإشعار'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def clear_all(request):
+    """DELETE /api/notifications/clear-all/ — delete ALL notifications for current user."""
+    profile = get_profile(request)
+    if not profile:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+    deleted, _ = Notification.objects.filter(recipient=profile).delete()
+    return Response({'deleted': deleted})
