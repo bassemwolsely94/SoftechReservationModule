@@ -24,10 +24,10 @@ class Command(BaseCommand):
 
         if sync_run.status == 'success':
             self.stdout.write(self.style.SUCCESS(
-                f"✅ Sync complete — {sync_run.records_synced} records "
+                f"[OK] Sync complete -- {sync_run.records_synced} records "
                 f"in {sync_run.duration_seconds}s"
             ))
         else:
             self.stdout.write(self.style.ERROR(
-                f"❌ Sync failed: {sync_run.error_message}"
+                f"[FAIL] Sync failed: {sync_run.error_message}"
             ))
