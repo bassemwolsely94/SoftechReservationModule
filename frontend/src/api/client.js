@@ -158,6 +158,13 @@ export const transfersApi = {
 
   // Stock lookup
   itemStock:  (itemId)     => api.get('/transfers/item_stock/', { params: { item_id: itemId } }),
+
+  // Delivery dispatch — POST { delivery_person_name }
+  dispatch: (id, data) => api.post(`/transfers/${id}/dispatch/`, data),
+
+  // ERP stktrans reference validation — POST { doc_number }
+  // Returns { valid, doc_number, branch_code, doc_date, doc_value }
+  validateErpRef: (id, data) => api.post(`/transfers/${id}/validate-erp-ref/`, data),
 }
 
 

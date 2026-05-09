@@ -103,6 +103,8 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
     created_by_branch       = serializers.CharField(source='created_by.branch_name',     read_only=True)
     reviewed_by_name        = serializers.CharField(source='reviewed_by.full_name',      read_only=True)
     sent_to_erp_by_name     = serializers.CharField(source='sent_to_erp_by.full_name',   read_only=True)
+    dispatched_by_name      = serializers.CharField(source='dispatched_by.full_name',     read_only=True)
+    can_dispatch            = serializers.BooleanField(read_only=True)
     status_label            = serializers.CharField(source='status_label_ar',             read_only=True)
     status_color            = serializers.CharField(read_only=True)
     is_editable             = serializers.BooleanField(read_only=True)
@@ -146,10 +148,14 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
             'items', 'messages', 'destination_stock',
             'created_at', 'updated_at', 'submitted_at',
             'reviewed_at', 'sent_to_erp_at', 'completed_at',
+            # Delivery tracking
+            'delivery_person_name', 'dispatched_at', 'dispatched_by',
+            'dispatched_by_name', 'can_dispatch',
         ]
         read_only_fields = [
             'request_number', 'created_by', 'reviewed_by',
             'submitted_at', 'reviewed_at', 'sent_to_erp_at', 'completed_at',
+            'dispatched_at', 'dispatched_by',
         ]
 
 
