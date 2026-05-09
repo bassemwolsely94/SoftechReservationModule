@@ -126,16 +126,38 @@ class CursorWrapper:
         return col_types
 
     def _convert_row(self, col_types):
-        """Read one ResultSet row, converting strings and dates to Python types."""
-        str_types  = {'varchar', 'char', 'nvarchar', 'nchar', 'text', 'sysname'}
-        date_types = {'datetime', 'smalldatetime', 'timestamp', 'date', 'time'}
+        """Read one ResultSet row, converting all Java types to Python types."""
+        str_types     = {'varchar', 'char', 'nvarchar', 'nchar', 'text', 'sysname'}
+        date_types    = {'datetime', 'smalldatetime', 'timestamp', 'date', 'time'}
+        # Sybase numeric/decimal returns java.math.BigDecimal via jConnect
+        decimal_types = {'numeric', 'decimal', 'money', 'smallmoney'}
+        int_types     = {'int', 'smallint', 'tinyint', 'bigint'}
+        float_types   = {'float', 'real', 'double'}
         row = []
         for i, col_type in enumerate(col_types, start=1):
             val = self._rs.getObject(i)
+            if val is None:
+                row.append(None)
+                continue
             if col_type in str_types:
                 val = _safe_str(val)
             elif col_type in date_types:
                 val = _convert_date(val)
+            elif col_type in decimal_types:
+                try:
+                    val = float(str(val))
+                except Exception:
+                    pass
+            elif col_type in int_types:
+                try:
+                    val = int(str(val))
+                except Exception:
+                    pass
+            elif col_type in float_types:
+                try:
+                    val = float(str(val))
+                except Exception:
+                    pass
             row.append(val)
         return row
 

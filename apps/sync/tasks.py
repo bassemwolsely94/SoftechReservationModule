@@ -223,10 +223,11 @@ def sync_customers(conn, sync_run):
     for row in cursor.fetchall():
         try:
             branch_code  = str(row[0] or '').strip()
-            # branchcustcode is numeric(6) — use zero-padded 8-char string to
-            # match stktrans.personcode (varchar 8) which carries the same code.
-            raw_cust_int = int(row[1]) if row[1] is not None else 0
-            cust_code    = str(raw_cust_int)
+            # branchcustcode is numeric(6) — cursor returns it as float after
+            # BigDecimal conversion; cast to int then string to match
+            # stktrans.personcode (varchar 8) which carries the same numeric code.
+            raw_cust_num = row[1]  # float after CursorWrapper numeric conversion
+            cust_code    = str(int(float(raw_cust_num))) if raw_cust_num is not None else ''
             softech_id   = cust_code  # matches stktrans.personcode
 
             preferred_branch = None
