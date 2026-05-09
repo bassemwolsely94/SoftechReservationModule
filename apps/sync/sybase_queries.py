@@ -17,13 +17,14 @@ QUERY_CATEGORIES = """
 """
 
 # ── ITEMS CATALOG ─────────────────────────────────────────────────────────────
+# NOTE: phcode does not exist on the SOFTECHDB9.dbo.items table.
+#       Chronic-medication detection is done via itemsclassif category names.
 QUERY_ITEMS = """
     SELECT
         i.itemcode, i.itemname, i.itemname_scientific, i.itembarcode,
         i.itemclassifcode, i.suppcode, i.itemsaleprice, i.unitsaleprice,
         i.itemnomoreuse, i.itemarchive, i.familycode, i.fridgeitem,
-        i.itemmedicine, i.itemcomment, i.itemlastupdate,
-        i.phcode
+        i.itemmedicine, i.itemcomment, i.itemlastupdate
     FROM SOFTECHDB9.dbo.items i
     WHERE i.itemnomoreuse != '1' AND i.itemarchive = 0
 """
@@ -35,30 +36,26 @@ QUERY_STOCK = """
     FROM SOFTECHDB9.dbo.stkbal sb WHERE sb.nowqty > 0
 """
 
-# ── CUSTOMERS (PIC — Individual Retail Customers Only) ────────────────────────
-# ptcode '10' = customer, '11' = potential customer
-# ptclassifcode filters:
-#   '90' = delivery, '91' = cash retail (PIC), '15' = insurance (excluded)
-#   B2B / insurance companies have ptcode '20','30','40' — excluded by ptcode filter
-# We keep ptcode IN ('10','11') but exclude insurance ptclassifcodes
+# ── CUSTOMERS (PIC — localcustomers table) ───────────────────────────────────
+# Real column names discovered via syscolumns on 2026-05-09.
+# PK: (branchcode, branchcustcode).
+# Phones are ON localcustomers (mobileno = mobile, branchcustphone = landline).
+# ischronic flag is SOFTECH-native — sync it directly onto the Customer record.
+# branchcustclassif: classification code (varchar 2).
 QUERY_CUSTOMERS = """
     SELECT
-        p.ptcode, p.personname, p.personadd1, p.personadd2,
-        p.persondofbirth, p.branchcode, p.personnote, p.ptcode,
-        p.ptclassifcode, p.custdiscp, p.personsstatus
-    FROM SOFTECHDB9.dbo.localcustomers p
-    WHERE p.ptcode IN ('10', '11')
-      AND p.ptclassifcode NOT IN ('15', '16', '17', '18', '20', '25', '30')
-      AND (p.personsstatus IS NULL OR p.personsstatus != 'X')
+        lc.branchcode, lc.branchcustcode, lc.branchcustname,
+        lc.branchcustaddress1, lc.branchcustaddress2,
+        lc.custdofbirth, lc.mobileno, lc.branchcustphone,
+        lc.branchcustclassif, lc.ischronic
+    FROM SOFTECHDB9.dbo.localcustomers lc
 """
 
 # ── CUSTOMER PHONES ───────────────────────────────────────────────────────────
-QUERY_CUSTOMER_PHONES = """
-    SELECT ph.ptcode, ph.phoneno, ph.phonetype
-    FROM SOFTECHDB9.dbo.personphones ph
-    WHERE ph.ptcode IN ('10', '11') AND ph.phoneblock = 0
-    ORDER BY ph.ptcode, ph.phonetype
-"""
+# Phones are embedded on localcustomers (mobileno / branchcustphone).
+# personphones table uses ptcode which does not exist on localcustomers.
+# This query is kept as a stub so call-sites don't break; it returns nothing.
+QUERY_CUSTOMER_PHONES = None  # not used — phones fetched in QUERY_CUSTOMERS
 
 # ── SALES LINES — incremental (last 10 min) ───────────────────────────────────
 QUERY_CUSTOMER_SALES_LINES_RECENT = """
@@ -136,17 +133,42 @@ QUERY_ITEM_SEARCH = """
     ORDER BY i.itemname
 """
 
-# ── CHRONIC MEDICATIONS (PHCODE-based classification) ─────────────────────────
-# phcode field on items identifies therapeutic group / ATC code.
-# Chronic medications are typically long-course drugs (anti-hypertensives,
-# diabetics, thyroid, anticoagulants, etc.) identifiable by phcode prefix.
+# ── CHRONIC MEDICATIONS (classification-name-based) ──────────────────────────
+# SOFTECH items table has no phcode / ATC column.
+# We identify chronic items via Arabic and English keywords in the
+# therapeutic-category name (itemsclassif.classifnamearabic / itemsclassifname).
 QUERY_CHRONIC_ITEMS = """
-    SELECT i.itemcode, i.itemname, i.phcode, ic.itemsclassifname
+    SELECT i.itemcode, i.itemname, ic.itemsclassifname, ic.classifnamearabic
     FROM SOFTECHDB9.dbo.items i
-    LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic ON i.itemclassifcode = ic.itemsclassifcode
+    LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic
+           ON i.itemclassifcode = ic.itemsclassifcode
     WHERE i.itemnomoreuse != '1'
       AND i.itemarchive = 0
-      AND i.phcode IS NOT NULL
-      AND i.phcode != ''
-    ORDER BY i.phcode, i.itemname
+      AND (
+            ic.classifnamearabic LIKE N'%ضغط%'
+         OR ic.classifnamearabic LIKE N'%سكر%'
+         OR ic.classifnamearabic LIKE N'%كوليسترول%'
+         OR ic.classifnamearabic LIKE N'%الغدة الدرقية%'
+         OR ic.classifnamearabic LIKE N'%قلب%'
+         OR ic.classifnamearabic LIKE N'%ربو%'
+         OR ic.classifnamearabic LIKE N'%تخثر%'
+         OR ic.classifnamearabic LIKE N'%الصرع%'
+         OR ic.classifnamearabic LIKE N'%باركنسون%'
+         OR ic.classifnamearabic LIKE N'%اكتئاب%'
+         OR ic.classifnamearabic LIKE N'%مناعة%'
+         OR ic.classifnamearabic LIKE N'%هشاشة%'
+         OR ic.itemsclassifname LIKE '%hypertens%'
+         OR ic.itemsclassifname LIKE '%diabet%'
+         OR ic.itemsclassifname LIKE '%cardiovasc%'
+         OR ic.itemsclassifname LIKE '%cholesterol%'
+         OR ic.itemsclassifname LIKE '%thyroid%'
+         OR ic.itemsclassifname LIKE '%asthma%'
+         OR ic.itemsclassifname LIKE '%anticoagul%'
+         OR ic.itemsclassifname LIKE '%epilep%'
+         OR ic.itemsclassifname LIKE '%parkinson%'
+         OR ic.itemsclassifname LIKE '%depress%'
+         OR ic.itemsclassifname LIKE '%immunosuppress%'
+         OR ic.itemsclassifname LIKE '%osteoporos%'
+      )
+    ORDER BY ic.itemsclassifname, i.itemname
 """
