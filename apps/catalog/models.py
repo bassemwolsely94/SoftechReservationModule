@@ -25,7 +25,7 @@ class Item(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     unit_sale_price = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     medicine_type = models.CharField(max_length=2, blank=True)         # itemmedicine
-    phcode = models.CharField(max_length=20, blank=True, db_index=True)  # ATC/phcode
+    phcode = models.CharField(max_length=20, null=True, blank=True, db_index=True)  # ATC/phcode
     requires_fridge = models.BooleanField(default=False)               # fridgeitem='1'
     comment = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
