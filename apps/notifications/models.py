@@ -28,6 +28,12 @@ class Notification(models.Model):
         ('transfer_response',        '↩️ رد على طلب تحويل'),
         ('unfulfilled_transfer_flag','⚠️ تحويل غير مُصرَّف'),
 
+        # ── Demand / Lost Sales types ─────────────────────────────────────────
+        ('demand_created',           '🆕 طلب جديد'),
+        ('demand_assigned',          '👤 طلب مُعيَّن'),
+        ('demand_status',            '🔄 تغيير حالة طلب'),
+        ('demand_follow_up',         '📅 متابعة طلب'),
+
         # ── System types ──────────────────────────────────────────────────────
         ('system',                   '⚙️ نظام'),
     ]
@@ -66,6 +72,11 @@ class Notification(models.Model):
         null=True, blank=True,
         verbose_name='معرّف طلب التحويل',
     )
+    # Demand record stored as integer ID for same reason.
+    demand_id_ref = models.IntegerField(
+        null=True, blank=True,
+        verbose_name='معرّف طلب الطلب',
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -88,7 +99,7 @@ class Notification(models.Model):
 
     @classmethod
     def send_to_user(cls, staff, notification_type, title, body='',
-                     reservation=None, transfer_id=None):
+                     reservation=None, transfer_id=None, demand_id=None):
         """Create a single notification for one staff member."""
         return cls.objects.create(
             recipient=staff,
@@ -97,11 +108,12 @@ class Notification(models.Model):
             body=body,
             reservation=reservation,
             transfer_request_id_ref=transfer_id,
+            demand_id_ref=demand_id,
         )
 
     @classmethod
     def send_to_branch(cls, branch, notification_type, title, body='',
-                       reservation=None, transfer_id=None,
+                       reservation=None, transfer_id=None, demand_id=None,
                        exclude_roles=None):
         """Create notifications for ALL active staff at a branch."""
         from apps.users.models import StaffProfile
@@ -116,6 +128,7 @@ class Notification(models.Model):
                 body=body,
                 reservation=reservation,
                 transfer_request_id_ref=transfer_id,
+                demand_id_ref=demand_id,
             )
             for staff in qs
         ]
@@ -125,7 +138,8 @@ class Notification(models.Model):
 
     @classmethod
     def send_to_roles(cls, roles, notification_type, title, body='',
-                      reservation=None, transfer_id=None, branch=None):
+                      reservation=None, transfer_id=None, demand_id=None,
+                      branch=None):
         """Create notifications for all active staff with any of the given roles,
         optionally filtered by branch."""
         from apps.users.models import StaffProfile
@@ -140,6 +154,7 @@ class Notification(models.Model):
                 body=body,
                 reservation=reservation,
                 transfer_request_id_ref=transfer_id,
+                demand_id_ref=demand_id,
             )
             for staff in qs
         ]
@@ -149,7 +164,7 @@ class Notification(models.Model):
 
     @classmethod
     def send_to_admins(cls, notification_type, title, body='',
-                       reservation=None, transfer_id=None):
+                       reservation=None, transfer_id=None, demand_id=None):
         """Shortcut: notify all admins and purchasing staff."""
         return cls.send_to_roles(
             roles=['admin', 'purchasing'],
@@ -158,4 +173,5 @@ class Notification(models.Model):
             body=body,
             reservation=reservation,
             transfer_id=transfer_id,
+            demand_id=demand_id,
         )

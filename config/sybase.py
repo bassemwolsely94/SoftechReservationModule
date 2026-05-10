@@ -1,3 +1,5 @@
+import datetime as _dt
+
 import jpype
 import jpype.imports
 from django.conf import settings
@@ -88,6 +90,26 @@ def _safe_str(val):
     return decoded
 
 
+def _convert_date(val):
+    """
+    Convert a Java Timestamp / Date object (from jConnect) to a Python datetime.
+    Java's .getTime() returns milliseconds since the Unix epoch.
+    Returns None if the value is null or conversion fails.
+    """
+    if val is None:
+        return None
+    try:
+        # java.sql.Timestamp / java.util.Date both have .getTime() → milliseconds
+        millis = int(val.getTime())
+        return _dt.datetime.fromtimestamp(millis / 1000.0, tz=_dt.timezone.utc)
+    except Exception:
+        # Fallback: Sybase sometimes exposes a string-like ISO representation
+        try:
+            return _dt.datetime.fromisoformat(str(val)[:19])
+        except Exception:
+            return None
+
+
 class CursorWrapper:
     def __init__(self, java_conn):
         self._conn = java_conn
@@ -98,36 +120,62 @@ class CursorWrapper:
         self._stmt = self._conn.createStatement()
         self._rs = self._stmt.executeQuery(sql)
 
+    @staticmethod
+    def _build_type_sets(meta, col_count):
+        col_types = [str(meta.getColumnTypeName(i)).lower() for i in range(1, col_count + 1)]
+        return col_types
+
+    def _convert_row(self, col_types):
+        """Read one ResultSet row, converting all Java types to Python types."""
+        str_types     = {'varchar', 'char', 'nvarchar', 'nchar', 'text', 'sysname'}
+        date_types    = {'datetime', 'smalldatetime', 'timestamp', 'date', 'time'}
+        # Sybase numeric/decimal returns java.math.BigDecimal via jConnect
+        decimal_types = {'numeric', 'decimal', 'money', 'smallmoney'}
+        int_types     = {'int', 'smallint', 'tinyint', 'bigint'}
+        float_types   = {'float', 'real', 'double'}
+        row = []
+        for i, col_type in enumerate(col_types, start=1):
+            val = self._rs.getObject(i)
+            if val is None:
+                row.append(None)
+                continue
+            if col_type in str_types:
+                val = _safe_str(val)
+            elif col_type in date_types:
+                val = _convert_date(val)
+            elif col_type in decimal_types:
+                try:
+                    val = float(str(val))
+                except Exception:
+                    pass
+            elif col_type in int_types:
+                try:
+                    val = int(str(val))
+                except Exception:
+                    pass
+            elif col_type in float_types:
+                try:
+                    val = float(str(val))
+                except Exception:
+                    pass
+            row.append(val)
+        return row
+
     def fetchall(self):
         rows = []
         meta = self._rs.getMetaData()
         col_count = meta.getColumnCount()
-        # Pre-build column type list — convert Java String to Python str once
-        col_types = [str(meta.getColumnTypeName(i)).lower() for i in range(1, col_count + 1)]
-        str_types = {'varchar', 'char', 'nvarchar', 'nchar', 'text', 'sysname'}
+        col_types = self._build_type_sets(meta, col_count)
         while self._rs.next():
-            row = []
-            for i in range(1, col_count + 1):
-                val = self._rs.getObject(i)
-                if col_types[i - 1] in str_types:
-                    val = _safe_str(val)
-                row.append(val)
-            rows.append(row)
+            rows.append(self._convert_row(col_types))
         return rows
 
     def fetchone(self):
         meta = self._rs.getMetaData()
         col_count = meta.getColumnCount()
-        col_types = [str(meta.getColumnTypeName(i)).lower() for i in range(1, col_count + 1)]
-        str_types = {'varchar', 'char', 'nvarchar', 'nchar', 'text', 'sysname'}
+        col_types = self._build_type_sets(meta, col_count)
         if self._rs.next():
-            row = []
-            for i in range(1, col_count + 1):
-                val = self._rs.getObject(i)
-                if col_types[i - 1] in str_types:
-                    val = _safe_str(val)
-                row.append(val)
-            return row
+            return self._convert_row(col_types)
         return None
 
     def close(self):

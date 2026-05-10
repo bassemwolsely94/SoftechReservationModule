@@ -319,6 +319,41 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             TransferRequestDetailSerializer(tr, context={'request': request}).data
         )
 
+    # ── Dispatch (delivery tracking) ──────────────────────────────────────────
+
+    @action(detail=True, methods=['post'])
+    def dispatch(self, request, pk=None):
+        """POST /{id}/dispatch/ — record dispatch with delivery person."""
+        tr = self.get_object()
+        profile = _profile(request)
+
+        if not tr.can_dispatch:
+            return Response(
+                {'detail': 'لا يمكن تسجيل الإرسال في الحالة الحالية أو تم الإرسال مسبقاً'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        delivery_person = request.data.get('delivery_person_name', '').strip()
+        if not delivery_person:
+            return Response(
+                {'detail': 'اسم مندوب التوصيل مطلوب'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        tr.delivery_person_name = delivery_person
+        tr.dispatched_at = timezone.now()
+        tr.dispatched_by = profile
+        tr.save(update_fields=['delivery_person_name', 'dispatched_at', 'dispatched_by', 'updated_at'])
+
+        _system_log(
+            tr,
+            f'تم الإرسال بواسطة {profile.full_name} — المندوب: {delivery_person}'
+        )
+
+        return Response(
+            TransferRequestDetailSerializer(tr, context={'request': request}).data
+        )
+
     # ── Complete ──────────────────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'])
@@ -453,6 +488,55 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             TransferRequestMessageSerializer(msg).data,
             status=status.HTTP_201_CREATED,
         )
+
+    # ── SOFTECH stktrans reference validation ─────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='validate-erp-ref')
+    def validate_erp_ref(self, request, pk=None):
+        """
+        POST /{id}/validate-erp-ref/
+        Body: {"doc_number": "...", "branch_code": "..."}
+        Looks up the doc_number in SOFTECH stktransm to confirm it exists.
+        Returns the transaction details if found, 404 if not.
+        """
+        doc_number = (request.data.get('doc_number') or '').strip()
+        branch_code = (request.data.get('branch_code') or '').strip()
+
+        if not doc_number or not branch_code:
+            return Response(
+                {'detail': 'doc_number و branch_code مطلوبان'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from config.sybase import get_sybase_connection
+            from apps.sync.sybase_queries import QUERY_VALIDATE_STKTRANS
+            conn = get_sybase_connection()
+            cursor = conn.cursor()
+            cursor.execute(QUERY_VALIDATE_STKTRANS, [doc_number, branch_code])
+            row = cursor.fetchone()
+            conn.close()
+        except Exception as e:
+            return Response(
+                {'detail': f'خطأ في الاتصال بـ SOFTECH: {str(e)}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not row:
+            return Response(
+                {'valid': False, 'detail': 'رقم المستند غير موجود في النظام لهذا الفرع'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({
+            'valid': True,
+            'doc_number': row[0],
+            'doc_code': row[1],
+            'branch_code': row[2],
+            'doc_date': str(row[3]) if row[3] else None,
+            'doc_value': float(row[4]) if row[4] else None,
+            'user_code': row[5],
+        })
 
     # ── Stock lookup (for UI) ─────────────────────────────────────────────────
 

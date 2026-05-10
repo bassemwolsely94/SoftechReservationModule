@@ -84,6 +84,37 @@ class Reservation(models.Model):
         return dict(self.STATUS_CHOICES).get(self.status, self.status)
 
 
+class ReservationDownpayment(models.Model):
+    """Track downpayments received against a reservation."""
+
+    PAYMENT_METHODS = [
+        ('cash',     'نقدي'),
+        ('card',     'بطاقة'),
+        ('transfer', 'تحويل بنكي'),
+        ('other',    'أخرى'),
+    ]
+
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='downpayments'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='cash')
+    reference_number = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    received_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True
+    )
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-received_at']
+        verbose_name = 'دفعة مقدمة'
+        verbose_name_plural = 'الدفعات المقدمة'
+
+    def __str__(self):
+        return f'حجز #{self.reservation_id} — {self.amount} جنيه ({self.get_payment_method_display()})'
+
+
 class ReservationStatusLog(models.Model):
     reservation = models.ForeignKey(
         Reservation, on_delete=models.CASCADE, related_name='status_logs'

@@ -121,10 +121,12 @@ export const dashboardApi = {
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export const notificationsApi = {
-  list:       () => api.get('/notifications/'),
-  unreadCount:() => api.get('/notifications/unread-count/'),
-  markRead:   (id) => api.post(`/notifications/${id}/read/`),
-  markAllRead:() => api.post('/notifications/mark-all-read/'),
+  list:        (params = {}) => api.get('/notifications/', { params }),
+  unreadCount: ()            => api.get('/notifications/unread-count/'),
+  markRead:    (id)          => api.post(`/notifications/${id}/read/`),
+  markAllRead: ()            => api.post('/notifications/mark-all-read/'),
+  deleteOne:   (id)          => api.delete(`/notifications/${id}/`),
+  clearAll:    ()            => api.delete('/notifications/clear-all/'),
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────────
@@ -156,6 +158,13 @@ export const transfersApi = {
 
   // Stock lookup
   itemStock:  (itemId)     => api.get('/transfers/item_stock/', { params: { item_id: itemId } }),
+
+  // Delivery dispatch — POST { delivery_person_name }
+  dispatch: (id, data) => api.post(`/transfers/${id}/dispatch/`, data),
+
+  // ERP stktrans reference validation — POST { doc_number }
+  // Returns { valid, doc_number, branch_code, doc_date, doc_value }
+  validateErpRef: (id, data) => api.post(`/transfers/${id}/validate-erp-ref/`, data),
 }
 
 

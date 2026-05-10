@@ -36,6 +36,6 @@ class Command(BaseCommand):
         profile.save()
 
         self.stdout.write(self.style.SUCCESS(
-            f'✅ {"Created" if created else "Updated"} StaffProfile for '
+            f'[OK] {"Created" if created else "Updated"} StaffProfile for '
             f'"{username}" — role={profile.role}'
         ))

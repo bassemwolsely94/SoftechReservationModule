@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 from datetime import date
 
-from .models import Reservation, ReservationStatusLog, ReservationActivity
+from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment
 from .serializers import (
     ReservationListSerializer,
     ReservationDetailSerializer,
@@ -16,6 +16,8 @@ from .serializers import (
     ChangeStatusSerializer,
     ReservationActivitySerializer,
     ReservationActivityCreateSerializer,
+    ReservationDownpaymentSerializer,
+    ReservationDownpaymentCreateSerializer,
 )
 
 
@@ -84,6 +86,31 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if self.action in ('partial_update', 'update'):
             return ReservationUpdateSerializer
         return ReservationDetailSerializer
+
+    def perform_update(self, serializer):
+        staff = get_profile(self.request)
+        old_branch = serializer.instance.branch
+        reservation = serializer.save()
+        new_branch = reservation.branch
+        if old_branch != new_branch:
+            log_activity(
+                reservation=reservation,
+                activity_type='status_changed',
+                message=f'تم تغيير الفرع من "{old_branch.name_ar or old_branch.name}" إلى "{new_branch.name_ar or new_branch.name}"',
+                staff=staff,
+            )
+            # Notify branch staff of the reassignment
+            try:
+                from apps.notifications.models import Notification
+                Notification.send_to_branch(
+                    branch=new_branch,
+                    notification_type='reservation_status',
+                    title=f'حجز محوَّل إلى فرعك — {reservation.item.name}',
+                    body=f'العميل: {reservation.contact_name}',
+                    reservation=reservation,
+                )
+            except Exception:
+                pass
 
     def perform_create(self, serializer):
         staff = get_profile(self.request)
@@ -202,6 +229,41 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
         return Response(
             ReservationActivitySerializer(activity, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    # ── Downpayments ──────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get', 'post'], url_path='downpayments')
+    def downpayments(self, request, pk=None):
+        reservation = self.get_object()
+
+        if request.method == 'GET':
+            dps = reservation.downpayments.select_related('received_by__user')
+            total = sum(d.amount for d in dps)
+            return Response({
+                'total_paid': float(total),
+                'downpayments': ReservationDownpaymentSerializer(dps, many=True).data,
+            })
+
+        # POST — record a new downpayment
+        staff = get_profile(request)
+        serializer = ReservationDownpaymentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dp = ReservationDownpayment.objects.create(
+            reservation=reservation,
+            received_by=staff,
+            **serializer.validated_data,
+        )
+        log_activity(
+            reservation=reservation,
+            activity_type='note',
+            message=f'تم تسجيل دفعة مقدمة: {dp.amount} جنيه ({dp.get_payment_method_display()})'
+                    + (f' — مرجع: {dp.reference_number}' if dp.reference_number else ''),
+            staff=staff,
+        )
+        return Response(
+            ReservationDownpaymentSerializer(dp).data,
             status=status.HTTP_201_CREATED,
         )
 

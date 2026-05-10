@@ -4,6 +4,7 @@ Sync engine: reads from Sybase ASE 12.5 → writes to PostgreSQL.
 Runs every 5 minutes via APScheduler.
 ABSOLUTE RULE: NEVER INSERT/UPDATE/DELETE on any Sybase connection.
 """
+import datetime as _dt
 from decimal import Decimal
 import logging
 from collections import defaultdict
@@ -14,7 +15,7 @@ from django.contrib.auth.models import User as DjangoUser
 from config.sybase import get_sybase_connection
 from apps.sync.sybase_queries import (
     QUERY_BRANCHES, QUERY_CATEGORIES, QUERY_ITEMS, QUERY_STOCK,
-    QUERY_CUSTOMERS, QUERY_CUSTOMER_PHONES,
+    QUERY_CUSTOMERS,
     QUERY_CUSTOMER_SALES_LINES_RECENT, QUERY_CUSTOMER_SALES_LINES_FULL,
     QUERY_USERS,
 )
@@ -152,6 +153,8 @@ def sync_items(conn, sync_run):
                     'requires_fridge': row[11] == '1', # fridgeitem
                     'medicine_type': row[12] or '', # itemmedicine
                     'comment': row[13] or '',      # itemcomment
+                    # phcode column does not exist on SOFTECHDB9.dbo.items;
+                    # chronic detection uses category name matching instead.
                     'is_active': True,
                 }
             )
@@ -196,62 +199,67 @@ def sync_stock(conn, sync_run):
 
 def sync_customers(conn, sync_run):
     """
-    Customers: ptcode IN ('10','11')
-    Phones: separate personphones table
-    phonetype '40'=mobile (priority), '10'=home, '20'=work
-    """
-    # Pre-load all phones into memory
-    phone_cursor = conn.cursor()
-    phone_cursor.execute(QUERY_CUSTOMER_PHONES)
-    phones = defaultdict(dict)
-    for row in phone_cursor.fetchall():
-        personcode = str(row[0]).strip()
-        phonetype = str(row[2]).strip()
-        phoneno = str(row[1] or '').strip()
-        if phoneno:
-            phones[personcode][phonetype] = phoneno
+    Sync SOFTECHDB9.dbo.localcustomers → Customer.
 
+    Real schema (confirmed via syscolumns 2026-05-09):
+    Row layout:
+      [0] branchcode         varchar(5)
+      [1] branchcustcode     numeric(6)   ← customer PK within branch
+      [2] branchcustname     varchar(30)
+      [3] branchcustaddress1 varchar(30)
+      [4] branchcustaddress2 varchar(30)
+      [5] custdofbirth       datetime
+      [6] mobileno           varchar(40)  ← primary phone
+      [7] branchcustphone    varchar(30)  ← secondary phone
+      [8] branchcustclassif  varchar(2)   ← customer classification code
+      [9] ischronic          tinyint      ← SOFTECH native chronic flag
+
+    Phones are embedded on localcustomers; personphones table not used.
+    softech_id = branchcode + '-' + branchcustcode (globally unique composite).
+    """
     cursor = conn.cursor()
     cursor.execute(QUERY_CUSTOMERS)
     count = 0
     for row in cursor.fetchall():
         try:
-            personcode = str(row[0]).strip()
-            person_phones = phones.get(personcode, {})
-
-            phone_primary = (
-                person_phones.get('40') or
-                person_phones.get('10') or
-                person_phones.get('20') or
-                next(iter(person_phones.values()), '')
-            )
-            alts = [v for v in person_phones.values() if v != phone_primary]
-            phone_alt = alts[0] if alts else ''
+            branch_code  = str(row[0] or '').strip()
+            # branchcustcode is numeric(6) — cursor returns it as float after
+            # BigDecimal conversion; cast to int then string to match
+            # stktrans.personcode (varchar 8) which carries the same numeric code.
+            raw_cust_num = row[1]  # float after CursorWrapper numeric conversion
+            cust_code    = str(int(float(raw_cust_num))) if raw_cust_num is not None else ''
+            softech_id   = cust_code  # matches stktrans.personcode
 
             preferred_branch = None
-            if row[5]:
+            if branch_code:
                 preferred_branch = Branch.objects.filter(
-                    softech_branch_id=str(row[5]).strip()
+                    softech_branch_id=branch_code
                 ).first()
 
+            mobile = str(row[6] or '').strip()
+            phone2 = str(row[7] or '').strip()
+
+            defaults = {
+                'name': str(row[2] or '').strip(),
+                'address': f"{str(row[3] or '')} {str(row[4] or '')}".strip(),
+                'date_of_birth': row[5],
+                'preferred_branch': preferred_branch,
+                'phone': mobile or phone2,
+                'phone_alt': phone2 if mobile else '',
+                'softech_ptclassifcode': str(row[8] or '').strip(),
+            }
+
+            # Sync ischronic if the Customer model carries the field
+            if hasattr(Customer, 'is_chronic_softech'):
+                defaults['is_chronic_softech'] = bool(row[9])
+
             Customer.objects.update_or_create(
-                softech_id=personcode,
-                defaults={
-                    'name': row[1] or '',
-                    'address': f"{row[2] or ''} {row[3] or ''}".strip(),
-                    'date_of_birth': row[4],
-                    'preferred_branch': preferred_branch,
-                    'notes_softech': row[6] or '',
-                    'softech_ptcode': str(row[7] or '').strip(),
-                    'softech_ptclassifcode': str(row[8] or '').strip(),
-                    'discount_percent': Decimal(str(row[9])) if row[9] else 0,
-                    'phone': phone_primary,
-                    'phone_alt': phone_alt,
-                }
+                softech_id=softech_id,
+                defaults=defaults,
             )
             count += 1
         except Exception as e:
-            logger.warning(f"Customer sync error personcode={row[0]}: {e}")
+            logger.warning(f"Customer sync error branchcustcode={row[1]}: {e}")
 
     SyncLog.objects.create(
         sync_run=sync_run,
@@ -292,10 +300,11 @@ def sync_sales(conn, sync_run, full_history=False):
             if not customer or not branch:
                 continue
 
-            try:
-                date_str = docdate.strftime('%Y%m%d') if hasattr(docdate, 'strftime') else str(docdate)[:10].replace('-', '')
-            except:
-                date_str = str(docdate)[:10].replace('-', '')
+            # docdate is now a Python datetime (converted by CursorWrapper)
+            if isinstance(docdate, _dt.datetime):
+                date_str = docdate.strftime('%Y%m%d')
+            else:
+                date_str = str(docdate)[:10].replace('-', '') if docdate else 'nodate'
             invoice_id = f"{branchcode}-{doccode}-{docnumber}-{date_str}"
             total = sum(Decimal(str(line[8])) if line[8] else Decimal(0) for line in lines)
 
@@ -304,7 +313,7 @@ def sync_sales(conn, sync_run, full_history=False):
                 defaults={
                     'customer': customer,
                     'branch': branch,
-                    'invoice_date': docdate if hasattr(docdate, 'strftime') else None,
+                    'invoice_date': docdate if isinstance(docdate, _dt.datetime) else None,
                     'total_amount': total,
                     'doc_code': doccode,
                 }
