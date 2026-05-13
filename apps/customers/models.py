@@ -18,6 +18,14 @@ class Customer(models.Model):
         'branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='customers'
     )
+    # Walk-in / pre-ERP flag.
+    # True  → entered by staff before the customer is registered in SOFTECH.
+    #         No softech_id yet. Auto-merged when SOFTECH sync finds same phone.
+    # False → synced from SOFTECH (normal customer).
+    is_guest = models.BooleanField(
+        default=False,
+        help_text='زبون مؤقت — سيتم دمجه تلقائياً عند مزامنة رقم هاتفه من SOFTECH',
+    )
     created_by = models.ForeignKey(
         'users.StaffProfile', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='created_customers'
@@ -82,6 +90,10 @@ class PurchaseHistory(models.Model):
     doc_code = models.CharField(max_length=3, blank=True)  # '115' = sale, '30' = return
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     invoice_date = models.DateTimeField(null=True, blank=True)
+    # ERP document number — return invoices reference this to link back to the original sale
+    docnumber = models.CharField(max_length=30, blank=True, db_index=True)
+    # Cashier / salesperson usercode from stktransm
+    softech_user = models.CharField(max_length=20, blank=True, db_index=True)
     last_synced = models.DateTimeField(auto_now=True)
 
     class Meta:

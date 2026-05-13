@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
-from .models import Category, Item, ItemStock
+from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
 from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
 
 
@@ -28,7 +28,10 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         if in_stock == 'true':
             from django.db.models import Sum
             qs = qs.annotate(
-                total_qty=Sum('stock_levels__quantity_on_hand')
+                total_qty=Sum(
+                    'stock_levels__quantity_on_hand',
+                    filter=~models.Q(stock_levels__softech_store_code__in=EXCLUDED_STORE_CODES),
+                )
             ).filter(total_qty__gt=0)
         return qs
 
@@ -39,9 +42,44 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['get'])
     def stock(self, request, pk=None):
+        """
+        Returns per-branch aggregated stock (expired stores 102/103/105 excluded).
+        One record per branch, quantities summed across valid stores.
+        """
         item = self.get_object()
-        stocks = ItemStock.objects.filter(item=item).select_related('branch')
-        return Response(ItemStockSerializer(stocks, many=True).data)
+        from django.db.models import Sum as _Sum
+        rows = (
+            ItemStock.objects
+            .filter(item=item)
+            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            .values('branch__id', 'branch__name', 'branch__name_ar')
+            .annotate(
+                quantity_on_hand=_Sum('quantity_on_hand'),
+                monthly_qty=_Sum('monthly_qty'),
+                on_order_qty=_Sum('on_order_qty'),
+            )
+            .order_by('-quantity_on_hand')
+        )
+        result = []
+        for r in rows:
+            qty = float(r['quantity_on_hand'] or 0)
+            if qty >= 5:
+                stock_status, label = 'in_stock', 'متوفر'
+            elif qty > 0:
+                stock_status, label = 'low_stock', 'كمية محدودة'
+            else:
+                stock_status, label = 'out_of_stock', 'غير متوفر'
+            result.append({
+                'branch':           r['branch__id'],
+                'branch_name':      r['branch__name'],
+                'branch_name_ar':   r['branch__name_ar'],
+                'quantity_on_hand': qty,
+                'monthly_qty':      float(r['monthly_qty'] or 0),
+                'on_order_qty':     float(r['on_order_qty'] or 0),
+                'stock_status':     stock_status,
+                'stock_status_label': label,
+            })
+        return Response(result)
 
     @action(detail=False, methods=['get'], url_path='softech-search')
     def softech_search(self, request):

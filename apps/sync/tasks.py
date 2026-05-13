@@ -253,10 +253,35 @@ def sync_customers(conn, sync_run):
             if hasattr(Customer, 'is_chronic_softech'):
                 defaults['is_chronic_softech'] = bool(row[9])
 
-            Customer.objects.update_or_create(
+            real_customer, _ = Customer.objects.update_or_create(
                 softech_id=softech_id,
                 defaults=defaults,
             )
+
+            # ── Auto-merge walk-in guest customers with same phone ────────────
+            # If staff created a guest Customer for this phone before the person
+            # was registered in SOFTECH, re-link their reservations and remove
+            # the temporary guest record.
+            guest_phone = defaults.get('phone', '').strip()
+            if guest_phone:
+                try:
+                    from apps.customers.models import Customer as _C
+                    from apps.reservations.models import Reservation as _R
+                    guests = _C.objects.filter(
+                        phone=guest_phone, is_guest=True
+                    ).exclude(pk=real_customer.pk)
+                    for guest in guests:
+                        _R.objects.filter(customer=guest).update(
+                            customer=real_customer
+                        )
+                        guest.delete()
+                        logger.info(
+                            f"Auto-merged guest customer (phone={guest_phone}) "
+                            f"into softech_id={softech_id}"
+                        )
+                except Exception as merge_err:
+                    logger.warning(f"Guest-merge error phone={guest_phone}: {merge_err}")
+
             count += 1
         except Exception as e:
             logger.warning(f"Customer sync error branchcustcode={row[1]}: {e}")
@@ -281,6 +306,10 @@ def sync_sales(conn, sync_run, full_history=False):
     rows = cursor.fetchall()
 
     # Group lines → invoices
+    # Row layout (updated query with stktransm join):
+    #  [0] personcode  [1] branchcode  [2] doccode   [3] docnumber  [4] docdate
+    #  [5] itemcode    [6] transqty    [7] transprice [8] transprice_total
+    #  [9] storecode   [10] usercode   [11] phcode
     invoices = defaultdict(list)
     for row in rows:
         key = (
@@ -308,6 +337,14 @@ def sync_sales(conn, sync_run, full_history=False):
             invoice_id = f"{branchcode}-{doccode}-{docnumber}-{date_str}"
             total = sum(Decimal(str(line[8])) if line[8] else Decimal(0) for line in lines)
 
+            # usercode from stktransm (index 10); take first non-empty value from lines
+            usercode = ''
+            for line in lines:
+                uc = str(line[10] or '').strip() if len(line) > 10 else ''
+                if uc:
+                    usercode = uc
+                    break
+
             purchase, _ = PurchaseHistory.objects.update_or_create(
                 softech_invoice_id=invoice_id,
                 defaults={
@@ -316,6 +353,8 @@ def sync_sales(conn, sync_run, full_history=False):
                     'invoice_date': docdate if isinstance(docdate, _dt.datetime) else None,
                     'total_amount': total,
                     'doc_code': doccode,
+                    'docnumber': docnumber,
+                    'softech_user': usercode,
                 }
             )
 

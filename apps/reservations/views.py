@@ -44,8 +44,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'priority', 'branch', 'assigned_to']
     search_fields = [
         'contact_name', 'contact_phone',
-        'customer__name', 'customer__phone', 'item__name',
-        'item__softech_id',
+        'customer__name', 'customer__phone',
+        'item__name', 'item__softech_id',
+        'manual_item_name',
     ]
     ordering_fields = ['created_at', 'updated_at', 'follow_up_date', 'priority']
     ordering = ['-created_at']
@@ -105,7 +106,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 Notification.send_to_branch(
                     branch=new_branch,
                     notification_type='reservation_status',
-                    title=f'حجز محوَّل إلى فرعك — {reservation.item.name}',
+                    title=f'حجز محوَّل إلى فرعك — {reservation.item_label}',
                     body=f'العميل: {reservation.contact_name}',
                     reservation=reservation,
                 )
@@ -114,7 +115,29 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         staff = get_profile(self.request)
-        reservation = serializer.save(created_by=staff)
+
+        # ── Walk-in guest customer ────────────────────────────────────────────
+        # If no customer was selected from search, auto-create (or find) a
+        # guest Customer keyed by phone number.  Guest records have no softech_id
+        # and are auto-merged with the real record when SOFTECH sync finds the
+        # same mobile number.
+        save_kwargs = {'created_by': staff}
+        if not serializer.validated_data.get('customer'):
+            from apps.customers.models import Customer as _Customer
+            phone = (serializer.validated_data.get('contact_phone') or '').strip()
+            name  = (serializer.validated_data.get('contact_name')  or '').strip()
+            if phone:
+                guest, _ = _Customer.objects.get_or_create(
+                    phone=phone,
+                    is_guest=True,
+                    defaults={
+                        'name':     name or 'زبون مباشر',
+                        'is_guest': True,
+                    },
+                )
+                save_kwargs['customer'] = guest
+
+        reservation = serializer.save(**save_kwargs)
 
         # Auto-log creation to status log
         ReservationStatusLog.objects.create(
@@ -126,10 +149,15 @@ class ReservationViewSet(viewsets.ModelViewSet):
         )
 
         # Auto-log to chatter
+        customer_label = (
+            reservation.customer.name
+            if reservation.customer_id
+            else reservation.contact_name or 'زبون مباشر'
+        )
         log_activity(
             reservation=reservation,
             activity_type='status_changed',
-            message=f'تم إنشاء الحجز للصنف "{reservation.item.name}" للعميل {reservation.customer.name}',
+            message=f'تم إنشاء الحجز للصنف "{reservation.item_label}" للعميل {customer_label}',
             staff=staff,
         )
 
@@ -180,7 +208,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             log_activity(
                 reservation=reservation,
                 activity_type='item_dispensed',
-                message=f'تم صرف الصنف "{reservation.item.name}" للعميل {reservation.contact_name}',
+                message=f'تم صرف الصنف "{reservation.item_label}" للعميل {reservation.contact_name}',
                 staff=staff,
             )
 

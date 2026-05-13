@@ -1,6 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  safelist: [
+    // Sidebar collapse toggle — dynamic ternary prevents JIT from detecting these
+    'w-16', 'w-60',
+  ],
   theme: {
     extend: {
       fontFamily: {

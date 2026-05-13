@@ -93,8 +93,8 @@ class ReservationActivityCreateSerializer(serializers.ModelSerializer):
 class ReservationListSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
+    item_name = serializers.SerializerMethodField()
+    item_softech_id = serializers.SerializerMethodField()
     branch_name = serializers.CharField(source='branch.name_ar', read_only=True)
     branch_id = serializers.IntegerField(source='branch.id', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
@@ -104,6 +104,7 @@ class ReservationListSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source='status_label_ar', read_only=True)
     image_url = serializers.SerializerMethodField()
     activity_count = serializers.SerializerMethodField()
+    is_manual_item = serializers.SerializerMethodField()
 
     def get_customer_name(self, obj):
         customer = getattr(obj, 'customer', None)
@@ -112,6 +113,19 @@ class ReservationListSerializer(serializers.ModelSerializer):
     def get_customer_phone(self, obj):
         customer = getattr(obj, 'customer', None)
         return getattr(customer, 'phone', None) or obj.contact_phone or ''
+
+    def get_item_name(self, obj):
+        if obj.item_id:
+            return obj.item.name
+        return obj.manual_item_name or '(صنف غير مكوَّد)'
+
+    def get_item_softech_id(self, obj):
+        if obj.item_id:
+            return obj.item.softech_id
+        return None
+
+    def get_is_manual_item(self, obj):
+        return not bool(obj.item_id)
 
     def get_image_url(self, obj):
         if obj.image:
@@ -124,13 +138,24 @@ class ReservationListSerializer(serializers.ModelSerializer):
         # Populated via annotation in viewset
         return getattr(obj, 'activity_count', 0)
 
+    def get_item_sale_price(self, obj):
+        return float(obj.item.unit_price) if obj.item_id else None
+
+    item_sale_price = serializers.SerializerMethodField()
+    channel_label   = serializers.SerializerMethodField()
+
+    def get_channel_label(self, obj):
+        return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
+
     class Meta:
         model = Reservation
         fields = [
             'id', 'customer_name', 'customer_phone',
-            'item_name', 'item_softech_id',
+            'item_name', 'item_softech_id', 'manual_item_name', 'is_manual_item',
+            'item_sale_price',
             'branch_name', 'branch_id',
             'quantity_requested', 'status', 'status_label', 'priority',
+            'channel', 'channel_label',
             'contact_phone', 'contact_name',
             'expected_arrival_date', 'follow_up_date',
             'assigned_to_name', 'created_by_name',
@@ -146,9 +171,10 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     customer_id = serializers.SerializerMethodField()
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
-    item_scientific = serializers.CharField(source='item.name_scientific', read_only=True)
+    item_name = serializers.SerializerMethodField()
+    item_softech_id = serializers.SerializerMethodField()
+    item_scientific = serializers.SerializerMethodField()
+    is_manual_item = serializers.SerializerMethodField()
     branch_name = serializers.CharField(source='branch.name_ar', read_only=True)
     branch_id = serializers.IntegerField(source='branch.id', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.full_name', read_only=True)
@@ -162,6 +188,14 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
 
     # Live stock at all branches for this item
     stock_by_branch = serializers.SerializerMethodField()
+    item_sale_price = serializers.SerializerMethodField()
+    channel_label   = serializers.SerializerMethodField()
+
+    def get_item_sale_price(self, obj):
+        return float(obj.item.unit_price) if obj.item_id else None
+
+    def get_channel_label(self, obj):
+        return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
 
     def get_customer_name(self, obj):
         customer = getattr(obj, 'customer', None)
@@ -175,6 +209,20 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
         customer = getattr(obj, 'customer', None)
         return getattr(customer, 'id', None)
 
+    def get_item_name(self, obj):
+        if obj.item_id:
+            return obj.item.name
+        return obj.manual_item_name or '(صنف غير مكوَّد)'
+
+    def get_item_softech_id(self, obj):
+        return obj.item.softech_id if obj.item_id else None
+
+    def get_item_scientific(self, obj):
+        return obj.item.name_scientific if obj.item_id else None
+
+    def get_is_manual_item(self, obj):
+        return not bool(obj.item_id)
+
     def get_image_url(self, obj):
         if obj.image:
             request = self.context.get('request')
@@ -183,28 +231,50 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
         return None
 
     def get_stock_by_branch(self, obj):
-        from apps.catalog.models import ItemStock
-        stocks = ItemStock.objects.filter(item=obj.item).select_related('branch')
-        return [
-            {
-                'branch_id': s.branch.id,
-                'branch_name': s.branch.name_ar or s.branch.name,
-                'quantity': float(s.quantity_on_hand),
-                'status': s.stock_status,
-                'status_label': s.stock_status_label,
-            }
-            for s in stocks
-        ]
+        if not obj.item_id:
+            return []
+        from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
+        from django.db.models import Sum
+        # Aggregate quantities per branch, excluding expired-stock stores
+        rows = (
+            ItemStock.objects
+            .filter(item=obj.item)
+            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            .select_related('branch')
+            .values('branch__id', 'branch__name', 'branch__name_ar')
+            .annotate(qty=Sum('quantity_on_hand'))
+            .order_by('-qty')
+        )
+        result = []
+        for r in rows:
+            qty = float(r['qty'] or 0)
+            if qty >= 5:
+                stock_status, label = 'in_stock', 'متوفر'
+            elif qty > 0:
+                stock_status, label = 'low_stock', 'كمية محدودة'
+            else:
+                stock_status, label = 'out_of_stock', 'غير متوفر'
+            result.append({
+                'branch_id':   r['branch__id'],
+                'branch_name': r['branch__name_ar'] or r['branch__name'],
+                'quantity':    qty,
+                'status':      stock_status,
+                'status_label': label,
+            })
+        return result
 
     class Meta:
         model = Reservation
         fields = [
             'id', 'customer', 'customer_id', 'customer_name', 'customer_phone',
             'item', 'item_name', 'item_softech_id', 'item_scientific',
+            'item_sale_price',
+            'manual_item_name', 'is_manual_item',
             'branch', 'branch_name', 'branch_id',
             'assigned_to', 'assigned_to_name',
             'created_by_name',
             'quantity_requested', 'status', 'status_label', 'priority',
+            'channel', 'channel_label',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date',
             'softech_reserve_id', 'status_color', 'priority_color',
@@ -223,8 +293,9 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
-            'customer', 'item', 'branch', 'assigned_to',
-            'quantity_requested', 'priority', 'contact_phone', 'contact_name',
+            'customer', 'item', 'manual_item_name', 'branch', 'assigned_to',
+            'quantity_requested', 'priority', 'channel',
+            'contact_phone', 'contact_name',
             'notes', 'expected_arrival_date', 'follow_up_date', 'image',
         ]
 
@@ -233,13 +304,22 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('الكمية يجب أن تكون أكبر من صفر')
         return value
 
+    def validate(self, data):
+        has_item        = bool(data.get('item'))
+        has_manual_name = bool((data.get('manual_item_name') or '').strip())
+        if not has_item and not has_manual_name:
+            raise serializers.ValidationError(
+                {'item': 'يجب تحديد صنف من القائمة أو إدخال اسم الصنف يدوياً'}
+            )
+        return data
+
 
 class ReservationUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
-            'branch',
-            'assigned_to', 'quantity_requested', 'priority',
+            'branch', 'item', 'manual_item_name',
+            'assigned_to', 'quantity_requested', 'priority', 'channel',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date', 'image',
         ]

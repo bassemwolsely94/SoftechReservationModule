@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Item, ItemStock
+from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -36,7 +36,11 @@ class ItemSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_stock(self, obj):
-        return float(sum(s.quantity_on_hand for s in obj.stock_levels.all()))
+        return float(sum(
+            s.quantity_on_hand
+            for s in obj.stock_levels.all()
+            if s.softech_store_code not in EXCLUDED_STORE_CODES
+        ))
 
 
 class ItemSearchSerializer(serializers.ModelSerializer):
@@ -50,4 +54,8 @@ class ItemSearchSerializer(serializers.ModelSerializer):
                   'unit_price', 'category_name', 'requires_fridge', 'total_stock']
 
     def get_total_stock(self, obj):
-        return float(sum(s.quantity_on_hand for s in obj.stock_levels.all()))
+        return float(sum(
+            s.quantity_on_hand
+            for s in obj.stock_levels.all()
+            if s.softech_store_code not in EXCLUDED_STORE_CODES
+        ))

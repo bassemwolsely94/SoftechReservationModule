@@ -1,6 +1,7 @@
 import logging
+from django.db.models import Sum
 from apps.reservations.models import Reservation, ReservationStatusLog
-from apps.catalog.models import ItemStock
+from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
 
 logger = logging.getLogger('elrezeiky.reservations')
 
@@ -16,25 +17,35 @@ def check_stock_for_pending_reservations():
 
     flagged = 0
     for r in pending:
-        stock = ItemStock.objects.filter(
-            item=r.item,
-            branch=r.branch,
-            quantity_on_hand__gte=r.quantity_requested
-        ).first()
+        # Manual-item reservations have no catalog entry — skip stock check
+        if not r.item_id:
+            continue
 
-        if stock:
+        agg = (
+            ItemStock.objects
+            .filter(item=r.item, branch=r.branch)
+            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            .aggregate(total=Sum('quantity_on_hand'))
+        )
+        available_qty = agg['total'] or 0
+
+        if available_qty >= r.quantity_requested:
             ReservationStatusLog.objects.create(
                 reservation=r,
                 old_status='pending',
                 new_status='available',
-                note=f'تلقائي: {stock.quantity_on_hand} وحدة متاحة في {r.branch.name}',
+                note=f'تلقائي: {available_qty} وحدة متاحة في {r.branch.name}',
             )
             r.status = 'available'
             r.save(update_fields=['status', 'updated_at'])
             flagged += 1
+            customer_label = (
+                f"{r.customer.name} ({r.customer.phone})"
+                if r.customer_id else r.contact_name
+            )
             logger.info(
                 f"Stock available: Reservation #{r.id} "
-                f"{r.item.name} → {r.customer.name} ({r.customer.phone})"
+                f"{r.item_label} → {customer_label}"
             )
 
     if flagged:

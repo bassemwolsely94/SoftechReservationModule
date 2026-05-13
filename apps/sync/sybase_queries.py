@@ -58,11 +58,19 @@ QUERY_CUSTOMERS = """
 QUERY_CUSTOMER_PHONES = None  # not used — phones fetched in QUERY_CUSTOMERS
 
 # ── SALES LINES — incremental (last 10 min) ───────────────────────────────────
+# Joined with stktransm to get usercode (cashier) and phcode (ATC code).
+# phcode lives on stktransm, not on the items table in SOFTECHDB9.
 QUERY_CUSTOMER_SALES_LINES_RECENT = """
     SELECT
         st.personcode, st.branchcode, st.doccode, st.docnumber, st.docdate,
-        st.itemcode, st.transqty, st.transprice, st.transprice_total, st.storecode
+        st.itemcode, st.transqty, st.transprice, st.transprice_total, st.storecode,
+        sm.usercode, sm.phcode
     FROM SOFTECHDB9.dbo.stktrans st
+    JOIN SOFTECHDB9.dbo.stktransm sm
+        ON  sm.branchcode = st.branchcode
+        AND sm.doccode    = st.doccode
+        AND sm.docnumber  = st.docnumber
+        AND sm.docdate    = st.docdate
     WHERE st.docdate >= DATEADD(minute, -10, GETDATE())
     AND st.doccode IN ('115', '30')
     AND st.personcode IS NOT NULL AND st.personcode != ''
@@ -73,8 +81,14 @@ QUERY_CUSTOMER_SALES_LINES_RECENT = """
 QUERY_CUSTOMER_SALES_LINES_FULL = """
     SELECT
         st.personcode, st.branchcode, st.doccode, st.docnumber, st.docdate,
-        st.itemcode, st.transqty, st.transprice, st.transprice_total, st.storecode
+        st.itemcode, st.transqty, st.transprice, st.transprice_total, st.storecode,
+        sm.usercode, sm.phcode
     FROM SOFTECHDB9.dbo.stktrans st
+    JOIN SOFTECHDB9.dbo.stktransm sm
+        ON  sm.branchcode = st.branchcode
+        AND sm.doccode    = st.doccode
+        AND sm.docnumber  = st.docnumber
+        AND sm.docdate    = st.docdate
     WHERE st.docdate >= DATEADD(day, -90, GETDATE())
     AND st.doccode IN ('115', '30')
     AND st.personcode IS NOT NULL AND st.personcode != ''
