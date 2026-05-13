@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 from apps.reservations.models import Reservation
 from apps.customers.models import Customer, PurchaseHistory
-from apps.catalog.models import ItemStock
+from apps.catalog.models import ItemStock, EXCLUDED_STORE_CODES
 from apps.sync.models import SyncRun
 
 
@@ -120,10 +120,13 @@ def dashboard_summary(request):
     }
 
     # ── Low stock alerts ──────────────────────────────────────────────────────
-    stock_qs = ItemStock.objects.filter(
-        quantity_on_hand__gt=0,
-        quantity_on_hand__lt=5
-    ).select_related('item', 'branch').order_by('quantity_on_hand')
+    stock_qs = (
+        ItemStock.objects
+        .filter(quantity_on_hand__gt=0, quantity_on_hand__lt=5)
+        .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+        .select_related('item', 'branch')
+        .order_by('quantity_on_hand')
+    )
     if profile and profile.branch and profile.role not in ('admin', 'call_center', 'purchasing'):
         stock_qs = stock_qs.filter(branch=profile.branch)
     stock_alerts = [
@@ -137,20 +140,20 @@ def dashboard_summary(request):
     ]
 
     # ── Transfer KPIs ─────────────────────────────────────────────────────────
-    transfers = {'pending': 0, 'flagged': 0, 'this_week': 0}
+    transfers = {'pending': 0, 'in_erp': 0, 'this_week': 0}
     try:
         from django.apps import apps as _a
         TR = _a.get_model('transfers', 'TransferRequest')
-        transfers['pending']   = TR.objects.filter(status='sent').count()
-        transfers['flagged']   = TR.objects.filter(flagged_no_sale=True).count()
+        transfers['pending']   = TR.objects.filter(status='pending').count()
+        transfers['in_erp']    = TR.objects.filter(status='sent_to_erp').count()
         transfers['this_week'] = TR.objects.filter(
             created_at__date__gte=week_start
         ).count()
         # Branch-scoped incoming transfers for branch staff
         if profile and profile.branch and profile.role not in ('admin', 'call_center', 'purchasing'):
             transfers['incoming_to_my_branch'] = TR.objects.filter(
-                source_branch=profile.branch,
-                status='sent',
+                supplying_branch=profile.branch,
+                status__in=['approved', 'sent_to_erp'],
             ).count()
     except Exception:
         pass
@@ -202,9 +205,12 @@ def followups_today(request):
     results = [
         {
             'id':            r.id,
-            'item_name':     r.item.name,
-            'softech_id':    r.item.softech_id,
-            'customer_name': r.customer.name,
+            'item_name':     r.item_label,
+            'softech_id':    r.item.softech_id if r.item_id else None,
+            'customer_name': (
+                r.customer.name if r.customer_id
+                else r.contact_name or 'زبون مباشر'
+            ),
             'contact_phone': r.contact_phone,
             'branch_name':   r.branch.name_ar or r.branch.name,
             'status':        r.status,
@@ -224,7 +230,13 @@ def followups_today(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def purchasing_dashboard(request):
-    """Full purchasing analytics. Roles: admin, purchasing only."""
+    """
+    Transfer-request analytics. Roles: admin, purchasing only.
+
+    Uses apps.transfers.TransferRequest which has these statuses:
+      draft | pending | approved | rejected | needs_revision |
+      sent_to_erp | completed | cancelled
+    """
     profile = _profile(request)
     if not profile or profile.role not in ('admin', 'purchasing'):
         return Response(
@@ -234,7 +246,8 @@ def purchasing_dashboard(request):
 
     try:
         from django.apps import apps as _a
-        TR = _a.get_model('transfers', 'TransferRequest')
+        TR  = _a.get_model('transfers', 'TransferRequest')
+        TRI = _a.get_model('transfers', 'TransferRequestItem')
     except Exception:
         return Response(
             {'detail': 'تطبيق التحويلات غير مُثبَّت بعد. تأكد من تشغيل migrate.'},
@@ -249,22 +262,23 @@ def purchasing_dashboard(request):
     tr_win  = TR.objects.filter(created_at__gte=win)
     tr_week = TR.objects.filter(created_at__gte=week_ago)
 
+    # ── KPIs ──────────────────────────────────────────────────────────────────
     total       = tr_win.count()
-    n_accepted  = tr_win.filter(status__in=['accepted', 'fulfilled']).count()
-    n_partial   = tr_win.filter(status='partial').count()
+    n_approved  = tr_win.filter(status__in=['approved', 'sent_to_erp', 'completed']).count()
+    n_completed = tr_win.filter(status='completed').count()
     n_rejected  = tr_win.filter(status='rejected').count()
-    n_fulfilled = tr_win.filter(status='fulfilled').count()
-    n_pending   = TR.objects.filter(status='sent').count()
-    n_flagged   = TR.objects.filter(flagged_no_sale=True).count()
-    accept_rate = round((n_accepted + n_partial) / total * 100, 1) if total else 0
+    n_pending   = TR.objects.filter(status='pending').count()
+    n_in_erp    = TR.objects.filter(status='sent_to_erp').count()
+    accept_rate = round(n_approved / total * 100, 1) if total else 0
 
-    responded = TR.objects.filter(
-        created_at__gte=win, responded_at__isnull=False
-    ).only('created_at', 'responded_at')
+    # Average time from creation to review
+    reviewed = TR.objects.filter(
+        created_at__gte=win, reviewed_at__isnull=False
+    ).only('created_at', 'reviewed_at')
     avg_hrs = None
-    if responded.exists():
-        secs = sum((t.responded_at - t.created_at).total_seconds() for t in responded)
-        avg_hrs = round(secs / responded.count() / 3600, 1)
+    if reviewed.exists():
+        secs    = sum((t.reviewed_at - t.created_at).total_seconds() for t in reviewed)
+        avg_hrs = round(secs / reviewed.count() / 3600, 1)
 
     weekly_breakdown = list(
         tr_week.values('status').annotate(count=Count('id')).order_by('status')
@@ -275,31 +289,51 @@ def purchasing_dashboard(request):
     for i in range(days - 1, -1, -1):
         d = (now - timedelta(days=i)).date()
         daily_trend.append({
-            'date': str(d),
+            'date':  str(d),
             'count': TR.objects.filter(created_at__date=d).count(),
         })
 
-    top_items = list(
-        tr_win.exclude(status='cancelled')
+    # ── Top items (via TransferRequestItem) ───────────────────────────────────
+    top_items_raw = list(
+        TRI.objects
+        .filter(request__created_at__gte=win)
+        .exclude(request__status='cancelled')
         .values('item__id', 'item__name', 'item__softech_id')
         .annotate(
-            request_count  = Count('id'),
-            total_qty      = Sum('quantity_needed'),
-            accepted_count = Count('id', filter=Q(status__in=['accepted', 'partial', 'fulfilled'])),
-            rejected_count = Count('id', filter=Q(status='rejected')),
+            request_count  = Count('request', distinct=True),
+            total_qty      = Sum('quantity'),
+            approved_count = Count(
+                'request',
+                filter=Q(request__status__in=['approved', 'sent_to_erp', 'completed']),
+                distinct=True,
+            ),
+            rejected_count = Count(
+                'request',
+                filter=Q(request__status='rejected'),
+                distinct=True,
+            ),
         )
         .order_by('-request_count')[:10]
     )
-    for row in top_items:
+    top_items = []
+    for row in top_items_raw:
         rc = row['request_count']
-        row['acceptance_rate'] = round(row['accepted_count'] / rc * 100) if rc else 0
-        row['total_qty'] = float(row['total_qty'] or 0)
+        top_items.append({
+            'item_id':        row['item__id'],
+            'item_name':      row['item__name'],
+            'softech_id':     row['item__softech_id'],
+            'request_count':  rc,
+            'total_qty':      float(row['total_qty'] or 0),
+            'accepted_count': row['approved_count'],
+            'rejected_count': row['rejected_count'],
+            'acceptance_rate': round(row['approved_count'] / rc * 100) if rc else 0,
+        })
 
     recommended = [
         {
-            'item_id':       r['item__id'],
-            'item_name':     r['item__name'],
-            'softech_id':    r['item__softech_id'],
+            'item_id':       r['item_id'],
+            'item_name':     r['item_name'],
+            'softech_id':    r['softech_id'],
             'request_count': r['request_count'],
             'total_qty':     r['total_qty'],
             'accept_rate':   r['acceptance_rate'],
@@ -308,104 +342,89 @@ def purchasing_dashboard(request):
         for r in top_items if r['request_count'] >= 3
     ]
 
+    # ── Top requesting branches ────────────────────────────────────────────────
     top_requestors = []
     for row in (
         tr_win.exclude(status='cancelled')
         .values('requesting_branch__id', 'requesting_branch__name_ar', 'requesting_branch__name')
-        .annotate(count=Count('id'), qty_total=Sum('quantity_needed'),
-                  n_rejected=Count('id', filter=Q(status='rejected')))
+        .annotate(
+            count      = Count('id'),
+            n_rejected = Count('id', filter=Q(status='rejected')),
+        )
         .order_by('-count')[:8]
     ):
         top_requestors.append({
             'branch_id':      row['requesting_branch__id'],
             'branch_name':    row['requesting_branch__name_ar'] or row['requesting_branch__name'],
             'count':          row['count'],
-            'qty_total':      float(row['qty_total'] or 0),
             'rejection_rate': round(row['n_rejected'] / row['count'] * 100) if row['count'] else 0,
         })
 
+    # ── Top supplying branches ─────────────────────────────────────────────────
     top_sources = []
     for row in (
         tr_win.exclude(status='cancelled')
-        .values('source_branch__id', 'source_branch__name_ar', 'source_branch__name')
-        .annotate(count=Count('id'),
-                  n_accepted=Count('id', filter=Q(status__in=['accepted', 'partial', 'fulfilled'])),
-                  n_rejected=Count('id', filter=Q(status='rejected')))
+        .filter(supplying_branch__isnull=False)
+        .values('supplying_branch__id', 'supplying_branch__name_ar', 'supplying_branch__name')
+        .annotate(
+            count      = Count('id'),
+            n_approved = Count('id', filter=Q(status__in=['approved', 'sent_to_erp', 'completed'])),
+            n_rejected = Count('id', filter=Q(status='rejected')),
+        )
         .order_by('-count')[:8]
     ):
         top_sources.append({
-            'branch_id':       row['source_branch__id'],
-            'branch_name':     row['source_branch__name_ar'] or row['source_branch__name'],
+            'branch_id':       row['supplying_branch__id'],
+            'branch_name':     row['supplying_branch__name_ar'] or row['supplying_branch__name'],
             'count':           row['count'],
-            'acceptance_rate': round(row['n_accepted'] / row['count'] * 100) if row['count'] else 0,
+            'acceptance_rate': round(row['n_approved'] / row['count'] * 100) if row['count'] else 0,
         })
 
-    REASON_LABELS = {
-        'insufficient_stock': 'مخزون غير كافٍ',
-        'reserved_customers': 'محجوز لعملاء الفرع',
-        'item_on_order':      'الصنف قيد الأوردر',
-        'other':              'أخرى',
-        '':                   'غير محدد',
-    }
-    rejection_reasons = [
-        {
-            'reason': r['rejection_reason'],
-            'label':  REASON_LABELS.get(r['rejection_reason'], r['rejection_reason']),
-            'count':  r['count'],
-        }
-        for r in (
-            TR.objects.filter(created_at__gte=win, status='rejected')
-            .values('rejection_reason').annotate(count=Count('id')).order_by('-count')
-        )
-    ]
+    # ── Rejection reasons (free-text field on TransferRequest) ────────────────
+    rejection_notes = list(
+        TR.objects.filter(created_at__gte=win, status='rejected')
+        .exclude(rejection_reason='')
+        .values_list('rejection_reason', flat=True)[:50]
+    )
 
-    flagged_list = []
-    for t in (
-        TR.objects.filter(flagged_no_sale=True)
-        .select_related('item', 'requesting_branch', 'source_branch')
-        .order_by('-responded_at')[:20]
-    ):
-        flagged_list.append({
-            'id':          t.id,
-            'item_name':   t.item.name,
-            'softech_id':  t.item.softech_id,
-            'branch_name': t.requesting_branch.name_ar or t.requesting_branch.name,
-            'source_name': t.source_branch.name_ar or t.source_branch.name,
-            'qty':         float(t.quantity_approved or t.quantity_needed or 0),
-            'days_since':  (now - t.responded_at).days if t.responded_at else None,
-            'responded_at': t.responded_at.isoformat() if t.responded_at else None,
-        })
-
+    # ── Flow matrix (requesting → supplying) ──────────────────────────────────
     flow_matrix = [
         {
             'from':  r['requesting_branch__name_ar'] or r['requesting_branch__name'],
-            'to':    r['source_branch__name_ar']     or r['source_branch__name'],
+            'to':    r['supplying_branch__name_ar']  or r['supplying_branch__name'],
             'count': r['count'],
         }
         for r in (
-            tr_win.exclude(status='cancelled')
-            .values('requesting_branch__name_ar', 'requesting_branch__name',
-                    'source_branch__name_ar',     'source_branch__name')
+            tr_win
+            .exclude(status='cancelled')
+            .filter(supplying_branch__isnull=False)
+            .values(
+                'requesting_branch__name_ar', 'requesting_branch__name',
+                'supplying_branch__name_ar',  'supplying_branch__name',
+            )
             .annotate(count=Count('id')).order_by('-count')[:15]
         )
     ]
 
     return Response({
-        'window_days': days,
+        'window_days':  days,
         'generated_at': now.isoformat(),
         'kpis': {
-            'total': total, 'accepted': n_accepted, 'partial': n_partial,
-            'rejected': n_rejected, 'fulfilled': n_fulfilled,
-            'pending': n_pending, 'flagged': n_flagged,
-            'accept_rate': accept_rate, 'avg_response_hrs': avg_hrs,
+            'total':            total,
+            'approved':         n_approved,
+            'completed':        n_completed,
+            'rejected':         n_rejected,
+            'pending':          n_pending,
+            'in_erp':           n_in_erp,
+            'accept_rate':      accept_rate,
+            'avg_review_hrs':   avg_hrs,
         },
-        'weekly_breakdown': weekly_breakdown,
-        'daily_trend':      daily_trend,
-        'top_items':        top_items,
-        'recommended':      recommended,
-        'top_requestors':   top_requestors,
-        'top_sources':      top_sources,
-        'rejection_reasons': rejection_reasons,
-        'flagged_list':     flagged_list,
-        'flow_matrix':      flow_matrix,
+        'weekly_breakdown':  weekly_breakdown,
+        'daily_trend':       daily_trend,
+        'top_items':         top_items,
+        'recommended':       recommended,
+        'top_requestors':    top_requestors,
+        'top_sources':       top_sources,
+        'rejection_notes':   rejection_notes,
+        'flow_matrix':       flow_matrix,
     })

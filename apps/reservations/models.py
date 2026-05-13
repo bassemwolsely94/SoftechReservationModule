@@ -16,12 +16,28 @@ class Reservation(models.Model):
         ('urgent',  'عاجل'),
         ('chronic', 'مريض مزمن'),
     ]
+    CHANNEL_CHOICES = [
+        ('pickup',        'استلام من الفرع'),
+        ('home_delivery', 'توصيل للمنزل'),
+        ('insurance',     'تأمين'),
+        ('inquiry',       'استفسار'),
+    ]
 
     customer = models.ForeignKey(
-        'customers.Customer', on_delete=models.PROTECT, related_name='reservations'
+        'customers.Customer', on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='reservations',
     )
     item = models.ForeignKey(
-        'catalog.Item', on_delete=models.PROTECT, related_name='reservations'
+        'catalog.Item', on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='reservations',
+    )
+    # Used when the item is not yet in the system (no softech_id / not synced).
+    # Staff types the name manually; item FK is null until the item is added.
+    manual_item_name = models.CharField(
+        max_length=500, blank=True,
+        help_text='اسم صنف غير مكوَّد — يُستخدم عند عدم وجود الصنف في قاعدة البيانات',
     )
     branch = models.ForeignKey('branches.Branch', on_delete=models.PROTECT)
     assigned_to = models.ForeignKey(
@@ -34,6 +50,10 @@ class Reservation(models.Model):
     contact_phone = models.CharField(max_length=50)
     contact_name = models.CharField(max_length=255)
     notes = models.TextField(blank=True)
+    channel = models.CharField(
+        max_length=20, choices=CHANNEL_CHOICES, default='pickup',
+        verbose_name='قناة الطلب',
+    )
     expected_arrival_date = models.DateField(null=True, blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
     softech_reserve_id = models.CharField(max_length=50, blank=True)
@@ -52,8 +72,16 @@ class Reservation(models.Model):
             models.Index(fields=['follow_up_date']),
         ]
 
+    @property
+    def item_label(self):
+        """Display name whether item is a catalog FK or a manual entry."""
+        if self.item_id:
+            return self.item.name
+        return self.manual_item_name or '(صنف غير مكوَّد)'
+
     def __str__(self):
-        return f"#{self.id} {self.item.name} — {self.customer.name} [{self.status}]"
+        customer_label = self.customer.name if self.customer_id else self.contact_name or 'زبون مباشر'
+        return f"#{self.id} {self.item_label} — {customer_label} [{self.status}]"
 
     @property
     def is_active(self):

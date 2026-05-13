@@ -19,10 +19,10 @@ class TransferRequestMessageInline(admin.TabularInline):
 @admin.register(TransferRequest)
 class TransferRequestAdmin(admin.ModelAdmin):
     list_display = [
-        'request_number', 'source_branch', 'destination_branch',
+        'request_number', 'requesting_branch', 'supplying_branch',
         'status', 'created_by', 'total_items', 'created_at',
     ]
-    list_filter  = ['status', 'source_branch', 'destination_branch']
+    list_filter  = ['status', 'requesting_branch', 'supplying_branch']
     search_fields = ['request_number', 'notes', 'items__item__name']
     readonly_fields = [
         'request_number', 'created_at', 'updated_at',

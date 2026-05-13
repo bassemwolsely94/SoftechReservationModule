@@ -38,6 +38,15 @@ INSTALLED_APPS = [
     'apps.notifications',
     'apps.transfers',
     'apps.demand',
+    'apps.chronic',
+    'apps.followups',
+    'apps.callcenter',
+    'apps.config',
+    'apps.stockcount',
+    'apps.shortage',
+    'apps.vouchers',
+    'apps.invoices',
+    'apps.incentives',
 ]
 
 MIDDLEWARE = [

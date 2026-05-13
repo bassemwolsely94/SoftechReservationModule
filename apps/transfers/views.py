@@ -47,7 +47,7 @@ def _notify(transfer_request, title, body, notif_type):
 
         # Notify destination branch staff + admins
         recipients = StaffProfile.objects.filter(
-            branch=transfer_request.destination_branch,
+            branch=transfer_request.supplying_branch,
             is_active=True,
         ) | StaffProfile.objects.filter(
             role__in=('admin', 'purchasing'),
@@ -94,7 +94,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     permission_classes  = [IsAuthenticated]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields    = ['status', 'source_branch', 'destination_branch']
+    filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
         'request_number', 'notes',
         'items__item__name', 'items__item__softech_id',
@@ -104,7 +104,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = TransferRequest.objects.select_related(
-            'source_branch', 'destination_branch',
+            'requesting_branch', 'supplying_branch',
             'created_by__user', 'reviewed_by__user',
         ).prefetch_related(
             'items__item',
@@ -117,17 +117,22 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
         # HQ roles see all
         if profile.role in ('admin', 'purchasing', 'call_center'):
-            return qs
+            pass
+        elif profile.branch:
+            # Branch staff see requests where they are source OR destination
+            qs = qs.filter(requesting_branch=profile.branch) | qs.filter(supplying_branch=profile.branch)
+        else:
+            return qs.none()
 
-        # Branch staff see requests where they are source OR destination
-        if profile.branch:
-            return qs.filter(
-                source_branch=profile.branch
-            ) | qs.filter(
-                destination_branch=profile.branch
-            )
+        # Date range filters
+        date_from = self.request.query_params.get('date_from')
+        date_to   = self.request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
 
-        return qs.none()
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -170,7 +175,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         _notify(
             tr,
             f'طلب تحويل جديد — {tr.request_number}',
-            f'فرع {tr.source_branch} يطلب تحويل {tr.items.count()} صنف. يرجى المراجعة.',
+            f'فرع {tr.requesting_branch} يطلب تحويل {tr.items.count()} صنف. يرجى المراجعة.',
             'transfer_request',
         )
 
@@ -321,9 +326,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     # ── Dispatch (delivery tracking) ──────────────────────────────────────────
 
-    @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
-        """POST /{id}/dispatch/ — record dispatch with delivery person."""
+    @action(detail=True, methods=['post'], url_path='record-dispatch', url_name='record_dispatch')
+    def record_dispatch(self, request, pk=None):
+        """POST /{id}/record-dispatch/ — record dispatch with delivery person."""
         tr = self.get_object()
         profile = _profile(request)
 

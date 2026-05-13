@@ -1,5 +1,9 @@
 from django.db import models
 
+# Stores that hold expired / quarantine stock at HQ branch (code 100).
+# These must NEVER appear in any stock balance queries or displays.
+EXCLUDED_STORE_CODES = frozenset({'102', '103', '105'})
+
 
 class Category(models.Model):
     softech_id = models.CharField(max_length=50, unique=True)

@@ -6,9 +6,12 @@ from apps.catalog.models import ItemStock
 # ── Item line serializers ─────────────────────────────────────────────────────
 
 class TransferRequestItemSerializer(serializers.ModelSerializer):
-    item_name       = serializers.CharField(source='item.name',       read_only=True)
-    item_softech_id = serializers.CharField(source='item.softech_id', read_only=True)
-    item_scientific = serializers.CharField(source='item.name_scientific', read_only=True)
+    item_name       = serializers.CharField(source='item.name',             read_only=True)
+    item_softech_id = serializers.CharField(source='item.softech_id',       read_only=True)
+    item_scientific = serializers.CharField(source='item.name_scientific',  read_only=True)
+    item_sale_price = serializers.DecimalField(
+        source='item.unit_price', max_digits=10, decimal_places=3, read_only=True
+    )
     available_stock = serializers.FloatField(
         source='available_stock_at_destination', read_only=True
     )
@@ -17,7 +20,7 @@ class TransferRequestItemSerializer(serializers.ModelSerializer):
         model  = TransferRequestItem
         fields = [
             'id', 'item', 'item_name', 'item_softech_id', 'item_scientific',
-            'quantity', 'notes', 'available_stock',
+            'item_sale_price', 'quantity', 'notes', 'available_stock',
         ]
 
 
@@ -67,13 +70,27 @@ class TransferRequestMessageCreateSerializer(serializers.ModelSerializer):
 # ── Request list serializer ───────────────────────────────────────────────────
 
 class TransferRequestListSerializer(serializers.ModelSerializer):
-    source_branch_name      = serializers.CharField(source='source_branch.name_ar',      read_only=True)
-    destination_branch_name = serializers.CharField(source='destination_branch.name_ar', read_only=True)
-    created_by_name         = serializers.CharField(source='created_by.full_name',        read_only=True)
-    reviewed_by_name        = serializers.CharField(source='reviewed_by.full_name',       read_only=True)
-    status_label            = serializers.CharField(source='status_label_ar',              read_only=True)
-    status_color            = serializers.CharField(read_only=True)
-    total_items             = serializers.SerializerMethodField()
+    requesting_branch_name = serializers.SerializerMethodField()
+    supplying_branch_name  = serializers.SerializerMethodField()
+    created_by_name        = serializers.SerializerMethodField()
+    reviewed_by_name       = serializers.SerializerMethodField()
+    status_label           = serializers.CharField(source='status_label_ar', read_only=True)
+    status_color           = serializers.CharField(read_only=True)
+    total_items            = serializers.SerializerMethodField()
+
+    def get_requesting_branch_name(self, obj):
+        b = obj.requesting_branch
+        return (b.name_ar or b.name) if b else '—'
+
+    def get_supplying_branch_name(self, obj):
+        b = obj.supplying_branch
+        return (b.name_ar or b.name) if b else '—'
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by_id else '—'
+
+    def get_reviewed_by_name(self, obj):
+        return obj.reviewed_by.full_name if obj.reviewed_by_id else None
 
     def get_total_items(self, obj):
         return obj.items.count()
@@ -82,8 +99,8 @@ class TransferRequestListSerializer(serializers.ModelSerializer):
         model  = TransferRequest
         fields = [
             'id', 'request_number',
-            'source_branch', 'source_branch_name',
-            'destination_branch', 'destination_branch_name',
+            'requesting_branch', 'requesting_branch_name',
+            'supplying_branch', 'supplying_branch_name',
             'status', 'status_label', 'status_color',
             'created_by_name', 'reviewed_by_name',
             'total_items',
@@ -95,15 +112,44 @@ class TransferRequestListSerializer(serializers.ModelSerializer):
 # ── Request detail serializer ─────────────────────────────────────────────────
 
 class TransferRequestDetailSerializer(serializers.ModelSerializer):
-    source_branch_name      = serializers.CharField(source='source_branch.name_ar',      read_only=True)
-    destination_branch_name = serializers.CharField(source='destination_branch.name_ar', read_only=True)
-    source_branch_id        = serializers.IntegerField(source='source_branch.id',        read_only=True)
-    destination_branch_id   = serializers.IntegerField(source='destination_branch.id',   read_only=True)
-    created_by_name         = serializers.CharField(source='created_by.full_name',       read_only=True)
-    created_by_branch       = serializers.CharField(source='created_by.branch_name',     read_only=True)
-    reviewed_by_name        = serializers.CharField(source='reviewed_by.full_name',      read_only=True)
-    sent_to_erp_by_name     = serializers.CharField(source='sent_to_erp_by.full_name',   read_only=True)
-    dispatched_by_name      = serializers.CharField(source='dispatched_by.full_name',     read_only=True)
+    requesting_branch_name = serializers.SerializerMethodField()
+    supplying_branch_name  = serializers.SerializerMethodField()
+    requesting_branch_id   = serializers.SerializerMethodField()
+    supplying_branch_id    = serializers.SerializerMethodField()
+    created_by_name        = serializers.SerializerMethodField()
+    created_by_branch      = serializers.SerializerMethodField()
+    reviewed_by_name       = serializers.SerializerMethodField()
+    sent_to_erp_by_name    = serializers.SerializerMethodField()
+    dispatched_by_name     = serializers.SerializerMethodField()
+
+    def get_requesting_branch_name(self, obj):
+        b = obj.requesting_branch
+        return (b.name_ar or b.name) if b else '—'
+
+    def get_supplying_branch_name(self, obj):
+        b = obj.supplying_branch
+        return (b.name_ar or b.name) if b else '—'
+
+    def get_requesting_branch_id(self, obj):
+        return obj.requesting_branch_id
+
+    def get_supplying_branch_id(self, obj):
+        return obj.supplying_branch_id
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by_id else '—'
+
+    def get_created_by_branch(self, obj):
+        return obj.created_by.branch_name if obj.created_by_id else None
+
+    def get_reviewed_by_name(self, obj):
+        return obj.reviewed_by.full_name if obj.reviewed_by_id else None
+
+    def get_sent_to_erp_by_name(self, obj):
+        return obj.sent_to_erp_by.full_name if obj.sent_to_erp_by_id else None
+
+    def get_dispatched_by_name(self, obj):
+        return obj.dispatched_by.full_name if obj.dispatched_by_id else None
     can_dispatch            = serializers.BooleanField(read_only=True)
     status_label            = serializers.CharField(source='status_label_ar',             read_only=True)
     status_color            = serializers.CharField(read_only=True)
@@ -121,22 +167,28 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
     destination_stock = serializers.SerializerMethodField()
 
     def get_destination_stock(self, obj):
-        stocks = ItemStock.objects.filter(
-            branch=obj.destination_branch
-        ).select_related('item')
+        if not obj.supplying_branch_id:
+            return {}
+        from apps.catalog.models import EXCLUDED_STORE_CODES
+        from django.db.models import Sum
         item_ids = set(obj.items.values_list('item_id', flat=True))
-        return {
-            str(s.item_id): float(s.quantity_on_hand)
-            for s in stocks
-            if s.item_id in item_ids
-        }
+        if not item_ids:
+            return {}
+        rows = (
+            ItemStock.objects
+            .filter(item_id__in=item_ids, branch=obj.supplying_branch)
+            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            .values('item_id')
+            .annotate(qty=Sum('quantity_on_hand'))
+        )
+        return {str(r['item_id']): float(r['qty'] or 0) for r in rows}
 
     class Meta:
         model  = TransferRequest
         fields = [
             'id', 'request_number',
-            'source_branch', 'source_branch_name', 'source_branch_id',
-            'destination_branch', 'destination_branch_name', 'destination_branch_id',
+            'requesting_branch', 'requesting_branch_name', 'requesting_branch_id',
+            'supplying_branch', 'supplying_branch_name', 'supplying_branch_id',
             'status', 'status_label', 'status_color',
             'created_by', 'created_by_name', 'created_by_branch',
             'reviewed_by', 'reviewed_by_name',
@@ -167,11 +219,12 @@ class TransferRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = TransferRequest
         fields = [
-            'source_branch', 'destination_branch', 'notes', 'items',
+            'id', 'requesting_branch', 'supplying_branch', 'notes', 'items',
         ]
+        read_only_fields = ['id']
 
     def validate(self, data):
-        if data.get('source_branch') == data.get('destination_branch'):
+        if data.get('requesting_branch') == data.get('supplying_branch'):
             raise serializers.ValidationError(
                 'الفرع الطالب والفرع المصدر لا يمكن أن يكونا نفس الفرع'
             )
@@ -188,7 +241,7 @@ class TransferRequestCreateSerializer(serializers.ModelSerializer):
 class TransferRequestUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = TransferRequest
-        fields = ['notes', 'source_branch', 'destination_branch']
+        fields = ['notes', 'requesting_branch', 'supplying_branch']
 
     def validate(self, data):
         instance = self.instance
@@ -196,8 +249,8 @@ class TransferRequestUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'لا يمكن تعديل هذا الطلب في حالته الحالية'
             )
-        src = data.get('source_branch', instance.source_branch if instance else None)
-        dst = data.get('destination_branch', instance.destination_branch if instance else None)
+        src = data.get('requesting_branch', instance.requesting_branch if instance else None)
+        dst = data.get('supplying_branch', instance.supplying_branch if instance else None)
         if src and dst and src == dst:
             raise serializers.ValidationError('الفرع الطالب والفرع المصدر لا يمكن أن يكونا نفس الفرع')
         return data

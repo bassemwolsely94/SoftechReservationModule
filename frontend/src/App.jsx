@@ -14,6 +14,13 @@ import SyncPage from './pages/SyncPage'
 import TransfersPage from './pages/TransfersPage'
 import TransferDetailPage from './pages/TransferDetailPage'
 import PurchasingPage from './pages/PurchasingPage'
+import ChronicClassifierPage from './pages/ChronicClassifierPage'
+import SettingsPage from './pages/SettingsPage'
+import StockCountPage from './pages/StockCountPage'
+import ShortagePage from './pages/ShortagePage'
+import VouchersPage from './pages/VouchersPage'
+import InvoicePage from './pages/InvoicePage'
+import IncentivesPage from './pages/IncentivesPage'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -52,7 +59,14 @@ export default function App() {
             <Route path="purchasing"         element={<PurchasingPage />} />
             <Route path="customers"          element={<CustomersPage />} />
             <Route path="customers/:id"      element={<CustomerDetailPage />} />
+            <Route path="chronic-classifier" element={<ChronicClassifierPage />} />
             <Route path="sync"               element={<SyncPage />} />
+            <Route path="settings"           element={<SettingsPage />} />
+            <Route path="stock-count"        element={<StockCountPage />} />
+            <Route path="shortage"           element={<ShortagePage />} />
+            <Route path="vouchers"           element={<VouchersPage />} />
+            <Route path="invoices"           element={<InvoicePage />} />
+            <Route path="incentives"         element={<IncentivesPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

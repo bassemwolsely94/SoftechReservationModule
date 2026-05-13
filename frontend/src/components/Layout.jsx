@@ -8,12 +8,19 @@ import { ar } from 'date-fns/locale'
 import NotificationPanel from './NotificationPanel'
 
 const NAV = [
-  { to: '/dashboard',    icon: '◈',  label: 'الرئيسية',             roles: null },
-  { to: '/reservations', icon: '📋', label: 'الحجوزات',             roles: null },
-  { to: '/transfers',    icon: '🔀', label: 'طلبات التحويل',        roles: null },
-  { to: '/purchasing',   icon: '📊', label: 'لوحة المشتريات',      roles: ['admin', 'purchasing'] },
-  { to: '/customers',    icon: '👥', label: 'العملاء',               roles: null },
-  { to: '/sync',         icon: '⟳',  label: 'المزامنة',             roles: ['admin'] },
+  { to: '/dashboard',           icon: '◈',  label: 'الرئيسية',             roles: null },
+  { to: '/reservations',        icon: '📋', label: 'الحجوزات',             roles: null },
+  { to: '/transfers',           icon: '🔀', label: 'طلبات التحويل',        roles: null },
+  { to: '/purchasing',          icon: '📊', label: 'لوحة المشتريات',      roles: ['admin', 'purchasing'] },
+  { to: '/customers',           icon: '👥', label: 'العملاء',               roles: null },
+  { to: '/chronic-classifier',  icon: '🧬', label: 'مصنّف الأدوية المزمنة', roles: ['admin', 'pharmacist', 'callcenter'] },
+  { to: '/sync',                icon: '⟳',  label: 'المزامنة',             roles: ['admin'] },
+  { to: '/stock-count',         icon: '📦', label: 'الجرد الفعلي',         roles: ['admin', 'pharmacist'] },
+  { to: '/shortage',            icon: '📋', label: 'النواقص',              roles: ['admin', 'pharmacist', 'callcenter'] },
+  { to: '/vouchers',            icon: '🎫', label: 'القسائم',              roles: ['admin', 'callcenter'] },
+  { to: '/invoices',            icon: '🧾', label: 'فواتير الموردين',      roles: ['admin', 'purchasing'] },
+  { to: '/incentives',           icon: '💰', label: 'الحوافز',              roles: ['admin', 'purchasing'] },
+  { to: '/settings',            icon: '⚙️', label: 'الإعدادات',            roles: ['admin'] },
 ]
 
 export default function Layout() {
@@ -35,7 +42,7 @@ export default function Layout() {
     <div className="flex min-h-screen bg-gray-50 font-cairo" dir="rtl">
 
       {/* Sidebar */}
-      <aside className={`flex flex-col bg-brand-700 text-white transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`}>
+      <aside className={`flex flex-col shrink-0 bg-brand-700 text-white transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`}>
 
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-brand-600">

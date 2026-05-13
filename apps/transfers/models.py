@@ -36,13 +36,13 @@ class TransferRequest(models.Model):
     )
 
     # ── Branches ──────────────────────────────────────────────────────────────
-    source_branch = models.ForeignKey(
+    requesting_branch = models.ForeignKey(
         'branches.Branch',
         on_delete=models.PROTECT,
         related_name='outgoing_requests',
         verbose_name='الفرع الطالب',
     )
-    destination_branch = models.ForeignKey(
+    supplying_branch = models.ForeignKey(
         'branches.Branch',
         on_delete=models.PROTECT,
         null=True,
@@ -125,20 +125,28 @@ class TransferRequest(models.Model):
         verbose_name = 'طلب تحويل'
         verbose_name_plural = 'طلبات التحويل'
         indexes = [
-            models.Index(fields=['status', 'source_branch']),
-            models.Index(fields=['status', 'destination_branch']),
+            models.Index(fields=['status', 'requesting_branch']),
+            models.Index(fields=['status', 'supplying_branch']),
             models.Index(fields=['created_at']),
         ]
 
     def __str__(self):
-        return f'{self.request_number} | {self.source_branch} → {self.destination_branch} | {self.get_status_display()}'
+        return f'{self.request_number} | {self.requesting_branch} → {self.supplying_branch} | {self.get_status_display()}'
 
     def save(self, *args, **kwargs):
         if not self.request_number:
-            # Generate after first save to get the ID
-            super().save(*args, **kwargs)
+            # Pre-fetch the next PK from the DB sequence so we can populate
+            # request_number BEFORE the INSERT — avoids a two-phase save and
+            # works even when the column has a NOT NULL constraint.
+            if not self.pk:
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT nextval('transfers_transferrequest_id_seq')"
+                    )
+                    next_id = cursor.fetchone()[0]
+                self.pk = next_id
             self.request_number = f'TR-{self.pk:06d}'
-            kwargs['force_insert'] = False
         super().save(*args, **kwargs)
 
     # ── State machine helpers ─────────────────────────────────────────────────
@@ -237,7 +245,7 @@ class TransferRequestItem(models.Model):
         from apps.catalog.models import ItemStock
         stock = ItemStock.objects.filter(
             item=self.item,
-            branch=self.request.destination_branch,
+            branch=self.request.supplying_branch,
         ).first()
         return float(stock.quantity_on_hand) if stock else 0.0
 
