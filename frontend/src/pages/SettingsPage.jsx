@@ -253,7 +253,9 @@ export default function SettingsPage() {
         configApi.groupedDropdowns(),
         configApi.dropdownKeys(),
       ])
-      setSettings(sRes.data)
+      // listSettings is paginated → extract results array
+      setSettings(sRes.data.results ?? sRes.data)
+      // grouped() and keys() return plain objects/arrays (custom actions, not paginated)
       setDropdowns(dRes.data)
       setDdKeys(kRes.data)
     } finally {

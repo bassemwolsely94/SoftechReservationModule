@@ -67,9 +67,11 @@ class IncentiveProgramCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = IncentiveProgram
         fields = [
+            'id',                                              # read-only, needed by frontend after create
             'name', 'description',
             'start_date', 'end_date', 'calculation_period', 'is_active',
         ]
+        read_only_fields = ['id']
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
