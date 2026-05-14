@@ -324,22 +324,40 @@ function ReservationModal({ reservation, onClose, onStatusChange, onImageUpload,
               )}
             </div>
 
-            {/* Channel */}
+            {/* Order source + Fulfillment method */}
             <div className="flex items-center gap-3">
-              <div className="text-xs text-gray-500 font-semibold flex-shrink-0">قناة الطلب:</div>
+              <div className="text-xs text-gray-500 font-semibold flex-shrink-0 w-20">مصدر الطلب:</div>
               <select
-                value={reservation.channel || 'pickup'}
+                value={reservation.order_source || ''}
                 onChange={async e => {
                   try {
-                    await reservationsApi.update(reservation.id, { channel: e.target.value })
+                    await reservationsApi.update(reservation.id, { order_source: e.target.value })
                     onRefresh()
                   } catch {}
                 }}
                 className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-brand-400 cursor-pointer">
+                <option value="">— اختر —</option>
+                <option value="cc_whatsapp">كول سنتر — واتساب</option>
+                <option value="cc_call">كول سنتر — مكالمة</option>
+                <option value="branch_whatsapp">الفرع — واتساب</option>
+                <option value="branch_call">الفرع — مكالمة</option>
+                <option value="online">طلب إلكتروني</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-gray-500 font-semibold flex-shrink-0 w-20">طريقة التسليم:</div>
+              <select
+                value={reservation.fulfillment_method || ''}
+                onChange={async e => {
+                  try {
+                    await reservationsApi.update(reservation.id, { fulfillment_method: e.target.value })
+                    onRefresh()
+                  } catch {}
+                }}
+                className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-brand-400 cursor-pointer">
+                <option value="">— اختر —</option>
                 <option value="pickup">🏪 استلام من الفرع</option>
-                <option value="home_delivery">🚚 توصيل للمنزل</option>
-                <option value="insurance">🏥 تأمين</option>
-                <option value="inquiry">❓ استفسار</option>
+                <option value="delivery">🚚 توصيل</option>
               </select>
             </div>
 
