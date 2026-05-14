@@ -325,10 +325,14 @@ def sync_customers(conn, sync_run):
             phone2 = str(row[7] or '').strip()
             phone  = mobile or phone2
 
-            # PIC code mirrors the SOFTECH format: {branchcode}HD{branchcustcode}
-            # Old branches: 2-digit prefix (01–12), e.g. "01HD14"
-            # New branches: 3-digit prefix (100, 130, 140), e.g. "130HD9969"
-            pic_code = f"{branch_code}HD{cust_code}" if branch_code and cust_code else ''
+            # Read PIC directly from SOFTECH (row[10] = lc.pic).
+            # The ERP stores the authoritative value — branch prefix mapping is
+            # non-trivial (e.g. internal branchcode "100" → PIC prefix "01") so
+            # we never synthesise it. Fall back to the generated form only when
+            # the column is absent or empty (older SOFTECH schema).
+            pic_code = str(row[10] or '').strip() if len(row) > 10 else ''
+            if not pic_code and branch_code and cust_code:
+                pic_code = f"{branch_code}HD{cust_code}"
 
             customer = Customer(
                 softech_id=cust_code,

@@ -47,7 +47,8 @@ QUERY_CUSTOMERS = """
         lc.branchcode, lc.branchcustcode, lc.branchcustname,
         lc.branchcustaddress1, lc.branchcustaddress2,
         lc.custdofbirth, lc.mobileno, lc.branchcustphone,
-        lc.branchcustclassif, lc.ischronic
+        lc.branchcustclassif, lc.ischronic,
+        lc.pic
     FROM SOFTECHDB9.dbo.localcustomers lc
 """
 

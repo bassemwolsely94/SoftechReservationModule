@@ -697,26 +697,15 @@ function NewReservationModal({ onClose, onCreated, branches, userBranchId, isCCO
   const [error, setError] = useState('')
   const fileRef = useRef()
 
-  // Customer search — fetch up to 20 then deduplicate by phone so the same person
-  // registered in multiple SOFTECH branches (old 2-digit + new 3-digit PIC) shows once.
+  // Customer search — PIC is the unique key; phone is NOT unique (multiple customers
+  // can share a phone). Show all matching records, no deduplication.
   useEffect(() => {
     if (form.customer_search.length < 2) { setCustomerResults([]); return }
     const t = setTimeout(async () => {
       try {
         const { default: api } = await import('../api/client')
-        const res = await api.get('/customers/', { params: { search: form.customer_search, limit: 20 } })
-        const raw = res.data.results || res.data
-        // One entry per phone number. Prefer the record that has a softech_pic.
-        const seen = new Map()
-        for (const c of raw) {
-          const key = c.phone ? c.phone : `__nophone_${c.id}`
-          if (!seen.has(key)) {
-            seen.set(key, c)
-          } else if (!seen.get(key).softech_pic && c.softech_pic) {
-            seen.set(key, c)
-          }
-        }
-        setCustomerResults(Array.from(seen.values()).slice(0, 8))
+        const res = await api.get('/customers/', { params: { search: form.customer_search, limit: 10 } })
+        setCustomerResults(res.data.results || res.data)
       } catch { setCustomerResults([]) }
     }, 300)
     return () => clearTimeout(t)
