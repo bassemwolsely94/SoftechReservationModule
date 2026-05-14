@@ -296,7 +296,7 @@ def sync_customers(conn, sync_run):
     Sync SOFTECHDB9.dbo.localcustomers → Customer.
     Row layout: [0] branchcode [1] branchcustcode [2] branchcustname
                 [3] addr1 [4] addr2 [5] dob [6] mobileno [7] branchcustphone
-                [8] branchcustclassif [9] ischronic
+                [8] branchcustclassif [9] ischronic [10] phcode (PIC)
 
     Optimisation: pre-load branch map → single bulk upsert.
     Guest-merge is done in one batched pass at the end (not per-row).
@@ -325,14 +325,10 @@ def sync_customers(conn, sync_run):
             phone2 = str(row[7] or '').strip()
             phone  = mobile or phone2
 
-            # Read PIC directly from SOFTECH (row[10] = lc.pic).
-            # The ERP stores the authoritative value — branch prefix mapping is
-            # non-trivial (e.g. internal branchcode "100" → PIC prefix "01") so
-            # we never synthesise it. Fall back to the generated form only when
-            # the column is absent or empty (older SOFTECH schema).
+            # row[10] = lc.phcode — SOFTECH's authoritative PIC value
+            # (e.g. "01HD14", "130HD9969"). Verified against live data:
+            # internal branchcode "100" → PIC prefix "01", not "100".
             pic_code = str(row[10] or '').strip() if len(row) > 10 else ''
-            if not pic_code and branch_code and cust_code:
-                pic_code = f"{branch_code}HD{cust_code}"
 
             customer = Customer(
                 softech_id=cust_code,
