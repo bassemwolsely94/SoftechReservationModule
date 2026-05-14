@@ -652,7 +652,7 @@ function ItemStockPanel({ stocks, branchId }) {
                 .sort((a, b) => b.quantity_on_hand - a.quantity_on_hand)
                 .map(s => (
                   <div
-                    key={s.id}
+                    key={s.branch}
                     className={`flex items-center justify-between px-2.5 py-1 text-xs border-b border-gray-100 last:border-0 ${
                       s.branch === branchId ? 'bg-blue-50 font-semibold' : 'bg-white'
                     }`}
