@@ -58,6 +58,27 @@ class Reservation(models.Model):
     follow_up_date = models.DateField(null=True, blank=True)
     softech_reserve_id = models.CharField(max_length=50, blank=True)
     image = models.ImageField(upload_to='reservations/%Y/%m/', null=True, blank=True)
+
+    ORDER_SOURCE_CHOICES = [
+        ('cc_whatsapp',     'كول سنتر — واتساب'),
+        ('cc_call',         'كول سنتر — مكالمة'),
+        ('branch_whatsapp', 'الفرع — واتساب'),
+        ('branch_call',     'الفرع — مكالمة'),
+        ('online',          'طلب إلكتروني'),
+    ]
+    FULFILLMENT_CHOICES = [
+        ('pickup',   'استلام من الفرع'),
+        ('delivery', 'توصيل'),
+    ]
+    order_source = models.CharField(
+        max_length=20, choices=ORDER_SOURCE_CHOICES, blank=True,
+        verbose_name='مصدر الطلب',
+    )
+    fulfillment_method = models.CharField(
+        max_length=10, choices=FULFILLMENT_CHOICES, blank=True,
+        verbose_name='طريقة التسليم',
+    )
+
     created_by = models.ForeignKey(
         'users.StaffProfile', on_delete=models.SET_NULL,
         null=True, related_name='created_reservations'
@@ -160,6 +181,23 @@ class ReservationStatusLog(models.Model):
 
     def __str__(self):
         return f"Reservation #{self.reservation_id}: {self.old_status} → {self.new_status}"
+
+
+# ── Extra images ──────────────────────────────────────────────────────────────
+
+class ReservationImage(models.Model):
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='images',
+    )
+    image = models.ImageField(upload_to='reservations/%Y/%m/')
+    uploaded_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='uploaded_reservation_images',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
 
 
 # ── Chatter / Activity Log ─────────────────────────────────────────────────────

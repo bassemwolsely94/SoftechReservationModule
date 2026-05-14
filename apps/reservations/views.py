@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 from datetime import date
 
-from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment
+from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage
 from .serializers import (
     ReservationListSerializer,
     ReservationDetailSerializer,
@@ -19,6 +19,7 @@ from .serializers import (
     ReservationActivityCreateSerializer,
     ReservationDownpaymentSerializer,
     ReservationDownpaymentCreateSerializer,
+    ReservationImageSerializer,
 )
 
 
@@ -541,3 +542,41 @@ class ReservationViewSet(viewsets.ModelViewSet):
             ),
         }
         return Response(data)
+
+    # ── Extra images ──────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get', 'post'], url_path='images',
+            parser_classes=[MultiPartParser, FormParser, JSONParser])
+    def images(self, request, pk=None):
+        reservation = self.get_object()
+        if request.method == 'GET':
+            imgs = ReservationImage.objects.filter(reservation=reservation)
+            return Response(ReservationImageSerializer(
+                imgs, many=True, context={'request': request}
+            ).data)
+
+        profile = get_profile(request)
+        files = request.FILES.getlist('images')
+        if not files:
+            return Response({'error': 'لم يتم إرسال أي صور'}, status=status.HTTP_400_BAD_REQUEST)
+        created = []
+        for f in files:
+            img = ReservationImage.objects.create(
+                reservation=reservation, image=f, uploaded_by=profile
+            )
+            created.append(img)
+        return Response(
+            ReservationImageSerializer(created, many=True, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['delete'], url_path=r'images/(?P<image_id>\d+)/delete')
+    def delete_image(self, request, pk=None, image_id=None):
+        reservation = self.get_object()
+        try:
+            img = ReservationImage.objects.get(pk=image_id, reservation=reservation)
+        except ReservationImage.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        img.image.delete(save=False)
+        img.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

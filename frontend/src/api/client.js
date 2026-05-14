@@ -77,6 +77,15 @@ export const reservationsApi = {
 
   // WhatsApp share — returns { message_text }; frontend opens wa.me
   shareWhatsapp:   (id) => api.post(`/reservations/${id}/share-whatsapp/`),
+
+  // Extra images (multi-upload)
+  getImages:    (id) => api.get(`/reservations/${id}/images/`),
+  uploadImages: (id, formData) =>
+    api.post(`/reservations/${id}/images/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  deleteImage:  (reservationId, imageId) =>
+    api.delete(`/reservations/${reservationId}/images/${imageId}/delete/`),
 }
 
 // ── Customers ─────────────────────────────────────────────────────────────────

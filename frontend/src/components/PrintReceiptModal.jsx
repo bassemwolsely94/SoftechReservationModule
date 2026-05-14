@@ -11,6 +11,7 @@
  * Receipt format: narrow card (~360px) — NOT A4.
  */
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { reservationsApi, transfersApi } from '../api/client'
 
 const fmt = (n, dp = 2) =>
@@ -312,7 +313,7 @@ export default function PrintReceiptModal({ type, docId, onClose }) {
     requestAnimationFrame(() => window.print())
   }
 
-  return (
+  return createPortal(
     <div
       id="receipt-print-root"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -389,6 +390,7 @@ export default function PrintReceiptModal({ type, docId, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

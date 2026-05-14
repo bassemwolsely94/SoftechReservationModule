@@ -12,6 +12,18 @@ import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+const ORDER_SOURCE_LABELS = {
+  cc_whatsapp:     'كول سنتر — واتساب',
+  cc_call:         'كول سنتر — مكالمة',
+  branch_whatsapp: 'الفرع — واتساب',
+  branch_call:     'الفرع — مكالمة',
+  online:          'طلب إلكتروني',
+}
+const FULFILLMENT_LABELS = {
+  pickup:   'استلام من الفرع',
+  delivery: 'توصيل',
+}
+
 const NEXT_STATUSES = {
   pending:   ['available', 'cancelled'],
   available: ['contacted', 'cancelled'],
@@ -509,12 +521,20 @@ export default function ReservationDetailPage() {
   const { user } = useAuthStore()
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showPrintModal, setShowPrintModal] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
+  const imageInputRef = useRef()
   const chatEndRef = useRef()
 
   const { data: r, isLoading, isError } = useQuery({
     queryKey: ['reservation', id],
     queryFn: () => reservationsApi.get(id).then(res => res.data),
     refetchInterval: 60_000,
+  })
+
+  const { data: extraImages = [], refetch: refetchImages } = useQuery({
+    queryKey: ['reservation-images', id],
+    queryFn: () => reservationsApi.getImages(id).then(res => res.data),
+    enabled: !!id,
   })
 
   // Scroll chatter to bottom on load
@@ -537,6 +557,29 @@ export default function ReservationDetailPage() {
     } catch (e) {
       alert(e.response?.data?.detail || 'تعذّر حذف الرسالة')
     }
+  }
+
+  const handleUploadImages = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setImageUploading(true)
+    try {
+      const fd = new FormData()
+      files.forEach(f => fd.append('images', f))
+      await reservationsApi.uploadImages(id, fd)
+      refetchImages()
+    } catch { /* silent */ } finally {
+      setImageUploading(false)
+      if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+  }
+
+  const handleDeleteImage = async (imageId) => {
+    if (!window.confirm('حذف هذه الصورة؟')) return
+    try {
+      await reservationsApi.deleteImage(id, imageId)
+      refetchImages()
+    } catch { /* silent */ }
   }
 
   if (isLoading) return (
@@ -708,16 +751,39 @@ export default function ReservationDetailPage() {
             </div>
           )}
 
-          {/* Attached image */}
-          {r.image_url && (
+          {/* Images gallery */}
+          {(r.image_url || extraImages.length > 0) && (
             <div className="card">
-              <h3 className="font-bold text-gray-700 mb-3 text-sm">المرفقات</h3>
-              <img
-                src={r.image_url}
-                alt="مرفق الحجز"
-                className="rounded-xl max-h-64 border border-gray-200 object-contain w-full cursor-pointer hover:opacity-90"
-                onClick={() => window.open(r.image_url, '_blank')}
-              />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-700 text-sm">المرفقات</h3>
+                <label className={`cursor-pointer text-xs px-2.5 py-1 rounded-lg border ${imageUploading ? 'opacity-50 pointer-events-none' : 'border-gray-300 hover:bg-gray-50'} text-gray-600 flex items-center gap-1`}>
+                  <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUploadImages} />
+                  {imageUploading ? '⏳ جارٍ الرفع...' : '+ إضافة صور'}
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {r.image_url && (
+                  <img src={r.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(r.image_url, '_blank')} />
+                )}
+                {extraImages.map(img => (
+                  <div key={img.id} className="relative group">
+                    <img src={img.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(img.image_url, '_blank')} />
+                    <button onClick={() => handleDeleteImage(img.id)} className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload images when none attached yet */}
+          {!r.image_url && extraImages.length === 0 && (
+            <div className="card">
+              <h3 className="font-bold text-gray-700 text-sm mb-3">المرفقات</h3>
+              <label className={`cursor-pointer flex flex-col items-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm hover:border-brand-400 hover:text-brand-600 transition-colors ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUploadImages} />
+                <span className="text-2xl">🖼️</span>
+                {imageUploading ? 'جارٍ الرفع...' : 'اضغط لرفع صور'}
+              </label>
             </div>
           )}
         </div>
@@ -785,6 +851,27 @@ export default function ReservationDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Order source & fulfillment */}
+          {(r.order_source || r.fulfillment_method) && (
+            <div className="card">
+              <h3 className="font-bold text-gray-400 mb-3 text-xs uppercase tracking-wide">تفاصيل الطلب</h3>
+              <div className="space-y-2">
+                {r.order_source && (
+                  <div>
+                    <div className="text-xs text-gray-400">مصدر الطلب</div>
+                    <div className="text-sm font-medium text-gray-700">{ORDER_SOURCE_LABELS[r.order_source] || r.order_source}</div>
+                  </div>
+                )}
+                {r.fulfillment_method && (
+                  <div>
+                    <div className="text-xs text-gray-400">طريقة التسليم</div>
+                    <div className="text-sm font-medium text-gray-700">{FULFILLMENT_LABELS[r.fulfillment_method] || r.fulfillment_method}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Assignment */}
           {r.assigned_to_name && (

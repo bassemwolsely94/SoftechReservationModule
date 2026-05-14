@@ -686,6 +686,7 @@ function NewReservationModal({ onClose, onCreated, branches, userBranchId, isCCO
     priority: 'normal', quantity_requested: 1,
     contact_phone: '', contact_name: '', notes: '',
     follow_up_date: '', expected_arrival_date: '',
+    order_source: '', fulfillment_method: '',
   })
   const [customerResults, setCustomerResults] = useState([])
   const [itemResults, setItemResults] = useState([])
@@ -976,6 +977,31 @@ function NewReservationModal({ onClose, onCreated, branches, userBranchId, isCCO
             <label className="text-xs text-gray-500 mb-1 block">ملاحظات</label>
             <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-300 resize-none"
               value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+
+          {/* Order source + Fulfillment method */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">مصدر الطلب</label>
+              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-300"
+                value={form.order_source} onChange={e => setForm(f => ({ ...f, order_source: e.target.value }))}>
+                <option value="">— اختر —</option>
+                <option value="cc_whatsapp">كول سنتر — واتساب</option>
+                <option value="cc_call">كول سنتر — مكالمة</option>
+                <option value="branch_whatsapp">الفرع — واتساب</option>
+                <option value="branch_call">الفرع — مكالمة</option>
+                <option value="online">طلب إلكتروني</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">طريقة التسليم</label>
+              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-300"
+                value={form.fulfillment_method} onChange={e => setForm(f => ({ ...f, fulfillment_method: e.target.value }))}>
+                <option value="">— اختر —</option>
+                <option value="pickup">استلام من الفرع</option>
+                <option value="delivery">توصيل</option>
+              </select>
+            </div>
           </div>
 
           {/* Image */}

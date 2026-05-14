@@ -1,5 +1,22 @@
 from rest_framework import serializers
-from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment
+from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage
+
+
+# ── Reservation Images ────────────────────────────────────────────────────────
+
+class ReservationImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
+
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url
+
+    class Meta:
+        model = ReservationImage
+        fields = ['id', 'image_url', 'uploaded_by_name', 'uploaded_at']
 
 
 # ── Status Log ────────────────────────────────────────────────────────────────
@@ -196,6 +213,7 @@ class ReservationListSerializer(serializers.ModelSerializer):
             'branch_name', 'branch_id',
             'quantity_requested', 'status', 'status_label', 'priority',
             'channel', 'channel_label',
+            'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name',
             'expected_arrival_date', 'follow_up_date',
             'assigned_to_name', 'created_by_name',
@@ -224,6 +242,7 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source='status_label_ar', read_only=True)
     status_logs = ReservationStatusLogSerializer(many=True, read_only=True)
     activities = ReservationActivitySerializer(many=True, read_only=True)
+    images = ReservationImageSerializer(many=True, read_only=True)
     image_url = serializers.SerializerMethodField()
 
     # Live stock at all branches for this item
@@ -315,10 +334,11 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
             'created_by_name',
             'quantity_requested', 'status', 'status_label', 'priority',
             'channel', 'channel_label',
+            'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date',
             'softech_reserve_id', 'status_color', 'priority_color',
-            'image_url',
+            'image_url', 'images',
             'stock_by_branch',
             'status_logs',
             'activities',
@@ -335,6 +355,7 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
         fields = [
             'customer', 'item', 'manual_item_name', 'branch', 'assigned_to',
             'quantity_requested', 'priority', 'channel',
+            'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name',
             'notes', 'expected_arrival_date', 'follow_up_date', 'image',
         ]
@@ -360,6 +381,7 @@ class ReservationUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'branch', 'item', 'manual_item_name',
             'assigned_to', 'quantity_requested', 'priority', 'channel',
+            'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date', 'image',
         ]
