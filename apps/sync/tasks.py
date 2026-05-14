@@ -23,7 +23,7 @@ from django.utils import timezone
 from config.sybase import get_sybase_connection
 from apps.sync.sybase_queries import (
     QUERY_BRANCHES, QUERY_CATEGORIES, QUERY_ITEMS, QUERY_STOCK,
-    QUERY_CUSTOMERS,
+    QUERY_CUSTOMERS, QUERY_CUSTOMER_PHONES,
     QUERY_CUSTOMER_SALES_LINES_RECENT, QUERY_CUSTOMER_SALES_LINES_FULL,
     QUERY_USERS,
 )
@@ -298,9 +298,25 @@ def sync_customers(conn, sync_run):
                 [3] addr1 [4] addr2 [5] dob [6] mobileno [7] branchcustphone
                 [8] branchcustclassif [9] ischronic [10] phcode (PIC)
 
-    Optimisation: pre-load branch map → single bulk upsert.
-    Guest-merge is done in one batched pass at the end (not per-row).
+    Phones: localcustomers.mobileno is the DEFAULT phone only.
+    personphones holds ALL phones keyed by phcode (PIC). We pre-load
+    personphones so the search finds customers by any of their registered
+    phone numbers, not just the default one stored on localcustomers.
     """
+    # ── Pre-load all phones from personphones keyed by PIC (phcode) ───────────
+    pic_phone_map: dict = {}  # phcode → [primary_phone, alt_phone, ...]
+    try:
+        ph_cur = conn.cursor()
+        ph_cur.execute(QUERY_CUSTOMER_PHONES)
+        for ph_row in ph_cur.fetchall():
+            pic   = str(ph_row[0] or '').strip()
+            phone = str(ph_row[1] or '').strip()
+            if pic and phone:
+                pic_phone_map.setdefault(pic, []).append(phone)
+        logger.info(f"Loaded phones for {len(pic_phone_map)} PICs from personphones")
+    except Exception as ph_err:
+        logger.warning(f"personphones pre-load failed (falling back to mobileno): {ph_err}")
+
     cursor = conn.cursor()
     cursor.execute(QUERY_CUSTOMERS)
     rows = cursor.fetchall()
@@ -321,14 +337,20 @@ def sync_customers(conn, sync_run):
             if not cust_code:
                 continue
 
-            mobile = str(row[6] or '').strip()
-            phone2 = str(row[7] or '').strip()
-            phone  = mobile or phone2
-
             # row[10] = lc.phcode — SOFTECH's authoritative PIC value
-            # (e.g. "01HD14", "130HD9969"). Verified against live data:
-            # internal branchcode "100" → PIC prefix "01", not "100".
             pic_code = str(row[10] or '').strip() if len(row) > 10 else ''
+
+            # Phones: personphones is primary (all registered numbers);
+            # localcustomers.mobileno / branchcustphone are fallback only.
+            pic_phones = pic_phone_map.get(pic_code, [])
+            if pic_phones:
+                phone  = pic_phones[0]
+                phone2 = pic_phones[1] if len(pic_phones) > 1 else ''
+            else:
+                mobile = str(row[6] or '').strip()
+                landline = str(row[7] or '').strip()
+                phone  = mobile or landline
+                phone2 = landline if mobile else ''
 
             customer = Customer(
                 softech_id=cust_code,
@@ -338,7 +360,7 @@ def sync_customers(conn, sync_run):
                 date_of_birth=_to_date(row[5]),
                 preferred_branch_id=branch_map.get(branch_code),
                 phone=phone,
-                phone_alt=phone2 if mobile else '',
+                phone_alt=phone2,
                 softech_ptclassifcode=str(row[8] or '').strip(),
                 is_guest=False,
             )
@@ -346,8 +368,9 @@ def sync_customers(conn, sync_run):
                 customer.is_chronic_softech = bool(row[9])
 
             objs.append(customer)
-            if phone:
-                synced_phones.add(phone)
+            for p in (phone, phone2):
+                if p:
+                    synced_phones.add(p)
 
         except Exception as e:
             logger.warning(f"Customer build error branchcustcode={row[1]}: {e}")

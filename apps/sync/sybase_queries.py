@@ -53,10 +53,18 @@ QUERY_CUSTOMERS = """
 """
 
 # ── CUSTOMER PHONES ───────────────────────────────────────────────────────────
-# Phones are embedded on localcustomers (mobileno / branchcustphone).
-# personphones table uses ptcode which does not exist on localcustomers.
-# This query is kept as a stub so call-sites don't break; it returns nothing.
-QUERY_CUSTOMER_PHONES = None  # not used — phones fetched in QUERY_CUSTOMERS
+# personphones.personcode = lc.phcode (the PIC, e.g. "01HD14").
+# One PIC can have multiple phone rows. We pull all non-blocked entries and
+# pick up to 2 phones per PIC in sync_customers (phone + phone_alt).
+# stckorderallow='1' marks the preferred ordering/contact phone — order by it
+# DESC so the primary phone sorts first.
+QUERY_CUSTOMER_PHONES = """
+    SELECT pp.personcode, pp.phoneno, pp.stckorderallow
+    FROM SOFTECHDB9.dbo.personphones pp
+    WHERE pp.phoneblock = 0
+      AND pp.phoneno IS NOT NULL
+    ORDER BY pp.personcode, pp.stckorderallow DESC, pp.phoneno
+"""
 
 # ── SALES LINES — incremental (last 10 min) ───────────────────────────────────
 # Joined with stktransm to get usercode (cashier) and phcode (ATC code).
