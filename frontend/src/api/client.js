@@ -56,12 +56,27 @@ export const reservationsApi = {
     api.post(`/reservations/${id}/change-status/`, { status, note }),
   dashboard:    (params) => api.get('/reservations/dashboard/', { params }),
 
-  // Chatter
+  // Chatter — supports text, image attachment, and voice note (FormData or JSON)
   activities:   (id) => api.get(`/reservations/${id}/activities/`),
-  logActivity:  (id, formData) =>
-    api.post(`/reservations/${id}/log/`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  logActivity:  (id, formData) => {
+    const isFormData = formData instanceof FormData
+    return api.post(`/reservations/${id}/log/`, formData, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
+    })
+  },
+
+  // Downpayments
+  getDownpayments: (id) => api.get(`/reservations/${id}/downpayments/`),
+  addDownpayment:  (id, data) => api.post(`/reservations/${id}/downpayments/`, data),
+
+  // Delete a chatter activity (soft-delete — tombstone stays)
+  deleteActivity:  (id, activityId) => api.delete(`/reservations/${id}/activities/${activityId}/`),
+
+  // Print receipt — returns structured data; frontend calls window.print()
+  printReceipt:    (id) => api.get(`/reservations/${id}/print/`),
+
+  // WhatsApp share — returns { message_text }; frontend opens wa.me
+  shareWhatsapp:   (id) => api.post(`/reservations/${id}/share-whatsapp/`),
 }
 
 // ── Customers ─────────────────────────────────────────────────────────────────
@@ -93,6 +108,16 @@ export const itemsApi = {
   list:  (params) => api.get('/items/', { params }),
   get:   (id) => api.get(`/items/${id}/`),
   stock: (id) => api.get(`/items/${id}/stock/`),
+
+  /**
+   * Wildcard-aware item search.
+   * q supports SOFTECH-style wildcards: "pan*500", "*cillin", "amox*"
+   * Optional: branch_id → includes qty_at_branch in results.
+   */
+  wildcardSearch: (q, branchId = null) =>
+    api.get('/items/softech-search/', {
+      params: { q, ...(branchId ? { branch_id: branchId } : {}) },
+    }),
 }
 
 // ── Branches ──────────────────────────────────────────────────────────────────
@@ -153,8 +178,14 @@ export const transfersApi = {
   removeItem: (id, itemId) => api.delete(`/transfers/${id}/items/${itemId}/`),
   updateItem: (id, itemId, data) => api.patch(`/transfers/${id}/items/${itemId}/`, data),
 
-  // Chatter
-  sendMessage: (id, data)  => api.post(`/transfers/${id}/messages/`, data),
+  // Chatter — supports text, image, and voice note
+  getMessages:  (id)       => api.get(`/transfers/${id}/messages/`),
+  sendMessage:  (id, data) => {
+    const isFormData = data instanceof FormData
+    return api.post(`/transfers/${id}/messages/`, data, {
+      headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
+    })
+  },
 
   // Stock lookup
   itemStock:  (itemId)     => api.get('/transfers/item_stock/', { params: { item_id: itemId } }),
@@ -163,8 +194,16 @@ export const transfersApi = {
   dispatch: (id, data) => api.post(`/transfers/${id}/record-dispatch/`, data),
 
   // ERP stktrans reference validation — POST { doc_number }
-  // Returns { valid, doc_number, branch_code, doc_date, doc_value }
   validateErpRef: (id, data) => api.post(`/transfers/${id}/validate-erp-ref/`, data),
+
+  // Delete a chatter message (soft-delete — tombstone stays)
+  deleteMessage:  (id, messageId) => api.delete(`/transfers/${id}/messages/${messageId}/`),
+
+  // Print receipt — returns structured receipt data
+  printReceipt:   (id) => api.get(`/transfers/${id}/print/`),
+
+  // WhatsApp share — returns { message_text }
+  shareWhatsapp:  (id) => api.post(`/transfers/${id}/share-whatsapp/`),
 }
 
 
@@ -307,8 +346,12 @@ export const incentivesApi = {
   updateProgram:  (id, data)     => api.patch(`/incentives/programs/${id}/`, data),
   deleteProgram:  (id)           => api.delete(`/incentives/programs/${id}/`),
 
-  // Calculate (POST action on a program)
+  // Calculate — body: { period_start, period_end, user_ids?, force? }
+  // Returns 409 if period is finalized and force is not true
   calculate:      (id, data)     => api.post(`/incentives/programs/${id}/calculate/`, data),
+
+  // Simulate (dry-run) — same body as calculate; never writes to DB
+  simulate:       (id, data)     => api.post(`/incentives/programs/${id}/simulate/`, data),
 
   // Report (GET action on a program)
   report:         (id, params)   => api.get(`/incentives/programs/${id}/report/`, { params }),
@@ -330,6 +373,38 @@ export const incentivesApi = {
   listSettlements: (params)      => api.get('/incentives/settlements/', { params }),
   getSettlement:   (id)          => api.get(`/incentives/settlements/${id}/`),
   receipt:         (id)          => api.get(`/incentives/settlements/${id}/receipt/`),
+}
+
+// ── User Management & Permissions ─────────────────────────────────────────────
+
+export const usersApi = {
+  // Staff profile CRUD
+  list:          (params)       => api.get('/users/staff/', { params }),
+  get:           (id)           => api.get(`/users/staff/${id}/`),
+  create:        (data)         => api.post('/users/staff/', data),
+  update:        (id, data)     => api.patch(`/users/staff/${id}/`, data),
+  delete:        (id)           => api.delete(`/users/staff/${id}/`),
+
+  // Admin actions
+  resetPassword: (id, newPassword) =>
+    api.post(`/users/staff/${id}/reset-password/`, { new_password: newPassword }),
+  toggleActive:  (id) => api.post(`/users/staff/${id}/toggle-active/`),
+  activityLog:   (id) => api.get(`/users/staff/${id}/activity-log/`),
+
+  // Self-service
+  changePassword: (oldPassword, newPassword, confirmPassword) =>
+    api.post('/auth/change-password/', {
+      old_password: oldPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    }),
+
+  // ERP user lookup (for creation form validation)
+  erpUsers:       (params) => api.get('/users/erp-users/', { params }),
+
+  // Permissions matrix
+  getPermissions: ()       => api.get('/users/permissions/'),
+  savePermissions:(updates)=> api.post('/users/permissions/', updates),
 }
 
 export const chronicApi = {

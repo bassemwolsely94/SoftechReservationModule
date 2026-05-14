@@ -6,6 +6,9 @@ import { StatusBadge, PriorityBadge, STATUS_OPTIONS } from '../components/Status
 import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import PrintReceiptModal from '../components/PrintReceiptModal'
+import WhatsAppShareButton from '../components/WhatsAppShareButton'
+import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -153,7 +156,7 @@ function StockWidget({ stockByBranch, currentBranchId }) {
 
 // ── Chatter Entry ─────────────────────────────────────────────────────────────
 
-function ActivityEntry({ activity }) {
+function ActivityEntry({ activity, onDelete }) {
   const isSystem = activity.activity_type === 'status_changed'
   const isDispensed = activity.activity_type === 'item_dispensed'
 
@@ -194,54 +197,102 @@ function ActivityEntry({ activity }) {
               {activity.created_by_branch}
             </span>
           )}
-          <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border">
-            {activity.activity_icon} {activity.activity_label}
-          </span>
+          {!activity.is_deleted && (
+            <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border">
+              {activity.activity_icon} {activity.activity_label}
+            </span>
+          )}
           <span
             className="text-xs text-gray-400 mr-auto"
             title={formatDateTime(activity.created_at)}
           >
             {timeAgo(activity.created_at)}
           </span>
+          {/* Delete button — only for author / admin */}
+          {activity.can_delete && onDelete && (
+            <button
+              onClick={() => onDelete(activity.id)}
+              className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
+              title="حذف الرسالة"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* Message bubble */}
-        {activity.message && (
-          <div className="bg-white border border-gray-200 rounded-xl rounded-tr-sm px-4 py-3 shadow-sm">
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-              {activity.message}
-            </p>
+        {/* Tombstone — deleted message */}
+        {activity.is_deleted ? (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 italic bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>
+              تم حذف هذه الرسالة
+              {activity.deleted_by_name && ` بواسطة ${activity.deleted_by_name}`}
+              {activity.deleted_at && ` · ${timeAgo(activity.deleted_at)}`}
+            </span>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Message bubble */}
+            {activity.message && (
+              <div className="bg-white border border-gray-200 rounded-xl rounded-tr-sm px-4 py-3 shadow-sm">
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {activity.message}
+                </p>
+              </div>
+            )}
 
-        {/* Attachment */}
-        {activity.attachment_url && (
-          <div className="mt-2">
-            <img
-              src={activity.attachment_url}
-              alt="مرفق"
-              className="rounded-lg max-h-48 border border-gray-200 object-contain cursor-pointer hover:opacity-90"
-              onClick={() => window.open(activity.attachment_url, '_blank')}
-            />
-          </div>
-        )}
+            {/* Attachment */}
+            {activity.attachment_url && (
+              <div className="mt-2">
+                <img
+                  src={activity.attachment_url}
+                  alt="مرفق"
+                  className="rounded-lg max-h-48 border border-gray-200 object-contain cursor-pointer hover:opacity-90"
+                  onClick={() => window.open(activity.attachment_url, '_blank')}
+                />
+              </div>
+            )}
 
-        {/* Mentions */}
-        {activity.mentioned_users_names?.length > 0 && (
-          <div className="flex gap-1 mt-1 flex-wrap">
-            {activity.mentioned_users_names.map(u => (
-              <span key={u.id} className="text-xs text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
-                @{u.name}
-              </span>
-            ))}
-          </div>
-        )}
+            {/* Voice note */}
+            {activity.voice_note_url && (
+              <div className="mt-2">
+                <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
+                  <span>🎙️</span>
+                  <span>ملاحظة صوتية</span>
+                </div>
+                <audio
+                  src={activity.voice_note_url}
+                  controls
+                  className="w-full h-8 max-w-sm"
+                  style={{ direction: 'ltr' }}
+                />
+              </div>
+            )}
 
-        {/* Transfer reference */}
-        {activity.transfer_request_id_ref && (
-          <div className="mt-1 text-xs text-blue-600">
-            🔀 طلب تحويل #{activity.transfer_request_id_ref}
-          </div>
+            {/* Mentions */}
+            {activity.mentioned_users_names?.length > 0 && (
+              <div className="flex gap-1 mt-1 flex-wrap">
+                {activity.mentioned_users_names.map(u => (
+                  <span key={u.id} className="text-xs text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+                    @{u.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Transfer reference */}
+            {activity.transfer_request_id_ref && (
+              <div className="mt-1 text-xs text-blue-600">
+                🔀 طلب تحويل #{activity.transfer_request_id_ref}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -254,14 +305,15 @@ function ChatterInput({ reservationId, onPosted }) {
   const [type, setType] = useState('note')
   const [message, setMessage] = useState('')
   const [file, setFile] = useState(null)
+  const [voiceFile, setVoiceFile] = useState(null)
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef()
   const textRef = useRef()
 
   const handlePost = async () => {
-    if (!message.trim() && !file) {
-      setError('اكتب رسالة أو أرفق صورة')
+    if (!message.trim() && !file && !voiceFile) {
+      setError('اكتب رسالة أو أرفق صورة أو سجّل ملاحظة صوتية')
       return
     }
     setPosting(true)
@@ -271,9 +323,11 @@ function ChatterInput({ reservationId, onPosted }) {
       fd.append('activity_type', type)
       fd.append('message', message)
       if (file) fd.append('attachment', file)
+      if (voiceFile) fd.append('voice_note', voiceFile)
       await reservationsApi.logActivity(reservationId, fd)
       setMessage('')
       setFile(null)
+      setVoiceFile(null)
       onPosted()
     } catch (e) {
       setError(e.response?.data?.detail || 'حدث خطأ')
@@ -317,6 +371,15 @@ function ChatterInput({ reservationId, onPosted }) {
         placeholder="اكتب ملاحظة، نتيجة مكالمة، أو تحديثاً... (Ctrl+Enter للإرسال)"
         className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 placeholder-gray-400"
       />
+
+      {/* Voice recorder */}
+      <div className="mt-2">
+        <VoiceNoteRecorder
+          onRecorded={(audioFile) => setVoiceFile(audioFile)}
+          onClear={() => setVoiceFile(null)}
+          disabled={posting}
+        />
+      </div>
 
       {/* Footer row */}
       <div className="flex items-center gap-2 mt-2">
@@ -445,6 +508,7 @@ export default function ReservationDetailPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showPrintModal, setShowPrintModal] = useState(false)
   const chatEndRef = useRef()
 
   const { data: r, isLoading, isError } = useQuery({
@@ -463,6 +527,16 @@ export default function ReservationDetailPage() {
   const invalidate = () => {
     qc.invalidateQueries(['reservation', id])
     qc.invalidateQueries(['reservations-kanban'])
+  }
+
+  const handleDeleteActivity = async (activityId) => {
+    if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
+    try {
+      await reservationsApi.deleteActivity(r.id, activityId)
+      invalidate()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر حذف الرسالة')
+    }
   }
 
   if (isLoading) return (
@@ -504,6 +578,13 @@ export default function ReservationDetailPage() {
           onSuccess={invalidate}
         />
       )}
+      {showPrintModal && (
+        <PrintReceiptModal
+          type="reservation"
+          docId={r.id}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
 
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -536,7 +617,21 @@ export default function ReservationDetailPage() {
           </div>
 
           {/* Role-based quick action buttons */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Print & WhatsApp share */}
+            <button
+              onClick={() => setShowPrintModal(true)}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+              title="طباعة الإيصال"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              طباعة
+            </button>
+            <WhatsAppShareButton type="reservation" docId={r.id} size="sm" />
+
             {roleActions.map(a => {
               const asc = STATUS_COLOR_MAP[a.status] || {}
               return (
@@ -593,7 +688,7 @@ export default function ReservationDetailPage() {
                 </div>
               )}
               {r.activities?.map(activity => (
-                <ActivityEntry key={activity.id} activity={activity} />
+                <ActivityEntry key={activity.id} activity={activity} onDelete={handleDeleteActivity} />
               ))}
               <div ref={chatEndRef} />
             </div>

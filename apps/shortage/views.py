@@ -14,12 +14,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ShortageList, ShortageItem
+from .matching import find_best_matches, _normalize
 from .serializers import (
     ShortageListSerializer, ShortageListDetailSerializer,
     ShortageListCreateSerializer,
     ShortageItemSerializer, ShortageItemWriteSerializer, ShortageItemUpdateSerializer,
 )
-from .matching import find_best_matches
 
 
 class ShortageListViewSet(viewsets.ModelViewSet):
@@ -56,7 +56,22 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         shortage_list = self.get_object()
         ser = ShortageItemWriteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
+        raw_name = ser.validated_data.get('raw_name', '').strip()
+
+        # ── Duplicate prevention: same normalized name in this list ───────────
+        norm = _normalize(raw_name)
+        if norm:
+            existing_names = list(
+                shortage_list.items.values_list('raw_name', flat=True)
+            )
+            if any(_normalize(n) == norm for n in existing_names):
+                return Response(
+                    {'detail': f'الصنف "{raw_name}" موجود بالفعل في هذه القائمة'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         item = ser.save(shortage_list=shortage_list)
+
         # Auto-run matching if no item was manually specified
         if not item.item_id:
             matches = find_best_matches(item.raw_name, top_n=1, min_score=0.6)
@@ -79,27 +94,35 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         POST { lines: ['paracetamol 10', 'أموكسيسيلين 5', ...] }
         Each line is: "item_name [qty] [unit]"
         Creates ShortageItems with auto-matching.
+        Duplicate lines (same normalized name already in this list) are skipped.
         """
         shortage_list = self.get_object()
         lines = request.data.get('lines', [])
         if not lines:
             return Response({'detail': 'لا توجد سطور'}, status=status.HTTP_400_BAD_REQUEST)
 
-        import re
         from apps.catalog.models import Item as CatalogItem
 
-        created = []
+        # Build a set of normalized names already in this list
+        existing_norms = {
+            _normalize(n)
+            for n in shortage_list.items.values_list('raw_name', flat=True)
+        }
+
+        created  = []
+        skipped  = []
+
         for raw in lines:
             raw = raw.strip()
             if not raw:
                 continue
-            # Parse: last token may be unit, second-to-last may be qty
-            parts   = raw.split()
-            qty     = 1.0
-            unit    = ''
+
+            # Parse: last token may be qty (number)
+            parts    = raw.split()
+            qty      = 1.0
+            unit     = ''
             raw_name = raw
 
-            # Try to extract trailing number (qty)
             if len(parts) >= 2:
                 try:
                     qty      = float(parts[-1])
@@ -107,8 +130,15 @@ class ShortageListViewSet(viewsets.ModelViewSet):
                 except ValueError:
                     pass
 
+            # ── Duplicate check (within existing DB rows + current batch) ──────
+            norm = _normalize(raw_name)
+            if norm in existing_norms:
+                skipped.append(raw_name)
+                continue
+            existing_norms.add(norm)   # prevent intra-batch duplication
+
             # Auto-match
-            matches = find_best_matches(raw_name, top_n=1, min_score=0.55)
+            matches  = find_best_matches(raw_name, top_n=1, min_score=0.55)
             item_obj = None
             score    = None
             if matches:
@@ -129,7 +159,12 @@ class ShortageListViewSet(viewsets.ModelViewSet):
             )
             created.append(ShortageItemSerializer(si).data)
 
-        return Response({'created': len(created), 'items': created})
+        return Response({
+            'created':      len(created),
+            'skipped':      len(skipped),
+            'skipped_names': skipped,
+            'items':        created,
+        })
 
     # ── Match / re-match a single item ────────────────────────────────────────
 

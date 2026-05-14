@@ -506,36 +506,51 @@ function RulesTab({ selectedProgram }) {
 function CalculateTab({ selectedProgram }) {
   const [form, setForm] = useState({
     period_start: monthStart(),
-    period_end: monthEnd(),
+    period_end:   monthEnd(),
   })
+  const [force,   setForce]   = useState(false)
   const [running, setRunning] = useState(false)
-  const [result, setResult]   = useState(null)
-  const [err, setErr]         = useState('')
+  const [simming, setSimming] = useState(false)
+  const [result,  setResult]  = useState(null)
+  const [err,     setErr]     = useState('')
+  // 409: period finalized — ask whether to force-recalculate
+  const [locked,  setLocked]  = useState(false)
 
-  const run = async () => {
+  const _exec = async (simulate) => {
     if (!selectedProgram) { setErr('اختر برنامجاً أولاً'); return }
-    setRunning(true); setErr(''); setResult(null)
+    simulate ? setSimming(true) : setRunning(true)
+    setErr(''); setResult(null); setLocked(false)
     try {
-      const { data } = await incentivesApi.calculate(selectedProgram.id, {
+      const api = simulate ? incentivesApi.simulate : incentivesApi.calculate
+      const { data } = await api(selectedProgram.id, {
         period_start: form.period_start,
         period_end:   form.period_end,
+        ...((!simulate && force) ? { force: true } : {}),
       })
       setResult(data)
+      if (!simulate) setForce(false)   // reset force flag after successful run
     } catch (e) {
-      setErr(e.response?.data?.detail || 'فشل الاحتساب')
+      if (!simulate && e.response?.status === 409) {
+        // Finalization lock — offer override
+        setLocked(true)
+        setErr(e.response?.data?.detail || 'الفترة تحتوي على تسويات مُغلقة.')
+      } else {
+        setErr(e.response?.data?.detail || (simulate ? 'فشلت المحاكاة' : 'فشل الاحتساب'))
+      }
     } finally {
-      setRunning(false)
+      setRunning(false); setSimming(false)
     }
   }
 
   const userEntries = result
-    ? Object.entries(result.total_by_user).sort((a, b) => b[1] - a[1])
+    ? Object.entries(result.total_by_user || {}).sort((a, b) => b[1] - a[1])
     : []
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="font-bold text-gray-700 mb-3">تشغيل الاحتساب</h2>
+
         {!selectedProgram && (
           <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
             ⚠ اختر برنامجاً من تبويب البرامج أولاً
@@ -548,7 +563,25 @@ function CalculateTab({ selectedProgram }) {
         )}
 
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
-          {err && <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{err}</div>}
+          {/* Error / lock banner */}
+          {err && (
+            <div className={`text-sm p-3 rounded-lg border ${locked
+              ? 'text-orange-800 bg-orange-50 border-orange-200'
+              : 'text-red-600 bg-red-50 border-red-200'}`}>
+              {err}
+              {locked && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input id="force-cb" type="checkbox" checked={force}
+                    onChange={e => setForce(e.target.checked)}
+                    className="w-4 h-4 rounded accent-orange-600" />
+                  <label htmlFor="force-cb" className="text-sm font-medium cursor-pointer">
+                    إعادة الاحتساب بالقوة (تجاوز القفل)
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">بداية الفترة</label>
@@ -562,26 +595,57 @@ function CalculateTab({ selectedProgram }) {
             </div>
           </div>
 
-          <div className="pt-1">
-            <button className="btn-primary w-full py-3" onClick={run}
-              disabled={running || !selectedProgram}>
+          <div className="flex gap-3 pt-1">
+            {/* Simulate (dry-run) */}
+            <button
+              className="flex-1 border border-brand-400 text-brand-700 hover:bg-brand-50 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+              onClick={() => _exec(true)}
+              disabled={running || simming || !selectedProgram}
+            >
+              {simming ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-3.5 h-3.5 border-2 border-brand-300 border-t-brand-700 rounded-full animate-spin" />
+                  محاكاة...
+                </span>
+              ) : '🔍 معاينة (محاكاة)'}
+            </button>
+
+            {/* Run for real */}
+            <button
+              className="flex-[2] btn-primary py-2.5 disabled:opacity-50"
+              onClick={() => _exec(false)}
+              disabled={running || simming || !selectedProgram || (locked && !force)}
+            >
               {running ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  جارٍ الاحتساب من SOFTECH...
+                  جارٍ الاحتساب...
                 </span>
-              ) : '⚡ تشغيل الاحتساب'}
+              ) : force ? '⚡ إعادة الاحتساب (بالقوة)' : '⚡ تشغيل الاحتساب'}
             </button>
           </div>
         </div>
       </div>
 
+      {/* Results */}
       {result && (
         <div>
-          <div className="flex items-center gap-3 mb-3">
-            <h3 className="font-semibold text-gray-700">نتائج الاحتساب</h3>
-            <Badge color="green">{result.created} حركة</Badge>
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
+            <h3 className="font-semibold text-gray-700">
+              {result.simulated ? '🔍 نتائج المحاكاة (لم تُحفظ)' : 'نتائج الاحتساب'}
+            </h3>
+            <Badge color={result.simulated ? 'purple' : 'green'}>{result.created} حركة</Badge>
+            {result.simulated && <Badge color="yellow">محاكاة فقط</Badge>}
           </div>
+
+          {/* Skipped person codes warning */}
+          {result.skipped_person_codes?.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 mb-3">
+              ⚠ لم يتم ربط {result.skipped_person_codes.length} كود مندوب بأي موظف:
+              <span className="font-mono ms-1">{result.skipped_person_codes.join(', ')}</span>
+              <div className="text-xs mt-1">تأكد من تعيين softech_user_id في ملف الموظف.</div>
+            </div>
+          )}
 
           {userEntries.length === 0 ? (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
@@ -595,7 +659,8 @@ function CalculateTab({ selectedProgram }) {
                 <span>إجمالي الحوافز</span>
               </div>
               {userEntries.map(([uid, total]) => (
-                <div key={uid} className="px-4 py-3 border-b last:border-0 flex justify-between items-center">
+                <div key={uid}
+                  className="px-4 py-3 border-b last:border-0 flex justify-between items-center">
                   <span className="text-sm text-gray-700">مندوب #{uid}</span>
                   <span className="font-bold text-brand-700">{fmt(total)} ج.م</span>
                 </div>

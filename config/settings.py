@@ -157,6 +157,9 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+            # Force UTF-8 on Windows so Arabic / arrow characters don't crash
+            # the CP1256 console handler with UnicodeEncodeError.
+            'stream': 'ext://sys.stdout',
         },
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
@@ -164,6 +167,7 @@ LOGGING = {
             'maxBytes': 10 * 1024 * 1024,  # 10MB
             'backupCount': 5,
             'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
     },
     'loggers': {
@@ -184,4 +188,6 @@ SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
 
 MIDDLEWARE += [
     'core.middleware.db_cleanup.CloseConnectionsMiddleware',
+    # Stores current StaffProfile in thread-local for serializer audit helpers
+    'apps.users.middleware.CurrentUserMiddleware',
 ]

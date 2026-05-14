@@ -9,8 +9,13 @@ API endpoints:
   PATCH/DEL  /api/incentives/rules/{id}/
 
   POST       /api/incentives/programs/{id}/calculate/
+             Body: { period_start, period_end, user_ids?, force? }
+             Returns: { created, total_by_user, skipped_person_codes, simulated }
+             Raises 409 if period has finalized settlements (unless force=true)
+
+  POST       /api/incentives/programs/{id}/simulate/
              Body: { period_start, period_end, user_ids? }
-             Returns: { created, total_by_user }
+             Returns: same shape as calculate but nothing is written to DB
 
   GET        /api/incentives/programs/{id}/report/
              Params: period_start, period_end, user_id?
@@ -87,6 +92,29 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
 
+    # ── shared period-parse helper ────────────────────────────────────────────
+
+    def _parse_period(self, data):
+        """
+        Parse period_start / period_end from request data.
+        Returns (period_start, period_end) or raises ValueError.
+        """
+        period_start = _parse_date(data.get('period_start'), 'period_start')
+        period_end   = _parse_date(data.get('period_end'),   'period_end')
+        if period_start > period_end:
+            raise ValueError('period_start يجب أن يسبق period_end')
+        return period_start, period_end
+
+    def _parse_user_ids(self, data):
+        """Return list[int] or None."""
+        raw = data.get('user_ids') or None
+        if raw is None:
+            return None
+        try:
+            return [int(x) for x in raw]
+        except (TypeError, ValueError):
+            raise ValueError('user_ids يجب أن تكون قائمة أرقام صحيحة')
+
     # ── POST .../programs/{id}/calculate/ ─────────────────────────────────────
 
     @action(detail=True, methods=['post'])
@@ -98,34 +126,32 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
           {
             "period_start": "2025-01-01",
             "period_end":   "2025-01-31",
-            "user_ids":     [1, 2, 3]     # optional, omit for all staff
+            "user_ids":     [1, 2, 3],   # optional — omit for all staff
+            "force":        false        # true to recalculate even if finalized
           }
+
+        Returns 409 if any settlement for this period is already finalized
+        and force is not true.
         """
         program = self.get_object()
 
         try:
-            period_start = _parse_date(request.data.get('period_start'), 'period_start')
-            period_end   = _parse_date(request.data.get('period_end'),   'period_end')
+            period_start, period_end = self._parse_period(request.data)
+            user_ids = self._parse_user_ids(request.data)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if period_start > period_end:
-            return Response(
-                {'detail': 'period_start يجب أن يسبق period_end'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user_ids = request.data.get('user_ids') or None
-        if user_ids is not None:
-            try:
-                user_ids = [int(x) for x in user_ids]
-            except (TypeError, ValueError):
-                return Response({'detail': 'user_ids يجب أن تكون قائمة أرقام صحيحة'},
-                                status=status.HTTP_400_BAD_REQUEST)
+        force = bool(request.data.get('force', False))
 
         try:
             from .engine import calculate as run_calculate
-            result = run_calculate(program.id, period_start, period_end, user_ids)
+            result = run_calculate(
+                program.id, period_start, period_end,
+                user_ids=user_ids, simulate=False, force=force,
+            )
+        except ValueError as exc:
+            # Finalization lock: period already finalized, force not set
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except Exception as exc:
             logger.exception('calculate action failed for program %d', program.id)
             return Response(
@@ -134,11 +160,61 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
             )
 
         return Response({
-            'program_id':    program.id,
-            'period_start':  period_start.isoformat(),
-            'period_end':    period_end.isoformat(),
-            'created':       result['created'],
-            'total_by_user': result['total_by_user'],
+            'program_id':           program.id,
+            'period_start':         period_start.isoformat(),
+            'period_end':           period_end.isoformat(),
+            'created':              result.created,
+            'total_by_user':        result.total_by_user,
+            'skipped_person_codes': result.skipped_person_codes,
+            'simulated':            result.simulated,
+        })
+
+    # ── POST .../programs/{id}/simulate/ ─────────────────────────────────────
+
+    @action(detail=True, methods=['post'])
+    def simulate(self, request, pk=None):
+        """
+        Dry-run: compute incentives without writing any transactions.
+
+        Body (JSON):
+          {
+            "period_start": "2025-01-01",
+            "period_end":   "2025-01-31",
+            "user_ids":     [1, 2, 3]   # optional
+          }
+
+        Returns same shape as calculate with simulated=true.
+        Safe to call at any time — never modifies the database.
+        """
+        program = self.get_object()
+
+        try:
+            period_start, period_end = self._parse_period(request.data)
+            user_ids = self._parse_user_ids(request.data)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from .engine import calculate as run_calculate
+            result = run_calculate(
+                program.id, period_start, period_end,
+                user_ids=user_ids, simulate=True, force=True,
+            )
+        except Exception as exc:
+            logger.exception('simulate action failed for program %d', program.id)
+            return Response(
+                {'detail': f'فشل المحاكاة: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({
+            'program_id':           program.id,
+            'period_start':         period_start.isoformat(),
+            'period_end':           period_end.isoformat(),
+            'created':              result.created,
+            'total_by_user':        result.total_by_user,
+            'skipped_person_codes': result.skipped_person_codes,
+            'simulated':            result.simulated,
         })
 
     # ── GET .../programs/{id}/report/ ─────────────────────────────────────────

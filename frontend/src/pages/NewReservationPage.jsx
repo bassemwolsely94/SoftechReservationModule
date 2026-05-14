@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { customersApi, itemsApi, branchesApi, reservationsApi } from '../api/client'
 import { PRIORITY_OPTIONS } from '../components/StatusBadge'
+import ItemSearchInput from '../components/ItemSearchInput'
 
 // ── Step indicators ────────────────────────────────────────────────────────────
 function StepDot({ n, active, done }) {
@@ -155,13 +156,7 @@ function NewCustomerForm({ form, onChange, onCreated }) {
 
 // ── Step 2: Item + Branch ──────────────────────────────────────────────────────
 function StepItem({ selected, branch, quantity, onSelect, onBranch, onQuantity, branches }) {
-  const [query, setQuery] = useState('')
-
-  const { data, isFetching } = useQuery({
-    queryKey: ['itemSearch', query],
-    queryFn: () => itemsApi.list({ search: query, page_size: 8 }).then(r => r.data.results || r.data),
-    enabled: query.length >= 2,
-  })
+  const [itemSearchText, setItemSearchText] = useState(selected?.name || '')
 
   const { data: stockData } = useQuery({
     queryKey: ['itemStock', selected?.id],
@@ -181,45 +176,33 @@ function StepItem({ selected, branch, quantity, onSelect, onBranch, onQuantity, 
             {selected.name_scientific && (
               <div className="text-xs text-gray-500 italic">{selected.name_scientific}</div>
             )}
-            <div className="text-sm text-brand-600">{selected.unit_price} ج.م</div>
+            {selected.unit_sale_price > 0 && (
+              <div className="text-sm text-brand-600">{Number(selected.unit_sale_price).toFixed(2)} ج.م</div>
+            )}
           </div>
-          <button onClick={() => onSelect(null)} className="text-sm text-brand-600 hover:underline">تغيير</button>
+          <button onClick={() => { onSelect(null); setItemSearchText('') }}
+            className="text-sm text-brand-600 hover:underline">تغيير</button>
         </div>
       ) : (
         <div className="mb-4">
-          <input
-            type="text"
-            className="input-field mb-2"
-            placeholder="ابحث بالاسم أو الباركود أو الاسم العلمي..."
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            autoFocus
+          <ItemSearchInput
+            value={itemSearchText}
+            onChange={setItemSearchText}
+            onSelect={item => {
+              // ItemSearchInput returns {softech_id, name, name_scientific, unit_sale_price, item_id, qty_at_branch}
+              // Map to the shape the rest of the page expects
+              onSelect({
+                id: item.item_id || item.softech_id,
+                softech_id: item.softech_id,
+                name: item.name,
+                name_scientific: item.name_scientific,
+                unit_sale_price: item.unit_sale_price,
+              })
+              setItemSearchText(item.name)
+            }}
+            placeholder="ابحث بالاسم أو الكود... (يدعم * مثل: pan*، *cillin)"
+            className="mb-2"
           />
-          {isFetching && <div className="text-sm text-gray-400">جارٍ البحث...</div>}
-          {data && data.length > 0 && (
-            <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-auto">
-              {data.map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => onSelect(item)}
-                  className="flex items-center justify-between px-4 py-2.5 hover:bg-brand-50 cursor-pointer"
-                >
-                  <div>
-                    <div className="font-semibold text-sm text-gray-800">{item.name}</div>
-                    {item.name_scientific && (
-                      <div className="text-xs text-gray-400 italic">{item.name_scientific}</div>
-                    )}
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs font-bold text-brand-700">{item.unit_price} ج.م</div>
-                    <div className={`text-xs ${item.total_stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {item.total_stock > 0 ? `${item.total_stock} متاح` : 'نفد'}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

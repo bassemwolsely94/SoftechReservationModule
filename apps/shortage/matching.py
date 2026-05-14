@@ -84,10 +84,11 @@ def find_best_matches(raw_name: str, top_n: int = 5, min_score: float = 0.25):
         if len(tok) >= 2:
             q |= Q(name__icontains=tok) | Q(name_scientific__icontains=tok)
 
+    # Cap at 500; for a 133K-item catalog the DB pre-filter keeps this fast
     if not q:
-        candidates = Item.objects.filter(is_active=True)[:200]
+        candidates = Item.objects.filter(is_active=True)[:500]
     else:
-        candidates = Item.objects.filter(is_active=True).filter(q)[:200]
+        candidates = Item.objects.filter(is_active=True).filter(q)[:500]
 
     scored = []
     for item in candidates:

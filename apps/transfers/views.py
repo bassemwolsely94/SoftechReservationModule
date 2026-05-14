@@ -7,6 +7,7 @@ NO stock mutations. NO ERP calls. Communication + approval only.
 from django.utils import timezone
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -30,9 +31,25 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
-def _can_review(profile):
-    """Who can approve/reject: admin, purchasing, call_center (HQ roles)."""
+def _is_hq(profile):
+    """HQ-wide oversight roles."""
     return profile and profile.role in ('admin', 'purchasing', 'call_center')
+
+def _can_supply_side(profile, tr):
+    """Supplying branch staff + admin/purchasing can approve/reject/send-to-ERP."""
+    if not profile:
+        return False
+    if profile.role in ('admin', 'purchasing'):
+        return True
+    return bool(profile.branch_id and profile.branch_id == tr.supplying_branch_id)
+
+def _can_request_side(profile, tr):
+    """Requesting branch staff + HQ can submit/edit/complete/cancel."""
+    if not profile:
+        return False
+    if _is_hq(profile):
+        return True
+    return bool(profile.branch_id and profile.branch_id == tr.requesting_branch_id)
 
 
 def _system_log(request_obj, message):
@@ -161,6 +178,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تقديم الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if not tr.can_submit:
             return Response(
                 {'detail': 'لا يمكن تقديم هذا الطلب — تأكد من إضافة أصناف وأن الحالة صحيحة'},
@@ -190,9 +213,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية اعتماد الطلبات'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم اعتماد الطلب'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_approve:
@@ -225,9 +248,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية رفض الطلبات'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم رفض الطلب'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_reject:
@@ -264,9 +287,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية طلب التعديل'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم طلب التعديل'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_request_revision:
@@ -296,6 +319,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
     def send_to_erp(self, request, pk=None):
         tr = self.get_object()
         profile = _profile(request)
+
+        if not _can_supply_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم الإرسال للـ ERP'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         if not tr.can_send_to_erp:
             return Response(
@@ -366,6 +395,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تأكيد الاستلام وإغلاق الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if tr.status != 'sent_to_erp':
             return Response(
                 {'detail': 'يجب إرسال الطلب للـ ERP أولاً'},
@@ -388,6 +423,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         tr = self.get_object()
         profile = _profile(request)
+
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم إلغاء الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         if not tr.can_cancel:
             return Response(
@@ -466,21 +507,26 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         from .serializers import TransferRequestItemSerializer
         return Response(TransferRequestItemSerializer(line).data)
 
-    # ── Chatter / Messages ────────────────────────────────────────────────────
+    # ── Chatter / Messages (text / image / voice) ─────────────────────────────
 
-    @action(detail=True, methods=['get', 'post'], url_path='messages')
+    @action(
+        detail=True, methods=['get', 'post'], url_path='messages',
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def messages(self, request, pk=None):
         tr = self.get_object()
 
         if request.method == 'GET':
             msgs = tr.messages.select_related('created_by__user').order_by('created_at')
             return Response(
-                TransferRequestMessageSerializer(msgs, many=True).data
+                TransferRequestMessageSerializer(msgs, many=True, context={'request': request}).data
             )
 
-        # POST
+        # POST — text, image, or voice note
         profile = _profile(request)
-        serializer = TransferRequestMessageCreateSerializer(data=request.data)
+        serializer = TransferRequestMessageCreateSerializer(
+            data=request.data, context={'request': request}
+        )
         serializer.is_valid(raise_exception=True)
 
         msg = TransferRequestMessage.objects.create(
@@ -490,8 +536,53 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         )
 
         return Response(
-            TransferRequestMessageSerializer(msg).data,
+            TransferRequestMessageSerializer(msg, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    # ── Chatter: delete a message (soft-delete) ──────────────────────────────
+
+    @action(
+        detail=True, methods=['delete'],
+        url_path=r'messages/(?P<message_id>[0-9]+)',
+        url_name='delete_message',
+    )
+    def delete_message(self, request, pk=None, message_id=None):
+        """
+        DELETE /api/transfers/{id}/messages/{message_id}/
+
+        Soft-deletes a message. Only the author or an admin may delete.
+        System messages (status logs) cannot be deleted.
+        """
+        tr = self.get_object()
+        profile = _profile(request)
+
+        try:
+            msg = tr.messages.get(pk=message_id)
+        except TransferRequestMessage.DoesNotExist:
+            return Response({'detail': 'الرسالة غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
+
+        if msg.is_deleted:
+            return Response({'detail': 'هذه الرسالة محذوفة مسبقاً'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if msg.message_type == 'system':
+            return Response({'detail': 'لا يمكن حذف رسائل النظام'}, status=status.HTTP_403_FORBIDDEN)
+
+        is_author = (msg.created_by_id and profile and msg.created_by_id == profile.id)
+        is_admin  = (profile and profile.role == 'admin')
+        if not is_author and not is_admin:
+            return Response(
+                {'detail': 'لا يمكنك حذف رسائل الآخرين'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        msg.is_deleted = True
+        msg.deleted_at  = timezone.now()
+        msg.deleted_by  = profile
+        msg.save(update_fields=['is_deleted', 'deleted_at', 'deleted_by'])
+
+        return Response(
+            TransferRequestMessageSerializer(msg, context={'request': request}).data
         )
 
     # ── SOFTECH stktrans reference validation ─────────────────────────────────
@@ -591,3 +682,98 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 for s in stocks
             ],
         })
+
+    # ── Print Receipt ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='print')
+    def print_receipt(self, request, pk=None):
+        """
+        GET /api/transfers/{id}/print/
+
+        Returns a clean data payload for printable receipt rendering.
+        Logs the print action to the chatter.
+        """
+        tr      = self.get_object()
+        profile = _profile(request)
+
+        # Audit log
+        _system_log(tr, f'تم طباعة الطلب بواسطة {profile.full_name if profile else "النظام"}')
+
+        items_data = [
+            {
+                'item_code':    line.item.softech_id,
+                'item_name':    line.item.name,
+                'item_scientific': line.item.name_scientific,
+                'quantity':     float(line.quantity),
+                'notes':        line.notes,
+            }
+            for line in tr.items.select_related('item').all()
+        ]
+
+        receipt = {
+            'doc_type':              'transfer',
+            'request_number':        tr.request_number,
+            'status':                tr.status,
+            'status_label':          tr.status_label_ar,
+            'requesting_branch':     (tr.requesting_branch.name_ar or tr.requesting_branch.name)
+                                      if tr.requesting_branch_id else '—',
+            'supplying_branch':      (tr.supplying_branch.name_ar or tr.supplying_branch.name)
+                                      if tr.supplying_branch_id else '—',
+            'created_by':            tr.created_by.full_name if tr.created_by_id else '—',
+            'reviewed_by':           tr.reviewed_by.full_name if tr.reviewed_by_id else None,
+            'erp_reference':         tr.erp_reference or None,
+            'delivery_person_name':  tr.delivery_person_name or None,
+            'notes':                 tr.notes,
+            'rejection_reason':      tr.rejection_reason or None,
+            'created_at':            tr.created_at.isoformat(),
+            'submitted_at':          tr.submitted_at.isoformat() if tr.submitted_at else None,
+            'reviewed_at':           tr.reviewed_at.isoformat() if tr.reviewed_at else None,
+            'sent_to_erp_at':        tr.sent_to_erp_at.isoformat() if tr.sent_to_erp_at else None,
+            'dispatched_at':         tr.dispatched_at.isoformat() if tr.dispatched_at else None,
+            'completed_at':          tr.completed_at.isoformat() if tr.completed_at else None,
+            'items':                 items_data,
+            'total_items':           len(items_data),
+            'printed_by':            profile.full_name if profile else '—',
+            'printed_at':            timezone.now().isoformat(),
+        }
+        return Response(receipt)
+
+    # ── WhatsApp Share ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='share-whatsapp')
+    def share_whatsapp(self, request, pk=None):
+        """
+        POST /api/transfers/{id}/share-whatsapp/
+
+        Generates a WhatsApp-ready message and logs the share event.
+        """
+        tr      = self.get_object()
+        profile = _profile(request)
+
+        req_branch  = (tr.requesting_branch.name_ar or tr.requesting_branch.name) if tr.requesting_branch_id else '—'
+        sup_branch  = (tr.supplying_branch.name_ar  or tr.supplying_branch.name)  if tr.supplying_branch_id  else '—'
+        created_str = tr.created_at.strftime('%Y-%m-%d %H:%M')
+
+        lines = [
+            '🔀 *طلب تحويل مخزون — صيدليات الرزيقي*',
+            f'رقم الطلب: {tr.request_number}',
+            f'الحالة: {tr.status_label_ar}',
+            f'من فرع: {req_branch}',
+            f'إلى فرع: {sup_branch}',
+            '',
+            '*الأصناف:*',
+        ]
+        for line in tr.items.select_related('item').all():
+            lines.append(f'• {line.item.name} × {line.quantity}' +
+                         (f' ({line.notes})' if line.notes else ''))
+        if tr.notes:
+            lines += ['', f'ملاحظات: {tr.notes}']
+        if tr.erp_reference:
+            lines += [f'مرجع ERP: {tr.erp_reference}']
+        lines += ['', f'التاريخ: {created_str}']
+
+        message_text = '\n'.join(lines)
+
+        _system_log(tr, f'تم مشاركة الطلب عبر واتساب بواسطة {profile.full_name if profile else "النظام"}')
+
+        return Response({'message_text': message_text})

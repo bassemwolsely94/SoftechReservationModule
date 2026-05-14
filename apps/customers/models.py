@@ -3,6 +3,11 @@ from django.db import models
 
 class Customer(models.Model):
     softech_id = models.CharField(max_length=13, unique=True, null=True, blank=True)
+    softech_pic = models.CharField(
+        max_length=30, blank=True, db_index=True,
+        verbose_name='كود العميل (PIC)',
+        help_text='الكود المركب: {كودالفرع}HD{رقمالعميل} — مثال: 01HD14 أو 130HD9969',
+    )
     softech_ptcode = models.CharField(max_length=3, blank=True)
     softech_ptclassifcode = models.CharField(max_length=5, blank=True)
     name = models.CharField(max_length=255, db_index=True)

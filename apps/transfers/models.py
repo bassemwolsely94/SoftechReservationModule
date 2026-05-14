@@ -273,7 +273,7 @@ class TransferRequestMessage(models.Model):
         choices=MESSAGE_TYPES,
         default='message',
     )
-    message = models.TextField(verbose_name='الرسالة')
+    message = models.TextField(verbose_name='الرسالة', blank=True)
     created_by = models.ForeignKey(
         'users.StaffProfile',
         on_delete=models.SET_NULL,
@@ -282,6 +282,28 @@ class TransferRequestMessage(models.Model):
         verbose_name='بواسطة',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Attachments
+    attachment = models.ImageField(
+        upload_to='transfer_attachments/%Y/%m/',
+        null=True, blank=True,
+        verbose_name='مرفق صورة',
+    )
+    voice_note = models.FileField(
+        upload_to='transfer_voices/%Y/%m/',
+        null=True, blank=True,
+        verbose_name='ملاحظة صوتية',
+    )
+
+    # Soft-delete — tombstone stays; body/attachments are redacted
+    is_deleted = models.BooleanField(default=False, verbose_name='محذوف')
+    deleted_at  = models.DateTimeField(null=True, blank=True, verbose_name='وقت الحذف')
+    deleted_by  = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='deleted_transfer_messages',
+        verbose_name='حُذف بواسطة',
+    )
 
     class Meta:
         ordering = ['created_at']

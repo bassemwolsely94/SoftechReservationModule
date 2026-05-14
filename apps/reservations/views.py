@@ -1,5 +1,6 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -19,6 +20,10 @@ from .serializers import (
     ReservationDownpaymentSerializer,
     ReservationDownpaymentCreateSerializer,
 )
+
+
+# Roles that are allowed to see customer PII (name + phone)
+_PII_ROLES = frozenset({'admin', 'call_center', 'pharmacist'})
 
 
 def get_profile(request):
@@ -232,14 +237,31 @@ class ReservationViewSet(viewsets.ModelViewSet):
         )
         return Response(serializer.data)
 
-    # ── Chatter: post new activity ─────────────────────────────────────────────
+    # ── Chatter: post new activity (text / image / voice) ────────────────────
 
-    @action(detail=True, methods=['post'], url_path='log')
+    @action(
+        detail=True, methods=['post'], url_path='log',
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def log(self, request, pk=None):
+        """
+        POST multipart/form-data OR application/json.
+
+        Fields:
+          activity_type       — one of ACTIVITY_TYPES (default: 'note')
+          message             — text body (optional if attachment or voice_note given)
+          attachment          — image file (optional)
+          voice_note          — audio file: webm/ogg/mp3 (optional)
+          mentioned_users     — list of StaffProfile PKs (optional)
+          transfer_request_id_ref — int (optional)
+        """
         reservation = self.get_object()
         staff = get_profile(request)
 
-        serializer = ReservationActivityCreateSerializer(data=request.data)
+        serializer = ReservationActivityCreateSerializer(
+            data=request.data,
+            context={'request': request},
+        )
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -250,6 +272,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             message=d.get('message', ''),
             created_by=staff,
             attachment=d.get('attachment'),
+            voice_note=d.get('voice_note'),
             transfer_request_id_ref=d.get('transfer_request_id_ref'),
         )
         if d.get('mentioned_users'):
@@ -258,6 +281,57 @@ class ReservationViewSet(viewsets.ModelViewSet):
         return Response(
             ReservationActivitySerializer(activity, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    # ── Chatter: delete an activity (soft-delete) ────────────────────────────
+
+    @action(
+        detail=True, methods=['delete'],
+        url_path=r'activities/(?P<activity_id>[0-9]+)',
+        url_name='delete_activity',
+    )
+    def delete_activity(self, request, pk=None, activity_id=None):
+        """
+        DELETE /api/reservations/{id}/activities/{activity_id}/
+
+        Soft-deletes the activity. Only the author or an admin can delete.
+        The tombstone remains visible to all users with the deleter's name
+        and timestamp.
+        """
+        reservation = self.get_object()
+        profile = get_profile(request)
+
+        try:
+            activity = reservation.activities.get(pk=activity_id)
+        except ReservationActivity.DoesNotExist:
+            return Response({'detail': 'النشاط غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+
+        if activity.is_deleted:
+            return Response({'detail': 'هذا النشاط محذوف مسبقاً'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Permission: author or admin only
+        is_author = (activity.created_by_id and profile and activity.created_by_id == profile.id)
+        is_admin  = (profile and profile.role == 'admin')
+        if not is_author and not is_admin:
+            return Response(
+                {'detail': 'لا يمكنك حذف رسائل الآخرين'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # System auto-logs (status_changed, item_dispensed) cannot be deleted
+        if activity.activity_type in ('status_changed', 'item_dispensed'):
+            return Response(
+                {'detail': 'لا يمكن حذف سجلات النظام التلقائية'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        activity.is_deleted = True
+        activity.deleted_at  = timezone.now()
+        activity.deleted_by  = profile
+        activity.save(update_fields=['is_deleted', 'deleted_at', 'deleted_by'])
+
+        return Response(
+            ReservationActivitySerializer(activity, context={'request': request}).data
         )
 
     # ── Downpayments ──────────────────────────────────────────────────────────
@@ -294,6 +368,135 @@ class ReservationViewSet(viewsets.ModelViewSet):
             ReservationDownpaymentSerializer(dp).data,
             status=status.HTTP_201_CREATED,
         )
+
+    # ── Print Receipt ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='print')
+    def print_receipt(self, request, pk=None):
+        """
+        GET /api/reservations/{id}/print/
+
+        Returns a clean data payload for printable receipt rendering.
+        Respects PII permissions: customer name/phone are masked if the
+        requesting user's role is not in _PII_ROLES.
+
+        Logs a 'note' activity to create an audit trail of every print.
+        """
+        reservation = self.get_object()
+        profile     = get_profile(request)
+        can_see_pii = (profile and profile.role in _PII_ROLES)
+
+        # Audit log
+        log_activity(
+            reservation=reservation,
+            activity_type='note',
+            message=f'تم طباعة إيصال الحجز',
+            staff=profile,
+        )
+
+        item_name = reservation.item_label
+        downpayments = list(
+            reservation.downpayments.values('amount', 'payment_method', 'received_at')
+        )
+        total_paid = sum(d['amount'] for d in downpayments)
+
+        receipt = {
+            'doc_type':     'reservation',
+            'doc_number':   reservation.id,
+            'status':       reservation.status,
+            'status_label': reservation.status_label_ar,
+            'priority':     reservation.priority,
+            'channel':      reservation.channel,
+            'branch_name':  reservation.branch.name_ar or reservation.branch.name,
+            'created_by':   reservation.created_by.full_name if reservation.created_by_id else '—',
+            'created_at':   reservation.created_at.isoformat(),
+            'updated_at':   reservation.updated_at.isoformat(),
+            # Customer PII — masked by role
+            'customer_name':  (
+                (reservation.customer.name if reservation.customer_id else reservation.contact_name)
+                if can_see_pii else '—'
+            ),
+            'customer_phone': (
+                (reservation.customer.phone if reservation.customer_id else reservation.contact_phone)
+                if can_see_pii else '—'
+            ),
+            # Item
+            'item': {
+                'name':         item_name,
+                'softech_id':   reservation.item.softech_id if reservation.item_id else None,
+                'scientific':   reservation.item.name_scientific if reservation.item_id else '',
+                'quantity':     float(reservation.quantity_requested),
+            },
+            'notes':          reservation.notes,
+            'expected_arrival_date': (
+                reservation.expected_arrival_date.isoformat()
+                if reservation.expected_arrival_date else None
+            ),
+            'downpayments': [
+                {
+                    'amount':         float(d['amount']),
+                    'payment_method': d['payment_method'],
+                    'received_at':    d['received_at'].isoformat() if hasattr(d['received_at'], 'isoformat') else str(d['received_at']),
+                }
+                for d in downpayments
+            ],
+            'total_paid': float(total_paid),
+            'printed_by':  profile.full_name if profile else '—',
+            'printed_at':  timezone.now().isoformat(),
+        }
+        return Response(receipt)
+
+    # ── WhatsApp Share ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='share-whatsapp')
+    def share_whatsapp(self, request, pk=None):
+        """
+        POST /api/reservations/{id}/share-whatsapp/
+
+        Generates a WhatsApp-ready text message and logs the share event.
+        The frontend opens https://wa.me/?text=<encoded> in a new tab.
+
+        Respects PII permissions — customer name/phone masked if not authorized.
+        """
+        reservation = self.get_object()
+        profile     = get_profile(request)
+        can_see_pii = (profile and profile.role in _PII_ROLES)
+
+        customer_name = (
+            (reservation.customer.name if reservation.customer_id else reservation.contact_name)
+            if can_see_pii else '—'
+        )
+
+        item_name = reservation.item_label
+        branch_name = reservation.branch.name_ar or reservation.branch.name
+        created_at_str = reservation.created_at.strftime('%Y-%m-%d %H:%M')
+
+        lines = [
+            '📋 *طلب حجز — صيدليات الرزيقي*',
+            f'رقم الطلب: {reservation.id}',
+            f'الحالة: {reservation.status_label_ar}',
+            f'الفرع: {branch_name}',
+            '',
+            '*الصنف:*',
+            f'• {item_name} × {reservation.quantity_requested}',
+        ]
+        if reservation.notes:
+            lines += ['', f'ملاحظات: {reservation.notes}']
+        if can_see_pii:
+            lines += ['', f'العميل: {customer_name}']
+        lines += ['', f'التاريخ: {created_at_str}']
+
+        message_text = '\n'.join(lines)
+
+        # Audit log
+        log_activity(
+            reservation=reservation,
+            activity_type='note',
+            message='تم مشاركة الحجز عبر واتساب',
+            staff=profile,
+        )
+
+        return Response({'message_text': message_text})
 
     # ── Dashboard summary ──────────────────────────────────────────────────────
 

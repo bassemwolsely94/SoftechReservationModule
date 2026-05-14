@@ -32,15 +32,19 @@ class ReservationStatusLogSerializer(serializers.ModelSerializer):
 
 class ReservationActivitySerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
+    created_by_id   = serializers.IntegerField(source='created_by.id',     read_only=True)
     created_by_username = serializers.CharField(
         source='created_by.user.username', read_only=True
     )
-    created_by_role = serializers.CharField(source='created_by.role', read_only=True)
+    created_by_role   = serializers.CharField(source='created_by.role',        read_only=True)
     created_by_branch = serializers.CharField(source='created_by.branch_name', read_only=True)
-    activity_icon = serializers.CharField(read_only=True)
-    activity_label = serializers.CharField(read_only=True)
+    activity_icon     = serializers.CharField(read_only=True)
+    activity_label    = serializers.CharField(read_only=True)
     mentioned_users_names = serializers.SerializerMethodField()
-    attachment_url = serializers.SerializerMethodField()
+    attachment_url    = serializers.SerializerMethodField()
+    voice_note_url    = serializers.SerializerMethodField()
+    deleted_by_name   = serializers.SerializerMethodField()
+    can_delete        = serializers.SerializerMethodField()
 
     def get_mentioned_users_names(self, obj):
         return [
@@ -49,11 +53,43 @@ class ReservationActivitySerializer(serializers.ModelSerializer):
         ]
 
     def get_attachment_url(self, obj):
-        if obj.attachment:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.attachment.url)
-        return None
+        if obj.is_deleted or not obj.attachment:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.attachment.url) if request else None
+
+    def get_voice_note_url(self, obj):
+        if obj.is_deleted or not obj.voice_note:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.voice_note.url) if request else None
+
+    def get_deleted_by_name(self, obj):
+        return obj.deleted_by.full_name if obj.deleted_by_id else None
+
+    def get_can_delete(self, obj):
+        """True if the requesting user owns this activity or is an admin."""
+        if obj.is_deleted:
+            return False
+        request = self.context.get('request')
+        if not request:
+            return False
+        profile = getattr(request.user, 'staff_profile', None)
+        if not profile:
+            return False
+        if profile.role == 'admin':
+            return True
+        return obj.created_by_id == profile.id
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.is_deleted:
+            # Redact content, keep tombstone metadata
+            data['message']       = None
+            data['attachment_url'] = None
+            data['voice_note_url'] = None
+            data['mentioned_users_names'] = []
+        return data
 
     class Meta:
         model = ReservationActivity
@@ -61,12 +97,15 @@ class ReservationActivitySerializer(serializers.ModelSerializer):
             'id',
             'activity_type', 'activity_icon', 'activity_label',
             'message',
-            'created_by_name', 'created_by_username',
+            'created_by', 'created_by_id', 'created_by_name', 'created_by_username',
             'created_by_role', 'created_by_branch',
             'created_at',
             'attachment_url',
+            'voice_note_url',
             'mentioned_users_names',
             'transfer_request_id_ref',
+            'is_deleted', 'deleted_at', 'deleted_by_name',
+            'can_delete',
         ]
 
 
@@ -74,17 +113,18 @@ class ReservationActivityCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReservationActivity
         fields = [
-            'activity_type', 'message', 'attachment', 'mentioned_users',
-            'transfer_request_id_ref',
+            'activity_type', 'message', 'attachment', 'voice_note',
+            'mentioned_users', 'transfer_request_id_ref',
         ]
 
-    def validate_message(self, value):
-        # Message is required unless attachment is provided
-        return value
-
     def validate(self, data):
-        if not data.get('message') and not data.get('attachment'):
-            raise serializers.ValidationError('يجب كتابة رسالة أو إرفاق صورة')
+        has_message    = bool((data.get('message') or '').strip())
+        has_attachment = bool(data.get('attachment'))
+        has_voice      = bool(data.get('voice_note'))
+        if not has_message and not has_attachment and not has_voice:
+            raise serializers.ValidationError(
+                'يجب كتابة رسالة أو إرفاق صورة أو تسجيل ملاحظة صوتية'
+            )
         return data
 
 

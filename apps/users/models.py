@@ -24,6 +24,7 @@ MODULE_CHOICES = [
     ('purchasing',   'لوحة المشتريات'),
     ('chronic',      'الأدوية المزمنة'),
     ('admin',        'إدارة النظام'),
+    ('users',        'إدارة المستخدمين'),
 ]
 
 ACTION_CHOICES = [
@@ -35,6 +36,42 @@ ACTION_CHOICES = [
     ('export',  'تصدير'),
 ]
 
+USER_ACTIVITY_ACTION_CHOICES = [
+    ('login_success',       'دخول ناجح'),
+    ('login_failed',        'محاولة دخول فاشلة'),
+    ('password_changed',    'تغيير كلمة المرور'),
+    ('password_reset',      'إعادة تعيين كلمة المرور بواسطة المدير'),
+    ('role_changed',        'تغيير الدور'),
+    ('branch_changed',      'تغيير الفرع'),
+    ('activated',           'تفعيل الحساب'),
+    ('deactivated',         'تعطيل الحساب'),
+    ('permissions_changed', 'تغيير الصلاحيات'),
+    ('created',             'إنشاء المستخدم'),
+]
+
+
+class ERPUser(models.Model):
+    """
+    Local cache of SOFTECH ERP user records.
+    Populated by the sync management command.
+    Used to validate that a username exists in SOFTECH before creating a local account.
+    """
+    username    = models.CharField(max_length=50, unique=True, db_index=True, verbose_name='اسم المستخدم')
+    user_id     = models.CharField(max_length=50, blank=True, db_index=True, verbose_name='رقم المستخدم في ERP')
+    full_name   = models.CharField(max_length=150, blank=True, verbose_name='الاسم الكامل')
+    branch_code = models.CharField(max_length=20, blank=True, verbose_name='كود الفرع')
+    user_group  = models.CharField(max_length=50, blank=True, default='', verbose_name='مجموعة المستخدم')
+    is_active   = models.BooleanField(default=True, verbose_name='نشط')
+    synced_at   = models.DateTimeField(auto_now=True, verbose_name='آخر مزامنة')
+
+    class Meta:
+        verbose_name = 'مستخدم ERP'
+        verbose_name_plural = 'مستخدمو ERP'
+        ordering = ['username']
+
+    def __str__(self):
+        return f'{self.username} ({self.full_name})'
+
 
 class StaffProfile(models.Model):
     user = models.OneToOneField(
@@ -42,19 +79,58 @@ class StaffProfile(models.Model):
     )
     # Primary branch (kept for backward-compat + default scoping)
     branch = models.ForeignKey(
-        'branches.Branch', null=True, blank=True, on_delete=models.SET_NULL
+        'branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
+        verbose_name='الفرع الأساسي'
     )
-    softech_username = models.CharField(max_length=50, blank=True)
-    softech_user_id  = models.CharField(max_length=50, blank=True)
-    role     = models.CharField(max_length=20, choices=ROLE_CHOICES, default='salesperson')
-    phone    = models.CharField(max_length=20, blank=True)
-    is_active = models.BooleanField(default=True)
-    # Explicit global-access flag — overrides branch scoping without changing role
-    has_global_access = models.BooleanField(
+    # Link to SOFTECH ERP user record
+    erp_user = models.OneToOneField(
+        ERPUser, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='staff_profile', verbose_name='مستخدم ERP'
+    )
+    softech_username = models.CharField(max_length=50, blank=True, verbose_name='اسم المستخدم في SOFTECH')
+    softech_user_id  = models.CharField(max_length=50, blank=True, db_index=True, verbose_name='رقم المستخدم في SOFTECH')
+    role     = models.CharField(max_length=20, choices=ROLE_CHOICES, default='salesperson', verbose_name='الدور')
+    phone    = models.CharField(max_length=20, blank=True, verbose_name='الهاتف')
+    is_active = models.BooleanField(default=True, verbose_name='نشط')
+
+    # Branch access flags
+    access_all_branches = models.BooleanField(
         default=False,
         verbose_name='وصول شامل لجميع الفروع',
         help_text='يتجاوز قيود الفرع بغض النظر عن الدور',
     )
+    # Extra branches granted beyond the primary branch (via UserBranchAccess)
+    allowed_branches = models.ManyToManyField(
+        'branches.Branch',
+        blank=True,
+        related_name='staff_allowed',
+        verbose_name='فروع إضافية مسموح بها',
+    )
+    restricted_branches = models.ManyToManyField(
+        'branches.Branch',
+        blank=True,
+        related_name='staff_restricted',
+        verbose_name='فروع محظورة',
+    )
+
+    # Customer data visibility
+    can_see_all_customers = models.BooleanField(
+        default=False,
+        verbose_name='يرى جميع العملاء',
+        help_text='يسمح له برؤية عملاء الفروع الأخرى',
+    )
+    can_see_customer_phone = models.BooleanField(
+        default=True,
+        verbose_name='يرى رقم هاتف العميل',
+    )
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, null=True, verbose_name='تاريخ الإنشاء')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='آخر تعديل')
+
+    class Meta:
+        verbose_name = 'ملف الموظف'
+        verbose_name_plural = 'ملفات الموظفين'
 
     def __str__(self):
         return f"{self.full_name} — {self.get_role_display()}"
@@ -72,14 +148,15 @@ class StaffProfile(models.Model):
         return ''
 
     @property
-    def branch_id(self):
-        return self.branch_id if self.branch else None
-
-    @property
     def can_see_all_branches(self):
-        if self.has_global_access:
+        if self.access_all_branches:
             return True
         return self.role in ('admin', 'call_center', 'purchasing')
+
+    # Backward-compat alias
+    @property
+    def has_global_access(self):
+        return self.access_all_branches
 
     @property
     def accessible_branch_ids(self):
@@ -110,6 +187,32 @@ class StaffProfile(models.Model):
         return RoleModuleAccess.objects.filter(
             role=self.role, module=module, action=action, is_allowed=True
         ).exists()
+
+
+class UserActivityLog(models.Model):
+    """Audit trail for all user management and authentication events."""
+    target_user = models.ForeignKey(
+        StaffProfile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='user_activity_logs', verbose_name='المستخدم المستهدف'
+    )
+    changed_by = models.ForeignKey(
+        StaffProfile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='user_audit_actions', verbose_name='بواسطة'
+    )
+    action     = models.CharField(max_length=30, choices=USER_ACTIVITY_ACTION_CHOICES, verbose_name='الإجراء')
+    old_value  = models.JSONField(null=True, blank=True, verbose_name='القيمة القديمة')
+    new_value  = models.JSONField(null=True, blank=True, verbose_name='القيمة الجديدة')
+    note       = models.TextField(blank=True, verbose_name='ملاحظة')
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='عنوان IP')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='وقت الحدث', db_index=True)
+
+    class Meta:
+        verbose_name = 'سجل نشاط المستخدم'
+        verbose_name_plural = 'سجلات نشاط المستخدمين'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_action_display()} — {self.target_user} — {self.created_at:%Y-%m-%d %H:%M}'
 
 
 class UserBranchAccess(models.Model):

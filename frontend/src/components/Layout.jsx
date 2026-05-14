@@ -20,6 +20,8 @@ const NAV = [
   { to: '/vouchers',            icon: '🎫', label: 'القسائم',              roles: ['admin', 'callcenter'] },
   { to: '/invoices',            icon: '🧾', label: 'فواتير الموردين',      roles: ['admin', 'purchasing'] },
   { to: '/incentives',           icon: '💰', label: 'الحوافز',              roles: ['admin', 'purchasing'] },
+  { to: '/users',               icon: '👤', label: 'المستخدمون',           roles: ['admin'] },
+  { to: '/permissions',         icon: '🔐', label: 'الصلاحيات',            roles: ['admin'] },
   { to: '/settings',            icon: '⚙️', label: 'الإعدادات',            roles: ['admin'] },
 ]
 

@@ -39,19 +39,64 @@ class TransferRequestItemWriteSerializer(serializers.ModelSerializer):
 
 class TransferRequestMessageSerializer(serializers.ModelSerializer):
     created_by_name   = serializers.CharField(source='created_by.full_name', read_only=True)
+    created_by_id     = serializers.IntegerField(source='created_by.id',     read_only=True)
     created_by_role   = serializers.CharField(source='created_by.role',      read_only=True)
     created_by_branch = serializers.CharField(source='created_by.branch_name', read_only=True)
     type_icon         = serializers.SerializerMethodField()
+    attachment_url    = serializers.SerializerMethodField()
+    voice_note_url    = serializers.SerializerMethodField()
+    deleted_by_name   = serializers.SerializerMethodField()
+    can_delete        = serializers.SerializerMethodField()
 
     def get_type_icon(self, obj):
         return {'message': '💬', 'system': '⚙️', 'note': '📝'}.get(obj.message_type, '💬')
+
+    def get_attachment_url(self, obj):
+        if obj.is_deleted or not obj.attachment:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.attachment.url) if request else None
+
+    def get_voice_note_url(self, obj):
+        if obj.is_deleted or not obj.voice_note:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.voice_note.url) if request else None
+
+    def get_deleted_by_name(self, obj):
+        return obj.deleted_by.full_name if obj.deleted_by_id else None
+
+    def get_can_delete(self, obj):
+        if obj.is_deleted or obj.message_type == 'system':
+            return False
+        request = self.context.get('request')
+        if not request:
+            return False
+        profile = getattr(request.user, 'staff_profile', None)
+        if not profile:
+            return False
+        if profile.role == 'admin':
+            return True
+        return obj.created_by_id == profile.id
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.is_deleted:
+            data['message']        = None
+            data['attachment_url'] = None
+            data['voice_note_url'] = None
+        return data
 
     class Meta:
         model  = TransferRequestMessage
         fields = [
             'id', 'message_type', 'type_icon', 'message',
-            'created_by', 'created_by_name', 'created_by_role', 'created_by_branch',
+            'created_by', 'created_by_id', 'created_by_name',
+            'created_by_role', 'created_by_branch',
             'created_at',
+            'attachment_url', 'voice_note_url',
+            'is_deleted', 'deleted_at', 'deleted_by_name',
+            'can_delete',
         ]
         read_only_fields = ['created_at', 'created_by']
 
@@ -59,12 +104,17 @@ class TransferRequestMessageSerializer(serializers.ModelSerializer):
 class TransferRequestMessageCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = TransferRequestMessage
-        fields = ['message_type', 'message']
+        fields = ['message_type', 'message', 'attachment', 'voice_note']
 
-    def validate_message(self, value):
-        if not value.strip():
-            raise serializers.ValidationError('الرسالة لا يمكن أن تكون فارغة')
-        return value
+    def validate(self, data):
+        has_message    = bool((data.get('message') or '').strip())
+        has_attachment = bool(data.get('attachment'))
+        has_voice      = bool(data.get('voice_note'))
+        if not has_message and not has_attachment and not has_voice:
+            raise serializers.ValidationError(
+                'يجب كتابة رسالة أو إرفاق صورة أو تسجيل ملاحظة صوتية'
+            )
+        return data
 
 
 # ── Request list serializer ───────────────────────────────────────────────────
@@ -150,18 +200,83 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
 
     def get_dispatched_by_name(self, obj):
         return obj.dispatched_by.full_name if obj.dispatched_by_id else None
-    can_dispatch            = serializers.BooleanField(read_only=True)
-    status_label            = serializers.CharField(source='status_label_ar',             read_only=True)
+    status_label            = serializers.CharField(source='status_label_ar', read_only=True)
     status_color            = serializers.CharField(read_only=True)
-    is_editable             = serializers.BooleanField(read_only=True)
-    can_submit              = serializers.BooleanField(read_only=True)
-    can_approve             = serializers.BooleanField(read_only=True)
-    can_reject              = serializers.BooleanField(read_only=True)
-    can_request_revision    = serializers.BooleanField(read_only=True)
-    can_send_to_erp         = serializers.BooleanField(read_only=True)
-    can_cancel              = serializers.BooleanField(read_only=True)
     items                   = TransferRequestItemSerializer(many=True, read_only=True)
-    messages                = TransferRequestMessageSerializer(many=True, read_only=True)
+    messages                = serializers.SerializerMethodField()
+
+    # ── RBAC-aware action flags ───────────────────────────────────────────────
+    # Rules:
+    #   is_editable / can_submit / can_cancel : requesting branch + HQ
+    #   can_approve / can_reject / can_request_revision / can_send_to_erp / can_dispatch :
+    #       supplying branch + HQ
+    #   can_complete : requesting branch + HQ (they receive the goods)
+
+    is_editable          = serializers.SerializerMethodField()
+    can_submit           = serializers.SerializerMethodField()
+    can_approve          = serializers.SerializerMethodField()
+    can_reject           = serializers.SerializerMethodField()
+    can_request_revision = serializers.SerializerMethodField()
+    can_send_to_erp      = serializers.SerializerMethodField()
+    can_dispatch         = serializers.SerializerMethodField()
+    can_cancel           = serializers.SerializerMethodField()
+    can_complete         = serializers.SerializerMethodField()
+
+    def _profile(self):
+        request = self.context.get('request')
+        return getattr(request.user, 'staff_profile', None) if request else None
+
+    def _is_hq(self, profile):
+        return profile and profile.role in ('admin', 'purchasing', 'call_center')
+
+    def _is_requesting_side(self, profile, obj):
+        """Requesting branch staff OR HQ."""
+        if not profile:
+            return False
+        if self._is_hq(profile):
+            return True
+        return bool(profile.branch_id and profile.branch_id == obj.requesting_branch_id)
+
+    def _is_supplying_side(self, profile, obj):
+        """Supplying branch staff OR HQ (admin/purchasing only, not call_center)."""
+        if not profile:
+            return False
+        if profile.role in ('admin', 'purchasing'):
+            return True
+        return bool(profile.branch_id and profile.branch_id == obj.supplying_branch_id)
+
+    def get_messages(self, obj):
+        msgs = obj.messages.select_related('created_by__user').order_by('created_at')
+        return TransferRequestMessageSerializer(
+            msgs, many=True, context=self.context
+        ).data
+
+    def get_is_editable(self, obj):
+        return obj.is_editable and self._is_requesting_side(self._profile(), obj)
+
+    def get_can_submit(self, obj):
+        return obj.can_submit and self._is_requesting_side(self._profile(), obj)
+
+    def get_can_approve(self, obj):
+        return obj.can_approve and self._is_supplying_side(self._profile(), obj)
+
+    def get_can_reject(self, obj):
+        return obj.can_reject and self._is_supplying_side(self._profile(), obj)
+
+    def get_can_request_revision(self, obj):
+        return obj.can_request_revision and self._is_supplying_side(self._profile(), obj)
+
+    def get_can_send_to_erp(self, obj):
+        return obj.can_send_to_erp and self._is_supplying_side(self._profile(), obj)
+
+    def get_can_dispatch(self, obj):
+        return obj.can_dispatch and self._is_supplying_side(self._profile(), obj)
+
+    def get_can_cancel(self, obj):
+        return obj.can_cancel and self._is_requesting_side(self._profile(), obj)
+
+    def get_can_complete(self, obj):
+        return (obj.status == 'sent_to_erp') and self._is_requesting_side(self._profile(), obj)
 
     # Live stock at destination for all items
     destination_stock = serializers.SerializerMethodField()
@@ -196,7 +311,7 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
             'notes', 'rejection_reason', 'revision_notes',
             'erp_reference',
             'is_editable', 'can_submit', 'can_approve', 'can_reject',
-            'can_request_revision', 'can_send_to_erp', 'can_cancel',
+            'can_request_revision', 'can_send_to_erp', 'can_cancel', 'can_complete',
             'items', 'messages', 'destination_stock',
             'created_at', 'updated_at', 'submitted_at',
             'reviewed_at', 'sent_to_erp_at', 'completed_at',

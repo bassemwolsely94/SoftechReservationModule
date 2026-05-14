@@ -21,6 +21,8 @@ import ShortagePage from './pages/ShortagePage'
 import VouchersPage from './pages/VouchersPage'
 import InvoicePage from './pages/InvoicePage'
 import IncentivesPage from './pages/IncentivesPage'
+import UserManagementPage from './pages/UserManagementPage'
+import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -67,6 +69,8 @@ export default function App() {
             <Route path="vouchers"           element={<VouchersPage />} />
             <Route path="invoices"           element={<InvoicePage />} />
             <Route path="incentives"         element={<IncentivesPage />} />
+            <Route path="users"              element={<UserManagementPage />} />
+            <Route path="permissions"        element={<PermissionsMatrixPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

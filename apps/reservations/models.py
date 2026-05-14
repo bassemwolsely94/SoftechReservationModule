@@ -219,6 +219,23 @@ class ReservationActivity(models.Model):
         null=True, blank=True,
         help_text='ID of related TransferRequest (loose reference to avoid circular import)',
     )
+    # Voice note — recorded in browser via WebRTC or uploaded as audio file
+    voice_note = models.FileField(
+        upload_to='reservation_voices/%Y/%m/',
+        null=True, blank=True,
+        help_text='ملاحظة صوتية (WebRTC أو ملف صوتي)',
+    )
+
+    # Soft-delete — message body/attachments are redacted but the tombstone stays visible
+    is_deleted = models.BooleanField(default=False, verbose_name='محذوف')
+    deleted_at  = models.DateTimeField(null=True, blank=True, verbose_name='وقت الحذف')
+    deleted_by  = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='deleted_reservation_activities',
+        verbose_name='حُذف بواسطة',
+    )
 
     class Meta:
         ordering = ['created_at']  # Oldest first — chatter reads top to bottom

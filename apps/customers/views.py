@@ -21,7 +21,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes  = [IsAuthenticated]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch']
-    search_fields       = ['name', 'phone', 'phone_alt', 'softech_id']
+    search_fields       = ['name', 'phone', 'phone_alt', 'softech_id', 'softech_pic']
     ordering_fields     = ['name', 'created_at', 'updated_at']
     ordering            = ['name']
 

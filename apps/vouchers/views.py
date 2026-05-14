@@ -6,6 +6,8 @@ OTP delivery: stub that logs to console; replace with real SMS/WhatsApp gateway.
 """
 import logging
 
+from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -20,6 +22,10 @@ from .serializers import (
 )
 
 logger = logging.getLogger('elrezeiky.vouchers')
+
+# Maximum OTP requests per phone per voucher within OTP_RATE_WINDOW_SECONDS
+OTP_RATE_LIMIT       = 3
+OTP_RATE_WINDOW_SECS = 300   # 5 minutes
 
 
 def _send_otp(phone: str, plain_code: str, voucher: Voucher):
@@ -77,6 +83,9 @@ class VoucherViewSet(viewsets.ModelViewSet):
         """
         POST { phone: '01xxxxxxxxx' }
         Creates an OTP, "sends" it (stub), returns expiry.
+
+        Rate-limited: max OTP_RATE_LIMIT requests per phone per voucher
+        within OTP_RATE_WINDOW_SECS seconds.
         """
         voucher = self.get_object()
         voucher.refresh_status()
@@ -91,10 +100,22 @@ class VoucherViewSet(viewsets.ModelViewSet):
         ser.is_valid(raise_exception=True)
         phone = ser.validated_data['phone']
 
+        # ── Rate-limit check ──────────────────────────────────────────────────
+        window_start = timezone.now() - timezone.timedelta(seconds=OTP_RATE_WINDOW_SECS)
+        recent_count = VoucherOTP.objects.filter(
+            voucher=voucher, phone=phone,
+            created_at__gte=window_start,
+        ).count()
+        if recent_count >= OTP_RATE_LIMIT:
+            return Response(
+                {'detail': f'تم تجاوز الحد المسموح به لطلبات OTP. يرجى الانتظار قبل المحاولة مجدداً.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         # Read expiry from settings (default 3 min)
         try:
-            from apps.config.models import SystemSetting
-            expiry = int(SystemSetting.objects.get(key='voucher_otp_expiry_minutes').value)
+            from apps.config.services import get_setting
+            expiry = int(get_setting('voucher_otp_expiry_minutes', default='3'))
         except Exception:
             expiry = 3
 
@@ -113,10 +134,14 @@ class VoucherViewSet(viewsets.ModelViewSet):
     # ── Verify OTP ────────────────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'], url_path='verify-otp')
+    @transaction.atomic
     def verify_otp(self, request, pk=None):
         """
         POST { code: '123456', phone: '01xxxxxxxxx' }
         Verifies OTP, increments times_used, creates VoucherRedemption.
+
+        Atomic: select_for_update() prevents concurrent double-redemptions.
+        F() expression ensures times_used increment is race-free.
         """
         voucher = self.get_object()
         ser = VerifyOTPSerializer(data=request.data)
@@ -124,24 +149,40 @@ class VoucherViewSet(viewsets.ModelViewSet):
         plain = ser.validated_data['code']
         phone = ser.validated_data['phone']
 
-        # Find latest valid OTP for this phone
+        # ── Lock the OTP row to prevent concurrent redemption ─────────────────
         try:
             otp = (
                 VoucherOTP.objects
+                .select_for_update()
                 .filter(voucher=voucher, phone=phone, is_used=False)
                 .latest('created_at')
             )
         except VoucherOTP.DoesNotExist:
-            return Response({'detail': 'لا يوجد رمز OTP نشط لهذا الرقم'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'لا يوجد رمز OTP نشط لهذا الرقم'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Expiry check (is_expired uses timezone.now() internally)
+        if otp.is_expired:
+            return Response(
+                {'detail': 'انتهت صلاحية رمز OTP'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not otp.verify(plain):
-            if otp.is_expired:
-                return Response({'detail': 'انتهت صلاحية رمز OTP'}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({'detail': 'رمز OTP غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'رمز OTP غير صحيح'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Increment usage
-        voucher.times_used += 1
-        voucher.save(update_fields=['times_used', 'updated_at'])
+        # ── Atomic increment — avoids read-modify-write race ──────────────────
+        Voucher.objects.filter(pk=voucher.pk).update(
+            times_used=F('times_used') + 1,
+            updated_at=timezone.now(),
+        )
+        # Refresh to get the actual post-increment value for the response
+        voucher.refresh_from_db()
         voucher.refresh_status()
 
         # Audit log

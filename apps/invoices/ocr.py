@@ -3,8 +3,9 @@ apps/invoices/ocr.py
 
 OCR extraction for supplier invoice images.
 Primary:   pytesseract (Tesseract 4+ with Arabic+English language packs)
-Fallback:  easyocr (if installed)
-Stub mode: if neither available, returns the raw image path as placeholder text.
+Fallback:  easyocr (if installed) — Reader is a module-level singleton to avoid
+           the expensive re-initialisation on every call (model loading ~3 s).
+Stub mode: if neither available, returns empty string.
 
 Installation:
   pip install pytesseract pillow
@@ -13,8 +14,29 @@ Installation:
 """
 import logging
 import re
+import threading
 
 logger = logging.getLogger('elrezeiky.invoices')
+
+# ── easyocr singleton ────────────────────────────────────────────────────────
+# Initialized once on first use (lazy); protected by a lock so concurrent
+# invoice uploads don't create multiple Reader instances simultaneously.
+_easyocr_reader      = None
+_easyocr_reader_lock = threading.Lock()
+
+
+def _get_easyocr_reader():
+    """Return the module-level easyocr Reader, creating it if needed."""
+    global _easyocr_reader
+    if _easyocr_reader is not None:
+        return _easyocr_reader
+    with _easyocr_reader_lock:
+        if _easyocr_reader is None:          # double-checked locking
+            import easyocr
+            logger.info('Initializing easyocr Reader (one-time startup cost)…')
+            _easyocr_reader = easyocr.Reader(['ar', 'en'], gpu=False)
+            logger.info('easyocr Reader ready.')
+    return _easyocr_reader
 
 
 def extract_text(image_path: str) -> str:
@@ -35,10 +57,9 @@ def extract_text(image_path: str) -> str:
     except Exception as e:
         logger.warning(f'pytesseract error: {e}')
 
-    # Try easyocr
+    # Try easyocr (uses singleton Reader)
     try:
-        import easyocr
-        reader = easyocr.Reader(['ar', 'en'], gpu=False)
+        reader = _get_easyocr_reader()
         result = reader.readtext(image_path, detail=0)
         text   = '\n'.join(result)
         logger.info(f'OCR via easyocr: {len(text)} chars extracted')

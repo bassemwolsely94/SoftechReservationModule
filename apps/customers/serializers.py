@@ -66,7 +66,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Customer
         fields = [
-            'id', 'softech_id',
+            'id', 'softech_id', 'softech_pic',
             'name', 'phone', 'phone_alt', 'email',
             'address', 'date_of_birth',
             'chronic_conditions', 'notes_softech',
@@ -79,7 +79,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'softech_id', 'softech_ptcode', 'softech_ptclassifcode',
+            'softech_id', 'softech_pic', 'softech_ptcode', 'softech_ptclassifcode',
             'notes_softech', 'created_at', 'updated_at',
         ]
 
@@ -107,7 +107,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Customer
         fields = [
-            'id', 'softech_id',
+            'id', 'softech_id', 'softech_pic',
             'name', 'phone', 'phone_alt',
             'customer_type_label', 'customer_type_color',
             'preferred_branch_name',

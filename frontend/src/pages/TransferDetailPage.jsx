@@ -5,6 +5,10 @@ import { transfersApi, itemsApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import PrintReceiptModal from '../components/PrintReceiptModal'
+import WhatsAppShareButton from '../components/WhatsAppShareButton'
+import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
+import ItemSearchInput from '../components/ItemSearchInput'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -35,26 +39,19 @@ function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')
 }
 
-// ── Tab component ─────────────────────────────────────────────────────────────
+// ── Section heading ───────────────────────────────────────────────────────────
 
-function Tab({ label, icon, active, onClick, count }) {
+function SectionHeading({ icon, label, count }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
-        active
-          ? 'border-brand-600 text-brand-700'
-          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-      }`}
-    >
-      <span>{icon}</span>
-      {label}
+    <div className="flex items-center gap-2 mb-4">
+      <span className="text-base">{icon}</span>
+      <span className="text-sm font-bold text-gray-700">{label}</span>
       {count !== undefined && (
-        <span className={`badge text-xs ${active ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-400'}`}>
+        <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-semibold">
           {count}
         </span>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -180,11 +177,11 @@ function ActionButtons({ tr, onAction, loading }) {
         </div>
       )}
 
-      {/* Complete */}
-      {tr.status === 'sent_to_erp' && (
+      {/* Complete — requesting branch confirms receipt */}
+      {tr.can_complete && (
         <button onClick={() => onAction('complete')}
           className="text-sm px-4 py-2 rounded-lg font-semibold bg-green-600 hover:bg-green-700 text-white transition-colors">
-          🏁 إغلاق كمكتمل
+          🏁 تأكيد الاستلام
         </button>
       )}
 
@@ -208,11 +205,11 @@ function DetailsTab({ tr }) {
       <div className="space-y-4">
         <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
           <div className="text-xs text-brand-500 font-semibold mb-1">الفرع الطالب</div>
-          <div className="text-lg font-black text-brand-800">{tr.source_branch_name}</div>
+          <div className="text-lg font-black text-brand-800">{tr.requesting_branch_name}</div>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="text-xs text-gray-500 font-semibold mb-1">الفرع المصدر</div>
-          <div className="text-lg font-black text-gray-800">{tr.destination_branch_name}</div>
+          <div className="text-lg font-black text-gray-800">{tr.supplying_branch_name}</div>
         </div>
       </div>
 
@@ -342,6 +339,7 @@ function ItemsTab({ tr, onRefresh }) {
   }
 
   const destStock = tr.destination_stock || {}
+  const [itemSearchText, setItemSearchText] = useState('')
 
   return (
     <div>
@@ -369,9 +367,16 @@ function ItemsTab({ tr, onRefresh }) {
                 <tr key={line.id} className="hover:bg-gray-50">
                   <td className="py-3 px-2">
                     <div className="font-semibold text-gray-800">{line.item_name}</div>
-                    <div className="text-xs text-gray-400 font-mono">{line.item_softech_id}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-400 font-mono">{line.item_softech_id}</span>
+                      {line.item_sale_price > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          {Number(line.item_sale_price).toFixed(2)} ج.م
+                        </span>
+                      )}
+                    </div>
                     {line.item_scientific && (
-                      <div className="text-xs text-gray-400 italic">{line.item_scientific}</div>
+                      <div className="text-xs text-gray-400 italic mt-0.5">{line.item_scientific}</div>
                     )}
                   </td>
                   <td className="py-3 px-2 font-bold tabular-nums text-gray-800">
@@ -416,10 +421,25 @@ function ItemsTab({ tr, onRefresh }) {
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 space-y-3">
               <div className="text-xs font-bold text-brand-700">إضافة صنف جديد</div>
               <div className="flex flex-col gap-2">
-                <ItemSearch onSelect={item => setSelectedItem(item)} />
+                <ItemSearchInput
+                  value={itemSearchText}
+                  onChange={setItemSearchText}
+                  onSelect={item => {
+                    setSelectedItem(item)
+                    setItemSearchText(item.name)
+                  }}
+                  branchId={tr.supplying_branch}
+                  placeholder="ابحث عن صنف... (يدعم * مثل: pan*، *cillin)"
+                />
                 {selectedItem && (
                   <div className="text-xs text-brand-600 bg-white border border-brand-200 rounded-lg px-2 py-1">
-                    ✓ {selectedItem.name} ({selectedItem.softech_id})
+                    ✓ {selectedItem.name}
+                    {selectedItem.softech_id && ` (${selectedItem.softech_id})`}
+                    {selectedItem.qty_at_branch !== undefined && (
+                      <span className="mr-2 text-gray-400">
+                        متاح: {selectedItem.qty_at_branch ?? '—'}
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className="flex gap-2">
@@ -434,7 +454,7 @@ function ItemsTab({ tr, onRefresh }) {
               {error && <div className="text-xs text-red-600">{error}</div>}
               <div className="flex gap-2">
                 <button onClick={addItem} className="btn-primary text-xs px-3">إضافة</button>
-                <button onClick={() => { setAdding(false); setSelectedItem(null); setError('') }}
+                <button onClick={() => { setAdding(false); setSelectedItem(null); setItemSearchText(''); setError('') }}
                   className="btn-secondary text-xs px-3">إلغاء</button>
               </div>
             </div>
@@ -445,50 +465,76 @@ function ItemsTab({ tr, onRefresh }) {
   )
 }
 
-// ── Tab 3: Communication ──────────────────────────────────────────────────────
+// ── Chatter / Communication Panel ────────────────────────────────────────────
 
-function CommunicationTab({ tr, onRefresh }) {
+function CommunicationTab({ tr, onRefresh, onDeleteMessage }) {
   const [message, setMessage] = useState('')
   const [msgType, setMsgType] = useState('message')
+  const [attachFile, setAttachFile] = useState(null)
+  const [voiceFile, setVoiceFile] = useState(null)
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef()
-  const { user } = useAuthStore()
+  const attachRef = useRef()
+
+  const messages = tr.messages || []
+  const humanCount = messages.filter(m => m.message_type !== 'system').length
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [tr.messages?.length])
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+  }, [messages.length])
 
   async function sendMessage() {
-    if (!message.trim()) return
+    if (!message.trim() && !attachFile && !voiceFile) return
     setSending(true)
     try {
-      await transfersApi.sendMessage(tr.id, { message_type: msgType, message })
+      const fd = new FormData()
+      fd.append('message_type', msgType)
+      fd.append('message', message)
+      if (attachFile) fd.append('attachment', attachFile)
+      if (voiceFile) fd.append('voice_note', voiceFile)
+      await transfersApi.sendMessage(tr.id, fd)
       setMessage('')
+      setAttachFile(null)
+      setVoiceFile(null)
       onRefresh()
     } catch { } finally { setSending(false) }
   }
 
-  const messages = tr.messages || []
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col h-full">
+
+      {/* Panel header */}
+      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+        <div className="text-sm font-bold text-gray-700 flex items-center gap-2">
+          💬 المحادثة
+          {humanCount > 0 && (
+            <span className="text-xs bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">
+              {humanCount}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-gray-400 mt-0.5">{messages.length} إجمالي الأنشطة</div>
+      </div>
+
       {/* Messages feed */}
-      <div className="max-h-96 overflow-y-auto space-y-0 divide-y divide-gray-50">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
         {messages.length === 0 && (
-          <div className="text-center py-10 text-gray-400">
+          <div className="text-center py-12 text-gray-400">
             <div className="text-3xl mb-2">💬</div>
-            <div className="text-sm">لا توجد رسائل بعد</div>
+            <div className="text-xs">لا توجد رسائل بعد</div>
           </div>
         )}
+
         {messages.map(msg => {
           const isSystem = msg.message_type === 'system'
+
           if (isSystem) return (
-            <div key={msg.id} className="flex items-start gap-2 py-2.5">
-              <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-sm flex-shrink-0">
+            <div key={msg.id} className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
                 ⚙️
               </div>
               <div className="flex-1">
-                <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
+                <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5 leading-relaxed">
                   {msg.message}
                 </div>
                 <div className="text-xs text-gray-300 mt-0.5">{timeAgo(msg.created_at)}</div>
@@ -497,28 +543,82 @@ function CommunicationTab({ tr, onRefresh }) {
           )
 
           return (
-            <div key={msg.id} className="flex items-start gap-3 py-3">
-              <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            <div key={msg.id} className="flex items-start gap-2">
+              <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
                 {initials(msg.created_by_name || '؟')}
               </div>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-gray-800">{msg.created_by_name}</span>
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-800">{msg.created_by_name}</span>
                   {msg.created_by_branch && (
-                    <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                    <span className="text-xs text-gray-400 bg-gray-100 px-1 py-0.5 rounded">
                       {msg.created_by_branch}
                     </span>
                   )}
-                  {msg.message_type === 'note' && (
-                    <span className="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">
-                      ملاحظة داخلية
-                    </span>
+                  {!msg.is_deleted && msg.message_type === 'note' && (
+                    <span className="text-xs text-yellow-600 bg-yellow-50 px-1 py-0.5 rounded">📝 داخلي</span>
                   )}
-                  <span className="text-xs text-gray-400 mr-auto">{timeAgo(msg.created_at)}</span>
+                  <span className="text-xs text-gray-300 mr-auto">{timeAgo(msg.created_at)}</span>
+                  {/* Delete button */}
+                  {msg.can_delete && onDeleteMessage && (
+                    <button
+                      onClick={() => onDeleteMessage(msg.id)}
+                      className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
+                      title="حذف الرسالة"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
-                <div className="bg-white border border-gray-200 rounded-xl rounded-tr-sm px-4 py-2.5 shadow-sm">
-                  <p className="text-sm text-gray-700 leading-relaxed">{msg.message}</p>
-                </div>
+
+                {/* Tombstone */}
+                {msg.is_deleted ? (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400 italic bg-gray-50 border border-dashed border-gray-200 rounded-lg px-2.5 py-1.5">
+                    <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>
+                      تم حذف هذه الرسالة
+                      {msg.deleted_by_name && ` بواسطة ${msg.deleted_by_name}`}
+                      {msg.deleted_at && ` · ${timeAgo(msg.deleted_at)}`}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    {msg.message && (
+                      <div className="bg-white border border-gray-200 rounded-xl rounded-tr-sm px-3 py-2 shadow-sm">
+                        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                      </div>
+                    )}
+                    {msg.attachment_url && (
+                      <div className="mt-1.5">
+                        <img
+                          src={msg.attachment_url}
+                          alt="مرفق"
+                          className="rounded-lg max-h-40 border border-gray-200 object-contain cursor-pointer hover:opacity-90"
+                          onClick={() => window.open(msg.attachment_url, '_blank')}
+                        />
+                      </div>
+                    )}
+                    {msg.voice_note_url && (
+                      <div className="mt-1.5">
+                        <div className="flex items-center gap-1 text-xs text-gray-400 mb-1">
+                          <span>🎙️</span><span>ملاحظة صوتية</span>
+                        </div>
+                        <audio
+                          src={msg.voice_note_url}
+                          controls
+                          className="w-full h-8"
+                          style={{ direction: 'ltr' }}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )
@@ -527,14 +627,14 @@ function CommunicationTab({ tr, onRefresh }) {
       </div>
 
       {/* Compose */}
-      <div className="border border-gray-200 rounded-xl p-3">
-        <div className="flex gap-1 mb-2">
+      <div className="px-3 pb-3 pt-2 border-t border-gray-100 flex-shrink-0 space-y-2">
+        <div className="flex gap-1">
           {[
             { v: 'message', label: '💬 رسالة' },
             { v: 'note',    label: '📝 ملاحظة داخلية' },
           ].map(t => (
             <button key={t.v} onClick={() => setMsgType(t.v)}
-              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+              className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
                 msgType === t.v ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
               {t.label}
@@ -543,11 +643,40 @@ function CommunicationTab({ tr, onRefresh }) {
         </div>
         <textarea rows={2} value={message} onChange={e => setMessage(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendMessage() }}
-          placeholder="اكتب رسالة أو ملاحظة... (Ctrl+Enter للإرسال)"
-          className="w-full text-sm resize-none focus:outline-none placeholder-gray-300 leading-relaxed" />
-        <div className="flex justify-end mt-2 pt-2 border-t border-gray-100">
-          <button onClick={sendMessage} disabled={!message.trim() || sending}
-            className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+          placeholder="اكتب رسالة أو ملاحظة... (Ctrl+Enter)"
+          className="w-full text-xs border border-gray-200 rounded-lg p-2 resize-none focus:outline-none focus:border-brand-300 bg-white placeholder-gray-300" />
+
+        {/* Voice recorder */}
+        <VoiceNoteRecorder
+          onRecorded={(f) => setVoiceFile(f)}
+          onClear={() => setVoiceFile(null)}
+          disabled={sending}
+          maxSeconds={120}
+        />
+
+        {/* Image attach row */}
+        <div className="flex items-center gap-2">
+          <input type="file" accept="image/*" ref={attachRef} className="hidden"
+            onChange={e => setAttachFile(e.target.files[0] || null)} />
+          <button
+            onClick={() => attachRef.current?.click()}
+            className="text-gray-400 hover:text-brand-600 transition-colors p-1 rounded"
+            title="إرفاق صورة"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+          {attachFile && (
+            <span className="text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded truncate max-w-28">
+              📎 {attachFile.name}
+              <button onClick={() => setAttachFile(null)} className="mr-1 text-gray-400 hover:text-red-500">✕</button>
+            </span>
+          )}
+          <div className="flex-1" />
+          <button onClick={sendMessage} disabled={(!message.trim() && !attachFile && !voiceFile) || sending}
+            className="text-xs bg-brand-600 text-white px-3 py-1 rounded-lg disabled:opacity-40 hover:bg-brand-700 transition-colors font-medium">
             {sending ? 'جارٍ...' : 'إرسال'}
           </button>
         </div>
@@ -589,51 +718,12 @@ function ActivityTab({ tr }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-function ItemSearch({ onSelect }) {
-  const [q, setQ] = useState('')
-  const [open, setOpen] = useState(false)
-  const ref = useRef()
-
-  const { data: results } = useQuery({
-    queryKey: ['item-search-detail', q],
-    queryFn: () => itemsApi.list({ search: q, page_size: 10 }).then(r => r.data.results || r.data),
-    enabled: q.length >= 2,
-    staleTime: 10_000,
-  })
-
-  useEffect(() => {
-    function h(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-
-  return (
-    <div ref={ref} className="relative">
-      <input className="input-field text-sm" placeholder="ابحث بالاسم أو الكود..."
-        value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} autoComplete="off" />
-      {open && q.length >= 2 && results?.length > 0 && (
-        <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
-          {results.map(item => (
-            <button key={item.id} type="button"
-              className="w-full text-right px-4 py-2.5 hover:bg-brand-50 transition-colors border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); setQ(''); setOpen(false) }}>
-              <div className="font-semibold text-gray-800 text-sm">{item.name}</div>
-              <div className="text-xs text-blue-500 font-mono">كود: {item.softech_id}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function TransferDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { user } = useAuthStore()
-  const [tab, setTab] = useState('details')
   const [actionLoading, setActionLoading] = useState(false)
+  const [showPrintModal, setShowPrintModal] = useState(false)
 
   const { data: tr, isLoading, isError } = useQuery({
     queryKey: ['transfer', id],
@@ -642,6 +732,16 @@ export default function TransferDetailPage() {
   })
 
   const invalidate = () => qc.invalidateQueries(['transfer', id])
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
+    try {
+      await transfersApi.deleteMessage(id, messageId)
+      invalidate()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر حذف الرسالة')
+    }
+  }
 
   async function handleAction(actionName, payload = {}) {
     setActionLoading(true)
@@ -681,54 +781,88 @@ export default function TransferDetailPage() {
   const s = STATUS[tr.status] || STATUS.draft
 
   return (
-    <div className="min-h-full bg-gray-50" dir="rtl">
+    <div className="flex flex-col bg-gray-50" style={{ minHeight: '100vh' }} dir="rtl">
+      {showPrintModal && (
+        <PrintReceiptModal
+          type="transfer"
+          docId={tr.id}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={() => navigate('/transfers')}
-              className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+      {/* ── Sticky header ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={() => navigate('/transfers')}
+            className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-xl font-black text-gray-900 font-mono">{tr.request_number}</h1>
-                <span className="badge text-sm px-3 py-1 font-semibold"
-                  style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
-                  {s.label}
-                </span>
-              </div>
-              <div className="text-xs text-gray-400 mt-0.5">
-                {tr.source_branch_name} → {tr.destination_branch_name}
-                · {tr.created_by_name}
-                · {timeAgo(tr.created_at)}
-              </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl font-black text-gray-900 font-mono">{tr.request_number}</h1>
+              <span className="badge text-sm px-3 py-1 font-semibold"
+                style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
+                {s.label}
+              </span>
             </div>
-
-            <ActionButtons tr={tr} onAction={handleAction} loading={actionLoading} />
+            <div className="text-xs text-gray-400 mt-0.5">
+              {tr.requesting_branch_name} → {tr.supplying_branch_name}
+              · {tr.created_by_name}
+              · {timeAgo(tr.created_at)}
+            </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-0 mt-3 border-b border-gray-200 overflow-x-auto no-scrollbar -mb-px">
-            <Tab icon="📋" label="التفاصيل"     active={tab === 'details'}       onClick={() => setTab('details')} />
-            <Tab icon="💊" label="الأصناف"      active={tab === 'items'}         onClick={() => setTab('items')}   count={tr.items?.length} />
-            <Tab icon="💬" label="التواصل"      active={tab === 'communication'} onClick={() => setTab('communication')} count={(tr.messages || []).filter(m => m.message_type !== 'system').length} />
-            <Tab icon="📜" label="سجل الأنشطة" active={tab === 'activity'}      onClick={() => setTab('activity')} />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Print & WhatsApp */}
+            <button
+              onClick={() => setShowPrintModal(true)}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+              title="طباعة الإيصال"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              طباعة
+            </button>
+            <WhatsAppShareButton type="transfer" docId={tr.id} size="sm" />
+            <ActionButtons tr={tr} onAction={handleAction} loading={actionLoading} />
           </div>
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="max-w-5xl mx-auto px-6 py-6">
-        <div className="card animate-fade-in">
-          {tab === 'details'       && <DetailsTab       tr={tr} />}
-          {tab === 'items'         && <ItemsTab         tr={tr} onRefresh={invalidate} />}
-          {tab === 'communication' && <CommunicationTab tr={tr} onRefresh={invalidate} />}
-          {tab === 'activity'      && <ActivityTab      tr={tr} />}
+      {/* ── 2-column body ── */}
+      <div className="flex flex-1 gap-0 overflow-hidden" style={{ height: 'calc(100vh - 105px)' }}>
+
+        {/* Left: single-scroll — Details → Items → Activity */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+
+          {/* ── Details ── */}
+          <div className="card animate-fade-in">
+            <SectionHeading icon="📋" label="التفاصيل" />
+            <DetailsTab tr={tr} />
+          </div>
+
+          {/* ── Items ── */}
+          <div className="card">
+            <SectionHeading icon="💊" label="الأصناف" count={tr.items?.length} />
+            <ItemsTab tr={tr} onRefresh={invalidate} />
+          </div>
+
+          {/* ── Activity log ── */}
+          <div className="card">
+            <SectionHeading icon="📜" label="سجل الأنشطة" />
+            <ActivityTab tr={tr} />
+          </div>
+
+        </div>
+
+        {/* Right: always-visible chatter panel */}
+        <div className="w-80 flex-shrink-0 flex flex-col bg-white border-r border-gray-200 shadow-inner">
+          <CommunicationTab tr={tr} onRefresh={invalidate} onDeleteMessage={handleDeleteMessage} />
         </div>
       </div>
     </div>

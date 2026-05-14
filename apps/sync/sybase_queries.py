@@ -131,8 +131,12 @@ QUERY_VALIDATE_STKTRANS = """
 
 # ── ITEM SEARCH (live from SOFTECH, includes public price) ────────────────────
 # Used by transfer/reservation create screens to search items with real-time price.
+# Supports wildcard patterns: the caller converts user "*" → SQL "%" before binding.
+# Two variants:
+#   QUERY_ITEM_SEARCH     — exact / partial match (caller wraps q with %)
+#   QUERY_ITEM_SEARCH_TOP — configurable TOP N (use Python .format(top=N) before execute)
 QUERY_ITEM_SEARCH = """
-    SELECT TOP 30
+    SELECT TOP 50
         i.itemcode, i.itemname, i.itemname_scientific, i.itembarcode,
         i.itemclassifcode, i.itemsaleprice, i.unitsaleprice,
         i.itemnomoreuse, i.itemarchive, i.fridgeitem, i.itemmedicine
@@ -142,6 +146,7 @@ QUERY_ITEM_SEARCH = """
       AND (
           i.itemcode LIKE ?
           OR i.itemname LIKE ?
+          OR i.itemname_scientific LIKE ?
           OR i.itembarcode LIKE ?
       )
     ORDER BY i.itemname

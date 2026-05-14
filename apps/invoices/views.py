@@ -2,7 +2,13 @@
 apps/invoices/views.py
 
 Supplier invoice management with OCR extraction and fuzzy item matching.
+
+OCR runs in a background thread so the create/run-ocr endpoints respond
+immediately (status → 'processing') while extraction happens asynchronously.
+The client polls GET /invoices/{id}/ until status changes to 'review'.
 """
+import threading
+
 from django.db.models import Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -48,11 +54,25 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
         invoice = serializer.save(created_by=profile)
-        # If image uploaded, run OCR + line extraction synchronously
+        # If image uploaded, kick off OCR in the background
         if invoice.source_image:
-            self._run_ocr(invoice)
+            self._run_ocr_async(invoice)
 
     # ── OCR pipeline ──────────────────────────────────────────────────────────
+
+    def _run_ocr_async(self, invoice: SupplierInvoice):
+        """
+        Spin up a daemon thread to run OCR so the HTTP response returns
+        immediately with status='processing'.  The thread updates the invoice
+        to status='review' once done (or appends an error note on failure).
+        """
+        t = threading.Thread(
+            target=self._run_ocr,
+            args=(invoice,),
+            daemon=True,
+            name=f'ocr-invoice-{invoice.pk}',
+        )
+        t.start()
 
     def _run_ocr(self, invoice: SupplierInvoice):
         from .ocr import extract_text, parse_lines
@@ -100,17 +120,23 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='run-ocr')
     def run_ocr(self, request, pk=None):
-        """Re-extract text and rebuild lines from the uploaded image."""
+        """
+        Re-extract text and rebuild lines from the uploaded image.
+        Returns immediately with status='processing'; poll GET /invoices/{id}/
+        until status transitions to 'review'.
+        """
         invoice = self.get_object()
         if not invoice.source_image:
             return Response({'detail': 'لا توجد صورة مرفوعة'}, status=status.HTTP_400_BAD_REQUEST)
+        # Clear existing lines and mark as processing before the thread starts
         invoice.lines.all().delete()
-        self._run_ocr(invoice)
-        ser = SupplierInvoiceDetailSerializer(
-            self.get_queryset().get(pk=invoice.pk),
-            context=self.get_serializer_context()
-        )
-        return Response(ser.data)
+        invoice.status = 'processing'
+        invoice.save(update_fields=['status'])
+        self._run_ocr_async(invoice)
+        return Response({
+            'detail': 'جارٍ استخراج النص — راجع الفاتورة بعد لحظات',
+            'status': 'processing',
+        })
 
     # ── Add line manually ─────────────────────────────────────────────────────
 
