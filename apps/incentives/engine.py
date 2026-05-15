@@ -1,5 +1,5 @@
 """
-apps/incentives/engine.py  —  v2 (production-hardened)
+apps/incentives/engine.py  —  v3
 
 Item-Based Incentive Calculation Engine
 =========================================
@@ -7,40 +7,30 @@ Main entry points:
   calculate(program_id, period_start, period_end, *, user_ids=None, simulate=False, force=False)
   simulate_only(program_id, period_start, period_end, *, user_ids=None)   ← convenience wrapper
 
-Key design decisions (v2):
+Changes in v3 vs v2:
   ─────────────────────────────────────────────────────────────────────────────
-  • Returns are always separate negative transactions.  Sales are always written
-    at their FULL quantity with FULL incentive.  Net incentive = sum of all rows.
-    This eliminates the v1 double-counting bug (zeroing the sale AND creating
-    a negative return = double-deduction).
+  • Removed `i.groupcode` from the SQL query — this column does not exist in the
+    SOFTECH `items` table and caused:
+      com.sybase.jdbc3.jdbc.SybSQLException: Invalid column name 'groupcode'
+    Category-code matching has been removed from the engine; the `category_code`
+    field on IncentiveRule is kept on the model for informational/labelling use
+    only and is no longer evaluated by the engine.
 
-  • For same-period partial returns (3 of 5 units returned):
-      Sale row  : qty=5,  incentive= +25
-      Return row: qty=-3, incentive= -15
-      Net                            +10  ✓
+  • Multi-item rule support via IncentiveRuleItem:
+    A rule can now target either:
+      (a) A single item_code stored directly on IncentiveRule.item_code (legacy /
+          backward-compatible), OR
+      (b) Any number of items stored in IncentiveRuleItem linked to the rule.
+    Both are evaluated; (a) takes precedence over (b) in matching order.
 
-  • `is_reversed` flag on sale rows is purely informational:
-    True means the full sale qty was returned within the same period.
-    It does NOT affect incentive_amount computation.
+  • Per-item incentive override:
+    IncentiveRuleItem.incentive_override, when set, overrides the rule's global
+    incentive_value for that specific item code.
 
-  • Cross-period returns (ref_doc_no from a previous period):
-    Always produce a negative transaction in the current period.
-    The previous period's sale row is NOT modified (it may be finalized).
+  • Rule items are prefetched ONCE before the hot loop (not per-row).
 
-  • Finalization lock:
-    If ANY finalized IncentiveSettlement exists for this program+period,
-    calculate() raises ValueError unless force=True.
-    Use simulate=True to preview without writing.
-
-  • Idempotency:
-    Non-simulated runs delete existing transactions for the period first,
-    then bulk-insert fresh ones (batch_size=500).
-
-  • Performance:
-    — person_map built ONCE before the loop (not per-row)
-    — returned_qty_map built in a single pass over returns_rows
-    — Softech connection opened once (sales+returns in one pass)
-    — bulk_create with batch_size=500
+  All v2 design decisions (returns = negative, no double-counting, finalization
+  lock, idempotency, bulk_create) are preserved unchanged.
   ─────────────────────────────────────────────────────────────────────────────
 """
 import logging
@@ -59,9 +49,9 @@ _COL_BRANCHCODE  = 3
 _COL_R_DOCNUMBER = 4
 _COL_ITEMCODE    = 5
 _COL_ITEMNAME    = 6
-_COL_GROUPCODE   = 7
-_COL_TRANSQTY    = 8
-_COL_PRICE       = 9
+# NOTE: groupcode (was col 7) removed — column does not exist in SOFTECH items
+_COL_TRANSQTY    = 7   # was 8
+_COL_PRICE       = 8   # was 9
 
 _SALES_DOCCODE   = '115'
 _RETURNS_DOCCODE = '30'
@@ -75,7 +65,6 @@ SELECT
     m.r_docnumber,
     d.itemcode,
     i.itemname,
-    i.groupcode,
     d.transqty,
     d.itemsaleprice
 FROM SOFTECHDB9.dbo.stktransm m
@@ -144,12 +133,36 @@ def _to_date(value):
         return None
 
 
+# ── Rule item helpers ─────────────────────────────────────────────────────────
+
+def _build_rule_item_sets(rules) -> tuple[dict, dict]:
+    """
+    Returns two dicts built from pre-fetched rule_items:
+      rule_item_sets  : {rule.id: frozenset of item_codes}
+      rule_item_map   : {(rule.id, item_code): IncentiveRuleItem}  — for override lookup
+    """
+    rule_item_sets: dict[int, frozenset] = {}
+    rule_item_map:  dict[tuple, object]  = {}
+    for rule in rules:
+        items = list(rule.rule_items.all())   # already prefetched
+        rule_item_sets[rule.id] = frozenset(ri.item_code for ri in items)
+        for ri in items:
+            rule_item_map[(rule.id, ri.item_code)] = ri
+    return rule_item_sets, rule_item_map
+
+
 # ── Rule matching ─────────────────────────────────────────────────────────────
 
-def _find_matching_rule(rules, item_code: str, group_code: str,
+def _find_matching_rule(rules, rule_item_sets, item_code: str,
                         person_code: str, qty: Decimal):
     """
-    Return the highest-priority matching rule.
+    Return the highest-priority matching rule for an ERP line.
+
+    Matching logic (in order of precedence):
+      1. rule.item_code (single legacy field) — exact match
+      2. item_code in rule_item_sets[rule.id] (multi-item set)
+      3. If neither is configured the rule is skipped (no catch-all).
+
     Rules MUST be sorted by (-priority, item_code) before passing in.
     Returns None if nothing matches.
     """
@@ -157,26 +170,47 @@ def _find_matching_rule(rules, item_code: str, group_code: str,
         # Scope: person_code filter (optional — blank = all)
         if rule.person_code_filter and rule.person_code_filter != person_code:
             continue
-        # Scope: specific item_code OR category_code (item_code wins)
+
+        # Item scope
         if rule.item_code:
+            # Legacy single-item match
             if rule.item_code != item_code:
                 continue
-        elif rule.category_code:
-            if rule.category_code != group_code:
+        else:
+            item_set = rule_item_sets.get(rule.id)
+            if not item_set:
+                # Rule has no items configured at all — skip
                 continue
+            if item_code not in item_set:
+                continue
+
         # Minimum quantity gate
         if qty < rule.min_qty:
             continue
+
         return rule
     return None
 
 
-def _calc_incentive(rule, qty: Decimal, unit_price: Decimal) -> Decimal:
-    """Compute the positive incentive amount for one qualifying line."""
-    if rule.incentive_type == 'percent':
-        return (qty * unit_price * rule.incentive_value / Decimal('100')
+def _calc_incentive(rule, qty: Decimal, unit_price: Decimal,
+                    item_code: str = '', rule_item_map: dict = None) -> Decimal:
+    """
+    Compute the positive incentive amount for one qualifying line.
+    Applies IncentiveRuleItem.incentive_override when available.
+    """
+    effective_value = rule.incentive_value
+    effective_type  = rule.incentive_type
+
+    if item_code and rule_item_map:
+        ri = rule_item_map.get((rule.id, item_code))
+        if ri is not None and ri.incentive_override is not None:
+            effective_value = ri.incentive_override
+            # type stays the same (percent or fixed) — override changes value only
+
+    if effective_type == 'percent':
+        return (qty * unit_price * effective_value / Decimal('100')
                 ).quantize(Decimal('0.0001'))
-    return (qty * rule.incentive_value).quantize(Decimal('0.0001'))
+    return (qty * effective_value).quantize(Decimal('0.0001'))
 
 
 # ── Person-code ↔ StaffProfile map ───────────────────────────────────────────
@@ -255,21 +289,23 @@ def calculate(
                 'calculate: force-recalculating finalized period %s→%s for program %d',
                 period_start, period_end, program_id,
             )
-            # Reopen finalized settlements so they can be re-finalized later
             locked.update(is_finalized=False, finalized_at=None, finalized_by=None)
 
-    # ── Load active rules ──────────────────────────────────────────────────────
+    # ── Load active rules (prefetch rule_items) ────────────────────────────────
     rules = list(
         program.rules
         .filter(is_active=True)
+        .prefetch_related('rule_items')
         .order_by('-priority', 'item_code')
     )
     if not rules:
         logger.warning('calculate: program %d has no active rules', program_id)
         return CalculationResult(0, {}, [], simulate)
 
+    # ── Build rule item helpers ONCE ──────────────────────────────────────────
+    rule_item_sets, rule_item_map = _build_rule_item_sets(rules)
+
     # ── Build person_code map ONCE ─────────────────────────────────────────────
-    # user_ids=None → load ALL staff with Softech IDs
     person_map = _build_person_code_map(user_ids)
     person_codes = list(person_map.keys()) if user_ids else None
 
@@ -291,12 +327,6 @@ def calculate(
     )
 
     # ── Build return quantity map ──────────────────────────────────────────────
-    # { (ref_doc_no, item_code): Decimal }  — total returned qty per original doc+item
-    # Used to flag same-period fully-returned sales as is_reversed=True (informational).
-    #
-    # NOTE: is_reversed=True does NOT zero the incentive_amount.
-    # Net incentive = sale_incentive + return_incentive (return is negative).
-    # This avoids v1 double-counting.
     returned_qty_map: dict[tuple, Decimal] = defaultdict(Decimal)
     for row in returns_rows:
         ref_doc = _to_str(row[_COL_R_DOCNUMBER])
@@ -305,23 +335,16 @@ def calculate(
         if ref_doc and icode and qty > 0:
             returned_qty_map[(ref_doc, icode)] += qty
 
-    # Track which doc_numbers exist in current-period sales
-    # (returns referencing other doc_numbers are cross-period returns)
-    current_sale_docnos: set[str] = {
-        _to_str(row[_COL_DOCNUMBER]) for row in sales_rows
-    }
-
     # ── Build transactions (in-memory) ────────────────────────────────────────
-    to_create        = []
-    total_by_user:   dict[int, Decimal] = {}
-    skipped_codes:   list[str] = []
+    to_create:      list  = []
+    total_by_user:  dict  = {}
+    skipped_codes:  list  = []
 
     # ─── Pass 1: sales ────────────────────────────────────────────────────────
     for row in sales_rows:
         doc_no      = _to_str(row[_COL_DOCNUMBER])
         person_code = _to_str(row[_COL_PHCODE])
         item_code   = _to_str(row[_COL_ITEMCODE])
-        group_code  = _to_str(row[_COL_GROUPCODE])
         qty         = _to_decimal(row[_COL_TRANSQTY])
         price       = _to_decimal(row[_COL_PRICE])
         erp_date    = _to_date(row[_COL_DOCDATE])
@@ -336,16 +359,14 @@ def calculate(
                 skipped_codes.append(person_code)
             continue
 
-        rule = _find_matching_rule(rules, item_code, group_code, person_code, qty)
+        rule = _find_matching_rule(rules, rule_item_sets, item_code, person_code, qty)
         if rule is None:
             continue
 
-        # is_reversed = informational flag only (full quantity was returned same-period)
         returned = returned_qty_map.get((doc_no, item_code), Decimal('0'))
         is_reversed = (returned >= qty)
 
-        # incentive_amount is always the FULL sale incentive — returns handled separately
-        incentive_amt = _calc_incentive(rule, qty, price)
+        incentive_amt = _calc_incentive(rule, qty, price, item_code, rule_item_map)
 
         to_create.append(dict(
             program=program, rule=rule, user=staff,
@@ -365,7 +386,6 @@ def calculate(
         doc_no      = _to_str(row[_COL_DOCNUMBER])
         person_code = _to_str(row[_COL_PHCODE])
         item_code   = _to_str(row[_COL_ITEMCODE])
-        group_code  = _to_str(row[_COL_GROUPCODE])
         qty         = _to_decimal(row[_COL_TRANSQTY])
         price       = _to_decimal(row[_COL_PRICE])
         ref_doc_no  = _to_str(row[_COL_R_DOCNUMBER])
@@ -379,12 +399,11 @@ def calculate(
         if staff is None:
             continue
 
-        rule = _find_matching_rule(rules, item_code, group_code, person_code, qty)
+        rule = _find_matching_rule(rules, rule_item_sets, item_code, person_code, qty)
         if rule is None:
-            # No rule → no incentive was earned → no reversal needed
             continue
 
-        incentive_amt = -_calc_incentive(rule, qty, price)  # always negative
+        incentive_amt = -_calc_incentive(rule, qty, price, item_code, rule_item_map)
 
         to_create.append(dict(
             program=program, rule=rule, user=staff,

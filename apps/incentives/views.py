@@ -4,33 +4,38 @@ apps/incentives/views.py
 API endpoints:
   GET/POST   /api/incentives/programs/
   GET/PATCH  /api/incentives/programs/{id}/
-  DELETE     /api/incentives/programs/{id}/          (admin only)
+  DELETE     /api/incentives/programs/{id}/
   GET/POST   /api/incentives/rules/
   PATCH/DEL  /api/incentives/rules/{id}/
 
   POST       /api/incentives/programs/{id}/calculate/
-             Body: { period_start, period_end, user_ids?, force? }
-             Returns: { created, total_by_user, skipped_person_codes, simulated }
-             Raises 409 if period has finalized settlements (unless force=true)
-
   POST       /api/incentives/programs/{id}/simulate/
-             Body: { period_start, period_end, user_ids? }
-             Returns: same shape as calculate but nothing is written to DB
-
   GET        /api/incentives/programs/{id}/report/
-             Params: period_start, period_end, user_id?
-             Returns: aggregated per-user rows with transaction breakdown
-
   POST       /api/incentives/programs/{id}/finalize/
-             Body: { period_start, period_end, notes? }
-             Creates/updates IncentiveSettlement rows and marks is_finalized=True
-
   GET        /api/incentives/settlements/{id}/receipt/
-             Returns settlement detail for printable receipt
+
+  -- Multi-item rule management --
+  POST       /api/incentives/rules/{id}/add-item/
+             Body: { item_code, item_name?, incentive_override? }
+             Adds one item to a rule (idempotent: updates name/override if exists)
+
+  POST       /api/incentives/rules/{id}/import-items/
+             Body (JSON):  { "items": [...], "mode": "replace"|"append" }
+             Body (form):  csv_file=<upload>, mode=replace|append
+             CSV columns:  item_code, item_name (opt), incentive_override (opt)
+             Bulk-import items; mode=replace deletes existing items first.
+
+  DELETE     /api/incentives/rules/{id}/remove-item/?item_code=XYZ
+             Removes one item from a rule.
+
+  DELETE     /api/incentives/rules/{id}/clear-items/
+             Removes ALL items from a rule.
 """
+import csv
+import io
 import logging
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, Sum, Q
 from django.utils import timezone
@@ -40,7 +45,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import (
-    IncentiveProgram, IncentiveRule,
+    IncentiveProgram, IncentiveRule, IncentiveRuleItem,
     IncentiveTransaction, IncentiveSettlement,
 )
 from .serializers import (
@@ -48,6 +53,7 @@ from .serializers import (
     IncentiveProgramDetailSerializer,
     IncentiveProgramCreateSerializer,
     IncentiveRuleSerializer,
+    IncentiveRuleItemSerializer,
     IncentiveTransactionSerializer,
     IncentiveSettlementSerializer,
 )
@@ -415,7 +421,7 @@ class IncentiveRuleViewSet(viewsets.ModelViewSet):
     serializer_class   = IncentiveRuleSerializer
 
     def get_queryset(self):
-        qs = IncentiveRule.objects.select_related('program')
+        qs = IncentiveRule.objects.select_related('program').prefetch_related('rule_items')
         program_id = self.request.query_params.get('program')
         is_active  = self.request.query_params.get('is_active')
         if program_id:
@@ -423,6 +429,197 @@ class IncentiveRuleViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             qs = qs.filter(is_active=(is_active.lower() == 'true'))
         return qs.order_by('-priority', 'item_code')
+
+    # ── POST .../rules/{id}/add-item/ ─────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='add-item')
+    def add_item(self, request, pk=None):
+        """
+        Add (or update) one item in a rule.
+
+        Body: { "item_code": "123", "item_name": "...", "incentive_override": null }
+
+        Idempotent: if item_code already exists for this rule, updates
+        item_name and incentive_override.
+        """
+        rule = self.get_object()
+        item_code = (request.data.get('item_code') or '').strip()
+        if not item_code:
+            return Response({'detail': 'item_code مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+
+        item_name = (request.data.get('item_name') or '').strip()
+        override_raw = request.data.get('incentive_override')
+        incentive_override = None
+        if override_raw not in (None, ''):
+            try:
+                incentive_override = Decimal(str(override_raw))
+            except InvalidOperation:
+                return Response(
+                    {'detail': 'incentive_override قيمة غير صالحة'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        ri, created = IncentiveRuleItem.objects.update_or_create(
+            rule=rule,
+            item_code=item_code,
+            defaults={
+                'item_name':          item_name,
+                'incentive_override': incentive_override,
+            },
+        )
+        return Response(
+            IncentiveRuleItemSerializer(ri).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    # ── POST .../rules/{id}/import-items/ ─────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='import-items')
+    def import_items(self, request, pk=None):
+        """
+        Bulk-import items into a rule.
+
+        Accepts two input formats:
+          1. JSON body:
+             {
+               "items": [
+                 { "item_code": "123", "item_name": "...", "incentive_override": 5.0 },
+                 ...
+               ],
+               "mode": "replace"   // "replace" (default) or "append"
+             }
+
+          2. Multipart form upload:
+             csv_file=<CSV file>
+             mode=replace|append
+             CSV expected columns (header row required):
+               item_code, item_name (optional), incentive_override (optional)
+
+        mode=replace: deletes ALL existing rule items before importing.
+        mode=append:  merges; existing item_codes are updated, new ones added.
+
+        Returns: { created, updated, deleted, total }
+        """
+        rule = self.get_object()
+        mode = (request.data.get('mode') or 'replace').strip().lower()
+        if mode not in ('replace', 'append'):
+            return Response(
+                {'detail': 'mode يجب أن يكون replace أو append'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Parse input ───────────────────────────────────────────────────────
+        raw_items = []
+
+        # Check for CSV file upload
+        csv_file = request.FILES.get('csv_file')
+        if csv_file:
+            try:
+                text = csv_file.read().decode('utf-8-sig')   # handle BOM
+                reader = csv.DictReader(io.StringIO(text))
+                for row in reader:
+                    code = (row.get('item_code') or row.get('كود الصنف') or '').strip()
+                    if not code:
+                        continue
+                    name = (row.get('item_name') or row.get('اسم الصنف') or '').strip()
+                    ov_raw = (row.get('incentive_override') or row.get('قيمة الحافز') or '').strip()
+                    ov = None
+                    if ov_raw:
+                        try:
+                            ov = Decimal(ov_raw)
+                        except InvalidOperation:
+                            pass
+                    raw_items.append({'item_code': code, 'item_name': name, 'incentive_override': ov})
+            except Exception as exc:
+                return Response(
+                    {'detail': f'فشل قراءة ملف CSV: {exc}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            # JSON body
+            items_data = request.data.get('items')
+            if not isinstance(items_data, list):
+                return Response(
+                    {'detail': 'يجب إرسال items كمصفوفة JSON أو رفع ملف csv_file'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for entry in items_data:
+                code = (entry.get('item_code') or '').strip()
+                if not code:
+                    continue
+                name = (entry.get('item_name') or '').strip()
+                ov_raw = entry.get('incentive_override')
+                ov = None
+                if ov_raw not in (None, ''):
+                    try:
+                        ov = Decimal(str(ov_raw))
+                    except InvalidOperation:
+                        pass
+                raw_items.append({'item_code': code, 'item_name': name, 'incentive_override': ov})
+
+        if not raw_items:
+            return Response(
+                {'detail': 'لم يتم العثور على بنود صالحة في البيانات المُرسَلة'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Apply to DB ───────────────────────────────────────────────────────
+        deleted_count = 0
+        if mode == 'replace':
+            deleted_count, _ = IncentiveRuleItem.objects.filter(rule=rule).delete()
+
+        created_count = 0
+        updated_count = 0
+        for item in raw_items:
+            _, created = IncentiveRuleItem.objects.update_or_create(
+                rule=rule,
+                item_code=item['item_code'],
+                defaults={
+                    'item_name':          item['item_name'],
+                    'incentive_override': item['incentive_override'],
+                },
+            )
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+
+        total = IncentiveRuleItem.objects.filter(rule=rule).count()
+
+        logger.info(
+            'import_items: rule=%d mode=%s created=%d updated=%d deleted=%d total=%d',
+            rule.id, mode, created_count, updated_count, deleted_count, total,
+        )
+
+        return Response({
+            'created': created_count,
+            'updated': updated_count,
+            'deleted': deleted_count,
+            'total':   total,
+        })
+
+    # ── DELETE .../rules/{id}/remove-item/?item_code=XYZ ─────────────────────
+
+    @action(detail=True, methods=['delete'], url_path='remove-item')
+    def remove_item(self, request, pk=None):
+        """Remove a single item from the rule. Pass ?item_code=XYZ as query param."""
+        rule = self.get_object()
+        item_code = (request.query_params.get('item_code') or '').strip()
+        if not item_code:
+            return Response({'detail': 'item_code مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+        deleted, _ = IncentiveRuleItem.objects.filter(rule=rule, item_code=item_code).delete()
+        if not deleted:
+            return Response({'detail': 'الصنف غير موجود في هذه القاعدة'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ── DELETE .../rules/{id}/clear-items/ ────────────────────────────────────
+
+    @action(detail=True, methods=['delete'], url_path='clear-items')
+    def clear_items(self, request, pk=None):
+        """Remove ALL items from a rule."""
+        rule = self.get_object()
+        deleted, _ = IncentiveRuleItem.objects.filter(rule=rule).delete()
+        return Response({'deleted': deleted})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

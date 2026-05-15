@@ -2,12 +2,34 @@
 apps/incentives/serializers.py
 """
 from rest_framework import serializers
-from .models import IncentiveProgram, IncentiveRule, IncentiveTransaction, IncentiveSettlement
+from .models import (
+    IncentiveProgram, IncentiveRule, IncentiveRuleItem,
+    IncentiveTransaction, IncentiveSettlement,
+)
+
+
+# ── Rule Items ────────────────────────────────────────────────────────────────
+
+class IncentiveRuleItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = IncentiveRuleItem
+        fields = ['id', 'rule', 'item_code', 'item_name', 'incentive_override', 'created_at']
+        read_only_fields = ['created_at']
+        extra_kwargs = {'rule': {'required': False}}   # supplied via URL in nested routes
 
 
 # ── Rules ─────────────────────────────────────────────────────────────────────
 
 class IncentiveRuleSerializer(serializers.ModelSerializer):
+    rule_items = IncentiveRuleItemSerializer(many=True, read_only=True)
+    item_count = serializers.SerializerMethodField()
+
+    def get_item_count(self, obj):
+        # Uses prefetch cache when available, otherwise hits DB once
+        if hasattr(obj, '_prefetched_objects_cache') and 'rule_items' in obj._prefetched_objects_cache:
+            return len(obj._prefetched_objects_cache['rule_items'])
+        return obj.rule_items.count()
+
     class Meta:
         model  = IncentiveRule
         fields = [
@@ -15,19 +37,25 @@ class IncentiveRuleSerializer(serializers.ModelSerializer):
             'item_code', 'item_name', 'category_code',
             'incentive_type', 'incentive_value', 'min_qty',
             'person_code_filter', 'expiry_within_days', 'priority',
-            'is_active', 'created_at',
+            'is_active', 'created_at', 'rule_items', 'item_count',
         ]
         read_only_fields = ['created_at']
 
 
 class IncentiveRuleInlineSerializer(serializers.ModelSerializer):
     """Compact rule info embedded inside program detail."""
+    item_count = serializers.SerializerMethodField()
+
+    def get_item_count(self, obj):
+        return obj.rule_items.count()
+
     class Meta:
         model  = IncentiveRule
         fields = [
             'id', 'rule_name', 'item_code', 'item_name', 'category_code',
             'incentive_type', 'incentive_value', 'min_qty',
             'person_code_filter', 'expiry_within_days', 'priority', 'is_active',
+            'item_count',
         ]
 
 
@@ -67,7 +95,7 @@ class IncentiveProgramCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = IncentiveProgram
         fields = [
-            'id',                                              # read-only, needed by frontend after create
+            'id',
             'name', 'description',
             'start_date', 'end_date', 'calculation_period', 'is_active',
         ]

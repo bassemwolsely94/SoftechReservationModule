@@ -413,6 +413,27 @@ export const incentivesApi = {
   updateRule:     (id, data)     => api.patch(`/incentives/rules/${id}/`, data),
   deleteRule:     (id)           => api.delete(`/incentives/rules/${id}/`),
 
+  // Rule Items — multi-item management
+  // Add / update one item (idempotent)
+  addRuleItem:    (ruleId, data) => api.post(`/incentives/rules/${ruleId}/add-item/`, data),
+
+  // Remove one item by item_code
+  removeRuleItem: (ruleId, itemCode) =>
+    api.delete(`/incentives/rules/${ruleId}/remove-item/`, { params: { item_code: itemCode } }),
+
+  // Clear ALL items from a rule
+  clearRuleItems: (ruleId)       => api.delete(`/incentives/rules/${ruleId}/clear-items/`),
+
+  // Bulk-import items — JSON mode
+  // data = { items: [{item_code, item_name?, incentive_override?},...], mode: 'replace'|'append' }
+  importRuleItems: (ruleId, data) => api.post(`/incentives/rules/${ruleId}/import-items/`, data),
+
+  // Bulk-import items — CSV mode (FormData with 'csv_file' + 'mode')
+  importRuleItemsCsv: (ruleId, formData) =>
+    api.post(`/incentives/rules/${ruleId}/import-items/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   // Transactions (read-only)
   listTransactions: (params)     => api.get('/incentives/transactions/', { params }),
 

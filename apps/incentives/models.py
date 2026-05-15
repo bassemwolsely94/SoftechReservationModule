@@ -111,6 +111,38 @@ class IncentiveRule(models.Model):
         return f'{self.program.name} — {target}'
 
 
+class IncentiveRuleItem(models.Model):
+    """
+    One item belonging to a multi-item rule.
+    A rule can target either a single item_code (legacy, on IncentiveRule itself)
+    OR a set of items stored here.  The engine checks both.
+
+    incentive_override — when set, this per-item value is used instead of the
+    rule's global incentive_value.  Enables different rates per SKU in one rule.
+    """
+    rule = models.ForeignKey(
+        IncentiveRule, on_delete=models.CASCADE,
+        related_name='rule_items', verbose_name='القاعدة',
+    )
+    item_code = models.CharField(max_length=50, db_index=True, verbose_name='كود الصنف')
+    item_name = models.CharField(max_length=300, blank=True, verbose_name='اسم الصنف')
+    incentive_override = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        verbose_name='قيمة حافز خاصة (override)',
+        help_text='إذا تُرك فارغاً يُستخدم incentive_value من القاعدة الأصلية',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'صنف القاعدة'
+        verbose_name_plural = 'أصناف القاعدة'
+        unique_together     = [('rule', 'item_code')]
+        ordering            = ['item_code']
+
+    def __str__(self):
+        return f'{self.item_code} — {self.item_name}'
+
+
 class IncentiveTransaction(models.Model):
     """
     Immutable audit record: one ERP sale/return line that earned/reversed an incentive.

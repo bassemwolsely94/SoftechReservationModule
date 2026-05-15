@@ -1,17 +1,17 @@
 /**
- * IncentivesPage.jsx
+ * IncentivesPage.jsx  — v2
  *
  * Item-based sales incentive engine UI.
  *
  * Tabs:
- *   1. Programs  — list + create incentive programs
- *   2. Rules     — view / add / edit rules for selected program
- *   3. Calculate — pick period → run engine → preview report
- *   4. Report    — per-user aggregated table with drill-down
+ *   1. Programs   — list + create incentive programs
+ *   2. Rules      — multi-item rules per program (CSV upload + inline item manager)
+ *   3. Calculate  — pick period → run engine → preview report
+ *   4. Report     — per-user aggregated table with drill-down
  *   5. Settlements — finalized payroll records with printable receipts
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { incentivesApi } from '../api/client'
+import { incentivesApi, itemsApi } from '../api/client'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -21,18 +21,17 @@ const fmt = (n, dp = 2) =>
     maximumFractionDigits: dp,
   })
 
-const today = () => new Date().toISOString().slice(0, 10)
-
 const monthStart = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
-
 const monthEnd = () => {
   const d = new Date()
   const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
   return last.toISOString().slice(0, 10)
 }
+
+// ── Shared mini-components ───────────────────────────────────────────────────
 
 function Badge({ color = 'gray', children }) {
   const palette = {
@@ -42,6 +41,7 @@ function Badge({ color = 'gray', children }) {
     yellow: 'bg-yellow-100 text-yellow-800',
     gray:   'bg-gray-100 text-gray-700',
     purple: 'bg-purple-100 text-purple-800',
+    orange: 'bg-orange-100 text-orange-700',
   }
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${palette[color] || palette.gray}`}>
@@ -71,11 +71,11 @@ function EmptyState({ icon, title, sub }) {
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'programs',     label: 'البرامج',       icon: '🏆' },
-  { id: 'rules',        label: 'القواعد',        icon: '📐' },
-  { id: 'calculate',   label: 'الاحتساب',       icon: '⚡' },
-  { id: 'report',       label: 'التقرير',        icon: '📊' },
-  { id: 'settlements',  label: 'التسويات',       icon: '✅' },
+  { id: 'programs',    label: 'البرامج',   icon: '🏆' },
+  { id: 'rules',       label: 'القواعد',   icon: '📐' },
+  { id: 'calculate',   label: 'الاحتساب',  icon: '⚡' },
+  { id: 'report',      label: 'التقرير',   icon: '📊' },
+  { id: 'settlements', label: 'التسويات',  icon: '✅' },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,12 +84,9 @@ const TABS = [
 
 function CreateProgramModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
-    name: '',
-    description: '',
-    start_date: monthStart(),
-    end_date: monthEnd(),
-    calculation_period: 'monthly',
-    is_active: true,
+    name: '', description: '',
+    start_date: monthStart(), end_date: monthEnd(),
+    calculation_period: 'monthly', is_active: true,
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -102,9 +99,7 @@ function CreateProgramModal({ onClose, onCreated }) {
       onCreated(data)
     } catch (e) {
       setErr(e.response?.data?.detail || 'حدث خطأ')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   return (
@@ -112,7 +107,6 @@ function CreateProgramModal({ onClose, onCreated }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
         <h2 className="text-lg font-bold mb-4">برنامج حوافز جديد</h2>
         {err && <div className="mb-3 text-sm text-red-600 bg-red-50 p-2 rounded">{err}</div>}
-
         <div className="space-y-3">
           <div>
             <label className="text-xs text-gray-500 mb-1 block">اسم البرنامج *</label>
@@ -146,7 +140,6 @@ function CreateProgramModal({ onClose, onCreated }) {
             </select>
           </div>
         </div>
-
         <div className="flex justify-end gap-3 mt-5">
           <button className="btn-secondary" onClick={onClose}>إلغاء</button>
           <button className="btn-primary" onClick={save} disabled={saving}>
@@ -160,7 +153,7 @@ function CreateProgramModal({ onClose, onCreated }) {
 
 function ProgramsTab({ selectedProgram, onSelect }) {
   const [programs, setPrograms] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
 
   const load = useCallback(async () => {
@@ -168,9 +161,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
     try {
       const { data } = await incentivesApi.listPrograms()
       setPrograms(data.results || data)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -179,9 +170,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-gray-700">برامج الحوافز</h2>
-        <button className="btn-primary text-sm" onClick={() => setShowCreate(true)}>
-          + برنامج جديد
-        </button>
+        <button className="btn-primary text-sm" onClick={() => setShowCreate(true)}>+ برنامج جديد</button>
       </div>
 
       {loading ? <Spinner /> : programs.length === 0 ? (
@@ -189,21 +178,16 @@ function ProgramsTab({ selectedProgram, onSelect }) {
       ) : (
         <div className="space-y-3">
           {programs.map(p => (
-            <div
-              key={p.id}
-              onClick={() => onSelect(p)}
+            <div key={p.id} onClick={() => onSelect(p)}
               className={`rounded-xl border p-4 cursor-pointer transition-all ${
                 selectedProgram?.id === p.id
                   ? 'border-brand-500 bg-brand-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-brand-300 hover:shadow-sm'
-              }`}
-            >
+              }`}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="font-semibold text-gray-800">{p.name}</div>
-                  {p.description && (
-                    <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>
-                  )}
+                  {p.description && <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>}
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                     <span>📅 {p.start_date} → {p.end_date}</span>
                     <span>·</span>
@@ -212,9 +196,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
                     <span className="capitalize">{p.calculation_period}</span>
                   </div>
                 </div>
-                <Badge color={p.is_active ? 'green' : 'gray'}>
-                  {p.is_active ? 'نشط' : 'موقف'}
-                </Badge>
+                <Badge color={p.is_active ? 'green' : 'gray'}>{p.is_active ? 'نشط' : 'موقف'}</Badge>
               </div>
             </div>
           ))}
@@ -232,16 +214,296 @@ function ProgramsTab({ selectedProgram, onSelect }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rules tab
+// Item search component (for adding items to a rule)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ItemSearchPicker({ onPick }) {
+  const [q, setQ]         = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const debounce = useRef()
+
+  useEffect(() => {
+    clearTimeout(debounce.current)
+    if (!q.trim() || q.length < 2) { setResults([]); return }
+    debounce.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const { data } = await itemsApi.wildcardSearch(q)
+        setResults((data.results || data).slice(0, 20))
+      } catch { setResults([]) }
+      finally { setLoading(false) }
+    }, 350)
+  }, [q])
+
+  return (
+    <div className="relative">
+      <input
+        className="input w-full text-sm"
+        dir="ltr"
+        placeholder="ابحث عن صنف: كود أو اسم..."
+        value={q}
+        onChange={e => setQ(e.target.value)}
+      />
+      {loading && <div className="absolute left-2 top-2 text-xs text-gray-400">جارٍ البحث...</div>}
+      {results.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+          {results.map(item => (
+            <button
+              key={item.item_code || item.id}
+              className="w-full text-right px-3 py-2 text-sm hover:bg-brand-50 flex justify-between items-center"
+              onClick={() => {
+                onPick({
+                  item_code: item.item_code || item.id,
+                  item_name: item.item_name || item.name || '',
+                })
+                setQ('')
+                setResults([])
+              }}
+            >
+              <span className="text-gray-700">{item.item_name || item.name}</span>
+              <span className="font-mono text-xs text-gray-400">{item.item_code || item.id}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule Items Manager — inline panel inside rule card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RuleItemsManager({ rule, onItemsChanged }) {
+  const [items, setItems]         = useState(rule.rule_items || [])
+  const [adding, setAdding]       = useState(false)
+  const [manualCode, setManualCode] = useState('')
+  const [manualName, setManualName] = useState('')
+  const [manualOv, setManualOv]   = useState('')
+  const [busy, setBusy]           = useState(false)
+  const [err, setErr]             = useState('')
+
+  // CSV upload state
+  const [csvMode, setCsvMode]   = useState('replace')
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [csvMsg, setCsvMsg]     = useState('')
+  const csvRef = useRef()
+
+  const reload = async () => {
+    const { data } = await incentivesApi.getRule(rule.id)
+    const updated = data.rule_items || []
+    setItems(updated)
+    onItemsChanged(data)
+  }
+
+  const addItem = async (itemCode, itemName, overrideVal) => {
+    setErr(''); setBusy(true)
+    try {
+      await incentivesApi.addRuleItem(rule.id, {
+        item_code: itemCode,
+        item_name: itemName,
+        incentive_override: overrideVal !== '' ? overrideVal : null,
+      })
+      await reload()
+      setManualCode(''); setManualName(''); setManualOv('')
+      setAdding(false)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'فشل الإضافة')
+    } finally { setBusy(false) }
+  }
+
+  const removeItem = async (itemCode) => {
+    setBusy(true)
+    try {
+      await incentivesApi.removeRuleItem(rule.id, itemCode)
+      setItems(prev => prev.filter(i => i.item_code !== itemCode))
+      onItemsChanged({ ...rule, rule_items: items.filter(i => i.item_code !== itemCode) })
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'فشل الحذف')
+    } finally { setBusy(false) }
+  }
+
+  const clearAll = async () => {
+    if (!window.confirm(`حذف كل الأصناف (${items.length}) من هذه القاعدة؟`)) return
+    setBusy(true)
+    try {
+      await incentivesApi.clearRuleItems(rule.id)
+      setItems([])
+      onItemsChanged({ ...rule, rule_items: [] })
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'فشل الحذف')
+    } finally { setBusy(false) }
+  }
+
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCsvUploading(true); setCsvMsg('')
+    const fd = new FormData()
+    fd.append('csv_file', file)
+    fd.append('mode', csvMode)
+    try {
+      const { data } = await incentivesApi.importRuleItemsCsv(rule.id, fd)
+      setCsvMsg(`✅ تم الاستيراد: أُضيف ${data.created}، حُدِّث ${data.updated}، حُذف ${data.deleted}. الإجمالي: ${data.total}`)
+      await reload()
+    } catch (er) {
+      setCsvMsg(`❌ ${er.response?.data?.detail || 'فشل الاستيراد'}`)
+    } finally {
+      setCsvUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-dashed border-gray-200 pt-3 space-y-2">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-500">
+          الأصناف المُستهدفة ({items.length})
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {items.length > 0 && (
+            <button
+              className="text-xs text-red-500 hover:text-red-700 px-2 py-0.5 border border-red-200 rounded"
+              onClick={clearAll} disabled={busy}
+            >حذف الكل</button>
+          )}
+          <button
+            className="text-xs text-brand-600 hover:text-brand-800 px-2 py-0.5 border border-brand-200 rounded"
+            onClick={() => setAdding(a => !a)}
+          >{adding ? 'إلغاء' : '+ إضافة صنف'}</button>
+        </div>
+      </div>
+
+      {err && <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">{err}</div>}
+
+      {/* Add-item panel */}
+      {adding && (
+        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+          <div className="text-xs font-semibold text-gray-600 mb-1">إضافة صنف عبر بحث SOFTECH</div>
+          <ItemSearchPicker
+            onPick={({ item_code, item_name }) => {
+              setManualCode(item_code)
+              setManualName(item_name)
+            }}
+          />
+          <div className="grid grid-cols-3 gap-2 mt-1">
+            <div>
+              <label className="text-xs text-gray-400">كود الصنف</label>
+              <input className="input w-full text-xs" dir="ltr" value={manualCode}
+                onChange={e => setManualCode(e.target.value)} placeholder="يدوي أو من البحث" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">اسم الصنف</label>
+              <input className="input w-full text-xs" value={manualName}
+                onChange={e => setManualName(e.target.value)} placeholder="اختياري" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">حافز خاص (override)</label>
+              <input type="number" className="input w-full text-xs" dir="ltr" value={manualOv}
+                onChange={e => setManualOv(e.target.value)}
+                placeholder={`فارغ = ${rule.incentive_value}${rule.incentive_type === 'percent' ? '%' : ' ج.م'}`}
+                step="0.01" min="0" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              className="btn-primary text-xs py-1 px-3"
+              disabled={!manualCode.trim() || busy}
+              onClick={() => addItem(manualCode.trim(), manualName.trim(), manualOv)}
+            >{busy ? '...' : 'إضافة'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* CSV import panel */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-400">استيراد CSV:</span>
+        <select
+          className="text-xs border border-gray-200 rounded px-1 py-0.5"
+          value={csvMode} onChange={e => setCsvMode(e.target.value)}
+        >
+          <option value="replace">استبدال الكل</option>
+          <option value="append">إضافة للموجود</option>
+        </select>
+        <button
+          className="text-xs text-purple-600 hover:text-purple-800 px-2 py-0.5 border border-purple-200 rounded"
+          onClick={() => csvRef.current?.click()}
+          disabled={csvUploading}
+        >
+          {csvUploading ? 'جارٍ الاستيراد...' : '📂 رفع CSV'}
+        </button>
+        <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden"
+          onChange={handleCsvUpload} />
+        {/* CSV template download */}
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 underline"
+          onClick={() => {
+            const csv = 'item_code,item_name,incentive_override\n1001,مثال صنف 1,\n1002,مثال صنف 2,5.5\n'
+            const a = document.createElement('a')
+            a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+            a.download = 'incentive_items_template.csv'
+            a.click()
+          }}
+        >تحميل نموذج CSV</button>
+      </div>
+      {csvMsg && <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">{csvMsg}</div>}
+
+      {/* Items table */}
+      {items.length > 0 && (
+        <div className="rounded-xl border border-gray-100 overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">كود الصنف</th>
+                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">الاسم</th>
+                <th className="px-2 py-1.5 text-right text-gray-500 font-medium">حافز خاص</th>
+                <th className="px-2 py-1.5 w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(ri => (
+                <tr key={ri.item_code} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="px-2 py-1.5 font-mono">{ri.item_code}</td>
+                  <td className="px-2 py-1.5 text-gray-600 max-w-[180px] truncate">{ri.item_name || '—'}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    {ri.incentive_override != null
+                      ? <Badge color="orange">{ri.incentive_override}{rule.incentive_type === 'percent' ? '%' : ' ج.م'}</Badge>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      className="text-red-400 hover:text-red-600 text-xs"
+                      onClick={() => removeItem(ri.item_code)} disabled={busy}
+                    >✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {items.length === 0 && (
+        <div className="text-xs text-gray-400 py-2 text-center bg-gray-50 rounded-lg">
+          لا توجد أصناف — أضف أصنافاً يدوياً أو استورد CSV
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule Form (create / edit)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function RuleForm({ programId, rule, onSaved, onCancel }) {
   const blank = {
     program: programId,
     rule_name: '',
-    item_code: '',
+    item_code: '',        // legacy single-item (optional when rule_items are used)
     item_name: '',
-    category_code: '',
     incentive_type: 'percent',
     incentive_value: '',
     min_qty: '0',
@@ -250,17 +512,14 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
     priority: '0',
     is_active: true,
   }
-  const [form, setForm] = useState(rule ? { ...rule } : blank)
+  const [form, setForm]   = useState(rule ? { ...rule } : blank)
   const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
+  const [err, setErr]     = useState('')
 
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const save = async () => {
     if (!form.incentive_value) { setErr('قيمة الحافز مطلوبة'); return }
-    if (!form.item_code && !form.category_code) {
-      setErr('يجب تحديد كود الصنف أو كود الفئة'); return
-    }
     setSaving(true); setErr('')
     try {
       const payload = {
@@ -271,6 +530,9 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
         priority: Number(form.priority || 0),
         expiry_within_days: form.expiry_within_days ? Number(form.expiry_within_days) : null,
       }
+      // Remove rule_items / item_count from payload (read-only)
+      delete payload.rule_items
+      delete payload.item_count
       let res
       if (rule?.id) {
         res = await incentivesApi.updateRule(rule.id, payload)
@@ -280,9 +542,7 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
       onSaved(res.data)
     } catch (e) {
       setErr(e.response?.data?.detail || JSON.stringify(e.response?.data) || 'حدث خطأ')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   return (
@@ -295,24 +555,23 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
           onChange={e => upd('rule_name', e.target.value)} placeholder="مثال: عروض رمضان" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">كود الصنف</label>
-          <input className="input w-full" value={form.item_code}
-            onChange={e => upd('item_code', e.target.value)} placeholder="1234" dir="ltr" />
+      {/* Legacy single-item field — optional when using rule_items */}
+      <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+        <div className="text-xs text-gray-400 font-medium mb-1">
+          صنف وحيد (اختياري — اتركه فارغاً إذا كنت تستخدم قائمة الأصناف أدناه)
         </div>
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">اسم الصنف (للعرض)</label>
-          <input className="input w-full" value={form.item_name}
-            onChange={e => upd('item_name', e.target.value)} placeholder="أوجمنتين 625" />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-gray-500 mb-0.5 block">كود الصنف</label>
+            <input className="input w-full" dir="ltr" value={form.item_code}
+              onChange={e => upd('item_code', e.target.value)} placeholder="1234" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-0.5 block">اسم الصنف</label>
+            <input className="input w-full" value={form.item_name}
+              onChange={e => upd('item_name', e.target.value)} placeholder="أوجمنتين 625" />
+          </div>
         </div>
-      </div>
-
-      <div>
-        <label className="text-xs text-gray-500 mb-1 block">كود الفئة (groupcode)</label>
-        <input className="input w-full" value={form.category_code}
-          onChange={e => upd('category_code', e.target.value)} dir="ltr"
-          placeholder="يُترك فارغاً إذا تم تحديد كود الصنف" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -338,8 +597,7 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
         <div>
           <label className="text-xs text-gray-500 mb-1 block">الحد الأدنى للكمية</label>
           <input type="number" className="input w-full" value={form.min_qty}
-            onChange={e => upd('min_qty', e.target.value)}
-            step="1" min="0" dir="ltr" />
+            onChange={e => upd('min_qty', e.target.value)} step="1" min="0" dir="ltr" />
         </div>
         <div>
           <label className="text-xs text-gray-500 mb-1 block">فلتر كود المندوب</label>
@@ -350,8 +608,7 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
         <div>
           <label className="text-xs text-gray-500 mb-1 block">الأولوية</label>
           <input type="number" className="input w-full" value={form.priority}
-            onChange={e => upd('priority', e.target.value)}
-            step="1" min="0" dir="ltr" />
+            onChange={e => upd('priority', e.target.value)} step="1" min="0" dir="ltr" />
         </div>
       </div>
 
@@ -381,11 +638,16 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rules tab
+// ─────────────────────────────────────────────────────────────────────────────
+
 function RulesTab({ selectedProgram }) {
-  const [rules, setRules]       = useState([])
-  const [loading, setLoading]   = useState(false)
+  const [rules, setRules]         = useState([])
+  const [loading, setLoading]     = useState(false)
   const [addingNew, setAddingNew] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)  // expanded item manager
 
   const load = useCallback(async () => {
     if (!selectedProgram) return
@@ -393,9 +655,7 @@ function RulesTab({ selectedProgram }) {
     try {
       const { data } = await incentivesApi.listRules({ program: selectedProgram.id })
       setRules(data.results || data)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [selectedProgram])
 
   useEffect(() => { load() }, [load])
@@ -426,7 +686,7 @@ function RulesTab({ selectedProgram }) {
         <div className="mb-4">
           <RuleForm
             programId={selectedProgram.id}
-            onSaved={r => { setAddingNew(false); setRules(rs => [r, ...rs]) }}
+            onSaved={r => { setAddingNew(false); setRules(rs => [r, ...rs]); setExpandedId(r.id) }}
             onCancel={() => setAddingNew(false)}
           />
         </div>
@@ -435,7 +695,7 @@ function RulesTab({ selectedProgram }) {
       {loading ? <Spinner /> : rules.length === 0 ? (
         <EmptyState icon="📐" title="لا توجد قواعد" sub="أضف قاعدة حوافز للبدء" />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {rules.map(r => (
             <div key={r.id}>
               {editingId === r.id ? (
@@ -450,45 +710,59 @@ function RulesTab({ selectedProgram }) {
                 />
               ) : (
                 <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  {/* Rule header */}
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-800">
-                        {r.rule_name || (r.item_name || r.item_code || `فئة ${r.category_code}`)}
+                        {r.rule_name || r.item_name || r.item_code || '(بدون اسم)'}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                        {r.item_code && (
-                          <Badge color="blue">صنف: {r.item_code}</Badge>
-                        )}
-                        {r.category_code && !r.item_code && (
-                          <Badge color="purple">فئة: {r.category_code}</Badge>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {r.item_code && <Badge color="blue">صنف واحد: {r.item_code}</Badge>}
+                        {(r.item_count > 0 || r.rule_items?.length > 0) && (
+                          <Badge color="purple">
+                            {r.item_count || r.rule_items?.length} صنف
+                          </Badge>
                         )}
                         <Badge color={r.incentive_type === 'percent' ? 'green' : 'yellow'}>
-                          {r.incentive_type === 'percent' ? `${r.incentive_value}%` : `${fmt(r.incentive_value)} / وحدة`}
+                          {r.incentive_type === 'percent'
+                            ? `${r.incentive_value}%`
+                            : `${fmt(r.incentive_value)} ج.م/وحدة`}
                         </Badge>
-                        {Number(r.min_qty) > 0 && (
-                          <Badge color="gray">حد أدنى: {r.min_qty}</Badge>
-                        )}
-                        {r.person_code_filter && (
-                          <Badge color="gray">مندوب: {r.person_code_filter}</Badge>
-                        )}
-                        {r.expiry_within_days && (
-                          <Badge color="red">صلاحية &lt; {r.expiry_within_days} يوم</Badge>
-                        )}
+                        {Number(r.min_qty) > 0 && <Badge color="gray">حد أدنى: {r.min_qty}</Badge>}
+                        {r.person_code_filter && <Badge color="gray">مندوب: {r.person_code_filter}</Badge>}
+                        {r.expiry_within_days && <Badge color="red">صلاحية &lt; {r.expiry_within_days} يوم</Badge>}
                         <Badge color="gray">أولوية: {r.priority}</Badge>
                         {!r.is_active && <Badge color="red">موقفة</Badge>}
                       </div>
                     </div>
-                    <div className="flex gap-2 flex-shrink-0">
+                    <div className="flex gap-1 flex-shrink-0 mr-2">
                       <button
-                        className="text-xs text-blue-600 hover:text-blue-800 px-2"
-                        onClick={() => setEditingId(r.id)}
-                      >تعديل</button>
-                      <button
-                        className="text-xs text-red-500 hover:text-red-700 px-2"
-                        onClick={() => deleteRule(r.id)}
-                      >حذف</button>
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                          expandedId === r.id
+                            ? 'text-purple-700 border-purple-300 bg-purple-50'
+                            : 'text-purple-600 border-purple-200 hover:bg-purple-50'
+                        }`}
+                        onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                      >
+                        {expandedId === r.id ? '▲ الأصناف' : `▼ الأصناف (${r.item_count ?? r.rule_items?.length ?? 0})`}
+                      </button>
+                      <button className="text-xs text-blue-600 hover:text-blue-800 px-2"
+                        onClick={() => setEditingId(r.id)}>تعديل</button>
+                      <button className="text-xs text-red-500 hover:text-red-700 px-2"
+                        onClick={() => deleteRule(r.id)}>حذف</button>
                     </div>
                   </div>
+
+                  {/* Expanded items manager */}
+                  {expandedId === r.id && (
+                    <RuleItemsManager
+                      key={`rim-${r.id}`}
+                      rule={r}
+                      onItemsChanged={updated =>
+                        setRules(rs => rs.map(x => x.id === r.id ? { ...x, ...updated } : x))
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -504,16 +778,12 @@ function RulesTab({ selectedProgram }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CalculateTab({ selectedProgram }) {
-  const [form, setForm] = useState({
-    period_start: monthStart(),
-    period_end:   monthEnd(),
-  })
+  const [form, setForm] = useState({ period_start: monthStart(), period_end: monthEnd() })
   const [force,   setForce]   = useState(false)
   const [running, setRunning] = useState(false)
   const [simming, setSimming] = useState(false)
   const [result,  setResult]  = useState(null)
   const [err,     setErr]     = useState('')
-  // 409: period finalized — ask whether to force-recalculate
   const [locked,  setLocked]  = useState(false)
 
   const _exec = async (simulate) => {
@@ -521,25 +791,22 @@ function CalculateTab({ selectedProgram }) {
     simulate ? setSimming(true) : setRunning(true)
     setErr(''); setResult(null); setLocked(false)
     try {
-      const api = simulate ? incentivesApi.simulate : incentivesApi.calculate
-      const { data } = await api(selectedProgram.id, {
+      const apiCall = simulate ? incentivesApi.simulate : incentivesApi.calculate
+      const { data } = await apiCall(selectedProgram.id, {
         period_start: form.period_start,
         period_end:   form.period_end,
         ...((!simulate && force) ? { force: true } : {}),
       })
       setResult(data)
-      if (!simulate) setForce(false)   // reset force flag after successful run
+      if (!simulate) setForce(false)
     } catch (e) {
       if (!simulate && e.response?.status === 409) {
-        // Finalization lock — offer override
         setLocked(true)
         setErr(e.response?.data?.detail || 'الفترة تحتوي على تسويات مُغلقة.')
       } else {
         setErr(e.response?.data?.detail || (simulate ? 'فشلت المحاكاة' : 'فشل الاحتساب'))
       }
-    } finally {
-      setRunning(false); setSimming(false)
-    }
+    } finally { setRunning(false); setSimming(false) }
   }
 
   const userEntries = result
@@ -563,7 +830,6 @@ function CalculateTab({ selectedProgram }) {
         )}
 
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
-          {/* Error / lock banner */}
           {err && (
             <div className={`text-sm p-3 rounded-lg border ${locked
               ? 'text-orange-800 bg-orange-50 border-orange-200'
@@ -596,12 +862,9 @@ function CalculateTab({ selectedProgram }) {
           </div>
 
           <div className="flex gap-3 pt-1">
-            {/* Simulate (dry-run) */}
             <button
               className="flex-1 border border-brand-400 text-brand-700 hover:bg-brand-50 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-              onClick={() => _exec(true)}
-              disabled={running || simming || !selectedProgram}
-            >
+              onClick={() => _exec(true)} disabled={running || simming || !selectedProgram}>
               {simming ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-3.5 h-3.5 border-2 border-brand-300 border-t-brand-700 rounded-full animate-spin" />
@@ -609,13 +872,10 @@ function CalculateTab({ selectedProgram }) {
                 </span>
               ) : '🔍 معاينة (محاكاة)'}
             </button>
-
-            {/* Run for real */}
             <button
               className="flex-[2] btn-primary py-2.5 disabled:opacity-50"
               onClick={() => _exec(false)}
-              disabled={running || simming || !selectedProgram || (locked && !force)}
-            >
+              disabled={running || simming || !selectedProgram || (locked && !force)}>
               {running ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -627,7 +887,6 @@ function CalculateTab({ selectedProgram }) {
         </div>
       </div>
 
-      {/* Results */}
       {result && (
         <div>
           <div className="flex items-center gap-3 mb-3 flex-wrap">
@@ -638,7 +897,6 @@ function CalculateTab({ selectedProgram }) {
             {result.simulated && <Badge color="yellow">محاكاة فقط</Badge>}
           </div>
 
-          {/* Skipped person codes warning */}
           {result.skipped_person_codes?.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 mb-3">
               ⚠ لم يتم ربط {result.skipped_person_codes.length} كود مندوب بأي موظف:
@@ -659,17 +917,14 @@ function CalculateTab({ selectedProgram }) {
                 <span>إجمالي الحوافز</span>
               </div>
               {userEntries.map(([uid, total]) => (
-                <div key={uid}
-                  className="px-4 py-3 border-b last:border-0 flex justify-between items-center">
+                <div key={uid} className="px-4 py-3 border-b last:border-0 flex justify-between items-center">
                   <span className="text-sm text-gray-700">مندوب #{uid}</span>
                   <span className="font-bold text-brand-700">{fmt(total)} ج.م</span>
                 </div>
               ))}
               <div className="px-4 py-3 bg-gray-50 flex justify-between font-bold">
                 <span>الإجمالي</span>
-                <span className="text-brand-700">
-                  {fmt(userEntries.reduce((s, [, v]) => s + v, 0))} ج.م
-                </span>
+                <span className="text-brand-700">{fmt(userEntries.reduce((s, [, v]) => s + v, 0))} ج.م</span>
               </div>
             </div>
           )}
@@ -732,9 +987,7 @@ function TransactionDrillDown({ programId, userId, periodStart, periodEnd, onClo
                     </td>
                     <td className="px-3 py-2 text-right">{fmt(t.quantity, 0)}</td>
                     <td className="px-3 py-2 text-right">{fmt(t.unit_price)}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${
-                      Number(t.incentive_amount) < 0 ? 'text-red-600' : 'text-green-700'
-                    }`}>
+                    <td className={`px-3 py-2 text-right font-bold ${Number(t.incentive_amount) < 0 ? 'text-red-600' : 'text-green-700'}`}>
                       {fmt(t.incentive_amount)}
                     </td>
                     <td className="px-3 py-2">
@@ -752,10 +1005,7 @@ function TransactionDrillDown({ programId, userId, periodStart, periodEnd, onClo
 }
 
 function ReportTab({ selectedProgram }) {
-  const [form, setForm] = useState({
-    period_start: monthStart(),
-    period_end: monthEnd(),
-  })
+  const [form, setForm] = useState({ period_start: monthStart(), period_end: monthEnd() })
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
@@ -768,15 +1018,12 @@ function ReportTab({ selectedProgram }) {
     setLoading(true); setErr(''); setRows([])
     try {
       const { data } = await incentivesApi.report(selectedProgram.id, {
-        period_start: form.period_start,
-        period_end:   form.period_end,
+        period_start: form.period_start, period_end: form.period_end,
       })
       setRows(data.rows || [])
     } catch (e) {
       setErr(e.response?.data?.detail || 'فشل تحميل التقرير')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   const finalize = async () => {
@@ -784,16 +1031,13 @@ function ReportTab({ selectedProgram }) {
     setFinalizing(true); setFinalMsg('')
     try {
       const { data } = await incentivesApi.finalize(selectedProgram.id, {
-        period_start: form.period_start,
-        period_end:   form.period_end,
+        period_start: form.period_start, period_end: form.period_end,
       })
       setFinalMsg(`تم الاعتماد: ${data.finalized_count} مندوب / تم تجاوز: ${data.skipped_count}`)
       loadReport()
     } catch (e) {
       setFinalMsg(e.response?.data?.detail || 'فشل الاعتماد')
-    } finally {
-      setFinalizing(false)
-    }
+    } finally { setFinalizing(false) }
   }
 
   const grandTotal = rows.reduce((s, r) => s + (r.total_incentive || 0), 0)
@@ -833,11 +1077,8 @@ function ReportTab({ selectedProgram }) {
               <span className="text-sm font-semibold text-gray-700">
                 {rows.length} مندوب — {form.period_start} → {form.period_end}
               </span>
-              <div className="flex items-center gap-2 text-sm font-bold text-brand-700">
-                إجمالي: {fmt(grandTotal)} ج.م
-              </div>
+              <div className="font-bold text-brand-700 text-sm">إجمالي: {fmt(grandTotal)} ج.م</div>
             </div>
-
             <table className="w-full">
               <thead className="bg-gray-50/50">
                 <tr>
@@ -860,26 +1101,18 @@ function ReportTab({ selectedProgram }) {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        className="text-xs text-brand-600 hover:text-brand-800 underline"
-                        onClick={() => setDrillUser(r.user_id)}
-                      >تفصيل</button>
+                      <button className="text-xs text-brand-600 hover:text-brand-800 underline"
+                        onClick={() => setDrillUser(r.user_id)}>تفصيل</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-
             <div className="px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
-              {finalMsg && (
-                <div className="text-sm text-green-700">{finalMsg}</div>
-              )}
+              {finalMsg && <div className="text-sm text-green-700">{finalMsg}</div>}
               <div className="mr-auto">
-                <button
-                  className="btn-primary text-sm"
-                  onClick={finalize}
-                  disabled={finalizing || rows.every(r => r.is_finalized)}
-                >
+                <button className="btn-primary text-sm" onClick={finalize}
+                  disabled={finalizing || rows.every(r => r.is_finalized)}>
                   {finalizing ? 'جارٍ الاعتماد...' : '✅ اعتماد التسويات نهائياً'}
                 </button>
               </div>
@@ -906,11 +1139,11 @@ function ReportTab({ selectedProgram }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Settlements tab  +  Printable Receipt
+// Settlements tab + Printable Receipt
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ReceiptModal({ settlementId, onClose }) {
-  const [data, setData] = useState(null)
+  const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
   const printRef = useRef()
 
@@ -962,7 +1195,6 @@ function ReceiptModal({ settlementId, onClose }) {
                 <div className="text-xl font-bold">صيدليات الرزيقي</div>
                 <div className="text-sm text-gray-500 mt-1">إيصال تسوية حوافز المبيعات</div>
               </div>
-
               <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
                 <div>
                   <div className="text-gray-500 text-xs">البرنامج</div>
@@ -980,25 +1212,18 @@ function ReceiptModal({ settlementId, onClose }) {
                 </div>
                 <div>
                   <div className="text-gray-500 text-xs">تاريخ الاعتماد</div>
-                  <div className="font-semibold">
-                    {data.settlement.finalized_at?.slice(0, 10) || '—'}
-                  </div>
+                  <div className="font-semibold">{data.settlement.finalized_at?.slice(0, 10) || '—'}</div>
                 </div>
               </div>
-
               <div className="bg-brand-50 border border-brand-200 rounded-lg p-3 mb-4 flex justify-between items-center">
                 <span className="text-sm text-gray-600">إجمالي الحوافز المستحقة</span>
                 <span className="total">{fmt(data.settlement.total_incentive)} ج.م</span>
               </div>
-
               <div className="font-semibold text-sm mb-2">تفصيل الأصناف</div>
               <table className="w-full text-sm">
                 <thead>
                   <tr>
-                    <th>الصنف</th>
-                    <th>القاعدة</th>
-                    <th>الكمية الصافية</th>
-                    <th>الحافز</th>
+                    <th>الصنف</th><th>القاعدة</th><th>الكمية الصافية</th><th>الحافز</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1017,7 +1242,6 @@ function ReceiptModal({ settlementId, onClose }) {
                   ))}
                 </tbody>
               </table>
-
               {data.settlement.notes && (
                 <div className="mt-4 text-sm text-gray-500 border-t pt-3">
                   ملاحظات: {data.settlement.notes}
@@ -1044,9 +1268,7 @@ function SettlementsTab({ selectedProgram }) {
       if (programFilter) params.program = programFilter
       const { data } = await incentivesApi.listSettlements(params)
       setSettlements(data.results || data)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [programFilter])
 
   useEffect(() => { load() }, [load])
@@ -1077,10 +1299,7 @@ function SettlementsTab({ selectedProgram }) {
                 </div>
                 <div className="text-left flex flex-col items-end gap-2">
                   <span className="font-bold text-brand-700 text-lg">{fmt(s.total_incentive)} ج.م</span>
-                  <button
-                    className="btn-secondary text-xs"
-                    onClick={() => setReceiptId(s.id)}
-                  >🖨 إيصال</button>
+                  <button className="btn-secondary text-xs" onClick={() => setReceiptId(s.id)}>🖨 إيصال</button>
                 </div>
               </div>
             </div>
@@ -1088,9 +1307,7 @@ function SettlementsTab({ selectedProgram }) {
         </div>
       )}
 
-      {receiptId && (
-        <ReceiptModal settlementId={receiptId} onClose={() => setReceiptId(null)} />
-      )}
+      {receiptId && <ReceiptModal settlementId={receiptId} onClose={() => setReceiptId(null)} />}
     </div>
   )
 }
@@ -1100,7 +1317,7 @@ function SettlementsTab({ selectedProgram }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function IncentivesPage() {
-  const [activeTab, setActiveTab]           = useState('programs')
+  const [activeTab, setActiveTab]             = useState('programs')
   const [selectedProgram, setSelectedProgram] = useState(null)
 
   const handleSelectProgram = (p) => {
@@ -1123,10 +1340,8 @@ export default function IncentivesPage() {
             <div className="flex items-center gap-2 text-sm bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-lg">
               <span className="text-gray-500">البرنامج:</span>
               <span className="font-semibold text-brand-700">{selectedProgram.name}</span>
-              <button
-                className="text-gray-400 hover:text-gray-600 mr-1"
-                onClick={() => setSelectedProgram(null)}
-              >✕</button>
+              <button className="text-gray-400 hover:text-gray-600 mr-1"
+                onClick={() => setSelectedProgram(null)}>✕</button>
             </div>
           )}
         </div>
@@ -1134,15 +1349,12 @@ export default function IncentivesPage() {
         {/* Tab bar */}
         <div className="flex gap-1 mt-4 border-b -mb-4">
           {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === t.id
                   ? 'border-brand-600 text-brand-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
+              }`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -1151,21 +1363,11 @@ export default function IncentivesPage() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto p-6">
-        {activeTab === 'programs' && (
-          <ProgramsTab selectedProgram={selectedProgram} onSelect={handleSelectProgram} />
-        )}
-        {activeTab === 'rules' && (
-          <RulesTab selectedProgram={selectedProgram} />
-        )}
-        {activeTab === 'calculate' && (
-          <CalculateTab selectedProgram={selectedProgram} />
-        )}
-        {activeTab === 'report' && (
-          <ReportTab selectedProgram={selectedProgram} />
-        )}
-        {activeTab === 'settlements' && (
-          <SettlementsTab selectedProgram={selectedProgram} />
-        )}
+        {activeTab === 'programs'    && <ProgramsTab selectedProgram={selectedProgram} onSelect={handleSelectProgram} />}
+        {activeTab === 'rules'       && <RulesTab selectedProgram={selectedProgram} />}
+        {activeTab === 'calculate'   && <CalculateTab selectedProgram={selectedProgram} />}
+        {activeTab === 'report'      && <ReportTab selectedProgram={selectedProgram} />}
+        {activeTab === 'settlements' && <SettlementsTab selectedProgram={selectedProgram} />}
       </div>
     </div>
   )
