@@ -331,8 +331,8 @@ class VoucherOTP(models.Model):
         """
         Generates a fresh 6-digit OTP with random salt.
         Invalidates any previous unused OTPs for this voucher+phone.
-        Returns (otp_instance, whatsapp_url).
-        The plain code is NEVER stored and never returned directly to the UI.
+        Returns (otp_instance, whatsapp_url, plain_code).
+        plain_code is used SERVER-SIDE ONLY for QR generation — never stored, never in API response.
         """
         # Invalidate old active OTPs
         cls.objects.filter(voucher=voucher, phone=phone, is_used=False).update(is_used=True)
@@ -362,7 +362,7 @@ class VoucherOTP(models.Model):
             whatsapp_phone = '20' + whatsapp_phone
         whatsapp_url = f'https://wa.me/{whatsapp_phone}?text={quote(msg)}'
 
-        return otp, whatsapp_url
+        return otp, whatsapp_url, plain
 
     def verify(self, plain_code: str) -> bool:
         """

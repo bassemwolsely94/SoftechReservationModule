@@ -10,8 +10,11 @@ Security rules enforced here:
   ④ select_for_update() on concurrent-sensitive paths
   ⑤ customer_phone masked for non-PII roles in document endpoints
 """
+import base64
+import io
 import logging
 
+import qrcode
 from django.db import transaction
 from django.db.models import F, Sum, Count, Q
 from django.utils import timezone
@@ -51,6 +54,29 @@ def _profile(request):
 def _can_see_pii(request):
     p = _profile(request)
     return p and p.role in _PII_ROLES
+
+
+def _make_otp_qr(plain_code: str) -> str:
+    """
+    Generate a QR code PNG that encodes only the 6-digit OTP.
+    Returns a base64-encoded PNG string (data URI ready).
+
+    The QR encodes a plain digit string — any phone camera reads it
+    and shows the number. Employee sees only a black-and-white square,
+    never the digits.
+    """
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,  # high redundancy
+        box_size=12,
+        border=3,
+    )
+    qr.add_data(plain_code)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('ascii')
 
 
 # ── VoucherViewSet ─────────────────────────────────────────────────────────────
@@ -196,16 +222,24 @@ class VoucherViewSet(viewsets.ModelViewSet):
         except Exception:
             expiry = OTP_EXPIRY_MINUTES
 
-        # Create OTP — plain code is in the wa.me URL, never in the response
-        otp, whatsapp_url = VoucherOTP.create_for_voucher(voucher, phone, expiry_minutes=expiry)
+        # Create OTP — plain code used only for QR generation, never stored or returned
+        otp, whatsapp_url, plain_code = VoucherOTP.create_for_voucher(
+            voucher, phone, expiry_minutes=expiry
+        )
+
+        # Generate QR code PNG (base64) — employee shows this to customer at counter
+        # Customer's phone camera reads the QR → displays the digits → customer reads them aloud
+        # Employee sees only a square pattern, never the raw digits
+        qr_base64 = _make_otp_qr(plain_code)
 
         logger.info(f'[OTP] Generated for voucher={voucher.code} phone={phone[-4:]}****')
 
         return Response({
-            'detail':       f'تم إنشاء رمز OTP. افتح الرابط لإرساله عبر واتساب.',
+            'detail':       'تم إنشاء رمز OTP. استخدم QR للعرض المباشر أو أرسل عبر واتساب.',
             'otp_id':       otp.id,
             'expires_at':   otp.expires_at,
-            'whatsapp_url': whatsapp_url,   # employee opens this → WhatsApp opens → sends to customer
+            'whatsapp_url': whatsapp_url,   # option A: send via WhatsApp
+            'qr_code':      qr_base64,      # option B: show QR at counter — customer scans it
             'sent_via':     'whatsapp',
         })
 
