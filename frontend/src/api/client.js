@@ -330,9 +330,8 @@ export const vouchersApi = {
   documentWhatsapp: (refCode) =>
     api.post(`/vouchers/documents/${refCode}/whatsapp/`),
 
-  // Returns a URL string for print receipt (use with window.open)
-  documentPrintUrl: (refCode) =>
-    `${api.defaults.baseURL}/vouchers/documents/${refCode}/print/`,
+  // Fetch receipt data (authenticated), then caller renders HTML for window.print()
+  documentPrint: (refCode) => api.get(`/vouchers/documents/${refCode}/print/`),
 }
 
 // ── Shortage ──────────────────────────────────────────────────────────────────

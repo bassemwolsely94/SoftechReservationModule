@@ -805,9 +805,50 @@ function RedemptionFlow({ voucher, onClose }) {
               {/* Actions */}
               <div className="flex gap-2">
                 <Btn variant="outline" size="sm" className="flex-1"
-                  onClick={() => {
-                    const url = vouchersApi.documentPrintUrl(document.reference_code)
-                    window.open(url, '_blank')
+                  onClick={async () => {
+                    try {
+                      const r = await vouchersApi.documentPrint(document.reference_code)
+                      const d = r.data
+                      const fmt = (n, dp = 2) => n != null ? Number(n).toFixed(dp) : '—'
+                      const win = window.open('', '_blank', 'width=420,height=600')
+                      win.document.write(`<!DOCTYPE html><html dir="rtl"><head>
+<meta charset="utf-8"/>
+<title>وثيقة استرداد — ${d.reference_code}</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#111;font-size:13px}
+  h2{text-align:center;font-size:16px;margin:0 0 4px}
+  .sub{text-align:center;color:#666;font-size:11px;margin-bottom:16px}
+  .refbox{background:#111;color:#FFD700;font-family:monospace;font-size:22px;
+    font-weight:900;text-align:center;letter-spacing:4px;padding:14px;border-radius:8px;margin:12px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0}
+  td{padding:5px 4px;border-bottom:1px solid #eee;font-size:12px}
+  td:first-child{color:#888;width:45%}
+  td:last-child{font-weight:600;text-align:left}
+  .total{background:#f0fdf4;font-weight:900;font-size:15px}
+  .footer{text-align:center;font-size:10px;color:#aaa;margin-top:16px}
+  @media print{body{padding:0}.no-print{display:none}}
+</style></head><body>
+<h2>🎫 وثيقة استرداد قسيمة</h2>
+<div class="sub">ElRezeiky Pharmacy — نظام القسائم</div>
+<div class="refbox">${d.reference_code}</div>
+<table>
+  <tr><td>القسيمة</td><td dir="ltr">${d.voucher_code}</td></tr>
+  <tr><td>العنوان</td><td>${d.voucher_title}</td></tr>
+  <tr><td>نوع الخصم</td><td>${d.discount_value}</td></tr>
+  ${d.discount_applied != null ? `<tr class="total"><td>الخصم المطبق</td><td>${fmt(d.discount_applied)} ج.م</td></tr>` : ''}
+  ${d.order_amount    != null ? `<tr><td>قيمة الطلب</td><td>${fmt(d.order_amount)} ج.م</td></tr>` : ''}
+  <tr><td>العميل</td><td dir="ltr">${d.customer_phone}</td></tr>
+  <tr><td>الفرع</td><td>${d.branch_name}</td></tr>
+  <tr><td>الموظف</td><td>${d.employee_name}</td></tr>
+  <tr><td>الحالة</td><td>${d.status_label}</td></tr>
+  ${d.used_at ? `<tr><td>وقت الاستخدام</td><td>${new Date(d.used_at).toLocaleString('ar-EG')}</td></tr>` : ''}
+  <tr><td>طُبع بواسطة</td><td>${d.printed_by}</td></tr>
+</table>
+<div class="footer">طُبع في: ${new Date().toLocaleString('ar-EG')}</div>
+<script>window.onload=function(){window.print()}<\/script>
+</body></html>`)
+                      win.document.close()
+                    } catch { alert('خطأ في جلب بيانات الوثيقة') }
                   }}>
                   🖨️ طباعة
                 </Btn>
