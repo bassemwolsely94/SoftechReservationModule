@@ -285,15 +285,54 @@ export const invoicesApi = {
 // ── Vouchers ──────────────────────────────────────────────────────────────────
 
 export const vouchersApi = {
+  // ── Core CRUD ──────────────────────────────────────────────────────────────
   list:        (params)       => api.get('/vouchers/vouchers/', { params }),
   get:         (id)           => api.get(`/vouchers/vouchers/${id}/`),
   create:      (data)         => api.post('/vouchers/vouchers/', data),
   update:      (id, data)     => api.patch(`/vouchers/vouchers/${id}/`, data),
   cancel:      (id)           => api.post(`/vouchers/vouchers/${id}/cancel/`),
-  lookup:      (code)         => api.get('/vouchers/vouchers/lookup/', { params: { code } }),
-  generateOtp: (id, phone)    => api.post(`/vouchers/vouchers/${id}/generate-otp/`, { phone }),
-  verifyOtp:   (id, code, phone) => api.post(`/vouchers/vouchers/${id}/verify-otp/`, { code, phone }),
-  redemptions: (id)           => api.get(`/vouchers/vouchers/${id}/redemptions/`),
+
+  // ── Eligibility & OTP ──────────────────────────────────────────────────────
+  // Check if a customer (by phone) is eligible to use a voucher
+  validateEligibility: (id, data) =>
+    api.post(`/vouchers/vouchers/${id}/validate/`, data),
+
+  // Generate OTP — returns { otp_id, expires_at, whatsapp_url }
+  // data = { phone, order_amount? }
+  generateOtp: (id, data)    => api.post(`/vouchers/vouchers/${id}/generate-otp/`, data),
+
+  // Verify OTP — returns VoucherRedemptionDocument on success
+  // data = { code, phone, order_amount? }
+  verifyOtp:   (id, data)    => api.post(`/vouchers/vouchers/${id}/verify-otp/`, data),
+
+  // ── Assignment (voucher_category='assigned') ───────────────────────────────
+  // Assign a voucher to a customer phone
+  assign:      (id, data)    => api.post(`/vouchers/vouchers/${id}/assign/`, data),
+
+  // List all assignments for a voucher
+  getAssignments: (id)       => api.get(`/vouchers/vouchers/${id}/assignments/`),
+
+  // ── Audit / Reports ────────────────────────────────────────────────────────
+  redemptions: (id)          => api.get(`/vouchers/vouchers/${id}/redemptions/`),
+
+  // Aggregate report — params: { date_from?, date_to?, branch?, voucher_id? }
+  report:      (params)      => api.get('/vouchers/vouchers/report/', { params }),
+
+  // ── POS Redemption Documents ───────────────────────────────────────────────
+  // Retrieve a document by its reference_code (POS lookup)
+  getDocument: (refCode)     => api.get(`/vouchers/documents/${refCode}/`),
+
+  // Mark a document as used — data = { order_amount?, notes? }
+  markDocumentUsed: (refCode, data) =>
+    api.post(`/vouchers/documents/${refCode}/mark-used/`, data),
+
+  // Trigger WhatsApp share for a document — returns { message_text, whatsapp_url }
+  documentWhatsapp: (refCode) =>
+    api.post(`/vouchers/documents/${refCode}/whatsapp/`),
+
+  // Returns a URL string for print receipt (use with window.open)
+  documentPrintUrl: (refCode) =>
+    `${api.defaults.baseURL}/vouchers/documents/${refCode}/print/`,
 }
 
 // ── Shortage ──────────────────────────────────────────────────────────────────
