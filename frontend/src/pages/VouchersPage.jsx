@@ -132,10 +132,20 @@ function CreateVoucherModal({ onClose, onCreate }) {
     setSaving(true); setError(null)
     try {
       const payload = { ...form }
-      // Clean empty optional numbers
-      ;['max_discount_cap','min_order_value','usage_limit_per_day'].forEach(k => {
-        if (!payload[k]) delete payload[k]
+
+      // Remove optional blank numeric fields (DRF DecimalField rejects '' as invalid)
+      ;['max_discount_cap', 'min_order_value', 'usage_limit_per_day',
+        'discount_pct', 'discount_amount', 'credit_amount',
+        'free_item', 'max_uses', 'usage_limit_per_customer',
+        'validity_days_after_assignment',
+      ].forEach(k => {
+        if (payload[k] === '' || payload[k] === null || payload[k] === undefined)
+          delete payload[k]
       })
+
+      // Remove blank valid_until (optional date)
+      if (!payload.valid_until) delete payload.valid_until
+
       const r = await vouchersApi.create(payload)
       onCreate(r.data)
     } catch (e) {
