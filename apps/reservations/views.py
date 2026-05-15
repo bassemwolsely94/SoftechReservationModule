@@ -423,11 +423,17 @@ class ReservationViewSet(viewsets.ModelViewSet):
             ),
             # Item
             'item': {
-                'name':         item_name,
-                'softech_id':   reservation.item.softech_id if reservation.item_id else None,
-                'scientific':   reservation.item.name_scientific if reservation.item_id else '',
-                'quantity':     float(reservation.quantity_requested),
+                'name':       item_name,
+                'softech_id': reservation.item.softech_id if reservation.item_id else None,
+                'scientific': reservation.item.name_scientific if reservation.item_id else '',
+                'sale_price': float(reservation.item.unit_sale_price) if reservation.item_id else None,
+                'quantity':   float(reservation.quantity_requested),
             },
+            'customer_pic': (
+                reservation.customer.softech_pic
+                if (reservation.customer_id and can_see_pii and reservation.customer.softech_pic)
+                else None
+            ),
             'notes':          reservation.notes,
             'expected_arrival_date': (
                 reservation.expected_arrival_date.isoformat()
@@ -468,8 +474,10 @@ class ReservationViewSet(viewsets.ModelViewSet):
             if can_see_pii else '—'
         )
 
-        item_name = reservation.item_label
-        branch_name = reservation.branch.name_ar or reservation.branch.name
+        item_name      = reservation.item_label
+        item_code      = reservation.item.softech_id if reservation.item_id else None
+        item_price     = float(reservation.item.unit_sale_price) if reservation.item_id else None
+        branch_name    = reservation.branch.name_ar or reservation.branch.name
         created_at_str = reservation.created_at.strftime('%Y-%m-%d %H:%M')
 
         lines = [
@@ -481,10 +489,21 @@ class ReservationViewSet(viewsets.ModelViewSet):
             '*الصنف:*',
             f'• {item_name} × {reservation.quantity_requested}',
         ]
+        if item_code:
+            lines.append(f'  كود الصنف: {item_code}')
+        if item_price:
+            lines.append(f'  السعر العام: {item_price:.2f} ج.م')
         if reservation.notes:
             lines += ['', f'ملاحظات: {reservation.notes}']
         if can_see_pii:
             lines += ['', f'العميل: {customer_name}']
+            customer_pic = (
+                reservation.customer.softech_pic
+                if reservation.customer_id and reservation.customer.softech_pic
+                else None
+            )
+            if customer_pic:
+                lines.append(f'كود PIC: {customer_pic}')
         lines += ['', f'التاريخ: {created_at_str}']
 
         message_text = '\n'.join(lines)

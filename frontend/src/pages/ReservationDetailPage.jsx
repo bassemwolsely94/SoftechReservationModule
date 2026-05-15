@@ -799,6 +799,11 @@ export default function ReservationDetailPage() {
             {r.customer_name !== r.contact_name && (
               <div className="text-xs text-gray-400 mt-1">في النظام: {r.customer_name}</div>
             )}
+            {r.customer_softech_pic && (
+              <div className="text-xs font-mono text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded mt-1.5 inline-block">
+                PIC: {r.customer_softech_pic}
+              </div>
+            )}
             <button
               onClick={() => navigate(`/customers/${r.customer_id || r.customer}`)}
               className="text-brand-600 text-xs hover:underline mt-2 inline-flex items-center gap-1"
@@ -819,6 +824,11 @@ export default function ReservationDetailPage() {
             </div>
             {r.item_softech_id && (
               <div className="text-xs text-blue-500 font-mono mt-1">كود: {r.item_softech_id}</div>
+            )}
+            {r.item_sale_price != null && (
+              <div className="mt-2 inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg text-xs font-bold">
+                💰 {Number(r.item_sale_price).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+              </div>
             )}
           </div>
 

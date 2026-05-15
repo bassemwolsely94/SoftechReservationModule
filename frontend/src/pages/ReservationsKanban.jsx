@@ -299,6 +299,11 @@ function ReservationModal({ reservation, onClose, onStatusChange, onImageUpload,
                 <div className="text-xs text-gray-400 mb-1">العميل</div>
                 <div className="font-semibold text-gray-900 text-sm">{reservation.customer_name}</div>
                 <div className="text-xs text-gray-600 font-mono mt-0.5" dir="ltr">{reservation.contact_phone}</div>
+                {reservation.customer_softech_pic && (
+                  <div className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-1 w-fit">
+                    PIC: {reservation.customer_softech_pic}
+                  </div>
+                )}
                 <div className="text-xs text-gray-500 mt-1">الفرع: <strong>{reservation.branch_name}</strong></div>
               </div>
             </div>

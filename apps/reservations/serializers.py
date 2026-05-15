@@ -171,6 +171,10 @@ class ReservationListSerializer(serializers.ModelSerializer):
         customer = getattr(obj, 'customer', None)
         return getattr(customer, 'phone', None) or obj.contact_phone or ''
 
+    def get_customer_softech_pic(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'softech_pic', None)
+
     def get_item_name(self, obj):
         if obj.item_id:
             return obj.item.name
@@ -196,10 +200,11 @@ class ReservationListSerializer(serializers.ModelSerializer):
         return getattr(obj, 'activity_count', 0)
 
     def get_item_sale_price(self, obj):
-        return float(obj.item.unit_price) if obj.item_id else None
+        return float(obj.item.unit_sale_price) if obj.item_id else None
 
-    item_sale_price = serializers.SerializerMethodField()
-    channel_label   = serializers.SerializerMethodField()
+    item_sale_price         = serializers.SerializerMethodField()
+    customer_softech_pic    = serializers.SerializerMethodField()
+    channel_label           = serializers.SerializerMethodField()
 
     def get_channel_label(self, obj):
         return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
@@ -207,7 +212,7 @@ class ReservationListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
-            'id', 'customer_name', 'customer_phone',
+            'id', 'customer_name', 'customer_phone', 'customer_softech_pic',
             'item_name', 'item_softech_id', 'manual_item_name', 'is_manual_item',
             'item_sale_price',
             'branch_name', 'branch_id',
@@ -246,12 +251,13 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     # Live stock at all branches for this item
-    stock_by_branch = serializers.SerializerMethodField()
-    item_sale_price = serializers.SerializerMethodField()
-    channel_label   = serializers.SerializerMethodField()
+    stock_by_branch      = serializers.SerializerMethodField()
+    item_sale_price      = serializers.SerializerMethodField()
+    customer_softech_pic = serializers.SerializerMethodField()
+    channel_label        = serializers.SerializerMethodField()
 
     def get_item_sale_price(self, obj):
-        return float(obj.item.unit_price) if obj.item_id else None
+        return float(obj.item.unit_sale_price) if obj.item_id else None
 
     def get_channel_label(self, obj):
         return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
@@ -263,6 +269,10 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     def get_customer_phone(self, obj):
         customer = getattr(obj, 'customer', None)
         return getattr(customer, 'phone', None) or obj.contact_phone or ''
+
+    def get_customer_softech_pic(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return getattr(customer, 'softech_pic', None)
 
     def get_customer_id(self, obj):
         customer = getattr(obj, 'customer', None)
@@ -325,7 +335,7 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
-            'id', 'customer', 'customer_id', 'customer_name', 'customer_phone',
+            'id', 'customer', 'customer_id', 'customer_name', 'customer_phone', 'customer_softech_pic',
             'item', 'item_name', 'item_softech_id', 'item_scientific',
             'item_sale_price',
             'manual_item_name', 'is_manual_item',

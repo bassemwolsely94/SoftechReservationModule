@@ -117,6 +117,9 @@ function ReservationReceipt({ data }) {
         <SectionCard title="بيانات العميل">
           <Row label="الاسم"  value={data.customer_name} />
           <Row label="الهاتف" value={<span dir="ltr">{data.customer_phone}</span>} />
+          {data.customer_pic && (
+            <Row label="كود PIC" value={<span dir="ltr" className="font-mono">{data.customer_pic}</span>} />
+          )}
         </SectionCard>
       )}
 
@@ -132,6 +135,12 @@ function ReservationReceipt({ data }) {
           <span className="text-xs text-gray-500">الكمية المطلوبة</span>
           <span className="font-bold text-gray-900">{data.item?.quantity} وحدة</span>
         </div>
+        {data.item?.sale_price > 0 && (
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-xs text-gray-500">السعر العام</span>
+            <span className="font-bold text-emerald-700">{fmt(data.item.sale_price)} ج.م</span>
+          </div>
+        )}
       </SectionCard>
 
       {data.downpayments?.length > 0 && (

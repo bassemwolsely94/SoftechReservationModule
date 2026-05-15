@@ -764,7 +764,8 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             '*الأصناف:*',
         ]
         for line in tr.items.select_related('item').all():
-            lines.append(f'• {line.item.name} × {line.quantity}' +
+            item_code = f' [{line.item.softech_id}]' if line.item.softech_id else ''
+            lines.append(f'• {line.item.name}{item_code} × {line.quantity}' +
                          (f' ({line.notes})' if line.notes else ''))
         if tr.notes:
             lines += ['', f'ملاحظات: {tr.notes}']

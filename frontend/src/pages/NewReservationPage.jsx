@@ -41,6 +41,11 @@ function StepCustomer({ selected, onSelect }) {
             <div className="font-bold text-brand-800">{selected.name}</div>
             <div className="text-sm text-brand-600">{selected.phone}</div>
             {selected.phone_alt && <div className="text-xs text-gray-500">{selected.phone_alt}</div>}
+            {selected.softech_pic && (
+              <div className="text-xs font-mono text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded mt-1 inline-block">
+                PIC: {selected.softech_pic}
+              </div>
+            )}
           </div>
           <button onClick={() => onSelect(null)} className="text-sm text-brand-600 hover:underline">تغيير</button>
         </div>
@@ -68,6 +73,9 @@ function StepCustomer({ selected, onSelect }) {
                   <div>
                     <div className="font-semibold text-sm text-gray-800">{c.name}</div>
                     <div className="text-xs text-gray-500">{c.phone}</div>
+                    {c.softech_pic && (
+                      <span className="text-xs font-mono text-indigo-600">{c.softech_pic}</span>
+                    )}
                   </div>
                   <span className={`badge ${
                     c.customer_type_color === 'blue'  ? 'bg-blue-100 text-blue-700' :
@@ -176,8 +184,11 @@ function StepItem({ selected, branch, quantity, onSelect, onBranch, onQuantity, 
             {selected.name_scientific && (
               <div className="text-xs text-gray-500 italic">{selected.name_scientific}</div>
             )}
+            {selected.softech_id && (
+              <div className="text-xs font-mono text-gray-400 mt-0.5">كود: {selected.softech_id}</div>
+            )}
             {selected.unit_sale_price > 0 && (
-              <div className="text-sm text-brand-600">{Number(selected.unit_sale_price).toFixed(2)} ج.م</div>
+              <div className="text-sm font-semibold text-emerald-700 mt-0.5">💰 {Number(selected.unit_sale_price).toFixed(2)} ج.م</div>
             )}
           </div>
           <button onClick={() => { onSelect(null); setItemSearchText('') }}
