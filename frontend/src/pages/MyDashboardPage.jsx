@@ -26,6 +26,14 @@ const STATUS_BADGE = {
 }
 const money = (v) => `${Number(v || 0).toLocaleString('en-EG', { maximumFractionDigits: 2 })} ج.م`
 const SIZE_SPAN = { sm: 'lg:col-span-1', md: 'lg:col-span-1', lg: 'lg:col-span-2', xl: 'lg:col-span-3' }
+// Default look-back per widget type — must match apps/personal/providers.py.
+const DEFAULT_PERIOD = {
+  supplier_transactions: 90,
+  supplier_payments: 180,
+  customer_transactions: 180,
+  customer_payments: 180,
+}
+const PERIOD_WIDGETS = Object.keys(DEFAULT_PERIOD)
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Page
@@ -166,11 +174,22 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['personal-widgets'] }); toast.success('تم الحذف') },
   })
 
-  const period = widget.config?.period_days
+  // Period is optimistic local state so the highlight flips instantly on click,
+  // then we persist and refetch. Re-sync if the server value changes elsewhere.
+  const [period, setPeriodState] = useState(
+    widget.config?.period_days ?? DEFAULT_PERIOD[widget.widget_type] ?? 180
+  )
+  useEffect(() => {
+    if (widget.config?.period_days) setPeriodState(widget.config.period_days)
+  }, [widget.config?.period_days])
+
   const setPeriod = async (days) => {
-    await personalApi.updateWidget(widget.id, { config: { ...(widget.config || {}), period_days: days } })
-    qc.invalidateQueries({ queryKey: ['personal-widgets'] })
-    setRefreshTick(t => t + 1)
+    if (days === period) return
+    setPeriodState(days)                 // instant highlight
+    try {
+      await personalApi.updateWidget(widget.id, { config: { ...(widget.config || {}), period_days: days } })
+    } catch { /* keep optimistic value; next load reconciles */ }
+    setRefreshTick(t => t + 1)           // refetch with the persisted period
   }
 
   const err = dataQ.data?.detail
@@ -202,11 +221,11 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
         </div>
       </div>
 
-      {['supplier_transactions', 'supplier_payments', 'customer_transactions', 'customer_payments'].includes(widget.widget_type) && (
+      {PERIOD_WIDGETS.includes(widget.widget_type) && (
         <div className="flex gap-1 mb-2 flex-wrap">
           {[30, 90, 180, 365].map(d => (
             <button key={d}
-              className={`text-[11px] px-2 py-0.5 rounded-full border ${(''+(period || (widget.widget_type.includes('supplier_trans') ? 90 : 180))) === '' + d ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500'}`}
+              className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${period === d ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
               onClick={() => setPeriod(d)}>{d}ي</button>
           ))}
         </div>

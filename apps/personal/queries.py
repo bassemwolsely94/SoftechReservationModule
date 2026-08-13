@@ -25,7 +25,7 @@ Financial person keys  (VERIFIED live 2026-08-13)
     cheques.personcode         — money for a person (supplier purchase cheques
                                  financialdoccode='10'; also customer cheques).
                                  Works for both 5014 and 4231.
-    custpayments.custcode      — customer receivable settlements (may be empty).
+    custpayments               — EMPTY in this install (module inactive) → dropped.
     branchesales is NOT used   — 4M-row sales register, unindexed personcode →
                                  a person scan times out inside the widget window.
 
@@ -307,12 +307,16 @@ def customer_transactions(person_code: str, days: int = 180, limit: int = 300) -
 
 def customer_payments(person_code: str, days: int = 180, limit: int = 300) -> dict:
     """
-    Customer money movements: cheque receipts (cheques.personcode) plus any
-    receivable settlements (custpayments.custcode).
+    Customer money movements: cheque receipts keyed on cheques.personcode.
 
-    NOTE: branchesales is deliberately NOT queried (see supplier_payments) — its
-    unindexed personcode scan over 4M rows times out inside the widget window.
-    custpayments may legitimately be empty (VERIFIED: custcode=4231 → 0 rows).
+    NOTE: two SOFTECH tables are deliberately NOT queried here —
+      • branchesales — 4M-row sales register, unindexed personcode → times out
+        inside the widget window (see supplier_payments).
+      • custpayments — VERIFIED EMPTY in this SOFTECH install (0 rows total,
+        module inactive, like empsalaries/acctrans). Querying it was a guaranteed
+        wasted round-trip, so it is dropped. Columns, if the module is ever
+        activated: custcode, custpaydate, custpayvalue, custdeductvalue.
+    So cheques is the authoritative customer-money source here.
     """
     pc = str(person_code or '').strip()
     if not pc:
@@ -335,18 +339,4 @@ def customer_payments(person_code: str, days: int = 180, limit: int = 300) -> di
         })
     except Exception as e:
         out['cheques'] = [{'_error': str(e)[:200]}]
-    try:
-        raw = _rows(f"""
-            SELECT cp.custpaydate, cp.custpayvalue, cp.custdeductvalue
-            FROM {DB}.custpayments cp
-            WHERE cp.custcode = ?
-              AND cp.custpaydate >= DATEADD(day, -?, GETDATE())
-            ORDER BY cp.custpaydate DESC
-        """, [pc, int(days)], rowcount=limit)
-        out['custpayments'] = _norm(raw, {
-            'pay_date': ('custpaydate',), 'amount': ('custpayvalue',),
-            'deduct': ('custdeductvalue',),
-        })
-    except Exception as e:
-        out['custpayments'] = [{'_error': str(e)[:200]}]
     return out
