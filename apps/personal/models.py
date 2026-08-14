@@ -130,3 +130,103 @@ class PersonalWidget(models.Model):
 
     def __str__(self):
         return f'{self.staff_id}:{self.widget_type}#{self.pk}'
+
+
+class DocumentCommentEdit(models.Model):
+    """
+    Immutable audit record for every write to SOFTECH stktransm.comments made
+    from the personal dashboard. One row per edit attempt, capturing who, which
+    document, the old→new text, and the per-server outcome (HQ + branch).
+    """
+    staff = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True,
+        related_name='comment_edits', verbose_name='المستخدم',
+    )
+    identity = models.ForeignKey(
+        SoftechIdentityClaim, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='comment_edits', verbose_name='الهوية',
+    )
+    # SOFTECH document key
+    branchcode = models.CharField(max_length=20, db_index=True)
+    doccode    = models.CharField(max_length=10)
+    docnumber  = models.CharField(max_length=30, db_index=True)
+
+    old_comment = models.CharField(max_length=100, blank=True, verbose_name='الملاحظة السابقة')
+    new_comment = models.CharField(max_length=100, blank=True, verbose_name='الملاحظة الجديدة')
+
+    # per-server outcome: 'ok' | 'reverted' | 'skipped' | 'error: …'
+    hq_result     = models.CharField(max_length=120, blank=True, verbose_name='نتيجة المركز')
+    branch_host   = models.CharField(max_length=60, blank=True, verbose_name='خادم الفرع')
+    branch_result = models.CharField(max_length=120, blank=True, verbose_name='نتيجة الفرع')
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'تعديل ملاحظة مستند'
+        verbose_name_plural = 'تعديلات ملاحظات المستندات'
+
+    def __str__(self):
+        return f'{self.staff_id} · {self.doccode}#{self.docnumber} @ {self.created_at:%Y-%m-%d %H:%M}'
+
+
+class DocumentRevision(models.Model):
+    """
+    The AUTHORITATIVE revision ledger: has this user revised/approved a specific
+    SOFTECH document or cheque? Durable and queryable — survives even if someone
+    edits the SOFTECH remark in the native ERP. The remark also carries a mirror
+    stamp `[[راجعها … {code}]]`; when the ledger says revised but that stamp is
+    gone from the remark (native edit), the UI flags DRIFT and offers a re-stamp.
+    """
+    KIND_DOCUMENT = 'document'
+    KIND_CHEQUE   = 'cheque'
+    KIND_CHOICES  = [(KIND_DOCUMENT, 'مستند'), (KIND_CHEQUE, 'شيك')]
+
+    STATUS_REVISED = 'revised'
+    STATUS_REVOKED = 'revoked'
+    STATUS_CHOICES = [(STATUS_REVISED, 'تمت المراجعة'), (STATUS_REVOKED, 'أُلغيت')]
+
+    staff = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.CASCADE,
+        related_name='revisions', verbose_name='المستخدم',
+    )
+    identity = models.ForeignKey(
+        SoftechIdentityClaim, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='revisions',
+    )
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, db_index=True)
+    # key: documents → (branchcode, doccode, docnumber);
+    #      cheques   → (branchcode, financialdoccode, cheqsno)
+    branchcode = models.CharField(max_length=20, db_index=True)
+    doccode    = models.CharField(max_length=10)
+    docnumber  = models.CharField(max_length=30, db_index=True)
+
+    code   = models.CharField(max_length=20, blank=True, db_index=True, verbose_name='كود المراجعة')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                              default=STATUS_REVISED, db_index=True)
+    note   = models.CharField(max_length=250, blank=True, verbose_name='ملاحظة المراجعة')
+
+    hq_result     = models.CharField(max_length=120, blank=True)
+    branch_host   = models.CharField(max_length=60, blank=True)
+    branch_result = models.CharField(max_length=120, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'مراجعة مستند'
+        verbose_name_plural = 'مراجعات المستندات'
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['staff', 'kind', 'branchcode', 'doccode', 'docnumber'],
+                name='uniq_revision_staff_key',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.code or self.pk} · {self.kind} {self.doccode}#{self.docnumber} [{self.status}]'
+
+    @property
+    def is_revised(self):
+        return self.status == self.STATUS_REVISED

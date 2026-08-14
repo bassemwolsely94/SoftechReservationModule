@@ -206,6 +206,9 @@ def supplier_transactions(person_code: str, days: int = 90, limit: int = 300) ->
         lines = _rows(f"""
             SELECT sm.doccode, sm.docnumber, sm.docdate, sm.branchcode,
                    st.itemcode,
+                   MAX(i.itemname)                         AS item_name,
+                   MAX(sm.comments)                        AS doc_comment,
+                   MAX(u.userid)                           AS entered_by,
                    SUM(st.transqty)                        AS qty,
                    SUM(COALESCE(st.transprice_total, 0))   AS line_value,
                    sm.docvalue
@@ -213,6 +216,8 @@ def supplier_transactions(person_code: str, days: int = 90, limit: int = 300) ->
             JOIN {DB}.stktrans st
               ON  st.branchcode = sm.branchcode AND st.doccode = sm.doccode
               AND st.docnumber  = sm.docnumber  AND st.docdate = sm.docdate
+            LEFT JOIN {DB}.items i ON i.itemcode = st.itemcode
+            LEFT JOIN {DB}.users u ON u.usercode = sm.usercode
             WHERE sm.cust_branch_code = ?
               AND sm.doccode IN ('10','120')
               AND sm.docdate >= DATEADD(day, -?, GETDATE())
@@ -224,6 +229,35 @@ def supplier_transactions(person_code: str, days: int = 90, limit: int = 300) ->
     except Exception as e:
         return {'error': str(e)[:200]}
     return {'summary': summary, 'lines': lines, 'days': int(days)}
+
+
+def _person_cheques(pc: str, days: int, limit: int) -> list[dict]:
+    """Enriched cheque rows for a personcode — the shared source for both
+    supplier_payments and customer_payments. Includes the fields the drill-down
+    needs: cheque #, branch, type, note (chequenote), running balance."""
+    raw = _rows(f"""
+        SELECT c.cheqsno, c.cheqno, c.cheqdate, c.cheqvalue, c.branchcode,
+               c.bankcode, c.financialdoccode, c.cheqtype, c.chequenote,
+               c.personnewbal, c.handedto, u.userid,
+               bk.bankname, bk.banktype
+        FROM {DB}.cheques c
+        LEFT JOIN {DB}.users u  ON u.usercode  = c.usercode
+        LEFT JOIN {DB}.banks bk ON bk.bankcode = c.bankcode
+        WHERE c.personcode = ?
+          AND c.cheqvalue > 0
+          AND c.cheqdate >= DATEADD(day, -?, GETDATE())
+        ORDER BY c.cheqdate DESC
+    """, [pc, int(days)], rowcount=limit)
+    return _norm(raw, {
+        'cheqsno': ('cheqsno',), 'cheqno': ('cheqno',),
+        'pay_date': ('cheqdate',), 'amount': ('cheqvalue',),
+        'branchcode': ('branchcode',), 'bankcode': ('bankcode',),
+        'financialdoccode': ('financialdoccode',), 'cheqtype': ('cheqtype',),
+        'note': ('chequenote',), 'balance': ('personnewbal',),
+        'handedto': ('handedto',), 'user': ('userid',),
+        # bank/cash-box: banktype 0 = خزينة (cash), 1 = bank → real payment method
+        'bankname': ('bankname',), 'banktype': ('banktype',),
+    })
 
 
 def supplier_payments(person_code: str, days: int = 180, limit: int = 300) -> dict:
@@ -241,20 +275,7 @@ def supplier_payments(person_code: str, days: int = 180, limit: int = 300) -> di
         return {'error': 'no person_code'}
     out: dict = {'days': int(days)}
     try:
-        raw = _rows(f"""
-            SELECT c.cheqdate, c.cheqvalue, c.branchcode,
-                   c.financialdoccode, c.cheqtype
-            FROM {DB}.cheques c
-            WHERE c.personcode = ?
-              AND c.cheqvalue > 0
-              AND c.cheqdate >= DATEADD(day, -?, GETDATE())
-            ORDER BY c.cheqdate DESC
-        """, [pc, int(days)], rowcount=limit)
-        out['cheques'] = _norm(raw, {
-            'pay_date': ('cheqdate',), 'amount': ('cheqvalue',),
-            'branchcode': ('branchcode',), 'financialdoccode': ('financialdoccode',),
-            'cheqtype': ('cheqtype',),
-        })
+        out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
         out['cheques'] = [{'_error': str(e)[:200]}]
     return out
@@ -285,6 +306,9 @@ def customer_transactions(person_code: str, days: int = 180, limit: int = 300) -
         lines = _rows(f"""
             SELECT sm.doccode, sm.docnumber, sm.docdate, sm.branchcode,
                    st.itemcode,
+                   MAX(i.itemname)                         AS item_name,
+                   MAX(sm.comments)                        AS doc_comment,
+                   MAX(u.userid)                           AS entered_by,
                    SUM(st.transqty)                        AS qty,
                    SUM(COALESCE(st.transprice_total, 0))   AS line_value,
                    sm.docvalue
@@ -292,6 +316,8 @@ def customer_transactions(person_code: str, days: int = 180, limit: int = 300) -
             JOIN {DB}.stktrans st
               ON  st.branchcode = sm.branchcode AND st.doccode = sm.doccode
               AND st.docnumber  = sm.docnumber  AND st.docdate = sm.docdate
+            LEFT JOIN {DB}.items i ON i.itemcode = st.itemcode
+            LEFT JOIN {DB}.users u ON u.usercode = sm.usercode
             WHERE sm.cust_branch_code = ?
               AND sm.doccode IN ('115','30')
               AND sm.docdate >= DATEADD(day, -?, GETDATE())
@@ -323,20 +349,7 @@ def customer_payments(person_code: str, days: int = 180, limit: int = 300) -> di
         return {'error': 'no person_code'}
     out: dict = {'days': int(days)}
     try:
-        raw = _rows(f"""
-            SELECT c.cheqdate, c.cheqvalue, c.branchcode,
-                   c.financialdoccode, c.cheqtype
-            FROM {DB}.cheques c
-            WHERE c.personcode = ?
-              AND c.cheqvalue > 0
-              AND c.cheqdate >= DATEADD(day, -?, GETDATE())
-            ORDER BY c.cheqdate DESC
-        """, [pc, int(days)], rowcount=limit)
-        out['cheques'] = _norm(raw, {
-            'pay_date': ('cheqdate',), 'amount': ('cheqvalue',),
-            'branchcode': ('branchcode',), 'financialdoccode': ('financialdoccode',),
-            'cheqtype': ('cheqtype',),
-        })
+        out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
         out['cheques'] = [{'_error': str(e)[:200]}]
     return out

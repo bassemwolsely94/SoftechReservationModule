@@ -13,6 +13,12 @@ urlpatterns = [
     path('identities/<int:pk>/', views.identity_detail, name='personal-identity-detail'),
     path('identities/<int:pk>/review/', views.identity_review, name='personal-identity-review'),
 
+    # capabilities + document-comment write
+    path('me/capabilities/', views.my_capabilities, name='personal-capabilities'),
+    path('documents/comment/', views.set_document_comment, name='personal-doc-comment'),
+    path('cheques/note/', views.set_cheque_note, name='personal-cheque-note'),
+    path('revision/', views.set_revision, name='personal-revision'),
+
     # widgets
     path('widgets/catalog/', views.widgets_catalog, name='personal-widgets-catalog'),
     path('widgets/layout/', views.widgets_layout, name='personal-widgets-layout'),

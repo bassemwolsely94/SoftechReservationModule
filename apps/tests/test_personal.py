@@ -10,10 +10,12 @@ Supplier/customer widgets hit SOFTECH, so those data paths are exercised via
 resolve_person_key (pure authorisation, no Sybase). The my_tasks widget is
 mirror-only, so its data endpoint runs fully.
 """
-from django.test import TestCase
+from unittest.mock import patch
+
+from django.test import TestCase, SimpleTestCase
 
 from apps.tests.factories import make_user, make_admin, make_branch
-from apps.personal.models import SoftechIdentityClaim, PersonalWidget
+from apps.personal.models import SoftechIdentityClaim, PersonalWidget, DocumentCommentEdit, DocumentRevision
 from apps.personal.views import resolve_person_key, PersonalError
 from apps.tasks.models import OperationalTask
 
@@ -171,3 +173,152 @@ class MyTasksWidgetTests(TestCase):
         widget_ids = {t['id'] for t in self.client_.get(f'/api/personal/widgets/{w.id}/data/').data['data']['tasks']}
         selector_ids = set(tasks_for_staff(self.profile).values_list('id', flat=True))
         self.assertEqual(widget_ids, selector_ids)
+
+
+class CommentWriteGateTests(TestCase):
+    """The gated SOFTECH remarks write — permission, ownership, doc-type, audit."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.branch = make_branch()
+        cls.admin_user, cls.admin, cls.admin_client = make_admin('cw_admin')
+        cls.user, cls.profile, cls.client_ = make_user('cw_user', role='salesperson', branch=cls.branch)
+        # admin's approved supplier identity + transaction widget
+        cls.claim = SoftechIdentityClaim.objects.create(
+            staff=cls.admin, kind='supplier', person_code='5014',
+            status=SoftechIdentityClaim.STATUS_APPROVED)
+        cls.widget = PersonalWidget.objects.create(
+            staff=cls.admin, widget_type='supplier_transactions', identity=cls.claim)
+        cls.sales_widget = PersonalWidget.objects.create(
+            staff=cls.admin, widget_type='my_sales')
+        # a widget owned by the OTHER user
+        cls.user_claim = SoftechIdentityClaim.objects.create(
+            staff=cls.profile, kind='supplier', person_code='9',
+            status=SoftechIdentityClaim.STATUS_APPROVED)
+        cls.user_widget = PersonalWidget.objects.create(
+            staff=cls.profile, widget_type='supplier_transactions', identity=cls.user_claim)
+
+    def _post(self, client, widget_id, **extra):
+        body = {'widget_id': widget_id, 'branchcode': '140', 'doccode': '10',
+                'docnumber': '10791', 'comment': 'مرحبا'}
+        body.update(extra)
+        return client.post('/api/personal/documents/comment/', body, format='json')
+
+    def test_capabilities_flag(self):
+        self.assertTrue(self.admin_client.get('/api/personal/me/capabilities/').data['can_edit_erp_comments'])
+        self.assertFalse(self.client_.get('/api/personal/me/capabilities/').data['can_edit_erp_comments'])
+
+    def test_write_denied_without_permission(self):
+        r = self._post(self.client_, self.user_widget.id)
+        self.assertEqual(r.status_code, 403)
+
+    def test_write_denied_on_foreign_widget(self):
+        # admin has the permission but the widget belongs to another user
+        r = self._post(self.admin_client, self.user_widget.id)
+        self.assertEqual(r.status_code, 403)
+
+    def test_write_rejected_for_non_transaction_widget(self):
+        r = self._post(self.admin_client, self.sales_widget.id)
+        self.assertEqual(r.status_code, 400)
+
+    @patch('apps.personal.writeback.write_document_comment')
+    def test_write_happy_path_uses_owned_personcode_and_audits(self, mock_write):
+        mock_write.return_value = {'old': '', 'hq_result': 'ok',
+                                   'branch_host': '1.2.3.4', 'branch_result': 'ok'}
+        r = self._post(self.admin_client, self.widget.id)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['ok'])
+        # writeback was called with the personcode resolved from the owned claim
+        _, kwargs = mock_write.call_args
+        self.assertEqual(kwargs['expected_person_code'], '5014')
+        self.assertEqual(kwargs['comment'], 'مرحبا')
+        # an immutable audit row was written
+        edit = DocumentCommentEdit.objects.get(docnumber='10791')
+        self.assertEqual(edit.staff_id, self.admin.id)
+        self.assertEqual(edit.new_comment, 'مرحبا')
+        self.assertEqual(edit.hq_result, 'ok')
+
+
+class WritebackUnitTests(SimpleTestCase):
+
+    def test_docnum_param_strips_float(self):
+        from apps.personal.writeback import _docnum_param
+        self.assertEqual(_docnum_param('10791.0'), 10791)
+        self.assertEqual(_docnum_param('10791'), 10791)
+
+    def test_length_guard_rejects_over_100(self):
+        from apps.personal.writeback import write_document_comment, CommentWriteError
+        with self.assertRaises(CommentWriteError):
+            write_document_comment(branchcode='140', doccode='10', docnumber='1',
+                                   comment='x' * 101, expected_person_code='5014')
+
+
+class RevisionHelperTests(SimpleTestCase):
+
+    def test_marker_roundtrip_and_drift(self):
+        from apps.personal.revision import build_marker, apply_marker, strip_marker, marker_present
+        m = build_marker('BASSEM', 'R5')
+        stamped = apply_marker('ملاحظتي', m)
+        self.assertIn('R5]]', stamped)
+        self.assertEqual(strip_marker(stamped), 'ملاحظتي')      # clean note recovered
+        self.assertTrue(marker_present(stamped, 'R5'))           # in sync
+        self.assertFalse(marker_present(stamped, 'R9'))          # wrong code → drift
+        self.assertFalse(marker_present('ملاحظتي', 'R5'))        # stamp removed → drift
+
+    def test_numstr_normalises(self):
+        from apps.personal.revision import numstr
+        self.assertEqual(numstr('10791.0'), '10791')
+        self.assertEqual(numstr('10791'), '10791')
+
+
+class RevisionApiTests(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.branch = make_branch()
+        cls.admin_user, cls.admin, cls.admin_client = make_admin('rev_admin')
+        cls.claim = SoftechIdentityClaim.objects.create(
+            staff=cls.admin, kind='supplier', person_code='5014',
+            status=SoftechIdentityClaim.STATUS_APPROVED)
+        cls.widget = PersonalWidget.objects.create(
+            staff=cls.admin, widget_type='supplier_transactions', identity=cls.claim)
+        cls.user, cls.profile, cls.client_ = make_user('rev_user', role='salesperson', branch=cls.branch)
+
+    def _post(self, client, widget_id, **extra):
+        body = {'widget_id': widget_id, 'kind': 'document', 'branchcode': '140',
+                'doccode': '10', 'docnumber': '10791', 'revised': True}
+        body.update(extra)
+        return client.post('/api/personal/revision/', body, format='json')
+
+    def test_revision_requires_permission(self):
+        claim = SoftechIdentityClaim.objects.create(
+            staff=self.profile, kind='supplier', person_code='9',
+            status=SoftechIdentityClaim.STATUS_APPROVED)
+        w = PersonalWidget.objects.create(
+            staff=self.profile, widget_type='supplier_transactions', identity=claim)
+        r = self._post(self.client_, w.id)
+        self.assertEqual(r.status_code, 403)
+
+    @patch('apps.personal.writeback.write_document_comment')
+    def test_revise_creates_ledger_and_uses_transform(self, mock_write):
+        mock_write.return_value = {'old': '', 'new': 'x [[..R1]]', 'hq_result': 'ok',
+                                   'branch_host': '1.2.3.4', 'branch_result': 'ok'}
+        r = self._post(self.admin_client, self.widget.id, revised=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['revised'])
+        rec = DocumentRevision.objects.get(staff=self.admin, docnumber='10791')
+        self.assertEqual(rec.status, 'revised')
+        self.assertTrue(rec.code.startswith('R'))
+        # the marker is applied atomically via a transform callback
+        _, kwargs = mock_write.call_args
+        self.assertIn('transform', kwargs)
+        self.assertEqual(kwargs['expected_person_code'], '5014')
+
+    @patch('apps.personal.writeback.write_document_comment')
+    def test_unrevise_revokes(self, mock_write):
+        mock_write.return_value = {'old': 'x', 'new': 'x', 'hq_result': 'ok',
+                                   'branch_host': '', 'branch_result': 'skipped'}
+        self._post(self.admin_client, self.widget.id, revised=True)
+        self._post(self.admin_client, self.widget.id, revised=False)
+        rec = DocumentRevision.objects.get(staff=self.admin, docnumber='10791')
+        self.assertEqual(rec.status, 'revoked')

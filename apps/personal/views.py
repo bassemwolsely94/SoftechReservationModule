@@ -27,10 +27,16 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import SoftechIdentityClaim, PersonalWidget
+from .models import SoftechIdentityClaim, PersonalWidget, DocumentCommentEdit, DocumentRevision
 from .serializers import IdentityClaimSerializer, PersonalWidgetSerializer
 from .providers import WIDGET_REGISTRY, catalog
 from . import queries
+
+
+def _can_edit_comments(profile):
+    return bool(profile and (
+        profile.role == 'admin' or getattr(profile, 'can_edit_erp_comments', False)
+    ))
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -208,6 +214,250 @@ def identity_review(request, pk):
 @permission_classes([IsAuthenticated])
 def widgets_catalog(request):
     return Response({'results': catalog()})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DOCUMENT COMMENT — read is in the widget payload; this is the gated WRITE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_capabilities(request):
+    """Lets the UI decide whether to show the edit-comment control."""
+    return Response({'can_edit_erp_comments': _can_edit_comments(_profile(request))})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_document_comment(request):
+    """
+    Write a document's SOFTECH remarks (stktransm.comments) to HQ + branch.
+
+    Gated three ways: (1) the caller must have the edit permission; (2) the
+    target document must be reachable through an APPROVED widget the caller owns
+    (supplier/customer); (3) writeback re-verifies the doc's cust_branch_code
+    equals that widget's personcode before touching SOFTECH.
+    """
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'لا يوجد ملف موظف'}, status=403)
+    if not _can_edit_comments(profile):
+        return Response({'detail': 'ليس لديك صلاحية تعديل ملاحظات SOFTECH'}, status=403)
+
+    widget = get_object_or_404(PersonalWidget, pk=request.data.get('widget_id'))
+    if widget.staff_id != profile.id:
+        return Response({'detail': 'غير مصرّح'}, status=403)
+    meta = WIDGET_REGISTRY.get(widget.widget_type)
+    if not meta or meta['kind'] not in ('supplier', 'customer'):
+        return Response({'detail': 'هذه اللوحة لا تدعم تعديل الملاحظات'}, status=400)
+
+    try:
+        person_code = resolve_person_key(widget, profile)
+    except PersonalError as e:
+        return Response({'detail': e.detail}, status=e.status)
+
+    comment = (request.data.get('comment') or '').strip()
+    from .writeback import write_document_comment, CommentWriteError
+    from .revision import build_marker, apply_marker, numstr
+
+    # If this document is already revised, re-apply the stamp so editing the note
+    # through our UI keeps it (only native-SOFTECH edits should cause drift).
+    rev = DocumentRevision.objects.filter(
+        staff=profile, kind=DocumentRevision.KIND_DOCUMENT,
+        branchcode=str(request.data.get('branchcode') or ''),
+        doccode=str(request.data.get('doccode') or ''),
+        docnumber=numstr(request.data.get('docnumber')),
+        status=DocumentRevision.STATUS_REVISED,
+    ).first()
+    wk = dict(branchcode=request.data.get('branchcode'), doccode=request.data.get('doccode'),
+              docnumber=request.data.get('docnumber'), expected_person_code=person_code)
+    if rev:
+        marker = build_marker(profile.full_name, rev.code)
+        wk['transform'] = lambda old: apply_marker(comment, marker)
+    else:
+        wk['comment'] = comment
+    try:
+        result = write_document_comment(**wk)
+    except CommentWriteError as e:
+        return Response({'detail': e.detail}, status=e.status)
+    except Exception as e:  # SOFTECH connectivity / driver failure
+        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+
+    DocumentCommentEdit.objects.create(
+        staff=profile, identity=widget.identity,
+        branchcode=str(request.data.get('branchcode') or ''),
+        doccode=str(request.data.get('doccode') or ''),
+        docnumber=str(request.data.get('docnumber') or ''),
+        old_comment=(result.get('old') or '')[:100],
+        new_comment=comment[:100],
+        hq_result=result.get('hq_result', ''),
+        branch_host=result.get('branch_host', ''),
+        branch_result=result.get('branch_result', ''),
+    )
+    cache.delete(f'personal:widget:{widget.id}:data')   # so the new text shows
+    return Response({
+        'ok': result.get('hq_result') == 'ok',
+        'hq_result': result.get('hq_result'),
+        'branch_result': result.get('branch_result'),
+        'branch_host': result.get('branch_host'),
+        'comment': comment,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_cheque_note(request):
+    """
+    Write a cheque's remarks (cheques.chequenote) to HQ + branch. Same three-layer
+    gate as set_document_comment, but the owned widget must be a payments widget
+    (supplier/customer) and ownership is re-checked on the cheque's personcode.
+    """
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'لا يوجد ملف موظف'}, status=403)
+    if not _can_edit_comments(profile):
+        return Response({'detail': 'ليس لديك صلاحية تعديل ملاحظات SOFTECH'}, status=403)
+
+    widget = get_object_or_404(PersonalWidget, pk=request.data.get('widget_id'))
+    if widget.staff_id != profile.id:
+        return Response({'detail': 'غير مصرّح'}, status=403)
+    meta = WIDGET_REGISTRY.get(widget.widget_type)
+    if not meta or meta['kind'] not in ('supplier', 'customer'):
+        return Response({'detail': 'هذه اللوحة لا تدعم تعديل الملاحظات'}, status=400)
+
+    try:
+        person_code = resolve_person_key(widget, profile)
+    except PersonalError as e:
+        return Response({'detail': e.detail}, status=e.status)
+
+    note = (request.data.get('note') or '').strip()
+    from .writeback import write_cheque_note, CommentWriteError
+    from .revision import build_marker, apply_marker, numstr
+
+    rev = DocumentRevision.objects.filter(
+        staff=profile, kind=DocumentRevision.KIND_CHEQUE,
+        branchcode=str(request.data.get('branchcode') or ''),
+        doccode=str(request.data.get('financialdoccode') or ''),
+        docnumber=numstr(request.data.get('cheqsno')),
+        status=DocumentRevision.STATUS_REVISED,
+    ).first()
+    wk = dict(branchcode=request.data.get('branchcode'),
+              financialdoccode=request.data.get('financialdoccode'),
+              cheqsno=request.data.get('cheqsno'), expected_person_code=person_code)
+    if rev:
+        marker = build_marker(profile.full_name, rev.code)
+        wk['transform'] = lambda old: apply_marker(note, marker)
+    else:
+        wk['note'] = note
+    try:
+        result = write_cheque_note(**wk)
+    except CommentWriteError as e:
+        return Response({'detail': e.detail}, status=e.status)
+    except Exception as e:
+        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+
+    DocumentCommentEdit.objects.create(
+        staff=profile, identity=widget.identity,
+        branchcode=str(request.data.get('branchcode') or ''),
+        doccode=str(request.data.get('financialdoccode') or ''),   # cheque doc-type
+        docnumber=str(request.data.get('cheqsno') or ''),          # cheque serial
+        old_comment=(result.get('old') or '')[:100],
+        new_comment=note[:100],
+        hq_result=result.get('hq_result', ''),
+        branch_host=result.get('branch_host', ''),
+        branch_result=result.get('branch_result', ''),
+    )
+    cache.delete(f'personal:widget:{widget.id}:data')
+    return Response({
+        'ok': result.get('hq_result') == 'ok',
+        'hq_result': result.get('hq_result'),
+        'branch_result': result.get('branch_result'),
+        'branch_host': result.get('branch_host'),
+        'note': note,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_revision(request):
+    """
+    Toggle a document/cheque as revised. Records the authoritative ledger entry
+    (DocumentRevision) AND stamps/unstamps the SOFTECH remark with a mirror
+    marker `[[راجعها … {code}]]` (applied atomically to the fresh remark). Same
+    permission + ownership gate as the remark write. kind = 'document'|'cheque'.
+    """
+    from .revision import build_marker, apply_marker, numstr
+
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'لا يوجد ملف موظف'}, status=403)
+    if not _can_edit_comments(profile):
+        return Response({'detail': 'ليس لديك صلاحية المراجعة (كتابة SOFTECH)'}, status=403)
+
+    widget = get_object_or_404(PersonalWidget, pk=request.data.get('widget_id'))
+    if widget.staff_id != profile.id:
+        return Response({'detail': 'غير مصرّح'}, status=403)
+    meta = WIDGET_REGISTRY.get(widget.widget_type)
+    if not meta or meta['kind'] not in ('supplier', 'customer'):
+        return Response({'detail': 'هذه اللوحة لا تدعم المراجعة'}, status=400)
+    try:
+        person_code = resolve_person_key(widget, profile)
+    except PersonalError as e:
+        return Response({'detail': e.detail}, status=e.status)
+
+    kind = request.data.get('kind')
+    if kind not in (DocumentRevision.KIND_DOCUMENT, DocumentRevision.KIND_CHEQUE):
+        return Response({'detail': 'نوع غير صالح'}, status=400)
+    revised = bool(request.data.get('revised'))
+    branchcode = str(request.data.get('branchcode') or '')
+    doccode = str(request.data.get('doccode') or '')           # doccode | financialdoccode
+    docnumber = numstr(request.data.get('docnumber'))          # docnumber | cheqsno
+
+    # ledger record (one per staff+doc); mint a stable code on first touch
+    rec, _created = DocumentRevision.objects.get_or_create(
+        staff=profile, kind=kind, branchcode=branchcode, doccode=doccode, docnumber=docnumber,
+        defaults={'identity': widget.identity},
+    )
+    if not rec.code:
+        rec.code = f'R{rec.pk}'
+        rec.save(update_fields=['code'])
+
+    marker = build_marker(profile.full_name, rec.code) if revised else ''
+    transform = lambda old: apply_marker(old, marker)
+
+    from .writeback import write_document_comment, write_cheque_note, CommentWriteError
+    try:
+        if kind == DocumentRevision.KIND_CHEQUE:
+            result = write_cheque_note(
+                branchcode=branchcode, financialdoccode=doccode, cheqsno=docnumber,
+                transform=transform, expected_person_code=person_code)
+        else:
+            result = write_document_comment(
+                branchcode=branchcode, doccode=doccode, docnumber=docnumber,
+                transform=transform, expected_person_code=person_code)
+    except CommentWriteError as e:
+        return Response({'detail': e.detail}, status=e.status)
+    except Exception as e:
+        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+
+    rec.status = DocumentRevision.STATUS_REVISED if revised else DocumentRevision.STATUS_REVOKED
+    rec.note = (request.data.get('note') or '').strip()[:250]
+    rec.hq_result = result.get('hq_result', '')
+    rec.branch_host = result.get('branch_host', '')
+    rec.branch_result = result.get('branch_result', '')
+    rec.save()
+
+    cache.delete(f'personal:widget:{widget.id}:data')
+    return Response({
+        'ok': result.get('hq_result') == 'ok',
+        'revised': revised,
+        'code': rec.code,
+        'by': profile.full_name,
+        'at': rec.updated_at.isoformat(),
+        'hq_result': result.get('hq_result'),
+        'branch_result': result.get('branch_result'),
+        'new_remark': result.get('new'),
+    })
 
 
 def _owned_identity_or_400(profile, identity_id, widget_type):
