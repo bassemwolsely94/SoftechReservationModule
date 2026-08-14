@@ -10,7 +10,7 @@
  * All widget data flows through /api/personal/widgets/:id/data/, which is
  * hard-scoped server-side to an APPROVED identity claim you own.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -32,8 +32,42 @@ const DEFAULT_PERIOD = {
   supplier_payments: 180,
   customer_transactions: 180,
   customer_payments: 180,
+  my_sales: 30,
+  my_analytics: 90,
 }
 const PERIOD_WIDGETS = Object.keys(DEFAULT_PERIOD)
+// Width cycle: 1 col → 2 cols → full width. Maps to PersonalWidget.size.
+const SIZE_ORDER = ['md', 'lg', 'xl']
+const SIZE_HINT = { md: 'عرض ١', lg: 'عرض ٢', xl: 'عرض كامل' }
+// Widgets whose documents carry an editable SOFTECH remarks field.
+const WIDGET_KIND_EDITABLE = ['supplier_transactions', 'customer_transactions', 'supplier_payments', 'customer_payments']
+// Widgets whose branch filter is applied SERVER-SIDE (aggregates) → refetch on change.
+// Transaction/payment widgets filter client-side (rows already loaded), so no refetch.
+const SERVER_BRANCH_FILTER = ['my_sales', 'my_analytics']
+
+// Multi-select branch chips (client-side filter, persisted in widget config).
+function BranchFilter({ options, selected, onChange }) {
+  if (!options || options.length <= 1) return null
+  const toggle = (b) => {
+    const set = new Set(selected)
+    set.has(b) ? set.delete(b) : set.add(b)
+    onChange([...set])
+  }
+  return (
+    <div className="flex gap-1 mb-2 flex-wrap items-center">
+      <span className="text-[10px] text-gray-400 ml-1">الفروع:</span>
+      {options.map(b => (
+        <button key={b} onClick={() => toggle(b)}
+          className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${selected.includes(b) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+          فرع {b}
+        </button>
+      ))}
+      {selected.length > 0 && (
+        <button onClick={() => onChange([])} className="text-[10px] text-gray-400 underline">مسح</button>
+      )}
+    </div>
+  )
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Page
@@ -51,6 +85,8 @@ export default function MyDashboardPage() {
 
   const widgetsQ = useQuery({ queryKey: ['personal-widgets'], queryFn: () => personalApi.widgets().then(r => r.data.results) })
   const identsQ  = useQuery({ queryKey: ['personal-identities'], queryFn: () => personalApi.identities().then(r => r.data.results) })
+  const capsQ    = useQuery({ queryKey: ['personal-caps'], queryFn: () => personalApi.capabilities().then(r => r.data) })
+  const canEditComments = capsQ.data?.can_edit_erp_comments || false
 
   const widgets    = widgetsQ.data || []
   const identities = identsQ.data || []
@@ -114,7 +150,7 @@ export default function MyDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
             {order.map((w, i) => (
               <WidgetCard
-                key={w.id} widget={w} index={i}
+                key={w.id} widget={w} index={i} canEdit={canEditComments}
                 onDragStart={onDragStart} onDragEnter={onDragEnter} onDragEnd={onDragEnd}
               />
             ))}
@@ -157,7 +193,7 @@ export default function MyDashboardPage() {
 // Widget card
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
+function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEnd }) {
   const qc = useQueryClient()
   const toast = useToast()
   const [refreshTick, setRefreshTick] = useState(0)
@@ -192,8 +228,33 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
     setRefreshTick(t => t + 1)           // refetch with the persisted period
   }
 
+  const cycleSize = async () => {
+    const cur = SIZE_ORDER.includes(widget.size) ? widget.size : 'md'
+    const next = SIZE_ORDER[(SIZE_ORDER.indexOf(cur) + 1) % SIZE_ORDER.length]
+    try {
+      await personalApi.updateWidget(widget.id, { size: next })
+      qc.invalidateQueries({ queryKey: ['personal-widgets'] })
+    } catch { /* no-op */ }
+  }
+  const wide = widget.size === 'lg' || widget.size === 'xl'
+
+  const cfg = widget.config || {}
+  const saveBranches = async (arr) => {
+    try {
+      await personalApi.updateWidget(widget.id, { config: { ...cfg, branches: arr } })
+      qc.invalidateQueries({ queryKey: ['personal-widgets'] })
+      // aggregate widgets recompute server-side → refetch; row widgets filter locally
+      if (SERVER_BRANCH_FILTER.includes(widget.widget_type)) setRefreshTick(t => t + 1)
+    } catch { /* no-op */ }
+  }
+
   const err = dataQ.data?.detail
   const payload = dataQ.data?.data
+  const branchOptions = useMemo(() => {
+    if (Array.isArray(payload?.branches)) return payload.branches   // server facet
+    const src = payload?.documents || payload?.cheques || []
+    return [...new Set(src.map(x => x && x.branchcode).filter(Boolean))].sort()
+  }, [payload])
 
   return (
     <div
@@ -216,6 +277,7 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
           <button title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
           <button title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
         </div>
@@ -230,6 +292,9 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
           ))}
         </div>
       )}
+      {PERIOD_WIDGETS.includes(widget.widget_type) && (
+        <BranchFilter options={branchOptions} selected={cfg.branches || []} onChange={saveBranches} />
+      )}
 
       <div className="flex-1 min-h-[80px]">
         {dataQ.isLoading ? (
@@ -239,7 +304,12 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
         ) : payload?.error ? (
           <div className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">تعذّر جلب البيانات: {payload.error}</div>
         ) : (
-          <WidgetBody type={widget.widget_type} payload={payload} />
+          <WidgetBody
+            type={widget.widget_type} payload={payload} wide={wide}
+            widgetId={widget.id} branches={cfg.branches || []}
+            canEdit={canEdit && (WIDGET_KIND_EDITABLE.includes(widget.widget_type))}
+            onSaved={() => setRefreshTick(t => t + 1)}
+          />
         )}
       </div>
 
@@ -252,13 +322,13 @@ function WidgetCard({ widget, index, onDragStart, onDragEnter, onDragEnd }) {
 
 // ── type-specific body renderers ──────────────────────────────────────────────
 
-function WidgetBody({ type, payload }) {
+function WidgetBody({ type, payload, wide, widgetId, canEdit, onSaved, branches }) {
   if (!payload) return <EmptyMini />
   switch (type) {
     case 'supplier_transactions':
-    case 'customer_transactions': return <TxnBody payload={payload} />
+    case 'customer_transactions': return <TxnBody payload={payload} wide={wide} widgetId={widgetId} canEdit={canEdit} onSaved={onSaved} branches={branches} />
     case 'supplier_payments':
-    case 'customer_payments':     return <PaymentsBody payload={payload} />
+    case 'customer_payments':     return <PaymentsBody payload={payload} widgetId={widgetId} canEdit={canEdit} onSaved={onSaved} branches={branches} />
     case 'my_sales':              return <MySalesBody payload={payload} />
     case 'my_analytics':          return <MyAnalyticsBody payload={payload} />
     case 'my_narrative_reports':  return <NarrativeBody payload={payload} />
@@ -278,65 +348,349 @@ function Kpi({ label, value, tone = 'text-gray-800' }) {
   )
 }
 
-function TxnBody({ payload }) {
+const DOCCODE_LABEL = { '10': 'شراء', '120': 'مرتجع شراء', '115': 'بيع', '30': 'مرتجع بيع' }
+
+// Revision toggle + drift-fix. Marks a document/cheque revised in our ledger AND
+// stamps the SOFTECH remark; if the stamp was removed in native SOFTECH (drift),
+// offers a one-click re-stamp. `kind` = 'document' | 'cheque'.
+function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
+  const toast = useToast()
+  const [saving, setSaving] = useState(false)
+  const revised = !!item.revised
+  const drift = revised && item.stamp_drift
+
+  const setRev = async (val) => {
+    setSaving(true)
+    try {
+      const body = kind === 'cheque'
+        ? { widget_id: widgetId, kind: 'cheque', branchcode: item.branchcode,
+            doccode: item.financialdoccode, docnumber: item.cheqsno, revised: val }
+        : { widget_id: widgetId, kind: 'document', branchcode: item.branchcode,
+            doccode: item.doccode, docnumber: item.docnumber, revised: val }
+      const { data } = await personalApi.setRevision(body)
+      const ok = data.hq_result === 'ok'
+      toast[ok ? 'success' : 'warning'](
+        val ? 'تمت المراجعة' : 'أُلغيت المراجعة',
+        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`)
+      onSaved?.()
+    } catch (e) {
+      toast.error('تعذّر', e?.response?.data?.detail || '')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-gray-200 text-[11px]">
+      <div className="flex items-center gap-2 min-w-0">
+        {revised
+          ? <span className="text-green-700 font-medium whitespace-nowrap">✔ تمت المراجعة{item.revision_code ? ` #${item.revision_code}` : ''}</span>
+          : <span className="text-gray-400 whitespace-nowrap">لم تُراجع</span>}
+        {drift && <span className="text-amber-600 whitespace-nowrap" title="الختم مفقود من ملاحظات SOFTECH">⚠ الختم مفقود</span>}
+      </div>
+      {canEdit && (
+        <div className="flex gap-1.5 shrink-0">
+          {drift && (
+            <button disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[10px] px-2 py-0.5">إعادة الختم</button>
+          )}
+          <button disabled={saving} onClick={() => setRev(!revised)}
+            className={`text-[10px] px-2 py-0.5 rounded ${revised ? 'btn-secondary' : 'btn-primary'} disabled:opacity-50`}>
+            {saving ? '...' : (revised ? 'إلغاء المراجعة' : '✔ تمييز كمُراجَع')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+const DOCCODE_TONE = {
+  '10': 'bg-green-100 text-green-700', '115': 'bg-green-100 text-green-700',
+  '120': 'bg-red-100 text-red-700',    '30': 'bg-red-100 text-red-700',
+}
+// Money always shows 2 decimals (matches SOFTECH's currency rounding); SOFTECH
+// line values carry sub-cent float artifacts (e.g. 13044.9964 → 13,045.00).
+const money2 = (v) => (v == null ? '—' : Number(v).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+// Quantities keep their real precision (e.g. 0.333), never forced to 2 dp.
+const qtyFmt = (v) => (v == null ? '—' : Number(v).toLocaleString('en-EG', { maximumFractionDigits: 3 }))
+const fmtDoc = (v) => String(v ?? '').replace(/\.0+$/, '')   // 10791.0 → 10791
+
+// One row per DOCUMENT (transaction); click to expand its item lines with full
+// names. `wide` (widget size lg/xl) lays the items out in two columns.
+function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
   const s = payload.summary || {}
-  const lines = payload.lines || []
+  const docs = (payload.documents || []).filter(d => !branches?.length || branches.includes(d.branchcode))
+  const [sel, setSel] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const toast = useToast()
+
+  const toggle = (i, open) => { setSel(open ? null : i); setEditing(false) }
+
+  const saveComment = async (d) => {
+    setSaving(true)
+    try {
+      const { data } = await personalApi.setComment({
+        widget_id: widgetId, branchcode: d.branchcode, doccode: d.doccode,
+        docnumber: d.docnumber, comment: draft,
+      })
+      const ok = data.hq_result === 'ok'
+      toast[ok ? 'success' : 'warning'](
+        ok ? 'تم الحفظ في SOFTECH' : 'حُفظ جزئياً',
+        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`,
+      )
+      setEditing(false)
+      onSaved?.()
+    } catch (e) {
+      toast.error('تعذّر الحفظ', e?.response?.data?.detail || '')
+    } finally { setSaving(false) }
+  }
+
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <Kpi label="صافي القيمة" value={money(s.net_value)} tone={Number(s.net_value) < 0 ? 'text-red-600' : 'text-green-700'} />
-        <Kpi label="عدد المستندات" value={s.doc_count || 0} />
+        <Kpi label="عدد المستندات" value={s.doc_count || docs.length} />
       </div>
-      {lines.length === 0 ? <EmptyMini /> : (
-        <div className="max-h-56 overflow-auto -mx-1">
-          <table className="w-full text-[11px]">
-            <thead className="text-gray-400 sticky top-0 bg-white">
-              <tr><th className="text-right px-1 py-1">التاريخ</th><th className="text-right px-1">الصنف</th><th className="text-left px-1">كمية</th><th className="text-left px-1">القيمة</th></tr>
-            </thead>
-            <tbody>
-              {lines.slice(0, 60).map((l, i) => (
-                <tr key={i} className="border-t border-gray-50">
-                  <td className="px-1 py-1 text-gray-500 whitespace-nowrap">{(l.docdate || '').slice(0, 10)}</td>
-                  <td className="px-1 text-gray-700">{l.itemcode}</td>
-                  <td className="px-1 text-left">{Number(l.qty || 0)}</td>
-                  <td className="px-1 text-left text-gray-700">{Number(l.line_value || 0).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {docs.length === 0 ? <EmptyMini /> : (
+        <div className="max-h-80 overflow-auto -mx-1 divide-y divide-gray-100">
+          {docs.slice(0, 80).map((d, i) => {
+            const open = sel === i
+            return (
+              <div key={i}>
+                <button
+                  onClick={() => toggle(i, open)}
+                  className={`w-full text-right px-2 py-1.5 ${open ? 'bg-brand-50' : 'hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-gray-300 shrink-0">{open ? '▾' : '▸'}</span>
+                    <span className="text-gray-500 whitespace-nowrap shrink-0">{(d.docdate || '').slice(0, 10)}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${DOCCODE_TONE[d.doccode] || 'bg-gray-100 text-gray-500'}`}>
+                      {DOCCODE_LABEL[d.doccode] || d.doccode}
+                    </span>
+                    <span className="mr-auto font-bold text-gray-800 whitespace-nowrap">{money2(d.line_total)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-400 pr-4 mt-0.5 flex-wrap">
+                    <span className="whitespace-nowrap">مستند #{fmtDoc(d.docnumber)}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="whitespace-nowrap">فرع {d.branchcode}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="whitespace-nowrap">{d.items.length} صنف</span>
+                    {d.user && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="whitespace-nowrap" title="أدخلها">👤 {d.user}</span>
+                      </>
+                    )}
+                    {d.revised && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-green-600 whitespace-nowrap" title={`تمت المراجعة${d.revision_code ? ' #' + d.revision_code : ''}`}>✔{d.stamp_drift ? ' ⚠' : ''}</span>
+                      </>
+                    )}
+                    {d.comments && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-amber-600 truncate max-w-[150px]" title={d.comments}>📝 {d.comments}</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+                {open && (
+                  <div className="px-2 pb-2 pt-1 bg-brand-50/30">
+                    <div className={`grid gap-1 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {d.items.map((it, j) => (
+                        <div key={j} className="bg-white rounded-lg px-2 py-1.5 border border-gray-100">
+                          <div className="text-gray-800 text-[11px] font-medium leading-snug">{it.item_name || it.itemcode}</div>
+                          <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                            <span>كود {it.itemcode}</span>
+                            <span className="text-gray-600">
+                              {qtyFmt(it.qty)} × {money2(it.unit_price)} = <span className="text-gray-800 font-semibold">{money2(it.line_value)}</span>
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-[11px] pt-1.5 mt-1.5 border-t border-gray-200">
+                      <span className="text-gray-400">إجمالي المستند</span>
+                      <span className="font-bold text-gray-800">{money2(d.docvalue)} ج.م</span>
+                    </div>
+                    <div className="mt-1">
+                      {editing ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-gray-400">📝 ملاحظات</span>
+                            <span className="text-[9px] text-gray-400">{draft.length}/100</span>
+                          </div>
+                          <textarea
+                            value={draft} maxLength={100} rows={2} autoFocus
+                            onChange={(e) => setDraft(e.target.value)}
+                            className="w-full text-[11px] border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
+                            placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)"
+                          />
+                          <div className="flex gap-1.5">
+                            <button disabled={saving} onClick={() => saveComment(d)}
+                              className="btn-primary text-[11px] px-3 py-1 disabled:opacity-50">
+                              {saving ? '...' : 'حفظ في SOFTECH'}
+                            </button>
+                            <button disabled={saving} onClick={() => setEditing(false)}
+                              className="btn-secondary text-[11px] px-3 py-1">إلغاء</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-2 text-[11px]">
+                          <span className="text-gray-400 shrink-0">📝 ملاحظات</span>
+                          <span className="flex-1 text-gray-700 text-left leading-snug break-words">{d.comments || '—'}</span>
+                          {canEdit && (
+                            <button onClick={() => { setDraft(d.comments || ''); setEditing(true) }}
+                              className="text-gray-400 hover:text-brand-600 shrink-0" title="تعديل الملاحظة">✏️</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <RevisionControl item={d} kind="document" widgetId={widgetId} canEdit={canEdit} onSaved={onSaved} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-function PaymentsBody({ payload }) {
-  const cheques = (payload.cheques || []).filter(x => !x._error)
-  const pays    = (payload.payments || payload.custpayments || []).filter(x => !x._error)
-  const rows = [
-    ...cheques.map(c => ({ date: c.pay_date, amount: c.amount, kind: 'شيك' })),
-    ...pays.map(p => ({ date: p.pay_date, amount: p.amount, kind: 'دفعة' })),
-  ].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+// Real payment method comes from the bank type (0 = خزينة/cash, 1 = bank),
+// NOT cheqtype (which mislabels cash-box entries as "شيك").
+const payMethod = (c) => {
+  const bt = String(c?.banktype ?? '')
+  if (bt === '0') return 'نقدى'
+  if (bt === '1') return 'بنكي'
+  return ''
+}
+
+function Detail({ k, v }) {
+  return (
+    <div className="flex justify-between gap-2 min-w-0">
+      <span className="text-gray-400 shrink-0">{k}</span>
+      <span className="text-gray-800 font-medium text-left truncate" title={String(v ?? '—')}>{v ?? '—'}</span>
+    </div>
+  )
+}
+
+// One row per cheque; click to expand its details, with an editable remarks
+// field (cheques.chequenote) written to HQ + branch like document comments.
+function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
+  const cheques = (payload.cheques || [])
+    .filter(x => !x._error)
+    .filter(c => !branches?.length || branches.includes(c.branchcode))
+  const total = cheques.reduce((s, c) => s + Number(c.amount || 0), 0)
+  const [sel, setSel] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const toast = useToast()
+  const toggle = (i, open) => { setSel(open ? null : i); setEditing(false) }
+
+  const saveNote = async (c) => {
+    setSaving(true)
+    try {
+      const { data } = await personalApi.setChequeNote({
+        widget_id: widgetId, branchcode: c.branchcode,
+        financialdoccode: c.financialdoccode, cheqsno: c.cheqsno, note: draft,
+      })
+      const ok = data.hq_result === 'ok'
+      toast[ok ? 'success' : 'warning'](
+        ok ? 'تم الحفظ في SOFTECH' : 'حُفظ جزئياً',
+        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`,
+      )
+      setEditing(false)
+      onSaved?.()
+    } catch (e) {
+      toast.error('تعذّر الحفظ', e?.response?.data?.detail || '')
+    } finally { setSaving(false) }
+  }
+
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <Kpi label="الإجمالي" value={money(total)} />
-        <Kpi label="عدد الحركات" value={rows.length} />
+        <Kpi label="عدد الحركات" value={cheques.length} />
       </div>
-      {rows.length === 0 ? <EmptyMini /> : (
-        <div className="max-h-56 overflow-auto">
-          <table className="w-full text-[11px]">
-            <tbody>
-              {rows.slice(0, 60).map((r, i) => (
-                <tr key={i} className="border-t border-gray-50">
-                  <td className="px-1 py-1 text-gray-500">{(r.date || '').slice(0, 10)}</td>
-                  <td className="px-1"><span className="text-[10px] bg-gray-100 rounded px-1.5 py-0.5">{r.kind}</span></td>
-                  <td className="px-1 text-left text-gray-700">{Number(r.amount || 0).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {cheques.length === 0 ? <EmptyMini /> : (
+        <div className="max-h-80 overflow-auto -mx-1 divide-y divide-gray-100">
+          {cheques.slice(0, 80).map((c, i) => {
+            const open = sel === i
+            return (
+              <div key={i}>
+                <button onClick={() => toggle(i, open)}
+                  className={`w-full text-right px-2 py-1.5 ${open ? 'bg-brand-50' : 'hover:bg-gray-50'}`}>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-gray-300 shrink-0">{open ? '▾' : '▸'}</span>
+                    <span className="text-gray-500 whitespace-nowrap shrink-0">{(c.pay_date || '').slice(0, 10)}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${DOCCODE_TONE[c.financialdoccode] || 'bg-gray-100 text-gray-500'}`}>
+                      {DOCCODE_LABEL[c.financialdoccode] || 'شيك'}
+                    </span>
+                    <span className="mr-auto font-bold text-gray-800 whitespace-nowrap">{money2(c.amount)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-400 pr-4 mt-0.5 flex-wrap">
+                    <span className="whitespace-nowrap">رقم #{c.cheqno || fmtDoc(c.cheqsno)}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="whitespace-nowrap">فرع {c.branchcode}</span>
+                    {payMethod(c) && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap font-medium">{payMethod(c)}</span></>)}
+                    {c.bankname && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap truncate max-w-[120px]" title={c.bankname}>{c.bankname}</span></>)}
+                    {c.user && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap">👤 {c.user}</span></>)}
+                    {c.revised && (<><span className="text-gray-300">·</span><span className="text-green-600 whitespace-nowrap" title={`تمت المراجعة${c.revision_code ? ' #' + c.revision_code : ''}`}>✔{c.stamp_drift ? ' ⚠' : ''}</span></>)}
+                    {c.note && (<><span className="text-gray-300">·</span><span className="text-amber-600 truncate max-w-[150px]" title={c.note}>📝 {c.note}</span></>)}
+                  </div>
+                </button>
+                {open && (
+                  <div className="px-2 pb-2 pt-1 bg-brand-50/30 text-[11px]">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      <Detail k="رقم المرجع" v={c.cheqno || '—'} />
+                      <Detail k="طريقة الدفع" v={payMethod(c) || '—'} />
+                      <Detail k="الخزينة / البنك" v={c.bankname || '—'} />
+                      <Detail k="نوع المستند" v={DOCCODE_LABEL[c.financialdoccode] || c.financialdoccode} />
+                      <Detail k="الفرع" v={c.branchcode} />
+                      <Detail k="المبلغ" v={money2(c.amount)} />
+                      <Detail k="الرصيد بعد" v={money2(c.balance)} />
+                      <Detail k="سُلّم إلى" v={c.handedto || '—'} />
+                      <Detail k="أدخلها" v={c.user || '—'} />
+                    </div>
+                    <div className="mt-1.5 pt-1.5 border-t border-gray-200">
+                      {editing ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">📝 ملاحظات الشيك</span>
+                            <span className="text-[9px] text-gray-400">{draft.length}/250</span>
+                          </div>
+                          <textarea value={draft} maxLength={250} rows={2} autoFocus
+                            onChange={(e) => setDraft(e.target.value)}
+                            className="w-full text-[11px] border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
+                            placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)" />
+                          <div className="flex gap-1.5">
+                            <button disabled={saving} onClick={() => saveNote(c)}
+                              className="btn-primary text-[11px] px-3 py-1 disabled:opacity-50">
+                              {saving ? '...' : 'حفظ في SOFTECH'}
+                            </button>
+                            <button disabled={saving} onClick={() => setEditing(false)}
+                              className="btn-secondary text-[11px] px-3 py-1">إلغاء</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-gray-400 shrink-0">📝 ملاحظات</span>
+                          <span className="flex-1 text-gray-700 text-left leading-snug break-words">{c.note || '—'}</span>
+                          {canEdit && (
+                            <button onClick={() => { setDraft(c.note || ''); setEditing(true) }}
+                              className="text-gray-400 hover:text-brand-600 shrink-0" title="تعديل ملاحظة الشيك">✏️</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <RevisionControl item={c} kind="cheque" widgetId={widgetId} canEdit={canEdit} onSaved={onSaved} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -345,11 +699,17 @@ function PaymentsBody({ payload }) {
 
 function MySalesBody({ payload }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
       <Kpi label="إجمالي المبيعات" value={money(payload.revenue)} tone="text-green-700" />
-      <Kpi label="عدد الفواتير" value={payload.invoices || 0} />
+      <Kpi label="عدد الفواتير" value={qtyFmt(payload.invoices)} />
+      <Kpi label="متوسط الفاتورة" value={money(payload.avg_invoice)} />
+      <Kpi label="عدد العملاء" value={qtyFmt(payload.customers)} />
+      <Kpi label="عدد الوحدات" value={qtyFmt(payload.units)} />
+      <Kpi label="صافي الربح" value={money(payload.gross_profit)}
+           tone={Number(payload.gross_profit) < 0 ? 'text-red-600' : 'text-green-700'} />
+      <Kpi label="هامش الربح" value={`${qtyFmt(payload.margin)}%`} />
       <Kpi label="المرتجعات" value={money(payload.returns_value)} tone="text-red-600" />
-      <Kpi label="عدد المرتجعات" value={payload.returns_count || 0} />
+      <Kpi label="عدد المرتجعات" value={qtyFmt(payload.returns_count)} />
     </div>
   )
 }
@@ -374,9 +734,9 @@ function MyAnalyticsBody({ payload }) {
             <tbody>
               {items.map((t, i) => (
                 <tr key={i} className="border-t border-gray-50">
-                  <td className="px-1 py-1 text-gray-700 truncate max-w-[140px]">{t.name}</td>
-                  <td className="px-1 text-left">{Number(t.qty || 0)}</td>
-                  <td className="px-1 text-left text-gray-600">{Number(t.value || 0).toLocaleString()}</td>
+                  <td className="px-1 py-1 text-gray-700 truncate max-w-[160px]" title={t.name}>{t.name}</td>
+                  <td className="px-1 text-left">{qtyFmt(t.qty)}</td>
+                  <td className="px-1 text-left text-gray-600">{money2(t.value)}</td>
                 </tr>
               ))}
             </tbody>

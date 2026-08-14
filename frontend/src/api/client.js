@@ -258,6 +258,12 @@ export const personalApi = {
   layout:       (items)     => api.post('/personal/widgets/layout/', items),
   widgetData:   (id, refresh) =>
     api.get(`/personal/widgets/${id}/data/`, refresh ? { params: { refresh: 1 } } : {}),
+
+  // Document remarks (stktransm.comments) — read rides in widgetData; this is the write
+  capabilities:  ()     => api.get('/personal/me/capabilities/'),
+  setComment:    (data) => api.post('/personal/documents/comment/', data),
+  setChequeNote: (data) => api.post('/personal/cheques/note/', data),
+  setRevision:   (data) => api.post('/personal/revision/', data),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
