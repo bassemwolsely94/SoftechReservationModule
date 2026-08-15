@@ -39,6 +39,29 @@ def _can_edit_comments(profile):
     ))
 
 
+def _branch_ok(result):
+    """A branch write is fine only if it landed ('ok') or there was no branch
+    server to write to ('skipped'). Anything else (offline/error/reverted) fails."""
+    br = str(result.get('branch_result') or '')
+    return br == 'ok' or br.startswith('skipped')
+
+
+def _write_fully_ok(result):
+    """The write went through on BOTH targets it needed to reach."""
+    return result.get('hq_result') == 'ok' and _branch_ok(result)
+
+
+def _write_warning(result):
+    """Human note on which target did NOT go through (empty when fully ok)."""
+    parts = []
+    if result.get('hq_result') != 'ok':
+        parts.append(f"المركز الرئيسي: {result.get('hq_result') or 'فشل'}")
+    if not _branch_ok(result):
+        host = result.get('branch_host') or ''
+        parts.append(f"خادم الفرع{(' ' + host) if host else ''}: {result.get('branch_result')}")
+    return ' · '.join(parts)
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _profile(request):
@@ -281,7 +304,8 @@ def set_document_comment(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:  # SOFTECH connectivity / driver failure
-        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+                         'error': str(e)[:150]}, status=502)
 
     DocumentCommentEdit.objects.create(
         staff=profile, identity=widget.identity,
@@ -296,7 +320,8 @@ def set_document_comment(request):
     )
     cache.delete(f'personal:widget:{widget.id}:data')   # so the new text shows
     return Response({
-        'ok': result.get('hq_result') == 'ok',
+        'ok': _write_fully_ok(result),
+        'warning': _write_warning(result),
         'hq_result': result.get('hq_result'),
         'branch_result': result.get('branch_result'),
         'branch_host': result.get('branch_host'),
@@ -354,7 +379,8 @@ def set_cheque_note(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
-        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+                         'error': str(e)[:150]}, status=502)
 
     DocumentCommentEdit.objects.create(
         staff=profile, identity=widget.identity,
@@ -369,7 +395,8 @@ def set_cheque_note(request):
     )
     cache.delete(f'personal:widget:{widget.id}:data')
     return Response({
-        'ok': result.get('hq_result') == 'ok',
+        'ok': _write_fully_ok(result),
+        'warning': _write_warning(result),
         'hq_result': result.get('hq_result'),
         'branch_result': result.get('branch_result'),
         'branch_host': result.get('branch_host'),
@@ -438,7 +465,8 @@ def set_revision(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
-        return Response({'detail': 'تعذّرت الكتابة إلى SOFTECH', 'error': str(e)[:150]}, status=502)
+        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+                         'error': str(e)[:150]}, status=502)
 
     rec.status = DocumentRevision.STATUS_REVISED if revised else DocumentRevision.STATUS_REVOKED
     rec.note = (request.data.get('note') or '').strip()[:250]

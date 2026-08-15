@@ -157,6 +157,33 @@ def search_persons(q: str, kind: str | None = None, limit: int = 25) -> list[dic
     ] or ([rows[0]] if rows and rows[0].get('_error') else [])
 
 
+def channel_labels() -> dict:
+    """
+    (ptcode|ptclassifcode) → Arabic label from SOFTECH persontypesclassif.
+    ptclassifcode is NOT unique on its own — it is scoped by ptcode (the person
+    type), so a customer's '91' ('عميل نقدى') differs from a supplier's '91'. We
+    key by the pair. Tiny table — cached an hour so my_analytics doesn't re-query.
+    """
+    from django.core.cache import cache
+    key = 'personal:channel_labels'
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    out = {}
+    try:
+        rows = _rows(f"SELECT ptcode, ptclassifcode, ptclassifdescr FROM {DB}.persontypesclassif",
+                     rowcount=500)
+        for r in rows:
+            pt = str(r.get('ptcode') or '').strip()
+            cc = str(r.get('ptclassifcode') or '').strip()
+            if cc:
+                out[f'{pt}|{cc}'] = (r.get('ptclassifdescr') or '').strip()
+    except Exception:
+        out = {}
+    cache.set(key, out, 3600)
+    return out
+
+
 def get_person(person_code: str) -> dict:
     """Fetch a single personsdata row by code (used to cache the label on claim)."""
     pc = str(person_code or '').strip()

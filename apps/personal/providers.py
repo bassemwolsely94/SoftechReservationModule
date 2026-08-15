@@ -267,10 +267,15 @@ def _my_analytics(person_key, config, staff=None):
     )
     base, branch_codes = _sales_branch_facet_and_filter(base, config)
 
+    # sales_channel is a code (personsdata.ptclassifcode: 91='عميل نقدى', 90='عميل
+    # Delivery', 15='تأمين صحي'…), scoped by the customer's person type. Resolve via
+    # the (ptcode|ptclassifcode) pair so the chips read clearly.
+    label_map = queries.channel_labels()
+
     channels = list(
-        base.values('sales_channel')
+        base.values('sales_person_type', 'sales_channel')
             .annotate(value=Sum('total_amount'), invoices=Count('id'))
-            .order_by('-value')[:10]
+            .order_by('-value')[:12]
     )
     top_items = list(
         PurchaseHistoryLine.objects
@@ -284,6 +289,7 @@ def _my_analytics(person_key, config, staff=None):
         'branches': branch_codes,
         'channels': [
             {'channel': c['sales_channel'] or '—',
+             'channel_label': label_map.get(f"{c['sales_person_type'] or ''}|{c['sales_channel'] or ''}", ''),
              'value': float(c['value'] or 0), 'invoices': c['invoices']}
             for c in channels
         ],
