@@ -1,9 +1,9 @@
 from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.db.models import Prefetch
 
-from .models import SystemSetting, DropdownOption
+from .models import SystemSetting, DropdownOption, PharmacyProfile
 from .serializers import (
     SystemSettingSerializer, SystemSettingUpdateSerializer,
     DropdownOptionSerializer, DropdownOptionWriteSerializer,
@@ -120,3 +120,116 @@ class DropdownOptionViewSet(viewsets.ModelViewSet):
                 DropdownOptionSerializer(opt).data
             )
         return Response(result)
+
+
+# ── Appearance / Theme ─────────────────────────────────────────────────────────
+
+# Stored as a single SystemSetting row (key='theme', value_type='json',
+# is_public=True). Public GET so the login screen / customer portal can theme
+# themselves before authentication; admin-only PUT to change it.
+THEME_KEY = 'theme'
+DEFAULT_THEME = {
+    'primary':    '#022871',   # navy  — brand-600 + generated scale
+    'secondary':  '#3880bb',   # sky   — brand-400
+    'accent':     '#ea0000',   # red   — danger / brand-red
+    'arabicFont': 'cairo',     # cairo | jozoor | tajawal
+}
+ALLOWED_FONTS = {'cairo', 'jozoor', 'tajawal'}
+
+
+def _load_theme():
+    stored = SystemSetting.get(THEME_KEY, default={}) or {}
+    theme = dict(DEFAULT_THEME)
+    if isinstance(stored, dict):
+        theme.update({k: stored[k] for k in DEFAULT_THEME if k in stored})
+    return theme
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([permissions.AllowAny])
+def theme(request):
+    """
+    GET /api/config/theme/  → current appearance theme (public, unauthenticated).
+    PUT /api/config/theme/  → update it (admin only).
+    """
+    if request.method == 'PUT':
+        # Admin only — role lives on request.user.staff_profile (see apps/users)
+        profile = getattr(request.user, 'staff_profile', None)
+        if not (profile and profile.role == 'admin' and profile.is_active):
+            return Response({'detail': 'يتطلب صلاحية مدير'}, status=status.HTTP_403_FORBIDDEN)
+
+        import re
+        incoming = request.data or {}
+        merged = _load_theme()
+        hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
+        for key in ('primary', 'secondary', 'accent'):
+            if key in incoming:
+                val = str(incoming[key]).strip()
+                if not hex_re.match(val):
+                    return Response({'detail': f'قيمة لون غير صحيحة: {key}'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                merged[key] = val.lower()
+        if 'arabicFont' in incoming:
+            font = str(incoming['arabicFont']).strip().lower()
+            if font not in ALLOWED_FONTS:
+                return Response({'detail': 'خط غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
+            merged['arabicFont'] = font
+
+        import json
+        SystemSetting.objects.update_or_create(
+            key=THEME_KEY,
+            defaults={
+                'value':      json.dumps(merged),
+                'value_type': 'json',
+                'category':   'general',
+                'is_public':  True,
+                'label':      'مظهر النظام (الألوان والخط)',
+                'description': 'ألوان الهوية البصرية وخط الواجهة — عام لكل المستخدمين',
+            },
+        )
+        return Response(merged)
+
+    return Response(_load_theme())
+
+
+# ── Pharmacy Profile ───────────────────────────────────────────────────────────
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def pharmacy_profile(request):
+    """
+    GET  /api/config/pharmacy/ → pharmacy profile + active branches
+    PATCH /api/config/pharmacy/ → update pharmacy profile fields
+    """
+    from apps.branches.models import Branch
+
+    if request.method == 'PATCH':
+        profile = PharmacyProfile.get()
+        allowed = {
+            'name_ar', 'name_en', 'tagline_ar', 'website',
+            'whatsapp_number', 'call_center_numbers', 'extra_footer_ar',
+        }
+        for field, value in request.data.items():
+            if field in allowed:
+                setattr(profile, field, value)
+        profile.save()
+
+    profile  = PharmacyProfile.get()
+    # Only active + operational branches appear on customer receipts/WhatsApp
+    branches = list(
+        Branch.objects
+        .filter(is_active=True, is_operational=True)
+        .order_by('name')
+        .values('id', 'name', 'name_ar', 'address', 'phone')
+    )
+
+    return Response({
+        'name_ar':             profile.name_ar,
+        'name_en':             profile.name_en,
+        'tagline_ar':          profile.tagline_ar,
+        'website':             profile.website,
+        'whatsapp_number':     profile.whatsapp_number,
+        'call_center_numbers': profile.call_center_list(),
+        'extra_footer_ar':     profile.extra_footer_ar,
+        'branches':            branches,
+    })
