@@ -1,5 +1,72 @@
-/* ─── Google Fonts ─────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+/* ─── Arabic webfonts: Cairo (default/fallback) + Tajawal (optional choice) ─── */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;900&display=swap');
+
+/* ─── ElRezeiky brand fonts (self-hosted, files in frontend/public/fonts/) ─────
+     Jozoor              → Arabic
+     Harabara Mais Demo  → Latin / headings
+     Berlin Sans FB      → Numbers (Regular + Bold)
+   .woff2 preferred, original .otf/.ttf kept as fallback.
+   ---------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Jozoor';
+  src: url('/fonts/Jozoor.woff2') format('woff2'),
+       url('/fonts/Jozoor.otf')   format('opentype');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Harabara Mais Demo';
+  src: url('/fonts/HarabaraMaisDemo.woff2') format('woff2'),
+       url('/fonts/HarabaraMaisDemo.otf')   format('opentype');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Berlin Sans FB';
+  src: url('/fonts/BerlinSansFB.woff2') format('woff2'),
+       url('/fonts/BerlinSansFB.ttf')   format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Berlin Sans FB';
+  src: url('/fonts/BerlinSansFB-Bold.woff2') format('woff2'),
+       url('/fonts/BerlinSansFB-Bold.ttf')   format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* Fonts. --font-ar is swapped at runtime by the Appearance settings page
+     (Cairo default — clearest for dense Arabic UI; Jozoor/Tajawal optional).
+     --font-ui embeds --font-ar so changing the Arabic font updates the body too:
+     Latin → Harabara, Arabic → chosen font. */
+  --font-en:  'Harabara Mais Demo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ar:  'Cairo', 'Tajawal', sans-serif;
+  --font-ui:  'Harabara Mais Demo', var(--font-ar), system-ui, sans-serif;
+  --font-num: 'Berlin Sans FB', 'Harabara Mais Demo', 'Cairo', sans-serif;
+
+  /* ── Brand palette defaults (R G B triplets; overridden at runtime by
+     src/theme/theme.js). These match the navy scale in tailwind.config.js. ── */
+  --c-brand-50:  238 243 251;
+  --c-brand-100: 211 224 244;
+  --c-brand-200: 167 193 232;
+  --c-brand-300: 111 155 214;
+  --c-brand-400: 56 128 187;   /* sky  */
+  --c-brand-500: 28 86 149;
+  --c-brand-600: 2 40 113;     /* navy — primary */
+  --c-brand-700: 2 32 93;
+  --c-brand-800: 1 24 69;
+  --c-brand-900: 1 17 47;
+  --c-brand-sky: 56 128 187;
+  --c-brand-red: 234 0 0;
+  --c-danger:    234 0 0;
+
+  /* Convenience solid hexes for inline/canvas use */
+  --brand-navy: #022871;
+  --brand-sky:  #3880bb;
+  --brand-red:  #ea0000;
+}
 
 @tailwind base;
 @tailwind components;
@@ -20,9 +87,9 @@
   }
 
   body {
-    font-family: 'Cairo', sans-serif;
-    background-color: #f8faf9;
-    color: #1a2e24;
+    font-family: var(--font-ui);
+    background-color: #f6f8fc;
+    color: #0f1b33;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
@@ -40,10 +107,27 @@
 
   /* Smooth focus rings */
   *:focus-visible {
-    outline: 2px solid #1B6B3A;
+    outline: 2px solid rgb(var(--c-brand-600));
     outline-offset: 2px;
     border-radius: 6px;
   }
+}
+
+/* ─── RefreshButton loading bar animation ───────────────────────────────────── */
+@keyframes refresh-sweep {
+  0%   { left: -55%; width: 45%; }
+  65%  { left: 85%;  width: 60%; }
+  100% { left: 110%; width: 45%; }
+}
+
+.refresh-btn-bar {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background-color: currentColor;
+  opacity: 0.45;
+  border-radius: 9999px;
+  animation: refresh-sweep 1.1s ease-in-out infinite;
 }
 
 /* ─── Component layer ───────────────────────────────────────────────────────── */
@@ -199,11 +283,15 @@
     text-align: right;
   }
 
-  /* Tabular numerals for KPIs */
+  /* Tabular numerals for KPIs — uses the brand Numbers font (Berlin Sans FB) */
   .tabnum {
+    font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
   }
+
+  /* Brand Numbers font without forcing tabular spacing */
+  .font-num { font-family: var(--font-num); }
 
   /* Readable line-height for Arabic prose */
   .prose-ar {
@@ -228,7 +316,7 @@
 
   /* Gradient brand text */
   .text-brand-gradient {
-    background: linear-gradient(135deg, #1B6B3A 0%, #38916a 100%);
+    background: linear-gradient(135deg, rgb(var(--c-brand-600)) 0%, rgb(var(--c-brand-sky)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

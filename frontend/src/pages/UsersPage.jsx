@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
+import BranchSelect from '../components/BranchSelect'
 
 const ROLE_COLORS = {
   admin:       { bg: '#fef2f2', color: '#b91c1c' },
@@ -24,7 +25,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
 
   const { data: staff, isLoading } = useQuery({
     queryKey: ['staff-detail', staffId],
-    queryFn:  () => usersApi.getStaff(staffId).then(r => r.data),
+    queryFn:  () => usersApi.get(staffId).then(r => r.data),
   })
 
   const [form, setForm]     = useState(null)
@@ -47,7 +48,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
   async function handleSave() {
     setSaving(true); setError('')
     try {
-      await usersApi.updateStaff(staffId, {
+      await usersApi.update(staffId, {
         ...form,
         branch: form.branch ? Number(form.branch) : null,
       })
@@ -108,8 +109,8 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
               style={{
                 flex: 1, padding: '11px 4px', border: 'none', background: 'none',
                 cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'Cairo,sans-serif',
-                color: tab === t.k ? '#1B6B3A' : '#6b7280',
-                borderBottom: tab === t.k ? '2px solid #1B6B3A' : '2px solid transparent',
+                color: tab === t.k ? 'rgb(var(--c-brand-600))' : '#6b7280',
+                borderBottom: tab === t.k ? '2px solid rgb(var(--c-brand-600))' : '2px solid transparent',
                 marginBottom: -1, transition: 'all .15s',
               }}>
               {t.label}
@@ -166,7 +167,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
                 <input type="checkbox" checked={form.is_active}
                   onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))}
-                  style={{ width: 16, height: 16, accentColor: '#1B6B3A' }} />
+                  style={{ width: 16, height: 16, accentColor: 'rgb(var(--c-brand-600))' }} />
                 <span style={{ fontWeight: 600, fontSize: 13, color: '#1c2833' }}>الحساب نشط</span>
               </label>
             </div>
@@ -175,13 +176,12 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
           {tab === 'branch' && (
             <div>
               <label className="label">الفرع الافتراضي</label>
-              <select className="input-field" value={form.branch}
-                onChange={e => setForm(p => ({ ...p, branch: e.target.value }))}>
-                <option value="">بدون فرع محدد</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-                ))}
-              </select>
+              <BranchSelect
+                value={form.branch}
+                onChange={v => setForm(p => ({ ...p, branch: v }))}
+                branches={branches}
+                allLabel="بدون فرع محدد"
+              />
               <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 8 }}>
                 الفرع الافتراضي يُستخدم لتصفية البيانات التلقائية عند دخول المستخدم.
               </p>
@@ -192,7 +192,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
             <div>
               <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
                 الصفحات المتاحة تُحدَّد تلقائياً بناءً على الدور المختار:
-                <strong style={{ color: '#1B6B3A' }}> {roles.find(r => r.value === form.role)?.label}</strong>
+                <strong style={{ color: 'rgb(var(--c-brand-600))' }}> {roles.find(r => r.value === form.role)?.label}</strong>
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {Object.entries(PAGE_LABELS).map(([key, label]) => {
@@ -268,13 +268,13 @@ export default function UsersPage() {
 
   const { data: rolesData } = useQuery({
     queryKey: ['roles'],
-    queryFn:  () => usersApi.staff({}).then(r => r.data.roles || []),
+    queryFn:  () => usersApi.list({}).then(r => r.data.roles || []),
     staleTime: 60_000,
   })
 
   const { data, isLoading } = useQuery({
     queryKey: ['staff-list', filters],
-    queryFn:  () => usersApi.staff({
+    queryFn:  () => usersApi.list({
       search: filters.search || undefined,
       role:   filters.role   || undefined,
     }).then(r => r.data),
@@ -359,7 +359,7 @@ export default function UsersPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
                           width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                          background: '#f0fdf4', color: '#1B6B3A',
+                          background: '#eef3fb', color: 'rgb(var(--c-brand-600))',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontWeight: 700, fontSize: 13,
                         }}>

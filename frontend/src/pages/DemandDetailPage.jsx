@@ -3,16 +3,20 @@
  * Odoo-style 4-tab layout:
  *   📋 Details | 💊 Items | 🔔 Follow-ups | 💬 Logs
  */
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { demandApi, itemsApi } from '../api/client'
+import { demandApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import CanDo from '../components/CanDo'
+import ItemSearchWidget from '../components/ItemSearchWidget'
+
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
-const BRAND  = '#1B6B3A'
+const BRAND  = 'rgb(var(--c-brand-600))'
 const GREEN  = '#10b981'
 const BLUE   = '#3b82f6'
 const ORANGE = '#f59e0b'
@@ -20,15 +24,17 @@ const RED    = '#ef4444'
 const PURPLE = '#8b5cf6'
 const GRAY   = '#9ca3af'
 
+// Mirrors apps/demand/models.py DemandRecord.STATUS_CHOICES (9 states).
 const STATUS_CFG = {
-  new:       { label: 'جديد',           dot: ORANGE, bg: '#fffbeb', text: '#92400e', border: '#fde68a' },
-  assigned:  { label: 'مُعيَّن',        dot: BLUE,   bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
-  follow_up: { label: 'متابعة',         dot: PURPLE, bg: '#f5f3ff', text: '#5b21b6', border: '#ddd6fe' },
-  contacted: { label: 'تم التواصل',     dot: BRAND,  bg: '#f0f9f4', text: '#1B6B3A', border: '#bbf7d0' },
-  waiting:   { label: 'ينتظر المخزون', dot: GRAY,   bg: '#f9fafb', text: '#6b7280', border: '#e5e7eb' },
-  fulfilled: { label: 'تم التوريد',     dot: GREEN,  bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
-  lost:      { label: 'بيع ضائع',      dot: RED,    bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
-  cancelled: { label: 'ملغي',          dot: GRAY,   bg: '#f9fafb', text: '#9ca3af', border: '#e5e7eb' },
+  new:                { label: 'جديد',           dot: ORANGE, bg: '#fffbeb', text: '#92400e', border: '#fde68a' },
+  assigned:           { label: 'مُعيَّن',         dot: BLUE,   bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
+  follow_up:          { label: 'متابعة',          dot: PURPLE, bg: '#f5f3ff', text: '#5b21b6', border: '#ddd6fe' },
+  stock_eta:          { label: 'انتظار المخزون', dot: ORANGE, bg: '#fffbeb', text: '#92400e', border: '#fde68a' },
+  transfer_suggested: { label: 'اقتراح تحويل',    dot: PURPLE, bg: '#f5f3ff', text: '#5b21b6', border: '#ddd6fe' },
+  purchasing_flagged: { label: 'للمشتريات',       dot: RED,    bg: '#fff1f2', text: '#9f1239', border: '#fecdd3' },
+  fulfilled:          { label: 'تم التسليم',       dot: GREEN,  bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
+  lost:               { label: 'بيع ضائع',         dot: RED,    bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
+  cancelled:          { label: 'ملغي',             dot: GRAY,   bg: '#f9fafb', text: '#9ca3af', border: '#e5e7eb' },
 }
 
 const PRIORITY_CFG = {
@@ -66,11 +72,11 @@ const FOLLOW_UP_TYPES = [
 
 function fmtDate(d) {
   if (!d) return '—'
-  try { return format(new Date(d), 'd MMM yyyy — HH:mm', { locale: ar }) } catch { return d }
+  try { return toLatinDigits(format(new Date(d), 'd MMM yyyy — HH:mm', { locale: ar })) } catch { return d }
 }
 function timeAgo(d) {
   if (!d) return ''
-  try { return formatDistanceToNow(new Date(d), { locale: ar, addSuffix: true }) } catch { return '' }
+  try { return toLatinDigits(formatDistanceToNow(new Date(d), { locale: ar, addSuffix: true })) } catch { return '' }
 }
 function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')
@@ -85,10 +91,8 @@ function SlaTimer({ demand }) {
     return () => clearInterval(t)
   }, [])
 
-  const deadline =
-    demand.status === 'new'      ? demand.sla_assigned_due :
-    demand.status === 'assigned' ? demand.sla_contacted_due :
-    demand.is_active             ? demand.sla_resolved_due : null
+  // Backend exposes a single deadline for the current SLA stage.
+  const deadline = demand.sla_deadline
 
   if (!deadline) return null
 
@@ -134,7 +138,38 @@ function Tab({ icon, label, active, onClick, count }) {
 
 // ── Action Buttons ────────────────────────────────────────────────────────────
 
+// Mirrors apps/demand/service.py VALID_TRANSITIONS — drives which actions show.
+const VALID_TRANSITIONS = {
+  new:                ['assigned', 'cancelled'],
+  assigned:           ['follow_up', 'stock_eta', 'transfer_suggested', 'purchasing_flagged', 'fulfilled', 'lost', 'cancelled'],
+  follow_up:          ['follow_up', 'stock_eta', 'transfer_suggested', 'purchasing_flagged', 'fulfilled', 'lost', 'cancelled'],
+  stock_eta:          ['follow_up', 'fulfilled', 'lost', 'cancelled'],
+  transfer_suggested: ['follow_up', 'fulfilled', 'lost', 'cancelled'],
+  purchasing_flagged: ['follow_up', 'stock_eta', 'fulfilled', 'lost', 'cancelled'],
+  fulfilled: [], lost: [], cancelled: [],
+}
+const canTransition = (status, target) => (VALID_TRANSITIONS[status] || []).includes(target)
+
 function ActionBar({ demand, onAction, loading }) {
+  const st = demand.status
+  const canAssign  = canTransition(st, 'assigned')
+  const canContact = canTransition(st, 'follow_up')
+  const canWait    = canTransition(st, 'stock_eta')
+  const canFulfill = canTransition(st, 'fulfilled')
+  const canLost    = canTransition(st, 'lost')
+  const canCancel  = canTransition(st, 'cancelled')
+
+  const { user } = useAuthStore()
+  const [assignForm, setAssignForm] = useState(false)
+  const [assignee, setAssignee]     = useState(String(user?.id || ''))
+  const { data: staffResp } = useQuery({
+    queryKey: ['assignable-staff'],
+    queryFn: () => usersApi.list({ is_active: true }).then(r => r.data.results || r.data),
+    enabled: assignForm,
+    staleTime: 300_000,
+  })
+  const staff = Array.isArray(staffResp) ? staffResp : []
+
   const [lostForm, setLostForm]     = useState(false)
   const [lostReason, setLostReason] = useState('')
   const [lostNotes, setLostNotes]   = useState('')
@@ -156,11 +191,38 @@ function ActionBar({ demand, onAction, loading }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
 
-      {/* Assign — new only, admin/CC */}
-      {demand.can_assign && btn('تعيين', 'assign', {}, BLUE, '👤')}
+      {/* Assign — new only, admin/CC/supervisor */}
+      <CanDo module="demand" action="assign">
+        {canAssign && !assignForm && (
+          <button disabled={loading} onClick={() => setAssignForm(true)}
+            className="text-sm px-4 py-2 rounded-lg font-semibold text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            style={{ background: BLUE }}>
+            👤 تعيين
+          </button>
+        )}
+        {assignForm && (
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+            <select className="border border-blue-300 rounded-lg px-2 py-1 text-xs focus:outline-none max-w-44"
+              value={assignee} onChange={e => setAssignee(e.target.value)}>
+              <option value="">اختر الموظف...</option>
+              {staff.map(s => (
+                <option key={s.id} value={s.id}>
+                  {(s.full_name || s.username || s.name || `#${s.id}`)}{String(s.id) === String(user?.id) ? ' (أنا)' : ''}
+                </option>
+              ))}
+            </select>
+            <button disabled={!assignee}
+              onClick={() => { onAction('assign', { assigned_to: Number(assignee) }); setAssignForm(false) }}
+              className="text-xs text-white px-2 py-1 rounded-lg disabled:opacity-50" style={{ background: BLUE }}>
+              تأكيد
+            </button>
+            <button onClick={() => setAssignForm(false)} className="text-xs text-gray-400">إلغاء</button>
+          </div>
+        )}
+      </CanDo>
 
       {/* Contact */}
-      {demand.can_contact && !showNote && (
+      {canContact && !showNote && (
         <button disabled={loading} onClick={() => setShowNote(true)}
           className="text-sm px-4 py-2 rounded-lg font-semibold text-white transition-colors"
           style={{ background: BRAND }}>
@@ -181,75 +243,82 @@ function ActionBar({ demand, onAction, loading }) {
       )}
 
       {/* Wait for stock */}
-      {['new', 'assigned', 'contacted'].includes(demand.status) &&
-        btn('ينتظر المخزون', 'wait', {}, GRAY, '⏳')}
+      {canWait && btn('ينتظر المخزون', 'wait', {}, GRAY, '⏳')}
 
       {/* Fulfill */}
-      {demand.can_fulfill && !showERP && (
-        <button disabled={loading} onClick={() => setShowERP(true)}
-          className="text-sm px-4 py-2 rounded-lg font-semibold text-white"
-          style={{ background: GREEN }}>
-          ✅ تم التوريد
-        </button>
-      )}
-      {showERP && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-          <input className="border border-green-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none font-mono"
-            placeholder="رقم الفاتورة (اختياري)" dir="ltr"
-            value={erpInput} onChange={e => setErpInput(e.target.value)} />
-          <button onClick={() => { onAction('fulfill', { erp_invoice_id: erpInput }); setShowERP(false) }}
-            className="text-xs text-white px-2 py-1 rounded-lg" style={{ background: GREEN }}>
-            تأكيد
+      <CanDo module="demand" action="finalize">
+        {canFulfill && !showERP && (
+          <button disabled={loading} onClick={() => setShowERP(true)}
+            className="text-sm px-4 py-2 rounded-lg font-semibold text-white"
+            style={{ background: GREEN }}>
+            تم التوريد
           </button>
-          <button onClick={() => setShowERP(false)} className="text-xs text-gray-400">إلغاء</button>
-        </div>
-      )}
+        )}
+        {showERP && (
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+            <input className="border border-green-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none font-mono"
+              placeholder="رقم الفاتورة (اختياري)" dir="ltr"
+              value={erpInput} onChange={e => setErpInput(e.target.value)} />
+            <button onClick={() => { onAction('fulfill', { erp_invoice_ref: erpInput }); setShowERP(false) }}
+              className="text-xs text-white px-2 py-1 rounded-lg" style={{ background: GREEN }}>
+              تأكيد
+            </button>
+            <button onClick={() => setShowERP(false)} className="text-xs text-gray-400">إلغاء</button>
+          </div>
+        )}
+      </CanDo>
 
       {/* Lost */}
-      {demand.can_mark_lost && !lostForm && (
-        <button onClick={() => setLostForm(true)}
-          className="text-sm px-4 py-2 rounded-lg font-semibold text-white" style={{ background: RED }}>
-          ❌ بيع ضائع
-        </button>
-      )}
-      {lostForm && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex-wrap">
-          <select className="border border-red-300 rounded-lg px-2 py-1 text-xs focus:outline-none"
-            value={lostReason} onChange={e => setLostReason(e.target.value)}>
-            <option value="">اختر السبب *</option>
-            {LOST_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
-          <input className="border border-red-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none"
-            placeholder="تفاصيل إضافية..."
-            value={lostNotes} onChange={e => setLostNotes(e.target.value)} />
-          <button
-            disabled={!lostReason}
-            onClick={() => {
-              onAction('markLost', { lost_reason: lostReason, lost_notes: lostNotes })
-              setLostForm(false)
-            }}
-            className="text-xs text-white px-2 py-1 rounded-lg disabled:opacity-50" style={{ background: RED }}>
-            تأكيد
+      <CanDo module="demand" action="edit">
+        {canLost && !lostForm && (
+          <button onClick={() => setLostForm(true)}
+            className="text-sm px-4 py-2 rounded-lg font-semibold text-white" style={{ background: RED }}>
+            بيع ضائع
           </button>
-          <button onClick={() => setLostForm(false)} className="text-xs text-gray-400">إلغاء</button>
-        </div>
-      )}
+        )}
+        {lostForm && (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex-wrap">
+            <select className="border border-red-300 rounded-lg px-2 py-1 text-xs focus:outline-none"
+              value={lostReason} onChange={e => setLostReason(e.target.value)}>
+              <option value="">اختر السبب *</option>
+              {LOST_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <input className="border border-red-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none"
+              placeholder="تفاصيل إضافية..."
+              value={lostNotes} onChange={e => setLostNotes(e.target.value)} />
+            <button
+              disabled={!lostReason}
+              onClick={() => {
+                onAction('markLost', { lost_reason: lostReason, note: lostNotes })
+                setLostForm(false)
+              }}
+              className="text-xs text-white px-2 py-1 rounded-lg disabled:opacity-50" style={{ background: RED }}>
+              تأكيد
+            </button>
+            <button onClick={() => setLostForm(false)} className="text-xs text-gray-400">إلغاء</button>
+          </div>
+        )}
+      </CanDo>
 
-      {/* ERP lookup */}
-      {!demand.erp_lookup_done && (
-        <button onClick={() => onAction('erpLookup', {})}
-          className="btn-secondary text-xs">
-          🔗 بحث في ERP
-        </button>
-      )}
+      {/* ERP lookup / enrich — admin/purchasing only */}
+      <CanDo module="demand" action="approve">
+        {!demand.phcode && (
+          <button onClick={() => onAction('erpLookup', {})}
+            className="btn-secondary text-xs">
+            بحث في ERP
+          </button>
+        )}
+      </CanDo>
 
       {/* Cancel */}
-      {demand.can_cancel && (
-        <button onClick={() => { if (window.confirm('إلغاء الطلب؟')) onAction('cancel', {}) }}
-          className="btn-ghost text-xs text-gray-400 hover:text-red-500">
-          إلغاء الطلب
-        </button>
-      )}
+      <CanDo module="demand" action="delete">
+        {canCancel && (
+          <button onClick={() => { if (window.confirm('إلغاء الطلب؟')) onAction('cancel', {}) }}
+            className="btn-ghost text-xs text-gray-400 hover:text-red-500">
+            إلغاء الطلب
+          </button>
+        )}
+      </CanDo>
     </div>
   )
 }
@@ -268,11 +337,11 @@ function DetailsTab({ demand }) {
         <div className="space-y-2 bg-blue-50 border border-blue-100 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-blue-600">الهاتف</span>
-            <span className="font-mono font-bold text-gray-800" dir="ltr">{demand.contact_phone}</span>
+            <span className="font-mono font-bold text-gray-800" dir="ltr">{demand.phone}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-blue-600">الاسم</span>
-            <span className="font-semibold text-gray-800">{demand.contact_name || '—'}</span>
+            <span className="font-semibold text-gray-800">{demand.customer_name || '—'}</span>
           </div>
           {demand.phcode && (
             <div className="flex items-center justify-between">
@@ -290,14 +359,14 @@ function DetailsTab({ demand }) {
           )}
           <div className="flex items-center justify-between pt-1 border-t border-blue-200">
             <span className="text-xs text-blue-600">ربط ERP</span>
-            <span className={`text-xs font-semibold ${demand.erp_lookup_done ? 'text-green-600' : 'text-orange-600'}`}>
-              {demand.erp_lookup_done ? '✓ تم البحث' : '⏳ لم يتم البحث بعد'}
+            <span className={`text-xs font-semibold ${demand.phcode ? 'text-green-600' : 'text-orange-600'}`}>
+              {demand.phcode ? '✓ تم الربط' : '⏳ لم يتم الربط بعد'}
             </span>
           </div>
-          {demand.customer_name && (
+          {demand.customer && (
             <div className="flex items-center justify-between">
               <span className="text-xs text-blue-600">العميل المرتبط</span>
-              <span className="text-xs font-semibold text-brand-700">{demand.customer_name}</span>
+              <span className="text-xs font-semibold text-brand-700 font-mono">{demand.customer_softech_id || '✓'}</span>
             </div>
           )}
         </div>
@@ -324,7 +393,7 @@ function DetailsTab({ demand }) {
           </div>
           <div className="flex items-center justify-between py-1.5 border-b border-gray-50">
             <span className="text-xs text-gray-400">مصدر الطلب</span>
-            <span className="text-xs text-gray-600">{demand.source_channel}</span>
+            <span className="text-xs text-gray-600">{demand.source_label || demand.source}</span>
           </div>
           <div className="flex items-center justify-between py-1.5 border-b border-gray-50">
             <span className="text-xs text-gray-400">أنشئ بواسطة</span>
@@ -359,9 +428,9 @@ function DetailsTab({ demand }) {
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="text-xs text-red-700 font-black mb-3 flex items-center gap-2">
               ❌ تفاصيل البيع الضائع
-              {demand.lost_value_egp && (
+              {demand.potential_value > 0 && (
                 <span className="font-mono text-sm text-red-800">
-                  — قيمة مقدرة: {parseFloat(demand.lost_value_egp).toLocaleString('ar-EG')} ج.م
+                  — قيمة مقدرة: {Math.round(demand.potential_value).toLocaleString('en-US')} ج.م
                 </span>
               )}
             </div>
@@ -369,15 +438,11 @@ function DetailsTab({ demand }) {
               <div>
                 <div className="text-xs text-red-500 mb-1">السبب</div>
                 <div className="font-semibold text-red-800 text-sm">
-                  {LOST_REASONS.find(r => r.value === demand.lost_reason)?.label || demand.lost_reason}
+                  {demand.lost_reason_label
+                   || LOST_REASONS.find(r => r.value === demand.lost_reason)?.label
+                   || demand.lost_reason || '—'}
                 </div>
               </div>
-              {demand.lost_notes && (
-                <div>
-                  <div className="text-xs text-red-500 mb-1">تفاصيل</div>
-                  <div className="text-sm text-red-700">{demand.lost_notes}</div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -389,9 +454,9 @@ function DetailsTab({ demand }) {
         <div className="flex items-center gap-0 overflow-x-auto">
           {[
             { label: 'إنشاء',      at: demand.created_at,   done: true },
-            { label: 'تعيين',      at: demand.assigned_at,  done: !!demand.assigned_at,  deadline: demand.sla_assigned_due },
-            { label: 'تواصل',      at: demand.contacted_at, done: !!demand.contacted_at, deadline: demand.sla_contacted_due },
-            { label: 'حل',         at: demand.fulfilled_at, done: !!demand.fulfilled_at, deadline: demand.sla_resolved_due },
+            { label: 'تعيين',      at: demand.assigned_at,  done: !!demand.assigned_at },
+            { label: 'تواصل',      at: demand.contacted_at, done: !!demand.contacted_at },
+            { label: 'حل',         at: demand.fulfilled_at, done: !!demand.fulfilled_at },
           ].map((step, i, arr) => (
             <div key={i} className="flex items-center">
               <div className="flex flex-col items-center min-w-20 text-center">
@@ -405,12 +470,12 @@ function DetailsTab({ demand }) {
                 </div>
                 {step.at && (
                   <div className="text-xs text-gray-400 mt-0.5">
-                    {format(new Date(step.at), 'HH:mm', { locale: ar })}
+                    {toLatinDigits(format(new Date(step.at), 'HH:mm', { locale: ar }))}
                   </div>
                 )}
                 {!step.done && step.deadline && (
                   <div className="text-xs text-orange-500 mt-0.5">
-                    حد: {format(new Date(step.deadline), 'HH:mm', { locale: ar })}
+                    حد: {toLatinDigits(format(new Date(step.deadline), 'HH:mm', { locale: ar }))}
                   </div>
                 )}
               </div>
@@ -427,57 +492,51 @@ function DetailsTab({ demand }) {
   )
 }
 
-// ── Tab 2: Items ──────────────────────────────────────────────────────────────
+// ── Substitutes for an existing demand line (Phase 3, detail page) ────────────
 
-function ItemSearch({ onSelect }) {
-  const [q, setQ] = useState('')
-  const [open, setOpen] = useState(false)
-
-
-  const [debouncedQ, setDebouncedQ] = useState('')
-
-useEffect(() => {
-  const delay = setTimeout(() => {
-    setDebouncedQ(q)
-  }, 300)
-
-  return () => clearTimeout(delay)
-}, [q])
-
-
-  const ref = useRef()
-
-  const { data: results } = useQuery({
-    queryKey: ['item-search-detail', debouncedQ],
-queryFn: () => itemsApi.list({ search: debouncedQ, page_size: 10 }).then(r => r.data.results || r.data),
-enabled: debouncedQ.length >= 2, staleTime: 10_000,
+function DetailSubstitutesRow({ demand, line, onRefresh }) {
+  const [busy, setBusy] = useState(false)
+  const addedIds = demand.items.map(i => i.item).filter(Boolean)
+  const { data = [] } = useQuery({
+    queryKey: ['demand-substitutes', line.item, demand.branch],
+    queryFn: () => demandApi.substitutes({ item: line.item, branch: demand.branch })
+      .then(r => r.data.substitutes || []),
+    enabled: !!line.item && !!demand.branch,
+    staleTime: 60_000,
   })
+  const subs = (data || []).filter(s => !addedIds.includes(s.id))
+  if (!subs.length) return null
 
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  async function add(sub) {
+    setBusy(true)
+    try {
+      await demandApi.addItem(demand.id, {
+        item: sub.id, quantity: line.quantity || 1, substitute_for_item: line.item,
+      })
+      onRefresh()
+    } finally { setBusy(false) }
+  }
 
   return (
-    <div ref={ref} className="relative">
-      <input className="input-field text-sm" placeholder="ابحث بالاسم أو الكود..."
-        value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} autoComplete="off" />
-      {open && q.length >= 2 && results?.length > 0 && (
-        <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
-          {results.map(item => (
-            <button key={item.id} type="button"
-              className="w-full text-right px-4 py-2.5 hover:bg-brand-50 transition-colors border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); setQ(''); setOpen(false) }}>
-              <div className="font-semibold text-gray-800 text-sm">{item.name}</div>
-              <div className="text-xs text-blue-500 font-mono">كود: {item.softech_id}</div>
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="border-r-2 border-blue-200 bg-blue-50/60 rounded-lg px-3 py-2 mb-1">
+      <div className="text-[11px] font-bold text-blue-700 mb-1.5">
+        💊 بدائل متوفرة بنفس المادة الفعّالة لـ {line.item_name}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {subs.map(s => (
+          <button key={s.id} type="button" disabled={busy} onClick={() => add(s)}
+            className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1 hover:bg-blue-100 text-blue-800 disabled:opacity-50 transition-colors"
+            title={`متاح بالفرع: ${s.stock_at_branch} · الشبكة: ${s.stock_network} · ${s.pack_price} ج.م`}>
+            + {s.name}
+            <span className="text-blue-400 mr-1">({Math.round(s.stock_at_branch || s.stock_network)} متاح)</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
+
+// ── Tab 2: Items ──────────────────────────────────────────────────────────────
 
 function ItemsTab({ demand, onRefresh }) {
   const [adding, setAdding] = useState(false)
@@ -515,8 +574,8 @@ function ItemsTab({ demand, onRefresh }) {
               <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الصنف</th>
               <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الكمية</th>
               <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">التصنيف</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">المخزون الحالي</th>
-              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">وقت التسجيل</th>
+              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">المخزون بالفرع</th>
+              <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">القيمة المقدرة</th>
               <th className="text-right pb-2 px-2 text-xs font-semibold text-gray-400">الحالة</th>
               {isEditable && <th className="pb-2 px-2" />}
             </tr>
@@ -524,14 +583,25 @@ function ItemsTab({ demand, onRefresh }) {
           <tbody className="divide-y divide-gray-50">
             {demand.items.map(line => {
               const typeColors = {
-                out_of_stock: { bg: '#fef2f2', text: RED,    label: 'نفد' },
-                low_stock:    { bg: '#fffbeb', text: ORANGE, label: 'منخفض' },
-                new_item:     { bg: '#f0f9f4', text: BRAND,  label: 'جديد' },
-                unknown:      { bg: '#f9fafb', text: GRAY,   label: 'غير محدد' },
-              }[line.item_type] || { bg: '#f9fafb', text: GRAY, label: '—' }
+                out_of_stock: { bg: '#fef2f2', text: RED,       label: 'نفد' },
+                low_stock:    { bg: '#fffbeb', text: ORANGE,    label: 'منخفض' },
+                new_item:     { bg: 'rgb(var(--c-brand-50))', text: BRAND,     label: 'جديد' },
+                price_check:  { bg: '#eff6ff', text: '#2563eb', label: 'سعر' },
+              }[line.demand_type] || { bg: '#f9fafb', text: GRAY, label: line.demand_type_label || '—' }
+
+              const itemStatusCls = {
+                pending:         'bg-gray-100 text-gray-600',
+                sourcing:        'bg-orange-100 text-orange-700',
+                available_again: 'bg-blue-100 text-blue-700',
+                recovered:       'bg-green-100 text-green-700',
+                fulfilled:       'bg-green-100 text-green-700',
+                lost:            'bg-red-100 text-red-700',
+                cancelled:       'bg-gray-100 text-gray-400',
+              }[line.item_status] || 'bg-gray-100 text-gray-500'
 
               return (
-                <tr key={line.id} className="hover:bg-gray-50">
+                <Fragment key={line.id}>
+                <tr className="hover:bg-gray-50">
                   <td className="py-3 px-2">
                     <div className="font-semibold text-gray-800 text-sm">{line.item_name}</div>
                     <div className="text-xs text-gray-400 font-mono">{line.item_softech_id}</div>
@@ -558,22 +628,28 @@ function ItemsTab({ demand, onRefresh }) {
                   </td>
                   <td className="py-3 px-2">
                     <span className={`font-bold tabular-nums text-sm ${
-                      line.current_stock > 10 ? 'text-green-700'
-                      : line.current_stock > 0 ? 'text-orange-600'
+                      line.stock_at_branch > 10 ? 'text-green-700'
+                      : line.stock_at_branch > 0 ? 'text-orange-600'
                       : 'text-red-500'
                     }`}>
-                      {line.current_stock > 0 ? `${line.current_stock} وحدة` : 'نفد'}
+                      {line.stock_at_branch > 0 ? `${line.stock_at_branch} وحدة` : 'نفد'}
                     </span>
                   </td>
-                  <td className="py-3 px-2 text-xs text-gray-500 tabular-nums">
-                    {line.stock_at_capture != null ? `${line.stock_at_capture} وحدة` : '—'}
+                  <td className="py-3 px-2 text-xs tabular-nums">
+                    {line.line_value != null ? (
+                      <span className="text-gray-600 inline-flex items-center gap-1">
+                        {Math.round(line.line_value).toLocaleString('en-US')} ج.م
+                        {line.price_is_manual && (
+                          <span className="badge bg-amber-100 text-amber-700 text-[9px]"
+                            title="سعر مُدخَل يدوياً — غير مؤكد ولم يُجلب من ERP">يدوي</span>
+                        )}
+                      </span>
+                    ) : '—'}
                   </td>
                   <td className="py-3 px-2">
-                    {line.is_fulfilled ? (
-                      <span className="badge bg-green-100 text-green-700">✓ وُرِّد</span>
-                    ) : (
-                      <span className="badge bg-gray-100 text-gray-500">لم يُورَّد</span>
-                    )}
+                    <span className={`badge text-xs ${itemStatusCls}`}>
+                      {line.item_status_label || '—'}
+                    </span>
                   </td>
                   {isEditable && (
                     <td className="py-3 px-2">
@@ -584,6 +660,14 @@ function ItemsTab({ demand, onRefresh }) {
                     </td>
                   )}
                 </tr>
+                {isEditable && line.item && line.item_status !== 'fulfilled' && (
+                  <tr>
+                    <td colSpan={7} className="px-2 pb-1">
+                      <DetailSubstitutesRow demand={demand} line={line} onRefresh={onRefresh} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>
@@ -599,12 +683,12 @@ function ItemsTab({ demand, onRefresh }) {
       {adding && (
         <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 space-y-3 mt-2">
           <div className="text-xs font-bold text-brand-700">إضافة صنف</div>
-          <ItemSearch onSelect={setSelItem} />
-          {selItem && (
-            <div className="text-xs text-brand-600 bg-white border border-brand-200 rounded-lg px-2 py-1">
-              ✓ {selItem.name} ({selItem.softech_id})
-            </div>
-          )}
+          <ItemSearchWidget
+            selected={selItem}
+            onSelect={setSelItem}
+            onClear={() => setSelItem(null)}
+            placeholder="ابحث باسم الصنف أو الكود أو الباركود..."
+          />
           <div className="flex gap-2">
             <input type="number" min="0.001" placeholder="الكمية"
               value={qty} onChange={e => setQty(e.target.value)}
@@ -634,11 +718,13 @@ function FollowUpsTab({ demand, onRefresh }) {
 
   async function addFollowUp() {
     if (!fuDate) return
+    // Backend takes hours-from-now; convert the chosen date/time (min 15 min).
+    const hours = Math.max(0.25, (new Date(fuDate) - new Date()) / 3_600_000)
     try {
-      await demandApi.addFollowUp(demand.id, {
-        follow_up_type: fuType,
-        due_date: fuDate,
-        notes: fuNotes,
+      await demandApi.scheduleFollowup(demand.id, {
+        hours_from_now: hours,
+        task_type: fuType,
+        note: fuNotes,
       })
       setShowAdd(false); setFuDate(''); setFuNotes(''); setFuType('call')
       onRefresh()
@@ -649,12 +735,12 @@ function FollowUpsTab({ demand, onRefresh }) {
     const notes = prompt('ملاحظات إتمام المتابعة:')
     if (notes === null) return
     try {
-      await demandApi.completeFollowUp(demand.id, fuId, notes || 'تم')
+      await demandApi.completeFollowup(demand.id, fuId, { note: notes || 'تم' })
       onRefresh()
     } catch { }
   }
 
-  const followUps = demand.follow_ups || []
+  const followUps = demand.followups || []
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -677,15 +763,16 @@ function FollowUpsTab({ demand, onRefresh }) {
                   'bg-white border-gray-200'
                 }`}>
                 <div className="text-xl shrink-0">
-                  {fu.follow_up_type === 'call'        ? '📞'
-                   : fu.follow_up_type === 'whatsapp'  ? '💬'
-                   : fu.follow_up_type === 'visit'     ? '🏥'
-                   : fu.follow_up_type === 'stock_check' ? '📦' : '📝'}
+                  {fu.task_type === 'call'        ? '📞'
+                   : fu.task_type === 'whatsapp'  ? '💬'
+                   : fu.task_type === 'visit'     ? '🏥'
+                   : fu.task_type === 'stock_check' ? '📦'
+                   : fu.task_type === 'sms'       ? '📱' : '📝'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-800 text-sm">
-                      {fu.follow_up_type_label}
+                      {fu.task_type_label}
                     </span>
                     {isOverdue && !isDone && (
                       <span className="badge bg-red-100 text-red-700 text-xs">⚠ فائت</span>
@@ -695,12 +782,12 @@ function FollowUpsTab({ demand, onRefresh }) {
                     )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    تاريخ الاستحقاق: {fu.due_date}
+                    تاريخ الاستحقاق: {fmtDate(fu.due_date)}
                     {fu.assigned_to_name && <span className="mr-2">· مُعيَّن لـ {fu.assigned_to_name}</span>}
                   </div>
-                  {fu.notes && (
+                  {fu.note && (
                     <div className="text-xs text-gray-600 mt-1 bg-gray-50 rounded px-2 py-1">
-                      {fu.notes}
+                      {fu.note}
                     </div>
                   )}
                   {isDone && fu.completed_at && (
@@ -801,7 +888,7 @@ function LogsTab({ demand, onRefresh }) {
           </div>
         )}
         {logs.map(log => {
-          const isSystem = ['system', 'status_change', 'assignment', 'erp_match'].includes(log.log_type)
+          const isSystem = ['system', 'status'].includes(log.log_type)
           if (isSystem) return (
             <div key={log.id} className="flex items-start gap-2 py-2">
               <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-sm shrink-0">
@@ -902,13 +989,13 @@ export default function DemandDetailPage() {
   setActionLoading(true)
     try {
       const map = {
-        assign:    () => demandApi.assign(id, payload.assigned_to),
-        contact:   () => demandApi.contact(id, payload.note),
-        wait:      () => demandApi.wait(id, payload.note),
-        fulfill:   () => demandApi.fulfill(id, payload.erp_invoice_id),
+        assign:    () => demandApi.assign(id, payload.assigned_to ? { assigned_to: payload.assigned_to } : {}),
+        contact:   () => demandApi.followUp(id, { note: payload.note || '' }),
+        wait:      () => demandApi.stockETA(id, {}),
+        fulfill:   () => demandApi.fulfill(id, { erp_invoice_ref: payload.erp_invoice_ref || '' }),
         markLost:  () => demandApi.markLost(id, payload),
-        cancel:    () => demandApi.cancel(id, payload.reason),
-        erpLookup: () => demandApi.erpLookup(id),
+        cancel:    () => demandApi.cancel(id, payload.reason ? { reason: payload.reason } : {}),
+        erpLookup: () => demandApi.enrichFromERP(id),
       }
       if (!map[action]) return
 await map[action]()
@@ -965,7 +1052,7 @@ await map[action]()
                 )}
               </div>
               <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>{demand.contact_name || demand.contact_phone}</span>
+                <span>{demand.customer_name || demand.phone}</span>
                 {demand.phcode && <span className="font-mono text-blue-400">({demand.phcode})</span>}
                 <span>·</span>
                 <span>{demand.branch_name}</span>
@@ -985,7 +1072,7 @@ await map[action]()
             <Tab icon="💊" label="الأصناف"    active={tab === 'items'}     onClick={() => setTab('items')}
               count={demand.items?.length} />
             <Tab icon="🔔" label="المتابعات"  active={tab === 'followups'} onClick={() => setTab('followups')}
-              count={demand.follow_ups?.filter(f => f.status === 'pending').length} />
+              count={demand.followups?.filter(f => f.status === 'pending').length} />
             <Tab icon="💬" label="السجلات"    active={tab === 'logs'}      onClick={() => setTab('logs')}
               count={demand.logs?.filter(l => l.log_type !== 'system').length} />
           </div>

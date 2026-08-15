@@ -1,0 +1,21 @@
+{
+  "name": "صيدليات الرزيقي — حسابي",
+  "short_name": "الرزيقي",
+  "description": "بوابة العملاء — طلباتك ونقاطك وإعادة صرف أدويتك",
+  "start_url": "/portal",
+  "scope": "/portal",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#f9fafb",
+  "theme_color": "#022871",
+  "icons": [
+    {
+      "src": "/portal-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -769,6 +769,10 @@ export const configApi = {
   pharmacyProfile: ()        => api.get('/config/pharmacy/'),
   updatePharmacy:  (data)    => api.patch('/config/pharmacy/', data),
 
+  // Appearance / theme (GET is public; PUT is admin-only)
+  getTheme:        ()        => api.get('/config/theme/'),
+  updateTheme:     (data)    => api.put('/config/theme/', data),
+
   // Dropdown options
   listDropdowns:  (params)  => api.get('/config/dropdowns/', { params }),
   getDropdownKey: (key)     => api.get('/config/dropdowns/', { params: { key } }),

@@ -8,6 +8,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import NotificationBell from './NotificationBell'
 import ModuleNotificationBell from './ModuleNotificationBell'
+import BrandMark from './BrandMark'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -285,8 +286,8 @@ export default function Layout() {
 
           {/* Logo mark */}
           <div className="flex items-center justify-center h-14 border-b border-slate-800 shrink-0">
-            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-black text-base leading-none">ر</span>
+            <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-sm">
+              <BrandMark size={30} />
             </div>
           </div>
 
