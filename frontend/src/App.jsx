@@ -164,6 +164,7 @@ const queryClient = new QueryClient({
 // section; "new" is reached via each list's floating + button (not a tab).
 // `roles` (when present) gates the tab; MobileLayout filters by the user's role.
 const MOBILE_TABS = [
+  { to: '/m/me',           label: 'لوحتي',      icon: '🙋' },
   { to: '/m/pos',          label: 'نقطة البيع', icon: '🧾', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'] },
   { to: '/m/reservations', label: 'الحجوزات',  icon: '📋' },
   { to: '/m/transfers',    label: 'التحويلات', icon: '🔀' },
@@ -248,6 +249,7 @@ export default function App() {
               Reached at /m — bookmark on a phone home screen. */}
           <Route path="/m" element={<RequireAuth><MobileLayout title="صيدليات الرزيقي" tabs={MOBILE_TABS} /></RequireAuth>}>
             <Route index element={<Navigate to="/m/reservations" replace />} />
+            <Route path="me"                element={<MyDashboardPage />} />
             <Route path="pos"               element={<MobilePOSOrderPage />} />
             <Route path="reservations"      element={<MobileReservationsPage />} />
             <Route path="reservations/new"  element={<MobileNewReservationPage />} />

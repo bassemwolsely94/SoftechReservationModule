@@ -55,15 +55,15 @@ function BranchFilter({ options, selected, onChange }) {
   }
   return (
     <div className="flex gap-1 mb-2 flex-wrap items-center">
-      <span className="text-[10px] text-gray-400 ml-1">الفروع:</span>
+      <span className="text-[13px] text-gray-400 ml-1">الفروع:</span>
       {options.map(b => (
         <button key={b} onClick={() => toggle(b)}
-          className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${selected.includes(b) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+          className={`text-[13px] px-2 py-0.5 rounded-full border transition-colors ${selected.includes(b) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
           فرع {b}
         </button>
       ))}
       {selected.length > 0 && (
-        <button onClick={() => onChange([])} className="text-[10px] text-gray-400 underline">مسح</button>
+        <button onClick={() => onChange([])} className="text-[13px] text-gray-400 underline">مسح</button>
       )}
     </div>
   )
@@ -268,11 +268,11 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-gray-300 cursor-move shrink-0 select-none" title="اسحب لإعادة الترتيب">⠿</span>
-          <span className="text-lg shrink-0">{widget.catalog_icon}</span>
+          <span className="text-xl shrink-0">{widget.catalog_icon}</span>
           <div className="min-w-0">
-            <h3 className="font-bold text-sm text-gray-800 truncate">{widget.title || widget.catalog_label}</h3>
+            <h3 className="font-bold text-base text-gray-800 truncate">{widget.title || widget.catalog_label}</h3>
             {widget.identity_label && (
-              <p className="text-[11px] text-gray-400 truncate">{widget.identity_label}</p>
+              <p className="text-sm text-gray-400 truncate">{widget.identity_label}</p>
             )}
           </div>
         </div>
@@ -287,7 +287,7 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
         <div className="flex gap-1 mb-2 flex-wrap">
           {[30, 90, 180, 365].map(d => (
             <button key={d}
-              className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${period === d ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+              className={`text-sm px-2 py-0.5 rounded-full border transition-colors ${period === d ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
               onClick={() => setPeriod(d)}>{d}ي</button>
           ))}
         </div>
@@ -314,7 +314,7 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
       </div>
 
       {dataQ.data?._cached && (
-        <p className="text-[10px] text-gray-300 mt-2">مخزّن مؤقتاً</p>
+        <p className="text-[13px] text-gray-300 mt-2">مخزّن مؤقتاً</p>
       )}
     </div>
   )
@@ -333,7 +333,7 @@ function WidgetBody({ type, payload, wide, widgetId, canEdit, onSaved, branches 
     case 'my_analytics':          return <MyAnalyticsBody payload={payload} />
     case 'my_narrative_reports':  return <NarrativeBody payload={payload} />
     case 'my_tasks':              return <TasksBody payload={payload} />
-    default:                      return <pre className="text-[10px] overflow-auto">{JSON.stringify(payload, null, 1)}</pre>
+    default:                      return <pre className="text-[13px] overflow-auto">{JSON.stringify(payload, null, 1)}</pre>
   }
 }
 
@@ -342,8 +342,8 @@ const EmptyMini = () => <p className="text-xs text-gray-400 text-center py-4">ل
 function Kpi({ label, value, tone = 'text-gray-800' }) {
   return (
     <div className="bg-gray-50 rounded-lg px-3 py-2">
-      <div className="text-[10px] text-gray-400">{label}</div>
-      <div className={`text-sm font-bold ${tone}`}>{value}</div>
+      <div className="text-[13px] text-gray-400">{label}</div>
+      <div className={`text-xl font-bold ${tone}`}>{value}</div>
     </div>
   )
 }
@@ -368,10 +368,10 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
         : { widget_id: widgetId, kind: 'document', branchcode: item.branchcode,
             doccode: item.doccode, docnumber: item.docnumber, revised: val }
       const { data } = await personalApi.setRevision(body)
-      const ok = data.hq_result === 'ok'
-      toast[ok ? 'success' : 'warning'](
-        val ? 'تمت المراجعة' : 'أُلغيت المراجعة',
-        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`)
+      const ok = data.ok
+      toast[ok ? 'success' : 'error'](
+        ok ? (val ? 'تمت المراجعة' : 'أُلغيت المراجعة') : 'لم يكتمل — أحد الخوادم غير متصل',
+        ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`))
       onSaved?.()
     } catch (e) {
       toast.error('تعذّر', e?.response?.data?.detail || '')
@@ -379,7 +379,7 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-gray-200 text-[11px]">
+    <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-gray-200 text-sm">
       <div className="flex items-center gap-2 min-w-0">
         {revised
           ? <span className="text-green-700 font-medium whitespace-nowrap">✔ تمت المراجعة{item.revision_code ? ` #${item.revision_code}` : ''}</span>
@@ -389,10 +389,10 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
       {canEdit && (
         <div className="flex gap-1.5 shrink-0">
           {drift && (
-            <button disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[10px] px-2 py-0.5">إعادة الختم</button>
+            <button disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[13px] px-2 py-0.5">إعادة الختم</button>
           )}
           <button disabled={saving} onClick={() => setRev(!revised)}
-            className={`text-[10px] px-2 py-0.5 rounded ${revised ? 'btn-secondary' : 'btn-primary'} disabled:opacity-50`}>
+            className={`text-[13px] px-2 py-0.5 rounded ${revised ? 'btn-secondary' : 'btn-primary'} disabled:opacity-50`}>
             {saving ? '...' : (revised ? 'إلغاء المراجعة' : '✔ تمييز كمُراجَع')}
           </button>
         </div>
@@ -431,10 +431,10 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
         widget_id: widgetId, branchcode: d.branchcode, doccode: d.doccode,
         docnumber: d.docnumber, comment: draft,
       })
-      const ok = data.hq_result === 'ok'
-      toast[ok ? 'success' : 'warning'](
-        ok ? 'تم الحفظ في SOFTECH' : 'حُفظ جزئياً',
-        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`,
+      const ok = data.ok
+      toast[ok ? 'success' : 'error'](
+        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد الخوادم غير متصل',
+        ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`),
       )
       setEditing(false)
       onSaved?.()
@@ -450,7 +450,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
         <Kpi label="عدد المستندات" value={s.doc_count || docs.length} />
       </div>
       {docs.length === 0 ? <EmptyMini /> : (
-        <div className="max-h-80 overflow-auto -mx-1 divide-y divide-gray-100">
+        <div className="max-h-[32rem] overflow-auto -mx-1 divide-y divide-gray-100">
           {docs.slice(0, 80).map((d, i) => {
             const open = sel === i
             return (
@@ -459,15 +459,15 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                   onClick={() => toggle(i, open)}
                   className={`w-full text-right px-2 py-1.5 ${open ? 'bg-brand-50' : 'hover:bg-gray-50'}`}
                 >
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex items-center gap-2 text-sm">
                     <span className="text-gray-300 shrink-0">{open ? '▾' : '▸'}</span>
                     <span className="text-gray-500 whitespace-nowrap shrink-0">{(d.docdate || '').slice(0, 10)}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${DOCCODE_TONE[d.doccode] || 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[13px] shrink-0 ${DOCCODE_TONE[d.doccode] || 'bg-gray-100 text-gray-500'}`}>
                       {DOCCODE_LABEL[d.doccode] || d.doccode}
                     </span>
                     <span className="mr-auto font-bold text-gray-800 whitespace-nowrap">{money2(d.line_total)}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-400 pr-4 mt-0.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-[13px] text-gray-400 pr-4 mt-0.5 flex-wrap">
                     <span className="whitespace-nowrap">مستند #{fmtDoc(d.docnumber)}</span>
                     <span className="text-gray-300">·</span>
                     <span className="whitespace-nowrap">فرع {d.branchcode}</span>
@@ -488,7 +488,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                     {d.comments && (
                       <>
                         <span className="text-gray-300">·</span>
-                        <span className="text-amber-600 truncate max-w-[150px]" title={d.comments}>📝 {d.comments}</span>
+                        <span className="text-amber-600 truncate max-w-[240px]" title={d.comments}>📝 {d.comments}</span>
                       </>
                     )}
                   </div>
@@ -498,8 +498,8 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                     <div className={`grid gap-1 ${wide ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {d.items.map((it, j) => (
                         <div key={j} className="bg-white rounded-lg px-2 py-1.5 border border-gray-100">
-                          <div className="text-gray-800 text-[11px] font-medium leading-snug">{it.item_name || it.itemcode}</div>
-                          <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                          <div className="text-gray-800 text-sm font-medium leading-snug">{it.item_name || it.itemcode}</div>
+                          <div className="flex items-center justify-between text-[13px] text-gray-400 mt-1">
                             <span>كود {it.itemcode}</span>
                             <span className="text-gray-600">
                               {qtyFmt(it.qty)} × {money2(it.unit_price)} = <span className="text-gray-800 font-semibold">{money2(it.line_value)}</span>
@@ -508,7 +508,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                         </div>
                       ))}
                     </div>
-                    <div className="flex justify-between text-[11px] pt-1.5 mt-1.5 border-t border-gray-200">
+                    <div className="flex justify-between text-sm pt-1.5 mt-1.5 border-t border-gray-200">
                       <span className="text-gray-400">إجمالي المستند</span>
                       <span className="font-bold text-gray-800">{money2(d.docvalue)} ج.م</span>
                     </div>
@@ -516,32 +516,34 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                       {editing ? (
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-gray-400">📝 ملاحظات</span>
-                            <span className="text-[9px] text-gray-400">{draft.length}/100</span>
+                            <span className="text-sm text-gray-400">📝 ملاحظات</span>
+                            <span className="text-[12px] text-gray-400">{draft.length}/100</span>
                           </div>
                           <textarea
                             value={draft} maxLength={100} rows={2} autoFocus
                             onChange={(e) => setDraft(e.target.value)}
-                            className="w-full text-[11px] border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
+                            className="w-full text-sm border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
                             placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)"
                           />
                           <div className="flex gap-1.5">
                             <button disabled={saving} onClick={() => saveComment(d)}
-                              className="btn-primary text-[11px] px-3 py-1 disabled:opacity-50">
+                              className="btn-primary text-sm px-3 py-1 disabled:opacity-50">
                               {saving ? '...' : 'حفظ في SOFTECH'}
                             </button>
                             <button disabled={saving} onClick={() => setEditing(false)}
-                              className="btn-secondary text-[11px] px-3 py-1">إلغاء</button>
+                              className="btn-secondary text-sm px-3 py-1">إلغاء</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-start justify-between gap-2 text-[11px]">
-                          <span className="text-gray-400 shrink-0">📝 ملاحظات</span>
-                          <span className="flex-1 text-gray-700 text-left leading-snug break-words">{d.comments || '—'}</span>
-                          {canEdit && (
-                            <button onClick={() => { setDraft(d.comments || ''); setEditing(true) }}
-                              className="text-gray-400 hover:text-brand-600 shrink-0" title="تعديل الملاحظة">✏️</button>
-                          )}
+                        <div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-400">📝 ملاحظات</span>
+                            {canEdit && (
+                              <button onClick={() => { setDraft(d.comments || ''); setEditing(true) }}
+                                className="text-gray-400 hover:text-brand-600" title="تعديل الملاحظة">✏️ تعديل</button>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-800 leading-relaxed break-words whitespace-pre-wrap mt-1">{d.comments || '—'}</div>
                         </div>
                       )}
                     </div>
@@ -596,10 +598,10 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
         widget_id: widgetId, branchcode: c.branchcode,
         financialdoccode: c.financialdoccode, cheqsno: c.cheqsno, note: draft,
       })
-      const ok = data.hq_result === 'ok'
-      toast[ok ? 'success' : 'warning'](
-        ok ? 'تم الحفظ في SOFTECH' : 'حُفظ جزئياً',
-        `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`,
+      const ok = data.ok
+      toast[ok ? 'success' : 'error'](
+        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد الخوادم غير متصل',
+        ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`),
       )
       setEditing(false)
       onSaved?.()
@@ -615,34 +617,34 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
         <Kpi label="عدد الحركات" value={cheques.length} />
       </div>
       {cheques.length === 0 ? <EmptyMini /> : (
-        <div className="max-h-80 overflow-auto -mx-1 divide-y divide-gray-100">
+        <div className="max-h-[32rem] overflow-auto -mx-1 divide-y divide-gray-100">
           {cheques.slice(0, 80).map((c, i) => {
             const open = sel === i
             return (
               <div key={i}>
                 <button onClick={() => toggle(i, open)}
                   className={`w-full text-right px-2 py-1.5 ${open ? 'bg-brand-50' : 'hover:bg-gray-50'}`}>
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex items-center gap-2 text-sm">
                     <span className="text-gray-300 shrink-0">{open ? '▾' : '▸'}</span>
                     <span className="text-gray-500 whitespace-nowrap shrink-0">{(c.pay_date || '').slice(0, 10)}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${DOCCODE_TONE[c.financialdoccode] || 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[13px] shrink-0 ${DOCCODE_TONE[c.financialdoccode] || 'bg-gray-100 text-gray-500'}`}>
                       {DOCCODE_LABEL[c.financialdoccode] || 'شيك'}
                     </span>
                     <span className="mr-auto font-bold text-gray-800 whitespace-nowrap">{money2(c.amount)}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-400 pr-4 mt-0.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-[13px] text-gray-400 pr-4 mt-0.5 flex-wrap">
                     <span className="whitespace-nowrap">رقم #{c.cheqno || fmtDoc(c.cheqsno)}</span>
                     <span className="text-gray-300">·</span>
                     <span className="whitespace-nowrap">فرع {c.branchcode}</span>
                     {payMethod(c) && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap font-medium">{payMethod(c)}</span></>)}
-                    {c.bankname && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap truncate max-w-[120px]" title={c.bankname}>{c.bankname}</span></>)}
+                    {c.bankname && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap truncate max-w-[200px]" title={c.bankname}>{c.bankname}</span></>)}
                     {c.user && (<><span className="text-gray-300">·</span><span className="whitespace-nowrap">👤 {c.user}</span></>)}
                     {c.revised && (<><span className="text-gray-300">·</span><span className="text-green-600 whitespace-nowrap" title={`تمت المراجعة${c.revision_code ? ' #' + c.revision_code : ''}`}>✔{c.stamp_drift ? ' ⚠' : ''}</span></>)}
-                    {c.note && (<><span className="text-gray-300">·</span><span className="text-amber-600 truncate max-w-[150px]" title={c.note}>📝 {c.note}</span></>)}
+                    {c.note && (<><span className="text-gray-300">·</span><span className="text-amber-600 truncate max-w-[240px]" title={c.note}>📝 {c.note}</span></>)}
                   </div>
                 </button>
                 {open && (
-                  <div className="px-2 pb-2 pt-1 bg-brand-50/30 text-[11px]">
+                  <div className="px-2 pb-2 pt-1 bg-brand-50/30 text-sm">
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                       <Detail k="رقم المرجع" v={c.cheqno || '—'} />
                       <Detail k="طريقة الدفع" v={payMethod(c) || '—'} />
@@ -659,29 +661,31 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-gray-400">📝 ملاحظات الشيك</span>
-                            <span className="text-[9px] text-gray-400">{draft.length}/250</span>
+                            <span className="text-[12px] text-gray-400">{draft.length}/250</span>
                           </div>
                           <textarea value={draft} maxLength={250} rows={2} autoFocus
                             onChange={(e) => setDraft(e.target.value)}
-                            className="w-full text-[11px] border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
+                            className="w-full text-sm border border-gray-200 rounded-lg p-1.5 focus:outline-none focus:border-brand-500"
                             placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)" />
                           <div className="flex gap-1.5">
                             <button disabled={saving} onClick={() => saveNote(c)}
-                              className="btn-primary text-[11px] px-3 py-1 disabled:opacity-50">
+                              className="btn-primary text-sm px-3 py-1 disabled:opacity-50">
                               {saving ? '...' : 'حفظ في SOFTECH'}
                             </button>
                             <button disabled={saving} onClick={() => setEditing(false)}
-                              className="btn-secondary text-[11px] px-3 py-1">إلغاء</button>
+                              className="btn-secondary text-sm px-3 py-1">إلغاء</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-gray-400 shrink-0">📝 ملاحظات</span>
-                          <span className="flex-1 text-gray-700 text-left leading-snug break-words">{c.note || '—'}</span>
-                          {canEdit && (
-                            <button onClick={() => { setDraft(c.note || ''); setEditing(true) }}
-                              className="text-gray-400 hover:text-brand-600 shrink-0" title="تعديل ملاحظة الشيك">✏️</button>
-                          )}
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">📝 ملاحظات</span>
+                            {canEdit && (
+                              <button onClick={() => { setDraft(c.note || ''); setEditing(true) }}
+                                className="text-gray-400 hover:text-brand-600" title="تعديل ملاحظة الشيك">✏️ تعديل</button>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-800 leading-relaxed break-words whitespace-pre-wrap mt-1">{c.note || '—'}</div>
                         </div>
                       )}
                     </div>
@@ -718,31 +722,49 @@ function MyAnalyticsBody({ payload }) {
   const items = payload.top_items || []
   const channels = payload.channels || []
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {channels.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {channels.map((c, i) => (
-            <span key={i} className="text-[10px] bg-brand-50 text-brand-700 rounded-full px-2 py-0.5">
-              {c.channel}: {money(c.value)}
-            </span>
-          ))}
+        <div>
+          <div className="text-[13px] text-gray-400 mb-1.5">المبيعات حسب القناة</div>
+          <div className="flex flex-wrap gap-1.5">
+            {channels.map((c, i) => (
+              <span key={i} className="text-[13px] bg-brand-50 text-brand-700 rounded-lg px-2.5 py-1">
+                <span className="font-semibold">{c.channel_label || `قناة ${c.channel}`}</span>
+                {' — '}{money(c.value)}
+                {c.invoices ? <span className="text-brand-400"> · {c.invoices} فاتورة</span> : null}
+              </span>
+            ))}
+          </div>
         </div>
       )}
-      {items.length === 0 ? <EmptyMini /> : (
-        <div className="max-h-52 overflow-auto">
-          <table className="w-full text-[11px]">
-            <tbody>
-              {items.map((t, i) => (
-                <tr key={i} className="border-t border-gray-50">
-                  <td className="px-1 py-1 text-gray-700 truncate max-w-[160px]" title={t.name}>{t.name}</td>
-                  <td className="px-1 text-left">{qtyFmt(t.qty)}</td>
-                  <td className="px-1 text-left text-gray-600">{money2(t.value)}</td>
+      <div>
+        <div className="text-[13px] text-gray-400 mb-1.5">أعلى الأصناف مبيعاً</div>
+        {items.length === 0 ? <EmptyMini /> : (
+          <div className="max-h-[26rem] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="text-gray-400 sticky top-0 bg-white z-10">
+                <tr>
+                  <th className="text-right px-1 py-1 font-medium">الصنف</th>
+                  <th className="text-left px-1 font-medium whitespace-nowrap">الكمية</th>
+                  <th className="text-left px-1 font-medium whitespace-nowrap">القيمة (ج.م)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {items.map((t, i) => (
+                  <tr key={i} className="border-t border-gray-50">
+                    <td className="px-1 py-1.5 text-gray-700">
+                      <div className="truncate max-w-[300px]" title={t.name}>{t.name}</div>
+                      <div className="text-[12px] text-gray-400">كود {t.softech_id || '—'}</div>
+                    </td>
+                    <td className="px-1 text-left align-top">{qtyFmt(t.qty)}</td>
+                    <td className="px-1 text-left align-top text-gray-600">{money2(t.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -756,8 +778,8 @@ function NarrativeBody({ payload }) {
   return (
     <div className="max-h-60 overflow-auto space-y-1.5">
       {f.map((x, i) => (
-        <div key={i} className="flex items-start gap-2 text-[11px]">
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${SEV[x.severity] || 'bg-gray-100'}`}>{x.severity}</span>
+        <div key={i} className="flex items-start gap-2 text-sm">
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[13px] ${SEV[x.severity] || 'bg-gray-100'}`}>{x.severity}</span>
           <span className="text-gray-600 leading-snug">{x.message_ar}</span>
         </div>
       ))}
@@ -777,7 +799,7 @@ function TasksBody({ payload }) {
       {tasks.length === 0 ? <EmptyMini /> : (
         <div className="max-h-56 overflow-auto space-y-1">
           {tasks.map(t => (
-            <div key={t.id} className="flex items-center justify-between gap-2 text-[11px] border-t border-gray-50 py-1">
+            <div key={t.id} className="flex items-center justify-between gap-2 text-sm border-t border-gray-50 py-1">
               <span className="text-gray-700 truncate">{t.title}</span>
               <div className="flex items-center gap-2 shrink-0">
                 {t.due_date && <span className="text-gray-400">{(t.due_date || '').slice(0, 10)}</span>}
@@ -838,8 +860,8 @@ function AddWidgetModal({ onClose, approvedIdentities, onNeedIdentity, onAdded }
               <span className="text-lg">{c.icon}</span>
               <span className="font-bold text-sm text-gray-800">{c.label}</span>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">{c.desc}</p>
-            <span className="inline-block mt-1 text-[10px] bg-gray-100 rounded px-1.5 py-0.5 text-gray-500">{KIND_LABEL[c.kind]}</span>
+            <p className="text-sm text-gray-400 mt-1">{c.desc}</p>
+            <span className="inline-block mt-1 text-[13px] bg-gray-100 rounded px-1.5 py-0.5 text-gray-500">{KIND_LABEL[c.kind]}</span>
           </button>
         ))}
       </div>
@@ -917,7 +939,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
           <div key={r.person_code} className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="min-w-0">
               <div className="text-sm text-gray-800 truncate">{r.name}</div>
-              <div className="text-[11px] text-gray-400">كود: {r.person_code} {r.ptcode ? `· نوع ${r.ptcode}` : ''}</div>
+              <div className="text-sm text-gray-400">كود: {r.person_code} {r.ptcode ? `· نوع ${r.ptcode}` : ''}</div>
             </div>
             <button className="btn-secondary text-xs shrink-0" disabled={claimM.isPending} onClick={() => claimM.mutate(r)}>
               اطلب اعتماد
@@ -952,11 +974,11 @@ function ManageIdentitiesModal({ identities, onClose, onClaimNew, onChanged }) {
               <div key={i.id} className="flex items-center justify-between gap-2 p-3 rounded-xl border border-gray-100">
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-gray-800 truncate">{i.label || i.person_code}</div>
-                  <div className="text-[11px] text-gray-400">{KIND_LABEL[i.kind]} · كود {i.person_code}</div>
-                  {i.review_note && <div className="text-[11px] text-gray-400 mt-0.5">ملاحظة: {i.review_note}</div>}
+                  <div className="text-sm text-gray-400">{KIND_LABEL[i.kind]} · كود {i.person_code}</div>
+                  {i.review_note && <div className="text-sm text-gray-400 mt-0.5">ملاحظة: {i.review_note}</div>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-[10px] rounded-full px-2 py-0.5 ${b.c}`}>{b.t}</span>
+                  <span className={`text-[13px] rounded-full px-2 py-0.5 ${b.c}`}>{b.t}</span>
                   <button className="text-gray-300 hover:text-red-600" onClick={() => delM.mutate(i.id)}>✕</button>
                 </div>
               </div>
@@ -998,7 +1020,7 @@ function AdminApprovalQueue() {
           <div key={p.id} className="flex items-center justify-between gap-2 bg-white rounded-xl p-3 border border-gray-100">
             <div className="min-w-0">
               <div className="text-sm font-bold text-gray-800 truncate">{p.staff_name} → {p.label || p.person_code}</div>
-              <div className="text-[11px] text-gray-400">{KIND_LABEL[p.kind]} · كود {p.person_code}{p.note ? ` · ${p.note}` : ''}</div>
+              <div className="text-sm text-gray-400">{KIND_LABEL[p.kind]} · كود {p.person_code}{p.note ? ` · ${p.note}` : ''}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button className="btn-primary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'approve' })}>اعتماد</button>
