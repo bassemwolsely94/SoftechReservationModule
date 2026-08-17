@@ -1,0 +1,98 @@
+{
+  "meta": {
+    "label": "after",
+    "host": "192.168.30.12",
+    "docnumber": 468769,
+    "branch": "130",
+    "phcode": "130HD9668",
+    "store": "130",
+    "items": [
+      "107295",
+      "94965"
+    ],
+    "captured_at": "2026-06-22T03:34:10.962111"
+  },
+  "stktransm5": [],
+  "stktrans5": [],
+  "branchesales5": [],
+  "stktransm_samedoc": [],
+  "stktrans_samedoc": [],
+  "branchesales_samedoc": [],
+  "stktransm_phcode_recent": [
+    {
+      "branchcode": "130",
+      "doccode": "30",
+      "docnumber": 21478.0,
+      "docvalue": 275.4,
+      "docvaluepay": 64.8,
+      "patientpayment": 64.8,
+      "ptclassifcode": "10",
+      "trans_time": "2026-06-21T23:36:08.603000+00:00"
+    },
+    {
+      "branchcode": "130",
+      "doccode": "115",
+      "docnumber": 452723.0,
+      "docvalue": 275.4,
+      "docvaluepay": 64.8,
+      "patientpayment": 64.8,
+      "ptclassifcode": "10",
+      "trans_time": "2026-06-21T23:25:26.770000+00:00"
+    }
+  ],
+  "stkbal": [
+    {
+      "storecode": "130",
+      "itemcode": "107295",
+      "nowqty": 2.66667,
+      "nowqtyout": 0.0,
+      "nowcostprice": 81.1306,
+      "opencostprice": 33.6
+    },
+    {
+      "storecode": "130",
+      "itemcode": "94965",
+      "nowqty": 2.66667,
+      "nowqtyout": 0.0,
+      "nowcostprice": 162.0824,
+      "opencostprice": 81.0
+    }
+  ],
+  "picpoints": [],
+  "localcustomerspoints": [
+    {
+      "branchcode": "130",
+      "phcode": "130HD9668",
+      "totpoints": 0,
+      "conpoints": 0
+    }
+  ],
+  "localcustomers_pic": [
+    {
+      "branchcode": "130",
+      "phcode": "130HD9668",
+      "picpoints": 1
+    }
+  ],
+  "lastdocnumbers": [
+    {
+      "branchcode": "000",
+      "lastdocnumberin": 0.0,
+      "lastdocnumberout": 359944.0,
+      "lastdocnumberout_cust": 468770.0,
+      "lastdocnumberout_inv": 0.0,
+      "paymentsno": 497049.0,
+      "ver_branch": "0"
+    },
+    {
+      "branchcode": "130",
+      "lastdocnumberin": 33916.0,
+      "lastdocnumberout": 26318.0,
+      "lastdocnumberout_cust": 452724.0,
+      "lastdocnumberout_inv": 33.0,
+      "paymentsno": 481835.0,
+      "ver_branch": "1"
+    }
+  ],
+  "stktransm_inv": []
+}

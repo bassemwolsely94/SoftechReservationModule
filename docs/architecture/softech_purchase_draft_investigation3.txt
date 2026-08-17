@@ -1,0 +1,81 @@
+Purchase-draft hunt #3: 2026-06-28T12:52:19.279288  (READ-ONLY)
+
+================================================================================
+  1: scan candidate header tables for the draft (docnumber2=1124578)
+================================================================================
+
+  stktransm_prep: cols=43  has docnumber2=True  has docvalue=True
+
+--- stktransm_prep COUNT(*) ---
+  COLS: cnt
+  0
+
+--- stktransm_prep WHERE docnumber2=1124578 ---
+  (no rows)
+
+  stktransm_q: cols=43  has docnumber2=True  has docvalue=True
+
+--- stktransm_q COUNT(*) ---
+  COLS: cnt
+  0
+
+--- stktransm_q WHERE docnumber2=1124578 ---
+  (no rows)
+
+  stktransm9: cols=43  has docnumber2=True  has docvalue=True
+
+--- stktransm9 COUNT(*) ---
+  COLS: cnt
+  41
+
+--- stktransm9 WHERE docnumber2=1124578 ---
+  (no rows)
+
+  stktransm_hq: cols=43  has docnumber2=True  has docvalue=True
+
+--- stktransm_hq COUNT(*) ---
+  COLS: cnt
+  0
+
+--- stktransm_hq WHERE docnumber2=1124578 ---
+  (no rows)
+
+  stktransmres: cols=41  has docnumber2=True  has docvalue=True
+
+--- stktransmres COUNT(*) ---
+  COLS: cnt
+  1
+
+--- stktransmres WHERE docnumber2=1124578 ---
+  (no rows)
+
+  importsm: cols=20  has docnumber2=False  has docvalue=False
+
+--- importsm COUNT(*) ---
+  COLS: cnt
+  0
+
+  imports: cols=26  has docnumber2=False  has docvalue=False
+
+--- imports COUNT(*) ---
+  COLS: cnt
+  0
+
+  itemsimportsm: cols=21  has docnumber2=False  has docvalue=False
+
+--- itemsimportsm COUNT(*) ---
+  COLS: cnt
+  0
+
+  itemsimports: cols=15  has docnumber2=False  has docvalue=False
+
+--- itemsimports COUNT(*) ---
+  COLS: cnt
+  0
+
+================================================================================
+  2: NOT FOUND in any candidate — draft may be client-side/local
+================================================================================
+  The draft was not located in any server table searched.
+
+Complete: 2026-06-28T12:52:21.474265

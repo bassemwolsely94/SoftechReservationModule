@@ -1,0 +1,867 @@
+POS/Cashier discovery started: 2026-06-21T11:57:20.864048
+Profile: prod | effective host: 192.168.1.8
+Mode: READ-ONLY (SELECT only)
+
+================================================================================
+  A: Candidate Tables by NAME pattern
+================================================================================
+
+--- name LIKE '%trans5%' ---
+  chequestrans5
+  costcenterstrans5
+  dm_stktrans5
+  dm_stktrans5photo
+  dm_tripstrans5
+  stktrans5
+  stktrans5_ot
+
+--- name LIKE '%transm5%' ---
+  dm_stktransm5
+  dm_stktransm5log
+  stktransm5
+  stktransm5_ext
+  stktransm5_ot
+  stktransm5_revise
+
+--- name LIKE '%pos%' ---
+  pos_cancel
+  pos_cancel_old
+  pos_negsales
+  pos_shiftclosing
+  postext
+  r3pos_negsales
+
+--- name LIKE '%cashier%' ---
+  (no rows)
+
+--- name LIKE '%cash%' ---
+  branchescash
+  cheques_cashed
+
+--- name LIKE '%sarf%' ---
+  (no rows)
+
+--- name LIKE '%srf%' ---
+  (no rows)
+
+--- name LIKE '%dispens%' ---
+  (no rows)
+
+--- name LIKE '%pend%' ---
+  accitems_pend
+  acctrans_pend
+  banks_safe_pending
+  branchesspends
+
+--- name LIKE '%hold%' ---
+  (no rows)
+
+--- name LIKE '%queue%' ---
+  (no rows)
+
+--- name LIKE '%indirect%' ---
+  (no rows)
+
+--- name LIKE '%preinv%' ---
+  (no rows)
+
+--- name LIKE '%pre_inv%' ---
+  (no rows)
+
+--- name LIKE '%staging%' ---
+  (no rows)
+
+--- name LIKE '%order%' ---
+  cust_orders
+  lastorderno
+  lastordernott
+  piccrmorderdel
+  piccrmorders
+  piccrmorders5
+  piccrmordersnos
+  piccrmorderstatus
+  piccrmorderstrans
+  r3piccrmordersnos
+  r3piccrmorderstatus
+  smsggorders
+  stockorders
+  stockordersm
+  stockordersmpay
+  stockordersmtext
+  stockordersrec
+
+================================================================================
+  B: User tables ending in '5'
+================================================================================
+
+--- name LIKE '%5' ---
+  branchesales5
+  branchesalescc5
+  cheques5
+  cheques_5
+  chequestrans5
+  companiesitems5
+  costcenterstrans5
+  dailyexpenses5
+  dm_custrating5
+  dm_stktrans5
+  dm_stktransm5
+  dm_trips5
+  dm_tripstimes5
+  dm_tripstrans5
+  piccrmorders5
+  salescomm5
+  stktrans5
+  stktransm5
+  stktransm_5
+  stktransmclassif5
+  stktransmcomm5
+  temp_inv5
+  testfix5
+
+================================================================================
+  C: Columns matching dispense-serial / pending patterns
+================================================================================
+
+--- column LIKE '%sarf%' ---
+  (no rows)
+
+--- column LIKE '%srf%' ---
+  (no rows)
+
+--- column LIKE '%dispens%' ---
+  (no rows)
+
+--- column LIKE 'docnumber5' ---
+  dm_custrating | docnumber5 | decimal
+  dm_custrating5 | docnumber5 | decimal
+  dm_stktrans | docnumber5 | decimal
+  dm_stktrans5 | docnumber5 | decimal
+  dm_stktrans5photo | docnumber5 | decimal
+  dm_stktransm | docnumber5 | decimal
+  dm_stktransm5 | docnumber5 | decimal
+  dm_stktransm5log | docnumber5 | decimal
+  dm_stktransmissed | docnumber5 | decimal
+  dm_stktransmlog | docnumber5 | decimal
+  dm_stktransmmissed | docnumber5 | decimal
+  dm_stktransphoto | docnumber5 | decimal
+  dm_tripstimes | docnumber5 | decimal
+  dm_tripstimes5 | docnumber5 | decimal
+  dm_tripstrans | docnumber5 | decimal
+  dm_tripstrans5 | docnumber5 | decimal
+  piccrmorders | docnumber5 | decimal
+  piccrmorders5 | docnumber5 | decimal
+  piccrmorderstrans | docnumber5 | decimal
+  r3dm_custrating | docnumber5 | decimal
+  r3dm_stktrans | docnumber5 | decimal
+  r3dm_stktransm | docnumber5 | decimal
+  r3dm_tripstimes | docnumber5 | decimal
+  r3dm_tripstrans | docnumber5 | decimal
+  stktransm5_revise | docnumber5 | decimal
+  stktransm_5 | docnumber5 | decimal
+
+--- column LIKE '%posno%' ---
+  (no rows)
+
+--- column LIKE '%cashno%' ---
+  cheques_cashed | cashnote | varchar
+
+================================================================================
+  D: Procedures/triggers referencing likely screen logic
+================================================================================
+
+--- Procs/triggers mentioning "cashier"/"sarf"/"trans5" ---
+  tr_dm_stktransm5_updt | TR
+  tr_dm_tripstrans5_ins | TR
+  tr_stktransm5 | TR
+
+================================================================================
+  E: Structure of high-priority candidates
+================================================================================
+
+  All candidates discovered (71):
+    - accitems_pend
+    - acctrans_pend
+    - banks_safe_pending
+    - branchesales5
+    - branchesalescc5
+    - branchescash
+    - branchesspends
+    - cheques5
+    - cheques_5
+    - cheques_cashed
+    - chequestrans5
+    - companiesitems5
+    - costcenterstrans5
+    - cust_orders
+    - dailyexpenses5
+    - dm_custrating
+    - dm_custrating5
+    - dm_stktrans
+    - dm_stktrans5
+    - dm_stktrans5photo
+    - dm_stktransm
+    - dm_stktransm5
+    - dm_stktransm5log
+    - dm_stktransmissed
+    - dm_stktransmlog
+    - dm_stktransmmissed
+    - dm_stktransphoto
+    - dm_trips5
+    - dm_tripstimes
+    - dm_tripstimes5
+    - dm_tripstrans
+    - dm_tripstrans5
+    - lastorderno
+    - lastordernott
+    - piccrmorderdel
+    - piccrmorders
+    - piccrmorders5
+    - piccrmordersnos
+    - piccrmorderstatus
+    - piccrmorderstrans
+    - pos_cancel
+    - pos_cancel_old
+    - pos_negsales
+    - pos_shiftclosing
+    - postext
+    - r3dm_custrating
+    - r3dm_stktrans
+    - r3dm_stktransm
+    - r3dm_tripstimes
+    - r3dm_tripstrans
+    - r3piccrmordersnos
+    - r3piccrmorderstatus
+    - r3pos_negsales
+    - salescomm5
+    - smsggorders
+    - stktrans5
+    - stktrans5_ot
+    - stktransm5
+    - stktransm5_ext
+    - stktransm5_ot
+    - stktransm5_revise
+    - stktransm_5
+    - stktransmclassif5
+    - stktransmcomm5
+    - stockorders
+    - stockordersm
+    - stockordersmpay
+    - stockordersmtext
+    - stockordersrec
+    - temp_inv5
+    - testfix5
+
+  High-priority subset (23):
+    * accitems_pend
+    * acctrans_pend
+    * banks_safe_pending
+    * branchesspends
+    * chequestrans5
+    * costcenterstrans5
+    * dm_stktrans5
+    * dm_stktrans5photo
+    * dm_stktransm5
+    * dm_stktransm5log
+    * dm_tripstrans5
+    * pos_cancel
+    * pos_cancel_old
+    * pos_negsales
+    * pos_shiftclosing
+    * postext
+    * r3pos_negsales
+    * stktrans5
+    * stktrans5_ot
+    * stktransm5
+    * stktransm5_ext
+    * stktransm5_ot
+    * stktransm5_revise
+
+  SCHEMA: accitems_pend  (colid | name | type | len | NULL?)
+    [  1] accitemcode                  varchar        len=9     NOT NULL
+    [  2] accitemname                  varchar        len=50    NOT NULL
+    [  3] acciteml1                    varchar        len=2     NOT NULL
+    [  4] acciteml2                    varchar        len=1     NULL
+    [  5] acciteml3                    varchar        len=1     NULL
+    [  6] acciteml4                    varchar        len=1     NULL
+    [  7] acciteml5                    varchar        len=2     NULL
+    [  8] acciteml6                    varchar        len=2     NULL
+    [  9] acclast                      smallint       len=2     NOT NULL
+    [ 10] accfinalcode                 smallint       len=2     NOT NULL
+    [ 11] accdebit                     decimal        len=8     NOT NULL
+    [ 12] acccredit                    decimal        len=8     NOT NULL
+    [ 13] accnature                    smallint       len=2     NOT NULL
+    [ 14] accdebitopen                 decimal        len=8     NOT NULL
+    [ 15] acccreditopen                decimal        len=8     NOT NULL
+    [ 16] accsystem                    varchar        len=1     NOT NULL
+    [ 17] accdebittemp                 decimal        len=8     NULL
+    [ 18] acccredittemp                decimal        len=8     NULL
+    [ 19] modif_lastupdate             datetime       len=8     NULL
+
+--- accitems_pend — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: acctrans_pend  (colid | name | type | len | NULL?)
+    [  1] accsno                       decimal        len=6     NOT NULL
+    [  2] acclineno                    smallint       len=2     NOT NULL
+    [  3] accitemcode                  varchar        len=9     NOT NULL
+    [  4] acctransdebit                decimal        len=8     NOT NULL
+    [  5] acctranscredit               decimal        len=8     NOT NULL
+    [  6] acctransdebit2               decimal        len=8     NOT NULL
+    [  7] acctranscredit2              decimal        len=8     NOT NULL
+    [  8] acctransdate                 datetime       len=8     NOT NULL
+    [  9] usercode                     varchar        len=5     NOT NULL
+    [ 10] trans_time                   datetime       len=8     NULL
+    [ 11] whogeneratedit               smallint       len=2     NOT NULL
+    [ 12] acctranssource               smallint       len=2     NOT NULL
+    [ 13] ref_number                   decimal        len=6     NULL
+    [ 14] acctransopen                 tinyint        len=1     NULL
+    [ 15] acctransyear                 smallint       len=2     NULL
+    [ 16] acctransmonth                tinyint        len=1     NULL
+    [ 17] table_dumped                 datetime       len=8     NULL
+    [ 18] ver_branch_l1                varchar        len=5     NOT NULL
+    [ 19] ver_branch_l1_orig           varchar        len=2     NULL
+
+--- acctrans_pend — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: banks_safe_pending  (colid | name | type | len | NULL?)
+    [  1] bankcode                     varchar        len=3     NOT NULL
+    [  2] pending_sno                  int            len=4     NOT NULL
+    [  3] given_date                   datetime       len=8     NOT NULL
+    [  4] given_to                     varchar        len=100   NOT NULL
+    [  5] cashvalue                    decimal        len=6     NOT NULL
+    [  6] pendingstatus                tinyint        len=1     NOT NULL
+    [  7] closed_date                  datetime       len=8     NULL
+    [  8] usercode                     varchar        len=5     NOT NULL
+    [  9] trans_time                   datetime       len=8     NOT NULL
+    [ 10] pendingnote                  varchar        len=250   NULL
+    [ 11] closed_usercode              varchar        len=5     NULL
+    [ 12] closed_trans_time            datetime       len=8     NULL
+    [ 13] given_to_empcode             varchar        len=5     NULL
+    [ 14] incusttype                   tinyint        len=1     NULL
+    [ 15] tempduedate                  datetime       len=8     NULL
+
+--- banks_safe_pending — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: branchesspends  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] spendsdate                   datetime       len=8     NOT NULL
+    [  3] intervalcode                 varchar        len=1     NOT NULL
+    [  4] spentcash                    numeric        len=5     NOT NULL
+    [  5] spentdescr                   varchar        len=50    NULL
+
+--- branchesspends — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: chequestrans5  (colid | name | type | len | NULL?)
+    [  1] cheqsno                      int            len=4     NOT NULL
+    [  2] branchcode                   varchar        len=5     NOT NULL
+    [  3] doccode                      varchar        len=3     NOT NULL
+    [  4] docnumber                    decimal        len=6     NOT NULL
+    [  5] docdate                      datetime       len=8     NOT NULL
+    [  6] docvaluepaid                 decimal        len=6     NOT NULL
+    [  7] docvaluepaynow               decimal        len=6     NOT NULL
+    [  8] usercode                     varchar        len=5     NULL
+    [  9] cheqbranchcode               varchar        len=5     NOT NULL
+    [ 10] table_dumped                 datetime       len=8     NULL
+
+--- chequestrans5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: costcenterstrans5  (colid | name | type | len | NULL?)
+    [  1] ccsno                        int            len=4     NOT NULL
+    [  2] branchcode                   varchar        len=5     NOT NULL
+    [  3] doccode                      varchar        len=3     NOT NULL
+    [  4] docnumber                    decimal        len=6     NOT NULL
+    [  5] docdate                      datetime       len=8     NOT NULL
+    [  6] cheqsno                      int            len=4     NOT NULL
+    [  7] trans_source                 tinyint        len=1     NOT NULL
+    [  8] costcentercode               varchar        len=10    NOT NULL
+    [  9] costvalue                    decimal        len=6     NOT NULL
+    [ 10] usercode                     varchar        len=5     NOT NULL
+    [ 11] trans_time                   datetime       len=8     NOT NULL
+    [ 12] trans_sign                   decimal        len=2     NOT NULL
+    [ 13] expcode                      int            len=4     NOT NULL
+    [ 14] table_dumped                 datetime       len=8     NULL
+    [ 15] ver_branchcode               varchar        len=5     NOT NULL
+    [ 16] recdata                      varchar        len=25    NULL
+
+--- costcenterstrans5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: dm_stktrans5  (colid | name | type | len | NULL?)
+    [  1] partnercode                  varchar        len=4     NOT NULL
+    [  2] tenantid                     varchar        len=10    NOT NULL
+    [  3] branchcode                   varchar        len=5     NOT NULL
+    [  4] doccode                      varchar        len=3     NOT NULL
+    [  5] docnumber5                   decimal        len=6     NOT NULL
+    [  6] docdate5                     datetime       len=8     NOT NULL
+    [  7] item_sno                     smallint       len=2     NOT NULL
+    [  8] itemcode                     varchar        len=15    NOT NULL
+    [  9] itemname                     varchar        len=105   NOT NULL
+    [ 10] itemtrans                    char           len=1     NOT NULL
+    [ 11] transqty                     decimal        len=6     NOT NULL
+    [ 12] itemsaleprice                decimal        len=6     NOT NULL
+    [ 13] transprice                   decimal        len=7     NOT NULL
+    [ 14] transprice_total             decimal        len=7     NOT NULL
+
+--- dm_stktrans5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: dm_stktrans5photo  (colid | name | type | len | NULL?)
+    [  1] partnercode                  varchar        len=4     NOT NULL
+    [  2] tenantid                     varchar        len=10    NOT NULL
+    [  3] branchcode                   varchar        len=5     NOT NULL
+    [  4] doccode                      varchar        len=3     NOT NULL
+    [  5] docnumber5                   decimal        len=6     NOT NULL
+    [  6] docdate5                     datetime       len=8     NOT NULL
+    [  7] photo_sno                    smallint       len=2     NOT NULL
+    [  8] so_photo                     text           len=16    NULL
+    [  9] ctrans_time                  datetime       len=8     NOT NULL
+    [ 10] nbs_updtstamp                datetime       len=8     NULL
+    [ 11] vf1                          varchar        len=5     NULL
+
+--- dm_stktrans5photo — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: dm_stktransm5  (colid | name | type | len | NULL?)
+    [  1] partnercode                  varchar        len=4     NOT NULL
+    [  2] tenantid                     varchar        len=10    NOT NULL
+    [  3] cc_branchcode                varchar        len=5     NOT NULL
+    [  4] cc_orderno                   decimal        len=6     NOT NULL
+    [  5] branchcode                   varchar        len=5     NOT NULL
+    [  6] doccode                      varchar        len=3     NOT NULL
+    [  7] docnumber5                   decimal        len=6     NOT NULL
+    [  8] docdate5                     datetime       len=8     NOT NULL
+    [  9] so_priority                  tinyint        len=1     NOT NULL
+    [ 10] no_items                     smallint       len=2     NOT NULL
+    [ 11] no_services                  smallint       len=2     NOT NULL
+    [ 12] phcode                       varchar        len=18    NOT NULL
+    [ 13] phcode_name                  varchar        len=100   NOT NULL
+    [ 14] phcode_contact               varchar        len=40    NOT NULL
+    [ 15] phcode_address               varchar        len=100   NOT NULL
+    [ 16] refurlemail                  varchar        len=100   NULL
+    [ 17] docvalue                     decimal        len=6     NOT NULL
+    [ 18] docvaluepay                  decimal        len=6     NOT NULL
+    [ 19] money_change                 decimal        len=4     NOT NULL
+    [ 20] is_blocked                   tinyint        len=1     NOT NULL
+    [ 21] order_notes                  varchar        len=100   NULL
+    [ 22] so_status                    smallint       len=2     NOT NULL
+    [ 23] so_statustime                datetime       len=8     NOT NULL
+    [ 24] dm_tripid                    varchar        len=20    NULL
+    [ 25] startp_trans_time            datetime       len=8     NOT NULL
+    [ 26] refstoplocationx             decimal        len=6     NULL
+    [ 27] refstoplocationy             decimal        len=6     NULL
+    [ 28] stoplocationx                decimal        len=6     NULL
+    [ 29] stoplocationy                decimal        len=6     NULL
+    [ 30] travel_mins_actual           int            len=4     NULL
+    [ 31] travel_mins_std              int            len=4     NULL
+    [ 32] handle_mins_actual           int            len=4     NULL
+    [ 33] handle_mins_std              int            len=4     NULL
+    [ 34] rating_customer              smallint       len=2     NULL
+    [ 35] rating_system                smallint       len=2     NULL
+    [ 36] money_customer               decimal        len=4     NOT NULL
+    [ 37] money_system                 decimal        len=4     NOT NULL
+    [ 38] cusercode                    varchar        len=10    NOT NULL
+    [ 39] ctrans_time                  datetime       len=8     NOT NULL
+    [ 40] usercode                     varchar        len=10    NOT NULL
+    [ 41] trans_time                   datetime       len=8     NOT NULL
+    [ 42] dm_tripid_order              tinyint        len=1     NULL
+    [ 43] vf1                          varchar        len=5     NULL
+
+--- dm_stktransm5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: dm_stktransm5log  (colid | name | type | len | NULL?)
+    [  1] partnercode                  varchar        len=4     NOT NULL
+    [  2] tenantid                     varchar        len=10    NOT NULL
+    [  3] cc_branchcode                varchar        len=5     NOT NULL
+    [  4] cc_orderno                   decimal        len=6     NOT NULL
+    [  5] branchcode                   varchar        len=5     NOT NULL
+    [  6] doccode                      varchar        len=3     NOT NULL
+    [  7] docnumber5                   decimal        len=6     NOT NULL
+    [  8] docdate5                     datetime       len=8     NOT NULL
+    [  9] so_priority                  tinyint        len=1     NOT NULL
+    [ 10] no_items                     smallint       len=2     NOT NULL
+    [ 11] no_services                  smallint       len=2     NOT NULL
+    [ 12] phcode                       varchar        len=18    NOT NULL
+    [ 13] phcode_name                  varchar        len=100   NOT NULL
+    [ 14] phcode_contact               varchar        len=40    NOT NULL
+    [ 15] phcode_address               varchar        len=100   NOT NULL
+    [ 16] refurlemail                  varchar        len=100   NULL
+    [ 17] docvalue                     decimal        len=6     NOT NULL
+    [ 18] docvaluepay                  decimal        len=6     NOT NULL
+    [ 19] money_change                 decimal        len=4     NOT NULL
+    [ 20] is_blocked                   tinyint        len=1     NOT NULL
+    [ 21] order_notes                  varchar        len=100   NULL
+    [ 22] so_status                    smallint       len=2     NOT NULL
+    [ 23] so_statustime                datetime       len=8     NOT NULL
+    [ 24] dm_tripid                    varchar        len=20    NULL
+    [ 25] startp_trans_time            datetime       len=8     NOT NULL
+    [ 26] refstoplocationx             decimal        len=6     NULL
+    [ 27] refstoplocationy             decimal        len=6     NULL
+    [ 28] stoplocationx                decimal        len=6     NULL
+    [ 29] stoplocationy                decimal        len=6     NULL
+    [ 30] travel_mins_actual           int            len=4     NULL
+    [ 31] travel_mins_std              int            len=4     NULL
+    [ 32] handle_mins_actual           int            len=4     NULL
+    [ 33] handle_mins_std              int            len=4     NULL
+    [ 34] rating_customer              smallint       len=2     NULL
+    [ 35] rating_system                smallint       len=2     NULL
+    [ 36] money_customer               decimal        len=4     NOT NULL
+    [ 37] money_system                 decimal        len=4     NOT NULL
+    [ 38] cusercode                    varchar        len=10    NOT NULL
+    [ 39] ctrans_time                  datetime       len=8     NOT NULL
+    [ 40] usercode                     varchar        len=10    NOT NULL
+    [ 41] trans_time                   datetime       len=8     NOT NULL
+    [ 42] dm_tripid_order              tinyint        len=1     NULL
+    [ 43] vf1                          varchar        len=5     NULL
+
+--- dm_stktransm5log — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: dm_tripstrans5  (colid | name | type | len | NULL?)
+    [  1] partnercode                  varchar        len=4     NOT NULL
+    [  2] tenantid                     varchar        len=10    NOT NULL
+    [  3] branchcode                   varchar        len=5     NOT NULL
+    [  4] doccode                      varchar        len=3     NOT NULL
+    [  5] docnumber5                   decimal        len=6     NOT NULL
+    [  6] docdate5                     datetime       len=8     NOT NULL
+    [  7] dm_tripid                    varchar        len=20    NOT NULL
+    [  8] trans_type                   smallint       len=2     NOT NULL
+    [  9] trans_datetime               datetime       len=8     NOT NULL
+    [ 10] trans_locationx              decimal        len=6     NOT NULL
+    [ 11] trans_locationy              decimal        len=6     NOT NULL
+    [ 12] drivercode                   varchar        len=10    NOT NULL
+    [ 13] travel_mins_actual           int            len=4     NOT NULL
+    [ 14] travel_mins_std              int            len=4     NOT NULL
+    [ 15] handle_mins_actual           int            len=4     NOT NULL
+    [ 16] usercode                     varchar        len=10    NOT NULL
+    [ 17] nbs_updtstamp                datetime       len=8     NULL
+    [ 18] vf1                          varchar        len=5     NULL
+    [ 19] ref_tripid                   varchar        len=20    NULL
+
+--- dm_tripstrans5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: pos_cancel  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] itemcode                     varchar        len=6     NOT NULL
+    [  4] itemsaleprice                decimal        len=4     NOT NULL
+    [  5] transprice                   decimal        len=5     NOT NULL
+    [  6] transqty                     decimal        len=6     NOT NULL
+    [  7] transprice_total             decimal        len=6     NOT NULL
+    [  8] custcode                     varchar        len=8     NOT NULL
+    [  9] usercode                     varchar        len=5     NOT NULL
+    [ 10] trans_time                   datetime       len=8     NOT NULL
+    [ 11] trans_date                   datetime       len=8     NOT NULL
+    [ 12] mitemname                    varchar        len=20    NULL
+
+--- pos_cancel — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: pos_cancel_old  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] itemcode                     varchar        len=5     NOT NULL
+    [  4] itemsaleprice                decimal        len=4     NOT NULL
+    [  5] transprice                   decimal        len=5     NOT NULL
+    [  6] transqty                     decimal        len=5     NOT NULL
+    [  7] transprice_total             decimal        len=6     NOT NULL
+    [  8] custcode                     varchar        len=5     NOT NULL
+    [  9] usercode                     varchar        len=5     NOT NULL
+    [ 10] trans_time                   datetime       len=8     NOT NULL
+    [ 11] trans_date                   datetime       len=8     NOT NULL
+
+--- pos_cancel_old — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: pos_negsales  (colid | name | type | len | NULL?)
+    [  1] branchcode                   char           len=5     NOT NULL
+    [  2] doccode                      char           len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] dblitemflag                  smallint       len=2     NOT NULL
+    [  6] itemcode                     char           len=6     NOT NULL
+    [  7] transqty                     decimal        len=6     NOT NULL
+    [  8] transprice                   decimal        len=5     NOT NULL
+    [  9] transprice_total             decimal        len=6     NOT NULL
+    [ 10] itemexpirydate               datetime       len=8     NULL
+    [ 11] item_partno                  varchar        len=32    NULL
+    [ 12] usercode                     char           len=5     NULL
+    [ 13] trans_time                   datetime       len=8     NULL
+    [ 14] osbranchcode                 char           len=5     NOT NULL
+    [ 15] osdoccode                    char           len=3     NOT NULL
+    [ 16] osdocnumber                  decimal        len=6     NOT NULL
+    [ 17] osdocdate                    datetime       len=8     NOT NULL
+    [ 18] osdblitemflag                smallint       len=2     NOT NULL
+    [ 19] ostransprice                 decimal        len=5     NOT NULL
+
+--- pos_negsales — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: pos_shiftclosing  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] cashiercode                  varchar        len=5     NOT NULL
+    [  3] paymenttype                  varchar        len=2     NOT NULL
+    [  4] trans_time                   datetime       len=8     NOT NULL
+    [  5] moneyvalue1                  decimal        len=7     NOT NULL
+    [  6] moneyvalue2                  decimal        len=7     NOT NULL
+    [  7] usercode                     varchar        len=5     NOT NULL
+    [  8] upto_salesdocnumber          decimal        len=6     NOT NULL
+    [  9] user_cashinhand              decimal        len=6     NOT NULL
+    [ 10] user_cashinhand2             decimal        len=6     NOT NULL
+    [ 11] other_cashinhand             decimal        len=6     NOT NULL
+    [ 12] other_cashiercode            varchar        len=5     NULL
+    [ 13] user_moneyvalue3             decimal        len=6     NULL
+    [ 14] user_moneyvalue4             decimal        len=6     NULL
+    [ 15] user_moneyvalue5             decimal        len=6     NULL
+    [ 16] upto_cheqsno                 decimal        len=6     NOT NULL
+    [ 17] moneyvalue1_get              decimal        len=6     NOT NULL
+    [ 18] table_dumped                 datetime       len=8     NULL
+    [ 19] moneyvaluesales              decimal        len=6     NOT NULL
+    [ 20] moneyvalueret                decimal        len=6     NOT NULL
+    [ 21] bcurrency                    tinyint        len=1     NOT NULL
+    [ 22] bcrateavg                    decimal        len=4     NOT NULL
+    [ 23] bankcode                     varchar        len=5     NULL
+
+--- pos_shiftclosing — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: postext  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] poslinetype                  smallint       len=2     NOT NULL
+    [  3] poslineno                    smallint       len=2     NOT NULL
+    [  4] poslinetext                  varchar        len=60    NULL
+    [  5] usercode                     varchar        len=5     NULL
+    [  6] modif_lastupdate             datetime       len=8     NULL
+
+--- postext — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: r3pos_negsales  (colid | name | type | len | NULL?)
+    [  1] branchcode                   char           len=5     NOT NULL
+    [  2] doccode                      char           len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] dblitemflag                  smallint       len=2     NOT NULL
+    [  6] itemcode                     char           len=6     NOT NULL
+    [  7] transqty                     decimal        len=6     NOT NULL
+    [  8] transprice                   decimal        len=5     NOT NULL
+    [  9] transprice_total             decimal        len=6     NOT NULL
+    [ 10] itemexpirydate               datetime       len=8     NULL
+    [ 11] item_partno                  varchar        len=32    NULL
+    [ 12] usercode                     char           len=5     NULL
+    [ 13] trans_time                   datetime       len=8     NULL
+    [ 14] osbranchcode                 char           len=5     NOT NULL
+    [ 15] osdoccode                    char           len=3     NOT NULL
+    [ 16] osdocnumber                  decimal        len=6     NOT NULL
+    [ 17] osdocdate                    datetime       len=8     NOT NULL
+    [ 18] osdblitemflag                smallint       len=2     NOT NULL
+    [ 19] ostransprice                 decimal        len=5     NOT NULL
+
+--- r3pos_negsales — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktrans5  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] storecode                    varchar        len=3     NOT NULL
+    [  6] itemcode                     varchar        len=6     NOT NULL
+    [  7] transqty                     decimal        len=6     NOT NULL
+    [  8] transprice                   decimal        len=6     NOT NULL
+    [  9] newqty                       decimal        len=6     NULL
+    [ 10] newcostprice                 decimal        len=6     NULL
+    [ 11] itemexpirydate               datetime       len=8     NULL
+    [ 12] itemsaleprice                decimal        len=6     NOT NULL
+    [ 13] itemsalestax                 decimal        len=6     NULL
+    [ 14] itemsaleprice_tax            decimal        len=6     NULL
+    [ 15] pharmacydiscp                decimal        len=4     NULL
+    [ 16] additionaldiscp              decimal        len=4     NULL
+    [ 17] transprice_total             decimal        len=7     NOT NULL
+    [ 18] origintaxp                   decimal        len=4     NULL
+    [ 19] custdiscp                    decimal        len=4     NULL
+    [ 20] specialdiscp                 decimal        len=4     NOT NULL
+    [ 21] bonusqty                     decimal        len=6     NOT NULL
+    [ 22] dblitemflag                  smallint       len=2     NOT NULL
+    [ 23] r_docnumber                  decimal        len=6     NULL
+    [ 24] r_docdate                    datetime       len=8     NULL
+    [ 25] saleprice_extrap             decimal        len=4     NULL
+    [ 26] suppliercode                 varchar        len=8     NULL
+    [ 27] r_doccode                    varchar        len=3     NULL
+    [ 28] s_doccode                    varchar        len=3     NULL
+    [ 29] s_docnumber                  decimal        len=6     NULL
+    [ 30] s_docdate                    datetime       len=8     NULL
+    [ 31] usercode                     varchar        len=5     NULL
+    [ 32] trans_time                   datetime       len=8     NULL
+    [ 33] personcode                   varchar        len=8     NULL
+    [ 34] table_dumped                 datetime       len=8     NULL
+    [ 35] storecode2                   varchar        len=3     NULL
+    [ 36] retqty                       decimal        len=6     NULL
+    [ 37] item_partno                  varchar        len=15    NULL
+    [ 38] costcentercode               varchar        len=10    NULL
+    [ 39] rcostprice                   decimal        len=6     NULL
+    [ 40] vf1                          varchar        len=15    NULL
+    [ 41] vf2                          varchar        len=15    NULL
+    [ 42] vf3                          decimal        len=8     NULL
+    [ 43] vf4                          smallint       len=2     NULL
+    [ 44] promsno                      varchar        len=20    NULL
+    [ 45] promtype                     tinyint        len=1     NULL
+
+--- stktrans5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktrans5_ot  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=100   NOT NULL
+    [  2] order_sno                    decimal        len=8     NOT NULL
+    [  3] item_sno                     smallint       len=2     NOT NULL
+    [  4] item_name                    varchar        len=105   NOT NULL
+    [  5] item_qty                     decimal        len=6     NOT NULL
+    [  6] item_price                   decimal        len=6     NOT NULL
+
+--- stktrans5_ot — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktransm5  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] supp_main_code               varchar        len=8     NULL
+    [  6] docnumber2                   decimal        len=8     NULL
+    [  7] comments                     varchar        len=100   NULL
+    [  8] docvalue                     decimal        len=7     NOT NULL
+    [  9] cust_branch_code             varchar        len=8     NULL
+    [ 10] origintaxp                   decimal        len=4     NULL
+    [ 11] custdiscp                    decimal        len=4     NULL
+    [ 12] specialdiscp                 decimal        len=4     NULL
+    [ 13] storecode                    varchar        len=3     NOT NULL
+    [ 14] docvaluepay                  decimal        len=7     NOT NULL
+    [ 15] fatstatuscode                varchar        len=2     NOT NULL
+    [ 16] ptcode                       varchar        len=3     NULL
+    [ 17] ptclassifcode                varchar        len=2     NULL
+    [ 18] cust_branch_store            varchar        len=5     NULL
+    [ 19] docvaluereturn               decimal        len=7     NOT NULL
+    [ 20] fatcurrentstatus             varchar        len=2     NULL
+    [ 21] docwritedate                 datetime       len=8     NULL
+    [ 22] cust_professional            varchar        len=1     NULL
+    [ 23] saleprice_extrap             decimal        len=4     NULL
+    [ 24] usercode                     varchar        len=5     NULL
+    [ 25] trans_time                   datetime       len=8     NULL
+    [ 26] patientpayment               decimal        len=7     NULL
+    [ 27] table_dumped                 datetime       len=8     NULL
+    [ 28] docvalue1                    decimal        len=7     NOT NULL
+    [ 29] docvalue2                    decimal        len=7     NOT NULL
+    [ 30] docvalue3                    decimal        len=7     NOT NULL
+    [ 31] phcode                       varchar        len=13    NULL
+    [ 32] personnewbal                 decimal        len=6     NULL
+    [ 33] docvaluebc                   decimal        len=7     NULL
+    [ 34] bcrate                       decimal        len=4     NULL
+    [ 35] bcurrency                    tinyint        len=1     NULL
+    [ 36] docvaluepaybc                decimal        len=7     NULL
+    [ 37] cashiercode                  varchar        len=5     NULL
+    [ 38] mitemsys                     varchar        len=2     NULL
+    [ 39] origdoc                      tinyint        len=1     NULL
+    [ 40] refdoctorcode                varchar        len=13    NULL
+    [ 41] docpaydue                    datetime       len=8     NULL
+    [ 42] vf1                          varchar        len=5     NULL
+    [ 43] vf2                          varchar        len=15    NULL
+
+--- stktransm5 — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktransm5_ext  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] etax_type                    tinyint        len=1     NOT NULL
+    [  6] etax_class                   tinyint        len=1     NOT NULL
+    [  7] is_ereceipt                  tinyint        len=1     NOT NULL
+    [  8] receipt_sno                  decimal        len=6     NOT NULL
+    [  9] vf21                         varchar        len=10    NULL
+    [ 10] vf22                         varchar        len=10    NULL
+    [ 11] vf23                         decimal        len=7     NULL
+
+--- stktransm5_ext — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktransm5_ot  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=20    NOT NULL
+    [  2] order_sno                    decimal        len=8     NOT NULL
+    [  3] pic_no                       varchar        len=15    NOT NULL
+    [  4] pic_name                     varchar        len=50    NOT NULL
+    [  5] add_latitudex                decimal        len=6     NULL
+    [  6] add_longitudey               decimal        len=6     NULL
+    [  7] add_bldgno                   varchar        len=10    NULL
+    [  8] add_street1                  varchar        len=50    NULL
+    [  9] add_street2                  varchar        len=50    NULL
+    [ 10] add_zone                     varchar        len=50    NULL
+    [ 11] add_aptno                    varchar        len=10    NULL
+    [ 12] add_floorno                  varchar        len=10    NULL
+    [ 13] add_pobox                    varchar        len=10    NULL
+    [ 14] add_postcode                 varchar        len=10    NULL
+    [ 15] add_areaname                 varchar        len=20    NULL
+    [ 16] add_landmark                 varchar        len=50    NULL
+    [ 17] add_comments                 varchar        len=50    NULL
+    [ 18] pic_phone                    varchar        len=100   NOT NULL
+    [ 19] is_injection                 varchar        len=1     NULL
+    [ 20] is_nursing                   varchar        len=1     NULL
+    [ 21] is_sugar                     varchar        len=1     NULL
+    [ 22] order_stat                   varchar        len=1     NOT NULL
+    [ 23] order_url                    varchar        len=200   NOT NULL
+    [ 24] order_price                  decimal        len=6     NOT NULL
+    [ 25] delivery_stat                varchar        len=1     NOT NULL
+    [ 26] order_transtime              datetime       len=8     NULL
+
+--- stktransm5_ot — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+  SCHEMA: stktransm5_revise  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber5                   decimal        len=6     NOT NULL
+    [  4] docdate5                     datetime       len=8     NOT NULL
+    [  5] docvalue                     decimal        len=6     NOT NULL
+    [  6] cust_branch_code             varchar        len=8     NOT NULL
+    [  7] so_usercode                  varchar        len=5     NOT NULL
+    [  8] so_trans_time                datetime       len=8     NOT NULL
+    [  9] reviseusercode               varchar        len=5     NOT NULL
+    [ 10] revisetrans_time             datetime       len=8     NOT NULL
+    [ 11] reviseresult                 tinyint        len=1     NOT NULL
+    [ 12] revisereason                 varchar        len=5     NULL
+    [ 13] vf1                          varchar        len=5     NULL
+    [ 14] vf2                          varchar        len=15    NULL
+
+--- stktransm5_revise — TOP 5 sample ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Incorrect syntax near '5'.
+
+
+Complete: 2026-06-21T11:57:25.299527
