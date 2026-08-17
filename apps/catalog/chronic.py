@@ -16,7 +16,6 @@ Public API:
   - is_chronic_item(item)      bool — is this Item chronic?
   - get_chronic_category(item)  str  — Arabic label or ''
   - tag_chronic_items()          int  — bulk-tag catalog; returns count created
-  - create_chronic_follow_up_task(demand_record, item, due_hours)
 """
 
 
@@ -146,31 +145,3 @@ def tag_chronic_items() -> int:
             if was_created:
                 created += 1
     return created
-
-
-def create_chronic_follow_up_task(demand_record, item, due_hours: int = 72):
-    """
-    Create a FollowUpTask on a DemandRecord for a chronic medication.
-    Idempotent — won't duplicate pending tasks for the same demand.
-
-    Returns (task, created_bool).
-    """
-    from django.utils import timezone
-    from datetime import timedelta
-    from apps.demand.models import FollowUpTask
-
-    due_date = timezone.now() + timedelta(hours=due_hours)
-    task, created = FollowUpTask.objects.get_or_create(
-        demand=demand_record,
-        task_type='call',
-        status='pending',
-        defaults={
-            'due_date': due_date,
-            'assigned_to': demand_record.assigned_to,
-            'note': (
-                f'متابعة دواء مزمن: {item.name}'
-                ' — يرجى التأكد من توافر الدواء وإبلاغ العميل بموعد الاستلام'
-            ),
-        },
-    )
-    return task, created
