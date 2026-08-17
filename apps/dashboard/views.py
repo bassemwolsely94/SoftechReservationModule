@@ -110,7 +110,7 @@ def dashboard_summary(request):
         'revenue_7d':  float(sales_qs.aggregate(t=Sum('total_amount'))['t'] or 0),
     }
 
-    # ── Customer stats ────────────────────────────────────────────────────────
+    # ── Customer stats + churn intelligence ──────────────────────────────────
     customers = {
         'total': Customer.objects.count(),
         'new_this_month': Customer.objects.filter(
@@ -118,6 +118,34 @@ def dashboard_summary(request):
             created_at__month=today.month
         ).count(),
     }
+    # Churn intelligence (computed by segment_customers — non-blocking)
+    try:
+        customers['churn_high']     = Customer.objects.filter(churn_segment='high').count()
+        customers['churn_critical'] = Customer.objects.filter(churn_segment='critical').count()
+        customers['churn_any']      = Customer.objects.filter(
+            churn_segment__in=('high', 'critical')
+        ).count()
+    except Exception:
+        pass
+
+    # ── Chronic follow-up stats ────────────────────────────────────────────────
+    chronic_followup = {}
+    try:
+        from apps.followups.models import FollowUpTask
+        from datetime import date as _date
+        _today = _date.today()
+        chronic_followup = {
+            'pending':    FollowUpTask.objects.filter(status='pending').count(),
+            'due_today':  FollowUpTask.objects.filter(
+                status='pending', due_date=_today
+            ).count(),
+            'overdue':    FollowUpTask.objects.filter(
+                status__in=('pending', 'called'), due_date__lt=_today
+            ).count(),
+            'missed':     FollowUpTask.objects.filter(status='missed').count(),
+        }
+    except Exception:
+        pass
 
     # ── Low stock alerts ──────────────────────────────────────────────────────
     stock_qs = (
@@ -169,15 +197,16 @@ def dashboard_summary(request):
     }
 
     return Response({
-        'reservations':  reservations,
-        'status_funnel': status_funnel,
-        'by_branch':     by_branch,
-        'sales':         sales,
-        'customers':     customers,
-        'stock_alerts':  stock_alerts,
-        'transfers':     transfers,
-        'sync':          sync,
-        'generated_at':  timezone.now().isoformat(),
+        'reservations':    reservations,
+        'status_funnel':   status_funnel,
+        'by_branch':       by_branch,
+        'sales':           sales,
+        'customers':       customers,
+        'stock_alerts':    stock_alerts,
+        'transfers':       transfers,
+        'sync':            sync,
+        'chronic_followup': chronic_followup,
+        'generated_at':    timezone.now().isoformat(),
     })
 
 
