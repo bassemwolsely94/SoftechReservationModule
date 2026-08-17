@@ -9,5 +9,19 @@ python-decouple==3.8
 django-filter==23.5
 Pillow>=10.3.0
 django-extensions==3.2.3
-pytesseract>=0.3.10
+pytesseract>=0.3.10           # optional: printed text OCR (requires Tesseract binary)
+easyocr>=1.7.0                # local handwriting OCR — no API key needed
+google-genai>=1.0.0           # optional: Gemini free-tier OCR (GEMINI_API_KEY in .env)
 qrcode>=8.0
+pyotp>=2.9.0                   # TOTP 2FA (RFC 6238) for approval-role logins
+openpyxl>=3.1.0
+rapidfuzz>=3.6.0
+# ── WebSocket / real-time ─────────────────────────────────────────────────────
+channels>=4.0.0               # Django Channels — WebSocket support
+daphne>=4.0.0                 # ASGI server (required when channels is in INSTALLED_APPS)
+PyJWT>=2.8.0                  # JWT decode in WS middleware (already pulled by simplejwt)
+imagehash>=4.3.0
+beautifulsoup4>=4.12.0
+# ── Web Push (VAPID) ──────────────────────────────────────────────────────────
+pywebpush>=2.0.0              # browser push notifications (VAPID) — "alive" bell
+PyMySQL==1.2.0  # Issabel CDR (call-center call counts, doc 16 Phase 5)
