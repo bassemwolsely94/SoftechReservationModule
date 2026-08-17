@@ -40,3 +40,6 @@ Not Yet Deployed/
 /tempsave_dml.txt
 /test_results.txt
 /Powershell Commands.txt
+
+# Test/replication scratch state
+_repl_test_state.json
