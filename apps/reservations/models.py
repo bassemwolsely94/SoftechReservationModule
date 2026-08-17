@@ -15,12 +15,30 @@ class Reservation(models.Model):
         ('normal',  'عادي'),
         ('urgent',  'عاجل'),
         ('chronic', 'مريض مزمن'),
+        ('high',    'مهم'),
     ]
+    # ── POS-type channel (mirrors Softech ERP POS screen selection) ─────────────
+    # Ctrl+F2 = Cash Sales  →  cash_sales
+    # Ctrl+F3 = Home Delivery →  home_delivery
+    # Ctrl+F4 = Contract Sales → contract_sales  (sub-channel stored in contract_subtype)
     CHANNEL_CHOICES = [
-        ('pickup',        'استلام من الفرع'),
-        ('home_delivery', 'توصيل للمنزل'),
-        ('insurance',     'تأمين'),
-        ('inquiry',       'استفسار'),
+        ('cash_sales',     'بيع نقدي / كاش (F2)'),
+        ('home_delivery',  'توصيل للمنزل (F3)'),
+        ('contract_sales', 'بيع بالكنتراكت (F4)'),
+    ]
+
+    # ── Contract sub-channel (نوع العميل in Softech, only when channel=contract_sales) ──
+    CONTRACT_SUBTYPE_CHOICES = [
+        ('taakodat',         'تعاقدات / آجل'),
+        ('loyal_customer',   'عميل دائم'),
+        ('health_insurance', 'تأمين صحي'),
+        ('compensation',     'تعويضات الشركات'),
+        ('electronic',       'إيصال إلكتروني بالبطاقة الشخصية'),
+        ('vip',              'Vip'),
+        ('camac',            'تعاقد - سداد أجل - خصم يدوى'),
+        ('clearing',         'مقاصات'),
+        ('donation',         'تبرعات'),
+        ('internal',         'موظفين شركة الرزيقى'),
     ]
 
     customer = models.ForeignKey(
@@ -45,19 +63,27 @@ class Reservation(models.Model):
         null=True, blank=True, related_name='assigned_reservations'
     )
     quantity_requested = models.DecimalField(max_digits=10, decimal_places=2, default=1)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal', db_index=True)
     contact_phone = models.CharField(max_length=50)
     contact_name = models.CharField(max_length=255)
     notes = models.TextField(blank=True)
     channel = models.CharField(
-        max_length=20, choices=CHANNEL_CHOICES, default='pickup',
-        verbose_name='قناة الطلب',
+        max_length=20, choices=CHANNEL_CHOICES, default='cash_sales',
+        verbose_name='قناة الطلب (نوع POS)',
+    )
+    contract_subtype = models.CharField(
+        max_length=30, choices=CONTRACT_SUBTYPE_CHOICES, blank=True,
+        verbose_name='نوع العميل / قناة الكنتراكت',
+        help_text='يُملأ فقط عند اختيار بيع بالكنتراكت',
     )
     expected_arrival_date = models.DateField(null=True, blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
     softech_reserve_id = models.CharField(max_length=50, blank=True)
     image = models.ImageField(upload_to='reservations/%Y/%m/', null=True, blank=True)
+
+    # Built once from STATUS_CHOICES — used in status_label_ar property
+    _STATUS_LABELS: dict = {}   # populated below after class body completes
 
     ORDER_SOURCE_CHOICES = [
         ('cc_whatsapp',     'كول سنتر — واتساب'),
@@ -65,6 +91,7 @@ class Reservation(models.Model):
         ('branch_whatsapp', 'الفرع — واتساب'),
         ('branch_call',     'الفرع — مكالمة'),
         ('online',          'طلب إلكتروني'),
+        ('walk_in',         'زيارة مباشرة'),
     ]
     FULFILLMENT_CHOICES = [
         ('pickup',   'استلام من الفرع'),
@@ -86,11 +113,59 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── ERP Match Verification (post-fulfillment) ─────────────────────────────
+    # After تم التسليم (fulfilled), admin/pharmacist can verify that the
+    # reservation was actually processed in SOFTECH as a sales document
+    # (doccode 115 — مبيعات نقدية).
+    erp_reference         = models.CharField(
+        max_length=50, blank=True,
+        verbose_name='رقم مستند ERP (مبيعات)',
+    )
+    erp_match_status      = models.CharField(
+        max_length=20, blank=True, db_index=True,
+        choices=[
+            ('pending',   'قيد الانتظار'),
+            ('matched',   'متطابق'),
+            ('partial',   'تطابق جزئي'),
+            ('not_found', 'غير موجود'),
+        ],
+        verbose_name='حالة مطابقة ERP',
+    )
+    erp_match_detail      = models.TextField(blank=True, verbose_name='تفاصيل المطابقة')
+    erp_last_checked      = models.DateTimeField(null=True, blank=True, verbose_name='آخر فحص')
+    erp_check_attempts    = models.PositiveSmallIntegerField(default=0, verbose_name='عدد المحاولات')
+    erp_matched_at        = models.DateTimeField(null=True, blank=True, verbose_name='وقت المطابقة')
+    erp_match_doc_code    = models.CharField(max_length=10, blank=True, verbose_name='كود نوع المستند')
+    erp_match_doc_date    = models.DateField(null=True, blank=True, verbose_name='تاريخ المستند')
+    erp_match_doc_value   = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        verbose_name='قيمة المستند',
+    )
+    erp_match_user_code   = models.CharField(max_length=20, blank=True, verbose_name='كود المستخدم (ERP)')
+    erp_match_user_id     = models.CharField(max_length=100, blank=True, verbose_name='اسم مستخدم ERP')
+    erp_match_user_name   = models.CharField(max_length=200, blank=True, verbose_name='الاسم الكامل (ERP)')
+    erp_match_trans_time  = models.DateTimeField(null=True, blank=True, verbose_name='وقت تنفيذ المعاملة (ERP)')
+    erp_match_store_code  = models.CharField(max_length=20, blank=True, verbose_name='كود المخزن (ERP)')
+    erp_matched_items     = models.JSONField(default=list, blank=True, verbose_name='أصناف المطابقة')
+    # Full document lines from SOFTECH (all items on the matched receipt)
+    erp_receipt_lines     = models.JSONField(default=list, blank=True, verbose_name='أصناف الإيصال الكاملة')
+    # Customer info from SOFTECH localcustomers (PIC code, name, phone)
+    erp_customer_info     = models.JSONField(default=dict, blank=True, verbose_name='بيانات العميل (ERP)')
+
+    # ── Class-level lookup maps (built once, not per property call) ──────────────
+    _STATUS_COLORS = {
+        'pending': 'gray', 'available': 'orange', 'contacted': 'blue',
+        'confirmed': 'indigo', 'fulfilled': 'green', 'cancelled': 'red', 'expired': 'red',
+    }
+    _PRIORITY_COLORS = {'normal': 'gray', 'urgent': 'red', 'chronic': 'purple', 'high': 'yellow'}
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['status', 'branch']),
+            models.Index(fields=['status', '-created_at']),   # list filtered by status
             models.Index(fields=['follow_up_date']),
+            models.Index(fields=['branch', '-created_at']),   # branch-scoped list
         ]
 
     @property
@@ -110,27 +185,49 @@ class Reservation(models.Model):
 
     @property
     def priority_color(self):
-        return {
-            'normal': 'gray',
-            'urgent': 'red',
-            'chronic': 'purple',
-        }.get(self.priority, 'gray')
+        return self._PRIORITY_COLORS.get(self.priority, 'gray')
 
     @property
     def status_color(self):
-        return {
-            'pending': 'gray',
-            'available': 'orange',
-            'contacted': 'blue',
-            'confirmed': 'indigo',
-            'fulfilled': 'green',
-            'cancelled': 'red',
-            'expired': 'red',
-        }.get(self.status, 'gray')
+        return self._STATUS_COLORS.get(self.status, 'gray')
 
     @property
     def status_label_ar(self):
-        return dict(self.STATUS_CHOICES).get(self.status, self.status)
+        # dict() called once at class definition — reuse as class attribute
+        return self._STATUS_LABELS.get(self.status, self.status)
+
+
+class ReservationLine(models.Model):
+    """
+    One item line in a multi-item reservation basket.
+    When a reservation has lines, they are the authoritative item list.
+    When it has no lines, the header item/qty fields apply (single-item, backward compat).
+    """
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='lines',
+    )
+    item = models.ForeignKey(
+        'catalog.Item', on_delete=models.PROTECT,
+        null=True, blank=True,
+    )
+    manual_item_name = models.CharField(max_length=500, blank=True)
+    quantity_requested = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'صنف في الحجز'
+        verbose_name_plural = 'أصناف الحجز'
+
+    @property
+    def item_label(self):
+        if self.item_id:
+            return self.item.name
+        return self.manual_item_name or '(صنف غير مكوَّد)'
+
+    def __str__(self):
+        return f'{self.item_label} × {self.quantity_requested} — حجز #{self.reservation_id}'
 
 
 class ReservationDownpayment(models.Model):
@@ -265,7 +362,7 @@ class ReservationActivity(models.Model):
     )
 
     # Soft-delete — message body/attachments are redacted but the tombstone stays visible
-    is_deleted = models.BooleanField(default=False, verbose_name='محذوف')
+    is_deleted = models.BooleanField(default=False, db_index=True, verbose_name='محذوف')
     deleted_at  = models.DateTimeField(null=True, blank=True, verbose_name='وقت الحذف')
     deleted_by  = models.ForeignKey(
         'users.StaffProfile',
@@ -283,15 +380,21 @@ class ReservationActivity(models.Model):
     def __str__(self):
         return f"[{self.get_activity_type_display()}] حجز #{self.reservation_id} — {self.created_at:%Y-%m-%d %H:%M}"
 
+    # Class-level lookup maps — built once, reused on every property call
+    _ACTIVITY_TYPES_MAP: dict = {}   # populated below
+
     @property
     def activity_icon(self):
-        label = dict(self.ACTIVITY_TYPES).get(self.activity_type, '')
-        # Extract just the emoji
+        label = self._ACTIVITY_TYPES_MAP.get(self.activity_type, '')
         return label.split(' ')[0] if label else '•'
 
     @property
     def activity_label(self):
-        label = dict(self.ACTIVITY_TYPES).get(self.activity_type, self.activity_type)
-        # Strip emoji
+        label = self._ACTIVITY_TYPES_MAP.get(self.activity_type, self.activity_type)
         parts = label.split(' ', 1)
         return parts[1] if len(parts) > 1 else label
+
+
+# ── Populate class-level lookup maps (after class body is complete) ────────────
+Reservation._STATUS_LABELS       = dict(Reservation.STATUS_CHOICES)
+ReservationActivity._ACTIVITY_TYPES_MAP = dict(ReservationActivity.ACTIVITY_TYPES)

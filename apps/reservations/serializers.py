@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage
+from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 
 
 # ── Reservation Images ────────────────────────────────────────────────────────
@@ -145,6 +145,52 @@ class ReservationActivityCreateSerializer(serializers.ModelSerializer):
         return data
 
 
+# ── Reservation Lines (basket) ────────────────────────────────────────────────
+# Defined here — before ReservationDetailSerializer which embeds them.
+
+class ReservationLineSerializer(serializers.ModelSerializer):
+    item_name = serializers.SerializerMethodField()
+    item_softech_id = serializers.SerializerMethodField()
+    item_sale_price = serializers.SerializerMethodField()
+
+    def get_item_name(self, obj):
+        return obj.item.name if obj.item_id else obj.manual_item_name or '(صنف غير مكوَّد)'
+
+    def get_item_softech_id(self, obj):
+        return obj.item.softech_id if obj.item_id else None
+
+    def get_item_sale_price(self, obj):
+        if not obj.item_id:
+            return None
+        price = obj.item.pack_price
+        return float(price) if price is not None else None
+
+    class Meta:
+        model = ReservationLine
+        fields = [
+            'id', 'item', 'item_name', 'item_softech_id', 'item_sale_price',
+            'manual_item_name', 'quantity_requested', 'notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class ReservationLineCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReservationLine
+        fields = ['item', 'manual_item_name', 'quantity_requested', 'notes']
+
+    def validate(self, data):
+        has_item = bool(data.get('item'))
+        has_manual = bool((data.get('manual_item_name') or '').strip())
+        if not has_item and not has_manual:
+            raise serializers.ValidationError(
+                {'item': 'يجب تحديد صنف أو إدخال اسمه يدوياً'}
+            )
+        if data.get('quantity_requested', 1) <= 0:
+            raise serializers.ValidationError({'quantity_requested': 'الكمية يجب أن تكون أكبر من صفر'})
+        return data
+
+
 # ── Reservation List ──────────────────────────────────────────────────────────
 
 class ReservationListSerializer(serializers.ModelSerializer):
@@ -162,6 +208,19 @@ class ReservationListSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     activity_count = serializers.SerializerMethodField()
     is_manual_item = serializers.SerializerMethodField()
+    lines_count = serializers.SerializerMethodField()
+    lines = serializers.SerializerMethodField()
+
+    def get_lines(self, obj):
+        return [
+            {
+                'id': line.pk,
+                'item_name': line.item.name if line.item_id else (line.manual_item_name or '—'),
+                'item_softech_id': line.item.softech_id if line.item_id else None,
+                'quantity_requested': float(line.quantity_requested),
+            }
+            for line in obj.lines.select_related('item').all()
+        ]
 
     def get_customer_name(self, obj):
         customer = getattr(obj, 'customer', None)
@@ -199,15 +258,40 @@ class ReservationListSerializer(serializers.ModelSerializer):
         # Populated via annotation in viewset
         return getattr(obj, 'activity_count', 0)
 
+    def get_lines_count(self, obj):
+        # Populated via annotation in viewset (lines__count); fall back to queryset count
+        annotated = getattr(obj, 'lines_count', None)
+        if annotated is not None:
+            return annotated
+        return obj.lines.count()
+
     def get_item_sale_price(self, obj):
-        return float(obj.item.unit_sale_price) if obj.item_id else None
+        if not obj.item_id:
+            return None
+        price = obj.item.pack_price
+        return float(price) if price is not None else None
 
     item_sale_price         = serializers.SerializerMethodField()
     customer_softech_pic    = serializers.SerializerMethodField()
     channel_label           = serializers.SerializerMethodField()
+    contract_subtype_label  = serializers.SerializerMethodField()
+    channel_display         = serializers.SerializerMethodField()
 
     def get_channel_label(self, obj):
         return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
+
+    def get_contract_subtype_label(self, obj):
+        if not obj.contract_subtype:
+            return ''
+        return dict(Reservation.CONTRACT_SUBTYPE_CHOICES).get(obj.contract_subtype, obj.contract_subtype)
+
+    def get_channel_display(self, obj):
+        """Full display: 'بيع بالكنتراكت — تأمين صحي' or 'بيع نقدي / كاش (F2)'"""
+        base = dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
+        if obj.channel == 'contract_sales' and obj.contract_subtype:
+            sub = dict(Reservation.CONTRACT_SUBTYPE_CHOICES).get(obj.contract_subtype, obj.contract_subtype)
+            return f'{base} — {sub}'
+        return base
 
     class Meta:
         model = Reservation
@@ -217,13 +301,13 @@ class ReservationListSerializer(serializers.ModelSerializer):
             'item_sale_price',
             'branch_name', 'branch_id',
             'quantity_requested', 'status', 'status_label', 'priority',
-            'channel', 'channel_label',
+            'channel', 'channel_label', 'contract_subtype', 'contract_subtype_label', 'channel_display',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name',
             'expected_arrival_date', 'follow_up_date',
             'assigned_to_name', 'created_by_name',
             'status_color', 'priority_color',
-            'image_url', 'activity_count',
+            'image_url', 'activity_count', 'lines_count', 'lines',
             'created_at', 'updated_at',
         ]
 
@@ -250,17 +334,47 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
     images = ReservationImageSerializer(many=True, read_only=True)
     image_url = serializers.SerializerMethodField()
 
+    lines = ReservationLineSerializer(many=True, read_only=True)
+
     # Live stock at all branches for this item
     stock_by_branch      = serializers.SerializerMethodField()
     item_sale_price      = serializers.SerializerMethodField()
     customer_softech_pic = serializers.SerializerMethodField()
     channel_label        = serializers.SerializerMethodField()
+    contract_subtype_label = serializers.SerializerMethodField()
+    channel_display      = serializers.SerializerMethodField()
+    can_check_erp_match  = serializers.SerializerMethodField()
+
+    def get_can_check_erp_match(self, obj):
+        """True when admin/pharmacist can trigger ERP match on a fulfilled reservation."""
+        if obj.status != 'fulfilled':
+            return False
+        request = self.context.get('request')
+        if not request:
+            return False
+        profile = getattr(request.user, 'staff_profile', None)
+        return profile is not None and profile.role in ('admin', 'pharmacist', 'purchasing')
 
     def get_item_sale_price(self, obj):
-        return float(obj.item.unit_sale_price) if obj.item_id else None
+        if not obj.item_id:
+            return None
+        price = obj.item.pack_price
+        return float(price) if price is not None else None
 
     def get_channel_label(self, obj):
         return dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
+
+    def get_contract_subtype_label(self, obj):
+        if not obj.contract_subtype:
+            return ''
+        return dict(Reservation.CONTRACT_SUBTYPE_CHOICES).get(obj.contract_subtype, obj.contract_subtype)
+
+    def get_channel_display(self, obj):
+        base = dict(Reservation.CHANNEL_CHOICES).get(obj.channel, obj.channel)
+        if obj.channel == 'contract_sales' and obj.contract_subtype:
+            sub = dict(Reservation.CONTRACT_SUBTYPE_CHOICES).get(obj.contract_subtype, obj.contract_subtype)
+            return f'{base} — {sub}'
+        return base
 
     def get_customer_name(self, obj):
         customer = getattr(obj, 'customer', None)
@@ -343,7 +457,7 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_name',
             'created_by_name',
             'quantity_requested', 'status', 'status_label', 'priority',
-            'channel', 'channel_label',
+            'channel', 'channel_label', 'contract_subtype', 'contract_subtype_label', 'channel_display',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date',
@@ -353,6 +467,16 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
             'status_logs',
             'activities',
             'created_at', 'updated_at',
+            # ERP match fields
+            'erp_reference',
+            'erp_match_status', 'erp_match_detail',
+            'erp_last_checked', 'erp_check_attempts', 'erp_matched_at',
+            'erp_match_doc_code', 'erp_match_doc_date', 'erp_match_doc_value',
+            'erp_match_user_code', 'erp_match_user_id', 'erp_match_user_name',
+            'erp_match_trans_time', 'erp_match_store_code', 'erp_matched_items',
+            'erp_receipt_lines', 'erp_customer_info',
+            'can_check_erp_match',
+            'lines',
         ]
         read_only_fields = ['softech_reserve_id', 'created_at', 'updated_at']
 
@@ -363,12 +487,14 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
+            'id',
             'customer', 'item', 'manual_item_name', 'branch', 'assigned_to',
-            'quantity_requested', 'priority', 'channel',
+            'quantity_requested', 'priority', 'channel', 'contract_subtype',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name',
             'notes', 'expected_arrival_date', 'follow_up_date', 'image',
         ]
+        read_only_fields = ['id']
 
     def validate_quantity_requested(self, value):
         if value <= 0:
@@ -390,7 +516,7 @@ class ReservationUpdateSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = [
             'branch', 'item', 'manual_item_name',
-            'assigned_to', 'quantity_requested', 'priority', 'channel',
+            'assigned_to', 'quantity_requested', 'priority', 'channel', 'contract_subtype',
             'order_source', 'fulfillment_method',
             'contact_phone', 'contact_name', 'notes',
             'expected_arrival_date', 'follow_up_date', 'image',
@@ -427,3 +553,28 @@ class ReservationDownpaymentCreateSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError('المبلغ يجب أن يكون أكبر من صفر')
         return value
+
+
+# ── Bulk actions ───────────────────────────────────────────────────────────────
+
+class BulkActionSerializer(serializers.Serializer):
+    ACTION_CHOICES = ['assign', 'change_status', 'export']
+    action = serializers.ChoiceField(choices=ACTION_CHOICES)
+    ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        min_length=1,
+        max_length=200,
+    )
+    # For assign
+    assigned_to = serializers.IntegerField(required=False, allow_null=True)
+    # For change_status
+    status = serializers.ChoiceField(
+        choices=[s[0] for s in Reservation.STATUS_CHOICES],
+        required=False,
+    )
+    note = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate(self, data):
+        if data['action'] == 'change_status' and not data.get('status'):
+            raise serializers.ValidationError({'status': 'الحالة مطلوبة لهذا الإجراء'})
+        return data
