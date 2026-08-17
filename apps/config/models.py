@@ -41,6 +41,21 @@ class SystemSetting(models.Model):
         return f'{self.key} = {self.value}'
 
     # ── helper ────────────────────────────────────────────────────────────────
+    @classmethod
+    def get(cls, key, default=None):
+        """
+        Fetch a setting's typed value by key, or `default` if missing/unparsable.
+
+        NOTE: several callers (e.g. apps/transits) already call
+        SystemSetting.get(...) inside try/except — before this method existed
+        those calls raised AttributeError and silently used their defaults.
+        """
+        row = cls.objects.filter(key=key).only('value', 'value_type').first()
+        if row is None:
+            return default
+        val = row.typed_value()
+        return default if val is None else val
+
     def typed_value(self):
         """Return value cast to the declared type."""
         if self.value_type == 'integer':
@@ -91,3 +106,53 @@ class DropdownOption(models.Model):
 
     def __str__(self):
         return f'[{self.dropdown_key}] {self.label} ({self.value})'
+
+
+class PharmacyProfile(models.Model):
+    """
+    Singleton model (pk=1) — pharmacy chain contact details.
+    Used in printed receipts, WhatsApp messages, and customer-facing footers.
+    """
+    name_ar             = models.CharField(max_length=200, default='صيدليات الرزيقي',
+                                           verbose_name='الاسم بالعربية')
+    name_en             = models.CharField(max_length=200, default='ElRezeiky Pharmacies',
+                                           verbose_name='الاسم بالإنجليزية')
+    tagline_ar          = models.CharField(max_length=300, blank=True,
+                                           verbose_name='الشعار / التعريف')
+    website             = models.CharField(max_length=200, blank=True,
+                                           verbose_name='الموقع الإلكتروني')
+    whatsapp_number     = models.CharField(max_length=30, blank=True,
+                                           verbose_name='رقم واتساب الرئيسي',
+                                           help_text='بدون + (مثل: 201055000468)')
+    call_center_numbers = models.TextField(blank=True,
+                                           verbose_name='أرقام الاتصال',
+                                           help_text='كل رقم في سطر منفصل')
+    extra_footer_ar     = models.TextField(blank=True,
+                                           verbose_name='نص تذييل إضافي')
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'ملف الصيدلية'
+        verbose_name_plural = 'ملف الصيدلية'
+
+    def __str__(self):
+        return self.name_ar
+
+    # ── singleton accessor ────────────────────────────────────────────────────
+    @classmethod
+    def get(cls):
+        """Return the singleton profile, creating it with defaults if absent."""
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={
+            'name_ar':             'صيدليات الرزيقي',
+            'name_en':             'ElRezeiky Pharmacies',
+            'tagline_ar':          'نحن هنا لخدمتكم',
+            'website':             '',
+            'whatsapp_number':     '201055000468',
+            'call_center_numbers': '01055000468',
+            'extra_footer_ar':     '',
+        })
+        return obj
+
+    def call_center_list(self):
+        """Return a clean list of call center numbers (newline-separated)."""
+        return [n.strip() for n in self.call_center_numbers.splitlines() if n.strip()]
