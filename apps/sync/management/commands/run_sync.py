@@ -1,6 +1,9 @@
 """
 python manage.py run_sync           # incremental (last 10 min)
 python manage.py run_sync --full    # full backfill (last 90 days)
+
+For a DEEP historical backfill (months/years, for KPI forecasting — doc 16),
+use `backfill_sales_history` instead (marches month-by-month, bounded memory).
 """
 from django.core.management.base import BaseCommand
 
