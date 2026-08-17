@@ -30,7 +30,7 @@ from .serializers import (
 
 def _get_profile(request):
     try:
-        return request.user.staffprofile
+        return request.user.staff_profile
     except Exception:
         return None
 

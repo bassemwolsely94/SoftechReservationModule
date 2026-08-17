@@ -328,3 +328,161 @@ class FollowUpProtocol(models.Model):
         cust = self.get_customer_type_filter_display()
         days_str = f' ({self.days} يوم)' if self.days else ''
         return f'{self.get_task_type_display()} | {freq}{days_str} | {cust}'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Clinical Safety Knowledge Base
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DrugInteraction(models.Model):
+    """
+    Drug-drug interaction knowledge base.
+
+    Seeded from: management command seed_drug_interactions (to be built).
+    Also manually curated by pharmacists via Django admin.
+
+    Used by:
+      - Recommendation engine (clinical safety filter)
+      - Future POS screening
+      - CustomerHealthProfile.active_medications check
+
+    IMPORTANT: ingredient_a < ingredient_b alphabetically (enforced on save)
+    so that (metformin, aspirin) and (aspirin, metformin) collapse into one row.
+    """
+    SEVERITY_CHOICES = [
+        ('major',    'خطير — تجنب الجمع'),
+        ('moderate', 'متوسط — استخدم بحذر'),
+        ('minor',    'بسيط — راقب العميل'),
+    ]
+
+    ingredient_a   = models.CharField(
+        max_length=200, db_index=True,
+        verbose_name='المادة الفعّالة أ',
+    )
+    ingredient_b   = models.CharField(
+        max_length=200, db_index=True,
+        verbose_name='المادة الفعّالة ب',
+    )
+    severity       = models.CharField(
+        max_length=10, choices=SEVERITY_CHOICES, db_index=True,
+        verbose_name='شدة التفاعل',
+    )
+    mechanism      = models.TextField(
+        blank=True,
+        verbose_name='آلية التفاعل',
+    )
+    clinical_effect = models.TextField(
+        blank=True,
+        verbose_name='الأثر السريري',
+    )
+    management_ar  = models.TextField(
+        blank=True,
+        verbose_name='توصية الإدارة (عربي)',
+        help_text='ما يجب على الصيدلاني فعله عند اكتشاف هذا التفاعل',
+    )
+    management_en  = models.TextField(blank=True, verbose_name='Management (English)')
+    is_active      = models.BooleanField(default=True, db_index=True)
+    source         = models.CharField(
+        max_length=50, blank=True,
+        verbose_name='المصدر',
+        help_text='مثال: Drugs.com, BNF, Micromedex, Manual',
+    )
+    created_by     = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name='أُضيف بواسطة',
+    )
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'تفاعل دوائي'
+        verbose_name_plural = 'التفاعلات الدوائية'
+        # Enforce canonical ordering: ingredient_a ≤ ingredient_b
+        unique_together = ('ingredient_a', 'ingredient_b')
+        indexes = [
+            models.Index(fields=['ingredient_a', 'severity']),
+            models.Index(fields=['ingredient_b', 'severity']),
+            models.Index(fields=['severity', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f'{self.ingredient_a} ↔ {self.ingredient_b} [{self.get_severity_display()}]'
+
+    def save(self, *args, **kwargs):
+        # Canonical order: always store alphabetically so dedup works
+        if self.ingredient_a and self.ingredient_b:
+            a, b = self.ingredient_a.lower().strip(), self.ingredient_b.lower().strip()
+            if a > b:
+                self.ingredient_a, self.ingredient_b = b, a
+        super().save(*args, **kwargs)
+
+
+class DrugContraindication(models.Model):
+    """
+    Drug-disease contraindication rules.
+
+    Maps an active ingredient to a chronic condition (using the same
+    CHRONIC_CLASS_CHOICES keys as ActiveIngredient.chronic_class) and
+    records the severity.
+
+    Used by:
+      - Recommendation engine (filter out unsafe items for known conditions)
+      - Future POS screening
+    """
+    SEVERITY_CHOICES = [
+        ('absolute', 'موانع مطلقة — لا تُعطَ أبداً'),
+        ('relative', 'موانع نسبية — استشر الطبيب'),
+        ('caution',  'تحذير — راقب العميل'),
+    ]
+    POPULATION_CHOICES = [
+        ('',           'عام'),
+        ('pregnancy',  'حامل'),
+        ('lactation',  'مرضعة'),
+        ('pediatric',  'أطفال'),
+        ('geriatric',  'مسنون'),
+        ('renal',      'قصور كلوي'),
+        ('hepatic',    'قصور كبدي'),
+    ]
+
+    ingredient  = models.CharField(
+        max_length=200, db_index=True,
+        verbose_name='المادة الفعّالة',
+    )
+    condition   = models.CharField(
+        max_length=30,
+        choices=CHRONIC_CLASS_CHOICES,
+        db_index=True,
+        verbose_name='الحالة المزمنة',
+    )
+    severity    = models.CharField(
+        max_length=10, choices=SEVERITY_CHOICES,
+        verbose_name='شدة التحذير',
+    )
+    population  = models.CharField(
+        max_length=15, choices=POPULATION_CHOICES, blank=True,
+        verbose_name='الفئة المعنية',
+        help_text='اتركه فارغاً إذا كان ينطبق على جميع المرضى بهذه الحالة',
+    )
+    description_ar = models.TextField(
+        blank=True, verbose_name='الوصف (عربي)',
+    )
+    is_active   = models.BooleanField(default=True, db_index=True)
+    source      = models.CharField(max_length=50, blank=True, verbose_name='المصدر')
+    created_by  = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name='أُضيف بواسطة',
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'تحذير دواء × مرض'
+        verbose_name_plural = 'تحذيرات الأدوية والأمراض'
+        unique_together = ('ingredient', 'condition', 'population')
+        indexes = [
+            models.Index(fields=['ingredient', 'severity']),
+            models.Index(fields=['condition', 'severity']),
+        ]
+
+    def __str__(self):
+        pop = f' [{self.get_population_display()}]' if self.population else ''
+        return f'{self.ingredient} + {self.get_condition_display()}{pop} → {self.get_severity_display()}'

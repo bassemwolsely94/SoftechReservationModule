@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     MedicationTag, ActiveIngredient, IngredientTag,
     ItemIngredientMap, FollowUpProtocol,
+    DrugInteraction, DrugContraindication,
 )
 
 
@@ -88,3 +89,35 @@ class FollowUpProtocolAdmin(admin.ModelAdmin):
                      'frequency_type', 'customer_type_filter', 'trigger_condition')
     search_fields = ('name', 'active_ingredient__name', 'active_ingredient__name_ar')
     ordering      = ('active_ingredient', 'sort_order')
+
+
+@admin.register(DrugInteraction)
+class DrugInteractionAdmin(admin.ModelAdmin):
+    list_display  = ('ingredient_a', 'ingredient_b', 'severity',
+                     'source', 'is_active', 'updated_at')
+    list_filter   = ('severity', 'is_active', 'source')
+    search_fields = ('ingredient_a', 'ingredient_b', 'clinical_effect')
+    ordering      = ('severity', 'ingredient_a')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('المادتان المتفاعلتان', {
+            'fields': ('ingredient_a', 'ingredient_b', 'severity'),
+        }),
+        ('التفاصيل السريرية', {
+            'fields': ('mechanism', 'clinical_effect', 'management_ar', 'management_en'),
+        }),
+        ('المصدر والحالة', {
+            'fields': ('source', 'is_active', 'created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+
+@admin.register(DrugContraindication)
+class DrugContraindicationAdmin(admin.ModelAdmin):
+    list_display  = ('ingredient', 'condition', 'severity', 'population',
+                     'source', 'is_active', 'created_at')
+    list_filter   = ('severity', 'condition', 'population', 'is_active')
+    search_fields = ('ingredient', 'description_ar')
+    ordering      = ('severity', 'ingredient')
+    readonly_fields = ('created_at',)
