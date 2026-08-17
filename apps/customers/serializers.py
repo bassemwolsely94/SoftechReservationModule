@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, CustomerNote, PurchaseHistory, PurchaseHistoryLine
+from .models import Customer, CustomerNote, CustomerHealthProfile, PurchaseHistory, PurchaseHistoryLine
 
 
 class CustomerNoteSerializer(serializers.ModelSerializer):
@@ -57,30 +57,73 @@ class CustomerSerializer(serializers.ModelSerializer):
     total_purchases      = serializers.IntegerField(read_only=True)
     lifetime_value       = serializers.FloatField(read_only=True)
     notes                = CustomerNoteSerializer(many=True, read_only=True)
+    # Intelligence scores (computed nightly)
+    churn_score_pct      = serializers.SerializerMethodField()
+    churn_segment_label  = serializers.SerializerMethodField()
+    # Health profile summary (avoids a second request in most cases)
+    is_chronic           = serializers.SerializerMethodField()
+    detected_conditions  = serializers.SerializerMethodField()
 
     def get_preferred_branch_name(self, obj):
         if obj.preferred_branch:
             return obj.preferred_branch.name_ar or obj.preferred_branch.name
         return None
 
+    def get_churn_score_pct(self, obj):
+        return round(float(obj.churn_score or 0) * 100, 1)
+
+    def get_churn_segment_label(self, obj):
+        return {
+            'low':      '✅ منخفض',
+            'medium':   '⚠️ متوسط',
+            'high':     '🔴 مرتفع',
+            'critical': '🚨 حرج',
+        }.get(obj.churn_segment, '')
+
+    def get_is_chronic(self, obj):
+        try:
+            return obj.health_profile.is_chronic
+        except Exception:
+            return bool(obj.chronic_conditions)
+
+    def get_detected_conditions(self, obj):
+        try:
+            return obj.health_profile.detected_conditions
+        except Exception:
+            return []
+
     class Meta:
         model  = Customer
         fields = [
             'id', 'softech_id', 'softech_pic',
-            'name', 'phone', 'phone_alt', 'email',
+            'name', 'phone', 'phone_alt', 'whatsapp_phone', 'email',
             'address', 'date_of_birth',
             'chronic_conditions', 'notes_softech',
             'discount_percent',
             'preferred_branch', 'preferred_branch_name',
             'softech_ptcode', 'softech_ptclassifcode',
+            'person_type_label', 'person_classif_label',
             'customer_type_label', 'customer_type_color',
             'total_purchases', 'lifetime_value',
+            # CRM scores
+            'segment', 'ltv', 'last_visit_date',
+            'days_since_last_visit', 'purchase_count_90d',
+            'complaint_risk_score',
+            # Churn intelligence
+            'churn_score', 'churn_score_pct', 'churn_segment',
+            'churn_segment_label', 'churn_updated_at',
+            # Health summary
+            'is_chronic', 'detected_conditions',
             'notes',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'softech_id', 'softech_pic', 'softech_ptcode', 'softech_ptclassifcode',
+            'person_type_label', 'person_classif_label',
             'notes_softech', 'created_at', 'updated_at',
+            'segment', 'ltv', 'last_visit_date', 'days_since_last_visit',
+            'purchase_count_90d', 'complaint_risk_score',
+            'churn_score', 'churn_segment', 'churn_updated_at',
         ]
 
 
@@ -89,7 +132,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Customer
         fields = [
-            'phone', 'phone_alt', 'email', 'address',
+            'phone', 'phone_alt', 'whatsapp_phone', 'email', 'address',
             'date_of_birth', 'chronic_conditions', 'preferred_branch',
         ]
 
@@ -98,20 +141,26 @@ class CustomerListSerializer(serializers.ModelSerializer):
     customer_type_label   = serializers.CharField(read_only=True)
     customer_type_color   = serializers.CharField(read_only=True)
     preferred_branch_name = serializers.SerializerMethodField()
+    churn_score_pct       = serializers.SerializerMethodField()
 
     def get_preferred_branch_name(self, obj):
         if obj.preferred_branch:
             return obj.preferred_branch.name_ar or obj.preferred_branch.name
         return None
 
+    def get_churn_score_pct(self, obj):
+        return round(float(obj.churn_score or 0) * 100, 1)
+
     class Meta:
         model  = Customer
         fields = [
             'id', 'softech_id', 'softech_pic',
-            'name', 'phone', 'phone_alt',
+            'name', 'phone', 'phone_alt', 'whatsapp_phone',
             'customer_type_label', 'customer_type_color',
             'preferred_branch_name',
             'discount_percent', 'address',
+            'segment', 'churn_score', 'churn_score_pct', 'churn_segment',
+            'days_since_last_visit', 'last_visit_date',
         ]
 
 
