@@ -1,18 +1,31 @@
 from django.contrib import admin
-from .models import StockCountSession, StockCountLine
+from .models import StockCountSession, StockCountSnapshot
 
 
-class StockCountLineInline(admin.TabularInline):
-    model  = StockCountLine
-    extra  = 0
-    fields = ('item', 'manual_item_name', 'system_qty', 'erp_transqty', 'counted_qty', 'difference', 'has_discrepancy')
-    readonly_fields = ('difference', 'has_discrepancy')
+class StockCountSnapshotInline(admin.TabularInline):
+    model         = StockCountSnapshot
+    extra         = 0
+    fields        = ('item_code', 'item_name', 'expected_qty', 'counted_qty', 'difference', 'variance_type')
+    readonly_fields = ('item_code', 'item_name', 'expected_qty', 'snapshot_time', 'difference', 'variance_type')
+    can_delete    = False
+    max_num       = 0  # read-only inline — no adding rows
 
 
 @admin.register(StockCountSession)
 class StockCountSessionAdmin(admin.ModelAdmin):
-    list_display   = ('branch', 'count_date', 'status', 'erp_doc_number', 'created_by', 'created_at')
-    list_filter    = ('status', 'branch', 'count_date')
-    search_fields  = ('erp_doc_number', 'notes')
-    readonly_fields = ('created_at', 'completed_at')
-    inlines        = [StockCountLineInline]
+    list_display   = ('name', 'branch_code', 'mode', 'status', 'item_count',
+                      'surplus_count', 'deficit_count', 'ok_count', 'created_by', 'created_at')
+    list_filter    = ('status', 'mode', 'branch_code')
+    search_fields  = ('name', 'branch_code', 'notes')
+    readonly_fields = ('created_at', 'updated_at', 'snapshot_at', 'exported_at', 'uploaded_at', 'variance_at',
+                       'item_count', 'surplus_count', 'deficit_count', 'ok_count')
+    inlines        = [StockCountSnapshotInline]
+
+
+@admin.register(StockCountSnapshot)
+class StockCountSnapshotAdmin(admin.ModelAdmin):
+    list_display   = ('session', 'item_code', 'item_name', 'branch_code',
+                      'expected_qty', 'counted_qty', 'difference', 'variance_type')
+    list_filter    = ('variance_type', 'branch_code')
+    search_fields  = ('item_code', 'item_name')
+    readonly_fields = ('expected_qty', 'snapshot_time')

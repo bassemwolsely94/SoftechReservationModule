@@ -1,76 +1,101 @@
+"""
+apps/stockcount/serializers.py  — v2
+"""
 from rest_framework import serializers
-from .models import StockCountSession, StockCountLine
+from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
 
 
-class StockCountLineSerializer(serializers.ModelSerializer):
-    item_name        = serializers.SerializerMethodField()
-    item_softech_id  = serializers.SerializerMethodField()
-    item_scientific  = serializers.SerializerMethodField()
-    item_sale_price  = serializers.SerializerMethodField()
+# ── Snapshot ──────────────────────────────────────────────────────────────────
 
-    def get_item_name(self, obj):
-        return obj.item.name if obj.item_id else obj.manual_item_name
-
-    def get_item_softech_id(self, obj):
-        return obj.item.softech_id if obj.item_id else None
-
-    def get_item_scientific(self, obj):
-        return obj.item.name_scientific if obj.item_id else None
-
-    def get_item_sale_price(self, obj):
-        return float(obj.item.unit_price) if obj.item_id else None
+class StockCountSnapshotSerializer(serializers.ModelSerializer):
+    variance_label = serializers.CharField(
+        source='get_variance_type_display', read_only=True
+    )
 
     class Meta:
-        model  = StockCountLine
+        model  = StockCountSnapshot
         fields = [
-            'id', 'item', 'item_name', 'item_softech_id', 'item_scientific', 'item_sale_price',
-            'manual_item_name',
-            'system_qty', 'erp_transqty',
-            'counted_qty', 'difference', 'has_discrepancy',
-            'notes', 'updated_at',
+            'id', 'item_code', 'item_name', 'item_medicine', 'category_name',
+            'branch_code', 'expected_qty', 'snapshot_time',
+            'counted_qty', 'difference', 'variance_type', 'variance_label',
         ]
-        read_only_fields = ['difference', 'has_discrepancy', 'updated_at']
+        read_only_fields = fields   # Everything is read-only from API perspective
 
 
-class StockCountLineUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model  = StockCountLine
-        fields = ['counted_qty', 'notes']
-
+# ── Session list ─────────────────────────────────────────────────────────────
 
 class StockCountSessionListSerializer(serializers.ModelSerializer):
-    branch_name    = serializers.CharField(source='branch.name_ar', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
-    status_label   = serializers.SerializerMethodField()
-    total_lines    = serializers.IntegerField(read_only=True)
-    discrepancy_count = serializers.IntegerField(read_only=True)
+    created_by_name  = serializers.CharField(
+        source='created_by.full_name', read_only=True, default='',
+    )
+    snapshot_by_name = serializers.CharField(
+        source='snapshot_by.full_name', read_only=True, default='',
+    )
+    uploaded_by_name = serializers.CharField(
+        source='uploaded_by.full_name', read_only=True, default='',
+    )
+    status_label     = serializers.CharField(
+        source='get_status_display', read_only=True,
+    )
+    mode_label       = serializers.CharField(
+        source='get_mode_display', read_only=True,
+    )
+    doccode_labels   = serializers.SerializerMethodField()
 
-    STATUS_LABELS = {'open': 'قيد الجرد', 'completed': 'مكتمل', 'cancelled': 'ملغى'}
-
-    def get_status_label(self, obj):
-        return self.STATUS_LABELS.get(obj.status, obj.status)
+    def get_doccode_labels(self, obj):
+        return [
+            {'code': dc, 'label': DOCCODE_LABELS.get(dc, dc)}
+            for dc in (obj.doccodes or [])
+        ]
 
     class Meta:
         model  = StockCountSession
         fields = [
-            'id', 'branch', 'branch_name',
-            'status', 'status_label',
-            'count_date', 'notes',
-            'erp_doc_code', 'erp_doc_number',
-            'created_by_name',
-            'total_lines', 'discrepancy_count',
-            'created_at', 'completed_at',
+            'id', 'name', 'mode', 'mode_label', 'status', 'status_label',
+            'branch_code',
+            'date_from', 'date_to',
+            'doccodes', 'doccode_labels',
+            'user_code_filter', 'category_filter',
+            'item_count', 'surplus_count', 'deficit_count', 'ok_count',
+            'created_by_name', 'snapshot_by_name', 'uploaded_by_name',
+            'created_at', 'snapshot_at', 'exported_at', 'uploaded_at', 'variance_at',
+            'updated_at', 'notes',
         ]
 
 
+# ── Session detail (includes snapshots) ──────────────────────────────────────
+
 class StockCountSessionDetailSerializer(StockCountSessionListSerializer):
-    lines = StockCountLineSerializer(many=True, read_only=True)
+    snapshots = StockCountSnapshotSerializer(many=True, read_only=True)
 
     class Meta(StockCountSessionListSerializer.Meta):
-        fields = StockCountSessionListSerializer.Meta.fields + ['lines']
+        fields = StockCountSessionListSerializer.Meta.fields + ['snapshots']
 
+
+# ── Session create ────────────────────────────────────────────────────────────
 
 class StockCountSessionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = StockCountSession
-        fields = ['branch', 'count_date', 'notes', 'erp_doc_code', 'erp_doc_number']
+        fields = [
+            'name', 'mode', 'branch_code',
+            'date_from', 'date_to',
+            'doccodes', 'user_code_filter',
+            'category_filter', 'item_codes_filter',
+            'notes',
+        ]
+
+    def validate(self, data):
+        mode = data.get('mode', 'transaction')
+        if mode == 'transaction':
+            if not data.get('doccodes'):
+                raise serializers.ValidationError(
+                    'يجب تحديد كود مستند واحد على الأقل في النوع المبني على الحركات'
+                )
+            if not data.get('date_from') or not data.get('date_to'):
+                raise serializers.ValidationError(
+                    'يجب تحديد نطاق التاريخ في النوع المبني على الحركات'
+                )
+        if not data.get('branch_code'):
+            raise serializers.ValidationError('كود الفرع مطلوب')
+        return data

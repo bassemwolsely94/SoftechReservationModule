@@ -1,7 +1,7 @@
-from django.apps import AppConfig
+﻿from django.apps import AppConfig
 
 
-class StockCountConfig(AppConfig):
+class StockcountConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.stockcount'
-    verbose_name = 'الجرد الفعلي'
+    verbose_name = 'جرد المخزون'
