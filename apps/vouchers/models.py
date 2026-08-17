@@ -219,6 +219,59 @@ class Voucher(models.Model):
 
         return True, 'مؤهل'
 
+    # ── Item / branch eligibility gates (TD-M006) ───────────────────────────────
+
+    def check_items_eligibility(self, item_ids) -> tuple[bool, str]:
+        """(eligible, reason) for the item restriction.
+
+        Empty ``applicable_items`` ⇒ unrestricted (always eligible). When the
+        voucher IS item-restricted, the order MUST include at least one of the
+        applicable items — and the caller MUST supply the order's item ids, else
+        we reject (no silent bypass). This is an eligibility GATE, not a reprice.
+        """
+        allowed = set(self.applicable_items.values_list('id', flat=True))
+        if not allowed:
+            return True, 'لا قيود أصناف'
+        if not item_ids:
+            return False, 'هذه القسيمة مقصورة على أصناف محددة — حدد أصناف الطلب'
+        try:
+            ordered = {int(i) for i in item_ids}
+        except (TypeError, ValueError):
+            return False, 'قائمة الأصناف غير صالحة'
+        if allowed & ordered:
+            return True, 'مؤهل'
+        return False, 'لا يوجد صنف مؤهل لهذه القسيمة ضمن الطلب'
+
+    def check_branch_eligibility(self, branch) -> tuple[bool, str]:
+        """(eligible, reason) for the branch restriction.
+
+        Restriction set = ``applicable_branches`` (M2M) ∪ ``branch`` (FK).
+        Empty ⇒ unrestricted. ``branch`` may be a Branch instance or an id.
+        """
+        restricted = set(self.applicable_branches.values_list('id', flat=True))
+        if self.branch_id:
+            restricted.add(self.branch_id)
+        if not restricted:
+            return True, 'لا قيود فرع'
+        branch_id = getattr(branch, 'id', branch)
+        if branch_id is None:
+            return False, 'هذه القسيمة مقصورة على فروع محددة'
+        if branch_id in restricted:
+            return True, 'مؤهل'
+        return False, 'هذه القسيمة غير صالحة في هذا الفرع'
+
+    def check_full_eligibility(self, phone, item_ids=None, branch=None) -> tuple[bool, str]:
+        """Composite redemption gate: customer → branch → items.
+        Returns the first failing (False, reason); (True, 'مؤهل') when all pass.
+        """
+        ok, reason = self.check_customer_eligibility(phone)
+        if not ok:
+            return ok, reason
+        ok, reason = self.check_branch_eligibility(branch)
+        if not ok:
+            return ok, reason
+        return self.check_items_eligibility(item_ids)
+
     # ── Code generator ─────────────────────────────────────────────────────────
 
     @classmethod

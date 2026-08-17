@@ -109,7 +109,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Voucher.objects.select_related(
             'customer', 'branch', 'created_by', 'free_item'
-        )
+        ).prefetch_related('applicable_items', 'applicable_branches')
         p = self.request.query_params
 
         status_q  = p.get('status')
@@ -159,8 +159,12 @@ class VoucherViewSet(viewsets.ModelViewSet):
 
         phone        = ser.validated_data['phone']
         order_amount = float(ser.validated_data.get('order_amount') or 0)
+        item_ids     = ser.validated_data.get('item_ids') or []
+        branch       = getattr(_profile(request), 'branch', None)
 
-        eligible, reason = voucher.check_customer_eligibility(phone)
+        eligible, reason = voucher.check_full_eligibility(
+            phone, item_ids=item_ids, branch=branch,
+        )
 
         discount = 0.0
         if eligible and order_amount > 0:
@@ -196,10 +200,14 @@ class VoucherViewSet(viewsets.ModelViewSet):
         voucher = self.get_object()
         ser = GenerateOTPSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        phone = ser.validated_data['phone']
+        phone    = ser.validated_data['phone']
+        item_ids = ser.validated_data.get('item_ids') or []
+        branch   = getattr(_profile(request), 'branch', None)
 
-        # Eligibility check
-        eligible, reason = voucher.check_customer_eligibility(phone)
+        # Eligibility check — customer + branch + item restrictions (TD-M006)
+        eligible, reason = voucher.check_full_eligibility(
+            phone, item_ids=item_ids, branch=branch,
+        )
         if not eligible:
             return Response({'detail': reason}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -232,15 +240,30 @@ class VoucherViewSet(viewsets.ModelViewSet):
         # Employee sees only a square pattern, never the raw digits
         qr_base64 = _make_otp_qr(plain_code)
 
+        # Auto-send OTP via WhatsApp Cloud API (non-blocking — failure still returns QR)
+        wa_sent = False
+        try:
+            from apps.whatsapp.sender import WhatsAppSender
+            from django.conf import settings
+            if getattr(settings, 'WHATSAPP_TOKEN', ''):
+                WhatsAppSender().send_otp(
+                    wa_id=phone,
+                    otp_display=plain_code,
+                )
+                wa_sent = True
+                logger.info(f'[OTP] WhatsApp Cloud API send OK for voucher={voucher.code}')
+        except Exception as wa_err:
+            logger.warning(f'[OTP] WhatsApp Cloud API send failed (QR fallback active): {wa_err}')
+
         logger.info(f'[OTP] Generated for voucher={voucher.code} phone={phone[-4:]}****')
 
         return Response({
             'detail':       'تم إنشاء رمز OTP. استخدم QR للعرض المباشر أو أرسل عبر واتساب.',
             'otp_id':       otp.id,
             'expires_at':   otp.expires_at,
-            'whatsapp_url': whatsapp_url,   # option A: send via WhatsApp
-            'qr_code':      qr_base64,      # option B: show QR at counter — customer scans it
-            'sent_via':     'whatsapp',
+            'whatsapp_url': whatsapp_url,   # manual fallback link
+            'qr_code':      qr_base64,      # counter display — customer scans
+            'sent_via':     'whatsapp_api' if wa_sent else 'manual',
         })
 
     # ── MODULE 3: Verify OTP → Create Document ─────────────────────────────────
@@ -265,6 +288,17 @@ class VoucherViewSet(viewsets.ModelViewSet):
         plain        = ser.validated_data['code']
         phone        = ser.validated_data['phone']
         order_amount = float(ser.validated_data.get('order_amount') or 0)
+        item_ids     = ser.validated_data.get('item_ids') or []
+        branch       = getattr(_profile(request), 'branch', None)
+
+        # Authoritative eligibility gate (TD-M006) — re-checked here, the point
+        # where the redemption document is minted. Run BEFORE consuming the OTP so
+        # an ineligible request doesn't burn the customer's code.
+        eligible, reason = voucher.check_full_eligibility(
+            phone, item_ids=item_ids, branch=branch,
+        )
+        if not eligible:
+            return Response({'detail': reason}, status=status.HTTP_400_BAD_REQUEST)
 
         # Lock OTP row — prevent concurrent verification
         try:
@@ -387,12 +421,19 @@ class VoucherViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
+        # Gap-3: Cancellation must require admin or manager — not any authenticated user.
+        profile = _profile(request)
+        if not profile or profile.role not in ('admin', 'manager'):
+            return Response(
+                {'detail': 'هذه العملية تتطلب دور المدير أو المسؤول'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         voucher = self.get_object()
         if voucher.status == 'cancelled':
             return Response({'detail': 'القسيمة ملغاة بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
         voucher.status = 'cancelled'
         voucher.save(update_fields=['status', 'updated_at'])
-        logger.info(f'[CANCELLED] voucher={voucher.code} by={_profile(request)}')
+        logger.info(f'[CANCELLED] voucher={voucher.code} by={profile}')
         return Response({'detail': 'تم إلغاء القسيمة'})
 
     # ── Lookup by code ─────────────────────────────────────────────────────────

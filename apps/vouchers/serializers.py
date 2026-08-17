@@ -25,6 +25,8 @@ class VoucherListSerializer(serializers.ModelSerializer):
     is_expired       = serializers.BooleanField(read_only=True)
     is_exhausted     = serializers.BooleanField(read_only=True)
     value_display    = serializers.SerializerMethodField()
+    # Targeting restrictions — needed by the redeem UI to gate item/branch (TD-M006)
+    applicable_items_detail = serializers.SerializerMethodField()
 
     TYPE_LABELS     = dict(Voucher.TYPE_CHOICES)
     CATEGORY_LABELS = dict(Voucher.CATEGORY_CHOICES)
@@ -51,6 +53,10 @@ class VoucherListSerializer(serializers.ModelSerializer):
             return obj.free_item.name if obj.free_item_id else '—'
         return '—'
 
+    def get_applicable_items_detail(self, obj):
+        """[{id, name}] for the voucher's eligible items (empty ⇒ unrestricted)."""
+        return [{'id': i.id, 'name': i.name} for i in obj.applicable_items.all()]
+
     class Meta:
         model  = Voucher
         fields = [
@@ -62,6 +68,7 @@ class VoucherListSerializer(serializers.ModelSerializer):
             'max_discount_cap', 'min_order_value',
             'customer', 'customer_name',
             'branch', 'branch_name',
+            'applicable_items', 'applicable_items_detail', 'applicable_branches',
             'valid_from', 'valid_until',
             'max_uses', 'times_used',
             'usage_limit_per_customer', 'usage_limit_per_day',
@@ -74,14 +81,23 @@ class VoucherListSerializer(serializers.ModelSerializer):
 
 
 class VoucherCreateSerializer(serializers.ModelSerializer):
+    # Gap-7: id and code are server-generated and read-only.
+    # They are included here so the 201 response gives the client everything
+    # it needs to display/navigate to the newly created voucher immediately,
+    # without a follow-up GET request.
+    id   = serializers.IntegerField(read_only=True)
+    code = serializers.CharField(read_only=True)
+
     class Meta:
         model  = Voucher
         fields = [
+            'id', 'code',   # read-only — returned in 201 response
             'title', 'description',
             'voucher_category', 'voucher_type',
             'discount_pct', 'discount_amount', 'credit_amount',
             'free_item', 'max_discount_cap', 'min_order_value',
             'customer', 'branch',
+            'applicable_items', 'applicable_branches',
             'valid_from', 'valid_until',
             'max_uses', 'usage_limit_per_customer', 'usage_limit_per_day',
             'validity_days_after_assignment', 'notes',
@@ -228,10 +244,19 @@ class VoucherRedemptionSerializer(serializers.ModelSerializer):
 
 # ── Action serializers ────────────────────────────────────────────────────────
 
+# item_ids — the order's catalog item ids; required to redeem an item-restricted
+# voucher (TD-M006). Optional for unrestricted vouchers.
+def _item_ids_field():
+    return serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list,
+    )
+
+
 class GenerateOTPSerializer(serializers.Serializer):
     phone        = serializers.CharField(max_length=20)
     order_amount = serializers.DecimalField(max_digits=10, decimal_places=3,
                                              required=False, allow_null=True)
+    item_ids     = _item_ids_field()
 
     def validate_phone(self, value):
         v = value.strip()
@@ -245,6 +270,7 @@ class VerifyOTPSerializer(serializers.Serializer):
     phone        = serializers.CharField(max_length=20)
     order_amount = serializers.DecimalField(max_digits=10, decimal_places=3,
                                              required=False, allow_null=True)
+    item_ids     = _item_ids_field()
 
     def validate_code(self, value):
         v = value.strip()
@@ -257,6 +283,7 @@ class ValidateVoucherSerializer(serializers.Serializer):
     phone        = serializers.CharField(max_length=20)
     order_amount = serializers.DecimalField(max_digits=10, decimal_places=3,
                                              required=False, allow_null=True)
+    item_ids     = _item_ids_field()
 
 
 class MarkUsedSerializer(serializers.Serializer):
