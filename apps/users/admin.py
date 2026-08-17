@@ -73,3 +73,39 @@ class UserActivityLogAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+from .models import ErpUserGroup, ErpScreen, ErpGroupPermission
+
+
+@admin.register(ErpUserGroup)
+class ErpUserGroupAdmin(admin.ModelAdmin):
+    list_display = ['usergroup', 'name', 'is_blocked', 'synced_at']
+    search_fields = ['name', 'usergroup']
+
+
+@admin.register(ErpScreen)
+class ErpScreenAdmin(admin.ModelAdmin):
+    list_display = ['mitemname', 'system', 'subsystem', 'descr_en', 'descr_ar']
+    list_filter = ['system']
+    search_fields = ['mitemname', 'descr_en', 'descr_ar']
+
+
+@admin.register(ErpGroupPermission)
+class ErpGroupPermissionAdmin(admin.ModelAdmin):
+    list_display = ['group', 'mitemname', 'can_enable', 'can_show', 'can_retrieve', 'can_save', 'can_money', 'can_cost']
+    list_filter = ['group', 'can_enable', 'can_save']
+    search_fields = ['mitemname']
+
+from .models import SoftechSystemMap, ErpGroupModulePermission
+
+
+@admin.register(SoftechSystemMap)
+class SoftechSystemMapAdmin(admin.ModelAdmin):
+    list_display = ['system', 'django_module', 'note', 'is_active']
+    list_filter = ['django_module', 'is_active']
+
+
+@admin.register(ErpGroupModulePermission)
+class ErpGroupModulePermissionAdmin(admin.ModelAdmin):
+    list_display = ['group', 'module', 'can_view', 'can_edit', 'can_see_cost', 'can_export', 'screens_count']
+    list_filter = ['module', 'can_view', 'can_edit', 'can_see_cost']

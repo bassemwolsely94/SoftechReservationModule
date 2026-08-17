@@ -32,21 +32,31 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            # The column is already there — just ensure it accepts empty strings
-            # by setting a DB-level default so the NOT NULL constraint won't fire
-            # when the field is omitted in older code paths.
+            # In production the column was created by the worktree without a default.
+            # In a fresh test database the column does not exist yet.
+            # Use a DO block to handle both cases idempotently.
             database_operations=[
                 migrations.RunSQL(
                     sql="""
-                        -- Column was created NOT NULL without a default in the worktree.
-                        -- Give it a default so inserts that omit it don't fail.
-                        ALTER TABLE "users_erpuser"
-                            ALTER COLUMN "user_group" SET DEFAULT '';
-
-                        -- Back-fill any existing NULL values (safety net).
-                        UPDATE "users_erpuser"
-                           SET "user_group" = ''
-                         WHERE "user_group" IS NULL;
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'users_erpuser'
+                                  AND column_name = 'user_group'
+                            ) THEN
+                                -- Fresh DB (e.g. test runner): create the column.
+                                ALTER TABLE "users_erpuser"
+                                    ADD COLUMN "user_group" VARCHAR(50) NOT NULL DEFAULT '';
+                            ELSE
+                                -- Production DB: column already exists, just set the default.
+                                ALTER TABLE "users_erpuser"
+                                    ALTER COLUMN "user_group" SET DEFAULT '';
+                                UPDATE "users_erpuser"
+                                   SET "user_group" = ''
+                                 WHERE "user_group" IS NULL;
+                            END IF;
+                        END $$;
                     """,
                     reverse_sql=migrations.RunSQL.noop,
                 ),

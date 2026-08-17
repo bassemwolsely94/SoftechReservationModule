@@ -1,12 +1,24 @@
 from rest_framework import serializers as drf_serializers, status, viewsets, filters
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+
+
+# ── Gap-1: Brute-force throttle on login ──────────────────────────────────────
+
+class LoginRateThrottle(AnonRateThrottle):
+    """
+    Limits login attempts to 10 per IP per minute.
+    Scope 'login' maps to REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'].
+    Applied ONLY to login_view — no other endpoint is affected.
+    """
+    scope = 'login'
 
 from .models import StaffProfile, ERPUser, UserActivityLog, RoleModuleAccess, ROLE_CHOICES, MODULE_CHOICES, ACTION_CHOICES
 from .serializers import (
@@ -45,6 +57,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
+            'mfa_enabled',
         ]
 
 
@@ -90,6 +103,7 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([LoginRateThrottle])
 def login_view(request):
     identifier = request.data.get('username', '').strip()
     password   = request.data.get('password', '')
@@ -118,6 +132,23 @@ def login_view(request):
     profile = getattr(user, 'staff_profile', None)
     if profile and not profile.is_active:
         return Response({'error': 'الحساب موقوف. تواصل مع المدير'}, status=status.HTTP_403_FORBIDDEN)
+
+    # ── Two-factor gate ───────────────────────────────────────────────────────
+    # Step 1 of login. If the user has 2FA on (or is in a required role once
+    # enforcement is enabled), don't issue tokens yet — hand back a short-lived
+    # pre-auth token the client exchanges at /auth/2fa/verify/ (or /enable/).
+    from . import mfa as _mfa
+    if profile and profile.mfa_enabled:
+        device_token = request.data.get('device_token', '')
+        if not _mfa.valid_device_token(device_token, user):
+            _log_auth('login_success', profile, ip, note='mfa_challenge')
+            return Response({'mfa_required': True,
+                             'mfa_token': _mfa.make_preauth_token(user, 'login')})
+    elif _mfa.mfa_required_for(profile):
+        # Enforcement on + required role + not yet enrolled → force enrollment now.
+        _log_auth('login_success', profile, ip, note='mfa_setup_required')
+        return Response({'mfa_setup_required': True,
+                         'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
     _log_auth('login_success', profile, ip)
 
@@ -174,6 +205,18 @@ def change_password_view(request):
 
     user.set_password(new_pw)
     user.save(update_fields=['password'])
+
+    # Gap-2: Blacklist all outstanding refresh tokens so the old password's
+    # sessions cannot be renewed.  The current access token (up to 1 hour
+    # remaining) still works — that's the irreducible JWT trade-off.
+    try:
+        from rest_framework_simplejwt.token_blacklist.models import (
+            OutstandingToken, BlacklistedToken,
+        )
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
+    except Exception:
+        pass  # blacklist app not installed — skip silently
 
     profile = getattr(user, 'staff_profile', None)
     ip      = get_current_ip() or request.META.get('REMOTE_ADDR')
@@ -330,18 +373,53 @@ class PermissionsMatrixView(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        """Return the full permissions matrix."""
+        """Return the full permissions matrix. Gap-5: restricted to admin role."""
+        if not (request.user.is_superuser or
+                getattr(getattr(request.user, 'staff_profile', None), 'role', '') == 'admin'):
+            return Response({'error': 'غير مصرح — يتطلب دور المسؤول'}, status=status.HTTP_403_FORBIDDEN)
+
         rows = RoleModuleAccess.objects.all().values('role', 'module', 'action', 'is_allowed')
         matrix = {}
         for row in rows:
             r = row['role']; m = row['module']; a = row['action']
             matrix.setdefault(r, {}).setdefault(m, {})[a] = row['is_allowed']
 
+        # ── Notifier (notification category) visibility matrix ────────────────
+        from apps.notifications.models import Notification, RoleNotificationAccess
+        from apps.notifications.views import _CATEGORY_MODULE
+        categories = [c for c, _ in Notification.CATEGORY_CHOICES]
+        explicit = {}
+        for r in RoleNotificationAccess.objects.values('role', 'category', 'is_allowed', 'generate'):
+            explicit.setdefault(r['role'], {})[r['category']] = (r['is_allowed'], r['generate'])
+        # module 'view' grants per role (for the inherit-default)
+        role_module_view = {}
+        for role, module in (RoleModuleAccess.objects
+                             .filter(action='view', is_allowed=True)
+                             .values_list('role', 'module')):
+            role_module_view.setdefault(role, set()).add(module)
+        # Effective 3-state mode per role × notifier: 'show' | 'mute' | 'off'
+        notifier_matrix = {}
+        for role, _ in ROLE_CHOICES:
+            if role == 'admin':
+                continue
+            rm = {}
+            for c in categories:
+                if role in explicit and c in explicit[role]:
+                    is_allowed, generate = explicit[role][c]
+                    rm[c] = 'off' if not generate else ('show' if is_allowed else 'mute')
+                else:
+                    module = _CATEGORY_MODULE.get(c)   # inherit module 'view' for visibility
+                    visible = True if not module else (module in role_module_view.get(role, set()))
+                    rm[c] = 'show' if visible else 'mute'   # generated by default
+            notifier_matrix[role] = rm
+
         return Response({
             'matrix': matrix,
             'roles':   [{'value': v, 'label': l} for v, l in ROLE_CHOICES if v != 'admin'],
             'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES],
             'actions': [{'value': v, 'label': l} for v, l in ACTION_CHOICES],
+            'notifiers':       [{'value': v, 'label': l} for v, l in Notification.CATEGORY_CHOICES],
+            'notifier_matrix': notifier_matrix,
         })
 
     def create(self, request):
@@ -354,16 +432,35 @@ class PermissionsMatrixView(viewsets.ViewSet):
         actor   = getattr(request.user, 'staff_profile', None)
         changed = []
 
+        from apps.notifications.models import RoleNotificationAccess
+
         for item in updates:
             role   = item.get('role')
-            module = item.get('module')
-            act    = item.get('action')
             allow  = bool(item.get('is_allowed', True))
 
+            # Notifier (notification category) update — 3-state mode preferred,
+            # falls back to a bare is_allowed for backward compatibility.
+            category = item.get('category')
+            if role and category and not item.get('module'):
+                mode = item.get('mode')
+                if mode in ('show', 'mute', 'off'):
+                    gen, vis = (mode != 'off'), (mode == 'show')
+                else:
+                    gen, vis, mode = True, allow, ('show' if allow else 'mute')
+                RoleNotificationAccess.objects.update_or_create(
+                    role=role, category=category,
+                    defaults={'is_allowed': vis, 'generate': gen, 'updated_by': actor},
+                )
+                changed.append({'role': role, 'category': category, 'mode': mode})
+                continue
+
+            # Module / action permission update
+            module = item.get('module')
+            act    = item.get('action')
             if not (role and module and act):
                 continue
 
-            obj, created = RoleModuleAccess.objects.update_or_create(
+            RoleModuleAccess.objects.update_or_create(
                 role=role, module=module, action=act,
                 defaults={'is_allowed': allow, 'updated_by': actor},
             )
@@ -383,3 +480,36 @@ class PermissionsMatrixView(viewsets.ViewSet):
                 pass
 
         return Response({'detail': f'تم تحديث {len(changed)} صلاحية', 'updated': changed})
+
+
+# ── My Permissions ─────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_permissions_view(request):
+    """
+    GET /api/users/my-permissions/
+
+    Returns the effective permission map for the currently authenticated user's role.
+    Format: { module: { action: bool } }
+
+    Admins receive all-true for every module/action.
+    Non-admins receive only their role's RoleModuleAccess grants;
+    missing entries default to False.
+    """
+    profile = getattr(request.user, 'staff_profile', None)
+    role = getattr(profile, 'role', 'viewer')
+
+    # Admins are unrestricted
+    if role == 'admin' or request.user.is_superuser:
+        all_modules = [v for v, _ in MODULE_CHOICES]
+        all_actions = [v for v, _ in ACTION_CHOICES]
+        perms = {m: {a: True for a in all_actions} for m in all_modules}
+        return Response({'role': 'admin', 'permissions': perms})
+
+    rows = RoleModuleAccess.objects.filter(role=role).values('module', 'action', 'is_allowed')
+    perms = {}
+    for row in rows:
+        perms.setdefault(row['module'], {})[row['action']] = row['is_allowed']
+
+    return Response({'role': role, 'permissions': perms})

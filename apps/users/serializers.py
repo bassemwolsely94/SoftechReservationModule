@@ -41,7 +41,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             'branch', 'branch_id', 'branch_name',
             'access_all_branches',
             'allowed_branch_ids', 'restricted_branch_ids',
-            'softech_username', 'erp_username',
+            'softech_username', 'softech_user_id', 'hr_code', 'erp_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
             'created_at', 'updated_at',
@@ -49,8 +49,11 @@ class StaffProfileSerializer(serializers.ModelSerializer):
 
 
 class StaffProfileListSerializer(serializers.ModelSerializer):
-    """Lightweight list serializer."""
-    username    = serializers.CharField(source='user.username', read_only=True)
+    """Lightweight list serializer — includes enough fields to pre-populate the edit drawer."""
+    username    = serializers.CharField(source='user.username',    read_only=True)
+    first_name  = serializers.CharField(source='user.first_name',  read_only=True)
+    last_name   = serializers.CharField(source='user.last_name',   read_only=True)
+    email       = serializers.CharField(source='user.email',       read_only=True)
     full_name   = serializers.CharField(read_only=True)
     branch_name = serializers.CharField(read_only=True)
     role_label  = serializers.CharField(source='get_role_display', read_only=True)
@@ -58,9 +61,11 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
     class Meta:
         model  = StaffProfile
         fields = [
-            'id', 'username', 'full_name', 'role', 'role_label',
+            'id', 'username', 'first_name', 'last_name', 'email',
+            'full_name', 'role', 'role_label',
             'branch', 'branch_name', 'is_active',
-            'access_all_branches',
+            'access_all_branches', 'softech_username', 'hr_code', 'phone',
+            'can_see_all_customers', 'can_see_customer_phone',
         ]
 
 
@@ -75,8 +80,9 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'role', 'branch', 'access_all_branches',
             'allowed_branches', 'restricted_branches',
-            'phone', 'is_active',
+            'phone', 'is_active', 'hr_code',
             'first_name', 'last_name', 'email',
+            'can_see_all_customers', 'can_see_customer_phone',
         ]
 
     def update(self, instance, validated_data):
