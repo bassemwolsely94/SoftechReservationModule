@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
 from apps.catalog.models import ItemStock
@@ -10,7 +11,7 @@ class TransferRequestItemSerializer(serializers.ModelSerializer):
     item_softech_id = serializers.CharField(source='item.softech_id',       read_only=True)
     item_scientific = serializers.CharField(source='item.name_scientific',  read_only=True)
     item_sale_price = serializers.DecimalField(
-        source='item.unit_price', max_digits=10, decimal_places=3, read_only=True
+        source='item.pack_price', max_digits=10, decimal_places=3, read_only=True
     )
     available_stock = serializers.FloatField(
         source='available_stock_at_destination', read_only=True
@@ -20,7 +21,8 @@ class TransferRequestItemSerializer(serializers.ModelSerializer):
         model  = TransferRequestItem
         fields = [
             'id', 'item', 'item_name', 'item_softech_id', 'item_scientific',
-            'item_sale_price', 'quantity', 'notes', 'available_stock',
+            'item_sale_price', 'quantity', 'approved_quantity', 'received_quantity',
+            'notes', 'available_stock',
         ]
 
 
@@ -143,6 +145,10 @@ class TransferRequestListSerializer(serializers.ModelSerializer):
         return obj.reviewed_by.full_name if obj.reviewed_by_id else None
 
     def get_total_items(self, obj):
+        # Use prefetch cache to avoid N+1 on list view
+        cache = getattr(obj, '_prefetched_objects_cache', {})
+        if 'items' in cache:
+            return len(cache['items'])
         return obj.items.count()
 
     class Meta:
@@ -200,6 +206,8 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
 
     def get_dispatched_by_name(self, obj):
         return obj.dispatched_by.full_name if obj.dispatched_by_id else None
+
+    # ── Nested / computed fields (declared here so DRF picks them up) ─────────
     status_label            = serializers.CharField(source='status_label_ar', read_only=True)
     status_color            = serializers.CharField(read_only=True)
     items                   = TransferRequestItemSerializer(many=True, read_only=True)
@@ -223,8 +231,12 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
     can_complete         = serializers.SerializerMethodField()
 
     def _profile(self):
-        request = self.context.get('request')
-        return getattr(request.user, 'staff_profile', None) if request else None
+        # Cache so we don't traverse the request → user → staff_profile chain
+        # once per can_* getter (9 getters would otherwise each do it)
+        if not hasattr(self, '_profile_cache'):
+            request = self.context.get('request')
+            self._profile_cache = getattr(request.user, 'staff_profile', None) if request else None
+        return self._profile_cache
 
     def _is_hq(self, profile):
         return profile and profile.role in ('admin', 'purchasing', 'call_center')
@@ -278,6 +290,39 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
     def get_can_complete(self, obj):
         return (obj.status == 'sent_to_erp') and self._is_requesting_side(self._profile(), obj)
 
+    # ERP match verification
+    can_check_erp_match = serializers.SerializerMethodField()
+
+    def get_can_check_erp_match(self, obj):
+        """
+        Admin / purchasing can trigger ERP match check.
+        Works even without erp_reference — auto-search mode will scan stktransm
+        by branch + items + date to discover the document automatically.
+        """
+        profile = self._profile()
+        return (
+            obj.status in ('sent_to_erp', 'completed')
+            and profile is not None
+            and profile.role in ('admin', 'purchasing')
+        )
+
+    # Linked SOFTECH in-transit document(s) — the fulfillment side of this
+    # request once it's been issued as a 125. Lets the UI deep-link a request
+    # to its live shipment tracking (apps/transits).
+    in_transit_docs = serializers.SerializerMethodField()
+
+    def get_in_transit_docs(self, obj):
+        return [
+            {
+                'id':             tt.id,
+                'erp_doc_number': tt.erp_doc_number,
+                'transit_status': tt.transit_status,
+                'transit_status_display': tt.get_transit_status_display(),
+                'days_in_transit': tt.days_in_transit,
+            }
+            for tt in obj.in_transit_records.all().order_by('-issue_date')
+        ]
+
     # Live stock at destination for all items
     destination_stock = serializers.SerializerMethodField()
 
@@ -312,12 +357,18 @@ class TransferRequestDetailSerializer(serializers.ModelSerializer):
             'erp_reference',
             'is_editable', 'can_submit', 'can_approve', 'can_reject',
             'can_request_revision', 'can_send_to_erp', 'can_cancel', 'can_complete',
-            'items', 'messages', 'destination_stock',
+            'items', 'messages', 'destination_stock', 'in_transit_docs',
             'created_at', 'updated_at', 'submitted_at',
             'reviewed_at', 'sent_to_erp_at', 'completed_at',
             # Delivery tracking
             'delivery_person_name', 'dispatched_at', 'dispatched_by',
             'dispatched_by_name', 'can_dispatch',
+            # ERP match verification
+            'erp_match_status', 'erp_matched_at', 'erp_match_doc_code',
+            'erp_match_doc_date', 'erp_match_doc_value', 'erp_match_user_code',
+            'erp_match_user_id', 'erp_match_user_name', 'erp_match_trans_time',
+            'erp_match_store_code', 'erp_matched_items', 'erp_last_checked',
+            'erp_check_attempts', 'erp_match_detail', 'can_check_erp_match',
         ]
         read_only_fields = [
             'request_number', 'created_by', 'reviewed_by',
@@ -383,3 +434,29 @@ class RevisionSerializer(serializers.Serializer):
 
 class SendToERPSerializer(serializers.Serializer):
     erp_reference = serializers.CharField(required=False, allow_blank=True)
+
+
+# ── Partial-fulfillment serializers ───────────────────────────────────────────
+
+class ApproveLineSerializer(serializers.Serializer):
+    item_id          = serializers.IntegerField()
+    approved_quantity = serializers.DecimalField(
+        max_digits=10, decimal_places=3, min_value=Decimal('0'),
+    )
+
+
+class ApproveWithQuantitiesSerializer(serializers.Serializer):
+    """Optional item-level quantities on the approve action."""
+    items = ApproveLineSerializer(many=True, required=False, default=list)
+
+
+class ReceiveLineSerializer(serializers.Serializer):
+    item_id           = serializers.IntegerField()
+    received_quantity = serializers.DecimalField(
+        max_digits=10, decimal_places=3, min_value=Decimal('0'),
+    )
+
+
+class CompleteWithReceiptSerializer(serializers.Serializer):
+    """Optional per-item received quantities on the complete action."""
+    items = ReceiveLineSerializer(many=True, required=False, default=list)

@@ -24,6 +24,8 @@ from .serializers import (
     RejectSerializer,
     RevisionSerializer,
     SendToERPSerializer,
+    ApproveWithQuantitiesSerializer,
+    CompleteWithReceiptSerializer,
 )
 
 
@@ -56,31 +58,29 @@ def _system_log(request_obj, message):
     TransferRequestMessage.log_system(request_obj, message)
 
 
-def _notify(transfer_request, title, body, notif_type):
-    """Fire in-app notification — non-fatal wrapper."""
+def _notify(transfer_request, title, body, notif_type, *, branch=None, include_admins=True):
+    """
+    Fire in-app notification — non-fatal wrapper.
+
+    branch: Branch instance to notify (defaults to supplying_branch).
+            Pass requesting_branch for response notifications (approve/reject/revision).
+    include_admins: also notifies admin/purchasing roles via send_to_branch's include_admins flag.
+
+    Uses Notification.send_to_branch() so WS push, dedup, and NotificationLog all work.
+    """
     try:
-        from apps.users.models import StaffProfile
         from apps.notifications.models import Notification
-
-        # Notify destination branch staff + admins
-        recipients = StaffProfile.objects.filter(
-            branch=transfer_request.supplying_branch,
-            is_active=True,
-        ) | StaffProfile.objects.filter(
-            role__in=('admin', 'purchasing'),
-            is_active=True,
-        )
-
-        for staff in recipients.distinct():
-            try:
-                Notification.objects.create(
-                    recipient=staff,
-                    title=title,
-                    body=body or '',
-                    notification_type=notif_type,
-                )
-            except Exception:
-                pass
+        target_branch = branch or transfer_request.supplying_branch
+        if target_branch:
+            Notification.send_to_branch(
+                branch=target_branch,
+                notification_type=notif_type,
+                title=title,
+                body=body or '',
+                transfer_id=transfer_request.id,
+                dedup_key=f'{notif_type}_{transfer_request.id}',
+                include_admins=include_admins,
+            )
     except Exception:
         pass
 
@@ -141,13 +141,17 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         else:
             return qs.none()
 
-        # Date range filters
+        # Date range filters — wrap in try/except so malformed input returns
+        # an empty queryset rather than a 500 from the DB driver
         date_from = self.request.query_params.get('date_from')
         date_to   = self.request.query_params.get('date_to')
-        if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
-        if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+        try:
+            if date_from:
+                qs = qs.filter(created_at__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(created_at__date__lte=date_to)
+        except Exception:
+            pass  # silently ignore invalid date strings
 
         return qs
 
@@ -224,10 +228,24 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        serializer = ApproveWithQuantitiesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items_data = {
+            i['item_id']: i['approved_quantity']
+            for i in serializer.validated_data.get('items', [])
+        }
+
         tr.status = 'approved'
         tr.reviewed_by = profile
         tr.reviewed_at = timezone.now()
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+        # Persist per-item approved quantities when supplied
+        if items_data:
+            for line in tr.items.all():
+                if line.item_id in items_data:
+                    line.approved_quantity = items_data[line.item_id]
+                    line.save(update_fields=['approved_quantity'])
 
         _system_log(tr, f'تم اعتماد الطلب بواسطة {profile.full_name}')
         _notify(
@@ -235,6 +253,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             f'تم اعتماد طلبك — {tr.request_number}',
             f'تمت الموافقة على طلب التحويل. يمكنك الآن إرساله للـ ERP.',
             'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch, not the supplying one
         )
 
         return Response(
@@ -274,6 +293,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             f'تم رفض طلبك — {tr.request_number}',
             f'سبب الرفض: {tr.rejection_reason}',
             'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch, not the supplying one
         )
 
         return Response(
@@ -308,6 +328,13 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'revision_notes', 'updated_at'])
 
         _system_log(tr, f'طُلب التعديل بواسطة {profile.full_name}: {tr.revision_notes}')
+        _notify(
+            tr,
+            f'يحتاج طلبك تعديلاً — {tr.request_number}',
+            tr.revision_notes,
+            'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch to make changes
+        )
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -335,19 +362,95 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         serializer = SendToERPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        erp_ref = serializer.validated_data.get('erp_reference', '').strip()
+
         tr.status = 'sent_to_erp'
         tr.sent_to_erp_at = timezone.now()
         tr.sent_to_erp_by = profile
-        tr.erp_reference = serializer.validated_data.get('erp_reference', '')
-        tr.save(update_fields=[
-            'status', 'sent_to_erp_at', 'sent_to_erp_by', 'erp_reference', 'updated_at'
-        ])
+        tr.erp_reference = erp_ref
 
-        erp_ref = f' (مرجع: {tr.erp_reference})' if tr.erp_reference else ''
+        update_fields = ['status', 'sent_to_erp_at', 'sent_to_erp_by', 'erp_reference', 'updated_at']
+
+        # If a doc number was provided, queue ERP match verification immediately
+        if erp_ref:
+            tr.erp_match_status   = 'pending'
+            tr.erp_check_attempts = 0
+            update_fields += ['erp_match_status', 'erp_check_attempts']
+
+        tr.save(update_fields=update_fields)
+
+        ref_label = f' (مرجع: {erp_ref})' if erp_ref else ''
         _system_log(
             tr,
-            f'تم الإرسال للـ ERP بواسطة {profile.full_name}{erp_ref}'
+            f'تم الإرسال للـ ERP بواسطة {profile.full_name}{ref_label}'
         )
+        if erp_ref:
+            _system_log(tr, f'🔍 جارٍ التحقق من المستند {erp_ref} في SOFTECH — قد يستغرق ذلك عدة ساعات حتى يتم استلام البيانات من الفرع المصدر.')
+
+        return Response(
+            TransferRequestDetailSerializer(tr, context={'request': request}).data
+        )
+
+    # ── Check ERP Match (manual trigger) ─────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='check-erp-match')
+    def check_erp_match(self, request, pk=None):
+        """
+        POST /{id}/check-erp-match/
+        Admin / purchasing only — manually trigger ERP match verification.
+        Runs ERPMatcher, persists result, logs to chatter, returns updated serializer.
+        """
+        tr = self.get_object()
+        profile = _profile(request)
+
+        if not profile or profile.role not in ('admin', 'purchasing'):
+            return Response(
+                {'detail': 'هذا الإجراء مخصص للمشرفين ومسؤولي المشتريات فقط'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if tr.status not in ('sent_to_erp', 'completed'):
+            return Response(
+                {'detail': 'يمكن التحقق من المطابقة فقط للطلبات المُرسَلة إلى ERP'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Rate limit: max one check per 20 seconds to protect the Sybase connection
+        if tr.erp_last_checked:
+            elapsed = (timezone.now() - tr.erp_last_checked).total_seconds()
+            if elapsed < 20:
+                remaining = int(20 - elapsed) + 1
+                return Response(
+                    {'detail': f'يرجى الانتظار {remaining} ثانية قبل إعادة الفحص.'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        from .erp_matcher import ERPMatcher, apply_match_result, ERP_MATCH_UPDATE_FIELDS
+
+        result = ERPMatcher(tr).run()
+        apply_match_result(tr, result)
+
+        # If auto-search discovered the docnumber, persist it to erp_reference
+        update_fields = list(ERP_MATCH_UPDATE_FIELDS)
+        if result.get('discovered_doc') and not tr.erp_reference:
+            tr.erp_reference = result['discovered_doc']
+            if 'erp_reference' not in update_fields:
+                update_fields.append('erp_reference')
+
+        tr.save(update_fields=update_fields)
+
+        # Log result to chatter
+        _system_log(tr, result['detail'])
+
+        # Notify both branches if matched
+        if result['status'] in ('matched', 'partial'):
+            _notify(
+                tr,
+                f'تم التحقق من مستند ERP — {tr.request_number}',
+                result['detail'],
+                'transfer_response',
+                branch=tr.requesting_branch,
+            )
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -407,9 +510,23 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        serializer = CompleteWithReceiptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items_data = {
+            i['item_id']: i['received_quantity']
+            for i in serializer.validated_data.get('items', [])
+        }
+
         tr.status = 'completed'
         tr.completed_at = timezone.now()
         tr.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        # Persist per-item received quantities when supplied
+        if items_data:
+            for line in tr.items.all():
+                if line.item_id in items_data:
+                    line.received_quantity = items_data[line.item_id]
+                    line.save(update_fields=['received_quantity'])
 
         _system_log(tr, f'تم إغلاق الطلب كمكتمل بواسطة {profile.full_name}')
 
@@ -534,6 +651,31 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             created_by=profile,
             **serializer.validated_data,
         )
+
+        # Notify the OTHER side that a message arrived
+        # (system log entries never trigger notifications)
+        if msg.message_type != 'system' and profile:
+            snippet = (msg.message or '📎 مرفق')[:60]
+            sender_name = profile.full_name
+            if profile.branch_id == tr.requesting_branch_id:
+                # Sender is requesting branch → notify supplying branch
+                _notify(
+                    tr,
+                    f'رسالة جديدة — {tr.request_number}',
+                    f'{sender_name}: {snippet}',
+                    'transfer_request',
+                    branch=tr.supplying_branch,
+                )
+            elif profile.branch_id == tr.supplying_branch_id:
+                # Sender is supplying branch → notify requesting branch
+                _notify(
+                    tr,
+                    f'رسالة جديدة — {tr.request_number}',
+                    f'{sender_name}: {snippet}',
+                    'transfer_response',
+                    branch=tr.requesting_branch,
+                )
+            # HQ/admin senders → no cross-branch notification to avoid noise
 
         return Response(
             TransferRequestMessageSerializer(msg, context={'request': request}).data,
@@ -696,19 +838,38 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr      = self.get_object()
         profile = _profile(request)
 
-        # Audit log
-        _system_log(tr, f'تم طباعة الطلب بواسطة {profile.full_name if profile else "النظام"}')
+        # Only log the print event when the caller explicitly opts in (prevents
+        # chatter spam from automatic print previews / pre-renders)
+        if request.query_params.get('log') == '1':
+            _system_log(tr, f'تم طباعة الطلب بواسطة {profile.full_name if profile else "النظام"}')
 
         items_data = [
             {
-                'item_code':    line.item.softech_id,
-                'item_name':    line.item.name,
-                'item_scientific': line.item.name_scientific,
-                'quantity':     float(line.quantity),
-                'notes':        line.notes,
+                'item_code':         line.item.softech_id,
+                'item_name':         line.item.name,
+                'item_scientific':   line.item.name_scientific,
+                'quantity':          float(line.quantity),
+                'approved_quantity': float(line.approved_quantity) if line.approved_quantity is not None else None,
+                'received_quantity': float(line.received_quantity) if line.received_quantity is not None else None,
+                'notes':             line.notes,
             }
             for line in tr.items.select_related('item').all()
         ]
+
+        # QR code — encodes the transfer number for scanning on receipt
+        qr_b64 = None
+        try:
+            import base64, io, qrcode
+            qr = qrcode.QRCode(version=1, box_size=4, border=2,
+                               error_correction=qrcode.constants.ERROR_CORRECT_L)
+            qr.add_data(tr.request_number)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color='black', back_color='white')
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            qr_b64 = base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass  # qrcode not installed or error — omit QR silently
 
         receipt = {
             'doc_type':              'transfer',
@@ -735,8 +896,177 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             'total_items':           len(items_data),
             'printed_by':            profile.full_name if profile else '—',
             'printed_at':            timezone.now().isoformat(),
+            'qr_code_base64':        qr_b64,
         }
         return Response(receipt)
+
+    # ── Transfer Analytics ────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'])
+    def analytics(self, request):
+        """
+        GET /api/transfers/analytics/?days=30
+        KPIs + top items + branch flow + rejection-by-branch.
+        """
+        from django.db.models import Count, Q, Sum
+        from datetime import timedelta
+
+        profile = _profile(request)
+        if not profile:
+            return Response({'detail': 'مطلوب تسجيل الدخول'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        days = max(1, min(int(request.query_params.get('days', 30)), 365))
+        since = timezone.now() - timedelta(days=days)
+
+        qs = TransferRequest.objects.filter(created_at__gte=since)
+
+        # Branch-scope the same way the list view does
+        if profile.role not in ('admin', 'purchasing', 'call_center'):
+            if profile.branch_id:
+                qs = qs.filter(
+                    Q(requesting_branch_id=profile.branch_id) |
+                    Q(supplying_branch_id=profile.branch_id)
+                )
+            else:
+                qs = qs.none()
+
+        total     = qs.count()
+        completed = qs.filter(status='completed').count()
+        rejected  = qs.filter(status='rejected').count()
+        pending   = qs.filter(status='pending').count()
+
+        # Average cycle time: submitted → completed (in hours)
+        avg_cycle = None
+        completed_timed = qs.filter(
+            status='completed',
+            submitted_at__isnull=False,
+            completed_at__isnull=False,
+        ).values_list('submitted_at', 'completed_at')
+        if completed_timed:
+            durations = [
+                (c - s).total_seconds() / 3600
+                for s, c in completed_timed
+                if s and c
+            ]
+            avg_cycle = round(sum(durations) / len(durations), 1) if durations else None
+
+        # Average response time: submitted → reviewed (in hours)
+        avg_response = None
+        reviewed_timed = qs.filter(
+            submitted_at__isnull=False,
+            reviewed_at__isnull=False,
+        ).values_list('submitted_at', 'reviewed_at')
+        if reviewed_timed:
+            durations = [
+                (r - s).total_seconds() / 3600
+                for s, r in reviewed_timed
+                if s and r
+            ]
+            avg_response = round(sum(durations) / len(durations), 1) if durations else None
+
+        # Top transferred items
+        top_items = list(
+            TransferRequestItem.objects
+            .filter(request__in=qs)
+            .values('item__name', 'item__softech_id')
+            .annotate(request_count=Count('id'), total_qty=Sum('quantity'))
+            .order_by('-request_count')[:20]
+        )
+
+        # Branch-to-branch flow
+        branch_flow = list(
+            qs.filter(supplying_branch__isnull=False)
+            .values('requesting_branch__name_ar', 'supplying_branch__name_ar')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
+
+        # Rejection rate by supplying branch
+        rejection_by_branch = list(
+            qs.filter(supplying_branch__isnull=False)
+            .values('supplying_branch__name_ar')
+            .annotate(
+                total=Count('id'),
+                rejected=Count('id', filter=Q(status='rejected')),
+            )
+            .order_by('-total')[:10]
+        )
+
+        return Response({
+            'period_days': days,
+            'kpis': {
+                'total':               total,
+                'completed':           completed,
+                'rejected':            rejected,
+                'pending':             pending,
+                'completion_rate':     round(completed / total * 100, 1) if total else 0,
+                'rejection_rate':      round(rejected  / total * 100, 1) if total else 0,
+                'avg_cycle_hours':     avg_cycle,
+                'avg_response_hours':  avg_response,
+            },
+            'top_items':           top_items,
+            'branch_flow':         branch_flow,
+            'rejection_by_branch': rejection_by_branch,
+        })
+
+    # ── Discrepancy Report ────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'], url_path='discrepancy-report')
+    def discrepancy_report(self, request):
+        """
+        GET /api/transfers/discrepancy-report/
+        Returns completed transfers where received_quantity differs from approved_quantity.
+        Requires admin or purchasing role.
+        """
+        from django.db.models import F
+
+        profile = _profile(request)
+        if not profile or profile.role not in ('admin', 'purchasing'):
+            return Response(
+                {'detail': 'هذا التقرير مخصص للمشرفين ومسؤولي المشتريات فقط'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        lines = (
+            TransferRequestItem.objects
+            .filter(
+                request__status='completed',
+                approved_quantity__isnull=False,
+                received_quantity__isnull=False,
+            )
+            .exclude(approved_quantity=F('received_quantity'))
+            .select_related(
+                'request__requesting_branch',
+                'request__supplying_branch',
+                'item',
+            )
+            .order_by('-request__completed_at')[:200]
+        )
+
+        data = []
+        for line in lines:
+            approved = float(line.approved_quantity)
+            received = float(line.received_quantity)
+            delta    = approved - received
+            pct      = round(delta / approved * 100, 1) if approved else 0
+            data.append({
+                'request_number':    line.request.request_number,
+                'request_id':        line.request_id,
+                'completed_at':      line.request.completed_at.isoformat() if line.request.completed_at else None,
+                'requesting_branch': (line.request.requesting_branch.name_ar or line.request.requesting_branch.name)
+                                     if line.request.requesting_branch_id else '—',
+                'supplying_branch':  (line.request.supplying_branch.name_ar or line.request.supplying_branch.name)
+                                     if line.request.supplying_branch_id else '—',
+                'item_name':         line.item.name,
+                'item_code':         line.item.softech_id,
+                'approved_quantity': approved,
+                'received_quantity': received,
+                'discrepancy':       round(delta, 3),
+                'discrepancy_pct':   pct,
+                'short':             delta > 0,
+            })
+
+        return Response({'discrepancies': data, 'total': len(data)})
 
     # ── WhatsApp Share ─────────────────────────────────────────────────────────
 
