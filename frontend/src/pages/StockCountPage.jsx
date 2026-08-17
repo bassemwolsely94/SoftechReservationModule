@@ -1,600 +1,918 @@
-import { useState, useEffect, useCallback } from 'react'
-import { stockCountApi, branchesApi, itemsApi } from '../api/client'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { stockCountApi } from '../api/client';
+import CanDo from '../components/CanDo';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG = {
-  open:      { label: 'قيد الجرد',  color: 'bg-blue-100 text-blue-700' },
-  completed: { label: 'مكتمل',      color: 'bg-green-100 text-green-700' },
-  cancelled: { label: 'ملغى',       color: 'bg-gray-100 text-gray-500' },
+const DOCCODE_OPTIONS = [
+  { value: 10,  label: '10  - مشتريات من الموردين' },
+  { value: 25,  label: '25  - استلام تحويل وارد (فرع / مركز)' },
+  { value: 50,  label: '50  - تسوية زيادة جرد' },
+  { value: 80,  label: '80  - مبيعات حجوزات' },
+  { value: 115, label: '115 - مبيعات' },
+  { value: 120, label: '120 - مرتجعات للموردين' },
+  { value: 125, label: '125 - تحويل صادر (إلى فرع / مركز)' },
+  { value: 150, label: '150 - تسوية نقص جرد' },
+];
+
+const PRESETS = [
+  { key: 'sold_today',      label: 'مبيعات اليوم',              doccodes: [115, 80], days: 0 },
+  { key: 'returns_today',   label: 'مرتجعات للموردين اليوم',    doccodes: [120],     days: 0 },
+  { key: 'received_hq',     label: 'استلام تحويل وارد',         doccodes: [25],      days: 7 },
+  { key: 'purchased_today', label: 'مشتريات اليوم',             doccodes: [10],      days: 0 },
+  { key: 'transferred_out', label: 'تحويلات صادرة',             doccodes: [125],     days: 7 },
+  { key: 'full_branch',     label: 'جرد شامل للفرع',            doccodes: [],        days: 0 },
+];
+
+const STATUS_COLORS = {
+  draft:          { bg: '#f3f4f6', text: '#374151', border: '#d1d5db' },
+  snapshot_taken: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+  exported:       { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+  uploaded:       { bg: '#fefce8', text: '#a16207', border: '#fde68a' },
+  variance_ready: { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
+  closed:         { bg: '#1f2937', text: '#f9fafb', border: '#374151' },
+};
+
+const STATUS_LABELS = {
+  draft:          'مسودة',
+  snapshot_taken: 'تم اللقطة',
+  exported:       'تم التصدير',
+  uploaded:       'تم الرفع',
+  variance_ready: 'الفروق جاهزة',
+  closed:         'مغلق',
+};
+
+const STATUS_STEPS = ['draft', 'snapshot_taken', 'exported', 'uploaded', 'variance_ready', 'closed'];
+
+// ── Utility helpers ───────────────────────────────────────────────────────────
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function diffColor(diff) {
-  if (diff === null || diff === undefined) return 'text-gray-400'
-  const n = Number(diff)
-  if (n === 0) return 'text-green-600 font-semibold'
-  if (n > 0)   return 'text-blue-600 font-semibold'
-  return 'text-red-600 font-semibold'
+function fmtQty(v) {
+  if (v === null || v === undefined) return '—';
+  return parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
-// ── CountLine row ─────────────────────────────────────────────────────────────
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
-function CountLineRow({ line, sessionId, onUpdated, isOpen }) {
-  const [editing, setEditing]   = useState(false)
-  const [qty,     setQty]       = useState(line.counted_qty ?? '')
-  const [notes,   setNotes]     = useState(line.notes ?? '')
-  const [saving,  setSaving]    = useState(false)
+// ── Shared table cell styles ──────────────────────────────────────────────────
 
-  const save = async () => {
-    setSaving(true)
-    try {
-      await stockCountApi.updateLine(sessionId, line.id, {
-        counted_qty: qty === '' ? null : Number(qty),
-        notes,
-      })
-      onUpdated()
-      setEditing(false)
-    } finally {
-      setSaving(false)
-    }
-  }
+const th = {
+  padding: '10px 12px',
+  textAlign: 'right',
+  fontWeight: 600,
+  fontSize: 13,
+  borderBottom: '1px solid #1e3a5f',
+  whiteSpace: 'nowrap',
+};
 
-  const diff = line.counted_qty != null
-    ? Number(line.counted_qty) - Number(line.system_qty)
-    : null
+const td = {
+  padding: '9px 12px',
+  borderBottom: '1px solid #f3f4f6',
+  fontSize: 13,
+};
 
+// ── WorkflowProgress ─────────────────────────────────────────────────────────
+
+function WorkflowProgress({ status }) {
+  const idx = STATUS_STEPS.indexOf(status);
   return (
-    <tr className={`border-b border-gray-100 hover:bg-gray-50 transition-colors
-      ${line.has_discrepancy ? 'bg-red-50/30' : ''}`}>
-      <td className="px-4 py-2.5">
-        <div className="text-sm font-medium text-gray-800">{line.item_name}</div>
-        {line.item_scientific && (
-          <div className="text-xs text-gray-400 italic">{line.item_scientific}</div>
-        )}
-        {line.item_softech_id && (
-          <div className="text-[11px] font-mono text-gray-400">{line.item_softech_id}</div>
-        )}
-      </td>
-      <td className="px-4 py-2.5 text-center text-sm text-gray-700">{Number(line.system_qty).toFixed(2)}</td>
-      <td className="px-4 py-2.5 text-center text-sm text-gray-500">
-        {line.erp_transqty != null ? Number(line.erp_transqty).toFixed(2) : '—'}
-      </td>
-      <td className="px-4 py-2.5 text-center">
-        {editing ? (
-          <input
-            type="number"
-            value={qty}
-            onChange={e => setQty(e.target.value)}
-            className="w-24 border border-brand-400 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-brand-400"
-            autoFocus
-            step="0.001"
-          />
-        ) : (
-          <span className={`text-sm ${line.counted_qty != null ? 'text-gray-800 font-medium' : 'text-gray-300'}`}>
-            {line.counted_qty != null ? Number(line.counted_qty).toFixed(2) : '—'}
-          </span>
-        )}
-      </td>
-      <td className={`px-4 py-2.5 text-center text-sm ${diffColor(diff)}`}>
-        {diff != null
-          ? (diff >= 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2))
-          : '—'}
-      </td>
-      <td className="px-4 py-2.5">
-        {editing ? (
-          <input
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
-            placeholder="ملاحظة..."
-          />
-        ) : (
-          <span className="text-xs text-gray-400">{line.notes || ''}</span>
-        )}
-      </td>
-      {isOpen && (
-        <td className="px-3 py-2.5 text-center">
-          {editing ? (
-            <div className="flex items-center gap-1 justify-center">
-              <button onClick={save} disabled={saving}
-                className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 disabled:opacity-50">
-                {saving ? '...' : 'حفظ'}
-              </button>
-              <button onClick={() => { setQty(line.counted_qty ?? ''); setNotes(line.notes ?? ''); setEditing(false) }}
-                className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200">
-                إلغاء
-              </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, margin: '8px 0' }}>
+      {STATUS_STEPS.map((step, i) => {
+        const done   = i < idx;
+        const active = i === idx;
+        const color  = done ? '#10b981' : active ? '#3b82f6' : '#d1d5db';
+        return (
+          <React.Fragment key={step}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 60 }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%',
+                background: color, color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 'bold',
+              }}>
+                {done ? '✓' : i + 1}
+              </div>
+              <span style={{
+                fontSize: 9,
+                color: active ? '#1d4ed8' : done ? '#059669' : '#9ca3af',
+                marginTop: 2, textAlign: 'center',
+              }}>
+                {STATUS_LABELS[step]}
+              </span>
             </div>
-          ) : (
-            <button onClick={() => setEditing(true)}
-              className="px-2.5 py-1 border border-gray-300 text-gray-500 rounded-lg text-xs hover:bg-gray-50">
-              تعديل
-            </button>
-          )}
-        </td>
-      )}
-    </tr>
-  )
+            {i < STATUS_STEPS.length - 1 && (
+              <div style={{ flex: 1, height: 2, background: done ? '#10b981' : '#e5e7eb', marginBottom: 16 }} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
 }
 
-// ── Session Detail ────────────────────────────────────────────────────────────
+// ── StatusBadge ───────────────────────────────────────────────────────────────
 
-function SessionDetail({ sessionId, onBack }) {
-  const [session,     setSession]     = useState(null)
-  const [loading,     setLoading]     = useState(true)
-  const [importing,   setImporting]   = useState(false)
-  const [erpForm,     setErpForm]     = useState({ doc_code: '', doc_number: '', branch_code: '' })
-  const [showImport,  setShowImport]  = useState(false)
-  const [addItemQ,    setAddItemQ]    = useState('')
-  const [itemResults, setItemResults] = useState([])
-  const [searchingItem, setSearchingItem] = useState(false)
-  const [completing,  setCompleting]  = useState(false)
-  const [toast,       setToast]       = useState(null)
-  const [filter,      setFilter]      = useState('all')  // all | discrepancy | uncounted
+function StatusBadge({ status }) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.draft;
+  return (
+    <span style={{
+      padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
+      background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+    }}>
+      {STATUS_LABELS[status] || status}
+    </span>
+  );
+}
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+// ── CreateSessionModal ────────────────────────────────────────────────────────
+
+function CreateSessionModal({ onClose, onCreate }) {
+  const [form, setForm] = useState({
+    name: '', branch_code: '', mode: 'transaction',
+    doccodes: [10, 25, 80],
+    date_from: today(), date_to: today(),
+    user_code_filter: '', category_filter: '',
+    item_codes_filter: [], notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  function applyPreset(preset) {
+    if (preset.key === 'full_branch') {
+      setForm(f => ({ ...f, mode: 'full', doccodes: [], date_from: '', date_to: '' }));
+    } else {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - preset.days);
+      setForm(f => ({
+        ...f, mode: 'transaction', doccodes: preset.doccodes,
+        date_from: start.toISOString().slice(0, 10),
+        date_to:   end.toISOString().slice(0, 10),
+      }));
+    }
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  function toggleDoccode(val) {
+    setForm(f => ({
+      ...f,
+      doccodes: f.doccodes.includes(val)
+        ? f.doccodes.filter(d => d !== val)
+        : [...f.doccodes, val],
+    }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true); setError('');
     try {
-      const res = await stockCountApi.get(sessionId)
-      setSession(res.data)
+      const payload = { ...form };
+      if (form.mode === 'full') { payload.doccodes = []; payload.date_from = null; payload.date_to = null; }
+      const res = await stockCountApi.create(payload);
+      onCreate(res.data);
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'خطأ في الحفظ');
     } finally {
-      setLoading(false)
-    }
-  }, [sessionId])
-
-  useEffect(() => { load() }, [load])
-
-  // Item search
-  useEffect(() => {
-    if (!addItemQ || addItemQ.length < 2) { setItemResults([]); return }
-    const t = setTimeout(async () => {
-      setSearchingItem(true)
-      try {
-        const r = await itemsApi.list({ search: addItemQ, page_size: 10 })
-        setItemResults(r.data.results || r.data)
-      } finally {
-        setSearchingItem(false)
-      }
-    }, 300)
-    return () => clearTimeout(t)
-  }, [addItemQ])
-
-  const handleImport = async () => {
-    if (!erpForm.doc_code || !erpForm.doc_number) return
-    setImporting(true)
-    try {
-      const r = await stockCountApi.importErp(sessionId, erpForm)
-      showToast(`تم استيراد ${r.data._imported} صنف من ERP`)
-      setShowImport(false)
-      setSession(r.data)
-    } catch (e) {
-      showToast(e.response?.data?.detail || 'خطأ في الاستيراد', 'error')
-    } finally {
-      setImporting(false)
+      setSaving(false);
     }
   }
-
-  const handleAddItem = async (item) => {
-    try {
-      await stockCountApi.addItem(sessionId, { item_id: item.id })
-      showToast(`تمت إضافة "${item.name}"`)
-      setAddItemQ('')
-      setItemResults([])
-      load()
-    } catch (e) {
-      showToast(e.response?.data?.detail || 'خطأ', 'error')
-    }
-  }
-
-  const handleComplete = async () => {
-    if (!confirm('إغلاق جلسة الجرد؟ لن تتمكن من تعديلها بعد ذلك.')) return
-    setCompleting(true)
-    try {
-      await stockCountApi.complete(sessionId)
-      showToast('تم إغلاق الجلسة ✓')
-      load()
-    } finally {
-      setCompleting(false)
-    }
-  }
-
-  const handleExport = async () => {
-    try {
-      const r = await stockCountApi.exportCsv(sessionId)
-      const url = URL.createObjectURL(new Blob([r.data]))
-      const a   = document.createElement('a')
-      a.href    = url
-      a.download = `stock_count_${sessionId}.csv`
-      a.click()
-    } catch {
-      showToast('خطأ في التصدير', 'error')
-    }
-  }
-
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 animate-pulse">جاري التحميل...</div>
-  if (!session) return null
-
-  const isOpen = session.status === 'open'
-  const lines  = session.lines || []
-
-  const filteredLines = lines.filter(l => {
-    if (filter === 'discrepancy') return l.has_discrepancy
-    if (filter === 'uncounted')   return l.counted_qty == null
-    return true
-  })
-
-  const totalDisc = lines.filter(l => l.has_discrepancy).length
-  const uncounted = lines.filter(l => l.counted_qty == null).length
-  const statusCfg = STATUS_CONFIG[session.status] || {}
 
   return (
-    <div className="flex flex-col h-full" dir="rtl">
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 12, width: 'min(680px,95vw)', maxHeight: '90vh', overflowY: 'auto', padding: 32, direction: 'rtl' }}>
+        <h2 style={{ margin: '0 0 20px', fontSize: 20 }}>إنشاء جلسة جرد جديدة</h2>
 
-      {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium
-          ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-          {toast.msg}
-        </div>
-      )}
-
-      {/* Sub-header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
-        <div className="flex items-center gap-3 mb-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-600 text-sm flex items-center gap-1">
-            ← رجوع
-          </button>
-          <div className="h-4 w-px bg-gray-300" />
-          <h2 className="font-bold text-gray-900">جرد {session.branch_name} — {session.count_date}</h2>
-          <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusCfg.color}`}>
-            {statusCfg.label}
-          </span>
-        </div>
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Stats */}
-          <div className="flex gap-4 text-sm">
-            <span className="text-gray-500">{lines.length} صنف</span>
-            <span className="text-amber-600">{uncounted} لم يُعد</span>
-            <span className="text-red-600">{totalDisc} فرق</span>
+        {/* Presets */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>بدء سريع:</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {PRESETS.map(p => (
+              <button key={p.key} onClick={() => applyPreset(p)} style={{
+                padding: '6px 14px', borderRadius: 20, border: '1px solid #e5e7eb',
+                background: '#f9fafb', cursor: 'pointer', fontSize: 13,
+              }}>{p.label}</button>
+            ))}
           </div>
-          <div className="mr-auto flex items-center gap-2">
-            {isOpen && (
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>اسم الجلسة *</label>
+              <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>كود الفرع *</label>
+              <input required value={form.branch_code} onChange={e => setForm(f => ({ ...f, branch_code: e.target.value }))}
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>النوع</label>
+              <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }}>
+                <option value="transaction">مبني على الحركات</option>
+                <option value="full">جرد شامل</option>
+                <option value="filtered">جرد مفلتر</option>
+              </select>
+            </div>
+            {form.mode === 'transaction' && (
               <>
-                {/* Import ERP */}
-                <button onClick={() => setShowImport(s => !s)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
-                  📥 استيراد من ERP
-                </button>
-                {/* Complete */}
-                <button onClick={handleComplete} disabled={completing}
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-                  {completing ? '...' : '✓ إغلاق الجلسة'}
-                </button>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600 }}>من تاريخ</label>
+                  <input type="date" value={form.date_from} onChange={e => setForm(f => ({ ...f, date_from: e.target.value }))}
+                    style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600 }}>إلى تاريخ</label>
+                  <input type="date" value={form.date_to} onChange={e => setForm(f => ({ ...f, date_to: e.target.value }))}
+                    style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+                </div>
               </>
             )}
-            <button onClick={handleExport}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-              📊 تصدير CSV
-            </button>
           </div>
-        </div>
 
-        {/* Import panel */}
-        {showImport && (
-          <div className="mt-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
-            <div className="flex items-end gap-3 flex-wrap">
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">كود المستند (doccode)</label>
-                <input value={erpForm.doc_code}
-                  onChange={e => setErpForm(f => ({ ...f, doc_code: e.target.value }))}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                  placeholder="110" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">رقم المستند</label>
-                <input value={erpForm.doc_number}
-                  onChange={e => setErpForm(f => ({ ...f, doc_number: e.target.value }))}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                  placeholder="123456" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600 block mb-1">كود الفرع (اختياري)</label>
-                <input value={erpForm.branch_code}
-                  onChange={e => setErpForm(f => ({ ...f, branch_code: e.target.value }))}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                  placeholder="1" />
-              </div>
-              <button onClick={handleImport} disabled={importing}
-                className="px-4 py-1.5 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
-                {importing ? 'جاري الاستيراد...' : 'استيراد'}
-              </button>
-              <button onClick={() => setShowImport(false)}
-                className="px-3 py-1.5 bg-white text-gray-500 rounded-lg text-sm border hover:bg-gray-50">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Add item panel */}
-        {isOpen && (
-          <div className="mt-3 relative">
-            <input
-              value={addItemQ}
-              onChange={e => setAddItemQ(e.target.value)}
-              className="w-full max-w-md border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-              placeholder="🔍 إضافة صنف بالاسم أو الكود..."
-            />
-            {(itemResults.length > 0 || searchingItem) && (
-              <div className="absolute top-full mt-1 w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-52 overflow-auto">
-                {searchingItem && <div className="px-4 py-3 text-sm text-gray-400 animate-pulse">جاري البحث...</div>}
-                {itemResults.map(item => (
-                  <button key={item.id} onClick={() => handleAddItem(item)}
-                    className="w-full text-right px-4 py-2.5 hover:bg-brand-50 text-sm flex items-center justify-between border-b border-gray-50 last:border-0">
-                    <div>
-                      <span className="font-medium text-gray-800">{item.name}</span>
-                      {item.name_scientific && <span className="text-xs text-gray-400 mr-1">({item.name_scientific})</span>}
-                    </div>
-                    <span className="text-xs font-mono text-gray-400">{item.softech_id}</span>
-                  </button>
+          {form.mode === 'transaction' && (
+            <div style={{ margin: '16px 0' }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>أكواد المستند</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                {DOCCODE_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={form.doccodes.includes(opt.value)} onChange={() => toggleDoccode(opt.value)} />
+                    {opt.label}
+                  </label>
                 ))}
               </div>
-            )}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>فلتر كود المستخدم</label>
+              <input value={form.user_code_filter} onChange={e => setForm(f => ({ ...f, user_code_filter: e.target.value }))}
+                placeholder="اتركه فارغاً للكل"
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>فلتر التصنيف</label>
+              <input value={form.category_filter} onChange={e => setForm(f => ({ ...f, category_filter: e.target.value }))}
+                placeholder="اتركه فارغاً للكل"
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>ملاحظات</label>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2}
+                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', marginTop: 4, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
           </div>
-        )}
+
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px', color: '#dc2626', marginTop: 12, fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
+            <button type="button" onClick={onClose}
+              style={{ padding: '8px 20px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+              إلغاء
+            </button>
+            <button type="submit" disabled={saving}
+              style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+              {saving ? 'جاري الإنشاء...' : 'إنشاء الجلسة'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── SessionsTab ───────────────────────────────────────────────────────────────
+
+function SessionsTab({ onSelect, refresh }) {
+  const [sessions, setSessions]   = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [search, setSearch]       = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (statusFilter) params.status = statusFilter;
+      if (search) params.search = search;
+      const res = await stockCountApi.list(params);
+      setSessions(res.data.results || res.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, search]);
+
+  useEffect(() => { load(); }, [load, refresh]);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          placeholder="بحث بالاسم أو الفرع..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1, minWidth: 200, border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}
+        />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}>
+          <option value="">كل الحالات</option>
+          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <CanDo module="admin" action="create">
+          <button onClick={() => setShowCreate(true)} style={{
+            padding: '8px 20px', borderRadius: 6, border: 'none',
+            background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
+          }}>
+            + جلسة جديدة
+          </button>
+        </CanDo>
       </div>
 
-      {/* Filter tabs */}
-      <div className="bg-gray-50 border-b border-gray-200 px-6 py-2 flex gap-2">
-        {[
-          { id: 'all',         label: `الكل (${lines.length})` },
-          { id: 'uncounted',   label: `لم يُعد (${uncounted})` },
-          { id: 'discrepancy', label: `فروق (${totalDisc})` },
-        ].map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-              ${filter === f.id ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>
-            {f.label}
-          </button>
+      {loading && <div style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>جاري التحميل...</div>}
+
+      {!loading && sessions.length === 0 && (
+        <div style={{ textAlign: 'center', color: '#6b7280', padding: 48, background: '#f9fafb', borderRadius: 8 }}>
+          لا توجد جلسات جرد. أنشئ جلسة جديدة للبدء.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {sessions.map(s => (
+          <div key={s.id} onClick={() => onSelect(s)} style={{
+            border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px',
+            cursor: 'pointer', background: '#fff', transition: 'box-shadow 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'}
+          onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <div>
+                <span style={{ fontWeight: 700, fontSize: 16 }}>{s.name}</span>
+                <span style={{ marginRight: 12, color: '#6b7280', fontSize: 13 }}>فرع: {s.branch_code}</span>
+              </div>
+              <StatusBadge status={s.status} />
+            </div>
+            <WorkflowProgress status={s.status} />
+            <div style={{ display: 'flex', gap: 24, marginTop: 8, fontSize: 13, color: '#6b7280' }}>
+              <span>الأصناف: <strong style={{ color: '#111' }}>{s.item_count || 0}</strong></span>
+              <span style={{ color: '#16a34a' }}>زيادة: <strong>{s.surplus_count || 0}</strong></span>
+              <span style={{ color: '#dc2626' }}>نقص: <strong>{s.deficit_count || 0}</strong></span>
+              <span style={{ color: '#059669' }}>مطابق: <strong>{s.ok_count || 0}</strong></span>
+              <span style={{ marginRight: 'auto' }}>
+                {new Date(s.created_at).toLocaleDateString('en-US')}
+              </span>
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-right">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-            <tr>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-right">الصنف</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-center">كمية النظام</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-center">كمية ERP</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-center">الكمية المعدودة</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-center">الفرق</th>
-              <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-right">ملاحظات</th>
-              {isOpen && <th className="px-3 py-3 text-xs font-semibold text-gray-500 text-center">إجراء</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLines.length === 0 ? (
-              <tr>
-                <td colSpan={isOpen ? 7 : 6} className="px-4 py-12 text-center text-gray-400 text-sm">
-                  {lines.length === 0
-                    ? 'لا توجد سطور. استورد من ERP أو أضف أصنافاً يدوياً.'
-                    : 'لا توجد سطور تطابق هذا الفلتر.'}
-                </td>
-              </tr>
-            ) : filteredLines.map(line => (
-              <CountLineRow
-                key={line.id}
-                line={line}
-                sessionId={sessionId}
-                onUpdated={load}
-                isOpen={isOpen}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-// ── Session List / Create ─────────────────────────────────────────────────────
-
-function CreateSessionModal({ branches, onClose, onCreated }) {
-  const today = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState({ branch: '', count_date: today, notes: '' })
-  const [saving, setSaving] = useState(false)
-  const [error,  setError]  = useState(null)
-
-  const submit = async () => {
-    if (!form.branch) { setError('اختر الفرع'); return }
-    setSaving(true); setError(null)
-    try {
-      const r = await stockCountApi.create(form)
-      onCreated(r.data.id)
-    } catch (e) {
-      setError(e.response?.data?.detail || 'حدث خطأ')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md" dir="rtl">
-        <h3 className="font-bold text-gray-900 mb-4">جلسة جرد جديدة</h3>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-gray-600 block mb-1">الفرع *</label>
-            <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-              <option value="">-- اختر الفرع --</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 block mb-1">تاريخ الجرد *</label>
-            <input type="date" value={form.count_date}
-              onChange={e => setForm(f => ({ ...f, count_date: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 block mb-1">ملاحظات</label>
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              rows={2}
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400" />
-          </div>
-        </div>
-        {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-200">{error}</div>}
-        <div className="flex gap-2 mt-5">
-          <button onClick={submit} disabled={saving}
-            className="flex-1 py-2 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
-            {saving ? 'جاري الإنشاء...' : 'إنشاء جلسة'}
-          </button>
-          <button onClick={onClose}
-            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200 text-sm">
-            إلغاء
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Page root ─────────────────────────────────────────────────────────────────
-
-export default function StockCountPage() {
-  const [sessions,    setSessions]    = useState([])
-  const [branches,    setBranches]    = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [showCreate,  setShowCreate]  = useState(false)
-  const [activeId,    setActiveId]    = useState(null)
-  const [filterBranch, setFilterBranch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-
-  const loadSessions = useCallback(async () => {
-    setLoading(true)
-    try {
-      const params = {}
-      if (filterBranch) params.branch = filterBranch
-      if (filterStatus) params.status = filterStatus
-      const r = await stockCountApi.list(params)
-      setSessions(r.data.results || r.data)
-    } finally {
-      setLoading(false)
-    }
-  }, [filterBranch, filterStatus])
-
-  useEffect(() => {
-    branchesApi.list().then(r => setBranches(r.data.results || r.data))
-  }, [])
-
-  useEffect(() => { loadSessions() }, [loadSessions])
-
-  if (activeId) {
-    return (
-      <SessionDetail
-        sessionId={activeId}
-        onBack={() => { setActiveId(null); loadSessions() }}
-      />
-    )
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-gray-50" dir="rtl">
-
       {showCreate && (
         <CreateSessionModal
-          branches={branches}
           onClose={() => setShowCreate(false)}
-          onCreated={(id) => { setShowCreate(false); setActiveId(id) }}
+          onCreate={s => { setSessions(prev => [s, ...prev]); onSelect(s); }}
         />
       )}
+    </div>
+  );
+}
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📦</span>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">الجرد الفعلي</h1>
-              <p className="text-sm text-gray-500">إنشاء وإدارة جلسات الجرد وتتبع الفروق</p>
-            </div>
-          </div>
-          <button onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700">
-            + جلسة جرد جديدة
-          </button>
-        </div>
-        {/* Filters */}
-        <div className="flex gap-3 mt-4 flex-wrap">
-          <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
-            className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-            <option value="">كل الفروع</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-            <option value="">كل الحالات</option>
-            <option value="open">قيد الجرد</option>
-            <option value="completed">مكتملة</option>
-            <option value="cancelled">ملغاة</option>
-          </select>
-        </div>
+// ── SnapshotTab ───────────────────────────────────────────────────────────────
+
+function SnapshotTab({ session, onRefresh }) {
+  const [preview, setPreview]   = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [snapping, setSnapping] = useState(false);
+  const [msg, setMsg]           = useState('');
+
+  async function handlePreview() {
+    setLoading(true); setMsg(''); setPreview(null);
+    try {
+      const res = await stockCountApi.previewItems(session.id);
+      setPreview(res.data);
+    } catch (err) {
+      setMsg(err.response?.data?.detail || 'خطأ في الاستعلام');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSnapshot() {
+    if (!window.confirm('سيتم تجميد الكميات المتوقعة الآن. هل أنت متأكد؟')) return;
+    setSnapping(true); setMsg('');
+    try {
+      const res = await stockCountApi.generateSnapshot(session.id);
+      setMsg(`✓ تم أخذ اللقطة بنجاح — ${res.data.item_count} صنف`);
+      onRefresh();
+    } catch (err) {
+      setMsg(err.response?.data?.detail || 'خطأ في أخذ اللقطة');
+    } finally {
+      setSnapping(false);
+    }
+  }
+
+  const canSnap = !['variance_ready', 'closed'].includes(session.status);
+
+  return (
+    <div>
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 16, marginBottom: 20, fontSize: 14 }}>
+        <strong>ℹ️ اللقطة (Snapshot)</strong>: تُجمّد الكميات المتوقعة من SOFTECH في لحظة بعينها.
+        بعد أخذ اللقطة لن تتغير الكميات المتوقعة حتى لو تغيرت البيانات في SOFTECH.
       </div>
 
-      {/* Sessions list */}
-      <div className="flex-1 overflow-auto p-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-40 text-gray-400 animate-pulse">جاري التحميل...</div>
-        ) : sessions.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-5xl mb-4">📦</div>
-            <div className="text-gray-500 font-medium mb-2">لا توجد جلسات جرد</div>
-            <div className="text-sm text-gray-400 mb-6">ابدأ بإنشاء جلسة جديدة</div>
-            <button onClick={() => setShowCreate(true)}
-              className="px-5 py-2.5 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700">
-              + جلسة جديدة
-            </button>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+        <button onClick={handlePreview} disabled={loading} style={{
+          padding: '10px 24px', borderRadius: 6, border: '1px solid #2563eb',
+          color: '#2563eb', background: '#fff', cursor: 'pointer', fontWeight: 600,
+        }}>
+          {loading ? 'جاري الاستعلام...' : '🔍 معاينة الأصناف'}
+        </button>
+        {canSnap && (
+          <button onClick={handleSnapshot} disabled={snapping} style={{
+            padding: '10px 24px', borderRadius: 6, border: 'none',
+            background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
+          }}>
+            {snapping ? 'جاري أخذ اللقطة...' : '📸 أخذ اللقطة'}
+          </button>
+        )}
+      </div>
+
+      {msg && (
+        <div style={{
+          padding: '10px 16px', borderRadius: 6, marginBottom: 16, fontSize: 14,
+          background: msg.startsWith('✓') ? '#f0fdf4' : '#fef2f2',
+          border: `1px solid ${msg.startsWith('✓') ? '#bbf7d0' : '#fecaca'}`,
+          color: msg.startsWith('✓') ? '#15803d' : '#dc2626',
+        }}>{msg}</div>
+      )}
+
+      {preview && (
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 15 }}>
+            معاينة: {preview.item_count} صنف من {preview.source}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sessions.map(s => {
-              const cfg = STATUS_CONFIG[s.status] || {}
-              return (
-                <button key={s.id} onClick={() => setActiveId(s.id)}
-                  className="bg-white rounded-2xl border border-gray-200 p-5 text-right hover:border-brand-300 hover:shadow-md transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="font-bold text-gray-900 text-sm">{s.branch_name}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{s.count_date}</div>
-                    </div>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${cfg.color}`}>
-                      {cfg.label}
-                    </span>
-                  </div>
-                  <div className="flex gap-4 text-xs text-gray-500">
-                    <span>{s.total_lines} صنف</span>
-                    {s.discrepancy_count > 0 && (
-                      <span className="text-red-500 font-medium">{s.discrepancy_count} فرق</span>
-                    )}
-                    {s.erp_doc_number && (
-                      <span className="font-mono text-gray-400">#{s.erp_doc_number}</span>
-                    )}
-                  </div>
-                  {s.notes && (
-                    <div className="mt-2 text-xs text-gray-400 truncate">{s.notes}</div>
-                  )}
-                </button>
-              )
-            })}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#1e3a5f', color: '#fff' }}>
+                  <th style={th}>كود الصنف</th>
+                  <th style={th}>اسم الصنف</th>
+                  <th style={th}>التصنيف</th>
+                  <th style={th}>الكمية المتوقعة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(preview.items || []).slice(0, 100).map((item, i) => (
+                  <tr key={item.item_code} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                    <td style={td}>{item.item_code}</td>
+                    <td style={td}>{item.item_name}</td>
+                    <td style={td}>{item.category_name || '—'}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{fmtQty(item.expected_qty)}</td>
+                  </tr>
+                ))}
+                {(preview.items || []).length > 100 && (
+                  <tr>
+                    <td colSpan={4} style={{ ...td, textAlign: 'center', color: '#6b7280' }}>
+                      ... و {preview.items.length - 100} صنف آخر
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CountTab ──────────────────────────────────────────────────────────────────
+
+function CountTab({ session, onRefresh }) {
+  const [downloading, setDownloading] = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [error, setError]             = useState('');
+  const fileRef = useRef();
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const res = await stockCountApi.exportSheet(session.id);
+      const cd    = res.headers['content-disposition'] || '';
+      const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const fname = match ? match[1].replace(/['"]/g, '') : `stock_count_${session.id}.xlsx`;
+      downloadBlob(res.data, fname);
+    } catch {
+      setError('خطأ في تحميل ورقة العد');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function handleUpload() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) { setError('اختر ملف أولاً'); return; }
+    setUploading(true); setError(''); setUploadResult(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await stockCountApi.uploadResults(session.id, formData);
+      setUploadResult(res.data);
+      onRefresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'خطأ في رفع الملف');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  const hasSnapshot = session.status !== 'draft';
+
+  return (
+    <div>
+      {!hasSnapshot && (
+        <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: 16, marginBottom: 20, fontSize: 14 }}>
+          ⚠️ يجب أخذ اللقطة أولاً قبل تحميل ورقة العد.
+        </div>
+      )}
+
+      {/* Step 1 — Download */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
+          <span style={{
+            background: '#2563eb', color: '#fff', borderRadius: '50%',
+            width: 24, height: 24, display: 'inline-flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 13, marginLeft: 8,
+          }}>1</span>
+          تحميل ورقة العد الفارغة
+        </div>
+        <p style={{ color: '#6b7280', fontSize: 14, margin: '0 0 12px' }}>
+          احفظ الملف، أدخل الكميات المعدودة في عمود "الكمية المعدودة" (العمود الأصفر)، ثم ارفع الملف في الخطوة التالية.
+        </p>
+        <button onClick={handleDownload} disabled={downloading || !hasSnapshot} style={{
+          padding: '10px 24px', borderRadius: 6, border: '1px solid #059669',
+          color: '#059669', background: '#fff', cursor: 'pointer', fontWeight: 600,
+          opacity: !hasSnapshot ? 0.5 : 1,
+        }}>
+          {downloading ? 'جاري التحميل...' : '⬇️ تحميل Excel / CSV'}
+        </button>
+      </div>
+
+      {/* Step 2 — Upload */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
+          <span style={{
+            background: '#2563eb', color: '#fff', borderRadius: '50%',
+            width: 24, height: 24, display: 'inline-flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 13, marginLeft: 8,
+          }}>2</span>
+          رفع نتائج العد
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{
+            border: '1px dashed #d1d5db', borderRadius: 6, padding: '10px 16px',
+            cursor: 'pointer', flex: 1, minWidth: 200,
+          }} />
+          <button onClick={handleUpload} disabled={uploading || !hasSnapshot} style={{
+            padding: '10px 24px', borderRadius: 6, border: 'none',
+            background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
+            opacity: !hasSnapshot ? 0.5 : 1,
+          }}>
+            {uploading ? 'جاري الرفع...' : '⬆️ رفع النتائج'}
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '10px 14px', color: '#dc2626', marginTop: 12, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+
+        {uploadResult && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontWeight: 600, color: '#15803d', marginBottom: 12 }}>
+              ✓ تم الرفع بنجاح — {uploadResult.processed} صنف تمت معالجته
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+              {[
+                { label: 'إجمالي الأصناف', value: uploadResult.processed,     color: '#2563eb' },
+                { label: 'مطابق',          value: uploadResult.ok_count,       color: '#059669' },
+                { label: 'زيادة',          value: uploadResult.surplus_count,  color: '#d97706' },
+                { label: 'نقص',            value: uploadResult.deficit_count,  color: '#dc2626' },
+              ].map(c => (
+                <div key={c.label} style={{ border: `1px solid ${c.color}33`, borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: c.color }}>{c.value}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
+            {uploadResult.unmatched_count > 0 && (
+              <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 14px', marginTop: 12, fontSize: 13, color: '#92400e' }}>
+                ⚠️ {uploadResult.unmatched_count} صنف لم يُعثر عليه في اللقطة وتم تجاهله.
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
-  )
+  );
+}
+
+// ── VarianceTab ───────────────────────────────────────────────────────────────
+
+function VarianceTab({ session, onRefresh }) {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter]   = useState('');
+  const [minDiff, setMinDiff] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [closing, setClosing]     = useState(false);
+
+  const load = useCallback(async () => {
+    if (!['variance_ready', 'closed', 'uploaded'].includes(session.status)) return;
+    setLoading(true);
+    try {
+      const params = {};
+      if (filter) params.variance_type = filter;
+      if (minDiff) params.min_abs_diff = minDiff;
+      const res = await stockCountApi.varianceReport(session.id, params);
+      setData(res.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [session.id, session.status, filter, minDiff]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAdjExport() {
+    setExporting(true);
+    try {
+      const res = await stockCountApi.adjustmentExport(session.id);
+      const cd    = res.headers['content-disposition'] || '';
+      const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const fname = match ? match[1].replace(/['"]/g, '') : `adjustment_${session.id}.xlsx`;
+      downloadBlob(res.data, fname);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleClose() {
+    if (!window.confirm('هل تريد إغلاق الجلسة نهائياً؟ لن يمكن التعديل بعد ذلك.')) return;
+    setClosing(true);
+    try {
+      await stockCountApi.close(session.id);
+      onRefresh();
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  if (!['variance_ready', 'closed', 'uploaded'].includes(session.status)) {
+    return (
+      <div style={{ textAlign: 'center', color: '#6b7280', padding: 48, background: '#f9fafb', borderRadius: 8 }}>
+        يجب رفع نتائج العد أولاً لعرض تقرير الفروق.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Summary cards */}
+      {data && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+          {[
+            { label: 'إجمالي الأصناف', value: data.summary?.item_count    || session.item_count,    color: '#2563eb' },
+            { label: 'مطابق',          value: data.summary?.ok_count      || session.ok_count,      color: '#059669' },
+            { label: 'زيادة',          value: data.summary?.surplus_count || session.surplus_count, color: '#d97706' },
+            { label: 'نقص',            value: data.summary?.deficit_count || session.deficit_count, color: '#dc2626' },
+          ].map(c => (
+            <div key={c.label} style={{ border: `2px solid ${c.color}`, borderRadius: 10, padding: 16, textAlign: 'center', background: '#fff' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: c.color }}>{c.value || 0}</div>
+              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{c.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filters + actions */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        {[
+          { key: '',        label: 'الكل' },
+          { key: 'surplus', label: 'زيادة فقط' },
+          { key: 'deficit', label: 'نقص فقط' },
+          { key: 'ok',      label: 'مطابق فقط' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+            padding: '6px 16px', borderRadius: 20, cursor: 'pointer',
+            fontWeight: filter === f.key ? 700 : 400,
+            border: filter === f.key ? '2px solid #2563eb' : '1px solid #d1d5db',
+            background: filter === f.key ? '#eff6ff' : '#fff',
+            color: filter === f.key ? '#2563eb' : '#374151',
+          }}>{f.label}</button>
+        ))}
+        <input
+          placeholder="فارق أدنى (كمية)"
+          value={minDiff}
+          onChange={e => setMinDiff(e.target.value)}
+          type="number" min="0" step="0.001"
+          style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', width: 140 }}
+        />
+        <div style={{ marginRight: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={handleAdjExport} disabled={exporting} style={{
+            padding: '8px 18px', borderRadius: 6, border: '1px solid #059669',
+            color: '#059669', background: '#fff', cursor: 'pointer', fontWeight: 600,
+          }}>
+            {exporting ? 'جاري...' : '📋 تصدير للتسوية'}
+          </button>
+          {session.status === 'variance_ready' && (
+            <button onClick={handleClose} disabled={closing} style={{
+              padding: '8px 18px', borderRadius: 6, border: 'none',
+              background: '#1f2937', color: '#fff', cursor: 'pointer', fontWeight: 600,
+            }}>
+              {closing ? 'جاري...' : '🔒 إغلاق الجلسة'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ERP note */}
+      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13, color: '#9a3412' }}>
+        📌 لتسوية الفروق في SOFTECH: أصناف الزيادة ← doccode 50 | أصناف النقص ← doccode 150
+      </div>
+
+      {loading && <div style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>جاري التحميل...</div>}
+
+      {data && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#1e3a5f', color: '#fff' }}>
+                <th style={th}>كود الصنف</th>
+                <th style={th}>اسم الصنف</th>
+                <th style={th}>الكمية المتوقعة</th>
+                <th style={th}>الكمية المعدودة</th>
+                <th style={th}>الفارق</th>
+                <th style={th}>النوع</th>
+                <th style={th}>كود ERP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.items || []).map((row, i) => {
+                const diff   = parseFloat(row.difference || 0);
+                const rowBg  = row.variance_type === 'surplus' ? '#fefce8'
+                             : row.variance_type === 'deficit' ? '#fef2f2'
+                             : row.variance_type === 'ok'      ? '#f0fdf4'
+                             : '#fff';
+                return (
+                  <tr key={row.item_code} style={{ background: i % 2 === 0 ? rowBg : '#f9fafb' }}>
+                    <td style={td}>{row.item_code}</td>
+                    <td style={td}>{row.item_name}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{fmtQty(row.expected_qty)}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {row.counted_qty !== null ? fmtQty(row.counted_qty) : <span style={{ color: '#9ca3af' }}>لم يُعَد</span>}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center', fontWeight: 700,
+                      color: diff > 0 ? '#15803d' : diff < 0 ? '#dc2626' : '#6b7280',
+                    }}>
+                      {diff !== 0 ? (diff > 0 ? '+' : '') + fmtQty(diff) : '—'}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {row.variance_type === 'surplus' && <span style={{ color: '#d97706', fontWeight: 600 }}>زيادة ▲</span>}
+                      {row.variance_type === 'deficit' && <span style={{ color: '#dc2626', fontWeight: 600 }}>نقص ▼</span>}
+                      {row.variance_type === 'ok'      && <span style={{ color: '#059669', fontWeight: 600 }}>مطابق ✓</span>}
+                      {!row.variance_type              && <span style={{ color: '#9ca3af' }}>—</span>}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#7c3aed' }}>
+                      {row.erp_doccode || '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {(!data.items || data.items.length === 0) && (
+                <tr>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: '#6b7280', padding: 32 }}>
+                    لا توجد بيانات
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { key: 'sessions', label: '📋 الجلسات' },
+  { key: 'snapshot', label: '📸 اللقطة' },
+  { key: 'count',    label: '📊 العد' },
+  { key: 'variance', label: '📉 الفروق' },
+];
+
+export default function StockCountPage() {
+  const [activeTab, setActiveTab]           = useState('sessions');
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [refresh, setRefresh]               = useState(0);
+
+  function handleSelect(s) {
+    setSelectedSession(s);
+    setActiveTab('snapshot');
+  }
+
+  async function refreshSession() {
+    if (!selectedSession) return;
+    try {
+      const res = await stockCountApi.get(selectedSession.id);
+      setSelectedSession(res.data);
+    } catch { /* ignore */ }
+    setRefresh(r => r + 1);
+  }
+
+  return (
+    <div style={{ direction: 'rtl', fontFamily: 'Cairo, Segoe UI, sans-serif', minHeight: '100vh', background: '#f8fafc' }}>
+      {/* Header */}
+      <div style={{ background: '#1e3a5f', color: '#fff', padding: '20px 32px' }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🏪 جرد المخزون</h1>
+        {selectedSession && (
+          <div style={{ marginTop: 8, fontSize: 14, color: '#93c5fd' }}>
+            الجلسة الحالية: <strong style={{ color: '#fff' }}>{selectedSession.name}</strong>
+            <span style={{ marginRight: 16 }}>فرع: {selectedSession.branch_code}</span>
+            <button onClick={() => { setSelectedSession(null); setActiveTab('sessions'); }}
+              style={{ marginRight: 16, background: 'transparent', border: '1px solid #60a5fa', color: '#60a5fa', borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 12 }}>
+              ← كل الجلسات
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 32px', display: 'flex', gap: 0 }}>
+        {TABS.map(tab => {
+          const disabled = tab.key !== 'sessions' && !selectedSession;
+          return (
+            <button key={tab.key}
+              disabled={disabled}
+              onClick={() => !disabled && setActiveTab(tab.key)}
+              style={{
+                padding: '14px 24px', border: 'none', background: 'transparent',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                fontWeight: activeTab === tab.key ? 700 : 400,
+                color: disabled ? '#d1d5db' : activeTab === tab.key ? '#2563eb' : '#374151',
+                borderBottom: activeTab === tab.key ? '3px solid #2563eb' : '3px solid transparent',
+                fontSize: 14, transition: 'all 0.15s',
+              }}>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Session workflow bar */}
+      {selectedSession && (
+        <div style={{ background: '#fff', padding: '12px 32px', borderBottom: '1px solid #e5e7eb' }}>
+          <WorkflowProgress status={selectedSession.status} />
+        </div>
+      )}
+
+      {/* Content */}
+      <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto' }}>
+        {activeTab === 'sessions' && (
+          <SessionsTab onSelect={handleSelect} refresh={refresh} />
+        )}
+        {activeTab === 'snapshot' && selectedSession && (
+          <SnapshotTab session={selectedSession} onRefresh={refreshSession} />
+        )}
+        {activeTab === 'count' && selectedSession && (
+          <CountTab session={selectedSession} onRefresh={refreshSession} />
+        )}
+        {activeTab === 'variance' && selectedSession && (
+          <VarianceTab session={selectedSession} onRefresh={refreshSession} />
+        )}
+      </div>
+    </div>
+  );
 }

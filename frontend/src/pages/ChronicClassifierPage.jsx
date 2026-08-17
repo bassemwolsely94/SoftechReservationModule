@@ -12,7 +12,7 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { chronicApi } from '../api/client'
+import { chronicApi, enrichmentApi } from '../api/client'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -123,7 +123,7 @@ function ItemClassifier() {
   const { data, isFetching } = useQuery({
     queryKey: ['chronicItems', params],
     queryFn:  () => chronicApi.listItems(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   })
 
   const { data: ingredients } = useQuery({
@@ -225,7 +225,7 @@ function ItemClassifier() {
                 sub: (summary.classification_pct || 0) + '% مصنَّف' },
             ].map(c => (
               <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="text-2xl font-bold text-gray-800">{(c.value || 0).toLocaleString()}</div>
+                <div className="text-2xl font-bold text-gray-800">{(c.value || 0).toLocaleString('en-US')}</div>
                 <div className="text-xs text-gray-500 mt-1">{c.label}</div>
                 {c.sub && <div className="text-xs text-gray-400 mt-0.5">{c.sub}</div>}
               </div>
@@ -342,7 +342,7 @@ function ItemClassifier() {
         {/* Pagination */}
         {totalPgs > 1 && (
           <div className="flex items-center justify-between flex-shrink-0">
-            <span className="text-sm text-gray-500">{count.toLocaleString()} صنف</span>
+            <span className="text-sm text-gray-500">{count.toLocaleString('en-US')} صنف</span>
             <div className="flex gap-2">
               <button
                 disabled={page === 1}
@@ -366,7 +366,7 @@ function ItemClassifier() {
           {/* Panel header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between">
             <div className="min-w-0">
-              <div className="font-semibold text-gray-900 text-sm truncate">{selected.name}</div>
+              <div className="font-semibold text-gray-900 text-sm break-words">{selected.name}</div>
               <div className="text-xs text-gray-400 mt-0.5 font-mono">{selected.softech_id}</div>
             </div>
             <button
@@ -385,7 +385,7 @@ function ItemClassifier() {
                   {selected.all_maps.map(m => (
                     <div key={m.map_id} className="flex items-start justify-between bg-gray-50 rounded-lg px-3 py-2 gap-2">
                       <div className="min-w-0">
-                        <div className="text-xs font-medium text-gray-800 truncate">{m.name_ar || m.name}</div>
+                        <div className="text-xs font-medium text-gray-800 break-words">{m.name_ar || m.name}</div>
                         {m.concentration && <div className="text-xs text-gray-400">{m.concentration}</div>}
                         {m.is_chronic && (
                           <ChronicBadge
@@ -565,13 +565,13 @@ function ItemClassifier() {
             <button
               onClick={handleClassify}
               disabled={
-                classifyMut.isLoading ||
+                classifyMut.isPending ||
                 (mode === 'existing' && !existingIngId) ||
                 (mode === 'new' && !newName.trim())
               }
               className="w-full bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors"
             >
-              {classifyMut.isLoading ? 'جارٍ الحفظ...' : 'حفظ التصنيف'}
+              {classifyMut.isPending ? 'جارٍ الحفظ...' : 'حفظ التصنيف'}
             </button>
           </div>
         </div>
@@ -683,7 +683,7 @@ function IngredientsManager() {
                   : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
               }`}
             >
-              <div className="font-medium truncate">{ing.name_ar || ing.name}</div>
+              <div className="font-medium break-words">{ing.name_ar || ing.name}</div>
               <div className={`text-xs mt-0.5 flex gap-1.5 items-center ${
                 selected?.id === ing.id ? 'text-brand-200' : 'text-gray-400'
               }`}>
@@ -771,7 +771,7 @@ function IngredientsManager() {
                 <div className="grid grid-cols-2 gap-2">
                   {ingDetail.item_maps.map(m => (
                     <div key={m.id} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
-                      <div className="font-medium text-gray-800 truncate">{m.item_name}</div>
+                      <div className="font-medium text-gray-800 break-words">{m.item_name}</div>
                       <div className="text-gray-400 font-mono">{m.item_softech_id}</div>
                       {m.concentration && <div className="text-gray-500 mt-0.5">{m.concentration}</div>}
                     </div>
@@ -891,10 +891,10 @@ function IngredientsManager() {
                   )}
                   <button
                     onClick={() => addProtMut.mutate(prot)}
-                    disabled={!prot.name.trim() || addProtMut.isLoading}
+                    disabled={!prot.name.trim() || addProtMut.isPending}
                     className="w-full bg-brand-600 text-white rounded py-1.5 text-sm hover:bg-brand-700 disabled:opacity-40"
                   >
-                    {addProtMut.isLoading ? 'جارٍ الحفظ...' : 'حفظ البروتوكول'}
+                    {addProtMut.isPending ? 'جارٍ الحفظ...' : 'حفظ البروتوكول'}
                   </button>
                 </div>
               )}
@@ -974,10 +974,10 @@ function IngredientsManager() {
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => createIngMut.mutate(form)}
-                disabled={!form.name.trim() || createIngMut.isLoading}
+                disabled={!form.name.trim() || createIngMut.isPending}
                 className="flex-1 bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-40"
               >
-                {createIngMut.isLoading ? 'جارٍ الحفظ...' : 'حفظ'}
+                {createIngMut.isPending ? 'جارٍ الحفظ...' : 'حفظ'}
               </button>
               <button
                 onClick={() => setShowForm(false)}
@@ -1121,7 +1121,7 @@ function TaskGenerator() {
                     onChange={() => toggleIngredient(ing.id)}
                     className="accent-brand-600"
                   />
-                  <span className="truncate">{ing.name_ar || ing.name}</span>
+                  <span className="min-w-0 flex-1 break-words">{ing.name_ar || ing.name}</span>
                 </label>
               ))}
             </div>
@@ -1136,20 +1136,20 @@ function TaskGenerator() {
         <div className="flex gap-3">
           <button
             onClick={() => { setResult(null); previewMut.mutate(payload) }}
-            disabled={previewMut.isLoading}
+            disabled={previewMut.isPending}
             className="flex-1 border border-brand-600 text-brand-600 rounded-lg py-2.5 text-sm font-medium hover:bg-brand-50 disabled:opacity-40 transition-colors"
           >
-            {previewMut.isLoading ? 'جارٍ المعاينة...' : '👁 معاينة (بدون حفظ)'}
+            {previewMut.isPending ? 'جارٍ المعاينة...' : '👁 معاينة (بدون حفظ)'}
           </button>
           <button
             onClick={() => {
               if (window.confirm('سيتم إنشاء مهام المتابعة فعلياً في قاعدة البيانات. هل أنت متأكد؟'))
                 generateMut.mutate(payload)
             }}
-            disabled={generateMut.isLoading}
+            disabled={generateMut.isPending}
             className="flex-1 bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors"
           >
-            {generateMut.isLoading ? 'جارٍ الإنشاء...' : '⚡ إنشاء المهام'}
+            {generateMut.isPending ? 'جارٍ الإنشاء...' : '⚡ إنشاء المهام'}
           </button>
         </div>
       </div>
@@ -1198,6 +1198,502 @@ function TaskGenerator() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tab 4 — AI Enrichment
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SOURCE_LABELS = {
+  softech:           'SOFTECH',
+  chronic_module:    'مزمن',
+  supplier_catalog:  'مورّد',
+  manual:            'يدوي',
+  ai_extract:        'ذكاء اصطناعي',
+  ocr:               'OCR',
+  previous_approval: 'موافقة سابقة',
+  rule_engine:       'قواعد',
+}
+
+const SOURCE_COLORS = {
+  softech:           'bg-blue-100 text-blue-700',
+  chronic_module:    'bg-purple-100 text-purple-700',
+  supplier_catalog:  'bg-green-100 text-green-700',
+  manual:            'bg-gray-100 text-gray-700',
+  ai_extract:        'bg-pink-100 text-pink-700',
+  ocr:               'bg-orange-100 text-orange-700',
+  previous_approval: 'bg-teal-100 text-teal-700',
+  rule_engine:       'bg-yellow-100 text-yellow-700',
+}
+
+function ConfBar({ value }) {
+  const pct   = Math.round((value || 0) * 100)
+  const color = pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444'
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div style={{ width: `${pct}%`, background: color }} className="h-full rounded-full transition-all" />
+      </div>
+      <span className="text-xs text-gray-500 w-8 text-left">{pct}%</span>
+    </div>
+  )
+}
+
+function CompletenessRing({ score }) {
+  const pct   = Math.round(score || 0)
+  const color = pct >= 80 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444'
+  const r = 26, circ = 2 * Math.PI * r
+  const dash = ((100 - pct) / 100) * circ
+  return (
+    <div className="relative w-16 h-16 flex-shrink-0">
+      <svg className="rotate-[-90deg]" width="64" height="64">
+        <circle cx="32" cy="32" r={r} fill="none" stroke="#e5e7eb" strokeWidth="5" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="5"
+          strokeDasharray={circ} strokeDashoffset={dash} strokeLinecap="round" />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-800">
+        {pct}%
+      </span>
+    </div>
+  )
+}
+
+/* ── Suggestion card ────────────────────────────────────────────────── */
+function SuggestionCard({ sug, onApprove, onReject, isLoading }) {
+  const [editMode, setEditMode] = useState(false)
+  const [editVal, setEditVal]   = useState(sug.suggested_value)
+
+  const srcColor = SOURCE_COLORS[sug.source] || 'bg-gray-100 text-gray-700'
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3.5 space-y-2.5">
+      {/* Field name + source */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-gray-700">{sug.field_label || sug.field_name}</span>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${srcColor}`}>
+          {SOURCE_LABELS[sug.source] || sug.source}
+        </span>
+      </div>
+
+      {/* Confidence */}
+      <ConfBar value={sug.confidence} />
+
+      {/* Current vs suggested */}
+      {sug.current_value && (
+        <div className="text-xs text-gray-400 line-through truncate" title={sug.current_value}>
+          {sug.current_value}
+        </div>
+      )}
+
+      {editMode ? (
+        <textarea
+          className="w-full border border-brand-400 rounded-lg px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-300"
+          rows={3}
+          value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          dir="auto"
+        />
+      ) : (
+        <div
+          className="text-sm text-gray-800 font-medium bg-gray-50 rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-brand-50 transition-colors"
+          onClick={() => setEditMode(true)}
+          title="انقر للتعديل"
+          dir="auto"
+        >
+          {sug.suggested_value || <span className="text-gray-400 italic">فارغ</span>}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => { onApprove(sug.id, editMode ? editVal : sug.suggested_value); setEditMode(false) }}
+          disabled={isLoading}
+          className="flex-1 bg-green-600 text-white rounded-lg py-1.5 text-xs font-medium hover:bg-green-700 disabled:opacity-40 transition-colors"
+        >
+          {editMode ? '✏️ قبول بالتعديل' : '✓ قبول'}
+        </button>
+        {editMode ? (
+          <button
+            onClick={() => setEditMode(false)}
+            className="px-3 bg-gray-100 text-gray-600 rounded-lg py-1.5 text-xs hover:bg-gray-200 transition-colors"
+          >
+            إلغاء
+          </button>
+        ) : (
+          <button
+            onClick={() => setEditMode(true)}
+            className="px-3 bg-gray-100 text-gray-600 rounded-lg py-1.5 text-xs hover:bg-gray-200 transition-colors"
+            title="تعديل قبل القبول"
+          >
+            ✏️
+          </button>
+        )}
+        <button
+          onClick={() => onReject(sug.id)}
+          disabled={isLoading}
+          className="px-3 bg-red-50 text-red-600 rounded-lg py-1.5 text-xs hover:bg-red-100 disabled:opacity-40 transition-colors border border-red-200"
+        >
+          ✗
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Main tab component ─────────────────────────────────────────────── */
+function AIEnrichmentTab() {
+  const qc = useQueryClient()
+  const [selected, setSelected]       = useState(null) // enrichment queue item
+  const [search, setSearch]           = useState('')
+  const [debouncedSearch, setDSearch] = useState('')
+  const [catFilter, setCatFilter]     = useState('')
+  const [scoreFilter, setScoreFilter] = useState('') // 'empty' | 'partial' | 'complete'
+  const [hasPending, setHasPending]   = useState(false)
+
+  // debounce search
+  const handleSearch = (val) => {
+    setSearch(val)
+    clearTimeout(handleSearch._t)
+    handleSearch._t = setTimeout(() => setDSearch(val), 350)
+  }
+
+  // ── Queries ──────────────────────────────────────────────────────────
+  const queueParams = {
+    ordering: 'completeness_score',
+    page_size: 60,
+    ...(debouncedSearch && { search: debouncedSearch }),
+    ...(catFilter       && { category: catFilter }),
+    ...(hasPending      && { has_pending: true }),
+    ...(scoreFilter === 'empty'    && { score_max: 5 }),
+    ...(scoreFilter === 'partial'  && { score_min: 5, score_max: 79 }),
+    ...(scoreFilter === 'complete' && { score_min: 80 }),
+  }
+
+  const { data: queueData, isFetching: queueLoading } = useQuery({
+    queryKey: ['enrQueue', queueParams],
+    queryFn:  () => enrichmentApi.queue(queueParams).then(r => r.data),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  })
+
+  const queueItems = queueData?.results || queueData || []
+
+  const { data: suggestions, isFetching: sugLoading } = useQuery({
+    queryKey: ['enrSuggestions', selected?.item_id],
+    queryFn:  () => enrichmentApi.suggestions({ item: selected.item_id, status: 'pending', page_size: 100 }).then(r => r.data),
+    enabled:  !!selected?.item_id,
+    staleTime: 10_000,
+  })
+
+  const suggestionList = suggestions?.results || suggestions || []
+
+  const { data: itemDetail, isFetching: detailLoading } = useQuery({
+    queryKey: ['enrDetail', selected?.item_id],
+    queryFn:  () => enrichmentApi.itemDetail(selected.item_id).then(r => r.data),
+    enabled:  !!selected?.item_id,
+    staleTime: 10_000,
+  })
+
+  const { data: report } = useQuery({
+    queryKey: ['enrReport'],
+    queryFn:  () => enrichmentApi.report().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  // ── Mutations ────────────────────────────────────────────────────────
+  const invalidate = () => {
+    qc.invalidateQueries(['enrQueue'])
+    qc.invalidateQueries(['enrSuggestions', selected?.item_id])
+    qc.invalidateQueries(['enrDetail', selected?.item_id])
+    qc.invalidateQueries(['enrReport'])
+  }
+
+  const approveMut = useMutation({
+    mutationFn: ({ id, value }) => enrichmentApi.approve(id, value),
+    onSuccess: invalidate,
+  })
+
+  const rejectMut = useMutation({
+    mutationFn: ({ id }) => enrichmentApi.reject(id, ''),
+    onSuccess: invalidate,
+  })
+
+  const bulkApproveMut = useMutation({
+    mutationFn: ({ itemId, conf }) => enrichmentApi.bulkApprove(itemId, conf),
+    onSuccess: invalidate,
+  })
+
+  const generateMut = useMutation({
+    mutationFn: ({ itemPk, overwrite }) => enrichmentApi.generate(itemPk, overwrite),
+    onSuccess: invalidate,
+  })
+
+  const isMutating = approveMut.isPending || rejectMut.isPending
+
+  // ── Published fields ─────────────────────────────────────────────────
+  const ENRICHABLE_FIELDS = [
+    ['name_ar', 'الاسم العربي'], ['brand_name', 'الاسم التجاري'],
+    ['manufacturer_ar', 'الشركة المصنعة (عربي)'], ['manufacturer_en', 'الشركة المصنعة (إنجليزي)'],
+    ['country_ar', 'بلد المنشأ (عربي)'], ['country_en', 'بلد المنشأ (إنجليزي)'],
+    ['dosage_form_ar', 'الشكل الدوائي (عربي)'], ['dosage_form_en', 'الشكل الدوائي (إنجليزي)'],
+    ['atc_code', 'كود ATC'], ['strength', 'التركيز / القوة'],
+    ['volume', 'الحجم'], ['pack_size_label', 'حجم العبوة'],
+    ['indication_ar', 'الاستخدامات (عربي)'], ['indication_en', 'الاستخدامات (إنجليزي)'],
+    ['contraindication_ar', 'موانع الاستخدام'], ['warning_ar', 'التحذيرات'],
+    ['pregnancy_category', 'فئة الحمل'], ['age_range', 'الفئة العمرية'],
+    ['storage_condition', 'شروط التخزين'], ['administration_route_ar', 'طريقة الاستخدام'],
+    ['dosage_ar', 'الجرعة'], ['frequency_ar', 'التكرار'], ['duration_ar', 'مدة العلاج'],
+    ['side_effects_ar', 'الآثار الجانبية (عربي)'], ['side_effects_en', 'الآثار الجانبية (إنجليزي)'],
+    ['drug_interactions_ar', 'التفاعلات الدوائية'], ['rx_otc', 'Rx / OTC'],
+    ['image_url', 'صورة المنتج'], ['image_secondary_url', 'صورة ثانوية'],
+    ['seo_desc_ar', 'وصف SEO (عربي)'], ['seo_desc_en', 'وصف SEO (إنجليزي)'],
+    ['medical_keywords_ar', 'الكلمات الطبية (عربي)'], ['medical_keywords_en', 'الكلمات الطبية (إنجليزي)'],
+  ]
+
+  const enrichment = itemDetail?.enrichment || {}
+  const pendingCount = suggestionList.length
+
+  return (
+    <div className="flex h-full gap-3 overflow-hidden">
+
+      {/* ── LEFT: Item Queue ────────────────────────────────────────── */}
+      <div className="w-72 flex-shrink-0 flex flex-col gap-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* Header */}
+        <div className="px-3 pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-gray-700">قائمة الأصناف</span>
+            {report && (
+              <span className="text-xs text-gray-400">
+                {report.total_items} صنف · متوسط {Math.round(report.avg_score || 0)}%
+              </span>
+            )}
+          </div>
+
+          {/* Search */}
+          <input
+            type="text"
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="بحث بالاسم أو الكود..."
+            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
+          />
+
+          {/* Filters row */}
+          <div className="flex gap-1.5 flex-wrap">
+            {[['', 'الكل'], ['empty', 'فارغة'], ['partial', 'ناقصة'], ['complete', 'مكتملة']].map(([val, lbl]) => (
+              <button
+                key={val}
+                onClick={() => setScoreFilter(val)}
+                className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                  scoreFilter === val
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-brand-300'
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* Has pending toggle */}
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={hasPending}
+              onChange={e => setHasPending(e.target.checked)}
+              className="rounded"
+            />
+            لديها اقتراحات معلّقة
+          </label>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+          {queueLoading && (
+            <div className="p-4 text-center text-sm text-gray-400">جارٍ التحميل...</div>
+          )}
+          {!queueLoading && queueItems.length === 0 && (
+            <div className="p-4 text-center text-sm text-gray-400">لا توجد نتائج</div>
+          )}
+          {queueItems.map(item => {
+            const pct   = Math.round(item.completeness_score || 0)
+            const color = pct >= 80 ? 'bg-green-400' : pct >= 40 ? 'bg-yellow-400' : 'bg-red-400'
+            const isSelected = selected?.id === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSelected(item)}
+                className={`w-full text-right px-3 py-2.5 transition-colors ${
+                  isSelected ? 'bg-brand-50 border-r-2 border-brand-500' : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {/* Score bar */}
+                  <div className="w-8 flex-shrink-0 space-y-0.5">
+                    <div className="text-xs font-bold text-gray-600 text-center">{pct}%</div>
+                    <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-800 break-words">{item.item_name}</div>
+                    <div className="text-xs text-gray-400">{item.item_code}</div>
+                  </div>
+                  {item.pending_count > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">
+                      {item.pending_count}
+                    </span>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── MIDDLE: Suggestions ─────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col gap-2 min-w-0 overflow-hidden">
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm bg-white rounded-xl border border-dashed border-gray-300">
+            <div className="text-center space-y-2">
+              <div className="text-4xl">🤖</div>
+              <div>اختر صنفاً من القائمة لعرض الاقتراحات</div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Item header */}
+            <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex-shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-gray-900">{selected.item_name}</div>
+                  <div className="text-xs text-gray-400">{selected.item_code}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Generate button */}
+                  <button
+                    onClick={() => generateMut.mutate({ itemPk: selected.item_id, overwrite: false })}
+                    disabled={generateMut.isPending}
+                    className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors"
+                  >
+                    {generateMut.isPending ? 'جارٍ...' : '🔍 استخراج اقتراحات'}
+                  </button>
+                  <button
+                    onClick={() => generateMut.mutate({ itemPk: selected.item_id, overwrite: true })}
+                    disabled={generateMut.isPending}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"
+                    title="إعادة الاستخراج وتجاهل المعلّق الحالي"
+                  >
+                    🔄
+                  </button>
+                  <CompletenessRing score={selected.completeness_score} />
+                </div>
+              </div>
+            </div>
+
+            {/* Suggestions list */}
+            <div className="flex-1 overflow-y-auto space-y-2 pl-1">
+              {sugLoading && (
+                <div className="text-center py-8 text-sm text-gray-400">جارٍ التحميل...</div>
+              )}
+
+              {!sugLoading && pendingCount === 0 && (
+                <div className="flex flex-col items-center justify-center h-48 text-gray-400 text-sm bg-white rounded-xl border border-dashed border-gray-200 space-y-2">
+                  <div className="text-3xl">✅</div>
+                  <div>لا توجد اقتراحات معلّقة لهذا الصنف</div>
+                  <div className="text-xs text-gray-300">اضغط "استخراج اقتراحات" لتحليل البيانات</div>
+                </div>
+              )}
+
+              {!sugLoading && suggestionList.map(sug => (
+                <SuggestionCard
+                  key={sug.id}
+                  sug={sug}
+                  isLoading={isMutating}
+                  onApprove={(id, value) => approveMut.mutate({ id, value })}
+                  onReject={(id)         => rejectMut.mutate({ id })}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── RIGHT: Published Values ──────────────────────────────── */}
+      <div className="w-80 flex-shrink-0 flex flex-col gap-2 overflow-hidden">
+        {!selected ? (
+          <div className="flex-1 bg-white rounded-xl border border-dashed border-gray-200" />
+        ) : (
+          <>
+            {/* Bulk approve panel */}
+            {pendingCount > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex-shrink-0 space-y-2">
+                <div className="text-sm font-semibold text-orange-800">
+                  {pendingCount} اقتراح معلّق
+                </div>
+                <div className="flex gap-1.5">
+                  {[['≥ 90%', 0.90], ['≥ 80%', 0.80], ['≥ 70%', 0.70]].map(([lbl, conf]) => (
+                    <button
+                      key={conf}
+                      onClick={() => bulkApproveMut.mutate({ itemId: selected.item_id, conf })}
+                      disabled={bulkApproveMut.isPending}
+                      className="flex-1 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40 transition-colors"
+                    >
+                      {bulkApproveMut.isPending ? '...' : `قبول ${lbl}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Published fields */}
+            <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+              <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-gray-700">القيم المنشورة</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    enrichment.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {enrichment.is_published ? 'منشور' : 'غير منشور'}
+                  </span>
+                </div>
+                {detailLoading && <div className="text-xs text-gray-400 mt-1">جارٍ التحميل...</div>}
+              </div>
+
+              <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+                {ENRICHABLE_FIELDS.map(([field, label]) => {
+                  const val = enrichment[field]
+                  if (!val) return null
+                  return (
+                    <div key={field} className="px-3 py-2">
+                      <div className="text-xs text-gray-400 mb-0.5">{label}</div>
+                      <div className="text-xs font-medium text-gray-800 break-words" dir="auto">
+                        {field === 'image_url' || field === 'image_secondary_url' ? (
+                          <a href={val} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline truncate block">
+                            {val}
+                          </a>
+                        ) : (
+                          val
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {ENRICHABLE_FIELDS.every(([f]) => !enrichment[f]) && !detailLoading && (
+                  <div className="p-4 text-center text-xs text-gray-400">
+                    لا توجد بيانات منشورة بعد
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page shell
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1205,6 +1701,7 @@ const TABS = [
   { id: 'classifier',  label: '🔬 مصنّف الأصناف' },
   { id: 'ingredients', label: '💊 المواد الفعّالة' },
   { id: 'tasks',       label: '⚡ توليد المهام' },
+  { id: 'enrichment',  label: '🤖 الإثراء الذكي' },
 ]
 
 export default function ChronicClassifierPage() {
@@ -1249,6 +1746,7 @@ export default function ChronicClassifierPage() {
             <TaskGenerator />
           </div>
         )}
+        {tab === 'enrichment'  && <AIEnrichmentTab />}
       </div>
     </div>
   )

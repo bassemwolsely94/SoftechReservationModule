@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { transfersApi, branchesApi, itemsApi } from '../api/client'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { transfersApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import BranchSelect from '../components/BranchSelect'
+import CanDo from '../components/CanDo'
+import TransferModuleTabs from '../components/TransferModuleTabs'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -23,7 +28,7 @@ const KANBAN_COLS = ['draft','pending','needs_revision','approved','sent_to_erp'
 
 function timeAgo(dt) {
   if (!dt) return '—'
-  try { return formatDistanceToNow(new Date(dt), { locale: ar, addSuffix: true }) } catch { return '' }
+  try { return toLatinDigits(formatDistanceToNow(new Date(dt), { locale: ar, addSuffix: true })) } catch { return '' }
 }
 
 function StatusBadge({ status }) {
@@ -34,262 +39,6 @@ function StatusBadge({ status }) {
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: s.dot }} />
       {s.label}
     </span>
-  )
-}
-
-// ── Item Search ───────────────────────────────────────────────────────────────
-
-function ItemSearch({ onSelect }) {
-  const [q, setQ] = useState('')
-  const [open, setOpen] = useState(false)
-  const { data: results } = useQuery({
-    queryKey: ['item-search', q],
-    queryFn: () => itemsApi.list({ search: q, page_size: 10 }).then(r => r.data.results || r.data),
-    enabled: q.length >= 2,
-    staleTime: 10_000,
-  })
-  return (
-    <div className="relative">
-      <input className="input-field text-sm" placeholder="ابحث بالاسم أو الكود..."
-        value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} autoComplete="off" />
-      {open && q.length >= 2 && results?.length > 0 && (
-        <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-56 overflow-y-auto">
-          {results.map(item => (
-            <button key={item.id} type="button"
-              className="w-full text-right px-4 py-2.5 hover:bg-brand-50 transition-colors border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); setQ(''); setOpen(false) }}>
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-semibold text-gray-800 text-sm truncate">{item.name}</div>
-                {item.unit_price > 0 && (
-                  <span className="flex-shrink-0 text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                    {Number(item.unit_price).toFixed(2)} ج.م
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-blue-500 font-mono">كود: {item.softech_id}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Create Request Modal ──────────────────────────────────────────────────────
-
-function CreateRequestModal({ branches, userBranchId, onClose, onCreated }) {
-  const [sourceBranch, setSourceBranch]           = useState(String(userBranchId || ''))
-  const [destinationBranch, setDestinationBranch] = useState('')
-  const [notes, setNotes]                         = useState('')
-  const [items, setItems]                         = useState([])
-  const [itemStocks, setItemStocks]               = useState({})
-  const [submitAndSend, setSubmitAndSend]         = useState(false)
-  const [submitting, setSubmitting]               = useState(false)
-  const [error, setError]                         = useState('')
-  const qc = useQueryClient()
-
-  useEffect(() => {
-    if (items.length === 0) return
-    items.forEach(row => {
-      if (itemStocks[row.item.id]) return
-      itemsApi.stock(row.item.id)
-        .then(res => setItemStocks(prev => ({ ...prev, [row.item.id]: res.data || [] })))
-        .catch(() => {})
-    })
-  }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function addItem(item) {
-    if (items.find(i => i.item.id === item.id)) return
-    setItems(prev => [...prev, { item, qty: '', notes: '' }])
-    itemsApi.stock(item.id)
-      .then(res => setItemStocks(prev => ({ ...prev, [item.id]: res.data || [] })))
-      .catch(() => {})
-  }
-  function updateItem(idx, field, value) {
-    setItems(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
-  }
-  function removeItem(idx) { setItems(prev => prev.filter((_, i) => i !== idx)) }
-
-  async function handleSubmit() {
-    if (!sourceBranch)      { setError('اختر الفرع الطالب'); return }
-    if (!destinationBranch) { setError('اختر الفرع المصدر'); return }
-    if (sourceBranch === destinationBranch) { setError('الفرعان لا يمكن أن يكونا نفس الفرع'); return }
-    if (items.length === 0) { setError('أضف صنفاً واحداً على الأقل'); return }
-    const bad = items.find(i => !i.qty || Number(i.qty) <= 0)
-    if (bad) { setError(`أدخل الكمية لـ: ${bad.item.name}`); return }
-
-    setSubmitting(true); setError('')
-    try {
-      const payload = {
-        requesting_branch: Number(sourceBranch),
-        supplying_branch:  Number(destinationBranch),
-        notes,
-        items: items.map(i => ({ item: i.item.id, quantity: i.qty, notes: i.notes || '' })),
-      }
-      const res = await transfersApi.create(payload)
-      const newId = res.data.id
-      if (submitAndSend) await transfersApi.submit(newId)
-      qc.invalidateQueries(['transfers'])
-      onCreated(newId, submitAndSend)
-      onClose()
-    } catch (e) {
-      const d = e.response?.data
-      setError(typeof d === 'object' ? Object.values(d).flat().join(' — ') : 'حدث خطأ')
-    } finally { setSubmitting(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
-          <div>
-            <h2 className="font-bold text-gray-900">طلب تحويل مخزون جديد</h2>
-            <p className="text-xs text-gray-400 mt-0.5">يمكنك إضافة عدة أصناف · الطلب لا يؤثر على المخزون</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl p-1">✕</button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-          {/* Branches */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">الفرع الطالب *</label>
-              <select className="input-field" value={sourceBranch}
-                onChange={e => setSourceBranch(e.target.value)}>
-                <option value="">اختر...</option>
-                {(branches || []).filter(b => String(b.id) !== destinationBranch).map(b => (
-                  <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">الفرع المصدر (يمتلك المخزون) *</label>
-              <select className="input-field" value={destinationBranch}
-                onChange={e => setDestinationBranch(e.target.value)}>
-                <option value="">اختر...</option>
-                {(branches || []).filter(b => String(b.id) !== sourceBranch).map(b => (
-                  <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Item search */}
-          <div>
-            <label className="label">إضافة أصناف *</label>
-            <ItemSearch onSelect={addItem} />
-            <p className="text-xs text-gray-400 mt-1">اكتب حرفين للبحث · يمكن إضافة عدة أصناف</p>
-          </div>
-
-          {/* Items list */}
-          {items.length === 0 ? (
-            <div className="border-2 border-dashed border-gray-200 rounded-xl py-8 text-center">
-              <div className="text-3xl mb-2">💊</div>
-              <div className="text-sm text-gray-400">ابحث عن صنف أعلاه لإضافته</div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-xs font-bold text-gray-500">الأصناف المضافة ({items.length})</div>
-              {items.map((row, idx) => {
-                const allBranches   = itemStocks[row.item.id]
-                const destId        = Number(destinationBranch)
-                const supplyRow     = allBranches?.find(b => b.branch === destId)
-                const otherBranches = allBranches?.filter(b => b.branch !== destId && b.quantity_on_hand > 0) || []
-                const stockColor    = qty =>
-                  qty >= 5  ? 'bg-green-100 text-green-700 ring-green-300'
-                  : qty > 0 ? 'bg-amber-100 text-amber-700 ring-amber-300'
-                  :           'bg-red-100 text-red-600 ring-red-300'
-                return (
-                  <div key={row.item.id} className="bg-brand-50 border border-brand-100 rounded-xl px-3 pt-2.5 pb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-800 text-sm truncate">{row.item.name}</div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-brand-600 font-mono">كود: {row.item.softech_id}</span>
-                          {row.item.unit_price > 0 && (
-                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                              {Number(row.item.unit_price).toFixed(2)} ج.م
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <input type="number" min="0.001" step="0.001" placeholder="الكمية"
-                        value={row.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
-                        className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-brand-400" />
-                      <input placeholder="ملاحظة"
-                        value={row.notes} onChange={e => updateItem(idx, 'notes', e.target.value)}
-                        className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-brand-400" />
-                      <button onClick={() => removeItem(idx)} className="text-gray-300 hover:text-red-400 text-xl leading-none flex-shrink-0">✕</button>
-                    </div>
-                    {!allBranches ? (
-                      <div className="mt-2 flex gap-1.5">
-                        {[1,2,3].map(i => <div key={i} className="h-5 w-20 bg-gray-200 rounded animate-pulse" />)}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {destinationBranch && (
-                          <>
-                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ring-2 ${stockColor(supplyRow?.quantity_on_hand ?? 0)}`}>
-                              <span>🏭</span>
-                              <span>{supplyRow ? (supplyRow.branch_name_ar || supplyRow.branch_name) : (branches?.find(b => b.id === destId)?.name_ar || 'الفرع المصدر')}</span>
-                              <span className="font-black text-sm">{supplyRow?.quantity_on_hand ?? 0}</span>
-                            </div>
-                            {otherBranches.length > 0 && <span className="text-gray-300 text-xs">|</span>}
-                          </>
-                        )}
-                        {otherBranches.map(b => (
-                          <div key={b.branch} className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${stockColor(b.quantity_on_hand)}`}>
-                            <span>{b.branch_name_ar || b.branch_name}</span>
-                            <span className="font-bold">{b.quantity_on_hand}</span>
-                          </div>
-                        ))}
-                        {!destinationBranch && allBranches.filter(b => b.quantity_on_hand > 0).map(b => (
-                          <div key={b.branch} className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ring-1 ${stockColor(b.quantity_on_hand)}`}>
-                            <span>{b.branch_name_ar || b.branch_name}</span>
-                            <span className="font-bold">{b.quantity_on_hand}</span>
-                          </div>
-                        ))}
-                        {allBranches.every(b => b.quantity_on_hand <= 0) && (
-                          <span className="text-[11px] text-red-400 font-medium">لا يوجد مخزون في أي فرع</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className="label">ملاحظات عامة (اختياري)</label>
-            <textarea rows={2} className="input-field resize-none text-sm"
-              placeholder="سبب الطلب، أولوية، تفاصيل إضافية..."
-              value={notes} onChange={e => setNotes(e.target.value)} />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>
-          )}
-        </div>
-
-        <div className="px-6 py-4 border-t flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none mr-auto">
-              <input type="checkbox" checked={submitAndSend}
-                onChange={e => setSubmitAndSend(e.target.checked)} className="rounded" />
-              حفظ وتقديم الطلب مباشرةً
-            </label>
-            <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-            <button onClick={handleSubmit} disabled={submitting || items.length === 0}
-              className="btn-primary text-sm disabled:opacity-50">
-              {submitting ? 'جارٍ...' : submitAndSend ? '📤 حفظ وتقديم' : '💾 حفظ كمسودة'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -412,12 +161,19 @@ function ListView({ requests, navigate }) {
 
 export default function TransfersPage() {
   const navigate     = useNavigate()
-  const qc           = useQueryClient()
+  const location     = useLocation()
   const { user }     = useAuthStore()
 
+  // 'قيد النقل' now lives on its own page (/transits). Redirect any legacy
+  // navigation that still asks for the in-transit tab via router state.
+  useEffect(() => {
+    if (location.state?.tab === 'in_transit') {
+      navigate('/transits', { replace: true })
+    }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const [viewMode, setViewMode]   = useState('list')   // 'list' | 'kanban'
-  const [showCreate, setShowCreate] = useState(false)
-  const [savedToast, setSavedToast] = useState('')     // success message
+  const [savedToast, setSavedToast] = useState(location.state?.savedToast || '')
   const [filters, setFilters] = useState({
     status: '', requesting_branch: '', supplying_branch: '',
     search: '', date_from: '', date_to: '',
@@ -444,22 +200,22 @@ export default function TransfersPage() {
     refetchInterval: 30_000,
   })
 
-  function handleCreated(id, wasSubmitted) {
-    qc.invalidateQueries(['transfers'])
-    if (wasSubmitted) {
-      navigate(`/transfers/${id}`)
-    } else {
-      setSavedToast('✅ تم حفظ الطلب كمسودة بنجاح')
-      setTimeout(() => setSavedToast(''), 4000)
+  // Auto-dismiss toast that came from NewTransferPage navigation state
+  useEffect(() => {
+    if (savedToast) {
+      const t = setTimeout(() => setSavedToast(''), 4000)
+      // Clear the location state so refresh doesn't re-show it
+      window.history.replaceState({}, '')
+      return () => clearTimeout(t)
     }
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingCount  = requests.filter(r => r.status === 'pending').length
   const draftCount    = requests.filter(r => r.status === 'draft').length
   const approvedCount = requests.filter(r => r.status === 'approved').length
 
   const activeFiltersCount = [
-    filters.requesting_branch, filters.supplying_branch,
+    filters.search, filters.requesting_branch, filters.supplying_branch,
     filters.date_from, filters.date_to,
   ].filter(Boolean).length
 
@@ -474,8 +230,13 @@ export default function TransfersPage() {
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+
+        {/* Module switcher (requests ⇄ in-transit, separate pages) */}
+        <TransferModuleTabs active="requests" />
+
         {/* Row 1: title + view toggle + new button */}
+        <div className="px-6 py-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div>
             <h1 className="text-lg font-black text-gray-900">طلبات التحويل</h1>
@@ -500,9 +261,11 @@ export default function TransfersPage() {
               }`}>⬛ كانبان</button>
           </div>
 
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm">
-            + طلب تحويل جديد
-          </button>
+          <CanDo module="transfers" action="create">
+            <button onClick={() => navigate('/transfers/new')} className="btn-primary text-sm">
+              + طلب تحويل جديد
+            </button>
+          </CanDo>
         </div>
 
         {/* Row 2: status tabs */}
@@ -535,17 +298,23 @@ export default function TransfersPage() {
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
 
-          <select className="input-field w-44 text-xs" value={filters.requesting_branch}
-            onChange={e => setFilters(f => ({ ...f, requesting_branch: e.target.value }))}>
-            <option value="">الفرع الطالب (الكل)</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
+          <BranchSelect
+            size="sm"
+            value={filters.requesting_branch}
+            onChange={v => setFilters(f => ({ ...f, requesting_branch: v }))}
+            branches={branches}
+            allLabel="الفرع الطالب (الكل)"
+            className="w-52"
+          />
 
-          <select className="input-field w-44 text-xs" value={filters.supplying_branch}
-            onChange={e => setFilters(f => ({ ...f, supplying_branch: e.target.value }))}>
-            <option value="">الفرع المصدر (الكل)</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
-          </select>
+          <BranchSelect
+            size="sm"
+            value={filters.supplying_branch}
+            onChange={v => setFilters(f => ({ ...f, supplying_branch: v }))}
+            branches={branches}
+            allLabel="الفرع المصدر (الكل)"
+            className="w-52"
+          />
 
           <div className="flex items-center gap-1">
             <span className="text-xs text-gray-500">من</span>
@@ -558,16 +327,18 @@ export default function TransfersPage() {
               onChange={e => setFilters(f => ({ ...f, date_to: e.target.value }))} />
           </div>
 
-          {(filters.search || activeFiltersCount > 0) && (
+          {activeFiltersCount > 0 && (
             <button className="btn-secondary text-xs px-3"
-              onClick={() => setFilters({ status: filters.status, requesting_branch: '', supplying_branch: '', search: '', date_from: '', date_to: '' })}>
-              مسح الفلاتر {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+              onClick={() => setFilters(f => ({ ...f, search: '', requesting_branch: '', supplying_branch: '', date_from: '', date_to: '' }))}>
+              مسح الفلاتر ({activeFiltersCount})
             </button>
           )}
         </div>
-      </div>
+        </div>
 
-      {/* Content */}
+      </div> {/* end sticky header */}
+
+      {/* ── Requests content ──────────────────────────────────────────────── */}
       {isLoading ? (
         <div className="px-6 py-5 space-y-2 animate-pulse">
           {[1,2,3,4].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
@@ -583,7 +354,7 @@ export default function TransfersPage() {
                 : 'اضغط "+ طلب تحويل جديد" لإنشاء أول طلب'}
             </div>
             {!filters.status && activeFiltersCount === 0 && (
-              <button onClick={() => setShowCreate(true)} className="btn-primary text-sm">
+              <button onClick={() => navigate('/transfers/new')} className="btn-primary text-sm">
                 + طلب تحويل جديد
               </button>
             )}
@@ -595,14 +366,6 @@ export default function TransfersPage() {
         <ListView requests={requests} navigate={navigate} />
       )}
 
-      {showCreate && (
-        <CreateRequestModal
-          branches={branches}
-          userBranchId={userBranchId}
-          onClose={() => setShowCreate(false)}
-          onCreated={handleCreated}
-        />
-      )}
     </div>
   )
 }

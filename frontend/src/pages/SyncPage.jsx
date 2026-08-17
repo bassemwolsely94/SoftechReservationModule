@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 import { SkeletonCard, EmptyState, PageHeader, SectionTitle, Spinner } from '../components/ui'
 
 const STATUS_CFG = {
@@ -20,6 +22,113 @@ function StatusPill({ status }) {
   )
 }
 
+const BRANCH_STATE_CFG = {
+  ok:      { cls: 'bg-green-100 text-green-700', dot: 'bg-green-500',           label: 'متصل' },
+  down:    { cls: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500',          label: 'غير متصل' },
+  chronic: { cls: 'bg-red-100 text-red-700',     dot: 'bg-red-500 animate-pulse', label: 'منقطع باستمرار' },
+}
+
+function relTime(iso) {
+  if (!iso) return null
+  try {
+    return toLatinDigits(format(new Date(iso), 'd MMM — HH:mm', { locale: ar }))
+  } catch { return null }
+}
+
+function nodeLabel(n) {
+  if (n.is_hq) return 'المركز الرئيسي'
+  return n.name ? `فرع ${n.branch_id} — ${n.name}` : `فرع ${n.branch_id}`
+}
+
+function BranchHealthPanel({ data, onProbe, probing }) {
+  const nodes = data?.nodes || data?.branches
+  if (!data || !nodes?.length) return null
+  const { summary, chronic_threshold } = data
+
+  return (
+    <div>
+      <SectionTitle icon="🔌">حالة اتصال الشبكة (المركز + الفروع)</SectionTitle>
+      <div className="card">
+        {/* Summary badges */}
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <span className="badge bg-green-100 text-green-700 gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            متصل {summary.ok}
+          </span>
+          {summary.down > 0 && (
+            <span className="badge bg-amber-100 text-amber-700 gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              غير متصل {summary.down}
+            </span>
+          )}
+          {summary.chronic > 0 && (
+            <span className="badge bg-red-100 text-red-700 gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              منقطع باستمرار {summary.chronic}
+            </span>
+          )}
+          <span className="text-xs font-bold text-gray-500 mr-auto">
+            {summary.ok}/{summary.total} نقطة متصلة
+          </span>
+          {onProbe && (
+            <button
+              onClick={onProbe}
+              disabled={probing}
+              className="btn-secondary text-xs disabled:opacity-50 gap-1"
+            >
+              {probing ? <Spinner size="sm" /> : '🔄'} فحص الآن
+            </button>
+          )}
+        </div>
+
+        {/* Per-node grid — every node incl. HQ, so 6/6 is visible at a glance */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {nodes.map(n => {
+            const cfg = BRANCH_STATE_CFG[n.state] || BRANCH_STATE_CFG.ok
+            return (
+              <div key={n.host}
+                className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${
+                  n.is_hq ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100'
+                }`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                  <span className="font-semibold text-sm text-gray-800 truncate">
+                    {n.is_hq && <span className="ml-1">🏢</span>}
+                    {nodeLabel(n)}
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono truncate hidden sm:inline">{n.host}</span>
+                </div>
+                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    {n.state === 'ok'
+                      ? (n.last_elapsed_ms != null && (
+                          <span className="text-xs text-gray-400">{Math.round(n.last_elapsed_ms)}ms</span>
+                        ))
+                      : (
+                          <span className="text-xs text-gray-500">منذ {n.consecutive_failures} محاولة</span>
+                        )}
+                    <span className={`badge ${cfg.cls}`}>{cfg.label}</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                    آخر محاولة {relTime(n.last_checked_at) || '—'}
+                    {n.state !== 'ok' && n.last_ok_at && <> · آخر اتصال {relTime(n.last_ok_at)}</>}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {(summary.down > 0 || summary.chronic > 0) && (
+          <p className="text-[11px] text-gray-400 mt-2">
+            تُعتبر النقطة «منقطعة باستمرار» بعد فشل {chronic_threshold} محاولات متتالية.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function SyncPage() {
   const qc = useQueryClient()
 
@@ -35,6 +144,18 @@ export default function SyncPage() {
     refetchInterval: 30_000,
   })
 
+  const { data: branchHealth } = useQuery({
+    queryKey: ['branchHealth'],
+    queryFn: () => syncApi.branchHealth().then(r => r.data),
+    refetchInterval: 30_000,
+  })
+
+  const { data: schedulerState } = useQuery({
+    queryKey: ['schedulerStatus'],
+    queryFn: () => syncApi.schedulerStatus().then(r => r.data),
+    refetchInterval: 30_000,
+  })
+
   const triggerMutation = useMutation({
     mutationFn: (full) => syncApi.trigger(full),
     onSuccess: () => {
@@ -43,6 +164,11 @@ export default function SyncPage() {
         qc.invalidateQueries(['syncLogs'])
       }, 2000)
     },
+  })
+
+  const probeMutation = useMutation({
+    mutationFn: () => syncApi.branchHealth(true).then(r => r.data),
+    onSuccess: (data) => qc.setQueryData(['branchHealth'], data),
   })
 
   const isBusy = triggerMutation.isPending || status?.status === 'running'
@@ -75,6 +201,24 @@ export default function SyncPage() {
 
       <div className="page-body space-y-5">
 
+        {/* Scheduler-down warning */}
+        {schedulerState && !schedulerState.running && (
+          <div className="card border-r-4 bg-red-50" style={{ borderRightColor: '#ef4444' }}>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <div className="font-bold text-red-700 text-sm">المجدول متوقف — المهام لا تعمل</div>
+                <div className="text-xs text-red-600 mt-0.5">
+                  {schedulerState.last_heartbeat
+                    ? `آخر نبضة منذ ${schedulerState.seconds_ago}ث`
+                    : 'لا توجد نبضة مسجّلة'}
+                  {' · '}شغّل: <code className="bg-white px-1 rounded">python manage.py run_scheduler</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Status card */}
         {statusLoading ? (
           <SkeletonCard lines={3} />
@@ -103,7 +247,7 @@ export default function SyncPage() {
                   {status.last_at && (
                     <div className="text-xs text-gray-500 mt-0.5">
                       آخر مزامنة:{' '}
-                      {format(new Date(status.last_at), 'd MMM yyyy — HH:mm', { locale: ar })}
+                      {toLatinDigits(format(new Date(status.last_at), 'd MMM yyyy — HH:mm', { locale: ar }))}
                     </div>
                   )}
                 </div>
@@ -112,7 +256,7 @@ export default function SyncPage() {
                 {status.records > 0 && (
                   <div className="text-center">
                     <div className="font-black text-gray-800 tabnum">
-                      {status.records?.toLocaleString('ar-EG')}
+                      {status.records?.toLocaleString('en-US')}
                     </div>
                     <div className="text-xs text-gray-400">سجل</div>
                   </div>
@@ -133,6 +277,13 @@ export default function SyncPage() {
             )}
           </div>
         ) : null}
+
+        {/* Network connection health (HQ + branches) */}
+        <BranchHealthPanel
+          data={branchHealth}
+          onProbe={() => probeMutation.mutate()}
+          probing={probeMutation.isPending}
+        />
 
         {/* Logs */}
         <div>
@@ -160,13 +311,13 @@ export default function SyncPage() {
                       <div>
                         <div className="text-sm font-semibold text-gray-800">
                           {run.started_at
-                            ? format(new Date(run.started_at), 'd MMM yyyy — HH:mm', { locale: ar })
+                            ? toLatinDigits(format(new Date(run.started_at), 'd MMM yyyy — HH:mm', { locale: ar }))
                             : '—'}
                         </div>
                         {run.completed_at && (
                           <div className="text-xs text-gray-400 mt-0.5">
                             انتهت:{' '}
-                            {format(new Date(run.completed_at), 'HH:mm:ss', { locale: ar })}
+                            {toLatinDigits(format(new Date(run.completed_at), 'HH:mm:ss', { locale: ar }))}
                           </div>
                         )}
                       </div>
@@ -175,7 +326,7 @@ export default function SyncPage() {
                       {run.records_synced > 0 && (
                         <div className="text-center">
                           <div className="font-black text-gray-800 tabnum">
-                            {run.records_synced?.toLocaleString('ar-EG')}
+                            {run.records_synced?.toLocaleString('en-US')}
                           </div>
                           <div className="text-xs text-gray-400">سجل</div>
                         </div>
@@ -202,7 +353,7 @@ export default function SyncPage() {
                         <div key={j} className="bg-gray-50 rounded-lg px-2.5 py-1.5 text-xs">
                           <div className="text-gray-500 truncate">{log.table_name}</div>
                           <div className="font-bold text-gray-800 tabnum">
-                            {log.records_processed?.toLocaleString('ar-EG')}
+                            {log.records_processed?.toLocaleString('en-US')}
                           </div>
                         </div>
                       ))}

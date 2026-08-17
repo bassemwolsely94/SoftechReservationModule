@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
+import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
     can_see_all_customers:  user?.can_see_all_customers  || false,
     can_see_customer_phone: user?.can_see_customer_phone ?? true,
     phone:               user?.phone          || '',
+    hr_code:             user?.hr_code        || '',
     is_active:           user?.is_active      ?? true,
   })
 
@@ -142,6 +144,17 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
               {errors.non_field_errors.join(' ')}
             </div>
           )}
+
+          {/* Field-level errors (role, branch, email, etc.) */}
+          {Object.entries(errors)
+            .filter(([k]) => !['non_field_errors', 'username', 'password'].includes(k))
+            .map(([k, v]) => (
+              <div key={k} className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                <span className="font-medium capitalize">{k.replace(/_/g, ' ')}: </span>
+                {Array.isArray(v) ? v.join(' ') : String(v)}
+              </div>
+            ))
+          }
 
           {/* ERP user search (create only) */}
           {!isEdit && (
@@ -244,6 +257,16 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">كود الموارد البشرية</label>
+              <input
+                type="text" value={form.hr_code}
+                onChange={e => set('hr_code', e.target.value)}
+                placeholder="كود الموظف في الموارد البشرية"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              {errors.hr_code && <p className="text-xs text-red-600 mt-1">{errors.hr_code}</p>}
+            </div>
           </div>
 
           {/* Role */}
@@ -263,16 +286,12 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
           {/* Branch */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">الفرع الأساسي</label>
-            <select
+            <BranchSelect
               value={form.branch}
-              onChange={e => set('branch', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
-            >
-              <option value="">— المركز الرئيسي —</option>
-              {branches?.map(b => (
-                <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>
-              ))}
-            </select>
+              onChange={v => set('branch', v)}
+              branches={branches ?? []}
+              allLabel="— المركز الرئيسي —"
+            />
           </div>
 
           {/* Access flags */}
@@ -473,7 +492,7 @@ function ActivityLogModal({ user, onClose }) {
                     {log.ip_address && <p className="text-xs text-gray-400">{log.ip_address}</p>}
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">
-                    {new Date(log.created_at).toLocaleString('ar-EG')}
+                    {new Date(log.created_at).toLocaleString('en-US')}
                   </span>
                 </div>
               ))}

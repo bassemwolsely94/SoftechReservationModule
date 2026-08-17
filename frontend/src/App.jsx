@@ -99,6 +99,7 @@ import ProcurementOptimizationPage from './pages/ProcurementOptimizationPage'
 import ProcurementHistoryPage from './pages/ProcurementHistoryPage'
 import SupplierSegmentationPage from './pages/SupplierSegmentationPage'
 import FocAnalysisPage from './pages/FocAnalysisPage'
+import SupplierCategoriesPage from './pages/SupplierCategoriesPage'
 // Analytics — hub renders Sales + Performance + Reservations + Transfers as tabs
 import AnalyticsHubPage from './pages/AnalyticsHubPage'
 import ReservationsAnalyticsPage from './pages/ReservationsAnalyticsPage'
@@ -141,6 +142,7 @@ import ImageEnrichmentPage from './pages/ImageEnrichmentPage'
 import RecommendationsPage from './pages/RecommendationsPage'
 import CallCenterAnalyticsPage from './pages/CallCenterAnalyticsPage'
 import PricingApprovalsPage from './pages/PricingApprovalsPage'
+import DiscountAlignmentPage from './pages/DiscountAlignmentPage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import BatchesPage from './pages/BatchesPage'
 import HRPage from './pages/HRPage'
@@ -361,6 +363,7 @@ export default function App() {
             <Route path="catalog-intelligence"  element={<CatalogIntelligencePage />} />
             <Route path="image-enrichment"      element={<ImageEnrichmentPage />} />
             <Route path="pricing-approvals"     element={<PricingApprovalsPage />} />
+            <Route path="discount-alignment"    element={<DiscountAlignmentPage />} />
             <Route path="pos"                   element={<POSOrderPage />} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />
@@ -380,6 +383,7 @@ export default function App() {
               <Route path="overview"     element={<ProcurementDashboard />} />
               <Route path="history"      element={<ProcurementHistoryPage />} />
               <Route path="segments"     element={<SupplierSegmentationPage />} />
+              <Route path="categories"   element={<SupplierCategoriesPage />} />
               <Route path="foc"          element={<FocAnalysisPage />} />
               {/* Legacy deep-links kept working */}
               <Route path="suppliers"            element={<SupplierPerformancePage />} />

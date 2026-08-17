@@ -8,6 +8,8 @@ import { auditApi } from '../api/client'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const SEVERITY_CFG = {
   info:     { label: 'معلومة', bg: '#eff6ff', text: '#1e40af', dot: '#3b82f6' },
@@ -43,12 +45,12 @@ const ACTION_ICONS = {
 
 function timeAgo(d) {
   if (!d) return '—'
-  try { return formatDistanceToNow(new Date(d), { locale: ar, addSuffix: true }) } catch { return d }
+  try { return toLatinDigits(formatDistanceToNow(new Date(d), { locale: ar, addSuffix: true })) } catch { return d }
 }
 
 function fmtDate(d) {
   if (!d) return '—'
-  try { return format(new Date(d), 'd MMM yyyy — HH:mm', { locale: ar }) } catch { return d }
+  try { return toLatinDigits(format(new Date(d), 'd MMM yyyy — HH:mm', { locale: ar })) } catch { return d }
 }
 
 // ── Audit Log Row ─────────────────────────────────────────────────────────────

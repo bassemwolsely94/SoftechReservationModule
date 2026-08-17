@@ -441,12 +441,14 @@ export const purchasingApi = {
   // Engine runs (audit log)
   runs:        (params)  => api.get('/purchasing/runs/', { params }),
   latestRun:   ()        => api.get('/purchasing/runs/latest/'),
-  activeRun:   ()        => api.get('/purchasing/runs/latest/'),
+  lastAttempt: ()        => api.get('/purchasing/runs/latest/', { params: { any: 1 } }),
+  activeRun:   ()        => api.get('/purchasing/runs/active/'),
 
   // Trigger a new engine run.
   // data: { params?: { weight_30d, weight_90d, weight_365d, abc_a_threshold, abc_b_threshold } }
   // Omit data (or pass {}) to use the current saved EngineConfig defaults.
   triggerRun:  (data = {}) => api.post('/purchasing/trigger/', data),
+  catchupSync: ()          => api.post('/purchasing/catchup/'),
 
   // Pre-computed summary stats for dashboard header cards (server-side aggregation)
   // Returns: { total_items, count_A/B/C/X, items_with_gap, total_gap_value, total_monthly_value, ... }
@@ -466,6 +468,8 @@ export const purchasingApi = {
     params,
     responseType: params.format === 'csv' ? 'blob' : 'arraybuffer',
   }),
+  advancedExport: (params) => api.get('/purchasing/advanced-export/', { params, responseType: 'arraybuffer' }),
+  advancedPivotExport: (params) => api.get('/purchasing/advanced-pivot-export/', { params, responseType: 'arraybuffer' }),
 
   // EngineConfig singleton — GET returns current weights/thresholds; PATCH updates them (admin only)
   config:       ()       => api.get('/purchasing/config/'),
@@ -1195,8 +1199,10 @@ export const procurementIntelApi = {
   listAlerts:      (params)              => api.get('/procurement/alerts/', { params }),
   resolveAlert:    (id, data)            => api.patch(`/procurement/alerts/${id}/resolve/`, data),
 
-  // v2: Purchase History (enhanced with FOC/tax/return-type filters)
+  // v2/v3: Purchase History (enhanced with SOFTECH item-attribute + range filters)
   history:             (params)          => api.get('/procurement/history/', { params }),
+  historySummary:      (params)          => api.get('/procurement/history/summary/', { params }),
+  filterOptions:       ()               => api.get('/procurement/filter-options/'),
 
   // v2: Supplier Segmentation
   listSegments:        (params)          => api.get('/procurement/segments/', { params }),
@@ -1214,6 +1220,18 @@ export const procurementIntelApi = {
 
   // v2: Tax Burden
   taxBurden:           (params)          => api.get('/procurement/tax-burden/', { params }),
+
+  // v3: Admin-managed supplier categories + classification rules
+  listCategories:      (params)          => api.get('/procurement/categories/', { params }),
+  createCategory:      (data)            => api.post('/procurement/categories/', data),
+  updateCategory:      (id, data)        => api.patch(`/procurement/categories/${id}/`, data),
+  deleteCategory:      (id)              => api.delete(`/procurement/categories/${id}/`),
+  listRules:           (params)          => api.get('/procurement/classification-rules/', { params }),
+  createRule:          (data)            => api.post('/procurement/classification-rules/', data),
+  updateRule:          (id, data)        => api.patch(`/procurement/classification-rules/${id}/`, data),
+  deleteRule:          (id)              => api.delete(`/procurement/classification-rules/${id}/`),
+  reclassify:          ()               => api.post('/procurement/reclassify/', {}),
+  personCodes:         (params)          => api.get('/procurement/person-codes/', { params }),
 }
 
 // ── Product Experience / Commerce Catalog API ─────────────────────────────────
@@ -1864,6 +1882,14 @@ export const pricingApprovalsApi = {
   preview:       (params)         => api.get('/pricing-approvals/preview/', { params }),
   approverInfo:  ()               => api.get('/pricing-approvals/approver-info/'),
   pendingCount:  ()               => api.get('/pricing-approvals/pending-count/'),
+  // Discount-alignment audit
+  alignmentScan:     (params)     => api.get('/pricing-approvals/alignment/', { params }),
+  alignmentPolicies: ()           => api.get('/pricing-approvals/alignment/policies/'),
+  savePolicy:        (data)       => api.post('/pricing-approvals/alignment/policies/', data),
+  alignmentTiers:    ()           => api.get('/pricing-approvals/alignment/tiers/'),
+  alignmentApply:    (data)       => api.post('/pricing-approvals/alignment/apply/', data),
+  tierPreview:       (params)     => api.get('/pricing-approvals/alignment/tier-preview/', { params }),
+  tierCreate:        (data)       => api.post('/pricing-approvals/alignment/tier-create/', data),
 
   // Replication status / repair (#2, #12)
   replication:       (id)            => api.get(`/pricing-approvals/${id}/replication/`),

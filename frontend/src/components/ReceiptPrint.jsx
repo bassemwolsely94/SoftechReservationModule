@@ -37,7 +37,7 @@ const PRIORITY_AR = {
 function fmtDate(d) {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleDateString('ar-EG', {
+    return new Date(d).toLocaleDateString('en-US', {
       day: 'numeric', month: 'long', year: 'numeric',
     })
   } catch { return d }
@@ -46,7 +46,7 @@ function fmtDate(d) {
 function fmtDateTime(d) {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleString('ar-EG', {
+    return new Date(d).toLocaleString('en-US', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     })
@@ -205,6 +205,7 @@ const RECEIPT_CSS = `
     line-height: 1.7;
   }
 
+
   .urgent-banner {
     background: #111;
     color: white;
@@ -275,7 +276,7 @@ function buildReservationHTML(r) {
   }
 
   return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar-u-nu-latn" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <title>${title} #${r.id}</title>
@@ -384,7 +385,7 @@ function buildTransferHTML(t) {
     </div>`).join('')
 
   return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar-u-nu-latn" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <title>${title} #${t.id}</title>
@@ -494,7 +495,6 @@ export function printReservationReceipt(reservation) {
   }
   win.document.write(html)
   win.document.close()
-  // Wait for fonts to load then print
   win.onload = () => {
     setTimeout(() => {
       win.focus()

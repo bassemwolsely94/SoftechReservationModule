@@ -13,7 +13,7 @@
  * Props:
  *   value        {string}   — current text value
  *   onChange     {fn}       — (text) => void
- *   onSelect     {fn}       — (item) => void  item = { softech_id, name, name_scientific, unit_sale_price, item_id, qty_at_branch, source }
+ *   onSelect     {fn}       — (item) => void  item = { softech_id, name, name_scientific, pack_price, unit_price, item_id, qty_at_branch, source }
  *   branchId     {number}   — if given, shows stock at that branch
  *   placeholder  {string}
  *   disabled     {bool}
@@ -34,14 +34,20 @@ function useDebounce(value, delay) {
 }
 
 export default function ItemSearchInput({
-  value = '',
-  onChange,
+  value: valueProp,
+  onChange: onChangeProp,
   onSelect,
   branchId = null,
   placeholder = 'ابحث عن صنف... (يدعم * مثل: pan*، *cillin)',
   disabled = false,
   className = '',
 }) {
+  // Support BOTH modes: controlled (parent owns value/onChange, e.g. Call Workspace) and
+  // uncontrolled (parent passes only onSelect, e.g. the POS screen) via internal state.
+  const [internalValue, setInternalValue] = useState('')
+  const controlled = valueProp !== undefined && onChangeProp !== undefined
+  const value    = controlled ? valueProp : internalValue
+  const setValue = controlled ? onChangeProp : setInternalValue
   const [results, setResults]   = useState([])
   const [loading, setLoading]   = useState(false)
   const [open, setOpen]         = useState(false)
@@ -110,7 +116,8 @@ export default function ItemSearchInput({
 
   const pick = (item) => {
     onSelect?.(item)
-    onChange?.(item.name)
+    // controlled callers keep the picked name; uncontrolled (POS) clears for the next scan
+    setValue(controlled ? item.name : '')
     setOpen(false)
     setResults([])
     inputRef.current?.blur()
@@ -136,7 +143,7 @@ export default function ItemSearchInput({
           ref={inputRef}
           type="text"
           value={value}
-          onChange={e => { onChange?.(e.target.value); setOpen(true) }}
+          onChange={e => { setValue(e.target.value); setOpen(true) }}
           onKeyDown={handleKey}
           onFocus={() => { if (results.length > 0) setOpen(true) }}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -159,7 +166,7 @@ export default function ItemSearchInput({
         {value && !disabled && (
           <button
             type="button"
-            onMouseDown={e => { e.preventDefault(); onChange?.(''); setResults([]); setOpen(false) }}
+            onMouseDown={e => { e.preventDefault(); setValue(''); setResults([]); setOpen(false) }}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -193,9 +200,9 @@ export default function ItemSearchInput({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">{item.name}</div>
+                  <div className="font-medium text-gray-900 break-words">{item.name}</div>
                   {item.name_scientific && (
-                    <div className="text-xs text-gray-500 truncate italic">{item.name_scientific}</div>
+                    <div className="text-xs text-gray-500 break-words italic">{item.name_scientific}</div>
                   )}
                   <div className="flex items-center gap-2 mt-0.5">
                     {item.softech_id && (
@@ -207,9 +214,9 @@ export default function ItemSearchInput({
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  {item.unit_sale_price > 0 && (
+                  {item.pack_price > 0 && (
                     <span className="text-xs font-semibold text-brand-700">
-                      {Number(item.unit_sale_price).toFixed(2)} ج.م
+                      {Number(item.pack_price).toFixed(2)} ج.م
                     </span>
                   )}
                   {branchId && stockBadge(item.qty_at_branch)}

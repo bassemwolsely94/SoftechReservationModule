@@ -8,7 +8,11 @@
  *   Tab 4 — تقارير     : usage report
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { vouchersApi, customersApi } from '../api/client'
+import { vouchersApi, customersApi, branchesApi } from '../api/client'
+import RefreshButton from '../components/RefreshButton'
+import CanDo from '../components/CanDo'
+import CustomerSearchWidget from '../components/CustomerSearchWidget'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
@@ -109,136 +113,9 @@ function Toast({ toast }) {
   )
 }
 
-// ── Shared: Customer search picker ───────────────────────────────────────────
-/**
- * Props:
- *   selected   — customer object | null
- *   onSelect   — (customer | null) => void
- *   placeholder — string (optional)
- *   allowManual — bool: show "enter phone manually" fallback for walk-ins not in system
- */
-function CustomerPicker({ selected, onSelect, placeholder = 'ابحث بالاسم أو الهاتف أو كود PIC...', allowManual = false }) {
-  const [query,       setQuery]       = useState('')
-  const [results,     setResults]     = useState([])
-  const [searching,   setSearching]   = useState(false)
-  const [manualMode,  setManualMode]  = useState(false)
-  const [manualPhone, setManualPhone] = useState('')
-  const debounceRef = useRef(null)
-
-  useEffect(() => {
-    if (query.length < 2) { setResults([]); return }
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true)
-      try {
-        const r = await customersApi.list({ search: query, page_size: 8 })
-        setResults(r.data.results || r.data)
-      } catch { setResults([]) }
-      finally { setSearching(false) }
-    }, 300)
-    return () => clearTimeout(debounceRef.current)
-  }, [query])
-
-  if (selected) {
-    return (
-      <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5">
-        <div className="min-w-0">
-          <div className="font-semibold text-gray-900 text-sm truncate">{selected.name}</div>
-          <div className="text-xs text-gray-500 font-mono mt-0.5">{selected.phone}</div>
-          {selected.softech_pic && (
-            <span className="text-xs font-mono text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded mt-1 inline-block">
-              PIC: {selected.softech_pic}
-            </span>
-          )}
-        </div>
-        <button onClick={() => { onSelect(null); setQuery('') }}
-          className="text-xs text-indigo-600 hover:text-indigo-800 shrink-0 mr-2 font-medium">
-          تغيير
-        </button>
-      </div>
-    )
-  }
-
-  if (allowManual && manualMode) {
-    return (
-      <div className="space-y-2">
-        <Input
-          value={manualPhone}
-          onChange={e => setManualPhone(e.target.value)}
-          placeholder="01xxxxxxxxx"
-          dir="ltr"
-        />
-        <div className="flex gap-2">
-          <Btn variant="primary" size="sm" onClick={() => {
-            if (manualPhone.trim()) {
-              onSelect({ id: null, name: 'عميل غير مسجل', phone: manualPhone.trim(), softech_pic: null })
-            }
-          }} disabled={!manualPhone.trim()}>
-            تأكيد الرقم
-          </Btn>
-          <button onClick={() => setManualMode(false)} className="text-xs text-gray-500 hover:text-gray-700">
-            ← البحث بدلاً من ذلك
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="relative">
-      <Input
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder={placeholder}
-        autoComplete="off"
-      />
-      {searching && (
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 animate-pulse">جاري البحث...</div>
-      )}
-
-      {results.length > 0 && (
-        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
-          {results.map(c => (
-            <div key={c.id} onClick={() => { onSelect(c); setQuery(''); setResults([]) }}
-              className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50 cursor-pointer border-b border-gray-50 last:border-0">
-              <div className="min-w-0">
-                <div className="font-semibold text-sm text-gray-900 truncate">{c.name}</div>
-                <div className="text-xs text-gray-500 font-mono">{c.phone}</div>
-                {c.softech_pic && (
-                  <span className="text-xs font-mono text-indigo-600">PIC: {c.softech_pic}</span>
-                )}
-              </div>
-              {c.customer_type_label && (
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full shrink-0 mr-2">
-                  {c.customer_type_label}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {query.length >= 2 && !searching && results.length === 0 && (
-        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-sm px-3 py-3 text-sm text-gray-500">
-          لا توجد نتائج
-          {allowManual && (
-            <button onClick={() => setManualMode(true)}
-              className="block text-xs text-indigo-600 hover:underline mt-1">
-              أدخل رقم الهاتف يدوياً
-            </button>
-          )}
-        </div>
-      )}
-
-      {allowManual && !query && (
-        <button onClick={() => setManualMode(true)}
-          className="text-xs text-indigo-500 hover:text-indigo-700 mt-1 block">
-          أو أدخل رقم هاتف غير مسجل
-        </button>
-      )}
-    </div>
-  )
-}
+// CustomerPicker is now the shared CustomerSearchWidget — imported at top.
+// Local alias for backward compat with existing usages in this file.
+const CustomerPicker = CustomerSearchWidget
 
 // ── Tab 1: Create Voucher Modal ───────────────────────────────────────────────
 function CreateVoucherModal({ onClose, onCreate }) {
@@ -253,8 +130,18 @@ function CreateVoucherModal({ onClose, onCreate }) {
     usage_limit_per_day: '', notes: '',
   })
   const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [applicableItems, setApplicableItems] = useState([])       // [{id, name}] (TD-M006)
+  const [applicableBranches, setApplicableBranches] = useState([]) // [branchId]
+  const [branchOptions, setBranchOptions] = useState([])
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
+
+  // Load branches once for the "eligible branches" restriction picker
+  useEffect(() => {
+    branchesApi.list()
+      .then(r => setBranchOptions(Array.isArray(r.data) ? r.data : (r.data?.results || [])))
+      .catch(() => {})
+  }, [])
 
   const f = (key) => (e) => setForm(p => ({ ...p, [key]: e.target.value }))
 
@@ -288,6 +175,10 @@ function CreateVoucherModal({ onClose, onCreate }) {
 
       // Remove blank valid_until (optional date)
       if (!payload.valid_until) delete payload.valid_until
+
+      // Targeting restrictions (TD-M006) — omit when empty (unrestricted)
+      if (applicableItems.length)    payload.applicable_items    = applicableItems.map(i => i.id)
+      if (applicableBranches.length) payload.applicable_branches = applicableBranches
 
       const r = await vouchersApi.create(payload)
       onCreate(r.data)
@@ -403,6 +294,49 @@ function CreateVoucherModal({ onClose, onCreate }) {
               <Input type="number" value={form.usage_limit_per_day} onChange={f('usage_limit_per_day')} min="1" placeholder="∞" />
             </Field>
           </div>
+
+          {/* ── Targeting restrictions (TD-M006) ── */}
+          <Field label="الأصناف المؤهلة (اختياري — تقصُر القسيمة على أصناف محددة)">
+            <ItemSearchWidget
+              selected={null}
+              onSelect={it => setApplicableItems(prev =>
+                prev.some(p => p.id === it.id) ? prev : [...prev, { id: it.id, name: it.name }])}
+              placeholder="ابحث لإضافة صنف مؤهل..."
+            />
+            {applicableItems.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {applicableItems.map(it => (
+                  <span key={it.id}
+                    className="inline-flex items-center gap-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 px-2 py-1 rounded-lg">
+                    {it.name}
+                    <button type="button"
+                      onClick={() => setApplicableItems(prev => prev.filter(p => p.id !== it.id))}
+                      className="text-brand-400 hover:text-red-500 leading-none">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </Field>
+
+          {branchOptions.length > 0 && (
+            <Field label="الفروع المؤهلة (اختياري — تقصُر الصرف على فروع محددة)">
+              <div className="flex flex-wrap gap-1.5">
+                {branchOptions.map(b => {
+                  const on = applicableBranches.includes(b.id)
+                  return (
+                    <button type="button" key={b.id}
+                      onClick={() => setApplicableBranches(prev =>
+                        on ? prev.filter(x => x !== b.id) : [...prev, b.id])}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                        on ? 'bg-brand-50 border-brand-300 text-brand-700 font-medium'
+                           : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                      {on ? '✓ ' : ''}{b.name_ar || b.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          )}
 
           <Field label="ملاحظات">
             <textarea value={form.notes} onChange={f('notes')} rows={2}
@@ -587,7 +521,7 @@ function VouchersList({ onRedeem }) {
           {Object.entries(CAT_CFG).map(([v, c]) => <option key={v} value={v}>{c.icon} {c.label}</option>)}
         </select>
         <div className="flex-1" />
-        <Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn>
+        <CanDo module="reservations" action="create"><Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
       </div>
 
       {/* Table */}
@@ -597,7 +531,7 @@ function VouchersList({ onRedeem }) {
         <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
           <div className="text-5xl mb-3">🎫</div>
           <div className="font-medium mb-4">لا توجد قسائم</div>
-          <Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn>
+          <CanDo module="reservations" action="create"><Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
         </div>
       ) : (
         <div className="flex-1 overflow-auto rounded-xl border border-gray-100">
@@ -700,6 +634,7 @@ function RedemptionFlow({ voucher, onClose }) {
   const [step,         setStep]         = useState(1)   // 1 | 2 | 3 | 4
   const [phone,        setPhone]        = useState('')
   const [orderAmount,  setOrderAmount]  = useState('')
+  const [itemIds,      setItemIds]      = useState([])  // selected applicable items (TD-M006)
   const [otpCode,      setOtpCode]      = useState('')
   const [otpId,        setOtpId]        = useState(null)
   const [otpExpiry,    setOtpExpiry]    = useState(null)
@@ -727,14 +662,20 @@ function RedemptionFlow({ voucher, onClose }) {
     return () => clearInterval(timerRef.current)
   }, [step, otpExpiry])
 
+  const restrictedItems = voucher.applicable_items_detail || []
+  const itemIdsPayload  = itemIds.length ? itemIds : undefined
+
   // Step 1 → validate eligibility
   const handleValidate = async () => {
     if (!phone.trim()) return setError('رقم الهاتف مطلوب')
+    if (restrictedItems.length && itemIds.length === 0)
+      return setError('هذه القسيمة مقصورة على أصناف محددة — اختر صنفاً واحداً على الأقل')
     setLoading(true); setError(null)
     try {
       const r = await vouchersApi.validateEligibility(voucher.id, {
         phone: phone.trim(),
         order_amount: orderAmount || undefined,
+        item_ids: itemIdsPayload,
       })
       setEligibility(r.data)
       setStep(2)
@@ -756,6 +697,7 @@ function RedemptionFlow({ voucher, onClose }) {
       const r = await vouchersApi.generateOtp(voucher.id, {
         phone: phone.trim(),
         order_amount: orderAmount || undefined,
+        item_ids: itemIdsPayload,
       })
       setOtpId(r.data.otp_id)
       setOtpExpiry(r.data.expires_at)
@@ -776,6 +718,7 @@ function RedemptionFlow({ voucher, onClose }) {
         code: otpCode,
         phone: phone.trim(),
         order_amount: orderAmount || undefined,
+        item_ids: itemIdsPayload,
       })
       setDocument(r.data.document)
       setStep(4)
@@ -792,6 +735,7 @@ function RedemptionFlow({ voucher, onClose }) {
       const r = await vouchersApi.generateOtp(voucher.id, {
         phone: phone.trim(),
         order_amount: orderAmount || undefined,
+        item_ids: itemIdsPayload,
       })
       setOtpId(r.data.otp_id)
       setOtpExpiry(r.data.expires_at)
@@ -862,6 +806,27 @@ function RedemptionFlow({ voucher, onClose }) {
                   onChange={e => setOrderAmount(e.target.value)}
                   placeholder="لحساب الخصم تلقائياً" min="0" step="0.01" />
               </Field>
+              {restrictedItems.length > 0 && (
+                <Field label="الأصناف المؤهلة في الطلب" required>
+                  <div className="space-y-1.5">
+                    {restrictedItems.map(it => {
+                      const on = itemIds.includes(it.id)
+                      return (
+                        <button type="button" key={it.id}
+                          onClick={() => setItemIds(prev => on ? prev.filter(x => x !== it.id) : [...prev, it.id])}
+                          className={`w-full text-right px-3 py-2 rounded-xl border text-sm transition-colors ${
+                            on ? 'bg-brand-50 border-brand-300 text-brand-700 font-medium'
+                               : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                          {on ? '✓ ' : ''}{it.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    هذه القسيمة مقصورة على أصناف محددة — أكّد وجود صنف منها في الطلب.
+                  </p>
+                </Field>
+              )}
               <ErrorBox msg={error} />
               <Btn variant="primary" size="lg" onClick={handleValidate}
                 disabled={loading || !phone} className="w-full">
@@ -1097,10 +1062,10 @@ function RedemptionFlow({ voucher, onClose }) {
   <tr><td>الفرع</td><td>${d.branch_name}</td></tr>
   <tr><td>الموظف</td><td>${d.employee_name}</td></tr>
   <tr><td>الحالة</td><td>${d.status_label}</td></tr>
-  ${d.used_at ? `<tr><td>وقت الاستخدام</td><td>${new Date(d.used_at).toLocaleString('ar-EG')}</td></tr>` : ''}
+  ${d.used_at ? `<tr><td>وقت الاستخدام</td><td>${new Date(d.used_at).toLocaleString('en-US')}</td></tr>` : ''}
   <tr><td>طُبع بواسطة</td><td>${d.printed_by}</td></tr>
 </table>
-<div class="footer">طُبع في: ${new Date().toLocaleString('ar-EG')}</div>
+<div class="footer">طُبع في: ${new Date().toLocaleString('en-US')}</div>
 <script>window.onload=function(){window.print()}<\/script>
 </body></html>`)
                       win.document.close()
@@ -1241,7 +1206,7 @@ function DocumentsTab() {
               <div><span className="text-gray-400">الموظف: </span>{doc.employee_name || '—'}</div>
               <div>
                 <span className="text-gray-400">أُنشئت: </span>
-                {new Date(doc.generated_at).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' })}
+                {new Date(doc.generated_at).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' })}
               </div>
             </div>
           </div>
@@ -1297,7 +1262,7 @@ function ReportTab() {
 
   useEffect(() => { load() }, [])
 
-  const fmt = (n, dp = 2) => Number(n || 0).toLocaleString('ar-EG', {
+  const fmt = (n, dp = 2) => Number(n || 0).toLocaleString('en-US', {
     minimumFractionDigits: dp, maximumFractionDigits: dp,
   })
 
@@ -1312,9 +1277,9 @@ function ReportTab() {
           <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
         </Field>
         <div className="pt-5">
-          <Btn variant="primary" onClick={load} disabled={loading}>
-            {loading ? '...' : '📊 تحديث التقرير'}
-          </Btn>
+          <RefreshButton loading={loading} onClick={load} variant="primary">
+            📊 تحديث التقرير
+          </RefreshButton>
         </div>
       </div>
 

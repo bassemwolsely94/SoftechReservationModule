@@ -25,6 +25,34 @@ function ToggleCell({ checked, onChange, disabled }) {
   )
 }
 
+// ── Notifier 3-state mode selector (Show / Mute / Off) ──────────────────────────
+
+const MODE_OPTS = [
+  { value: 'show', label: 'إظهار', on: 'bg-emerald-100 text-emerald-700' },
+  { value: 'mute', label: 'كتم',   on: 'bg-amber-100 text-amber-700' },
+  { value: 'off',  label: 'إيقاف', on: 'bg-red-100 text-red-700' },
+]
+
+function ModeSelector({ value, disabled, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg overflow-hidden border border-gray-200">
+      {MODE_OPTS.map((o, i) => (
+        <button
+          key={o.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(o.value)}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-r border-gray-200' : ''}
+            ${value === o.value ? o.on : 'bg-white text-gray-400 hover:bg-gray-50'}
+            ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Role label colors ──────────────────────────────────────────────────────────
 
 const ROLE_COLORS = {
@@ -59,6 +87,10 @@ export default function PermissionsMatrixPage() {
   const [dirtyKeys, setDirtyKeys] = useState(new Set())
   const [activeRole, setActiveRole] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  // 'modules' = module/action matrix · 'notifiers' = notification visibility
+  const [view, setView] = useState('modules')
+  const [localNotifiers, setLocalNotifiers] = useState({})   // {role: {category: bool}}
+  const [notifierDirty, setNotifierDirty] = useState(new Set())  // keys: role::category
 
   const { data, isLoading } = useQuery({
     queryKey: ['permissions-matrix'],
@@ -71,6 +103,10 @@ export default function PermissionsMatrixPage() {
     if (data?.matrix) {
       setLocalMatrix(JSON.parse(JSON.stringify(data.matrix)))
       setDirtyKeys(new Set())
+    }
+    if (data?.notifier_matrix) {
+      setLocalNotifiers(JSON.parse(JSON.stringify(data.notifier_matrix)))
+      setNotifierDirty(new Set())
     }
   }, [data])
 
@@ -86,6 +122,7 @@ export default function PermissionsMatrixPage() {
     onSuccess: () => {
       setSaveSuccess(true)
       setDirtyKeys(new Set())
+      setNotifierDirty(new Set())
       qc.invalidateQueries({ queryKey: ['permissions-matrix'] })
       setTimeout(() => setSaveSuccess(false), 3000)
     },
@@ -94,11 +131,11 @@ export default function PermissionsMatrixPage() {
   const toggleCell = (role, module, action) => {
     if (!isAdmin) return
     setLocalMatrix(prev => {
-      const next = { ...prev }
-      if (!next[role]) next[role] = {}
-      if (!next[role][module]) next[role][module] = {}
-      next[role][module][action] = !next[role][module][action]
-      return next
+      const roleData = { ...(prev[role] || {}) }
+      const modData  = { ...(roleData[module] || {}) }
+      modData[action] = !modData[action]
+      roleData[module] = modData
+      return { ...prev, [role]: roleData }
     })
     const key = `${role}::${module}::${action}`
     setDirtyKeys(prev => {
@@ -109,13 +146,24 @@ export default function PermissionsMatrixPage() {
     })
   }
 
+  const setNotifierMode = (role, category, mode) => {
+    if (!isAdmin) return
+    setLocalNotifiers(prev => ({ ...prev, [role]: { ...(prev[role] || {}), [category]: mode } }))
+    setNotifierDirty(prev => new Set(prev).add(`${role}::${category}`))
+  }
+
+  const totalDirty = dirtyKeys.size + notifierDirty.size
+
   const handleSave = () => {
-    if (!isAdmin || !dirtyKeys.size) return
+    if (!isAdmin || !totalDirty) return
     const updates = []
     for (const key of dirtyKeys) {
       const [role, module, action] = key.split('::')
-      const is_allowed = localMatrix[role]?.[module]?.[action] ?? false
-      updates.push({ role, module, action, is_allowed })
+      updates.push({ role, module, action, is_allowed: localMatrix[role]?.[module]?.[action] ?? false })
+    }
+    for (const key of notifierDirty) {
+      const [role, category] = key.split('::')
+      updates.push({ role, category, mode: localNotifiers[role]?.[category] || 'show' })
     }
     saveMutation.mutate(updates)
   }
@@ -124,6 +172,10 @@ export default function PermissionsMatrixPage() {
     if (data?.matrix) {
       setLocalMatrix(JSON.parse(JSON.stringify(data.matrix)))
       setDirtyKeys(new Set())
+    }
+    if (data?.notifier_matrix) {
+      setLocalNotifiers(JSON.parse(JSON.stringify(data.notifier_matrix)))
+      setNotifierDirty(new Set())
     }
   }
 
@@ -151,11 +203,13 @@ export default function PermissionsMatrixPage() {
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const roles   = data?.roles   || []
-  const modules = data?.modules || []
-  const actions = data?.actions || []
+  const roles     = data?.roles     || []
+  const modules   = data?.modules   || []
+  const actions   = data?.actions   || []
+  const notifiers = data?.notifiers || []
 
   const currentRoleData = activeRole ? (localMatrix[activeRole] || {}) : {}
+  const currentNotifiers = activeRole ? (localNotifiers[activeRole] || {}) : {}
 
   const allGrantedForModule = (module) =>
     actions.every(a => currentRoleData[module]?.[a.value] === true)
@@ -172,11 +226,11 @@ export default function PermissionsMatrixPage() {
           <p className="text-sm text-gray-500 mt-0.5">تحكم في وصول كل دور إلى كل وحدة وإجراء</p>
         </div>
         <div className="flex items-center gap-3">
-          <DirtyBadge count={dirtyKeys.size} />
+          <DirtyBadge count={totalDirty} />
           {saveSuccess && (
             <span className="text-sm text-emerald-600 font-medium">✓ تم الحفظ</span>
           )}
-          {isAdmin && dirtyKeys.size > 0 && (
+          {isAdmin && totalDirty > 0 && (
             <>
               <button
                 onClick={handleReset}
@@ -189,11 +243,25 @@ export default function PermissionsMatrixPage() {
                 disabled={saveMutation.isPending}
                 className="px-4 py-2 text-sm bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 font-medium"
               >
-                {saveMutation.isPending ? 'جارٍ الحفظ…' : `حفظ التغييرات (${dirtyKeys.size})`}
+                {saveMutation.isPending ? 'جارٍ الحفظ…' : `حفظ التغييرات (${totalDirty})`}
               </button>
             </>
           )}
         </div>
+      </div>
+
+      {/* View tabs */}
+      <div className="flex items-center gap-1 mb-5 bg-gray-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setView('modules')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            view === 'modules' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >صلاحيات الوحدات</button>
+        <button
+          onClick={() => setView('notifiers')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            view === 'notifiers' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >🔔 ظهور الإشعارات</button>
       </div>
 
       {isLoading ? (
@@ -205,7 +273,7 @@ export default function PermissionsMatrixPage() {
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 px-1">الأدوار</p>
             <div className="space-y-1.5">
               {roles.map(role => {
-                const isDirty = [...dirtyKeys].some(k => k.startsWith(role.value + '::'))
+                const isDirty = [...dirtyKeys, ...notifierDirty].some(k => k.startsWith(role.value + '::'))
                 return (
                   <button
                     key={role.value}
@@ -236,7 +304,7 @@ export default function PermissionsMatrixPage() {
 
           {/* Matrix table */}
           <div className="flex-1 overflow-x-auto">
-            {activeRole ? (
+            {activeRole && view === 'modules' ? (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {/* Table header */}
                 <table className="w-full text-sm">
@@ -340,6 +408,62 @@ export default function PermissionsMatrixPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            ) : activeRole && view === 'notifiers' ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-3 border-b bg-gray-50">
+                  <p className="text-sm text-gray-600">
+                    تحكّم في إشعارات دور <strong>{roles.find(r => r.value === activeRole)?.label}</strong>:
+                    <span className="text-emerald-700 font-medium"> إظهار</span> (تُنشأ وتَظهر) ·
+                    <span className="text-amber-700 font-medium"> كتم</span> (تُنشأ لكن لا تَظهر) ·
+                    <span className="text-red-700 font-medium"> إيقاف</span> (لا تُنشأ نهائياً).
+                    الافتراضي يتبع صلاحية «عرض» للوحدة المرتبطة.
+                  </p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-64">الإشعار / الموجز</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">الوضع</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {notifiers.map(n => {
+                      const mode = currentNotifiers[n.value] || 'show'
+                      const isDirty = notifierDirty.has(`${activeRole}::${n.value}`)
+                      return (
+                        <tr key={n.value} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-gray-800 text-sm">{n.label}</div>
+                            <div className="text-xs text-gray-400 font-mono">{n.value}</div>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <ModeSelector value={mode} disabled={!isAdmin}
+                                onChange={(m) => setNotifierMode(activeRole, n.value, m)} />
+                              {isDirty && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {isAdmin && (
+                  <div className="px-5 py-3 border-t bg-gray-50 flex gap-3 justify-end">
+                    <button
+                      onClick={() => notifiers.forEach(n => setNotifierMode(activeRole, n.value, 'show'))}
+                      className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">إظهار الكل</button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      onClick={() => notifiers.forEach(n => setNotifierMode(activeRole, n.value, 'mute'))}
+                      className="text-xs text-amber-600 hover:text-amber-700 font-medium">كتم الكل</button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      onClick={() => notifiers.forEach(n => setNotifierMode(activeRole, n.value, 'off'))}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium">إيقاف الكل</button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center text-gray-400 py-16">اختر دوراً من القائمة</div>

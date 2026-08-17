@@ -156,6 +156,7 @@ const NAV_GROUPS = [
       { to: '/procurement',       icon: '🛒', label: 'ذكاء المشتريات',   roles: ['admin','purchasing'] },
       { to: '/invoices',          icon: '🧾', label: 'فواتير الموردين',   roles: ['admin','purchasing'] },
       { to: '/pricing-approvals', icon: '🏷️', label: 'موافقات الأسعار', roles: ['admin','purchasing','pharmacist'] },
+      { to: '/discount-alignment', icon: '🎯', label: 'مطابقة الخصومات', roles: ['admin','purchasing','pharmacist'] },
     ],
   },
   {

@@ -15,7 +15,7 @@ import { createPortal } from 'react-dom'
 import { reservationsApi, transfersApi } from '../api/client'
 
 const fmt = (n, dp = 2) =>
-  Number(n || 0).toLocaleString('ar-EG', {
+  Number(n || 0).toLocaleString('en-US', {
     minimumFractionDigits: dp,
     maximumFractionDigits: dp,
   })
@@ -23,7 +23,7 @@ const fmt = (n, dp = 2) =>
 const fmtDate = (iso) => {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleString('ar-EG', {
+    return new Date(iso).toLocaleString('en-US', {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
     })
@@ -91,6 +91,65 @@ function ReceiptFooter({ data }) {
   )
 }
 
+// ── Audit Trail section ────────────────────────────────────────────────────────
+
+const ACTIVITY_ICONS = {
+  note:               '📝',
+  call_made:          '📞',
+  customer_replied:   '💬',
+  stock_checked:      '🔍',
+  status_changed:     '🔄',
+  transfer_requested: '🔀',
+  transfer_replied:   '↩️',
+  item_dispensed:     '✅',
+  reminder_sent:      '🔔',
+  image_attached:     '🖼️',
+  assigned:           '👤',
+  mention:            '@',
+}
+
+function AuditTrailSection({ trail = [] }) {
+  if (!trail.length) return null
+  return (
+    <SectionCard title={`سجل العمليات (${trail.length})`}>
+      <div className="space-y-2">
+        {trail.map((entry, i) => (
+          <div key={i}
+            className={`flex gap-2.5 pb-2 border-b border-gray-100 last:border-0
+              ${entry.kind === 'status' ? 'bg-blue-50/40 rounded-lg px-2 py-1.5 -mx-1' : ''}`}
+          >
+            {/* Icon */}
+            <div className="shrink-0 w-5 text-center text-sm mt-0.5">
+              {entry.kind === 'status' ? '🔄' : (ACTIVITY_ICONS[entry.type] || '•')}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              {/* Who + when */}
+              <div className="flex items-baseline justify-between gap-1 flex-wrap">
+                <span className="text-xs font-semibold text-gray-800">{entry.who}</span>
+                <span className="text-[10px] text-gray-400 font-mono shrink-0">
+                  {fmtDate(entry.when)}
+                </span>
+              </div>
+              {/* What happened */}
+              <div className={`text-xs mt-0.5 ${entry.kind === 'status' ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
+                {entry.what}
+              </div>
+              {/* Detail / note */}
+              {entry.detail && (
+                <div className="text-[10px] text-gray-500 mt-0.5 italic leading-snug">
+                  {entry.detail}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  )
+}
+
 // ── Reservation Receipt ────────────────────────────────────────────────────────
 
 function ReservationReceipt({ data }) {
@@ -123,25 +182,61 @@ function ReservationReceipt({ data }) {
         </SectionCard>
       )}
 
-      <SectionCard title="الصنف المطلوب">
-        <div className="font-semibold text-gray-900 text-sm leading-tight">{data.item?.name}</div>
-        {data.item?.scientific && (
-          <div className="text-xs text-gray-400 italic mt-0.5">{data.item.scientific}</div>
-        )}
-        {data.item?.softech_id && (
-          <div className="text-xs font-mono text-gray-400">كود: {data.item.softech_id}</div>
-        )}
-        <div className="mt-1.5 flex items-center justify-between">
-          <span className="text-xs text-gray-500">الكمية المطلوبة</span>
-          <span className="font-bold text-gray-900">{data.item?.quantity} وحدة</span>
-        </div>
-        {data.item?.sale_price > 0 && (
-          <div className="mt-1.5 flex items-center justify-between">
-            <span className="text-xs text-gray-500">السعر العام</span>
-            <span className="font-bold text-emerald-700">{fmt(data.item.sale_price)} ج.م</span>
-          </div>
-        )}
-      </SectionCard>
+      {/* Build full items list: primary + extra lines */}
+      {(() => {
+        const allItems = [
+          ...(data.item ? [data.item] : []),
+          ...(data.extra_lines || []),
+        ]
+        const title = allItems.length > 1
+          ? `الأصناف المطلوبة (${allItems.length} صنف)`
+          : 'الصنف المطلوب'
+        return (
+          <SectionCard title={title}>
+            {allItems.length === 1 ? (
+              // Single item — detailed view
+              <>
+                <div className="font-semibold text-gray-900 text-sm leading-tight">{allItems[0].name}</div>
+                {allItems[0].scientific && (
+                  <div className="text-xs text-gray-400 italic mt-0.5">{allItems[0].scientific}</div>
+                )}
+                {allItems[0].softech_id && (
+                  <div className="text-xs font-mono text-gray-400">كود: {allItems[0].softech_id}</div>
+                )}
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">الكمية المطلوبة</span>
+                  <span className="font-bold text-gray-900">{allItems[0].quantity} وحدة</span>
+                </div>
+                {allItems[0].sale_price > 0 && (
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">السعر العام</span>
+                    <span className="font-bold text-emerald-700">{fmt(allItems[0].sale_price)} ج.م</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Multiple items — table
+              <div className="divide-y divide-gray-100">
+                {allItems.map((it, i) => (
+                  <div key={i} className="py-1.5 flex items-start gap-2">
+                    <div className="text-xs text-gray-400 shrink-0 mt-0.5 w-4">{i + 1}.</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-gray-900 leading-tight">{it.name}</div>
+                      {it.softech_id && <div className="text-[10px] font-mono text-gray-400">{it.softech_id}</div>}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-xs font-bold text-gray-800">× {it.quantity}</div>
+                      {it.sale_price > 0 && (
+                        <div className="text-[10px] text-emerald-600 font-mono">{fmt(it.sale_price)}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        )
+      })()}
 
       {data.downpayments?.length > 0 && (
         <SectionCard title="الدفعات المقدمة">
@@ -163,6 +258,9 @@ function ReservationReceipt({ data }) {
           <p className="text-xs text-gray-600 leading-relaxed">{data.notes}</p>
         </SectionCard>
       )}
+
+      {/* ── Full audit trail — all users who acted + timestamps ── */}
+      <AuditTrailSection trail={data.audit_trail} />
 
       <ReceiptFooter data={data} />
     </div>
@@ -203,7 +301,7 @@ function TransferReceipt({ data }) {
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-xs text-gray-800 leading-tight">{item.item_name}</div>
                 {item.item_scientific && (
-                  <div className="text-xs text-gray-400 italic truncate">{item.item_scientific}</div>
+                  <div className="text-xs text-gray-400 italic break-words">{item.item_scientific}</div>
                 )}
                 {item.item_code && (
                   <div className="text-xs font-mono text-gray-400">{item.item_code}</div>
@@ -212,7 +310,17 @@ function TransferReceipt({ data }) {
                   <div className="text-xs text-gray-400">{item.notes}</div>
                 )}
               </div>
-              <div className="font-bold text-gray-900 text-sm shrink-0">{item.quantity}</div>
+              <div className="text-right shrink-0">
+                <div className="font-bold text-gray-900 text-sm">{item.quantity}</div>
+                {item.approved_quantity != null && item.approved_quantity !== item.quantity && (
+                  <div className="text-[10px] text-orange-600">معتمد: {item.approved_quantity}</div>
+                )}
+                {item.received_quantity != null && (
+                  <div className={`text-[10px] ${item.received_quantity < (item.approved_quantity ?? item.quantity) ? 'text-red-600' : 'text-green-700'}`}>
+                    مستلم: {item.received_quantity}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -227,6 +335,17 @@ function TransferReceipt({ data }) {
         <SectionCard title="سبب الرفض">
           <p className="text-xs text-red-700 leading-relaxed">{data.rejection_reason}</p>
         </SectionCard>
+      )}
+
+      {data.qr_code_base64 && (
+        <div className="flex flex-col items-center mt-4 pt-3 border-t border-dashed border-gray-200">
+          <img
+            src={`data:image/png;base64,${data.qr_code_base64}`}
+            alt="QR"
+            className="w-20 h-20"
+          />
+          <div className="text-[10px] text-gray-400 mt-1">امسح للوصول السريع للطلب</div>
+        </div>
       )}
 
       <ReceiptFooter data={data} />
