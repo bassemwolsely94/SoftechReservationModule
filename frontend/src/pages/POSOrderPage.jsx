@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import ItemSearchInput from '../components/ItemSearchInput'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import POSCustomerModal from '../components/POSCustomerModal'
 import CustomerTypePicker from '../components/CustomerTypePicker'
 import SalespersonPicker from '../components/SalespersonPicker'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../hooks/usePosOrder'
+import useGuidedFlow, { STAGE_TAB } from '../hooks/useGuidedFlow'
 
 /*
  * POSOrderPage — Indirect-POS (desktop). Mirrors the SOFTECH "In-Direct Point of Sale"
@@ -17,11 +18,14 @@ const NUMKEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '+/-', '0', '.']
 export default function POSOrderPage() {
   const P = usePosOrder()
   const [showCust, setShowCust] = useState(false)
+  const [showPic, setShowPic] = useState(false)
   const [showParked, setShowParked] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
+  const [guided, setGuided] = useState(false)
   return (
     <div dir="rtl" className="flex flex-col h-[calc(100vh-3.5rem)] bg-gray-100 text-[13px]">
-      <HeaderBand P={P} onOpenCust={() => setShowCust(true)} />
+      <WorkflowBar P={P} guided={guided} onToggleGuided={() => setGuided(g => !g)} />
+      <HeaderBand P={P} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* left: mode buttons + flags (SOFTECH left column) */}
         <ModeColumn P={P} />
@@ -40,8 +44,78 @@ export default function POSOrderPage() {
       </div>
       {P.batchModal && <BatchModal P={P} />}
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
+      {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
       {showReceipt && <ReceiptModal P={P} onClose={() => setShowReceipt(false)} />}
+      {guided && <GuidedMode P={P} onClose={() => setGuided(false)} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />}
+      {P.plan && <PlanModal P={P} />}
+    </div>
+  )
+}
+
+/* ─────────────────── dry-run plan preview ─────────────────── */
+function PlanModal({ P }) {
+  const pl = P.plan
+  const [showSql, setShowSql] = useState(false)
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => P.setPlan(null)}>
+      <div dir="rtl" className="bg-white rounded-lg w-[46rem] max-w-[96vw] max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b flex items-center justify-between sticky top-0 bg-white">
+          <div className="font-bold" style={{ color: '#022871' }}>🧾 معاينة الإرسال (وضع تجريبى — لن يُكتب في SOFTECH)</div>
+          <button onClick={() => P.setPlan(null)} className="text-gray-400 hover:text-gray-700">✕</button>
+        </div>
+        <div className="p-5 space-y-3 text-[13px]">
+          {pl.reservation_note && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-xs">⚠️ {pl.reservation_note}</div>
+          )}
+          {pl.points?.note && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2 text-xs">🎁 {pl.points.note}</div>
+          )}
+          {/* lines */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border">
+              <thead className="bg-gray-100"><tr>
+                {['الصنف', 'الكمية', 'سعر', 'خصم%', 'الإجمالي', 'الصلاحية', 'حالة'].map((c, i) => <th key={i} className="px-2 py-1 font-medium whitespace-nowrap">{c}</th>)}
+              </tr></thead>
+              <tbody>
+                {(pl.lines || []).map((l, i) => (
+                  <tr key={i} className="border-t text-center">
+                    <td className="px-2 py-1 text-right">{l.itemcode}</td>
+                    <td>{l.transqty}</td><td>{l.itemsaleprice}</td><td>{l.custdiscp}</td>
+                    <td>{l.transprice_total}</td><td>{l.item_expiry || (l.is_reservation ? '—' : '')}</td>
+                    <td>{l.is_reservation
+                      ? <span className="text-[10px] bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">حجز</span>
+                      : <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">بيع</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* payments */}
+          {(pl.payments || []).length > 0 && (
+            <div className="text-xs">
+              <div className="font-medium mb-1">السداد</div>
+              {pl.payments.map((p, i) => (
+                <div key={i} className="flex justify-between border-b py-0.5"><span>نوع {p.paymenttype}</span><span>{p.paymentvalue}</span></div>
+              ))}
+            </div>
+          )}
+          {/* SQL (collapsible) */}
+          {pl.sql && (
+            <div>
+              <button onClick={() => setShowSql(s => !s)} className="text-xs text-sky-700">{showSql ? '▾' : '▸'} عرض SQL ({Array.isArray(pl.sql) ? pl.sql.length : 1} عبارة)</button>
+              {showSql && (
+                <pre className="mt-1 bg-gray-900 text-gray-100 text-[11px] rounded p-2 overflow-x-auto max-h-56" dir="ltr">
+                  {Array.isArray(pl.sql) ? pl.sql.join('\n') : pl.sql}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t sticky bottom-0 bg-white flex justify-end">
+          <button onClick={() => P.setPlan(null)} className="px-4 py-2 rounded-lg text-white text-sm" style={{ background: '#022871' }}>إغلاق</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -76,6 +150,7 @@ function ReceiptModal({ P, onClose }) {
         ))}
         <div className="text-center text-xs text-gray-500 mt-1 mb-2">إيصال بيع — {P.docDate}</div>
         <div className="text-xs mb-1">العميل: {P.customer?.name || 'Walk-In Customer'}</div>
+        {P.picCustomer && <div className="text-xs mb-1">عميل PIC: {P.picCustomer.name}{P.picCustomer.softech_pic ? ` (${P.picCustomer.softech_pic})` : ''}{P.picCustomer.phone ? ` · ☎ ${P.picCustomer.phone}` : ''}</div>}
         {/* Print Employee Name of Contract Customer = ON */}
         {P.isClaim && P.claim?.patientname && (
           <div className="text-xs mb-1">اسم المريض: {P.claim.patientname}{P.claim.patientno ? ` (${P.claim.patientno})` : ''}</div>
@@ -92,6 +167,9 @@ function ReceiptModal({ P, onClose }) {
         <div className="text-xs flex justify-between text-orange-600"><span>الخصم</span><span>{money(P.totals.discount)}</span></div>
         <div className="text-sm flex justify-between font-bold"><span>الصافي</span><span>{money(P.totals.net)}</span></div>
         {P.loyalty?.points_balance != null && <div className="text-xs text-center mt-2 text-emerald-700">نقاط الولاء: {P.loyalty.points_balance}</div>}
+        {P.pointsInfo.eligible && P.pointsInfo.enrolled && (P.picCustomer?.softech_pic || P.customer?.softech_pic) && (
+          <div className="text-[11px] text-center mt-1 text-emerald-700">🎁 عميل مسجّل بنظام النقاط — تُحتسب عند إنهاء الكاشير</div>
+        )}
         <div className="border-t mt-3 pt-2 space-y-0.5">
           {RECEIPT.footers.map((f, i) => (
             <div key={i} className="text-center text-[10px] text-gray-500 leading-tight">{f}</div>
@@ -106,8 +184,253 @@ function ReceiptModal({ P, onClose }) {
   )
 }
 
+/* ─────────────────── workflow "story" bar (reactive) ─────────────────── */
+const WF_STATUS = {
+  done:    { ring: 'border-emerald-300 bg-emerald-50 text-emerald-700', mark: '✓' },
+  active:  { ring: 'border-sky-400 bg-sky-50 text-sky-800 ring-2 ring-sky-200/70', mark: '' },
+  blocked: { ring: 'border-red-300 bg-red-50 text-red-700', mark: '!' },
+  todo:    { ring: 'border-gray-200 bg-white text-gray-400', mark: '' },
+  skip:    { ring: 'border-dashed border-gray-200 bg-white text-gray-300', mark: '–' },
+}
+const WF_TABS = ['items', 'payment', 'contract']
+function WorkflowBar({ P, guided, onToggleGuided }) {
+  const wf = P.workflow
+  const go = s => { if (WF_TABS.includes(s.tab)) P.setActiveTab(s.tab) }
+  return (
+    <div className="bg-white border-b px-3 pt-2 pb-1.5 shadow-sm">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+        <button onClick={onToggleGuided} title="الوضع الموجّه — خطوة بخطوة"
+          className={`shrink-0 flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition ${guided ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+          style={guided ? { background: '#022871' } : undefined}>
+          🧭 <span className="whitespace-nowrap">الوضع الموجّه</span>
+        </button>
+        <span className="w-px h-5 bg-gray-200 shrink-0" />
+        {wf.steps.map((s, i) => {
+          const st = WF_STATUS[s.status] || WF_STATUS.todo
+          return (
+            <div key={s.key} className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => go(s)} title={s.hint || s.label}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${st.ring} ${WF_TABS.includes(s.tab) ? 'hover:brightness-95' : 'cursor-default'}`}>
+                <span className="text-sm leading-none">{s.icon}</span>
+                <span className="font-medium whitespace-nowrap">{s.label}</span>
+                {st.mark && <span className="font-bold text-[13px] leading-none">{st.mark}</span>}
+              </button>
+              {i < wf.steps.length - 1 && <span className="w-3 h-px bg-gray-200 shrink-0" />}
+            </div>
+          )
+        })}
+        <div className="flex-1 min-w-2" />
+        {wf.next
+          ? <div className="shrink-0 text-xs text-white rounded-full px-3 py-1" style={{ background: '#022871' }}>
+              التالى: {wf.next.label}{wf.next.hint ? ` — ${wf.next.hint}` : ''}
+            </div>
+          : <div className="shrink-0 text-xs bg-emerald-600 text-white rounded-full px-3 py-1">جاهز للحفظ ✓</div>}
+        <div className="shrink-0 text-[11px] text-gray-500 w-9 text-left tabular-nums">{wf.progress}%</div>
+      </div>
+      <div className="mt-1.5 h-1 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-300"
+             style={{ width: `${wf.progress}%`, background: 'linear-gradient(90deg,#3880bb,#10b981)' }} />
+      </div>
+      {wf.advisories.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {wf.advisories.map((a, i) => {
+            const tone = a.level === 'error' ? 'bg-red-50 text-red-700 border-red-200'
+                       : a.level === 'warn' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                       : 'bg-sky-50 text-sky-700 border-sky-200'
+            const clickable = a.action || WF_TABS.includes(a.tab)
+            const onClick = () => {
+              if (a.action === 'applyAllSuggested') P.applyAllSuggested()
+              else if (WF_TABS.includes(a.tab)) P.setActiveTab(a.tab)
+            }
+            return (
+              <button key={i} onClick={onClick}
+                className={`text-[11px] border rounded px-2 py-1 ${tone} ${clickable ? 'hover:brightness-95 cursor-pointer' : 'cursor-default'}`}>
+                {a.level === 'error' ? '⛔' : a.level === 'warn' ? '⚠️' : 'ℹ️'} {a.text}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────── guided focus mode (wizard) ─────────────────── */
+// One panel at a time over a dimmed power-screen. Stages reuse the same tab panels and the
+// same reactive engine (via useGuidedFlow), so switching in/out never loses or forks state.
+function GuidedMode({ P, onClose, onOpenCust, onOpenPic }) {
+  const wf = P.workflow
+  const { stages, safeIdx, stage, isLast, stStatus, setIdx, goNext, goPrev } = useGuidedFlow(P)
+  const stageAdvisories = wf.advisories.filter(a => a.tab === STAGE_TAB[stage.key])
+
+  return (
+    <div className="fixed inset-0 z-[45] flex flex-col bg-slate-900/60 backdrop-blur-sm" onClick={onClose}>
+      <div dir="rtl" onClick={e => e.stopPropagation()}
+           className="m-auto bg-white rounded-2xl shadow-2xl w-[min(56rem,95vw)] max-h-[92vh] flex flex-col overflow-hidden">
+        {/* header: stage rail + progress + close */}
+        <div className="px-5 pt-4 pb-3 border-b" style={{ background: 'linear-gradient(180deg,#f8fafc,#fff)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-sm font-bold" style={{ color: '#022871' }}>
+              🧭 الوضع الموجّه
+              <span className="text-xs font-normal text-gray-400">({safeIdx + 1} / {stages.length})</span>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-sm flex items-center gap-1">
+              الوضع الكامل ✕
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {stages.map((s, i) => {
+              const st = stStatus(s)
+              const active = i === safeIdx
+              const ring = active ? 'text-white border-transparent'
+                : st === 'done' ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                : st === 'blocked' ? 'border-red-300 bg-red-50 text-red-700'
+                : 'border-gray-200 bg-white text-gray-500'
+              return (
+                <div key={s.key} className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => setIdx(i)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${ring}`}
+                    style={active ? { background: '#022871' } : undefined}>
+                    <span>{s.icon}</span><span className="whitespace-nowrap font-medium">{s.title}</span>
+                    {!active && st === 'done' && <span className="font-bold">✓</span>}
+                    {!active && st === 'blocked' && <span className="font-bold">!</span>}
+                  </button>
+                  {i < stages.length - 1 && <span className="w-4 h-px bg-gray-200" />}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* the one active panel */}
+        <div className="flex-1 overflow-auto p-4 bg-white">
+          {stage.key === 'customer' && <GuidedCustomer P={P} onOpenCust={onOpenCust} onOpenPic={onOpenPic} />}
+          {stage.key === 'items' && <ItemsTab P={P} />}
+          {stage.key === 'claim' && <ContractTab P={P} />}
+          {stage.key === 'payment' && <GuidedPayment P={P} />}
+          {stageAdvisories.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {stageAdvisories.map((a, i) => {
+                const tone = a.level === 'error' ? 'bg-red-50 text-red-700 border-red-200'
+                  : a.level === 'warn' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-sky-50 text-sky-700 border-sky-200'
+                return (
+                  <button key={i} onClick={() => { if (a.action === 'applyAllSuggested') P.applyAllSuggested() }}
+                    className={`text-xs border rounded px-2 py-1 ${tone} ${a.action ? 'hover:brightness-95' : 'cursor-default'}`}>
+                    {a.level === 'error' ? '⛔' : a.level === 'warn' ? '⚠️' : 'ℹ️'} {a.text}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* footer: net + back/next or submit */}
+        <div className="border-t px-5 py-3 flex items-center gap-3 bg-gray-50">
+          <div className="text-sm">الصافي <b className="text-green-700 text-base">{money(P.totals.net)}</b></div>
+          {P.msg && <div className="text-xs text-gray-500 truncate max-w-[16rem]">{P.msg}</div>}
+          <div className="flex-1" />
+          <button onClick={goPrev} disabled={safeIdx === 0}
+                  className="px-4 py-2 rounded-lg border text-sm disabled:opacity-40">‹ السابق</button>
+          {!isLast
+            ? <button onClick={goNext}
+                      className="px-5 py-2 rounded-lg text-white text-sm font-medium" style={{ background: '#022871' }}>
+                التالى ›
+              </button>
+            : <div className="flex gap-2">
+                <button onClick={() => P.submit(false)} disabled={P.busy}
+                        className="px-4 py-2 rounded-lg border text-sm disabled:opacity-40">معاينة (تجريبى)</button>
+                <button onClick={() => P.submit(true)} disabled={P.busy || !wf.ready}
+                        className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-40">
+                  {P.busy ? '…' : 'إرسال للكاشير ✓'}
+                </button>
+              </div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// focused customer+channel+seller panel for the guided wizard (subset of the header band)
+function GuidedCustomer({ P, onOpenCust, onOpenPic }) {
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      <PicCustomerRow P={P} onOpenPic={onOpenPic} />
+      <div className="grid grid-cols-2 gap-3">
+        <F label="مبيعات فرع">
+          <select value={P.branch} onChange={e => P.setBranch(e.target.value)} className="inp">
+            <option value="">—</option>
+            {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
+          </select>
+        </F>
+        <F label="من حساب مخزن">
+          <select value={P.storeCode} onChange={e => P.setStoreCode(e.target.value)} className="inp">
+            {!P.stores?.length && <option value={P.storeCode}>{P.storeCode || '—'}</option>}
+            {(P.stores || []).map(s => <option key={s.storecode} value={s.storecode}>{s.storename || s.storecode}{s.default ? ' ★' : ''}</option>)}
+          </select>
+        </F>
+      </div>
+      <div className="flex gap-1 items-start">
+        <div className="flex-1"><CustomerTypePicker P={P} /></div>
+        <button onClick={onOpenCust} title="دليل العملاء الأفراد (بحث/إضافة)"
+                className="px-2 py-1.5 mt-4 border rounded bg-gray-50 shrink-0 text-sm">…</button>
+      </div>
+      <F label="مسؤول البيع (كود/اسم)"><SalespersonPicker P={P} className="inp" /></F>
+    </div>
+  )
+}
+
+// payment + review panel for the guided wizard
+function GuidedPayment({ P }) {
+  return (
+    <div className="max-w-2xl mx-auto space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+        {[['الإجمالي', P.totals.gross], ['الخصم', P.totals.discount], ['الضريبة', P.totals.tax], ['الصافي', P.totals.net]].map(([l, v], i) => (
+          <div key={i} className={`rounded-lg border p-2 ${l === 'الصافي' ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50'}`}>
+            <div className="text-[11px] text-gray-500">{l}</div>
+            <div className={`font-bold ${l === 'الصافي' ? 'text-emerald-700' : ''}`}>{money(v)}</div>
+          </div>
+        ))}
+      </div>
+      {P.isClaim && (
+        <div className="grid grid-cols-3 gap-2">
+          <F label="خصم العميل %"><input value={P.totals.custDiscPct} readOnly className="inp bg-gray-50" /></F>
+          <F label="ما يسدده المريض"><input type="number" step="0.01" value={P.patientPayment} placeholder={P.totals.net}
+                onChange={e => P.setPatientCopay(e.target.value)} className="inp" /></F>
+          <F label="يتحمله التعاقد"><input value={P.totals.claimAmount} readOnly className="inp bg-amber-50" /></F>
+        </div>
+      )}
+      <PaymentTab P={P} />
+    </div>
+  )
+}
+
+/* PIC-customer picker for delivery — the individual person (search/select/add), distinct from
+ * the "Home Delivery Customer" account. Shared by the header band and the guided customer stage. */
+function PicCustomerRow({ P, onOpenPic, className = '' }) {
+  if (!P.needsPicCustomer) return null
+  return (
+    <div className={className}>
+      <div className="text-[11px] text-gray-600 mb-0.5">عميل PIC (للتوصيل) — مطلوب قبل الإرسال</div>
+      <div className="flex items-center gap-2">
+        {P.picCustomer ? (
+          <div className="flex-1 flex items-center gap-2 bg-green-50 border border-green-300 rounded px-2 py-1.5 text-sm">
+            <span className="font-medium">{P.picCustomer.name}</span>
+            {P.picCustomer.softech_pic && <span className="font-mono text-xs text-gray-500">PIC: {P.picCustomer.softech_pic}</span>}
+            {P.picCustomer.phone && <span className="text-xs text-gray-500">☎ {P.picCustomer.phone}</span>}
+            <button onClick={() => P.setPicCustomer(null)} className="ml-auto text-gray-400 hover:text-red-500">✕</button>
+          </div>
+        ) : (
+          <div className="flex-1 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">لم يُحدد عميل PIC بعد</div>
+        )}
+        <button onClick={onOpenPic} className="px-3 py-1.5 rounded text-white text-sm shrink-0" style={{ background: '#022871' }}>🔍 بحث / اختيار / إضافة</button>
+      </div>
+    </div>
+  )
+}
+
 /* ───────────────────────── header band ───────────────────────── */
-function HeaderBand({ P, onOpenCust }) {
+function HeaderBand({ P, onOpenCust, onOpenPic }) {
   return (
     <div className="bg-white border-b px-3 py-2 grid grid-cols-4 gap-x-4 gap-y-1.5">
       <F label="مبيعات فرع">
@@ -133,6 +456,7 @@ function HeaderBand({ P, onOpenCust }) {
         <button onClick={onOpenCust} title="دليل العملاء الأفراد (بحث/إضافة)"
                 className="px-2 py-1.5 mt-4 border rounded bg-gray-50 shrink-0 text-sm">…</button>
       </div>
+      <PicCustomerRow P={P} onOpenPic={onOpenPic} className="col-span-4" />
       <F label="تاريخ المستند"><input type="date" value={P.docDate} onChange={e => P.setDocDate(e.target.value)} className="inp" /></F>
 
       <F label="نوع المستند">
@@ -225,11 +549,9 @@ function ItemsTab({ P }) {
     <div className="p-2">
       {/* barcode scan + favorites quick grid */}
       <div className="flex gap-2 mb-2">
-        <div className="flex-1"><ItemSearchInput onSelect={P.addItem} branchId={P.branch} /></div>
-        <input placeholder="مسح باركود ⏎" className="w-48 border rounded px-2 text-xs"
-               onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
-        {Number(P.suggest.ceiling) >= 0 && P.suggest.ceiling != null &&
-          <button onClick={P.applyAllSuggested} className="px-2 rounded bg-emerald-600 text-white text-xs whitespace-nowrap">تطبيق الخصم المتعاقد</button>}
+        <div className="flex-1"><ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود… (Ctrl+F1 بحث متقدم)" /></div>
+        {Object.values(P.suggest.map || {}).some(v => v != null) &&
+          <button onClick={P.applyAllSuggested} className="px-2 rounded bg-emerald-600 text-white text-xs whitespace-nowrap self-start mt-1">تطبيق الخصم المقترح</button>}
       </div>
       {P.favorites.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
@@ -272,7 +594,11 @@ function ItemsTab({ P }) {
                            onChange={e => P.setLine(i, 'cust_discp', e.target.value)} className="w-14 border rounded px-1 text-center" />
                     {P.suggest.map[l.softech_itemcode] != null && (
                       <button onClick={e => { e.stopPropagation(); P.applySuggested(i) }}
-                              title="تطبيق الخصم المتعاقد" className="text-[10px] text-emerald-700 block w-full">مقترح {P.suggest.map[l.softech_itemcode]}%</button>
+                              title="تطبيق الخصم المقترح" className="text-[10px] text-emerald-700 block w-full">مقترح {P.suggest.map[l.softech_itemcode]}%</button>
+                    )}
+                    {/* discount ceiling — visible to manager roles only (see reference.can_see_discount_cap) */}
+                    {P.ref?.can_see_discount_cap && P.suggest.caps?.[l.softech_itemcode] != null && (
+                      <span title="الحد الأقصى للخصم لهذا الصنف" className="text-[10px] text-gray-400 block w-full text-center">≤ {P.suggest.caps[l.softech_itemcode]}%</span>
                     )}
                   </Td>
                   <Td>{money(taxAmt)}</Td>
@@ -340,14 +666,21 @@ function PaymentTab({ P }) {
 }
 
 /* ─────────────────── Contract Emp. Data tab ─────────────────── */
-// the 12 SOFTECH standard titles (Corp. Customer Std. Emp. Data Titles)
+// Fields are per-contract: P.empDataFields is the live spec (which fields show + custom labels, from
+// SOFTECH motalba_fields), falling back to the 12 standard titles when no contract is selected yet.
 function ContractTab({ P }) {
   const C = (k, v) => P.setClaim({ ...P.claim, [k]: v })
   if (!P.isClaim) return <div className="p-6 text-gray-400 text-sm">تظهر بيانات المريض/المطالبة لقنوات التعاقد والتأمين فقط.</div>
+  const fields = P.empDataFields || CONTRACT_EMP_FIELDS
   return (
     <div className="p-4">
+      {P.contractFields != null && (
+        <div className="text-[11px] text-gray-500 mb-2">
+          الحقول المطلوبة محددة حسب التعاقد ({fields.length} حقل){fields.length === 0 ? ' — لا توجد حقول مطلوبة لهذا التعاقد' : ''}
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-3 max-w-3xl">
-        {CONTRACT_EMP_FIELDS.map(({ key, label, type }) => (
+        {fields.map(({ key, label, type }) => (
           <F key={key} label={label}>
             <input type={type || 'text'} value={P.claim[key] || ''} onChange={e => C(key, e.target.value)} className="inp" />
           </F>
@@ -369,10 +702,21 @@ function FooterBar({ P }) {
       <span className="text-orange-600">الخصم <b>{money(P.totals.discount)}</b></span>
       <span>الضريبة <b>{money(P.totals.tax)}</b></span>
       <span className="text-green-700 text-base">الصافي <b>{money(P.totals.net)}</b></span>
+      <PointsBadge P={P} />
       <div className="flex-1" />
       <span>الأصناف {P.lines.length}</span>
     </div>
   )
+}
+
+/* SOFTECH loyalty-points indicator — points are awarded per-item by SOFTECH at the cashier's
+ * finalization (not reproducible read-only), so we surface enrollment status, not a figure. */
+function PointsBadge({ P }) {
+  const pic = P.picCustomer?.softech_pic || P.customer?.softech_pic
+  if (!P.pointsInfo.eligible) return <span className="text-gray-400" title="هذه القناة لا تكتسب نقاطاً">🎁 لا نقاط لهذه القناة</span>
+  if (!pic) return <span className="text-gray-400">🎁 اختر عميلاً لاكتساب النقاط</span>
+  if (!P.pointsInfo.enrolled) return <span className="text-amber-600" title="العميل غير مسجّل بنظام النقاط في SOFTECH">🎁 غير مسجّل بنظام النقاط</span>
+  return <span className="text-emerald-700" title="تُحتسب تلقائياً عند إنهاء الكاشير حسب أصناف الفاتورة">🎁 مسجّل — نقاط عند الإنهاء</span>
 }
 
 function NumpadColumn({ P, onParked, onReceipt }) {
