@@ -373,6 +373,11 @@ cashier's finalization does, via SOFTECH's own (hidden) triggers.** We only have
 pending rows with correct displayed values (price/tax/cost/discount per §6d).
 
 ### Points — source of truth (OBSERVED on cash sale 468770)
+> **CORRECTED 2026-08-19** (SOFTECH_POS_FIELD_GAPS.md + memory, verified via `verify_pos_points`):
+> the award is **PER ITEM and NOT reproducible read-only** — same-`itemstoreclassif` items earn
+> different %. The `value/10` below and any per-classification model each matched some sales only by
+> coincidence. We compute no figure; SOFTECH awards at finalization. And **returns DO deduct points**
+> — the "asymmetric" note below is wrong.
 - **Formula:** `points = docvalue / 10` (1 point per 10 EGP). Verified: docvalue 4000 → **400 points**;
   pending header `personnewbal=400` (a preview), and at finalization a `picpoints` row `points=400`
   was written and `localcustomerspoints.totpoints` rose 4184→4584.
