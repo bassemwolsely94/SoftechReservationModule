@@ -336,13 +336,26 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
+# (Historically blocked points sales from the writer.) We now compute personnewbal correctly
+# (points = Σ floor(net × custdiscounts[rep, itemcode_alt3]/100); SOFTECH copies it at
+# finalization), so points-eligible sales are ALLOWED. Set True only to force them native again.
+POS_BLOCK_POINTS_SALES = config('POS_BLOCK_POINTS_SALES', default=False, cast=bool)
+# Reject out-of-stock items from the live writer (we don't write حجز 80, so an OOS line can't
+# finalize — matches native منع الصرف). See apps/pos_orders/stock.py.
+POS_ENFORCE_STOCK = config('POS_ENFORCE_STOCK', default=True, cast=bool)
+# softech_branch_ids where SOFTECH's reservation system (نظام الحجز) is ENABLED — there an OOS line
+# is written as a حجز (item_partno='Reservation', placeholder expiry) and the cashier's finalization
+# auto-creates the حجز 80. Elsewhere OOS is rejected (native منع الصرف). Comma-separated, e.g. "130,140".
+POS_RESERVATION_BRANCHES = [b.strip() for b in config('POS_RESERVATION_BRANCHES', default='').split(',') if b.strip()]
 POS_DEFAULT_SELLER_USERCODE = config('POS_DEFAULT_SELLER_USERCODE', default='')
 # Read authoritative branch prices/tax/cost live from the branch DB when preparing
 # an order (SELECT only). Default False → use the catalog mirror (offline-safe).
 POS_LIVE_PRICING = config('POS_LIVE_PRICING', default=False, cast=bool)
-# Connection charset for the POS writeback path so Arabic (patientname, comments…)
-# encodes correctly on INSERT. Only the writer uses it; global reads are unchanged.
-POS_WRITE_CHARSET = config('POS_WRITE_CHARSET', default='cp1256')
+# Connection charset for the POS writeback path. MUST be 'iso_1': the writer pre-encodes each string to
+# cp1256 bytes carried as latin-1 and sends them through this connection so Arabic (patientname, comments,
+# batch labels…) lands verbatim in the cp1256 columns. CHARSET='cp1256' GARBLES Arabic to '?' (verified);
+# 'utf8' is rejected by the server. Only the writer uses it; global reads are unchanged. See writer._enc_arabic.
+POS_WRITE_CHARSET = config('POS_WRITE_CHARSET', default='iso_1')
 # Authority-aware discount validation at /ready (live read of custdiscounts/managerdiscount).
 # ON: joins resolved (item category=items.itemstoreclassif; seller=managerdiscount.personcode;
 # customer=channel default CashCust/HomeDlvry for cash/delivery). Acts only on resolved data
