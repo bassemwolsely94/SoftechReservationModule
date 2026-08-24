@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import shortage_views
 
 urlpatterns = [
     # ── Demand engine ─────────────────────────────────────────────────────────
@@ -42,4 +43,20 @@ urlpatterns = [
     path('transfer-recs/<int:pk>/status/',
          views.transfer_rec_update_status,
          name='purchasing-transfer-rec-status'),
+
+    # ── Market shortage detector (نواقص السوق) ───────────────────────────────
+    path('shortage/candidates/', shortage_views.shortage_candidates, name='shortage-candidates'),
+    path('shortage/deltas/',     shortage_views.shortage_deltas,     name='shortage-deltas'),
+    path('shortage/confirmed/',  shortage_views.shortage_confirmed,  name='shortage-confirmed'),
+    path('shortage/dismissed/',  shortage_views.shortage_dismissed,  name='shortage-dismissed'),
+    path('shortage/med-types/',  shortage_views.shortage_med_types,  name='shortage-med-types'),
+    path('shortage/search/',     shortage_views.shortage_search,     name='shortage-search'),
+    path('shortage/flag/',       shortage_views.shortage_flag,       name='shortage-flag'),
+    path('shortage/unflag/',     shortage_views.shortage_unflag,     name='shortage-unflag'),
+    path('shortage/dismiss/',    shortage_views.shortage_dismiss,    name='shortage-dismiss'),
+    path('shortage/retrieve/',   shortage_views.shortage_retrieve,   name='shortage-retrieve'),
+    path('shortage/export/',     shortage_views.shortage_export,     name='shortage-export'),
+    path('shortage/whatsapp/',   shortage_views.shortage_whatsapp,   name='shortage-whatsapp'),
+    path('shortage/suggest-matches/', shortage_views.shortage_suggest_matches, name='shortage-suggest-matches'),
+    path('shortage/trends/',     shortage_views.shortage_trends,     name='shortage-trends'),
 ]

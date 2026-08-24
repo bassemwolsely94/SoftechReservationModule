@@ -949,3 +949,53 @@ class LostSalesRun(models.Model):
             f'LostSalesRun {self.pk} → DemandRun {self.demand_run_id} '
             f'| {self.get_status_display()} | {self.items_affected} صنف'
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MARKET SHORTAGE — run snapshots (enables delta view + recovery tracking)
+# ═══════════════════════════════════════════════════════════════════════════
+class ShortageSnapshot(models.Model):
+    """
+    One row per demand run — a point-in-time capture of the shortage picture, so
+    the review screen can diff runs (new / recovering / re-entered) instead of
+    re-scanning the whole candidate list every cycle.
+    """
+    run        = models.OneToOneField(DemandCalculationRun, on_delete=models.CASCADE,
+                                      related_name='shortage_snapshot')
+    created_at = models.DateTimeField(auto_now_add=True)
+    n_candidates = models.IntegerField(default=0)
+    n_confirmed  = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'ShortageSnapshot run={self.run_id} ({self.n_candidates} cand)'
+
+
+class ShortageObservation(models.Model):
+    """
+    Per (snapshot, item): the item's shortage signals at that run. Records every
+    detected candidate PLUS every currently-confirmed item (even if healthy), so a
+    confirmed item's recovery can be tracked across runs.
+    """
+    snapshot     = models.ForeignKey(ShortageSnapshot, on_delete=models.CASCADE,
+                                     related_name='observations')
+    item         = models.ForeignKey('catalog.Item', on_delete=models.CASCADE,
+                                     related_name='shortage_observations')
+    tier         = models.CharField(max_length=20, blank=True, default='')
+    coverage     = models.FloatField(default=0.0)
+    suppression  = models.FloatField(default=0.0)
+    annual_qty   = models.FloatField(default=0.0)
+    is_candidate = models.BooleanField(default=False)   # met the detection threshold
+    is_confirmed = models.BooleanField(default=False)   # in_shortage at snapshot time
+    healthy      = models.BooleanField(default=False)   # recovery signal (stock+sales back)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['snapshot', 'item']),
+            models.Index(fields=['item', 'id']),
+        ]
+
+    def __str__(self):
+        return f'{self.item_id} @ snap{self.snapshot_id} ({self.tier})'
