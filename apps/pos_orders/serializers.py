@@ -18,7 +18,7 @@ class LineSerializer(serializers.ModelSerializer):
             'item_sale_price', 'sale_tax_pct', 'cust_discp',
             'trans_price', 'trans_price_total', 'item_sale_tax',
             'item_sale_price_tax', 'new_cost_price', 'item_expiry', 'return_of_invoice',
-            'barcode', 'bonus_qty', 'pkg_price', 'batchno',
+            'barcode', 'bonus_qty', 'pkg_price', 'batchno', 'is_reservation',
         ]
         read_only_fields = ['trans_price', 'trans_price_total', 'item_sale_tax',
                             'item_sale_price_tax', 'item_name']
@@ -81,8 +81,11 @@ class OrderSerializer(serializers.ModelSerializer):
         # Map the entered patient/claim into source_companies_raw (companiesitems columns)
         # so the writer creates the contract claim record for fresh orders too.
         if claim:
-            keep = ('patientname', 'patientno', 'roshettano', 'membershipno',
-                    'relativedegree', 'deptname', 'financialno', 'fileno')
+            # the 12 emp-data slot columns (motalba_fields → companiesitems); comment=slot10 (التشخيص),
+            # patientnationality=slot8, hi_typecode=slot12. examdate=slot11 (date). See contract_fields.py.
+            keep = ('patientname', 'patientno', 'financialno', 'fileno', 'roshettano',
+                    'membershipno', 'deptname', 'patientnationality', 'relativedegree',
+                    'comment', 'hi_typecode')
             raw = {k: claim[k] for k in keep if claim.get(k)}
             if claim.get('examdate'):
                 raw['examdate'] = {'__dt__': f"{claim['examdate']} 00:00:00"}

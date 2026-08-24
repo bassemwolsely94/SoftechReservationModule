@@ -18,12 +18,16 @@ POS-discount authority hierarchy (customer tier vs item line vs manager override
 """
 from decimal import Decimal
 
+from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
-from .models import CHANNEL_TO_PTCLASSIF, PAYTYPE_TO_SOFTECH
+from .models import CHANNEL_TO_PTCLASSIF, PAYTYPE_TO_SOFTECH, CLAIM_CHANNELS
 
-# channels that sell to a named account and (for returnability) need claim/patient data
-CLAIM_CHANNELS = {'contract', 'insurance'}
+# channels that sell to a named account and (for returnability) need claim/patient data. Native gives a
+# companiesitems claim + branchesalescc to contract/insurance AND employee (موظفين) / permanent (عميل دائم)
+# — all named-account channels — so they all use the per-contract emp-data form (verified 7024/7025).
+# CLAIM_CHANNELS imported from .models (single source): contract/insurance/employee/permanent/
+# compensation/donation/card_receipt — every named-account channel carries claim + credit records.
 # channels where the balance is collected now (no credit line)
 COLLECTED_CHANNELS = {'cash', 'delivery'}
 # channels that must carry a PIC to save (SOFTECH "must provide PIC": Home Delivery = ON)
@@ -66,7 +70,9 @@ def validate_order(order, *, for_push=False):
     # ── customer / channel ────────────────────────────────────────────────────
     if order.channel in CLAIM_CHANNELS and not (order.softech_pic or '').strip():
         errs['softech_pic'] = 'عميل التعاقد/التأمين يتطلب تحديد العميل (PIC).'
-    if order.channel in PIC_REQUIRED_CHANNELS and not (order.softech_pic or '').strip():
+    # Home-Delivery PIC is a "must provide to SAVE" rule (SOFTECH config) — enforce it only on
+    # the live push, never on the dry-run preview, so previewing a delivery order isn't blocked.
+    if for_push and order.channel in PIC_REQUIRED_CHANNELS and not (order.softech_pic or '').strip():
         errs['softech_pic'] = 'التوصيل المنزلى يتطلب تحديد العميل (PIC) قبل الحفظ.'
 
     # ── change/rounding discount (خصم فكة) cap ────────────────────────────────
@@ -92,9 +98,10 @@ def validate_order(order, *, for_push=False):
             le['cust_discp'] = 'نسبة الخصم يجب أن تكون بين 0 و 100.'
         if _d(ln.sale_tax_pct) < 0:
             le['sale_tax_pct'] = 'نسبة الضريبة غير صحيحة.'
-        # expiry/batch required for a real write (returnability) — see writer faithful copy
-        if for_push and order.doc_kind == 'sale' and not ln.source_raw and not ln.item_expiry:
-            le['item_expiry'] = 'يجب تحديد تاريخ صلاحية/تشغيلة الصنف (من شاشة الأرصدة).'
+        # NOTE: item_expiry is NO LONGER required on the order line — the writer's FEFO allocator
+        # (_allocate_line) resolves the batch(es) live from stkbalexpiry at push time and reserves any
+        # shortfall, exactly like native. Requiring it here would wrongly block reservation/partial
+        # pushes (OOS lines legitimately have no expiry). Batch correctness is guaranteed by the writer.
         if le:
             le['index'] = i
             line_errs.append(le)
@@ -117,6 +124,19 @@ def validate_order(order, *, for_push=False):
             pay_errs.append(pe)
     if pay_errs:
         errs['payments_detail'] = pay_errs
+
+    # ── push-only: points safety ──────────────────────────────────────────────
+    # VERIFIED LIVE (2026-08-19): SOFTECH's finalization COPIES the pending header's personnewbal
+    # (it does NOT recompute), and personnewbal's per-item value is internal to SOFTECH's POS
+    # (not reproducible read-only, no DB proc). So our writer can't set it correctly, and a
+    # points-eligible sale to an identified PIC would settle with personnewbal=0 → the enrolled
+    # customer earns ZERO points. Block it from the live writer (such sales stay on the native
+    # cashier) unless explicitly overridden. Contract/insurance earn 0 points, so they're fine.
+    if for_push and getattr(settings, 'POS_BLOCK_POINTS_SALES', True):
+        from . import points as _points
+        if _points.channel_earns_points(order.channel) and (order.softech_pic or '').strip():
+            errs['points'] = ('بيع مكتسب للنقاط لعميل مُعرّف (PIC) — يجب إتمامه من شاشة الكاشير '
+                              'الأصلية حتى لا تُفقد نقاط العميل (شاشتنا لا تحسب personnewbal).')
 
     # ── push-only: balance + claim data ───────────────────────────────────────
     if for_push:

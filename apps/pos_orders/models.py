@@ -28,8 +28,17 @@ CHANNEL_TO_PTCLASSIF = {
     'employee':   '11',   # موظفيين
     'vip':        '99',   # Vip
     'permanent':  '30',   # عميل دائم
+    'compensation': '17', # تعويضات الشركات (corporate compensation — credit, claim + cc, 0 points)
+    'donation':   '16',   # تبرعات (donations — credit, claim + cc, 0 points)
+    'card_receipt': '12', # إيصال إلكترونى بالبطاقة الشخصية (card tender, claim + cc, 0 points)
 }
 PTCODE_CUSTOMER = '10'    # ptcode for all customer sales
+
+# Claim channels — every NAMED-account sale (all except anonymous cash/delivery) carries a companiesitems
+# (patient/claim/emp-data) record + a branchesalescc (credit/cost-center) record. Verified native: ptclassif
+# 10/15/17/16/12 AND employee(11)/permanent(30) all have claim + cc. Cash(91)/delivery(90) do not.
+CLAIM_CHANNELS = {'contract', 'insurance', 'employee', 'permanent',
+                  'compensation', 'donation', 'card_receipt'}
 
 # doc_kind → SOFTECH doccode + the lastdocnumbers counter column (spec §6h/§6i)
 DOCKIND_TO_DOCCODE = {'sale': '115', 'return': '30'}
@@ -69,6 +78,9 @@ class SoftechSalesOrder(models.Model):
         ('employee',  'موظفين'),
         ('vip',       'VIP'),
         ('permanent', 'عميل دائم'),
+        ('compensation', 'تعويضات الشركات'),
+        ('donation',  'تبرعات'),
+        ('card_receipt', 'إيصال بالبطاقة الشخصية'),
     ]
     DOC_KIND_CHOICES = [('sale', 'بيع'), ('return', 'مرتجع')]
 
@@ -225,6 +237,9 @@ class SoftechSalesOrderLine(models.Model):
     bonus_qty  = models.DecimalField(max_digits=12, decimal_places=3, default=0)          # العبوة → bonusqty
     pkg_price  = models.DecimalField(max_digits=12, decimal_places=4, default=0)          # سعر العبوة (display)
     batchno    = models.CharField(max_length=20, blank=True)                              # رقم الباتش (display)
+    # per-line out-of-stock reservation (حجز 80): item unavailable at sale time, held so the
+    # sale can be saved before it arrives; the real batch is chosen later at dispense (180).
+    is_reservation = models.BooleanField(default=False, verbose_name='حجز (غير متوفر)')
 
     class Meta:
         ordering = ['id']

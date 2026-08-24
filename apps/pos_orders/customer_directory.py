@@ -27,7 +27,9 @@ POS_CUSTOMER_TYPES = [
     {'key': 'contract',  'label': 'تعاقد / آجل',     'channel': 'contract',  'ptcode': '10', 'ptclassif': '10', 'discount': 'b2b'},
     {'key': 'insurance', 'label': 'تأمين صحى',       'channel': 'insurance', 'ptcode': '10', 'ptclassif': '15', 'discount': 'b2b'},
     {'key': 'employee',  'label': 'موظفين',          'channel': 'employee',  'ptcode': '10', 'ptclassif': '11', 'discount': 'pos_limit'},
-    {'key': 'compensation', 'label': 'تعويضات الشركات', 'channel': 'contract', 'ptcode': '10', 'ptclassif': '17', 'discount': 'b2b'},
+    {'key': 'compensation', 'label': 'تعويضات الشركات', 'channel': 'compensation', 'ptcode': '10', 'ptclassif': '17', 'discount': 'b2b'},
+    {'key': 'donation',  'label': 'تبرعات',          'channel': 'donation',  'ptcode': '10', 'ptclassif': '16', 'discount': 'b2b'},
+    {'key': 'card_receipt', 'label': 'إيصال بالبطاقة الشخصية', 'channel': 'card_receipt', 'ptcode': '10', 'ptclassif': '12', 'discount': 'pos_limit'},
 ]
 _BY_KEY = {t['key']: t for t in POS_CUSTOMER_TYPES}
 

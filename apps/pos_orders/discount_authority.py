@@ -86,6 +86,20 @@ class DiscountAuthorityReader:
         row = self._q1("SELECT personcode FROM personsdata WHERE personglobalcode=?", [gc])
         return (str(row[0]).strip() if row and row[0] is not None else None)
 
+    def item_alt3(self, itemcode):
+        """items.itemcode_alt3 — the item's CONTRACT-DISCOUNT classification (تصنيف خصم التعاقدات).
+        This is the key SOFTECH uses for LOYALTY POINTS (verified live 2026-08-19): points% =
+        custdiscounts[channel-rep, itemcode_alt3]. (NOT itemstoreclassif, which drives line discounts.)"""
+        row = self._q1("SELECT itemcode_alt3 FROM items WHERE itemcode=?", [str(itemcode)])
+        return (str(row[0]).strip() if row and row[0] is not None else None) or None
+
+    def item_posdiscp(self, itemcode):
+        """items.posdiscp — the item's own max POS discount % (the retail/walk-in default).
+        This is the item-master field that drives cash/delivery discounts — NOT custdiscounts
+        (which carries contract/point-system schedules keyed by a customer)."""
+        row = self._q1("SELECT posdiscp FROM items WHERE itemcode=?", [str(itemcode)])
+        return _d(row[0]) if row and row[0] is not None else None
+
     # ── confirmed lookups ──────────────────────────────────────────────────────
     def contracted(self, personcode, custdiscpcode):
         """(custdiscp, allow_sell) for the customer × category, or None if no row."""
@@ -107,41 +121,52 @@ class DiscountAuthorityReader:
 def check_order(order, reader):
     """
     Return a list of {index, field, detail} errors for lines that violate authority.
-    Skips any line whose category/customer/seller mapping can't be resolved.
+    Skips any line whose category/customer/seller mapping can't be resolved (no false reject).
+
+    Mirrors discount_suggest:
+      • retail  → entered discount must be ≤ min(item posdiscp, seller max).
+      • contract/insurance → a discount ABOVE the contracted rate needs the seller ceiling.
     """
     errors = []
-    personcode = reader.customer_personcode(order.channel)
+    is_contract = order.channel in ('contract', 'insurance')
     seller_pc = reader.seller_personcode(order.seller_usercode)
     branchcode = order.softech_branchcode
+    ceiling = reader.max_authority(seller_pc, branchcode) if seller_pc is not None else None
+    personcode = reader.customer_personcode(order.channel) if is_contract else None
 
     for i, ln in enumerate(order.lines.all()):
         entered = _d(ln.cust_discp)
         if entered <= 0:
             continue  # no discount → nothing to authorize
-        category = reader.item_category(ln.softech_itemcode)
-        if personcode is None or category is None:
-            continue  # cannot resolve the contracted rate → skip (no false reject)
 
-        contracted = reader.contracted(personcode, category)
-        if contracted is None:
-            continue  # no contract row for this customer×category → skip
-        cust_discp, allow_sell = contracted
-
-        if allow_sell == 0:
-            errors.append({'index': i, 'field': 'softech_itemcode',
-                           'detail': 'لا يُسمح ببيع هذه الفئة لهذا العميل (allow_sell=0).'})
-            continue
-
-        if entered > cust_discp:
-            # above the contracted rate → needs the seller's authority ceiling
-            ceiling = reader.max_authority(seller_pc, branchcode) if seller_pc is not None else None
-            if ceiling is None or entered > ceiling:
+        if is_contract:
+            category = reader.item_category(ln.softech_itemcode)
+            if personcode is None or category is None:
+                continue  # cannot resolve the contracted rate → skip
+            contracted = reader.contracted(personcode, category)
+            if contracted is None:
+                continue  # no contract row → skip
+            cust_discp, allow_sell = contracted
+            if allow_sell == 0:
+                errors.append({'index': i, 'field': 'softech_itemcode',
+                               'detail': 'لا يُسمح ببيع هذه الفئة لهذا العميل (allow_sell=0).'})
+                continue
+            if entered > cust_discp and (ceiling is None or entered > ceiling):
                 errors.append({
                     'index': i, 'field': 'cust_discp',
-                    'detail': (f'الخصم {entered}% يتجاوز المتعاقد عليه ({cust_discp}%) '
-                               f'ويتطلب صلاحية أعلى'
+                    'detail': (f'الخصم {entered}% يتجاوز المتعاقد عليه ({cust_discp}%) ويتطلب صلاحية أعلى'
                                + (f' (الحد المسموح {ceiling}%).' if ceiling is not None else '.')),
                 })
+        else:
+            # retail: cap = the tighter of the item's POS discount and the seller's max
+            pd = reader.item_posdiscp(ln.softech_itemcode)
+            bounds = [b for b in (pd, ceiling) if b is not None]
+            if not bounds:
+                continue  # cannot resolve either bound → skip
+            cap = min(bounds)
+            if entered > cap:
+                errors.append({'index': i, 'field': 'cust_discp',
+                               'detail': f'الخصم {entered}% يتجاوز الحد المسموح ({cap}%) لهذا الصنف.'})
     return errors
 
 
@@ -149,7 +174,7 @@ def validate_discount_authority(order):
     """Entry point for /ready. No-op unless enabled. Returns list of error dicts."""
     if not enabled():
         return []
-    reader = DiscountAuthorityReader(order.branch.db_host, order.branch.db_port or 5000,
+    reader = DiscountAuthorityReader(order.branch.effective_db_host, order.branch.effective_db_port,
                                      order.branch.db_name or 'SOFTECHDB9')
     try:
         return check_order(order, reader)

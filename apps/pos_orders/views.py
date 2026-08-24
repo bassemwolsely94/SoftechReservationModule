@@ -31,10 +31,18 @@ def _staff(user):
 # Only these roles may attribute a sale to a DIFFERENT salesperson; everyone else is locked
 # to their own usercode (enforced server-side in perform_create, not just the UI).
 SELLER_OVERRIDE_ROLES = {'admin', 'supervisor'}
+# Who may SEE the per-item discount ceiling ("≤ X%") on the POS. Kept to manager roles on
+# purpose: showing the cap to every cashier would just anchor them to always max it out, which
+# defeats the point of capping. Cashiers/salespeople get the silent clamp, not the number.
+DISCOUNT_CAP_VIEWER_ROLES = {'admin', 'supervisor', 'pharmacist'}
 
 
 def _can_change_seller(sp):
     return bool(sp and getattr(sp, 'role', None) in SELLER_OVERRIDE_ROLES)
+
+
+def _can_see_discount_cap(sp):
+    return bool(sp and getattr(sp, 'role', None) in DISCOUNT_CAP_VIEWER_ROLES)
 
 
 def _valid_uuid(token):
@@ -176,6 +184,11 @@ def push_order(request, pk):
     except ValueError as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     result['live'] = (not dry)
+    # Out-of-stock rejection (we don't write حجز) → 400 with the OOS lines (matches native منع الصرف).
+    if result.get('stock_errors'):
+        return Response({**result, 'detail': 'أصناف غير متوفرة بالرصيد — لا يمكن الإرسال.',
+                         'errors': {'stock': [e['detail'] for e in result['stock_errors']]}},
+                        status=status.HTTP_400_BAD_REQUEST)
     # Branch was unreachable → the order is safely queued for automatic retry (HTTP 202).
     if result.get('queued'):
         return Response({**result, 'detail': 'الفرع غير متصل — تم حفظ الأمر في الطابور وسيُرسل تلقائياً عند عودة الاتصال.'},
@@ -214,11 +227,37 @@ def batch_availability_view(request):
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     store = (request.query_params.get('store') or branch.softech_branch_id or '').strip()
     try:
-        batches = available_batches(branch.db_host, store, item,
-                                    branch.db_port or 5000, branch.db_name or 'SOFTECHDB9')
+        batches = available_batches(branch.effective_db_host, store, item,
+                                    branch.effective_db_port, branch.db_name or 'SOFTECHDB9')
     except Exception as e:
         return Response({'detail': f'تعذّر قراءة الأرصدة: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
     return Response({'item': item, 'store': store, 'batches': batches, **summarize(batches)})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_fields_view(request):
+    """Per-contract "Contract Employee Data" field spec (which claim fields show + custom labels).
+    GET ?branch=<id>&customer=<contract personcode>
+    Returns {fields:[{slot,column,label_ar,label_en,is_date}]} from SOFTECH motalba_fields — the POS
+    renders ONLY these fields (blacked-out ones omitted) with the per-contract labels."""
+    from apps.branches.models import Branch
+    from .contract_fields import contract_field_spec
+    personcode = (request.query_params.get('customer') or '').strip()
+    branch_id = request.query_params.get('branch')
+    if not personcode or not branch_id:
+        return Response({'detail': 'برجاء تحديد الفرع وعميل التعاقد.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        branch = Branch.objects.get(pk=branch_id)
+    except Branch.DoesNotExist:
+        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        fields = contract_field_spec(branch.effective_db_host, branch.effective_db_port,
+                                     branch.db_name or 'SOFTECHDB9', personcode)
+    except Exception as e:
+        return Response({'detail': f'تعذّر قراءة إعدادات حقول التعاقد: {e}'},
+                        status=status.HTTP_502_BAD_GATEWAY)
+    return Response({'customer': personcode, 'fields': fields})
 
 
 @api_view(['GET'])
@@ -245,8 +284,8 @@ def customer_entities(request):
     except Branch.DoesNotExist:
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     try:
-        entities = list_entities(branch.db_host, type_key, q=q,
-                                 db_port=branch.db_port or 5000, db_name=branch.db_name or 'SOFTECHDB9')
+        entities = list_entities(branch.effective_db_host, type_key, q=q,
+                                 db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
         return Response({'entities': [], 'note': f'تعذّر القراءة: {e}'})
     return Response({'type': type_key, 'entities': entities})
@@ -267,7 +306,7 @@ def salespeople_view(request):
     except Branch.DoesNotExist:
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     try:
-        people = salespeople(branch.db_host, q=q, db_port=branch.db_port or 5000,
+        people = salespeople(branch.effective_db_host, q=q, db_port=branch.effective_db_port,
                              db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
         return Response({'salespeople': [], 'note': f'تعذّر القراءة: {e}'})
@@ -288,8 +327,8 @@ def branch_stores_view(request):
     except Branch.DoesNotExist:
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     try:
-        stores = branch_stores(branch.db_host, branch.softech_branch_id,
-                               db_port=branch.db_port or 5000, db_name=branch.db_name or 'SOFTECHDB9')
+        stores = branch_stores(branch.effective_db_host, branch.softech_branch_id,
+                               db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
         return Response({'stores': [], 'note': f'تعذّر القراءة: {e}'})
     return Response({'branch': branch.softech_branch_id, 'stores': stores})
@@ -348,10 +387,20 @@ def flush_now(request):
 @permission_classes([CanOperatePosOrders])
 def discount_suggest(request):
     """
-    SOFTECH-style suggested discount per item (operator decides whether to apply).
-    GET ?branch=<id>&channel=<cash|delivery|…>&items=404,963
-    Returns each item's contracted rate (custdiscounts by category) + the seller's
-    authority ceiling. Read-only; empty/graceful if the branch is unreachable.
+    SOFTECH-style suggested discount per item, by channel (operator can still edit).
+    GET ?branch=<id>&channel=<cash|delivery|contract|…>&items=404,963[&personcode=]
+
+    Discount behaviour differs by channel — this is the crux of correct pricing:
+      • retail (cash/delivery/permanent/employee/vip) → CAP-ONLY, no auto-apply. The operator
+        enters the discount; the per-item ceiling = min(item's own POS discount `items.posdiscp`,
+        seller max `managerdiscount.max_custdiscp`). NOT custdiscounts — that table carries the
+        contract/point-system schedule and would wrongly apply a loyalty/contract rate to a
+        walk-in sale.
+      • contract/insurance → AUTO-APPLY the customer's contracted rate (`custdiscounts` by
+        category, keyed by the selected entity's personcode), bounded by the seller ceiling.
+
+    Returns per item: `suggestions[code]` = rate to auto-apply (contract only; null for retail),
+    `caps[code]` = the max % the operator may enter for that item. Read-only; graceful if down.
     """
     from apps.branches.models import Branch
     from .discount_authority import DiscountAuthorityReader
@@ -366,30 +415,62 @@ def discount_suggest(request):
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     sp = _staff(request.user)
     seller = (sp.softech_user_id.strip() if sp and sp.softech_user_id else '')
-    suggestions, ceiling = {}, None
+    is_contract = channel in ('contract', 'insurance')
+    suggestions, caps, ceiling = {}, {}, None
     try:
-        reader = DiscountAuthorityReader(branch.db_host, branch.db_port or 5000,
+        reader = DiscountAuthorityReader(branch.effective_db_host, branch.effective_db_port,
                                          branch.db_name or 'SOFTECHDB9')
         try:
-            # the SELECTED customer's personcode wins (its own B2B custdiscounts); fall back
-            # to the channel-default customer only when no specific entity was picked.
-            personcode = (request.query_params.get('personcode') or '').strip() \
-                or reader.customer_personcode(channel)
+            # the seller's max grantable % — the ceiling for BOTH channel families
             ceiling = reader.max_authority(seller, branch.softech_branch_id)
             ceiling = float(ceiling) if ceiling is not None else None
+            # contract/insurance only: the selected entity's personcode drives custdiscounts
+            personcode = None
+            if is_contract:
+                personcode = (request.query_params.get('personcode') or '').strip() \
+                    or reader.customer_personcode(channel)
             for it in items:
-                rate = None
-                cat = reader.item_category(it)
-                if personcode and cat:
-                    c = reader.contracted(personcode, cat)
-                    if c:
-                        rate = float(c[0]) if c[1] else 0   # allow_sell=0 → 0 (cannot discount/sell)
+                rate, cap = None, None
+                if is_contract:
+                    cat = reader.item_category(it)
+                    if personcode and cat:
+                        c = reader.contracted(personcode, cat)
+                        if c:
+                            rate = float(c[0]) if c[1] else 0   # allow_sell=0 → 0 (cannot discount)
+                    if rate is not None and ceiling is not None:
+                        rate = min(rate, ceiling)
+                    cap = ceiling                               # seller ceiling caps a contract override
+                else:
+                    # retail: CAP-ONLY. cap = min(item posdiscp, seller max); nothing auto-applied.
+                    pd = reader.item_posdiscp(it)
+                    pd = float(pd) if pd is not None else None
+                    bounds = [b for b in (pd, ceiling) if b is not None]
+                    cap = min(bounds) if bounds else None
                 suggestions[it] = rate
+                caps[it] = cap
         finally:
             reader.close()
     except Exception as e:
-        return Response({'suggestions': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {e}'})
-    return Response({'suggestions': suggestions, 'ceiling': ceiling})
+        return Response({'suggestions': {}, 'caps': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {e}'})
+    return Response({'suggestions': suggestions, 'caps': caps, 'ceiling': ceiling,
+                     'source': 'contract' if is_contract else 'item_pos'})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def points_preview_view(request):
+    """PIC loyalty-points status for the POS. GET ?channel=&pic=<softech_pic>
+    Returns {eligible (channel carries a points programme), enrolled (SOFTECH
+    localcustomers.picpoints=1)}. The points AMOUNT is per-item and computed by SOFTECH at
+    finalization (not reproducible read-only — see points.py). The enrolment read is live + graceful."""
+    from . import points as pts
+    channel = request.query_params.get('channel', 'cash')
+    pic = (request.query_params.get('pic') or '').strip()
+    return Response({
+        'eligible': pts.channel_earns_points(channel),
+        'enrolled': pts.is_enrolled(pic) if pic else False,
+        'pic': pic or None,
+    })
 
 
 @api_view(['GET'])
@@ -405,5 +486,7 @@ def reference_data(request):
         'seller_usercode': (sp.softech_user_id.strip() if sp and sp.softech_user_id else ''),
         'seller_name': (sp.softech_username.strip() if sp and sp.softech_username else ''),
         'can_change_seller': _can_change_seller(sp),
+        'can_see_discount_cap': _can_see_discount_cap(sp),
+        'default_branch': (sp.branch_id if sp and sp.branch_id else None),   # auto-select the seller's branch
         'note': 'SOFTECH writes are disabled (no test instance). /push returns a dry-run plan.',
     })

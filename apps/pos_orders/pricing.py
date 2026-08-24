@@ -92,8 +92,10 @@ def split_payment(channel, doc_value, tenders=None):
     """
     doc_value = _r2(doc_value)
     if not tenders:
-        # default: single full cash tender for non-contract channels
-        if channel == 'contract':
+        # default tender: contract & employee (موظفين) are 100% credit/آجل (settled later — employee
+        # deducted from salary; verified native ptclassif 11 → single credit tender, pay=0). All other
+        # channels (cash/delivery/permanent/…) collect the full amount as cash now.
+        if channel in ('contract', 'employee'):
             tenders = [{'pay_type': 'credit', 'amount': doc_value}]
         else:
             tenders = [{'pay_type': 'cash', 'amount': doc_value}]
@@ -101,7 +103,9 @@ def split_payment(channel, doc_value, tenders=None):
     norm = [{'pay_type': t['pay_type'], 'amount': _r2(t['amount'])} for t in tenders]
     non_credit = sum((t['amount'] for t in norm if t['pay_type'] != 'credit'), Decimal('0'))
     doc_value_pay = _r2(non_credit)
-    # patient_payment: 0 for a pure cash sale (no credit line); else the cash down-payment
-    has_credit = any(t['pay_type'] == 'credit' for t in norm)
-    patient_payment = doc_value_pay if has_credit else Decimal('0.00')
+    # patient_payment (ما يسدده المريض/العميل) = the cash the NAMED account pays now. Anonymous walk-ins
+    # (cash/delivery) record 0; named channels record the collected cash — permanent=full, contract=co-pay,
+    # employee=0 (all credit). Verified native: permanent 7025 patient=docvalue, contract 7824 patient=co-pay,
+    # employee 7024 patient=0, cash 7021 / delivery 7831 patient=0.
+    patient_payment = Decimal('0.00') if channel in ('cash', 'delivery') else doc_value_pay
     return doc_value_pay, patient_payment, norm

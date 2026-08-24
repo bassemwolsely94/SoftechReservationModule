@@ -107,7 +107,7 @@ def _execute_reservation(conn, order, sale_docnumber, seller):
 
 
 def _conn(order):
-    return get_branch_connection(order.branch.db_host, order.branch.db_port or 5000,
+    return get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
                                  order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
 
 

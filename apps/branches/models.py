@@ -114,6 +114,19 @@ class Branch(models.Model):
         return self.is_active and self.is_operational
 
     @property
+    def effective_db_host(self):
+        """SOFTECH DB host to actually connect to. HQ (softech_branch_id '100') and any branch
+        with no own db_host fall back to the central settings.SYBASE_HOST — the same convention
+        apps/sync uses (network_health.py). Without this, HQ reads/writes have no host and fail."""
+        from django.conf import settings
+        return (self.db_host or '').strip() or settings.SYBASE_HOST
+
+    @property
+    def effective_db_port(self):
+        from django.conf import settings
+        return self.db_port or getattr(settings, 'SYBASE_PORT', 5000) or 5000
+
+    @property
     def display_name(self):
         return self.name_ar or self.name
 
