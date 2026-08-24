@@ -822,6 +822,9 @@ def sync_stock(conn, sync_run):
     Old approach: 3 queries × 130k rows ≈ 390,000 DB round-trips → ~6 min.
     New approach: 2 pre-load queries + batched bulk INSERT … ON CONFLICT → ~10 sec.
     """
+    from django.utils import timezone
+    run_ts = timezone.now()   # rows refreshed this run get last_synced >= run_ts
+
     cursor = conn.cursor()
     cursor.execute(QUERY_STOCK)
     rows = cursor.fetchall()
@@ -856,17 +859,33 @@ def sync_stock(conn, sync_run):
     )
     count = len(objs)
     if objs:
+        # last_synced (auto_now) is refreshed on conflict too, so we can tell which
+        # rows this run touched and reconcile the rest below.
         ItemStock.objects.bulk_create(
             objs,
             update_conflicts=True,
             unique_fields=['item', 'branch', 'softech_store_code'],
-            update_fields=['quantity_on_hand', 'monthly_qty', 'on_order_qty'],
+            update_fields=['quantity_on_hand', 'monthly_qty', 'on_order_qty', 'last_synced'],
             batch_size=1000,
         )
+
+    # ── Reconcile sold-out stock ──────────────────────────────────────────────
+    # QUERY_STOCK returns only nowqty > 0, so an (item, store) that fully sold out
+    # in SOFTECH simply disappears from the result — its old positive quantity would
+    # otherwise linger forever and inflate on-hand stock (and shrink the buy list).
+    # Any positive row NOT refreshed this run is now zero in SOFTECH → zero it here.
+    # Guard: only reconcile after a healthy pull, so a partial/failed Sybase fetch
+    # can never wipe the whole table.
+    zeroed = 0
+    if count >= 1000:
+        zeroed = (ItemStock.objects
+                  .filter(quantity_on_hand__gt=0, last_synced__lt=run_ts)
+                  .update(quantity_on_hand=0, last_synced=run_ts))
+
     if skipped:
         logger.debug(f"Stock: skipped {skipped} rows (item or branch not found yet)")
     SyncLog.objects.create(sync_run=sync_run, table_name='stkbal', records_processed=count)
-    logger.info(f"Stock synced: {count}")
+    logger.info(f"Stock synced: {count} (zeroed {zeroed} sold-out rows)")
     return count
 
 
