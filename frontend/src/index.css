@@ -401,9 +401,44 @@
   }
 }
 
+/* ─── Sticky table headers (global — every module) ───────────────────────────
+   Column titles stay pinned while scrolling long tables. Each table's horizontal-
+   scroll wrapper (overflow-x-auto) is also a vertical scroll container, so we bound
+   its height to the viewport — the header then sticks to the top of that scroll
+   area. Short tables never reach the cap, so they render exactly as before.
+   Works for both border-collapse 'separate' (sticky thead) and 'collapse' (sticky
+   th) tables. Each header keeps its OWN background (a bg-* class on thead/tr/th
+   wins by specificity); transparent headers fall back to white so rows can't bleed
+   through. Opt a single table out with the `.no-sticky-head` class on its wrapper. */
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: inherit;
+}
+.overflow-x-auto:has(> table):not(.no-sticky-head),
+.overflow-auto:has(> table):not(.no-sticky-head),
+.overflow-y-auto:has(> table):not(.no-sticky-head) {
+  max-height: calc(100dvh - 12rem);
+}
+.no-sticky-head thead,
+.no-sticky-head thead th {
+  position: static;
+}
+
 /* ─── Print ──────────────────────────────────────────────────────────────────── */
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
   .card { box-shadow: none; border: 1px solid #e5e7eb; }
+  /* Never clip/scroll tables when printing */
+  thead, thead th { position: static; }
+  .overflow-x-auto:has(> table),
+  .overflow-auto:has(> table),
+  .overflow-y-auto:has(> table) { max-height: none; }
 }

@@ -143,6 +143,7 @@ const NAV_GROUPS = [
       { to: '/inventory',            icon: '🗃️', label: 'لوحة المخزون',   roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
       { to: '/batches',              icon: '🧪', label: 'الدفعات والانتهاء', roles: ['admin','pharmacist','purchasing','quality_manager','supervisor'] },
       { to: '/shortage',             icon: '🚨', label: 'النواقص',         roles: ['admin','pharmacist','call_center','salesperson','purchasing','supervisor','quality_manager'] },
+      { to: '/market-shortage',      icon: '📉', label: 'نواقص السوق',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
       { to: '/catalog-intelligence', icon: '🧠', label: 'ذكاء الكتالوج',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/chronic-classifier',   icon: '🧬', label: 'الأدوية المزمنة',  roles: ['admin','pharmacist','call_center','supervisor'] },
       { to: '/image-enrichment',     icon: '🖼️', label: 'صور المنتجات',   roles: ['admin','pharmacist','purchasing'] },

@@ -471,6 +471,22 @@ export const purchasingApi = {
   advancedExport: (params) => api.get('/purchasing/advanced-export/', { params, responseType: 'arraybuffer' }),
   advancedPivotExport: (params) => api.get('/purchasing/advanced-pivot-export/', { params, responseType: 'arraybuffer' }),
 
+  // ── Market shortage detector (نواقص السوق) ─────────────────────────────────
+  shortageCandidates: (params)      => api.get('/purchasing/shortage/candidates/', { params }),
+  shortageDeltas:     ()            => api.get('/purchasing/shortage/deltas/'),
+  shortageConfirmed:  (params)      => api.get('/purchasing/shortage/confirmed/', { params }),
+  shortageDismissed:  ()            => api.get('/purchasing/shortage/dismissed/'),
+  shortageMedTypes:   ()            => api.get('/purchasing/shortage/med-types/'),
+  shortageSearch:     (q)           => api.get('/purchasing/shortage/search/', { params: { q } }),
+  shortageFlag:       (data)        => api.post('/purchasing/shortage/flag/', data),
+  shortageUnflag:     (itemId)      => api.post('/purchasing/shortage/unflag/', { item_id: itemId }),
+  shortageDismiss:    (data)        => api.post('/purchasing/shortage/dismiss/', data),
+  shortageRetrieve:   (itemId)      => api.post('/purchasing/shortage/retrieve/', { item_id: itemId }),
+  shortageExport:     (params)      => api.get('/purchasing/shortage/export/', { params, responseType: 'arraybuffer' }),
+  shortageWhatsapp:   (params)      => api.get('/purchasing/shortage/whatsapp/', { params }),
+  shortageSuggestMatches: (itemId)  => api.get('/purchasing/shortage/suggest-matches/', { params: { item_id: itemId } }),
+  shortageTrends:     ()            => api.get('/purchasing/shortage/trends/'),
+
   // EngineConfig singleton — GET returns current weights/thresholds; PATCH updates them (admin only)
   config:       ()       => api.get('/purchasing/config/'),
   updateConfig: (data)   => api.patch('/purchasing/config/', data),

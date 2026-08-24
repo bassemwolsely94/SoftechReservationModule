@@ -28,6 +28,7 @@ import TransitsPage from './pages/TransitsPage'
 import NewTransferPage from './pages/NewTransferPage'
 import TransferDetailPage from './pages/TransferDetailPage'
 import PurchasingDashboard from './pages/PurchasingDashboard'
+import MarketShortagePage from './pages/MarketShortagePage'
 import ChronicClassifierPage from './pages/ChronicClassifierPage'
 import SettingsPage from './pages/SettingsPage'
 import StockCountPage from './pages/StockCountPage'
@@ -370,6 +371,7 @@ export default function App() {
             <Route path="stock-count"        element={<StockCountPage />} />
             <Route path="shortage"           element={<ShortagePage />} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
+            <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
 
             {/* ── Procurement hub (4 tabs) ──────────────────────────────
                 /procurement              → redirects to /procurement/overview
