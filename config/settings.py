@@ -360,6 +360,12 @@ INVOICE_WRITER_ENABLED  = config('INVOICE_WRITER_ENABLED', default=False, cast=b
 INVOICE_WRITER_PROFILE  = config('INVOICE_WRITER_PROFILE', default='test')   # test|prod
 INVOICE_DEFAULT_USERCODE = config('INVOICE_DEFAULT_USERCODE', default='')    # fallback buyer usercode
 INVOICE_WRITE_CHARSET   = config('INVOICE_WRITE_CHARSET', default='cp1256')
+
+# ── Market-shortage SOFTECH writeback (items.itemmodified=صنف نواقص, itemcode_alt2=تحذير) ──
+# Kill-switch: keep False until validated on the demo item; confirm/revert then stays
+# LOCAL (queued) and the retry job pushes when SOFTECH is reachable.
+SHORTAGE_SOFTECH_WRITE_ENABLED = config('SHORTAGE_SOFTECH_WRITE_ENABLED', default=False, cast=bool)
+SHORTAGE_WARNING_TEXT = config('SHORTAGE_WARNING_TEXT', default='صنف ناقص جدا بالسوق المصري!!!')
 INVOICE_RETURN_REASON_CODE = config('INVOICE_RETURN_REASON_CODE', default='4')  # docnumber2 on a 120 doc
 # Write confirmed vendor_item_code → SOFTECH itemssuppliers.suppitemcode (trigger-free
 # master data). Default off; enables first-invoice code→item resolution once seeded.

@@ -155,7 +155,7 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
     raise last_exc
 
 
-def get_sybase_connection():
+def get_sybase_connection(charset=None):
     host = settings.SYBASE_HOST
     port = getattr(settings, 'SYBASE_PORT', '5000')
     user = settings.SYBASE_USER
@@ -168,6 +168,10 @@ def get_sybase_connection():
     props = Properties()
     props.setProperty('user', user)
     props.setProperty('password', password)
+    # Opt-in connection charset (e.g. 'cp1256') so Arabic writes encode correctly.
+    # Default (None) is unchanged — used only by the writeback path.
+    if charset:
+        props.setProperty('CHARSET', charset)
     _apply_login_timeout(props)
     # Belt-and-suspenders: also bound the timeout at the DriverManager level.
     try:
