@@ -91,6 +91,80 @@ class Item(models.Model):
         verbose_name='مؤرشف',
         help_text="SOFTECH items.itemarchive = 1 — archived item.",
     )
+    # ── Market shortage flag (نواقص السوق) ────────────────────────────────────
+    # Sticky, human-confirmed flag: this item is in a market/supply shortage — we
+    # can't source it, or suppliers only give a limited quota below demand. Set by
+    # confirming an auto-detected candidate OR by adding a known quota item manually.
+    # It is NEVER auto-cleared (a quota item may briefly have stock); a human clears it.
+    in_shortage = models.BooleanField(
+        default=False, db_index=True,
+        verbose_name='في نقص بالسوق',
+        help_text='مؤكَّد يدويًا: صنف يصعب توريده من الموردين أو يأتي بكمية محدودة (كوتة).',
+    )
+    shortage_source = models.CharField(
+        max_length=10, blank=True, default='',
+        verbose_name='مصدر التحديد', help_text="'auto' (candidate confirmed) | 'manual' (added by hand).",
+    )
+    shortage_note = models.CharField(
+        max_length=300, blank=True, default='', verbose_name='ملاحظة النقص',
+        help_text='e.g. كوتة / لا يوجد بالموردين / بديل مطلوب.',
+    )
+    shortage_flagged_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='تاريخ التحديد',
+    )
+    # ── SOFTECH writeback state (items.itemmodified = صنف نواقص, itemcode_alt2 = تحذير) ──
+    # in_shortage is the DESIRED state; these track whether SOFTECH reflects it yet.
+    # False → local change not pushed (SOFTECH offline / error) → retry job picks it up.
+    shortage_softech_synced = models.BooleanField(
+        default=True, db_index=True, verbose_name='مُتزامن مع سوفتك',
+    )
+    shortage_softech_synced_at = models.DateTimeField(null=True, blank=True,
+                                                      verbose_name='آخر مزامنة سوفتك')
+    shortage_softech_error = models.CharField(max_length=300, blank=True, default='',
+                                              verbose_name='خطأ مزامنة سوفتك')
+    # True when THIS module set أوامر التوريد = موقوف (items.itemnomoreuse='1') because
+    # the item was dismissed as يُطلب عند الحاجة / obsolete — so retrieve can restore it.
+    shortage_supply_suspended = models.BooleanField(
+        default=False, verbose_name='أوقفنا التوريد (موقوف)',
+    )
+    shortage_confirmed_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='confirmed_market_shortages', verbose_name='أكَّده',
+    )
+    # ── Dismissal (move an item OUT of the candidate list, with a reason) ──────
+    # So the same non-shortage item doesn't resurface every run. Dismissed items are
+    # hidden from candidates but fully retrievable, and re-surface automatically only
+    # if they later show a strong new shortage signal (re-entered).
+    DISMISS_REASONS = [
+        ('variant',      'مقاس/شكل بديل لمنتج متاح'),   # size/variant of an available product
+        ('on_request',   'يُطلب عند الحاجة فقط'),        # brought only upon request
+        ('obsolete',     'غير متوفر بالسوق المصري'),      # obsolete in the Egyptian market
+        ('not_shortage', 'ليس نقصًا (موقوف/موسمي)'),      # false positive
+        ('other',        'أخرى'),
+    ]
+    shortage_dismissed = models.BooleanField(
+        default=False, db_index=True, verbose_name='مُستبعد من النواقص',
+        help_text='مُستبعد من قائمة المرشحين مع حفظ السبب — قابل للاسترجاع.',
+    )
+    shortage_dismiss_reason = models.CharField(
+        max_length=15, blank=True, default='', choices=DISMISS_REASONS,
+        verbose_name='سبب الاستبعاد',
+    )
+    shortage_dismiss_note = models.CharField(max_length=300, blank=True, default='',
+                                             verbose_name='ملاحظة الاستبعاد')
+    shortage_dismissed_at = models.DateTimeField(null=True, blank=True,
+                                                 verbose_name='تاريخ الاستبعاد')
+    shortage_dismissed_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='dismissed_market_shortages', verbose_name='استبعده',
+    )
+    # For reason='variant': the available product(s) that cover this item's demand.
+    # Many-to-many: a variant may map to one or two matching products, and a single
+    # available product may be the match for many variant items.
+    shortage_matching_items = models.ManyToManyField(
+        'self', symmetrical=False, blank=True,
+        related_name='covers_shortage_variants', verbose_name='المنتجات البديلة المتاحة',
+    )
     is_stockable = models.BooleanField(
         default=True,
         db_index=True,
