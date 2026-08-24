@@ -1071,7 +1071,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── 5. Row 1 — Group headers ──────────────────────────────────────────────
     row1 = (
-        [_hdr('بيانات الصنف', HDR_FILL)] * 16
+        [_hdr('بيانات الصنف', HDR_FILL)] * 18
         + [_hdr('100',          B100_HFILL)] * 6
     )
     for bi, b in enumerate(branches_no100):
@@ -1105,6 +1105,8 @@ def _export_xlsx_pivot_v2(run, request, filename):
         'Items_.itemname',
         'Items_.سعر-جمهور',
         'Items_.سعر-تكلفة',
+        'نقص/بديل السوق',            # market-shortage status: نقص سوق / بديل متاح
+        'المنتج البديل (والتوفر)',    # matching product(s) + all-branch availability warning
     ]
     B100_HDRS = [
         '100.الرصيد-الحالى',
@@ -1168,6 +1170,22 @@ def _export_xlsx_pivot_v2(run, request, filename):
         v = getattr(m, attr, None)
         return float(v) if v is not None else None
 
+    # ── Market-shortage overlay (نقص/بديل columns) ───────────────────────────
+    from apps.catalog.models import Item as _Item
+    from .shortage import branch_availability as _branch_avail
+    _short = {}
+    _match_ids = set()
+    for it in (_Item.objects.filter(id__in=item_order)
+               .filter(Q(in_shortage=True) | Q(shortage_dismissed=True))
+               .prefetch_related('shortage_matching_items')
+               .only('id', 'in_shortage', 'shortage_dismissed', 'shortage_dismiss_reason')):
+        _short[it.id] = it
+        for m in it.shortage_matching_items.all():
+            _match_ids.add(m.id)
+    _avail = _branch_avail(list(_match_ids))
+    SHORT_FILL = _f('FDE2E2')   # light red — market shortage
+    VAR_FILL   = _f('FFF3D6')   # light amber — variant with a matching product
+
     for iid in item_order:
         item        = item_obj[iid]
         branch_data = pivot[iid]          # {branch_id: metric}
@@ -1193,8 +1211,14 @@ def _export_xlsx_pivot_v2(run, request, filename):
         total_in_transit  = sum(intransits)
         total_rate     = sum(rates)
         total_gap      = sum(gaps)
-        max_priority   = max(priorities, default=0)
         total_coverage = (total_stock / total_rate) if total_rate > 0 else None
+        # معامل أولوية الطلب at NETWORK level = (1 − coverage) × gap — the same
+        # definition as the per-branch priority and the manual sheet's Total.
+        # (Previously this was max() of the per-branch priorities, which is dominated
+        # by branches with a near-zero sales rate: coverage = stock/rate explodes, so
+        # (1 − coverage) × gap balloons into the hundreds of thousands and the network
+        # priority total came out ~3× the manual sheet.)
+        total_priority = ((1.0 - total_coverage) * total_gap) if total_coverage is not None else 0.0
 
         # ── Summary calcs ─────────────────────────────────────────────────────
         deficit_qty  = sum(max(0,  g) for g in gaps)   # positive gaps only
@@ -1271,6 +1295,24 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(item.name,                                            item_fill))
         row.append(_cell(pack_price,                                           item_fill, '#,##0.00'))
         row.append(_cell(float(item.cost_price or 0),                          item_fill, '#,##0.00'))
+        # نقص/بديل السوق + المنتج البديل (والتوفر)
+        _si = _short.get(iid)
+        _status, _match_str, _cellfill = '', '', item_fill
+        if _si is not None:
+            _matches = list(_si.shortage_matching_items.all())
+            if _si.in_shortage:
+                _status, _cellfill = 'نقص سوق', SHORT_FILL
+            elif _si.shortage_dismissed and _si.shortage_dismiss_reason == 'variant':
+                _status, _cellfill = 'بديل متاح', VAR_FILL
+            elif _si.shortage_dismissed:
+                _status = 'مستبعد'
+            if _matches:
+                _codes = ' | '.join(m.softech_id for m in _matches)
+                _missing = sorted({c for m in _matches
+                                   for c in _avail.get(m.id, {}).get('missing', [])})
+                _match_str = _codes + (f'  ⚠ ناقص بفروع: {",".join(_missing)}' if _missing else '  ✓ بكل الفروع')
+        row.append(_cell(_status,    _cellfill))
+        row.append(_cell(_match_str, _cellfill))
 
         # [11-16] Branch 100 (6 cols — no coverage/priority)
         if branch_100 and branch_100.id in branch_data:
@@ -1307,7 +1349,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(total_rate,       TOT_DFILL, '#,##0.00'))
         row.append(_cell(total_coverage,   TOT_DFILL, '#,##0.0'))
         row.append(_cell(total_gap,        TOT_DFILL, '#,##0.00'))
-        row.append(_cell(max_priority,     TOT_DFILL, '#,##0.000'))
+        row.append(_cell(total_priority,   TOT_DFILL, '#,##0.000'))
 
         # [56-61] % of total stock (6 branches)
         for b in branches:

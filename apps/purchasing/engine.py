@@ -414,6 +414,16 @@ class DemandEngine:
                 # Non-fatal: lost sales calculation should not block the main run.
                 logger.warning('[DemandEngine] MODULE 13 skipped: %s', exc)
 
+            # MODULE 14 — Market-shortage snapshot + alerts (delta / recovery view)
+            try:
+                from .shortage import ensure_snapshot, notify_shortage_changes
+                ensure_snapshot(self.run_obj)
+                sent = notify_shortage_changes()
+                logger.info('[DemandEngine] MODULE 14 — shortage snapshot captured, %d alerts', sent)
+            except Exception as exc:
+                # Non-fatal: snapshotting/alerts must never block the demand run.
+                logger.warning('[DemandEngine] MODULE 14 skipped: %s', exc)
+
             elapsed = time.monotonic() - t0
             self.run_obj.status             = 'success'
             self.run_obj.finished_at        = timezone.now()
@@ -1105,7 +1115,61 @@ class DemandEngine:
                 'abc_class':          'X',   # filled in MODULE 10
             }
 
-        logger.info('[DemandEngine] Calculated %d item-branch pairs', len(results))
+        # ── Stock at (item, branch) pairs with NO sales in the window ──────────
+        # HQ (الرئيسي) is a distribution warehouse: most items are STORED there but
+        # SOLD from the retail branches, so they never appear in the sales-derived
+        # pg_rows above and their on-hand stock would be invisible to the network
+        # total (the manual sheet counts it → our buy list was over-stated). Idle
+        # stock at a retail branch (item on the shelf but not recently sold) is
+        # dropped the same way. Add these as pure-overstock rows (rate 0, gap =
+        # −stock) so ALL on-hand stock counts against the network gap. Restricted to
+        # the operational branches that already have sales somewhere, so defunct
+        # store codes don't leak in.
+        active_branches = {bid for (_, bid) in results}
+        stock_only = 0
+        for (item_id, branch_id), qty in self._stock_map.items():
+            if not qty or branch_id not in active_branches:
+                continue
+            if (item_id, branch_id) in results:
+                continue
+            in_transit = self._intransit_map.get((item_id, branch_id), 0.0)
+            pack_price = self._item_id_to_price.get(item_id, 0.0)
+            # rate 0 → target 0 → gap = −(stock + in_transit): pure overstock.
+            gap = calc_gap(qty + in_transit, 0.0, 0.0)
+            results[(item_id, branch_id)] = {
+                'item_id':            item_id,
+                'branch_id':          branch_id,
+                'pack_price':         pack_price,
+                'qty_30d':            0.0,
+                'qty_90d':            0.0,
+                'qty_365d':           0.0,
+                'invoices_30d':       0,
+                'invoices_90d':       0,
+                'invoices_365d':      0,
+                'trns_30d':           0,
+                'trns_90d':           0,
+                'trns_365d':          0,
+                'rate_30d':           0.0,
+                'rate_90d':           0.0,
+                'rate_365d':          0.0,
+                'monthly_avg':        0.0,
+                'monthly_avg_trns':   0.0,
+                'safety_stock':       0.0,
+                'current_stock':      qty,
+                'in_transit_qty':     in_transit,
+                'coverage_months':    None,   # rate 0 → coverage undefined (∞)
+                'gap':                gap,
+                'priority':           0.0,     # no purchase priority: pure overstock
+                'monthly_value':      0.0,
+                'net_sales_revenue':  0.0,
+                'last_sale_date':     None,
+                'pct_stock_of_total': None,
+                'abc_class':          'X',
+            }
+            stock_only += 1
+
+        logger.info('[DemandEngine] Calculated %d item-branch pairs '
+                    '(+%d stock-only no-sale pairs)', len(results), stock_only)
         return results
 
     # ── MODULE 9 — Network aggregation + pct_stock_of_total ──────────────────
@@ -1155,7 +1219,9 @@ class DemandEngine:
             if m['gap'] > 0:
                 a['total_gap']           += m['gap']
                 a['branches_with_gap']   += 1
-            a['branches_with_sales'] += 1
+            # Only count branches that actually had sales (not pure stock-only rows).
+            if m['monthly_avg'] > 0 or m['qty_365d'] > 0:
+                a['branches_with_sales'] += 1
 
         # Compute pct_stock_of_total per branch (second pass — denominator now known)
         for (item_id, branch_id), m in metrics.items():
