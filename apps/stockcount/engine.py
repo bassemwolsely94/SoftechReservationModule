@@ -368,7 +368,10 @@ def preview_items(
     if mode == 'full':
         return fetch_full_stock(branch_code, category_filter)
 
-    if mode == 'filtered':
+    # 'expiry_audit' reuses filtered-stock capture: the item set is supplied by
+    # the batches purchase-expiry engine (via item_codes_filter) when the session
+    # is spawned; the expiry-context/physical-expiry live on the snapshot rows.
+    if mode in ('filtered', 'expiry_audit'):
         if item_codes_filter:
             return fetch_filtered_stock(branch_code, item_codes_filter)
         if category_filter:
@@ -470,10 +473,15 @@ def refresh_session_counts(session, by=None):
     ])
 
 
-def apply_single_count(session, item_code, counted_qty, by=None):
+def apply_single_count(session, item_code, counted_qty, by=None, physical_expiry=None):
     """Record one counted item (live aisle entry). Returns the updated snapshot,
     or None if the item is not in this session's scope. expected_qty is never
-    touched; difference + variance_type are recomputed exactly like the upload path."""
+    touched; difference + variance_type are recomputed exactly like the upload path.
+
+    physical_expiry (date | 'YYYY-MM-DD' | None): the real shelf expiry the
+    counter reads off the pack — captured for expiry_audit sessions. None leaves
+    the stored value unchanged."""
+    from datetime import date, datetime
     from .models import StockCountSnapshot
     code = str(item_code).strip()
     snap = StockCountSnapshot.objects.filter(session=session, item_code=code).first()
@@ -483,7 +491,24 @@ def apply_single_count(session, item_code, counted_qty, by=None):
     snap.counted_qty   = counted
     snap.difference    = counted - snap.expected_qty
     snap.variance_type = _variance_type(snap.difference)
-    snap.save(update_fields=['counted_qty', 'difference', 'variance_type'])
+    update_fields = ['counted_qty', 'difference', 'variance_type']
+
+    if physical_expiry is not None:
+        parsed = physical_expiry
+        if isinstance(parsed, datetime):
+            parsed = parsed.date()
+        elif isinstance(parsed, str) and parsed.strip():
+            try:
+                parsed = datetime.strptime(parsed.strip()[:10], '%Y-%m-%d').date()
+            except ValueError:
+                parsed = None
+        elif not isinstance(parsed, date):
+            parsed = None
+        if parsed is not None:
+            snap.physical_expiry = parsed
+            update_fields.append('physical_expiry')
+
+    snap.save(update_fields=update_fields)
     refresh_session_counts(session, by=by)
     return snap
 

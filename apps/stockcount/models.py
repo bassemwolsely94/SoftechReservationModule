@@ -46,9 +46,13 @@ class StockCountSession(models.Model):
     ]
 
     MODE_CHOICES = [
-        ('transaction', 'مبني على الحركات'),
-        ('full',        'جرد شامل'),
-        ('filtered',    'جرد مفلتر'),
+        ('transaction',  'مبني على الحركات'),
+        ('full',         'جرد شامل'),
+        ('filtered',     'جرد مفلتر'),
+        # Physical near-expiry audit: item list comes from the batches
+        # purchase-expiry engine (spawned session); stock is captured like a
+        # filtered count, and counters also record the real shelf expiry.
+        ('expiry_audit', 'جرد صلاحية (تدقيق مادي)'),
     ]
 
     # ── Identity ──────────────────────────────────────────────────────────────
@@ -162,6 +166,16 @@ class StockCountSnapshot(models.Model):
     variance_type = models.CharField(max_length=10, choices=VARIANCE_CHOICES,
                                      blank=True, default='',
                                      verbose_name='نوع الانحراف')
+
+    # ── Expiry audit (expiry_audit mode) ──────────────────────────────────────
+    # entered_expiry_hint: earliest expiry keyed on the historical purchase
+    #   entries that flagged this item (context only — NOT trusted as truth).
+    # physical_expiry: the REAL shelf expiry the counter records during the
+    #   physical check. This is the source of truth for the audit.
+    entered_expiry_hint = models.DateField(
+        null=True, blank=True, verbose_name='الصلاحية المُدخَلة (استرشادي)')
+    physical_expiry     = models.DateField(
+        null=True, blank=True, verbose_name='الصلاحية الفعلية على الرف')
 
     class Meta:
         verbose_name        = 'لقطة جرد'

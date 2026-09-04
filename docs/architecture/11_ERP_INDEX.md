@@ -61,7 +61,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Loyalty | `apps/loyalty` | COMPLETE | Points program + per-branch points |
 | Referral | `apps/referral` | COMPLETE | Referral doctor / program |
 | Forecasting | `apps/forecasting` | COMPLETE | Demand/sales forecasting engine |
-| Batches / Near-Expiry | `apps/batches` | COMPLETE | Batch + expiry tracking, near-expiry scan |
+| Batches / Near-Expiry | `apps/batches` | COMPLETE | Batch + expiry tracking, near-expiry scan; **Purchase-Expiry Physical Audit** engine (`PurchaseExpiryEntry` 3-yr mirror of purchase-invoice entered expiries from main suppliers). Report = items **in stock now** whose trusted-supplier **entered expiry falls in a chosen window** (purchase date is NOT constrained), enriched with cost / value-at-risk / imported / origin for filter+sort → spawns a `stockcount` `expiry_audit` session for the physical shelf-expiry check |
 | Operational Approvals | `apps/approvals` | COMPLETE | Generic approval workflows (operational + HR); desktop `/approvals` + mobile `/m/approvals` |
 | Pricing Approvals (discount writeback) | `apps/discount_approvals` | COMPLETE | Approved item-discount writeback to SOFTECH (`replication.py` — reference channel) |
 | Procurement | `apps/procurement` | COMPLETE | Procurement hub: history, supplier segmentation/performance, FOC, margins, optimization |
@@ -120,7 +120,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Insurance | `/api/insurance/` | insurance |
 | Pricing Approvals (discount writeback) | `/api/pricing-approvals/` | discount_approvals |
 | Approvals (operational + HR) | `/api/approvals/` | approvals |
-| Batches / Near-Expiry | `/api/batches/` | batches |
+| Batches / Near-Expiry | `/api/batches/` | batches — list/detail + `fefo/` + `near-expiry/` + `alerts/` + `{id}/quarantine/` + **`purchase-expiry/`** (`candidates/` report · `runs/` · `sync/` admin-backfill · `spawn-count/` → stockcount) |
 | Forecasting | `/api/forecasting/` | forecasting — seasonality/runs/accuracy + `kpi-board/` (doc 16 branch KPI matrix) |
 | Loyalty | `/api/loyalty/` | loyalty |
 | Referral | `/api/referral/` | referral |
@@ -400,6 +400,7 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `pos_probe` | pos_orders | SOFTECH connectivity/diagnostic probe for the POS writer | Manual |
 | `run_forecast` | forecasting | Run demand/sales forecast | Daily |
 | `near_expiry_scan` | batches | Scan batches nearing expiry | Daily |
+| `sync_purchase_expiry` | batches | Backfill purchase-invoice lines carrying an entered expiry (`stktrans.itemexpirydate`, doccode 10) from **main** suppliers (`SupplierSegmentation` OFFICIAL_DISTRIBUTOR+MANUFACTURER) into `PurchaseExpiryEntry` — the mirror behind the **Purchase-Expiry Physical Audit** report (`/batches` → تدقيق صلاحيات الشراء → spawns a `stockcount` `expiry_audit` session). `--years 3` \| `--from/--to` \| `--branch` \| `--categories`. Idempotent + re-runnable (re-run after re-classifying suppliers as main). Read-only SOFTECH. Needs `run_procurement_engine` run first to classify suppliers | One-time `--years 3` backfill; then **scheduled daily 07:00** (`purchase_expiry_sync` APScheduler job, rolling ~4-month incremental window, additive); re-run `--years 3` when the main-supplier set changes |
 | `run_procurement_engine` | procurement | Recompute procurement/supplier metrics | Daily |
 | `sync_insurance_cache` / `sync_motalbas` / `reimport_all_claims` | insurance | Sync SOFTECH motalba claims into PG mirror | Configurable |
 | `seed_loyalty` | loyalty | Seed loyalty program defaults | One-time setup |

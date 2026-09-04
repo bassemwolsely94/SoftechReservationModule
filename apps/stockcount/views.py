@@ -353,8 +353,11 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         if counted < 0:
             return Response({'detail': 'الكمية يجب ألا تكون سالبة'}, status=status.HTTP_400_BAD_REQUEST)
 
+        physical_expiry = request.data.get('physical_expiry')  # optional 'YYYY-MM-DD'
+
         profile = getattr(request.user, 'staff_profile', None)
-        snap = apply_single_count(session, code, counted, by=profile)
+        snap = apply_single_count(session, code, counted, by=profile,
+                                  physical_expiry=physical_expiry)
         if snap is None:
             return Response({'detail': 'هذا الصنف ليس ضمن نطاق هذه الجلسة'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -369,6 +372,8 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
             'difference':     float(snap.difference),
             'variance_type':  snap.variance_type,
             'variance_label': VLABEL.get(snap.variance_type, ''),
+            'entered_expiry_hint': snap.entered_expiry_hint.isoformat() if snap.entered_expiry_hint else None,
+            'physical_expiry':     snap.physical_expiry.isoformat() if snap.physical_expiry else None,
             'progress':       {'counted': counted_n, 'total': total},
             'session_status': session.status,
         })

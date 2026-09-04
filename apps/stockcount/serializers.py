@@ -18,6 +18,7 @@ class StockCountSnapshotSerializer(serializers.ModelSerializer):
             'id', 'item_code', 'item_name', 'item_medicine', 'category_name',
             'branch_code', 'expected_qty', 'snapshot_time',
             'counted_qty', 'difference', 'variance_type', 'variance_label',
+            'entered_expiry_hint', 'physical_expiry',
         ]
         read_only_fields = fields   # Everything is read-only from API perspective
 

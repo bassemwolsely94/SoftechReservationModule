@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import StockBatch, BatchMovement, NearExpiryAlert
+from .models import (
+    StockBatch, BatchMovement, NearExpiryAlert,
+    PurchaseExpiryEntry, PurchaseExpiryAuditRun,
+)
 
 
 class BatchMovementInline(admin.TabularInline):
@@ -49,3 +52,30 @@ class NearExpiryAlertAdmin(admin.ModelAdmin):
     list_display  = ['batch', 'threshold_days', 'alerted_at', 'resolved_at', 'resolution']
     list_filter   = ['threshold_days']
     readonly_fields = ['batch', 'threshold_days', 'alerted_at']
+
+
+@admin.register(PurchaseExpiryEntry)
+class PurchaseExpiryEntryAdmin(admin.ModelAdmin):
+    list_display  = [
+        'item_code', 'item_name', 'entered_expiry', 'qty',
+        'supplier_code', 'supplier_category', 'doc_number', 'doc_date', 'branch_code',
+    ]
+    list_filter   = ['supplier_category', 'branch_code']
+    search_fields = ['item_code', 'item_name', 'supplier_code', 'supplier_name', 'doc_number']
+    date_hierarchy = 'doc_date'
+
+    def has_add_permission(self, request):
+        return False  # mirror rows come only from sync_purchase_expiry
+
+    def has_change_permission(self, request, obj=None):
+        return False  # immutable historical facts
+
+
+@admin.register(PurchaseExpiryAuditRun)
+class PurchaseExpiryAuditRunAdmin(admin.ModelAdmin):
+    list_display  = [
+        'id', 'status', 'window_from', 'window_to', 'branch_scope',
+        'suppliers_count', 'lines_fetched', 'lines_upserted', 'started_at', 'finished_at',
+    ]
+    list_filter   = ['status']
+    readonly_fields = [f.name for f in PurchaseExpiryAuditRun._meta.get_fields() if hasattr(f, 'name')]

@@ -1858,6 +1858,25 @@ def _run_procurement_refresh():
         logger.error('[APScheduler] procurement refresh failed: %s', exc)
 
 
+def _run_purchase_expiry_sync():
+    """Incrementally mirror NEW purchase-invoice expiry entries from main suppliers
+    into apps.batches.PurchaseExpiryEntry (near-expiry physical audit engine).
+
+    Additive + idempotent: the unique key skips already-mirrored batch lines, so a
+    rolling ~4-month window is enough to pick up newly-entered (and slightly
+    back-dated) invoices while everything mirrored before is preserved. Runs just
+    after the procurement refresh so the main-supplier classification is current.
+    The initial 3-year backfill is a one-time `sync_purchase_expiry --years 3`."""
+    try:
+        import datetime as _d
+        from django.core.management import call_command
+        frm = (_d.date.today().replace(day=1) - _d.timedelta(days=120)).strftime('%Y-%m')
+        call_command('sync_purchase_expiry', date_from=frm, verbosity=0)
+        logger.info('[APScheduler] purchase-expiry sync done (from %s)', frm)
+    except Exception as exc:
+        logger.error('[APScheduler] purchase-expiry sync failed: %s', exc)
+
+
 def _send_followup_reminders():
     """Fire reminder notifications for FollowUpTask records whose reminder_at has passed."""
     try:
@@ -2706,6 +2725,12 @@ def start_scheduler():
     # rules (price-creep, supplier concentration, etc.) run on current data.
     _scheduler.add_job(
         _run_procurement_refresh, 'cron', hour=6, minute=45, id='procurement_refresh',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Incrementally mirror new purchase-expiry entries (main suppliers) right after
+    # the procurement refresh — keeps the near-expiry physical audit report current.
+    _scheduler.add_job(
+        _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────

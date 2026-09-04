@@ -843,6 +843,16 @@ export default function StockCountPage() {
     setActiveTab('snapshot');
   }
 
+  // Deep-link: /stock-count?session=<id> auto-opens that session (used by the
+  // "start physical count" action of the purchase-expiry audit report).
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get('session');
+    if (!sid) return;
+    stockCountApi.get(sid)
+      .then(res => { setSelectedSession(res.data); setActiveTab('snapshot'); })
+      .catch(() => { /* session not found — stay on list */ });
+  }, []);
+
   async function refreshSession() {
     if (!selectedSession) return;
     try {

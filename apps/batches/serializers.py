@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from .models import StockBatch, BatchMovement, NearExpiryAlert
+from .models import (
+    StockBatch, BatchMovement, NearExpiryAlert, PurchaseExpiryAuditRun,
+)
 
 
 class BatchMovementSerializer(serializers.ModelSerializer):
@@ -86,3 +88,17 @@ class FEFORecommendationSerializer(serializers.ModelSerializer):
     class Meta:
         model  = StockBatch
         fields = ['id', 'batch_number', 'expiry_date', 'days_to_expiry', 'current_qty', 'item_name']
+
+
+class PurchaseExpiryAuditRunSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model  = PurchaseExpiryAuditRun
+        fields = [
+            'id', 'status', 'status_display', 'window_from', 'window_to',
+            'branch_scope', 'categories', 'suppliers_count',
+            'lines_fetched', 'lines_upserted', 'error_message', 'triggered_by',
+            'started_at', 'finished_at',
+        ]
+        read_only_fields = fields

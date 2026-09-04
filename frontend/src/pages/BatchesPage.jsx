@@ -2,9 +2,27 @@
  * BatchesPage — FEFO Batch Management + Near-Expiry Dashboard
  * Covers: batch list, near-expiry KPIs, active alerts, quarantine action
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { batchesApi } from '../api/client'
+import { batchesApi, branchesApi } from '../api/client'
+import useAuthStore from '../store/authStore'
+
+// ── date helpers ──────────────────────────────────────────────────────────────
+const _iso = (d) => d.toISOString().slice(0, 10)
+// Default ENTERED-EXPIRY window: first day of this month → end of +3 months
+// (a near-term "what's expiring soon" horizon; the user narrows it as needed).
+function _defaultExpiryFrom() {
+  const d = new Date(); d.setDate(1)
+  return _iso(d)
+}
+function _defaultExpiryTo() {
+  const d = new Date(); d.setMonth(d.getMonth() + 4, 0)   // last day of +3 months
+  return _iso(d)
+}
+function _fmtDate(s) {
+  return s ? new Date(s).toLocaleDateString('ar-EG') : '—'
+}
 
 function KpiCard({ label, value, sub, color = 'text-gray-900' }) {
   return (
@@ -55,6 +73,260 @@ function QuarantineModal({ batch, onClose }) {
   )
 }
 
+// ── Purchase-Expiry Physical Audit tab ────────────────────────────────────────
+function PurchaseExpiryAuditTab() {
+  const navigate = useNavigate()
+  const user     = useAuthStore(s => s.user)
+  const isAdmin  = ['admin', 'supervisor'].includes(user?.role)
+
+  const [from, setFrom]           = useState(_defaultExpiryFrom())
+  const [to, setTo]               = useState(_defaultExpiryTo())
+  const [branch, setBranch]       = useState('')          // '' = all branches
+  const [onlyInStock, setOnly]    = useState(true)
+  const [rows, setRows]           = useState(null)
+  const [err, setErr]             = useState(null)
+
+  // Client-side filter/sort (operate on the fetched rows — no SOFTECH re-hit)
+  const [search, setSearch]       = useState('')
+  const [importedOnly, setImp]    = useState(false)
+  const [minVar, setMinVar]       = useState('')
+  const [minQ, setMinQ]           = useState('')
+  const [sortKey, setSortKey]     = useState('value_at_risk')
+
+  const displayRows = useMemo(() => {
+    if (!rows) return null
+    let out = rows.filter(r => {
+      if (importedOnly && !r.is_imported) return false
+      if (minVar && (r.value_at_risk || 0) < Number(minVar)) return false
+      if (minQ && (r.current_qty || 0) < Number(minQ)) return false
+      if (search) {
+        const q = search.toLowerCase()
+        if (!((r.item_name || '').toLowerCase().includes(q) ||
+              (r.item_code || '').includes(q))) return false
+      }
+      return true
+    })
+    const num = (k) => (a, b) => (b[k] || 0) - (a[k] || 0)   // desc, nulls last
+    const cmp = {
+      value_at_risk: num('value_at_risk'),
+      current_qty:   num('current_qty'),
+      unit_cost:     num('unit_cost'),
+      retail_value:  num('retail_value'),
+      entry_count:   num('entry_count'),
+      expiry: (a, b) => (a.earliest_entered_expiry || '9999').localeCompare(b.earliest_entered_expiry || '9999'),
+    }[sortKey] || num('value_at_risk')
+    return [...out].sort(cmp)
+  }, [rows, importedOnly, minVar, minQ, search, sortKey])
+
+  const totalVar = useMemo(
+    () => (displayRows || []).reduce((s, r) => s + (r.value_at_risk || 0), 0),
+    [displayRows],
+  )
+
+  const { data: branchesData } = useQuery({
+    queryKey: ['branches', 'all-for-audit'],
+    queryFn:  () => branchesApi.list().then(r => r.data),
+  })
+  const branches = branchesData?.results || branchesData || []
+
+  const { data: runsData } = useQuery({
+    queryKey: ['batches', 'purchase-expiry-runs'],
+    queryFn:  () => batchesApi.purchaseExpiryRuns().then(r => r.data),
+    refetchInterval: (q) => {
+      const list = q.state.data?.results || q.state.data || []
+      return list.some(r => r.status === 'running') ? 4000 : false
+    },
+  })
+  const runs      = runsData?.results || runsData || []
+  const lastRun   = runs[0]
+  const isRunning = runs.some(r => r.status === 'running')
+
+  const candidates = useMutation({
+    mutationFn: () => batchesApi.purchaseExpiryCandidates({
+      from, to,
+      branches: branch ? [branch] : undefined,
+      only_in_stock: onlyInStock,
+    }).then(r => r.data),
+    onSuccess: (data) => { setRows(data.items || []); setErr(null) },
+    onError:   (e)    => setErr(e.response?.data?.detail || 'تعذّر توليد التقرير'),
+  })
+
+  const sync = useMutation({
+    mutationFn: () => batchesApi.purchaseExpirySync({ from, to, branch: branch || undefined }),
+    onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر بدء المزامنة'),
+  })
+
+  const spawn = useMutation({
+    mutationFn: () => batchesApi.purchaseExpirySpawnCount({ branch, from, to }).then(r => r.data),
+    onSuccess: (data) => navigate(`/stock-count?session=${data.session_id}`),
+    onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء جلسة الجرد'),
+  })
+
+  return (
+    <div>
+      {/* Explanation */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-900 leading-relaxed">
+        يعرض هذا التقرير الأصناف <b>الموجودة بالمخزون حاليًا</b> التي سجّل لها
+        <b> موزّع رئيسي / مصنع</b> — عند الشراء في <b>أي وقت</b> —
+        <b> تاريخ صلاحية يقع ضمن الفترة المحددة أدناه</b> (نطاق الصلاحية، وليس تاريخ الشراء)،
+        لسحبها ماديًا والتحقق من صلاحيتها الفعلية على الرف.
+        <span className="text-blue-700"> (لا يُشترط أن يحمل المخزون الحالي نفس هذه الصلاحية — البيان مجرد إشارة للفحص.)</span>
+      </div>
+
+      {/* Backfill status + admin sync */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 bg-white rounded-xl border border-gray-200 p-4">
+        <div className="text-sm text-gray-600 flex-1">
+          {lastRun ? (
+            <>آخر مزامنة: <b>{_fmtDate(lastRun.started_at)}</b> —{' '}
+              {lastRun.status === 'running' ? <span className="text-amber-600">جارية…</span>
+                : lastRun.status === 'success' ? <span className="text-green-700">ناجحة ({lastRun.lines_upserted?.toLocaleString('ar-EG')} سطر جديد، {lastRun.suppliers_count} مورد)</span>
+                : <span className="text-red-600">فشلت</span>}
+            </>
+          ) : <span className="text-gray-400">لم تُنفّذ مزامنة بعد — شغّل المزامنة لجلب بيانات الشراء (٣ سنوات).</span>}
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending || isRunning}
+            className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
+          >
+            {sync.isPending || isRunning ? 'المزامنة جارية…' : '🔄 مزامنة بيانات الشراء (٣ سنوات)'}
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-end gap-3 mb-5">
+        <label className="text-sm">
+          <span className="block text-gray-500 mb-1">الصلاحية من</span>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                 className="border rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-gray-500 mb-1">الصلاحية إلى</span>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                 className="border rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-gray-500 mb-1">الفرع</span>
+          <select value={branch} onChange={e => setBranch(e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm min-w-[10rem]">
+            <option value="">كل الفروع</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.softech_branch_id}>
+                {b.name_ar || b.display_name || b.softech_branch_id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm flex items-center gap-2 pb-2">
+          <input type="checkbox" checked={onlyInStock} onChange={e => setOnly(e.target.checked)} />
+          <span className="text-gray-600">الموجود بالمخزون فقط</span>
+        </label>
+        <button
+          onClick={() => candidates.mutate()}
+          disabled={candidates.isPending || !from || !to}
+          className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
+        >
+          {candidates.isPending ? 'جاري التحميل…' : 'توليد التقرير'}
+        </button>
+      </div>
+
+      {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
+
+      {/* Results */}
+      {rows === null ? (
+        <div className="text-center py-14 text-gray-400">حدّد الفترة والفرع ثم اضغط «توليد التقرير».</div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-14 text-gray-400">لا توجد أصناف مطابقة للمعايير.</div>
+      ) : (
+        <>
+          {/* Client-side filter + sort bar (no re-query) */}
+          <div className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
+            <input value={search} onChange={e => setSearch(e.target.value)}
+                   placeholder="بحث بالاسم / الكود…"
+                   className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
+            <label className="flex items-center gap-1 text-gray-600">
+              <input type="checkbox" checked={importedOnly} onChange={e => setImp(e.target.checked)} />
+              مستورد فقط
+            </label>
+            <input type="number" value={minVar} onChange={e => setMinVar(e.target.value)}
+                   placeholder="أدنى قيمة خطر" className="border rounded-lg px-2 py-1.5 w-28" />
+            <input type="number" value={minQ} onChange={e => setMinQ(e.target.value)}
+                   placeholder="أدنى كمية" className="border rounded-lg px-2 py-1.5 w-24" />
+            <select value={sortKey} onChange={e => setSortKey(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5">
+              <option value="value_at_risk">ترتيب: الأكبر خسارة محتملة</option>
+              <option value="current_qty">ترتيب: الأكبر كمية</option>
+              <option value="unit_cost">ترتيب: الأغلى (تكلفة الوحدة)</option>
+              <option value="retail_value">ترتيب: أعلى قيمة بيعية</option>
+              <option value="expiry">ترتيب: الأقرب صلاحية مُدخَلة</option>
+              <option value="entry_count">ترتيب: الأكثر إدخالات</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-gray-600">
+              عدد الأصناف: <b>{displayRows.length}</b>
+              <span className="mx-2 text-gray-300">·</span>
+              إجمالي القيمة المعرضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('ar-EG')} ج</b>
+            </p>
+            <button
+              onClick={() => spawn.mutate()}
+              disabled={spawn.isPending || !branch}
+              title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
+              className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي لهذه الأصناف'}
+            </button>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">كود</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">تكلفة الوحدة</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">قيمة معرّضة للخطر</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">المنشأ</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الفروع</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">صلاحية مُدخَلة (من / إلى)</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">إدخالات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.map(r => (
+                  <tr key={r.item_code} className={`border-b border-gray-100 hover:bg-gray-50 ${r.has_entered_expiry_passed ? 'bg-red-50' : ''}`}>
+                    <td className="px-3 py-3 font-mono text-xs text-gray-500">{r.item_code}</td>
+                    <td className="px-3 py-3 font-medium">
+                      {r.item_name || '—'}
+                      {r.is_imported &&
+                        <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-indigo-100 text-indigo-700">مستورد</span>}
+                      {r.has_entered_expiry_passed &&
+                        <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">صلاحية مُدخَلة منتهية</span>}
+                    </td>
+                    <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches_in_stock || []).join('، ') || '—'}</td>
+                    <td className="px-3 py-3 text-gray-700 text-xs">
+                      {_fmtDate(r.earliest_entered_expiry)} → {_fmtDate(r.latest_entered_expiry)}
+                    </td>
+                    <td className="px-3 py-3">{r.entry_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
 export default function BatchesPage() {
   const [tab, setTab]           = useState('alerts')
   const [quarantineBatch, setQ] = useState(null)
@@ -102,6 +374,7 @@ export default function BatchesPage() {
         {[
           { key: 'alerts', label: '🚨 تنبيهات الانتهاء' },
           { key: 'list',   label: '📦 قائمة الدفعات'   },
+          { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
@@ -237,6 +510,8 @@ export default function BatchesPage() {
           )}
         </>
       )}
+
+      {tab === 'audit' && <PurchaseExpiryAuditTab />}
 
       {quarantineBatch && <QuarantineModal batch={quarantineBatch} onClose={() => setQ(null)} />}
     </div>

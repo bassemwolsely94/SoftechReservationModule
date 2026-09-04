@@ -2042,6 +2042,16 @@ export const batchesApi = {
 
   // Quarantine a batch — data: { reason }
   quarantine:      (id, reason)  => api.post(`/batches/${id}/quarantine/`, { reason }),
+
+  // ── Purchase-Expiry Physical Audit ──────────────────────────────────────────
+  // Candidate worklist: body { from, to, branches?, categories?, only_in_stock?, min_qty? }
+  purchaseExpiryCandidates: (body) => api.post('/batches/purchase-expiry/candidates/', body),
+  // Backfill runs (status)
+  purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
+  // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }
+  purchaseExpirySync:       (body) => api.post('/batches/purchase-expiry/sync/', body || {}),
+  // Spawn a physical count session: body { branch, from, to, item_codes?, categories?, name? }
+  purchaseExpirySpawnCount: (body) => api.post('/batches/purchase-expiry/spawn-count/', body),
 }
 
 // ── HR Workflow ───────────────────────────────────────────────────────────────

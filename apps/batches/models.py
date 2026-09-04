@@ -224,6 +224,138 @@ class BatchMovement(models.Model):
         return f'{self.batch.batch_number} | {self.get_movement_type_display()} | {sign}{self.qty_change}'
 
 
+class PurchaseExpiryEntry(models.Model):
+    """
+    3-year local mirror of SOFTECH purchase-invoice lines (doccode '10') that
+    carry an entered expiry date (`stktrans.itemexpirydate`), from suppliers we
+    designate as "main" (trusted-expiry distributors / manufacturers).
+
+    WHY THIS EXISTS (physical near-expiry audit engine)
+    ---------------------------------------------------
+    SOFTECH's current per-batch on-hand table (`stkbalexpiry`) is not reliable —
+    expiry data-entry from non-main suppliers is arbitrary, and the current
+    on-hand batch↔expiry linkage drifts. Instead of trusting it, we trust the
+    ORIGINAL data-entry signal: "we keyed a purchase, from a trusted supplier,
+    with an expiry, during a window." Any item that (a) has such a purchase
+    entry inside a chosen period AND (b) is on-hand right now becomes a
+    candidate to physically pull off the shelf and re-verify its real expiry.
+
+    IMPORTANT: this is a HISTORY trigger, not a current-batch match. The
+    current stock does NOT have to carry the entered expiry — the entry is only
+    the reason to go and physically check.
+
+    Grain & idempotency
+    -------------------
+    One row per purchase line, batch-splits preserved via `dblitemflag`
+    (each split = its own entered expiry). The unique key makes the backfill
+    fully re-runnable: re-runs only INSERT rows that are missing (e.g. after a
+    supplier is newly re-classified as "main"), never duplicating existing ones.
+    Rows are immutable historical facts — never updated after insert.
+
+    Source: `apps/batches/queries.py` QUERY_PURCHASE_EXPIRY_WINDOW
+    Written by: `sync_purchase_expiry` management command / expiry_audit.run_backfill
+    Read by:    expiry_audit.audit_candidates → near-expiry physical audit report
+    """
+    # ── Identity (SOFTECH-native codes) ───────────────────────────────────────
+    branch_code    = models.CharField(max_length=10, db_index=True, verbose_name='كود الفرع')
+    supplier_code  = models.CharField(max_length=10, db_index=True, verbose_name='كود المورد')
+    supplier_name  = models.CharField(max_length=255, blank=True, verbose_name='اسم المورد')
+    # Denormalized from procurement.SupplierSegmentation at sync time so the
+    # report can filter by "main" category without a live join.
+    supplier_category = models.CharField(max_length=25, blank=True, db_index=True,
+                                         verbose_name='تصنيف المورد')
+    doc_number     = models.CharField(max_length=20, verbose_name='رقم الفاتورة')
+    doc_date       = models.DateField(db_index=True, verbose_name='تاريخ إدخال الفاتورة')
+    item_code      = models.CharField(max_length=6, db_index=True, verbose_name='كود الصنف')
+    item_name      = models.CharField(max_length=255, blank=True, verbose_name='اسم الصنف')
+    # dblitemflag differentiates expiry-batch splits within one (doc × item).
+    dblitemflag    = models.IntegerField(default=1, verbose_name='رقم الدفعة داخل الفاتورة')
+
+    # ── The signal ────────────────────────────────────────────────────────────
+    entered_expiry = models.DateField(db_index=True,
+                                      verbose_name='تاريخ الصلاحية المُدخَل')
+    qty            = models.DecimalField(max_digits=14, decimal_places=3, default=0,
+                                        verbose_name='الكمية المشتراة')
+    store_code     = models.CharField(max_length=5, blank=True, verbose_name='كود المخزن')
+
+    # ── Optional PG links (item/branch may not be mirrored yet) ───────────────
+    item   = models.ForeignKey(
+        'catalog.Item', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='purchase_expiry_entries', verbose_name='الصنف',
+    )
+    branch = models.ForeignKey(
+        'branches.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='purchase_expiry_entries', verbose_name='الفرع',
+    )
+
+    synced_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'إدخال صلاحية شراء'
+        verbose_name_plural = 'إدخالات صلاحية الشراء'
+        unique_together = ('branch_code', 'supplier_code', 'doc_number',
+                           'doc_date', 'item_code', 'dblitemflag')
+        indexes = [
+            models.Index(fields=['item_code', 'entered_expiry'], name='pxe_item_expiry_idx'),
+            models.Index(fields=['doc_date', 'supplier_code'],   name='pxe_date_supplier_idx'),
+            models.Index(fields=['supplier_category', 'doc_date'], name='pxe_cat_date_idx'),
+            models.Index(fields=['branch_code', 'doc_date'],      name='pxe_branch_date_idx'),
+        ]
+        ordering = ['-doc_date', 'item_code']
+
+    def __str__(self):
+        return (f'{self.item_code} exp {self.entered_expiry} '
+                f'← {self.supplier_code} doc {self.doc_number} ({self.doc_date})')
+
+
+class PurchaseExpiryAuditRun(models.Model):
+    """
+    Audit trail for one `sync_purchase_expiry` backfill run.
+
+    Supports the re-run story: the owner reclassifies more suppliers as "main"
+    over time, then re-runs the backfill so the newly-included suppliers' history
+    is pulled in. Each run records exactly which window / branches / categories /
+    supplier-set it covered and how many rows it added.
+    """
+    STATUS_CHOICES = [
+        ('running', 'يعمل'),
+        ('success', 'ناجح'),
+        ('failed',  'فشل'),
+    ]
+
+    started_at   = models.DateTimeField(auto_now_add=True)
+    finished_at  = models.DateTimeField(null=True, blank=True)
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
+
+    window_from  = models.DateField(verbose_name='من تاريخ')
+    window_to    = models.DateField(verbose_name='إلى تاريخ')
+    branch_scope = models.CharField(max_length=10, blank=True, default='',
+                                    verbose_name='الفرع (فارغ = كل الفروع)')
+    categories   = models.JSONField(default=list, verbose_name='فئات الموردين المشمولة')
+
+    suppliers_count = models.PositiveIntegerField(default=0, verbose_name='عدد الموردين')
+    lines_fetched   = models.PositiveIntegerField(default=0, verbose_name='الأسطر المقروءة')
+    lines_upserted  = models.PositiveIntegerField(default=0, verbose_name='الأسطر المضافة')
+    error_message   = models.TextField(blank=True)
+    triggered_by    = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        verbose_name        = 'تشغيل مزامنة صلاحيات الشراء'
+        verbose_name_plural = 'تشغيلات مزامنة صلاحيات الشراء'
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f'PurchaseExpiryRun #{self.pk} — {self.status} — {self.started_at:%Y-%m-%d %H:%M}'
+
+    def finish(self, status='success', error=''):
+        from django.utils import timezone as _tz
+        self.status = status
+        self.finished_at = _tz.now()
+        self.error_message = error
+        self.save(update_fields=['status', 'finished_at', 'error_message',
+                                 'suppliers_count', 'lines_fetched', 'lines_upserted'])
+
+
 class NearExpiryAlert(models.Model):
     """
     One row per (batch × threshold_days) — prevents duplicate alerts.
