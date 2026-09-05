@@ -77,3 +77,35 @@ QUERY_PURCHASE_EXPIRY_WINDOW = """
       AND sm.cust_branch_code IN ({suppliers})
       {branch_filter}
 """
+
+
+# ── Stock-IN movements per item × branch (for "age in branch" / stock-age) ────
+#
+# Every way stock ARRIVES at a branch, so we can tell how long the oldest unit
+# still on the shelf has been sitting (FIFO: newest sells last → what remains is
+# the oldest arrivals). Quarantine/expired stores (102/103/105) are excluded to
+# match the on-hand balance the report intersects with.
+#
+# Arrival doccodes (see apps/stockcount/engine.py header):
+#   10 = purchase from supplier   25 = transfer received (HQ/branch)
+#   30 = customer sales return    50 = stock-count surplus
+#
+# Grouped by (item, branch, docdate) → one row per receipt date; the caller
+# walks these newest→oldest, accumulating qty until it covers current on-hand.
+#
+# Column indices: [0] itemcode  [1] branchcode  [2] docdate  [3] qty
+#
+QUERY_STOCK_IN_MOVEMENTS = """
+    SELECT
+        st.itemcode,
+        st.branchcode,
+        st.docdate,
+        SUM(CONVERT(DECIMAL(14,3), ISNULL(st.transqty, 0))) AS qty
+    FROM SOFTECHDB9.dbo.stktrans st
+    WHERE st.doccode IN ({doccodes})
+      AND st.branchcode IN ({branches})
+      AND st.itemcode   IN ({items})
+      AND st.transqty   >  0
+      AND st.storecode  NOT IN ('102', '103', '105')
+    GROUP BY st.itemcode, st.branchcode, st.docdate
+"""

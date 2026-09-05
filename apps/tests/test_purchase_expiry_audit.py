@@ -53,6 +53,19 @@ class PureHelperTests(SimpleTestCase):
         self.assertEqual(_clean_docnumber('64550'), '64550')
         self.assertEqual(_clean_docnumber(None), '')
 
+    def test_fifo_oldest_date(self):
+        from apps.batches.expiry_audit import _fifo_oldest_date
+        # newest-first: small recent top-up on top of a big old batch
+        arr = [(_dt.date(2026, 8, 1), Decimal('10')),
+               (_dt.date(2025, 9, 1), Decimal('100'))]
+        # 50 on hand → old batch still contributes → oldest unit = Sep-2025
+        self.assertEqual(_fifo_oldest_date(arr, Decimal('50')), _dt.date(2025, 9, 1))
+        # 8 on hand → covered by the recent top-up alone → fresh
+        self.assertEqual(_fifo_oldest_date(arr, Decimal('8')), _dt.date(2026, 8, 1))
+        # no arrivals → None; arrivals < qty → earliest (oldest)
+        self.assertIsNone(_fifo_oldest_date([], Decimal('5')))
+        self.assertEqual(_fifo_oldest_date(arr, Decimal('999')), _dt.date(2025, 9, 1))
+
 
 # ── Supplier resolution (DB) ──────────────────────────────────────────────────
 
@@ -272,6 +285,44 @@ class AuditCandidatesTests(TestCase):
         codes_var = {r['item_code'] for r in rows_var}
         self.assertIn('E2', codes_var)
         self.assertNotIn('E1', codes_var)
+
+    def test_stock_age_fifo_and_sort(self):
+        # AGE1: 50 on hand = big old batch (Sep-2025) + small recent top-up
+        #       (Aug-2026) → oldest on-hand unit is STILL from Sep-2025.
+        # AGE2: 8 on hand, only a recent Aug-2026 arrival → fresh.
+        for code in ('AGE1', 'AGE2'):
+            self._entry(item_code=code, item_name=f'Item {code}', doc_number=f'AG{code}',
+                        entered_expiry=_dt.date(2026, 9, 15))
+
+        def stock(bcs, codes):
+            q = {'AGE1': Decimal('50'), 'AGE2': Decimal('8')}
+            return {('130', c): q[c] for c in codes if c in q}
+
+        def arrivals(bcs, codes):
+            data = {
+                ('130', 'AGE1'): [(_dt.date(2026, 8, 1), Decimal('10')),
+                                  (_dt.date(2025, 9, 1), Decimal('100'))],
+                ('130', 'AGE2'): [(_dt.date(2026, 8, 1), Decimal('10'))],
+            }
+            return {k: v for k, v in data.items() if k[1] in codes}
+
+        rows = audit_candidates(self.WINDOW_FROM, self.WINDOW_TO,
+                                stock_fetcher=stock, arrivals_fetcher=arrivals,
+                                sort='stock_age')
+        by = {r['item_code']: r for r in rows if r['item_code'] in ('AGE1', 'AGE2')}
+        self.assertEqual(by['AGE1']['oldest_arrival_date'], '2025-09-01')
+        self.assertEqual(by['AGE2']['oldest_arrival_date'], '2026-08-01')
+        self.assertEqual(by['AGE1']['stock_age_days'],
+                         (_dt.date.today() - _dt.date(2025, 9, 1)).days)
+        self.assertEqual(by['AGE1']['oldest_arrival_branch'], '130')
+        # Longest-sitting first
+        order = [r['item_code'] for r in rows if r['item_code'] in ('AGE1', 'AGE2')]
+        self.assertEqual(order, ['AGE1', 'AGE2'])
+
+    def test_stock_age_absent_when_not_in_stock(self):
+        rows = audit_candidates(self.WINDOW_FROM, self.WINDOW_TO, only_in_stock=False)
+        for r in rows:
+            self.assertIsNone(r['stock_age_days'])
 
     def test_branch_scope_filter(self):
         # Same item, one batch expiring in-window at a different branch.

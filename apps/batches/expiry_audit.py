@@ -27,6 +27,10 @@ logger = logging.getLogger('elrezeiky.batches')
 # Default "main / trusted-expiry" supplier categories (procurement taxonomy).
 MAIN_SUPPLIER_CATEGORIES = ('OFFICIAL_DISTRIBUTOR', 'MANUFACTURER')
 
+# Doccodes that ADD stock to a branch (an "arrival"), used for the stock-age /
+# "how long has it sat here" signal: purchase, transfer-in, sales return, surplus.
+ARRIVAL_DOCCODES = ('10', '25', '30', '50')
+
 # Guard against SOFTECH sentinel / garbage expiry dates.
 _MIN_EXPIRY_YEAR = 2000
 _MAX_EXPIRY_YEAR = 2100
@@ -242,6 +246,65 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
 
 # ── Current-stock resolver (live SOFTECH) ────────────────────────────────────
 
+def _stock_in_arrivals(branch_codes, item_codes, timeout=_QUERY_TIMEOUT):
+    """
+    Return {(branch_code, item_code): [(date, qty), ...] sorted NEWEST first}
+    for every stock-IN movement (ARRIVAL_DOCCODES) at the given branches.
+    Used to compute how long the oldest on-hand unit has been sitting (FIFO).
+    """
+    from config.sybase import get_sybase_connection
+    from .queries import QUERY_STOCK_IN_MOVEMENTS
+
+    if not branch_codes or not item_codes:
+        return {}
+
+    out = {}
+    doccodes = ', '.join(f"'{d}'" for d in ARRIVAL_DOCCODES)
+    branches = ', '.join(f"'{b}'" for b in branch_codes)
+    conn = get_sybase_connection()
+    try:
+        for chunk in _chunks(list(item_codes), _SUPPLIER_CHUNK):
+            items = ', '.join(f"'{c}'" for c in chunk)
+            sql = QUERY_STOCK_IN_MOVEMENTS.format(
+                doccodes=doccodes, branches=branches, items=items)
+            cur = conn.cursor()
+            try:
+                cur.execute(sql, timeout=timeout)
+                rows = cur.fetchall()
+            finally:
+                cur.close()
+            for r in rows:
+                ic = _str(r[0]); bc = _str(r[1])
+                d = _to_date(r[2]); q = _to_dec(r[3])
+                if ic and bc and d:
+                    out.setdefault((bc, ic), []).append((d, q))
+    finally:
+        conn.close()
+
+    for key in out:
+        out[key].sort(key=lambda t: t[0], reverse=True)   # newest first
+    return out
+
+
+def _fifo_oldest_date(arrivals, current_qty):
+    """
+    Given arrivals [(date, qty)] NEWEST-first and the current on-hand qty, return
+    the arrival date of the OLDEST unit still on hand (FIFO: newest sells last,
+    so what remains is the most-recent arrivals summing to current_qty). This is
+    robust to small recent top-ups sitting on top of a large old batch.
+    """
+    if not arrivals or current_qty is None or current_qty <= 0:
+        return None
+    cum = Decimal('0')
+    oldest = arrivals[-1][0]   # fallback: earliest, if arrivals < current_qty
+    for d, q in arrivals:      # newest → oldest
+        cum += q
+        oldest = d
+        if cum >= Decimal(str(current_qty)):
+            break
+    return oldest
+
+
 def _current_stock(branch_codes, item_codes):
     """
     Return {(branch_code, item_code): Decimal(qty)} for on-hand stock
@@ -268,6 +331,7 @@ _SORT_KEYS = {
     'unit_cost':      ('unit_cost',               True),   # most expensive first
     'retail_value':   ('retail_value',            True),
     'entry_count':    ('entry_count',             True),
+    'stock_age':      ('stock_age_days',          True),   # longest sitting in branch first
     'expiry':         ('earliest_entered_expiry', False),  # soonest entered expiry first
     'name':           ('item_name',               False),
 }
@@ -275,7 +339,8 @@ _SORT_KEYS = {
 
 def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
                      only_in_stock=True, min_qty=Decimal('0'), stock_fetcher=None,
-                     sort=None, imported_only=False, min_value_at_risk=None):
+                     sort=None, imported_only=False, min_value_at_risk=None,
+                     with_stock_age=True, arrivals_fetcher=None):
     """
     Physical near-expiry audit worklist.
 
@@ -303,7 +368,13 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
        suppliers, first_entry_date, last_entry_date, earliest_entered_expiry,
        latest_entered_expiry, has_entered_expiry_passed,
        unit_cost, pack_price, value_at_risk, retail_value, is_imported,
-       origin, medicine_type, producer, family, store_classif, pack_qty}
+       origin, medicine_type, producer, family, store_classif, pack_qty,
+       stock_age_days, oldest_arrival_date, oldest_arrival_branch}
+
+    stock_age_days = how long the OLDEST on-hand unit has sat at the branch (FIFO
+    over ARRIVAL_DOCCODES: purchase/transfer-in/return/surplus) — a higher value
+    means it's been sitting long unsold ⇒ higher near-expiry tendency. Best-effort
+    (None if the ERP lookup fails or only_in_stock is False). Sort key 'stock_age'.
     """
     from django.db.models import Count, Min, Max
     from .models import PurchaseExpiryEntry
@@ -429,7 +500,48 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             'family':         attr.get('family', ''),
             'store_classif':  attr.get('store_classif', ''),
             'pack_qty':       attr.get('pack_qty'),
+            # ── stock age in branch (filled below when only_in_stock) ──────────
+            'stock_age_days':       None,
+            'oldest_arrival_date':  None,
+            'oldest_arrival_branch': None,
         })
+
+    # ── "Age in branch" — how long the oldest on-hand unit has sat (FIFO) ──────
+    # An old arrival still on the shelf ⇒ higher near-expiry tendency. Best-effort:
+    # a flaky ERP moment leaves stock_age_days=None rather than failing the report.
+    # Only auto-hit SOFTECH for arrivals on the production path (no injected stock
+    # source); a caller that injected its own stock_fetcher must inject an
+    # arrivals_fetcher too, otherwise age is left blank (keeps tests offline).
+    if arrivals_fetcher is not None:
+        _fetch_arr = arrivals_fetcher
+    elif stock_fetcher is None:
+        _fetch_arr = _stock_in_arrivals
+    else:
+        _fetch_arr = None
+
+    if only_in_stock and with_stock_age and results and _fetch_arr is not None:
+        surviving = [r['item_code'] for r in results]
+        scope = sorted({bc for r in results for bc in r['branches_in_stock']}) or scope_branches
+        try:
+            arrivals = _fetch_arr(scope, surviving)
+        except Exception:
+            logger.exception('[PurchaseExpiry] stock-age lookup failed — leaving age blank')
+            arrivals = None
+        if arrivals:
+            for r in results:
+                best = None   # (age_days, date, branch)
+                for bc in r['branches_in_stock']:
+                    q = stock_map.get((bc, r['item_code']))
+                    d = _fifo_oldest_date(arrivals.get((bc, r['item_code'])), q)
+                    if d is None:
+                        continue
+                    age = (today - d).days
+                    if best is None or age > best[0]:
+                        best = (age, d, bc)
+                if best:
+                    r['stock_age_days']        = best[0]
+                    r['oldest_arrival_date']   = best[1].isoformat()
+                    r['oldest_arrival_branch'] = best[2]
 
     _sort_results(results, sort, only_in_stock)
     return results

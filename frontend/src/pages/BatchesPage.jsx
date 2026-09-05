@@ -113,6 +113,7 @@ function PurchaseExpiryAuditTab() {
       unit_cost:     num('unit_cost'),
       retail_value:  num('retail_value'),
       entry_count:   num('entry_count'),
+      stock_age:     num('stock_age_days'),
       expiry: (a, b) => (a.earliest_entered_expiry || '9999').localeCompare(b.earliest_entered_expiry || '9999'),
     }[sortKey] || num('value_at_risk')
     return [...out].sort(cmp)
@@ -257,6 +258,7 @@ function PurchaseExpiryAuditTab() {
             <select value={sortKey} onChange={e => setSortKey(e.target.value)}
                     className="border rounded-lg px-2 py-1.5">
               <option value="value_at_risk">ترتيب: الأكبر خسارة محتملة</option>
+              <option value="stock_age">ترتيب: الأقدم بالفرع (أطول مكوثًا)</option>
               <option value="current_qty">ترتيب: الأكبر كمية</option>
               <option value="unit_cost">ترتيب: الأغلى (تكلفة الوحدة)</option>
               <option value="retail_value">ترتيب: أعلى قيمة بيعية</option>
@@ -289,6 +291,7 @@ function PurchaseExpiryAuditTab() {
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">تكلفة الوحدة</th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">قيمة معرّضة للخطر</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600" title="مدة مكوث أقدم وحدة على الرف (تقديري FIFO)">عمر بالفرع</th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">المنشأ</th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">الفروع</th>
                   <th className="px-3 py-3 text-right font-semibold text-gray-600">صلاحية مُدخَلة (من / إلى)</th>
@@ -309,6 +312,16 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3 text-xs" title={r.oldest_arrival_date ? `أقدم وصول: ${_fmtDate(r.oldest_arrival_date)}${r.oldest_arrival_branch ? ' — فرع ' + r.oldest_arrival_branch : ''}` : ''}>
+                      {r.stock_age_days == null ? <span className="text-gray-400">—</span> : (
+                        <span className={r.stock_age_days >= 270 ? 'text-red-600 font-semibold'
+                              : r.stock_age_days >= 180 ? 'text-amber-600' : 'text-gray-600'}>
+                          {r.stock_age_days >= 60
+                            ? `~${Math.round(r.stock_age_days / 30)} شهر`
+                            : `${r.stock_age_days} يوم`}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
                     <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches_in_stock || []).join('، ') || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 text-xs">
