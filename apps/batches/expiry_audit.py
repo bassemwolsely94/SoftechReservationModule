@@ -133,10 +133,15 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
                  timeout=_QUERY_TIMEOUT):
     """
     Mirror doccode-10 purchase-with-expiry lines from main suppliers into
-    PurchaseExpiryEntry for [window_from, window_to].
+    PurchaseExpiryEntry for [window_from, window_to] — ACROSS ALL BRANCHES.
 
     run       : PurchaseExpiryAuditRun (updated with counters; caller finishes it)
-    branch    : SOFTECH branch code to restrict to, or None/'' for all branches
+    branch    : DEPRECATED / ignored. The mirror MUST hold every branch's purchase
+                entries, because purchases are received centrally (HQ store 100)
+                and then distributed — a per-branch report reads the chain-wide
+                mirror and intersects with that branch's stock. Restricting
+                ingestion to one branch would leave the mirror incomplete and
+                silently break other branches' reports, so we always mirror all.
     categories: main-supplier category codes (defaults to the two main ones)
 
     Returns a stats dict. Idempotent — safe to re-run (unique key skips dupes).
@@ -146,6 +151,10 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
     from apps.branches.models import Branch
     from .models import PurchaseExpiryEntry
     from .queries import QUERY_PURCHASE_EXPIRY_WINDOW
+
+    if branch:
+        logger.warning('[PurchaseExpiry] --branch=%s ignored — always mirroring ALL '
+                       'branches so every branch report stays complete.', branch)
 
     suppliers = resolve_main_suppliers(categories)
     if not suppliers:
@@ -162,9 +171,7 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
     item_map   = {i.softech_id: i for i in Item.objects.only('id', 'softech_id', 'name')}
     branch_map = {b.softech_branch_id: b for b in Branch.objects.only('id', 'softech_branch_id')}
 
-    branch_filter = ''
-    if branch:
-        branch_filter = f"AND sm.branchcode = '{branch}'"
+    branch_filter = ''   # always all branches — see docstring
 
     pre_count = PurchaseExpiryEntry.objects.count()
     fetched = 0

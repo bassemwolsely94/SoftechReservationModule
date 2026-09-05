@@ -53,7 +53,10 @@ class Command(BaseCommand):
         parser.add_argument('--to', dest='date_to',
                             help='End month YYYY-MM inclusive (default: this month).')
         parser.add_argument('--branch', default='',
-                            help='SOFTECH branch code to restrict to (default: all branches).')
+                            help='DEPRECATED / ignored — the mirror always holds ALL '
+                                 'branches (purchases are received centrally then '
+                                 'distributed, and per-branch reports read the '
+                                 'chain-wide mirror).')
         parser.add_argument('--categories', default='',
                             help='Comma-separated main-supplier category codes '
                                  '(default: OFFICIAL_DISTRIBUTOR,MANUFACTURER).')
@@ -85,22 +88,24 @@ class Command(BaseCommand):
 
         categories = [c.strip() for c in opts['categories'].split(',') if c.strip()] \
             or list(MAIN_SUPPLIER_CATEGORIES)
-        branch = (opts.get('branch') or '').strip()
+        if (opts.get('branch') or '').strip():
+            self.stdout.write(self.style.WARNING(
+                '--branch is ignored; mirroring ALL branches (see --help).'))
 
         self.stdout.write(self.style.NOTICE(
             f'Purchase-expiry backfill: {window_from} → {window_to} | '
-            f'branch={branch or "ALL"} | categories={",".join(categories)}'
+            f'branch=ALL | categories={",".join(categories)}'
         ))
 
         run = PurchaseExpiryAuditRun.objects.create(
             window_from=window_from, window_to=window_to,
-            branch_scope=branch, categories=categories,
+            branch_scope='', categories=categories,
             triggered_by='sync_purchase_expiry',
         )
         try:
             stats = run_backfill(
                 run, window_from, window_to,
-                branch=branch or None, categories=categories,
+                branch=None, categories=categories,
                 timeout=opts['timeout'],
             )
             run.finish('success')

@@ -121,7 +121,8 @@ def trigger_purchase_expiry_sync(request):
     """
     Kick off a purchase-expiry backfill in a background thread (admin only).
 
-    Body: years|from|to, branch, categories (all optional; mirror the CLI).
+    Body: years|from|to, categories (all optional). Always mirrors ALL branches
+    (any 'branch' is ignored — the mirror must stay chain-wide).
     Re-runnable — after re-classifying more suppliers as "main", call this again
     to pull the newly-included suppliers' history.
     """
@@ -139,18 +140,20 @@ def trigger_purchase_expiry_sync(request):
     if date_from > date_to:
         return Response({'detail': 'الفترة غير صحيحة.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    branch = (request.data.get('branch') or '').strip()
     categories = request.data.get('categories') or list(MAIN_SUPPLIER_CATEGORIES)
     triggered_by = str(request.user)
 
+    # Always mirror ALL branches — the mirror must stay complete so every branch's
+    # report works (purchases are centralized at HQ then distributed). Any 'branch'
+    # in the request is intentionally ignored.
     run = PurchaseExpiryAuditRun.objects.create(
-        window_from=date_from, window_to=date_to, branch_scope=branch,
+        window_from=date_from, window_to=date_to, branch_scope='',
         categories=categories, triggered_by=triggered_by,
     )
 
     def _run():
         try:
-            run_backfill(run, date_from, date_to, branch=branch or None,
+            run_backfill(run, date_from, date_to, branch=None,
                          categories=categories)
             run.finish('success')
         except Exception as e:   # noqa: BLE001

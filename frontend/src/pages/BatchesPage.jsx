@@ -153,7 +153,8 @@ function PurchaseExpiryAuditTab() {
   })
 
   const sync = useMutation({
-    mutationFn: () => batchesApi.purchaseExpirySync({ from, to, branch: branch || undefined }),
+    // Backfill is always chain-wide (all branches) — branch is a report-time filter only.
+    mutationFn: () => batchesApi.purchaseExpirySync({ from, to }),
     onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر بدء المزامنة'),
   })
 
