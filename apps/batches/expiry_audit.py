@@ -509,8 +509,11 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             'value_at_risk':  round(value_at_risk, 2) if value_at_risk is not None else None,
             'retail_value':   round(retail_value, 2) if retail_value is not None else None,
             'is_imported':    attr.get('is_imported', False),
+            'is_fridge':      attr.get('is_fridge', False),
             'origin':         attr.get('origin', ''),
             'medicine_type':  attr.get('medicine_type', ''),
+            'shape':          attr.get('shape', ''),
+            'effect':         attr.get('effect', ''),
             'producer':       attr.get('producer', ''),
             'family':         attr.get('family', ''),
             'store_classif':  attr.get('store_classif', ''),
@@ -568,15 +571,20 @@ def _item_attr_map(item_codes):
     out = {}
     fields = ('softech_id', 'name', 'cost_price', 'pack_price', 'is_imported',
               'origin_name_ar', 'origin_name', 'medicine_type_name_ar',
-              'producer_name', 'family_name_ar', 'family_name', 'store_classif', 'pack_qty')
+              'producer_name', 'family_name_ar', 'family_name', 'store_classif', 'pack_qty',
+              'requires_fridge', 'shape_name_ar', 'shape_name',
+              'effect_name_ar', 'effect_name')
     for it in Item.objects.filter(softech_id__in=item_codes).only(*fields):
         out[it.softech_id] = {
             'name':          it.name,
             'unit_cost':     float(it.cost_price) if it.cost_price is not None else None,
             'pack_price':    float(it.pack_price) if it.pack_price is not None else None,
             'is_imported':   bool(it.is_imported),
+            'is_fridge':     bool(getattr(it, 'requires_fridge', False)),
             'origin':        it.origin_name_ar or it.origin_name or '',
-            'medicine_type': it.medicine_type_name_ar or '',
+            'medicine_type': it.medicine_type_name_ar or '',      # التصنيف العام
+            'shape':         it.shape_name_ar or it.shape_name or '',   # الشكل الصيدلي
+            'effect':        it.effect_name_ar or it.effect_name or '', # دواعي الاستعمال
             'producer':      it.producer_name or '',
             'family':        it.family_name_ar or it.family_name or '',
             'store_classif': it.store_classif or '',

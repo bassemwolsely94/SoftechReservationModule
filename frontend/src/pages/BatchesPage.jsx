@@ -86,17 +86,52 @@ function PurchaseExpiryAuditTab() {
   const [rows, setRows]           = useState(null)
   const [err, setErr]             = useState(null)
 
-  // Client-side filter/sort (operate on the fetched rows — no SOFTECH re-hit)
+  // Client-side filters/sort (operate on the fetched rows — no SOFTECH re-hit)
   const [search, setSearch]       = useState('')
   const [importedOnly, setImp]    = useState(false)
+  const [fridgeOnly, setFridge]   = useState(false)
+  const [passedOnly, setPassed]   = useState(false)
   const [minVar, setMinVar]       = useState('')
   const [minQ, setMinQ]           = useState('')
+  const [medType, setMedType]     = useState('')
+  const [origin, setOrigin]       = useState('')
+  const [shape, setShape]         = useState('')
+  const [producer, setProducer]   = useState('')
   const [sortKey, setSortKey]     = useState('value_at_risk')
+  const [sortDir, setSortDir]     = useState('desc')
+
+  // Column meta drives BOTH the grid and the sortable headers.
+  const NUMERIC = new Set(['current_qty', 'unit_cost', 'value_at_risk', 'retail_value',
+                           'entry_count', 'stock_age_days'])
+
+  function sortBy(key) {
+    if (key === sortKey) { setSortDir(d => (d === 'desc' ? 'asc' : 'desc')); return }
+    setSortKey(key)
+    setSortDir(NUMERIC.has(key) ? 'desc' : 'asc')   // numbers: big-first; text/dates: A→Z / soonest
+  }
+  const arrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
+
+  // Distinct dropdown options built from the fetched rows.
+  const distinct = (key) => Array.from(
+    new Set((rows || []).map(r => r[key]).filter(Boolean))
+  ).sort((a, b) => String(a).localeCompare(String(b), 'ar'))
+  const opts = useMemo(() => ({
+    medType:  distinct('medicine_type'),
+    origin:   distinct('origin'),
+    shape:    distinct('shape'),
+    producer: distinct('producer'),
+  }), [rows])
 
   const displayRows = useMemo(() => {
     if (!rows) return null
-    let out = rows.filter(r => {
+    const out = rows.filter(r => {
       if (importedOnly && !r.is_imported) return false
+      if (fridgeOnly && !r.is_fridge) return false
+      if (passedOnly && !r.has_entered_expiry_passed) return false
+      if (medType && r.medicine_type !== medType) return false
+      if (origin && r.origin !== origin) return false
+      if (shape && r.shape !== shape) return false
+      if (producer && r.producer !== producer) return false
       if (minVar && (r.value_at_risk || 0) < Number(minVar)) return false
       if (minQ && (r.current_qty || 0) < Number(minQ)) return false
       if (search) {
@@ -106,18 +141,21 @@ function PurchaseExpiryAuditTab() {
       }
       return true
     })
-    const num = (k) => (a, b) => (b[k] || 0) - (a[k] || 0)   // desc, nulls last
-    const cmp = {
-      value_at_risk: num('value_at_risk'),
-      current_qty:   num('current_qty'),
-      unit_cost:     num('unit_cost'),
-      retail_value:  num('retail_value'),
-      entry_count:   num('entry_count'),
-      stock_age:     num('stock_age_days'),
-      expiry: (a, b) => (a.earliest_entered_expiry || '9999').localeCompare(b.earliest_entered_expiry || '9999'),
-    }[sortKey] || num('value_at_risk')
-    return [...out].sort(cmp)
-  }, [rows, importedOnly, minVar, minQ, search, sortKey])
+    const dir = sortDir === 'asc' ? 1 : -1
+    const isNum = NUMERIC.has(sortKey)
+    out.sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey]
+      const na = va === null || va === undefined || va === ''
+      const nb = vb === null || vb === undefined || vb === ''
+      if (na && nb) return 0
+      if (na) return 1            // missing values always last
+      if (nb) return -1
+      if (isNum) return (va - vb) * dir
+      return String(va).localeCompare(String(vb), 'ar') * dir
+    })
+    return out
+  }, [rows, importedOnly, fridgeOnly, passedOnly, medType, origin, shape, producer,
+      minVar, minQ, search, sortKey, sortDir])
 
   const totalVar = useMemo(
     () => (displayRows || []).reduce((s, r) => s + (r.value_at_risk || 0), 0),
@@ -159,9 +197,32 @@ function PurchaseExpiryAuditTab() {
   })
 
   const spawn = useMutation({
-    mutationFn: () => batchesApi.purchaseExpirySpawnCount({ branch, from, to }).then(r => r.data),
+    // Spawn a count for exactly the rows currently shown (after client filters).
+    mutationFn: () => batchesApi.purchaseExpirySpawnCount({
+      branch, from, to,
+      item_codes: (displayRows || []).map(r => r.item_code),
+    }).then(r => r.data),
     onSuccess: (data) => navigate(`/stock-count?session=${data.session_id}`),
     onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء جلسة الجرد'),
+  })
+
+  const branchLabel = branch
+    ? (branches.find(b => b.softech_branch_id === branch)?.name_ar || branch)
+    : 'كل الفروع'
+
+  const exportXlsx = useMutation({
+    mutationFn: () => batchesApi.purchaseExpiryExport({
+      items: displayRows || [], from, to, branch_label: branchLabel,
+    }),
+    onSuccess: (res) => {
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `expiry_audit_${branchLabel}_${from}_${to}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      window.URL.revokeObjectURL(url)
+    },
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر تصدير الملف'),
   })
 
   return (
@@ -243,60 +304,98 @@ function PurchaseExpiryAuditTab() {
         <div className="text-center py-14 text-gray-400">لا توجد أصناف مطابقة للمعايير.</div>
       ) : (
         <>
-          {/* Client-side filter + sort bar (no re-query) */}
+          {/* Client-side filters (no re-query) */}
           <div className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
             <input value={search} onChange={e => setSearch(e.target.value)}
                    placeholder="بحث بالاسم / الكود…"
                    className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
+            <select value={medType} onChange={e => setMedType(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
+              <option value="">التصنيف العام: الكل</option>
+              {opts.medType.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={origin} onChange={e => setOrigin(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5 max-w-[10rem]">
+              <option value="">المنشأ: الكل</option>
+              {opts.origin.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={shape} onChange={e => setShape(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5 max-w-[10rem]">
+              <option value="">الشكل: الكل</option>
+              {opts.shape.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={producer} onChange={e => setProducer(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
+              <option value="">المنتج: الكل</option>
+              {opts.producer.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
             <label className="flex items-center gap-1 text-gray-600">
               <input type="checkbox" checked={importedOnly} onChange={e => setImp(e.target.checked)} />
-              مستورد فقط
+              مستورد
+            </label>
+            <label className="flex items-center gap-1 text-gray-600">
+              <input type="checkbox" checked={fridgeOnly} onChange={e => setFridge(e.target.checked)} />
+              ❄️ ثلاجة
+            </label>
+            <label className="flex items-center gap-1 text-gray-600">
+              <input type="checkbox" checked={passedOnly} onChange={e => setPassed(e.target.checked)} />
+              منتهية فقط
             </label>
             <input type="number" value={minVar} onChange={e => setMinVar(e.target.value)}
                    placeholder="أدنى قيمة خطر" className="border rounded-lg px-2 py-1.5 w-28" />
             <input type="number" value={minQ} onChange={e => setMinQ(e.target.value)}
                    placeholder="أدنى كمية" className="border rounded-lg px-2 py-1.5 w-24" />
-            <select value={sortKey} onChange={e => setSortKey(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5">
-              <option value="value_at_risk">ترتيب: الأكبر خسارة محتملة</option>
-              <option value="stock_age">ترتيب: الأقدم بالفرع (أطول مكوثًا)</option>
-              <option value="current_qty">ترتيب: الأكبر كمية</option>
-              <option value="unit_cost">ترتيب: الأغلى (تكلفة الوحدة)</option>
-              <option value="retail_value">ترتيب: أعلى قيمة بيعية</option>
-              <option value="expiry">ترتيب: الأقرب صلاحية مُدخَلة</option>
-              <option value="entry_count">ترتيب: الأكثر إدخالات</option>
-            </select>
           </div>
 
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <p className="text-sm text-gray-600">
               عدد الأصناف: <b>{displayRows.length}</b>
               <span className="mx-2 text-gray-300">·</span>
               إجمالي القيمة المعرضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('ar-EG')} ج</b>
             </p>
-            <button
-              onClick={() => spawn.mutate()}
-              disabled={spawn.isPending || !branch}
-              title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
-              className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي لهذه الأصناف'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exportXlsx.mutate()}
+                disabled={exportXlsx.isPending || displayRows.length === 0}
+                className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
+              </button>
+              <button
+                onClick={() => spawn.mutate()}
+                disabled={spawn.isPending || !branch || displayRows.length === 0}
+                title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي لهذه الأصناف'}
+              </button>
+            </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">كود</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">تكلفة الوحدة</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">قيمة معرّضة للخطر</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600" title="مدة مكوث أقدم وحدة على الرف (تقديري FIFO)">عمر بالفرع</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">المنشأ</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">الفروع</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">صلاحية مُدخَلة (من / إلى)</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-600">إدخالات</th>
+                <tr className="bg-gray-50 border-b border-gray-200 select-none">
+                  {[
+                    ['item_code', 'كود'],
+                    ['item_name', 'الصنف'],
+                    ['current_qty', 'الكمية'],
+                    ['unit_cost', 'تكلفة الوحدة'],
+                    ['value_at_risk', 'قيمة معرّضة للخطر'],
+                    ['stock_age_days', 'عمر بالفرع'],
+                    ['medicine_type', 'التصنيف العام'],
+                    ['origin', 'المنشأ'],
+                    ['shape', 'الشكل'],
+                    ['producer', 'المنتج'],
+                    ['branches_in_stock', 'الفروع'],
+                    ['earliest_entered_expiry', 'صلاحية مُدخَلة'],
+                    ['entry_count', 'إدخالات'],
+                  ].map(([k, label]) => (
+                    <th key={k} onClick={() => sortBy(k)}
+                        className="px-3 py-3 text-right font-semibold text-gray-600 cursor-pointer hover:text-brand-700"
+                        title="اضغط للترتيب">
+                      {label}{arrow(k)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -305,10 +404,12 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3 font-mono text-xs text-gray-500">{r.item_code}</td>
                     <td className="px-3 py-3 font-medium">
                       {r.item_name || '—'}
+                      {r.is_fridge &&
+                        <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-sky-100 text-sky-700">❄️ ثلاجة</span>}
                       {r.is_imported &&
                         <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-indigo-100 text-indigo-700">مستورد</span>}
                       {r.has_entered_expiry_passed &&
-                        <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">صلاحية مُدخَلة منتهية</span>}
+                        <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">منتهية</span>}
                     </td>
                     <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
@@ -323,7 +424,10 @@ function PurchaseExpiryAuditTab() {
                         </span>
                       )}
                     </td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{r.medicine_type || '—'}</td>
                     <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{r.shape || '—'}</td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{r.producer || '—'}</td>
                     <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches_in_stock || []).join('، ') || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 text-xs">
                       {_fmtDate(r.earliest_entered_expiry)} → {_fmtDate(r.latest_entered_expiry)}

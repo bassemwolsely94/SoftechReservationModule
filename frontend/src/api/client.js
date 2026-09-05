@@ -2046,6 +2046,8 @@ export const batchesApi = {
   // ── Purchase-Expiry Physical Audit ──────────────────────────────────────────
   // Candidate worklist: body { from, to, branches?, categories?, only_in_stock?, min_qty? }
   purchaseExpiryCandidates: (body) => api.post('/batches/purchase-expiry/candidates/', body),
+  // Export the displayed rows to xlsx: body { items, from, to, branch_label }
+  purchaseExpiryExport:     (body) => api.post('/batches/purchase-expiry/export/', body, { responseType: 'blob' }),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

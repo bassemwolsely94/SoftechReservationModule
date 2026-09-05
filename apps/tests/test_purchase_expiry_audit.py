@@ -243,7 +243,9 @@ class AuditCandidatesTests(TestCase):
         Item.objects.create(softech_id='E1', name='Cheap Local',
                             cost_price=10, pack_price=15, is_imported=False)
         Item.objects.create(softech_id='E2', name='Expensive Imported',
-                            cost_price=200, pack_price=260, is_imported=True)
+                            cost_price=200, pack_price=260, is_imported=True,
+                            requires_fridge=True, shape_name_ar='قطرة',
+                            medicine_type_name_ar='عيون')
         for code in ('E1', 'E2'):
             self._entry(item_code=code, item_name='', doc_number=f'D{code}',
                         entered_expiry=_dt.date(2026, 9, 15))
@@ -262,6 +264,11 @@ class AuditCandidatesTests(TestCase):
         self.assertTrue(by['E2']['is_imported'])
         self.assertFalse(by['E1']['is_imported'])
         self.assertEqual(by['E2']['item_name'], 'Expensive Imported')  # name from catalog
+        # New filterable attributes
+        self.assertTrue(by['E2']['is_fridge'])
+        self.assertFalse(by['E1']['is_fridge'])
+        self.assertEqual(by['E2']['shape'], 'قطرة')
+        self.assertEqual(by['E2']['medicine_type'], 'عيون')
 
         # Sort by value_at_risk → E2 (2000) before E1 (1000).
         order = [r['item_code'] for r in rows if r['item_code'] in ('E1', 'E2')]

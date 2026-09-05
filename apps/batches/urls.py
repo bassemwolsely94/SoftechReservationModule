@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     StockBatchViewSet,
     purchase_expiry_candidates,
+    export_purchase_expiry,
     PurchaseExpiryRunListView,
     trigger_purchase_expiry_sync,
     spawn_expiry_count_session,
@@ -17,6 +18,8 @@ router.register(r'', StockBatchViewSet, basename='stockbatch')
 urlpatterns = [
     path('purchase-expiry/candidates/', purchase_expiry_candidates,
          name='purchase-expiry-candidates'),
+    path('purchase-expiry/export/', export_purchase_expiry,
+         name='purchase-expiry-export'),
     path('purchase-expiry/runs/', PurchaseExpiryRunListView.as_view(),
          name='purchase-expiry-runs'),
     path('purchase-expiry/sync/', trigger_purchase_expiry_sync,

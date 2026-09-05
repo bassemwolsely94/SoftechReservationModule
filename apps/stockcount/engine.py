@@ -299,28 +299,33 @@ def fetch_filtered_stock(branch_code: str, item_codes: list) -> list:
     """
     Return stock for a specific list of item_codes.
     Returns list of dicts: {item_code, item_name, item_medicine, category_name, qty}
+
+    Chunks the IN-list (Sybase ASE caps ANDs/ORs at 1024 per expression, so a
+    large IN — e.g. a 1500-item expiry-audit count — raises "Too many ANDs or ORs"
+    if sent in one go).
     """
     if not item_codes:
         return []
 
-    sql = _SQL_FILTERED_STOCK.format(
-        branch     = branch_code,
-        item_codes = _quoted_list(item_codes),
-        excluded   = _EXCLUDED_STORES,
-    )
-
-    rows = _run(sql)
-    return [
-        {
-            'item_code':     _to_str(r[0]),
-            'item_name':     _to_str(r[1]),
-            'item_medicine': _to_str(r[2]),
-            'category_name': _to_str(r[3]),
-            'qty':           _to_dec(r[4]),
-        }
-        for r in rows
-        if r[0]
-    ]
+    result = []
+    batch_size = 500
+    for i in range(0, len(item_codes), batch_size):
+        batch = item_codes[i: i + batch_size]
+        sql = _SQL_FILTERED_STOCK.format(
+            branch     = branch_code,
+            item_codes = _quoted_list(batch),
+            excluded   = _EXCLUDED_STORES,
+        )
+        for r in _run(sql):
+            if r[0]:
+                result.append({
+                    'item_code':     _to_str(r[0]),
+                    'item_name':     _to_str(r[1]),
+                    'item_medicine': _to_str(r[2]),
+                    'category_name': _to_str(r[3]),
+                    'qty':           _to_dec(r[4]),
+                })
+    return result
 
 
 # ── Public: preview items (no DB write) ──────────────────────────────────────

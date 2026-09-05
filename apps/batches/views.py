@@ -108,6 +108,100 @@ def purchase_expiry_candidates(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def export_purchase_expiry(request):
+    """
+    Export the (already filtered/sorted) audit rows the client is showing to xlsx.
+    Body: { items: [row, ...], from, to, branch_label }. Posting the displayed
+    rows keeps the file identical to what's on screen (client-side filters/sort)
+    without re-hitting SOFTECH.
+    """
+    from django.http import HttpResponse
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    items = request.data.get('items') or []
+    date_from = str(request.data.get('from') or '')
+    date_to = str(request.data.get('to') or '')
+    branch_label = str(request.data.get('branch_label') or 'كل الفروع')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'تدقيق الصلاحيات'
+    ws.sheet_view.rightToLeft = True
+
+    cols = [
+        ('كود', 'item_code', 12),
+        ('الصنف', 'item_name', 42),
+        ('الكمية الحالية', 'current_qty', 12),
+        ('تكلفة الوحدة', 'unit_cost', 12),
+        ('قيمة معرّضة للخطر', 'value_at_risk', 16),
+        ('عمر بالفرع (يوم)', 'stock_age_days', 14),
+        ('أقدم وصول', 'oldest_arrival_date', 12),
+        ('التصنيف العام', 'medicine_type', 18),
+        ('مستورد', 'is_imported', 8),
+        ('صنف ثلاجة', 'is_fridge', 9),
+        ('المنشأ', 'origin', 14),
+        ('الشكل', 'shape', 14),
+        ('المنتج', 'producer', 20),
+        ('العائلة', 'family', 20),
+        ('الفروع', 'branches_in_stock', 14),
+        ('صلاحية مُدخَلة (من)', 'earliest_entered_expiry', 14),
+        ('صلاحية مُدخَلة (إلى)', 'latest_entered_expiry', 14),
+        ('منتهية', 'has_entered_expiry_passed', 8),
+        ('عدد الإدخالات', 'entry_count', 10),
+        ('الموردون', 'suppliers', 40),
+    ]
+
+    # Title + meta
+    ws.append([f'تقرير تدقيق صلاحيات الشراء — {branch_label} — صلاحية {date_from} : {date_to}'])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
+    ws['A1'].font = Font(bold=True, size=13)
+    ws.append([])
+
+    header_row = 3
+    ws.append([c[0] for c in cols])
+    hfill = PatternFill('solid', fgColor='022871')
+    for i, c in enumerate(cols, start=1):
+        cell = ws.cell(row=header_row, column=i)
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = hfill
+        cell.alignment = Alignment(horizontal='center')
+        ws.column_dimensions[cell.column_letter].width = c[2]
+
+    def _fmt(row, key):
+        v = row.get(key)
+        if key in ('is_imported', 'is_fridge', 'has_entered_expiry_passed'):
+            return 'نعم' if v else ''
+        if key == 'branches_in_stock':
+            return '، '.join(v or [])
+        if key == 'suppliers':
+            return '، '.join(v or [])
+        return v if v is not None else ''
+
+    red = Font(color='C00000')
+    for row in items:
+        ws.append([_fmt(row, c[1]) for c in cols])
+        if row.get('has_entered_expiry_passed'):
+            for i in range(1, len(cols) + 1):
+                ws.cell(row=ws.max_row, column=i).font = red
+
+    ws.freeze_panes = f'A{header_row + 1}'
+
+    from io import BytesIO
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f'expiry_audit_{branch_label}_{date_from}_{date_to}.xlsx'.replace(' ', '_')
+    resp = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="expiry_audit.xlsx"'
+    return resp
+
+
 class PurchaseExpiryRunListView(generics.ListAPIView):
     """GET — recent purchase-expiry backfill runs (status/counters)."""
     permission_classes = [IsAuthenticated]
