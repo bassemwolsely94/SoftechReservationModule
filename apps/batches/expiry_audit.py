@@ -345,15 +345,18 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
     Physical near-expiry audit worklist.
 
     Trigger set: distinct items that have a PurchaseExpiryEntry (main supplier,
-    entered expiry) whose ENTERED EXPIRY ∈ [period_from, period_to] and whose
-    branch is in scope. The purchase itself may have happened at any time in the
-    synced mirror. Then (if only_in_stock) intersect with items on-hand right now.
+    entered expiry) whose ENTERED EXPIRY ∈ [period_from, period_to] — CHAIN-WIDE,
+    since purchases are received centrally then distributed. The purchase itself
+    may have happened at any time. Then (if only_in_stock) intersect with items
+    on-hand right now AT THE BRANCHES IN SCOPE.
 
     period_from / period_to : date objects (inclusive) — the ENTERED-EXPIRY window
                               (batches a trusted supplier logged as expiring here).
                               Purchase date (doc_date) is NOT constrained.
-    branch_codes            : list of SOFTECH branch codes, or None for all
-                              branches that appear in the mirror for this window.
+    branch_codes            : SOFTECH branch codes whose CURRENT STOCK to audit
+                              (None = all active branches). Does NOT filter the
+                              expiry trigger (which is chain-wide) — only the
+                              on-hand stock intersection.
     categories              : main-supplier categories (defaults to the two main).
     stock_fetcher           : callable(branch_codes, item_codes) → {(bc,ic): qty};
                               defaults to live SOFTECH lookup (injectable for tests).
@@ -384,13 +387,18 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
     # The period selects on the ENTERED EXPIRY date — i.e. "batches that a trusted
     # supplier's data entry says expire within [period_from, period_to]". The
     # purchase (doc_date) may have happened at ANY time in the synced mirror.
+    #
+    # NB: the expiry trigger is CHAIN-WIDE, deliberately NOT filtered by
+    # branch_codes. Purchases are received centrally (HQ store 100) and then
+    # distributed, so an item's expiring batch is recorded at HQ even though the
+    # stock sits at a selling branch. branch_codes filters CURRENT STOCK only
+    # (below) — filtering the mirror by the stock branch would wrongly drop every
+    # centrally-purchased item.
     qs = PurchaseExpiryEntry.objects.filter(
         entered_expiry__gte=period_from,
         entered_expiry__lte=period_to,
         supplier_category__in=cats,
     )
-    if branch_codes:
-        qs = qs.filter(branch_code__in=branch_codes)
 
     # Aggregate per item across the window/scope.
     agg = (

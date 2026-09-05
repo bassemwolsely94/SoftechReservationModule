@@ -237,12 +237,14 @@ def spawn_expiry_count_session(request):
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     # Backfill the entered-expiry hint (earliest keyed expiry within the window)
-    # onto each snapshot. Filters on entered_expiry — same semantics as the report.
+    # onto each snapshot. Chain-wide (NOT filtered by branch) — purchases are
+    # received centrally then distributed, so the expiry entry lives at HQ while
+    # the stock sits at this branch. Same semantics as the report.
     from django.db.models import Min
     cats = categories or list(MAIN_SUPPLIER_CATEGORIES)
     hint_qs = (
         PurchaseExpiryEntry.objects
-        .filter(branch_code=branch, entered_expiry__gte=date_from, entered_expiry__lte=date_to,
+        .filter(entered_expiry__gte=date_from, entered_expiry__lte=date_to,
                 supplier_category__in=cats, item_code__in=codes)
         .values('item_code').annotate(hint=Min('entered_expiry'))
     )

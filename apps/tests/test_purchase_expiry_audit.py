@@ -324,15 +324,29 @@ class AuditCandidatesTests(TestCase):
         for r in rows:
             self.assertIsNone(r['stock_age_days'])
 
-    def test_branch_scope_filter(self):
-        # Same item, one batch expiring in-window at a different branch.
-        self._entry(item_code='A100', branch_code='160', doc_number='2000',
-                    dblitemflag=1, entered_expiry=_dt.date(2026, 9, 18))
+    def test_branch_scope_filters_stock_not_mirror(self):
+        # A100's purchase-expiry entries are all at br130 (setUp), mimicking
+        # central HQ purchasing. The item is physically IN STOCK at br160.
+        # Auditing br160 must still surface it — the expiry trigger is chain-wide;
+        # branch_codes only scopes CURRENT STOCK.
+        def stock160(bcs, codes):   # respects requested scope, like _current_stock
+            return {('160', c): Decimal('5') for c in codes if c == 'A100' and '160' in bcs}
         rows = audit_candidates(
             self.WINDOW_FROM, self.WINDOW_TO, branch_codes=['160'],
-            stock_fetcher=self._stock({'A100'}),
+            stock_fetcher=stock160, with_stock_age=False,
         )
         a100 = [r for r in rows if r['item_code'] == 'A100']
         self.assertEqual(len(a100), 1)
-        # Only the branch-160 entry counted (branch-130 rows filtered out).
-        self.assertEqual(a100[0]['entry_count'], 1)
+        self.assertEqual(a100[0]['branches_in_stock'], ['160'])
+        # entry_count reflects the chain-wide in-window entries (2), not br160's.
+        self.assertEqual(a100[0]['entry_count'], 2)
+
+    def test_branch_scope_excludes_when_not_in_stock_there(self):
+        # In stock only at br130; auditing br160 → not present.
+        def stock130(bcs, codes):
+            return {('130', c): Decimal('5') for c in codes if c == 'A100' and '130' in bcs}
+        rows = audit_candidates(
+            self.WINDOW_FROM, self.WINDOW_TO, branch_codes=['160'],
+            stock_fetcher=stock130, with_stock_age=False,
+        )
+        self.assertNotIn('A100', {r['item_code'] for r in rows})
