@@ -144,7 +144,8 @@ class ItemPriceChangeRequest(models.Model):
     # Source channel — distinguishes module requests from imported batches
     source = models.CharField(
         max_length=20,
-        choices=[('manual', 'يدوي'), ('import', 'استيراد ملف'), ('rollback', 'تراجع')],
+        choices=[('manual', 'يدوي'), ('import', 'استيراد ملف'), ('rollback', 'تراجع'),
+                 ('near_expiry', 'قرب انتهاء الصلاحية')],
         default='manual', db_index=True, verbose_name='مصدر الطلب',
     )
 

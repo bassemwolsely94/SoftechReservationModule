@@ -99,13 +99,93 @@ def purchase_expiry_candidates(request):
         return Response({'detail': f'خطأ أثناء توليد التقرير: {e}'},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+    from apps.config.models import SystemSetting
     return Response({
         'from': date_from.isoformat(), 'to': date_to.isoformat(),
         'branches': branches or 'ALL',
         'only_in_stock': only_in_stock,
         'count': len(rows),
         'items': rows,
+        # A5.2: whether the "request markdown" action is enabled (default OFF)
+        'markdown_enabled': bool(SystemSetting.get('near_expiry_markdown_enabled', False)),
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def purchase_expiry_request_markdown(request):
+    """
+    A5.2 — create a PENDING near-expiry markdown request in the EXISTING
+    discount-approvals channel (special_discp). A human approves it there, which
+    triggers the established SOFTECH writeback; reversal uses that module's
+    rollback. Nothing is written to SOFTECH here — this only files the request.
+
+    Gated by SystemSetting 'near_expiry_markdown_enabled' (default OFF).
+    Body: { item_code (required), discount_pct (required), days_to_expiry?, branch?, reason? }
+    """
+    from apps.config.models import SystemSetting
+    if not SystemSetting.get('near_expiry_markdown_enabled', False):
+        return Response({'detail': 'خصم قرب انتهاء الصلاحية غير مُفعّل من الإعدادات.'},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    from apps.catalog.models import Item
+    from apps.discount_approvals.models import ItemPriceChangeRequest, USER_EDITABLE_FIELDS
+
+    item_code = str(request.data.get('item_code') or '').strip()
+    try:
+        discount_pct = round(float(request.data.get('discount_pct')), 2)
+    except (TypeError, ValueError):
+        return Response({'detail': 'discount_pct مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not (0 < discount_pct <= 100):
+        return Response({'detail': 'نسبة الخصم يجب أن تكون بين 0 و100.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    item = Item.objects.filter(softech_id=item_code).first()
+    if not item:
+        return Response({'detail': 'الصنف غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Idempotent: one OPEN near-expiry markdown per item (no stacking / double-post).
+    existing = ItemPriceChangeRequest.objects.filter(
+        item=item, source='near_expiry',
+        status__in=[ItemPriceChangeRequest.STATUS_PENDING,
+                    ItemPriceChangeRequest.STATUS_APPROVED],
+    ).first()
+    if existing:
+        return Response({'detail': f'يوجد طلب خصم قائم لهذا الصنف (#{existing.pk}).',
+                         'request_id': existing.pk}, status=status.HTTP_409_CONFLICT)
+
+    # Snapshot current priceable values exactly like the discount-approvals create view.
+    old_values = {}
+    for dj, _, _ in USER_EDITABLE_FIELDS:
+        v = getattr(item, dj, None)
+        old_values[dj] = str(v) if v is not None else '0'
+    for af in ('pack_price_tax', 'unit_price'):
+        v = getattr(item, af, None)
+        old_values[af] = str(v) if v is not None else '0'
+
+    days = request.data.get('days_to_expiry')
+    branch = str(request.data.get('branch') or '').strip()
+    extra = str(request.data.get('reason') or '').strip()
+    reason = (f"خصم قرب انتهاء الصلاحية {discount_pct}% (خصم خاص) — {item.name} — "
+              f"أيام حتى الصلاحية: {days} — فرع: {branch or 'الكل'}. "
+              f"يُسمح بالبيع تحت التكلفة للتصريف."
+              + (f" | {extra}" if extra else ''))
+
+    obj = ItemPriceChangeRequest.objects.create(
+        item=item, requested_by=request.user,
+        old_values=old_values,
+        new_values={'special_discp': str(discount_pct)},
+        reason=reason, source='near_expiry',
+        status=ItemPriceChangeRequest.STATUS_PENDING,
+    )
+    try:
+        from apps.discount_approvals.notify import notify_admins_new_request
+        notify_admins_new_request(obj)
+    except Exception:
+        logger.exception('notify_admins_new_request failed for markdown #%s', obj.pk)
+
+    return Response({'detail': 'تم إنشاء طلب الخصم — بانتظار الاعتماد في «اعتماد الأسعار».',
+                     'request_id': obj.pk}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])

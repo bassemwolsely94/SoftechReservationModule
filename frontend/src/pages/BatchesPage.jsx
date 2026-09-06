@@ -195,6 +195,8 @@ function PurchaseExpiryAuditTab() {
   const [rows, setRows]           = useState(null)
   const [err, setErr]             = useState(null)
   const [rebalanceRow, setRebal]  = useState(null)   // row being rebalanced (A4 modal)
+  const [mdEnabled, setMdEnabled] = useState(false)  // A5.2 markdown feature flag
+  const [mdRequested, setMdReq]   = useState(() => new Set())  // item_codes already requested
 
   // Client-side filters/sort (operate on the fetched rows — no SOFTECH re-hit)
   const [search, setSearch]       = useState('')
@@ -308,8 +310,18 @@ function PurchaseExpiryAuditTab() {
       branches: branch ? [branch] : undefined,
       only_in_stock: onlyInStock,
     }).then(r => r.data),
-    onSuccess: (data) => { setRows(data.items || []); setErr(null) },
+    onSuccess: (data) => { setRows(data.items || []); setMdEnabled(!!data.markdown_enabled); setMdReq(new Set()); setErr(null) },
     onError:   (e)    => setErr(e.response?.data?.detail || 'تعذّر توليد التقرير'),
+  })
+
+  const requestMarkdown = useMutation({
+    mutationFn: (r) => batchesApi.purchaseExpiryRequestMarkdown({
+      item_code: r.item_code, discount_pct: r.markdown_discount_pct,
+      days_to_expiry: r.days_to_expiry,
+      branch: branch || r.branches_in_stock?.[0] || '',
+    }),
+    onSuccess: (_res, r) => setMdReq(s => new Set(s).add(r.item_code)),
+    onError:   (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء طلب الخصم'),
   })
 
   const sync = useMutation({
@@ -599,9 +611,27 @@ function PurchaseExpiryAuditTab() {
                     </td>
                     <td className="px-3 py-3">{r.entry_count}</td>
                     <td className="px-3 py-3">
-                      <button onClick={() => setRebal(r)}
-                              className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
-                              title="اقتراح إعادة توزيع بين الفروع">↔ تحويل</button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setRebal(r)}
+                                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                title="اقتراح إعادة توزيع بين الفروع">↔ تحويل</button>
+                        {mdEnabled && r.markdown_discount_pct != null && (
+                          mdRequested.has(r.item_code)
+                            ? <span className="text-green-600 text-xs">✓ طُلب الخصم</span>
+                            : <button
+                                onClick={() => {
+                                  const below = r.unit_cost != null && r.markdown_net_price != null && r.markdown_net_price < r.unit_cost
+                                  if (window.confirm(
+                                    `طلب خصم خاص ${r.markdown_discount_pct}% على «${r.item_name}» `
+                                    + `(سعر بعد الخصم ${r.markdown_net_price} ج${below ? ' — أقل من التكلفة (تصريف)' : ''}).\n`
+                                    + `سيُرسَل للاعتماد في «اعتماد الأسعار» ولن يُطبَّق في SOFTECH إلا بعد الموافقة.`))
+                                    requestMarkdown.mutate(r)
+                                }}
+                                disabled={requestMarkdown.isPending}
+                                className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                                title="طلب خصم قرب انتهاء الصلاحية (يتطلب اعتماد)">💲 طلب خصم</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

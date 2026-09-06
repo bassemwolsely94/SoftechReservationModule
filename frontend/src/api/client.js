@@ -2054,6 +2054,8 @@ export const batchesApi = {
   purchaseExpiryRebalanceSuggest: (body) => api.post('/batches/purchase-expiry/rebalance-suggest/', body),
   // Expiry-prone items (procurement feedback): params { months_back?, short_dated_months?, min_short_pct? }
   purchaseExpiryProneItems: (params) => api.get('/batches/purchase-expiry/expiry-prone/', { params }),
+  // A5.2 request a near-expiry markdown (pending discount-approval): body { item_code, discount_pct, days_to_expiry?, branch? }
+  purchaseExpiryRequestMarkdown: (body) => api.post('/batches/purchase-expiry/request-markdown/', body),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

@@ -24,6 +24,45 @@ from apps.stockcount.engine import apply_single_count
 from .factories import make_admin
 
 
+class RequestMarkdownTests(TestCase):
+    """A5.2 — near-expiry markdown request lands in the discount-approvals channel
+    as a PENDING special_discp change, gated by a runtime flag."""
+    URL = '/api/batches/purchase-expiry/request-markdown/'
+
+    def setUp(self):
+        self.user, self.profile, self.client = make_admin('md_admin')
+        from apps.catalog.models import Item
+        self.item = Item.objects.create(
+            softech_id='MD1', name='Item MD1', cost_price=Decimal('10'),
+            pack_price=Decimal('20'), special_discp=Decimal('0'))
+
+    def _enable(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.create(
+            key='near_expiry_markdown_enabled', value='true', value_type='boolean')
+
+    def test_forbidden_when_flag_off(self):
+        r = self.client.post(self.URL, {'item_code': 'MD1', 'discount_pct': 15}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_creates_pending_special_discp_and_dedups(self):
+        from apps.discount_approvals.models import ItemPriceChangeRequest
+        self._enable()
+        r = self.client.post(self.URL,
+                             {'item_code': 'MD1', 'discount_pct': 15, 'days_to_expiry': 20},
+                             format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+        obj = ItemPriceChangeRequest.objects.get(pk=r.data['request_id'])
+        self.assertEqual(obj.source, 'near_expiry')
+        self.assertEqual(obj.new_values, {'special_discp': '15.0'})
+        self.assertEqual(obj.status, ItemPriceChangeRequest.STATUS_PENDING)
+        # No SOFTECH write on creation
+        self.assertEqual(obj.executed_values, {})
+        # Idempotent — a second open request is rejected
+        r2 = self.client.post(self.URL, {'item_code': 'MD1', 'discount_pct': 10}, format='json')
+        self.assertEqual(r2.status_code, status.HTTP_409_CONFLICT)
+
+
 class ApplySingleCountExpiryTests(TestCase):
     def setUp(self):
         self.session = StockCountSession.objects.create(
