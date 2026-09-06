@@ -1888,6 +1888,16 @@ def _run_expiry_worklists():
         logger.error('[APScheduler] expiry worklists failed: %s', exc)
 
 
+def _run_markdown_revert_reminders():
+    """Weekly reminder to review reverting stale near-expiry markdowns."""
+    try:
+        from django.core.management import call_command
+        call_command('remind_markdown_reversals', verbosity=0)
+        logger.info('[APScheduler] markdown-revert reminders sent')
+    except Exception as exc:
+        logger.error('[APScheduler] markdown-revert reminders failed: %s', exc)
+
+
 def _send_followup_reminders():
     """Fire reminder notifications for FollowUpTask records whose reminder_at has passed."""
     try:
@@ -2748,6 +2758,12 @@ def start_scheduler():
     _scheduler.add_job(
         _run_expiry_worklists, 'cron', day_of_week='sun', hour=8, minute=0,
         id='expiry_worklists', replace_existing=True, max_instances=1,
+        misfire_grace_time=3600,
+    )
+    # Weekly reminder to revert stale near-expiry markdowns (Sunday 08:30).
+    _scheduler.add_job(
+        _run_markdown_revert_reminders, 'cron', day_of_week='sun', hour=8, minute=30,
+        id='markdown_revert_reminders', replace_existing=True, max_instances=1,
         misfire_grace_time=3600,
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────

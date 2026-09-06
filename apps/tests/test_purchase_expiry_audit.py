@@ -18,7 +18,7 @@ from django.test import SimpleTestCase, TestCase
 from apps.batches.expiry_audit import (
     _month_chunks, _valid_expiry, _clean_docnumber, _compute_risk,
     resolve_main_suppliers, audit_candidates, supplier_scorecard, rebalance_suggest,
-    detect_short_dated, expiry_prone_items, _markdown_reco,
+    detect_short_dated, expiry_prone_items, _markdown_reco, remind_markdown_reversals,
 )
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
@@ -145,6 +145,35 @@ class SupplierScorecardTests(TestCase):
         by = {r['supplier_code']: r for r in rows}
         self.assertEqual(by['S1']['short_dated_lines'], 2)
         self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
+
+class MarkdownRevertReminderTests(TestCase):
+    """A5.2 follow-on — flag stale, un-reverted near-expiry markdowns."""
+
+    def _req(self, item, u, status_, executed_at, source='near_expiry', rolled_from=None):
+        from apps.discount_approvals.models import ItemPriceChangeRequest
+        return ItemPriceChangeRequest.objects.create(
+            item=item, requested_by=u, old_values={}, new_values={'special_discp': '15'},
+            reason='near-expiry', source=source, status=status_,
+            erp_executed_at=executed_at, rolled_back_from=rolled_from)
+
+    def test_only_stale_unreverted_flagged(self):
+        from django.contrib.auth import get_user_model
+        from django.utils import timezone
+        from apps.catalog.models import Item
+        u = get_user_model().objects.create_user(username='mru', password='x')
+        old = timezone.now() - _dt.timedelta(days=120)
+        now = timezone.now()
+
+        i1 = Item.objects.create(softech_id='RV1', name='Rev1')
+        self._req(i1, u, 'executed', old)                       # stale, unreverted → flagged
+        i2 = Item.objects.create(softech_id='RV2', name='Rev2')
+        self._req(i2, u, 'executed', now)                       # recent → not flagged
+        i3 = Item.objects.create(softech_id='RV3', name='Rev3')
+        r3 = self._req(i3, u, 'executed', old)                  # stale but rolled back → not flagged
+        self._req(i3, u, 'executed', old, source='rollback', rolled_from=r3)
+
+        self.assertEqual(remind_markdown_reversals(grace_days=90), 1)
 
 
 class NearExpiryIncentiveSeedTests(TestCase):

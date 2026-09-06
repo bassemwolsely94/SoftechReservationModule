@@ -868,6 +868,66 @@ def rebalance_suggest(item_code, from_branch, days_to_expiry,
     }
 
 
+# ── A5.2 follow-on: remind to revert stale near-expiry markdowns ──────────────
+
+def remind_markdown_reversals(grace_days=None):
+    """
+    Near-expiry markdowns are one-way price cuts; once the batch has cleared/expired
+    the discount should be reverted (via the discount-approvals rollback) so the
+    item doesn't stay discounted forever. This reminds purchasing to review any
+    EXECUTED near-expiry markdown that has been live longer than the grace window
+    and has NOT been rolled back. Reminder only — never auto-reverts a SOFTECH price.
+    """
+    import datetime as _d
+    from django.utils import timezone
+    from apps.discount_approvals.models import ItemPriceChangeRequest
+
+    if grace_days is None:
+        try:
+            from apps.config.models import SystemSetting
+            grace_days = int(SystemSetting.get('near_expiry_markdown_revert_days', 90) or 90)
+        except Exception:
+            grace_days = 90
+
+    cutoff = timezone.now() - _d.timedelta(days=grace_days)
+    reqs = list(
+        ItemPriceChangeRequest.objects
+        .filter(source='near_expiry',
+                status=ItemPriceChangeRequest.STATUS_EXECUTED,
+                erp_executed_at__lt=cutoff,
+                rollbacks__isnull=True)          # not yet reverted
+        .select_related('item').order_by('erp_executed_at')
+    )
+    if not reqs:
+        return 0
+
+    try:
+        from apps.notifications.models import Notification
+        from apps.users.models import StaffProfile
+    except Exception:
+        return len(reqs)
+
+    lines = [f"{r.item.name} — خصم منذ {r.erp_executed_at.date()} (طلب #{r.pk})"
+             for r in reqs[:15]]
+    body = (f"{len(reqs)} خصم قرب انتهاء صلاحية مضى عليه أكثر من {grace_days} يومًا دون تراجع — "
+            f"راجِع إلغاء الخصم من «اعتماد الأسعار» إن كان المخزون قد صُرِّف:\n\n"
+            + "\n".join(lines))
+    if len(reqs) > 15:
+        body += f"\n… و{len(reqs) - 15} أخرى."
+
+    iso = _d.date.today().isocalendar()
+    dedup = f"markdown_revert_review_{iso[0]}W{iso[1]}"
+    for r in StaffProfile.objects.filter(role__in=['purchasing', 'admin'], is_active=True):
+        try:
+            Notification.objects.create(
+                recipient=r, notification_type='system',
+                title=f"↩️ مراجعة إلغاء خصومات قرب الصلاحية ({len(reqs)})",
+                body=body, dedup_key=dedup)
+        except Exception:
+            logger.exception('markdown-revert reminder failed for %s', getattr(r, 'pk', '?'))
+    return len(reqs)
+
+
 # ── C1: short-dated-at-receipt detection + alert ──────────────────────────────
 
 def detect_short_dated(since_dt=None, threshold_months=SHORT_DATED_MONTHS,
@@ -1064,8 +1124,8 @@ def _notify_branch_worklist(branch, rows, top_n, today):
 
     iso = today.isocalendar()
     dedup = f"expiry_worklist_{branch.softech_branch_id}_{iso[0]}W{iso[1]}"
-    recipients = StaffProfile.objects.filter(
-        branch=branch, role__in=['pharmacist', 'supervisor'], is_active=True)
+    recipients = list(StaffProfile.objects.filter(
+        branch=branch, role__in=['pharmacist', 'supervisor'], is_active=True))
     n = 0
     for r in recipients:
         try:
@@ -1076,7 +1136,39 @@ def _notify_branch_worklist(branch, rows, top_n, today):
             n += 1
         except Exception:
             logger.exception('worklist notify failed for %s', getattr(r, 'pk', '?'))
+
+    _maybe_whatsapp_worklist(recipients, bname, len(rows), body)
     return n
+
+
+def _maybe_whatsapp_worklist(recipients, bname, count, body):
+    """Best-effort WhatsApp delivery of the worklist — ONLY when the feature flag
+    is on, and only to managers who opted in and have a phone. WhatsApp rides on
+    top of the (already-sent) in-app notification, so a send failure is non-fatal.
+    NOTE: proactive WhatsApp business messages generally require an approved
+    template / an open 24h session window; send_text is attempted best-effort."""
+    try:
+        from apps.config.models import SystemSetting
+        if not SystemSetting.get('expiry_worklist_whatsapp_enabled', False):
+            return
+        optins = [r for r in recipients
+                  if getattr(r, 'notify_expiry_worklist_wa', False) and (r.phone or '').strip()]
+        if not optins:
+            return
+        from apps.whatsapp.sender import WhatsAppSender
+        sender = WhatsAppSender()
+        if not sender.is_configured():
+            logger.warning('[PurchaseExpiry] WhatsApp not configured — worklist WA skipped')
+            return
+        text = f"🗓️ قائمة صلاحيات الأسبوع — {bname} ({count} صنف)\n\n{body}"
+        for r in optins:
+            try:
+                sender.send_text(wa_id=r.phone.strip(), body=text)
+            except Exception:
+                logger.exception('[PurchaseExpiry] worklist WhatsApp send failed for %s',
+                                 getattr(r, 'pk', '?'))
+    except Exception:
+        logger.exception('[PurchaseExpiry] worklist WhatsApp step failed')
 
 
 def _item_attr_map(item_codes):

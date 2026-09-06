@@ -133,6 +133,13 @@ class StaffProfile(models.Model):
     phone    = models.CharField(max_length=20, blank=True, verbose_name='الهاتف')
     is_active = models.BooleanField(default=True, verbose_name='نشط')
 
+    # Opt-in: also push the weekly near-expiry worklist to this manager on WhatsApp
+    # (in addition to the in-app notification). Requires `phone` set + the feature
+    # flag `expiry_worklist_whatsapp_enabled`. Off by default (outward messaging).
+    notify_expiry_worklist_wa = models.BooleanField(
+        default=False, verbose_name='إشعار قائمة الصلاحيات عبر واتساب',
+    )
+
     # Branch access flags
     access_all_branches = models.BooleanField(
         default=False,
