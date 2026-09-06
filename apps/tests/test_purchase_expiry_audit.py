@@ -18,7 +18,7 @@ from django.test import SimpleTestCase, TestCase
 from apps.batches.expiry_audit import (
     _month_chunks, _valid_expiry, _clean_docnumber, _compute_risk,
     resolve_main_suppliers, audit_candidates, supplier_scorecard, rebalance_suggest,
-    detect_short_dated, expiry_prone_items,
+    detect_short_dated, expiry_prone_items, _markdown_reco,
 )
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
@@ -91,6 +91,22 @@ class PureHelperTests(SimpleTestCase):
         # No qty → blank
         self.assertIsNone(_compute_risk(None, 5.0, 30, 2.0)['risk_tier'])
 
+    def test_markdown_reco(self):
+        # Normal: 20 days left → 25% band, well above margin floor
+        r = _markdown_reco(100.0, 200.0, 20)
+        self.assertEqual(r['markdown_discount_pct'], 25.0)
+        self.assertEqual(r['markdown_net_price'], 150.0)
+        # Margin floor clamps the discount (cost near price)
+        r = _markdown_reco(180.0, 200.0, 20)
+        self.assertLess(r['markdown_discount_pct'], 25.0)     # clamped below ladder
+        self.assertGreaterEqual(r['markdown_net_price'], 180.0)   # never below cost
+        # Expiry too far out → no markdown
+        self.assertIsNone(_markdown_reco(100.0, 200.0, 200)['markdown_discount_pct'])
+        # Already expired → no markdown
+        self.assertIsNone(_markdown_reco(100.0, 200.0, -1)['markdown_discount_pct'])
+        # Price barely above cost → can't discount without breaching floor
+        self.assertIsNone(_markdown_reco(199.0, 200.0, 20)['markdown_discount_pct'])
+
 
 # ── Supplier resolution (DB) ──────────────────────────────────────────────────
 
@@ -129,6 +145,34 @@ class SupplierScorecardTests(TestCase):
         by = {r['supplier_code']: r for r in rows}
         self.assertEqual(by['S1']['short_dated_lines'], 2)
         self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
+
+class NearExpiryIncentiveSeedTests(TestCase):
+    """A5.3 — seed a near-expiry staff incentive via the existing engine."""
+
+    def test_seed_creates_inactive_program_and_rule(self):
+        from django.core.management import call_command
+        from apps.incentives.models import IncentiveProgram, IncentiveRule
+
+        call_command('seed_near_expiry_incentive', days=90, percent=2.5, verbosity=0)
+        prog = IncentiveProgram.objects.get(name='حافز تصريف قرب انتهاء الصلاحية')
+        self.assertFalse(prog.is_active)                     # inactive by default (pays money)
+        rule = IncentiveRule.objects.get(program=prog)
+        self.assertEqual(rule.expiry_within_days, 90)
+        self.assertEqual(float(rule.incentive_value), 2.5)
+        self.assertEqual(rule.incentive_type, 'percent')
+
+        # Idempotent — re-run adds no duplicates
+        call_command('seed_near_expiry_incentive', days=90, percent=2.5, verbosity=0)
+        self.assertEqual(IncentiveProgram.objects.filter(
+            name='حافز تصريف قرب انتهاء الصلاحية').count(), 1)
+        self.assertEqual(IncentiveRule.objects.filter(program=prog).count(), 1)
+
+    def test_seed_activate_flag(self):
+        from django.core.management import call_command
+        from apps.incentives.models import IncentiveProgram
+        call_command('seed_near_expiry_incentive', name='NE Active', activate=True, verbosity=0)
+        self.assertTrue(IncentiveProgram.objects.get(name='NE Active').is_active)
 
 
 class ShortDatedAndProneTests(TestCase):

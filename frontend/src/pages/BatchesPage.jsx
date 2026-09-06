@@ -213,7 +213,8 @@ function PurchaseExpiryAuditTab() {
 
   // Column meta drives BOTH the grid and the sortable headers.
   const NUMERIC = new Set(['current_qty', 'unit_cost', 'value_at_risk', 'retail_value',
-                           'entry_count', 'stock_age_days', 'expected_loss', 'days_to_expiry'])
+                           'entry_count', 'stock_age_days', 'expected_loss', 'days_to_expiry',
+                           'markdown_discount_pct'])
   const RISK_RANK = { expired: 4, critical: 3, high: 2, medium: 1, low: 0 }
 
   function sortBy(key) {
@@ -514,6 +515,7 @@ function PurchaseExpiryAuditTab() {
                     ['current_qty', 'الكمية'],
                     ['unit_cost', 'تكلفة الوحدة'],
                     ['value_at_risk', 'قيمة معرّضة للخطر'],
+                    ['markdown_discount_pct', 'خصم مقترح'],
                     ...(hasRisk ? [
                       ['risk_tier', 'الخطورة'],
                       ['expected_loss', 'خسارة متوقعة'],
@@ -553,6 +555,14 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3 text-xs">
+                      {r.markdown_discount_pct == null ? <span className="text-gray-400">—</span> : (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700"
+                              title={`السعر بعد الخصم: ${r.markdown_net_price} ج · هامش ${r.markdown_margin_pct}%`}>
+                          −{r.markdown_discount_pct}%
+                        </span>
+                      )}
+                    </td>
                     {hasRisk && <>
                       <td className="px-3 py-3">
                         {r.risk_tier ? (

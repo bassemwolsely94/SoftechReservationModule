@@ -40,6 +40,50 @@ SHORT_DATED_MONTHS  = 6
 # C1: only alert on deliveries received within this recent window.
 RECENT_RECEIPT_DAYS = 45
 
+# A5.1 — near-expiry markdown RECOMMENDATION (recommend-only; deterministic policy
+# ladder, NOT a demand forecast). A full admin-managed MarkdownPolicy model lands
+# with A5.2 (the approval-gated writeback); these defaults drive the suggestion.
+MARKDOWN_MIN_MARGIN_PCT = 5.0     # never recommend below cost + this margin
+MARKDOWN_MAX_PCT        = 40.0    # hard cap on any recommended discount
+# (days-to-expiry upper bound, discount %) — first band that fits wins.
+MARKDOWN_LADDER = [(30, 25.0), (60, 15.0), (90, 10.0), (180, 5.0)]
+
+
+def _markdown_reco(unit_cost, pack_price, days_to_expiry):
+    """
+    Deterministic near-expiry markdown suggestion. Picks a discount from the
+    policy ladder by days-to-expiry, then CLAMPS it so the net price never drops
+    below cost × (1 + MARKDOWN_MIN_MARGIN_PCT) — i.e. we never recommend selling
+    at a loss. Recommend-only; no price is changed here.
+    Returns {markdown_discount_pct, markdown_net_price, markdown_margin_pct} (all
+    None when a markdown doesn't apply / can't stay above the margin floor).
+    """
+    blank = {'markdown_discount_pct': None, 'markdown_net_price': None,
+             'markdown_margin_pct': None}
+    if not pack_price or pack_price <= 0 or days_to_expiry is None or days_to_expiry <= 0:
+        return blank                       # expired/no price → not a markdown case
+    base = 0.0
+    for bound, disc in MARKDOWN_LADDER:
+        if days_to_expiry <= bound:
+            base = disc
+            break
+    if base <= 0:
+        return blank                       # expiry too far out — no markdown yet
+    cost = unit_cost or 0
+    if cost > 0:
+        floor_price = cost * (1 + MARKDOWN_MIN_MARGIN_PCT / 100.0)
+        max_allowed = (1 - floor_price / pack_price) * 100.0 if pack_price > floor_price else 0.0
+    else:
+        max_allowed = MARKDOWN_MAX_PCT     # unknown cost → cap only
+    disc = min(base, max_allowed, MARKDOWN_MAX_PCT)
+    if disc <= 0.5:
+        return blank                       # can't discount without breaching the floor
+    disc = round(disc, 1)
+    net = round(pack_price * (1 - disc / 100.0), 2)
+    margin = round((net - cost) / net * 100.0, 1) if net > 0 else None
+    return {'markdown_discount_pct': disc, 'markdown_net_price': net,
+            'markdown_margin_pct': margin}
+
 # Sybase IN-list cap and PG bulk-insert batch size.
 _SUPPLIER_CHUNK = 400
 _BULK_BATCH     = 1000
@@ -581,6 +625,7 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             velocity = sum(vel_map.get((ic, bc), 0.0) for bc in branches_in_stock) / 90.0
         d2e = (row['earliest_expiry'] - today).days if row['earliest_expiry'] else None
         risk = _compute_risk(qf, unit_cost, d2e, velocity)
+        markdown = _markdown_reco(unit_cost, pack_price, d2e)   # A5.1 recommend-only
 
         results.append({
             'item_code':                ic,
@@ -616,6 +661,10 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             'expected_unsold_qty': risk['expected_unsold_qty'],
             'expected_loss':       risk['expected_loss'],
             'risk_tier':           risk['risk_tier'],
+            # ── markdown recommendation (A5.1, recommend-only) ─────────────────
+            'markdown_discount_pct': markdown['markdown_discount_pct'],
+            'markdown_net_price':    markdown['markdown_net_price'],
+            'markdown_margin_pct':   markdown['markdown_margin_pct'],
             # ── stock age in branch (filled below when only_in_stock) ──────────
             'stock_age_days':       None,
             'oldest_arrival_date':  None,
