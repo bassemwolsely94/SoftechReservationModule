@@ -2048,6 +2048,8 @@ export const batchesApi = {
   purchaseExpiryCandidates: (body) => api.post('/batches/purchase-expiry/candidates/', body),
   // Export the displayed rows to xlsx: body { items, from, to, branch_label }
   purchaseExpiryExport:     (body) => api.post('/batches/purchase-expiry/export/', body, { responseType: 'blob' }),
+  // Supplier dating scorecard: params { months_back?, short_dated_months?, categories? }
+  purchaseExpirySupplierScorecard: (params) => api.get('/batches/purchase-expiry/supplier-scorecard/', { params }),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

@@ -15,8 +15,8 @@ from decimal import Decimal
 from django.test import SimpleTestCase, TestCase
 
 from apps.batches.expiry_audit import (
-    _month_chunks, _valid_expiry, _clean_docnumber,
-    resolve_main_suppliers, audit_candidates,
+    _month_chunks, _valid_expiry, _clean_docnumber, _compute_risk,
+    resolve_main_suppliers, audit_candidates, supplier_scorecard,
 )
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
@@ -66,8 +66,68 @@ class PureHelperTests(SimpleTestCase):
         self.assertIsNone(_fifo_oldest_date([], Decimal('5')))
         self.assertEqual(_fifo_oldest_date(arr, Decimal('999')), _dt.date(2025, 9, 1))
 
+    def test_compute_risk(self):
+        # Already expired → whole qty is loss, tier 'expired'
+        r = _compute_risk(10.0, 5.0, -1, 2.0)
+        self.assertEqual(r['risk_tier'], 'expired')
+        self.assertEqual(r['expected_unsold_qty'], 10.0)
+        self.assertEqual(r['expected_loss'], 50.0)
+        # Sells through in time → tier 'low', no loss
+        r = _compute_risk(10.0, 5.0, 100, 1.0)          # 100 days × 1/day covers 10
+        self.assertEqual(r['risk_tier'], 'low')
+        self.assertEqual(r['expected_loss'], 0.0)
+        # Mostly won't sell → 'critical'
+        r = _compute_risk(100.0, 5.0, 10, 1.0)          # sells 10, 90 unsold → 90%
+        self.assertEqual(r['risk_tier'], 'critical')
+        self.assertEqual(r['expected_unsold_qty'], 90.0)
+        self.assertEqual(r['expected_loss'], 450.0)
+        # Partial → 'medium'
+        r = _compute_risk(100.0, 5.0, 10, 7.0)          # sells 70, 30 unsold → 30%
+        self.assertEqual(r['risk_tier'], 'medium')
+        # Velocity unknown (engine not run) & not expired → blank
+        self.assertIsNone(_compute_risk(10.0, 5.0, 30, None)['risk_tier'])
+        # No qty → blank
+        self.assertIsNone(_compute_risk(None, 5.0, 30, 2.0)['risk_tier'])
+
 
 # ── Supplier resolution (DB) ──────────────────────────────────────────────────
+
+class SupplierScorecardTests(TestCase):
+    """B2 — shelf-life-at-receipt aggregation per main supplier (pure PG)."""
+
+    def _entry(self, code, sup, cat, doc, exp, item='X1'):
+        PurchaseExpiryEntry.objects.create(
+            branch_code='100', supplier_code=sup, supplier_name=f'Sup {sup}',
+            supplier_category=cat, doc_number=code, doc_date=doc,
+            item_code=item, item_name=item, dblitemflag=1, entered_expiry=exp,
+            qty=Decimal('5'),
+        )
+
+    def setUp(self):
+        # S1 (main): one short-dated (3mo) + one long (24mo) → 50% short
+        self._entry('1', 'S1', 'OFFICIAL_DISTRIBUTOR', _dt.date(2026, 1, 1), _dt.date(2026, 4, 1), item='A')
+        self._entry('2', 'S1', 'OFFICIAL_DISTRIBUTOR', _dt.date(2026, 1, 1), _dt.date(2028, 1, 1), item='B')
+        # S9 (non-main) → excluded from the default (main-only) scorecard
+        self._entry('3', 'S9', 'SMALL_WAREHOUSE', _dt.date(2026, 1, 1), _dt.date(2026, 3, 1), item='A')
+
+    def test_scorecard_main_only_and_percentages(self):
+        rows = supplier_scorecard(short_dated_months=6)
+        by = {r['supplier_code']: r for r in rows}
+        self.assertIn('S1', by)
+        self.assertNotIn('S9', by)                    # non-main excluded
+        self.assertEqual(by['S1']['lines'], 2)
+        self.assertEqual(by['S1']['items'], 2)
+        self.assertEqual(by['S1']['short_dated_lines'], 1)
+        self.assertEqual(by['S1']['pct_short_dated'], 50.0)
+        self.assertEqual(by['S1']['min_shelf_months'], 3.0)   # 90 days
+
+    def test_scorecard_threshold_widens_short_dated(self):
+        # With a 30-month threshold, BOTH lines count as short-dated.
+        rows = supplier_scorecard(short_dated_months=30)
+        by = {r['supplier_code']: r for r in rows}
+        self.assertEqual(by['S1']['short_dated_lines'], 2)
+        self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
 
 class ResolveMainSuppliersTests(TestCase):
 

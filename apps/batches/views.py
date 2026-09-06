@@ -202,6 +202,33 @@ def export_purchase_expiry(request):
     return resp
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def purchase_expiry_supplier_scorecard(request):
+    """
+    B2 — supplier dating scorecard: how well-dated is each main supplier's stock?
+    Query: ?months_back=&short_dated_months=&categories=a,b  (all optional).
+    Read-only, pure PG aggregation over the mirror.
+    """
+    from .expiry_audit import supplier_scorecard
+
+    def _int(name):
+        v = request.query_params.get(name)
+        try:
+            return int(v) if v not in (None, '') else None
+        except ValueError:
+            return None
+
+    cats = request.query_params.get('categories')
+    categories = [c.strip() for c in cats.split(',') if c.strip()] if cats else None
+    rows = supplier_scorecard(
+        categories=categories,
+        months_back=_int('months_back'),
+        short_dated_months=_int('short_dated_months') or 6,
+    )
+    return Response({'count': len(rows), 'suppliers': rows})
+
+
 class PurchaseExpiryRunListView(generics.ListAPIView):
     """GET — recent purchase-expiry backfill runs (status/counters)."""
     permission_classes = [IsAuthenticated]

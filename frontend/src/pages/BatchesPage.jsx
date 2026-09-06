@@ -23,6 +23,13 @@ function _defaultExpiryTo() {
 function _fmtDate(s) {
   return s ? new Date(s).toLocaleDateString('ar-EG') : '—'
 }
+const RISK_BADGE = {
+  expired:  { label: 'منتهية', cls: 'bg-red-200 text-red-900' },
+  critical: { label: 'حرجة',   cls: 'bg-red-100 text-red-700' },
+  high:     { label: 'عالية',  cls: 'bg-amber-100 text-amber-800' },
+  medium:   { label: 'متوسطة', cls: 'bg-yellow-100 text-yellow-800' },
+  low:      { label: 'منخفضة', cls: 'bg-green-100 text-green-700' },
+}
 
 function KpiCard({ label, value, sub, color = 'text-gray-900' }) {
   return (
@@ -97,17 +104,19 @@ function PurchaseExpiryAuditTab() {
   const [origin, setOrigin]       = useState('')
   const [shape, setShape]         = useState('')
   const [producer, setProducer]   = useState('')
+  const [riskFilter, setRiskFilter] = useState('')     // '' | 'atrisk' | 'critical'
   const [sortKey, setSortKey]     = useState('value_at_risk')
   const [sortDir, setSortDir]     = useState('desc')
 
   // Column meta drives BOTH the grid and the sortable headers.
   const NUMERIC = new Set(['current_qty', 'unit_cost', 'value_at_risk', 'retail_value',
-                           'entry_count', 'stock_age_days'])
+                           'entry_count', 'stock_age_days', 'expected_loss', 'days_to_expiry'])
+  const RISK_RANK = { expired: 4, critical: 3, high: 2, medium: 1, low: 0 }
 
   function sortBy(key) {
     if (key === sortKey) { setSortDir(d => (d === 'desc' ? 'asc' : 'desc')); return }
     setSortKey(key)
-    setSortDir(NUMERIC.has(key) ? 'desc' : 'asc')   // numbers: big-first; text/dates: A→Z / soonest
+    setSortDir((NUMERIC.has(key) || key === 'risk_tier') ? 'desc' : 'asc')   // numbers/risk: big-first; text/dates: A→Z / soonest
   }
   const arrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
@@ -128,6 +137,8 @@ function PurchaseExpiryAuditTab() {
       if (importedOnly && !r.is_imported) return false
       if (fridgeOnly && !r.is_fridge) return false
       if (passedOnly && !r.has_entered_expiry_passed) return false
+      if (riskFilter === 'atrisk' && !['expired', 'critical', 'high'].includes(r.risk_tier)) return false
+      if (riskFilter === 'critical' && !['expired', 'critical'].includes(r.risk_tier)) return false
       if (medType && r.medicine_type !== medType) return false
       if (origin && r.origin !== origin) return false
       if (shape && r.shape !== shape) return false
@@ -142,9 +153,11 @@ function PurchaseExpiryAuditTab() {
       return true
     })
     const dir = sortDir === 'asc' ? 1 : -1
-    const isNum = NUMERIC.has(sortKey)
+    const isRisk = sortKey === 'risk_tier'
+    const isNum = NUMERIC.has(sortKey) || isRisk
     out.sort((a, b) => {
-      const va = a[sortKey], vb = b[sortKey]
+      const va = isRisk ? RISK_RANK[a.risk_tier] : a[sortKey]
+      const vb = isRisk ? RISK_RANK[b.risk_tier] : b[sortKey]
       const na = va === null || va === undefined || va === ''
       const nb = vb === null || vb === undefined || vb === ''
       if (na && nb) return 0
@@ -154,13 +167,18 @@ function PurchaseExpiryAuditTab() {
       return String(va).localeCompare(String(vb), 'ar') * dir
     })
     return out
-  }, [rows, importedOnly, fridgeOnly, passedOnly, medType, origin, shape, producer,
+  }, [rows, importedOnly, fridgeOnly, passedOnly, riskFilter, medType, origin, shape, producer,
       minVar, minQ, search, sortKey, sortDir])
 
   const totalVar = useMemo(
     () => (displayRows || []).reduce((s, r) => s + (r.value_at_risk || 0), 0),
     [displayRows],
   )
+  const totalExpLoss = useMemo(
+    () => (displayRows || []).reduce((s, r) => s + (r.expected_loss || 0), 0),
+    [displayRows],
+  )
+  const hasRisk = useMemo(() => (rows || []).some(r => r.risk_tier), [rows])
 
   const { data: branchesData } = useQuery({
     queryKey: ['branches', 'all-for-audit'],
@@ -309,6 +327,14 @@ function PurchaseExpiryAuditTab() {
             <input value={search} onChange={e => setSearch(e.target.value)}
                    placeholder="بحث بالاسم / الكود…"
                    className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
+            {hasRisk && (
+              <select value={riskFilter} onChange={e => setRiskFilter(e.target.value)}
+                      className="border rounded-lg px-2 py-1.5">
+                <option value="">الخطورة: الكل</option>
+                <option value="critical">حرجة / منتهية</option>
+                <option value="atrisk">عالية فأعلى</option>
+              </select>
+            )}
             <select value={medType} onChange={e => setMedType(e.target.value)}
                     className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
               <option value="">التصنيف العام: الكل</option>
@@ -351,7 +377,11 @@ function PurchaseExpiryAuditTab() {
             <p className="text-sm text-gray-600">
               عدد الأصناف: <b>{displayRows.length}</b>
               <span className="mx-2 text-gray-300">·</span>
-              إجمالي القيمة المعرضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('ar-EG')} ج</b>
+              قيمة معرّضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('ar-EG')} ج</b>
+              {hasRisk && <>
+                <span className="mx-2 text-gray-300">·</span>
+                خسارة متوقعة: <b className="text-red-700">{Math.round(totalExpLoss).toLocaleString('ar-EG')} ج</b>
+              </>}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -381,6 +411,11 @@ function PurchaseExpiryAuditTab() {
                     ['current_qty', 'الكمية'],
                     ['unit_cost', 'تكلفة الوحدة'],
                     ['value_at_risk', 'قيمة معرّضة للخطر'],
+                    ...(hasRisk ? [
+                      ['risk_tier', 'الخطورة'],
+                      ['expected_loss', 'خسارة متوقعة'],
+                      ['days_to_expiry', 'أيام للصلاحية'],
+                    ] : []),
                     ['stock_age_days', 'عمر بالفرع'],
                     ['medicine_type', 'التصنيف العام'],
                     ['origin', 'المنشأ'],
@@ -414,6 +449,22 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
                     <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('ar-EG') : '—'}</td>
+                    {hasRisk && <>
+                      <td className="px-3 py-3">
+                        {r.risk_tier ? (
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${RISK_BADGE[r.risk_tier]?.cls || 'bg-gray-100 text-gray-600'}`}
+                                title={r.days_to_sellout != null ? `أيام حتى النفاد (بالمعدل): ${r.days_to_sellout}` : ''}>
+                            {RISK_BADGE[r.risk_tier]?.label || r.risk_tier}
+                          </span>
+                        ) : <span className="text-gray-400 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-3 font-semibold text-red-700">{r.expected_loss != null ? Math.round(r.expected_loss).toLocaleString('ar-EG') : '—'}</td>
+                      <td className="px-3 py-3 text-xs">
+                        {r.days_to_expiry == null ? '—'
+                          : r.days_to_expiry <= 0 ? <span className="text-red-700 font-semibold">منتهية</span>
+                          : <span className={r.days_to_expiry <= 30 ? 'text-red-600' : r.days_to_expiry <= 90 ? 'text-amber-600' : 'text-gray-600'}>{r.days_to_expiry} يوم</span>}
+                      </td>
+                    </>}
                     <td className="px-3 py-3 text-xs" title={r.oldest_arrival_date ? `أقدم وصول: ${_fmtDate(r.oldest_arrival_date)}${r.oldest_arrival_branch ? ' — فرع ' + r.oldest_arrival_branch : ''}` : ''}>
                       {r.stock_age_days == null ? <span className="text-gray-400">—</span> : (
                         <span className={r.stock_age_days >= 270 ? 'text-red-600 font-semibold'
@@ -439,6 +490,96 @@ function PurchaseExpiryAuditTab() {
             </table>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+
+// ── Supplier dating scorecard tab (B2) ────────────────────────────────────────
+function SupplierScorecardTab() {
+  const [shortDated, setShortDated] = useState(6)
+  const [monthsBack, setMonthsBack] = useState('')
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['batches', 'supplier-scorecard', shortDated, monthsBack],
+    queryFn: () => batchesApi.purchaseExpirySupplierScorecard({
+      short_dated_months: shortDated,
+      months_back: monthsBack || undefined,
+    }).then(r => r.data),
+  })
+  const rows = data?.suppliers || []
+
+  return (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-900 leading-relaxed">
+        يقيس هذا الجدول <b>جودة تواريخ الصلاحية</b> التي يورّدها كل موزّع رئيسي —
+        <b> مدة الصلاحية المتبقية عند الاستلام</b> (تاريخ الصلاحية المُدخَل − تاريخ الشراء).
+        الموردون ذوو النسبة الأعلى من التوريد <b>قصير الأجل</b> يتصدّرون القائمة —
+        ورقة تفاوض لتحسين شروط التوريد والمرتجعات.
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 mb-4 text-sm">
+        <label>
+          <span className="block text-gray-500 mb-1">حد «قصير الأجل» (شهور)</span>
+          <input type="number" value={shortDated} min={1}
+                 onChange={e => setShortDated(Number(e.target.value) || 6)}
+                 className="border rounded-lg px-3 py-2 w-24" />
+        </label>
+        <label>
+          <span className="block text-gray-500 mb-1">آخر (شهور) — فارغ = الكل</span>
+          <input type="number" value={monthsBack} min={1}
+                 onChange={e => setMonthsBack(e.target.value)}
+                 placeholder="الكل" className="border rounded-lg px-3 py-2 w-28" />
+        </label>
+        <button onClick={() => refetch()} disabled={isFetching}
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+          {isFetching ? 'جاري…' : 'تحديث'}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-center py-14 text-gray-400">
+          لا توجد بيانات — شغّل مزامنة صلاحيات الشراء أولًا من تبويب التدقيق.
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">المورد</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">التصنيف</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">متوسط الصلاحية عند الاستلام</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">أقل صلاحية</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">عدد الأسطر</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">أصناف</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(s => (
+                <tr key={s.supplier_code} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-3 font-medium">{s.supplier_name || s.supplier_code}</td>
+                  <td className="px-3 py-3 text-gray-500 text-xs">{s.category}</td>
+                  <td className="px-3 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      s.pct_short_dated >= 30 ? 'bg-red-100 text-red-700'
+                        : s.pct_short_dated >= 15 ? 'bg-amber-100 text-amber-800'
+                        : 'bg-green-100 text-green-700'}`}>
+                      {s.pct_short_dated}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">{(s.short_dated_lines || 0).toLocaleString('ar-EG')}</td>
+                  <td className="px-3 py-3">{s.avg_shelf_months != null ? `${s.avg_shelf_months} شهر` : '—'}</td>
+                  <td className="px-3 py-3 text-gray-600">{s.min_shelf_months != null ? `${s.min_shelf_months} شهر` : '—'}</td>
+                  <td className="px-3 py-3">{(s.lines || 0).toLocaleString('ar-EG')}</td>
+                  <td className="px-3 py-3">{(s.items || 0).toLocaleString('ar-EG')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
@@ -493,6 +634,7 @@ export default function BatchesPage() {
           { key: 'alerts', label: '🚨 تنبيهات الانتهاء' },
           { key: 'list',   label: '📦 قائمة الدفعات'   },
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
+          { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
@@ -630,6 +772,7 @@ export default function BatchesPage() {
       )}
 
       {tab === 'audit' && <PurchaseExpiryAuditTab />}
+      {tab === 'suppliers' && <SupplierScorecardTab />}
 
       {quarantineBatch && <QuarantineModal batch={quarantineBatch} onClose={() => setQ(null)} />}
     </div>

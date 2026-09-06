@@ -339,9 +339,74 @@ _SORT_KEYS = {
     'retail_value':   ('retail_value',            True),
     'entry_count':    ('entry_count',             True),
     'stock_age':      ('stock_age_days',          True),   # longest sitting in branch first
+    'expected_loss':  ('expected_loss',           True),   # biggest projected write-off first
+    'days_to_expiry': ('days_to_expiry',          False),  # soonest to expire first
     'expiry':         ('earliest_entered_expiry', False),  # soonest entered expiry first
     'name':           ('item_name',               False),
 }
+
+
+def _velocity_map(item_codes, branch_codes):
+    """
+    Return ({(item_code, branch_code): monthly_qty_90d_rate}, have_metrics: bool)
+    from the latest demand-engine run (purchasing.ItemDemandMetrics — a PG mirror,
+    no SOFTECH hit). qty_90d is the net 90-day sales quantity; velocity/day is
+    derived by the caller (qty_90d / 90). have_metrics=False means the demand
+    engine has never run → risk scoring is left blank rather than assumed.
+    """
+    from django.db.models import Max
+    from apps.purchasing.models import ItemDemandMetrics
+
+    latest = ItemDemandMetrics.objects.aggregate(m=Max('calc_date'))['m']
+    if latest is None:
+        return {}, False
+    rows = (ItemDemandMetrics.objects
+            .filter(calc_date=latest,
+                    item__softech_id__in=item_codes,
+                    branch__softech_branch_id__in=branch_codes)
+            .values_list('item__softech_id', 'branch__softech_branch_id', 'qty_90d'))
+    out = {}
+    for ic, bc, q90 in rows:
+        out[(str(ic), str(bc))] = float(q90 or 0)
+    return out, True
+
+
+def _compute_risk(qty, unit_cost, days_to_expiry, velocity_per_day):
+    """
+    Deterministic expiry-risk for one item: will the on-hand qty sell before it
+    expires, and what's the expected write-off if not?
+
+    velocity_per_day : units sold per day (None = demand engine hasn't run).
+    Returns dict of risk fields (all None when inputs are insufficient).
+    """
+    blank = dict(days_to_expiry=days_to_expiry, velocity_per_day=velocity_per_day,
+                 days_to_sellout=None, expected_unsold_qty=None,
+                 expected_loss=None, risk_tier=None)
+    if qty is None or days_to_expiry is None:
+        return blank
+    uc = unit_cost or 0
+    if days_to_expiry <= 0:                       # already past its recorded expiry
+        return dict(days_to_expiry=days_to_expiry, velocity_per_day=velocity_per_day,
+                    days_to_sellout=None, expected_unsold_qty=round(qty, 2),
+                    expected_loss=round(qty * uc, 2) if uc else None,
+                    risk_tier='expired')
+    if velocity_per_day is None:
+        return blank
+    projected_sold = velocity_per_day * days_to_expiry
+    unsold = max(0.0, qty - projected_sold)
+    sellout = (qty / velocity_per_day) if velocity_per_day > 0 else None
+    frac = (unsold / qty) if qty > 0 else 0
+    tier = ('low' if frac <= 0.001 else
+            'critical' if frac >= 0.75 else
+            'high' if frac >= 0.40 else 'medium')
+    return dict(
+        days_to_expiry=days_to_expiry,
+        velocity_per_day=round(velocity_per_day, 3),
+        days_to_sellout=round(sellout, 1) if sellout is not None else None,
+        expected_unsold_qty=round(unsold, 2),
+        expected_loss=round(unsold * uc, 2) if uc else None,
+        risk_tier=tier,
+    )
 
 
 def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
@@ -461,6 +526,11 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
     # Economics + attributes from the PG catalog mirror (one query, no SOFTECH).
     item_map = _item_attr_map(item_codes)
 
+    # Sales velocity (for expiry-risk scoring) from the latest demand-engine run.
+    vel_map, vel_known = ({}, False)
+    if only_in_stock:
+        vel_map, vel_known = _velocity_map(item_codes, scope_branches)
+
     today = _dt.date.today()
     results = []
     for ic, row in per_item.items():
@@ -491,6 +561,13 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
         if min_value_at_risk is not None and (value_at_risk or 0) < float(min_value_at_risk):
             continue
 
+        # Expiry-risk score: will it sell before the (earliest in-window) expiry?
+        velocity = None
+        if vel_known and qf is not None:
+            velocity = sum(vel_map.get((ic, bc), 0.0) for bc in branches_in_stock) / 90.0
+        d2e = (row['earliest_expiry'] - today).days if row['earliest_expiry'] else None
+        risk = _compute_risk(qf, unit_cost, d2e, velocity)
+
         results.append({
             'item_code':                ic,
             'item_name':                names.get(ic, '') or attr.get('name', ''),
@@ -518,6 +595,13 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             'family':         attr.get('family', ''),
             'store_classif':  attr.get('store_classif', ''),
             'pack_qty':       attr.get('pack_qty'),
+            # ── expiry-risk score (A2) ─────────────────────────────────────────
+            'days_to_expiry':      risk['days_to_expiry'],
+            'velocity_per_day':    risk['velocity_per_day'],
+            'days_to_sellout':     risk['days_to_sellout'],
+            'expected_unsold_qty': risk['expected_unsold_qty'],
+            'expected_loss':       risk['expected_loss'],
+            'risk_tier':           risk['risk_tier'],
             # ── stock age in branch (filled below when only_in_stock) ──────────
             'stock_age_days':       None,
             'oldest_arrival_date':  None,
@@ -563,6 +647,69 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
 
     _sort_results(results, sort, only_in_stock)
     return results
+
+
+# ── B2: Supplier dating scorecard ─────────────────────────────────────────────
+
+def supplier_scorecard(categories=None, months_back=None, short_dated_months=6):
+    """
+    Per main-supplier: how well-dated is the stock they deliver? Pure PG
+    aggregation over PurchaseExpiryEntry (shelf-life-at-receipt = entered_expiry −
+    purchase date). A negotiation lever — suppliers who consistently ship
+    short-dated goods drive avoidable expiry loss.
+
+    months_back        : only count purchases from the last N months (None = all mirror).
+    short_dated_months : a line is "short-dated" if shelf life at receipt < this.
+
+    Returns list[dict] sorted worst-first (highest % short-dated), each:
+      {supplier_code, supplier_name, category, lines, items, avg_shelf_months,
+       min_shelf_months, short_dated_lines, pct_short_dated}
+    """
+    import datetime as _d
+    from django.db.models import (F, ExpressionWrapper, DurationField, Count, Avg,
+                                  Min, Q)
+    from .models import PurchaseExpiryEntry
+
+    cats = list(categories) if categories else list(MAIN_SUPPLIER_CATEGORIES)
+    qs = PurchaseExpiryEntry.objects.filter(supplier_category__in=cats)
+    if months_back:
+        cutoff = _d.date.today() - _d.timedelta(days=int(months_back) * 30)
+        qs = qs.filter(doc_date__gte=cutoff)
+
+    shelf = ExpressionWrapper(F('entered_expiry') - F('doc_date'),
+                              output_field=DurationField())
+    short_cut = _d.timedelta(days=int(short_dated_months) * 30)
+    qs = qs.annotate(shelf=shelf)
+
+    agg = (qs.values('supplier_code', 'supplier_name', 'supplier_category')
+             .annotate(
+                 lines=Count('id'),
+                 items=Count('item_code', distinct=True),
+                 avg_shelf=Avg('shelf'),
+                 min_shelf=Min('shelf'),
+                 short_dated_lines=Count('id', filter=Q(shelf__lt=short_cut)),
+             ))
+
+    def _months(td):
+        return round(td.days / 30.0, 1) if td is not None else None
+
+    out = []
+    for r in agg:
+        lines = r['lines'] or 0
+        short = r['short_dated_lines'] or 0
+        out.append({
+            'supplier_code':    r['supplier_code'],
+            'supplier_name':    r['supplier_name'],
+            'category':         r['supplier_category'],
+            'lines':            lines,
+            'items':            r['items'],
+            'avg_shelf_months': _months(r['avg_shelf']),
+            'min_shelf_months': _months(r['min_shelf']),
+            'short_dated_lines': short,
+            'pct_short_dated':  round(100.0 * short / lines, 1) if lines else 0.0,
+        })
+    out.sort(key=lambda x: (-x['pct_short_dated'], x['avg_shelf_months'] or 999))
+    return out
 
 
 def _item_attr_map(item_codes):
