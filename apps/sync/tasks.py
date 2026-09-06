@@ -1877,6 +1877,17 @@ def _run_purchase_expiry_sync():
         logger.error('[APScheduler] purchase-expiry sync failed: %s', exc)
 
 
+def _run_expiry_worklists():
+    """Weekly per-branch near-expiry worklist → in-app notification to branch
+    managers (D4). Resilient per branch; deduped per ISO week."""
+    try:
+        from django.core.management import call_command
+        call_command('send_expiry_worklists', verbosity=0)
+        logger.info('[APScheduler] expiry worklists sent')
+    except Exception as exc:
+        logger.error('[APScheduler] expiry worklists failed: %s', exc)
+
+
 def _send_followup_reminders():
     """Fire reminder notifications for FollowUpTask records whose reminder_at has passed."""
     try:
@@ -2732,6 +2743,12 @@ def start_scheduler():
     _scheduler.add_job(
         _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Weekly per-branch near-expiry worklist → branch managers (Sunday 08:00, D4).
+    _scheduler.add_job(
+        _run_expiry_worklists, 'cron', day_of_week='sun', hour=8, minute=0,
+        id='expiry_worklists', replace_existing=True, max_instances=1,
+        misfire_grace_time=3600,
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).

@@ -952,6 +952,84 @@ def expiry_prone_items(months_back=12, short_dated_months=SHORT_DATED_MONTHS,
     return out[:int(limit)]
 
 
+# ── D4: scheduled per-branch expiry worklist → notifications ───────────────────
+
+def generate_branch_worklists(back_days=30, ahead_days=90, top_n=25,
+                              categories=None, notify=True):
+    """
+    For each active/operational branch, build a near-term expiry worklist (items
+    expiring from `back_days` ago through `ahead_days` ahead, still in stock,
+    ranked by expected loss) and push ONE summary in-app notification to that
+    branch's managers (pharmacist/supervisor). Resilient per branch (a flaky ERP
+    link on one branch never blocks the others). Deduped per (branch, ISO week).
+
+    Returns a summary dict. WhatsApp delivery can be layered on top (omni/whatsapp)
+    once staff numbers/opt-in are configured — deliberately not auto-sent here.
+    """
+    import datetime as _d
+    from apps.branches.models import Branch
+
+    today = _d.date.today()
+    frm = today - _d.timedelta(days=int(back_days))
+    to = today + _d.timedelta(days=int(ahead_days))
+    summary = {'branches_scanned': 0, 'branches_with_items': 0,
+               'notified': 0, 'errors': 0}
+
+    for b in Branch.objects.filter(is_active=True, is_operational=True):
+        bc = b.softech_branch_id
+        try:
+            rows = audit_candidates(frm, to, branch_codes=[bc], only_in_stock=True,
+                                    categories=categories, sort='expected_loss',
+                                    with_stock_age=False)
+        except Exception:
+            logger.exception('[PurchaseExpiry] worklist failed for branch %s', bc)
+            summary['errors'] += 1
+            continue
+        summary['branches_scanned'] += 1
+        if not rows:
+            continue
+        summary['branches_with_items'] += 1
+        if notify:
+            summary['notified'] += _notify_branch_worklist(b, rows, top_n, today)
+    return summary
+
+
+def _notify_branch_worklist(branch, rows, top_n, today):
+    try:
+        from apps.notifications.models import Notification
+        from apps.users.models import StaffProfile
+    except Exception:
+        return 0
+
+    bname = getattr(branch, 'name_ar', '') or branch.softech_branch_id
+    total_var = sum(r.get('value_at_risk') or 0 for r in rows)
+    total_loss = sum(r.get('expected_loss') or 0 for r in rows)
+    lines = [f"{r['item_name'] or r['item_code']} — كمية {r['current_qty']} — "
+             f"انتهاء {r['earliest_entered_expiry']}" for r in rows[:15]]
+    body = (f"{len(rows)} صنف قارب على انتهاء الصلاحية بفرع {bname} — "
+            f"قيمة معرّضة {round(total_var):,} ج"
+            + (f"، خسارة متوقعة {round(total_loss):,} ج" if total_loss else "")
+            + ":\n\n" + "\n".join(lines))
+    if len(rows) > 15:
+        body += f"\n… و{len(rows) - 15} أخرى — افتح «تدقيق صلاحيات الشراء»."
+
+    iso = today.isocalendar()
+    dedup = f"expiry_worklist_{branch.softech_branch_id}_{iso[0]}W{iso[1]}"
+    recipients = StaffProfile.objects.filter(
+        branch=branch, role__in=['pharmacist', 'supervisor'], is_active=True)
+    n = 0
+    for r in recipients:
+        try:
+            Notification.objects.create(
+                recipient=r, notification_type='system',
+                title=f"🗓️ قائمة صلاحيات الأسبوع — {bname} ({len(rows)})",
+                body=body, dedup_key=dedup)
+            n += 1
+        except Exception:
+            logger.exception('worklist notify failed for %s', getattr(r, 'pk', '?'))
+    return n
+
+
 def _item_attr_map(item_codes):
     """{itemcode: {economics + attributes}} from the PG catalog.Item mirror."""
     from apps.catalog.models import Item

@@ -11,6 +11,7 @@ inject a fake stock fetcher, so the core selection logic ("purchase-entry trigge
 """
 import datetime as _dt
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
 
@@ -175,6 +176,31 @@ class ShortDatedAndProneTests(TestCase):
         self.assertTrue(rows['P1']['reorder_review'])
         self.assertEqual(rows['P2']['pct_short_dated'], 0.0)
         self.assertFalse(rows['P2']['reorder_review'])
+
+
+class BranchWorklistTests(TestCase):
+    """D4 — weekly per-branch worklist notifies branch managers (audit mocked)."""
+
+    def test_worklist_notifies_branch_managers(self):
+        from apps.notifications.models import Notification
+        from apps.batches import expiry_audit
+        from .factories import make_branch, make_pharmacist
+
+        b = make_branch(name='النزهة', softech_id='130')
+        _, prof, _ = make_pharmacist('ph_worklist', branch=b)
+        rows = [{
+            'item_code': 'X1', 'item_name': 'Item X1', 'current_qty': 5,
+            'earliest_entered_expiry': '2026-10-31',
+            'value_at_risk': 100.0, 'expected_loss': 80.0,
+        }]
+        with patch.object(expiry_audit, 'audit_candidates', return_value=rows):
+            summary = expiry_audit.generate_branch_worklists(notify=True)
+
+        self.assertGreaterEqual(summary['branches_with_items'], 1)
+        self.assertTrue(
+            Notification.objects.filter(recipient=prof, notification_type='system',
+                                        title__contains='قائمة صلاحيات الأسبوع').exists()
+        )
 
 
 class RebalanceSuggestTests(TestCase):
