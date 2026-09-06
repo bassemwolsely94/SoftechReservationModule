@@ -16,7 +16,7 @@ from django.test import SimpleTestCase, TestCase
 
 from apps.batches.expiry_audit import (
     _month_chunks, _valid_expiry, _clean_docnumber, _compute_risk,
-    resolve_main_suppliers, audit_candidates, supplier_scorecard,
+    resolve_main_suppliers, audit_candidates, supplier_scorecard, rebalance_suggest,
 )
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
@@ -127,6 +127,42 @@ class SupplierScorecardTests(TestCase):
         by = {r['supplier_code']: r for r in rows}
         self.assertEqual(by['S1']['short_dated_lines'], 2)
         self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
+
+class RebalanceSuggestTests(TestCase):
+    """A4 — move near-expiry surplus from a slow branch to a fast one."""
+
+    def setUp(self):
+        from apps.branches.models import Branch
+        from apps.catalog.models import Item
+        self.b1 = Branch.objects.create(softech_branch_id='B01', name='Slow', name_ar='بطيء')
+        self.b2 = Branch.objects.create(softech_branch_id='B02', name='Fast', name_ar='سريع')
+        self.item = Item.objects.create(softech_id='Z1', name='Item Z1', cost_price=10)
+
+    def test_surplus_moves_to_fast_branch(self):
+        code = 'Z1'
+        stock = {('B01', code): Decimal('100'), ('B02', code): Decimal('5')}
+        # qty_90d: B01 sells nothing; B02 sells 900/90 = 10/day
+        vel = {(code, 'B01'): 0.0, (code, 'B02'): 900.0}
+        res = rebalance_suggest(code, 'B01', 30,
+                                stock_fetcher=lambda bcs, ics: stock,
+                                velocity_map=vel)
+        self.assertEqual(res['from_branch'], 'B01')
+        self.assertEqual(res['source_surplus'], 100.0)     # 100 − 0×30
+        self.assertEqual(len(res['plan']), 1)
+        self.assertEqual(res['plan'][0]['to_branch'], 'B02')
+        self.assertEqual(res['plan'][0]['qty'], 100)       # min(100 surplus, 295 headroom)
+        self.assertEqual(res['plan'][0]['to_branch_id'], self.b2.id)
+        self.assertEqual(res['item_id'], self.item.id)
+
+    def test_no_surplus_no_plan(self):
+        code = 'Z1'
+        stock = {('B01', code): Decimal('10'), ('B02', code): Decimal('5')}
+        vel = {(code, 'B01'): 900.0, (code, 'B02'): 900.0}   # B01 sells 10/day → clears 10 easily
+        res = rebalance_suggest(code, 'B01', 30,
+                                stock_fetcher=lambda bcs, ics: stock, velocity_map=vel)
+        self.assertEqual(res['source_surplus'], 0.0)
+        self.assertEqual(res['plan'], [])
 
 
 class ResolveMainSuppliersTests(TestCase):

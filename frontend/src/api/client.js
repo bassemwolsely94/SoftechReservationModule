@@ -2050,6 +2050,8 @@ export const batchesApi = {
   purchaseExpiryExport:     (body) => api.post('/batches/purchase-expiry/export/', body, { responseType: 'blob' }),
   // Supplier dating scorecard: params { months_back?, short_dated_months?, categories? }
   purchaseExpirySupplierScorecard: (params) => api.get('/batches/purchase-expiry/supplier-scorecard/', { params }),
+  // Inter-branch rebalancing suggestion: body { item_code, from_branch?, days_to_expiry }
+  purchaseExpiryRebalanceSuggest: (body) => api.post('/batches/purchase-expiry/rebalance-suggest/', body),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

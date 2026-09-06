@@ -5,7 +5,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { batchesApi, branchesApi } from '../api/client'
+import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
@@ -80,6 +80,108 @@ function QuarantineModal({ batch, onClose }) {
   )
 }
 
+// ── Inter-branch rebalancing modal (A4) ───────────────────────────────────────
+function RebalanceModal({ row, fromBranch, onClose }) {
+  const [done, setDone] = useState({})   // to_branch -> true once transfer created
+  const [err, setErr]   = useState(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['rebalance', row.item_code, fromBranch, row.days_to_expiry],
+    queryFn: () => batchesApi.purchaseExpiryRebalanceSuggest({
+      item_code: row.item_code,
+      from_branch: fromBranch || undefined,
+      days_to_expiry: row.days_to_expiry ?? 0,
+    }).then(r => r.data),
+  })
+
+  const createTransfer = useMutation({
+    mutationFn: (p) => transfersApi.create({
+      requesting_branch: p.to_branch_id,
+      supplying_branch:  data.from_branch_id,
+      notes: `إعادة توزيع لتفادي انتهاء الصلاحية — ${row.item_name} (كود ${row.item_code})`,
+      items: [{ item: data.item_id, quantity: p.qty }],
+    }),
+    onSuccess: (_res, p) => setDone(d => ({ ...d, [p.to_branch]: true })),
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء طلب التحويل'),
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-lg font-bold">إعادة توزيع بين الفروع</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">{row.item_name} — كود {row.item_code}</p>
+
+        {isLoading ? (
+          <div className="text-center py-10 text-gray-400">جاري حساب الاقتراح…</div>
+        ) : !data ? (
+          <div className="text-center py-10 text-gray-400">تعذّر الحساب.</div>
+        ) : (
+          <>
+            <div className="bg-gray-50 rounded-lg p-3 text-sm mb-4 grid grid-cols-2 gap-2">
+              <div>الفرع المصدر: <b>{data.from_branch_name}</b></div>
+              <div>الرصيد بالمصدر: <b>{data.source_qty}</b></div>
+              <div>معدل البيع/يوم بالمصدر: <b>{data.source_velocity_per_day}</b></div>
+              <div>أيام حتى الصلاحية: <b>{data.days_to_expiry}</b></div>
+              <div className="col-span-2">الفائض المعرّض للانتهاء: <b className="text-red-600">{data.source_surplus}</b> وحدة</div>
+            </div>
+
+            {!data.velocity_known ? (
+              <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                معدلات البيع غير متاحة — شغّل محرك الطلب (demand engine) أولًا لحساب الاقتراح.
+              </div>
+            ) : data.plan.length === 0 ? (
+              <div className="text-gray-500 bg-gray-50 border rounded-lg p-3 text-sm">
+                لا يوجد فرع يستوعب الفائض قبل انتهاء الصلاحية (أو لا يوجد فائض). قد تكون الخيارات الأنسب: خصم لتسريع البيع أو مرتجع للمورد.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="px-2 py-2 text-right">إلى فرع</th>
+                    <th className="px-2 py-2 text-right">الكمية المقترحة</th>
+                    <th className="px-2 py-2 text-right">رصيده الآن</th>
+                    <th className="px-2 py-2 text-right">معدل بيعه/يوم</th>
+                    <th className="px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.plan.map(p => (
+                    <tr key={p.to_branch} className="border-b border-gray-100">
+                      <td className="px-2 py-2 font-medium">{p.to_branch_name}</td>
+                      <td className="px-2 py-2 font-semibold text-green-700">{p.qty}</td>
+                      <td className="px-2 py-2 text-gray-600">{p.target_qty}</td>
+                      <td className="px-2 py-2 text-gray-600">{p.velocity_per_day}</td>
+                      <td className="px-2 py-2">
+                        {done[p.to_branch] ? (
+                          <span className="text-green-600 text-xs">✓ تم إنشاء الطلب</span>
+                        ) : (
+                          <button
+                            onClick={() => createTransfer.mutate(p)}
+                            disabled={createTransfer.isPending}
+                            className="px-3 py-1 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+                            إنشاء طلب تحويل
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
+          </>
+        )}
+        <div className="flex justify-end mt-5">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إغلاق</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Purchase-Expiry Physical Audit tab ────────────────────────────────────────
 function PurchaseExpiryAuditTab() {
   const navigate = useNavigate()
@@ -92,6 +194,7 @@ function PurchaseExpiryAuditTab() {
   const [onlyInStock, setOnly]    = useState(true)
   const [rows, setRows]           = useState(null)
   const [err, setErr]             = useState(null)
+  const [rebalanceRow, setRebal]  = useState(null)   // row being rebalanced (A4 modal)
 
   // Client-side filters/sort (operate on the fetched rows — no SOFTECH re-hit)
   const [search, setSearch]       = useState('')
@@ -431,6 +534,7 @@ function PurchaseExpiryAuditTab() {
                       {label}{arrow(k)}
                     </th>
                   ))}
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">إجراء</th>
                 </tr>
               </thead>
               <tbody>
@@ -484,12 +588,25 @@ function PurchaseExpiryAuditTab() {
                       {_fmtDate(r.earliest_entered_expiry)} → {_fmtDate(r.latest_entered_expiry)}
                     </td>
                     <td className="px-3 py-3">{r.entry_count}</td>
+                    <td className="px-3 py-3">
+                      <button onClick={() => setRebal(r)}
+                              className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                              title="اقتراح إعادة توزيع بين الفروع">↔ تحويل</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {rebalanceRow && (
+        <RebalanceModal
+          row={rebalanceRow}
+          fromBranch={branch || rebalanceRow.branches_in_stock?.[0] || ''}
+          onClose={() => setRebal(null)}
+        />
       )}
     </div>
   )

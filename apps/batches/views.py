@@ -202,6 +202,36 @@ def export_purchase_expiry(request):
     return resp
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def purchase_expiry_rebalance_suggest(request):
+    """
+    A4 — inter-branch rebalancing suggestion for one near-expiry item.
+    Body: { item_code (required), from_branch (softech code), days_to_expiry }.
+    Read-only; returns a transfer plan (target branches + qty). The frontend
+    turns a plan line into a transfer request via the existing /transfers/ API.
+    """
+    from .expiry_audit import rebalance_suggest
+
+    item_code = str(request.data.get('item_code') or '').strip()
+    if not item_code:
+        return Response({'detail': 'كود الصنف مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    from_branch = str(request.data.get('from_branch') or '').strip() or None
+    try:
+        days_to_expiry = int(request.data.get('days_to_expiry'))
+    except (TypeError, ValueError):
+        return Response({'detail': 'days_to_expiry مطلوب (عدد الأيام حتى انتهاء الصلاحية).'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = rebalance_suggest(item_code, from_branch, days_to_expiry)
+    except Exception as e:
+        logger.exception('rebalance_suggest failed for %s', item_code)
+        return Response({'detail': f'خطأ أثناء حساب الاقتراح: {e}'},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response(result)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def purchase_expiry_supplier_scorecard(request):

@@ -712,6 +712,99 @@ def supplier_scorecard(categories=None, months_back=None, short_dated_months=6):
     return out
 
 
+# ── A4: Inter-branch rebalancing suggestion ───────────────────────────────────
+
+def rebalance_suggest(item_code, from_branch, days_to_expiry,
+                      stock_fetcher=None, velocity_map=None):
+    """
+    For a near-expiry item that will expire unsold at `from_branch`, recommend
+    moving the surplus to branches that sell it fast enough to clear it before it
+    expires. Deterministic:
+
+      surplus at source   = max(0, source_qty − source_velocity × days_to_expiry)
+      headroom at target  = max(0, target_velocity × days_to_expiry − target_qty)
+      allocate surplus across targets, highest-headroom first, in whole units.
+
+    Velocity = ItemDemandMetrics.qty_90d ÷ 90 (PG, latest run). Stock = live
+    SOFTECH stkbal per branch. Both are injectable for tests.
+
+    Returns {item_code, item_id, item_name, from_branch*, source_qty,
+             source_velocity_per_day, source_surplus, days_to_expiry,
+             velocity_known, plan:[{to_branch, to_branch_id, to_branch_name, qty,
+             target_qty, velocity_per_day, headroom}]}.
+    The plan feeds apps/transfers create (requesting_branch=target, supplying=source).
+    """
+    from apps.catalog.models import Item
+    from apps.branches.models import Branch
+
+    item = Item.objects.filter(softech_id=item_code).only('id', 'name', 'cost_price').first()
+    bmeta = {}
+    for bc, bid, nar, nm in Branch.objects.filter(is_active=True).values_list(
+            'softech_branch_id', 'id', 'name_ar', 'name'):
+        bmeta[str(bc)] = {'id': bid, 'name': nar or nm or str(bc)}
+    branch_codes = list(bmeta.keys())
+
+    fetch = stock_fetcher or _current_stock
+    stock_map = fetch(branch_codes, [item_code])
+    stock = {bc: float(stock_map.get((bc, item_code), 0) or 0) for bc in branch_codes}
+
+    if velocity_map is None:
+        velocity_map, vknown = _velocity_map([item_code], branch_codes)
+    else:
+        vknown = True
+    vel = {bc: float(velocity_map.get((item_code, bc), 0.0)) / 90.0 for bc in branch_codes}
+
+    d2e = max(0, int(days_to_expiry or 0))
+
+    src = str(from_branch) if from_branch else None
+    if not src or src not in bmeta:
+        surpluses = {bc: max(0.0, stock[bc] - vel[bc] * d2e) for bc in branch_codes}
+        src = max(surpluses, key=surpluses.get) if surpluses else None
+
+    source_qty = stock.get(src, 0.0)
+    source_vel = vel.get(src, 0.0)
+    surplus = max(0.0, source_qty - source_vel * d2e)
+
+    targets = []
+    for bc in branch_codes:
+        if bc == src:
+            continue
+        headroom = vel[bc] * d2e - stock[bc]
+        if headroom > 0.5 and vel[bc] > 0:
+            targets.append((bc, headroom, vel[bc], stock[bc]))
+    targets.sort(key=lambda t: -t[1])
+
+    plan, remaining = [], surplus
+    for bc, headroom, v, tq in targets:
+        if remaining <= 0.5:
+            break
+        qty = int(round(min(remaining, headroom)))
+        if qty <= 0:
+            continue
+        plan.append({
+            'to_branch': bc, 'to_branch_id': bmeta[bc]['id'],
+            'to_branch_name': bmeta[bc]['name'], 'qty': qty,
+            'target_qty': round(tq, 2), 'velocity_per_day': round(v, 3),
+            'headroom': round(headroom, 1),
+        })
+        remaining -= qty
+
+    return {
+        'item_code': item_code,
+        'item_id': item.id if item else None,
+        'item_name': item.name if item else item_code,
+        'from_branch': src,
+        'from_branch_id': bmeta.get(src, {}).get('id'),
+        'from_branch_name': bmeta.get(src, {}).get('name', src),
+        'source_qty': round(source_qty, 2),
+        'source_velocity_per_day': round(source_vel, 3),
+        'source_surplus': round(surplus, 2),
+        'days_to_expiry': d2e,
+        'velocity_known': vknown,
+        'plan': plan,
+    }
+
+
 def _item_attr_map(item_codes):
     """{itemcode: {economics + attributes}} from the PG catalog.Item mirror."""
     from apps.catalog.models import Item
