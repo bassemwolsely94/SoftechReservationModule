@@ -703,6 +703,96 @@ function SupplierScorecardTab() {
 }
 
 
+// ── Procurement review tab (C2 — expiry-prone items) ──────────────────────────
+function ProcurementReviewTab() {
+  const [monthsBack, setMonthsBack] = useState(12)
+  const [shortDated, setShortDated] = useState(6)
+  const [minPct, setMinPct]         = useState(30)
+  const [reviewOnly, setReviewOnly] = useState(false)
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['batches', 'expiry-prone', monthsBack, shortDated, minPct],
+    queryFn: () => batchesApi.purchaseExpiryProneItems({
+      months_back: monthsBack, short_dated_months: shortDated, min_short_pct: minPct,
+    }).then(r => r.data),
+  })
+  const rows = (data?.items || []).filter(r => !reviewOnly || r.reorder_review)
+
+  return (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-900 leading-relaxed">
+        الأصناف التي <b>تُشترى قصيرة الأجل بشكل متكرر</b> من الموردين الرئيسيين
+        (نسبة عالية من مشترياتها تصل بصلاحية أقل من الحد) — إشارة لـ
+        <b> تقليل كمية إعادة الطلب</b>، التفاوض على تواريخ أفضل، أو تغيير المصدر.
+        تُعرض مع <b>معدل البيع الشهري</b> لتمييز البطيء قصير الأجل.
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 mb-4 text-sm">
+        <label><span className="block text-gray-500 mb-1">آخر (شهور)</span>
+          <input type="number" value={monthsBack} min={1} onChange={e => setMonthsBack(Number(e.target.value) || 12)}
+                 className="border rounded-lg px-3 py-2 w-24" /></label>
+        <label><span className="block text-gray-500 mb-1">حد «قصير الأجل» (شهور)</span>
+          <input type="number" value={shortDated} min={1} onChange={e => setShortDated(Number(e.target.value) || 6)}
+                 className="border rounded-lg px-3 py-2 w-24" /></label>
+        <label><span className="block text-gray-500 mb-1">حد المراجعة % قصير الأجل</span>
+          <input type="number" value={minPct} min={1} onChange={e => setMinPct(Number(e.target.value) || 30)}
+                 className="border rounded-lg px-3 py-2 w-28" /></label>
+        <label className="flex items-center gap-1 text-gray-600 pb-2">
+          <input type="checkbox" checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} />
+          للمراجعة فقط
+        </label>
+        <button onClick={() => refetch()} disabled={isFetching}
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+          {isFetching ? 'جاري…' : 'تحديث'}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-center py-14 text-gray-400">لا توجد أصناف مطابقة — شغّل مزامنة صلاحيات الشراء أولًا.</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">كود</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">% قصير الأجل</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">أسطر قصيرة / إجمالي</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">معدل البيع الشهري</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">موردون</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">توصية</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.item_code} className={`border-b border-gray-100 hover:bg-gray-50 ${r.reorder_review ? 'bg-amber-50' : ''}`}>
+                  <td className="px-3 py-3 font-mono text-xs text-gray-500">{r.item_code}</td>
+                  <td className="px-3 py-3 font-medium">{r.item_name || '—'}</td>
+                  <td className="px-3 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      r.pct_short_dated >= 50 ? 'bg-red-100 text-red-700'
+                        : r.pct_short_dated >= 30 ? 'bg-amber-100 text-amber-800'
+                        : 'bg-gray-100 text-gray-600'}`}>{r.pct_short_dated}%</span>
+                  </td>
+                  <td className="px-3 py-3 text-gray-600">{r.short_dated_lines} / {r.lines}</td>
+                  <td className="px-3 py-3">{r.monthly_velocity}</td>
+                  <td className="px-3 py-3 text-gray-500">{r.suppliers}</td>
+                  <td className="px-3 py-3">
+                    {r.reorder_review
+                      ? <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">قلّل إعادة الطلب</span>
+                      : <span className="text-gray-400 text-xs">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export default function BatchesPage() {
   const [tab, setTab]           = useState('alerts')
   const [quarantineBatch, setQ] = useState(null)
@@ -752,6 +842,7 @@ export default function BatchesPage() {
           { key: 'list',   label: '📦 قائمة الدفعات'   },
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
           { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
+          { key: 'reorder', label: '♻️ مراجعة الشراء' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
@@ -890,6 +981,7 @@ export default function BatchesPage() {
 
       {tab === 'audit' && <PurchaseExpiryAuditTab />}
       {tab === 'suppliers' && <SupplierScorecardTab />}
+      {tab === 'reorder' && <ProcurementReviewTab />}
 
       {quarantineBatch && <QuarantineModal batch={quarantineBatch} onClose={() => setQ(null)} />}
     </div>

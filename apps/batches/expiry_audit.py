@@ -35,6 +35,11 @@ ARRIVAL_DOCCODES = ('10', '25', '30', '50')
 _MIN_EXPIRY_YEAR = 2000
 _MAX_EXPIRY_YEAR = 2100
 
+# C1/C2: a batch is "short-dated" if its shelf life at receipt is below this.
+SHORT_DATED_MONTHS  = 6
+# C1: only alert on deliveries received within this recent window.
+RECENT_RECEIPT_DAYS = 45
+
 # Sybase IN-list cap and PG bulk-insert batch size.
 _SUPPLIER_CHUNK = 400
 _BULK_BATCH     = 1000
@@ -242,12 +247,21 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
     post_count = PurchaseExpiryEntry.objects.count()
     upserted = max(0, post_count - pre_count)
 
+    # C1: alert on freshly-received SHORT-DATED deliveries from main suppliers.
+    short_dated = 0
+    try:
+        entries = detect_short_dated(since_dt=run.started_at)
+        short_dated = _notify_short_dated(entries)
+    except Exception:
+        logger.exception('[PurchaseExpiry] short-dated alert step failed')
+
     run.lines_fetched  = fetched
     run.lines_upserted = upserted
     return {
-        'suppliers': len(supplier_codes),
-        'fetched':   fetched,
-        'upserted':  upserted,
+        'suppliers':   len(supplier_codes),
+        'fetched':     fetched,
+        'upserted':    upserted,
+        'short_dated': short_dated,
     }
 
 
@@ -803,6 +817,139 @@ def rebalance_suggest(item_code, from_branch, days_to_expiry,
         'velocity_known': vknown,
         'plan': plan,
     }
+
+
+# ── C1: short-dated-at-receipt detection + alert ──────────────────────────────
+
+def detect_short_dated(since_dt=None, threshold_months=SHORT_DATED_MONTHS,
+                       recent_days=RECENT_RECEIPT_DAYS, categories=None):
+    """
+    Recently-received purchase lines from main suppliers whose shelf life at
+    receipt (entered_expiry − purchase date) is below threshold_months.
+
+    since_dt : only rows mirrored at/after this time (i.e. new in this sync) —
+               so re-runs don't re-alert; None = ignore (used by tests/manual).
+    recent_days : only deliveries whose purchase date is within this window, so a
+               3-year backfill doesn't alert on ancient short-dated purchases.
+    """
+    import datetime as _d
+    from django.db.models import F, ExpressionWrapper, DurationField
+    from .models import PurchaseExpiryEntry
+
+    cats = list(categories) if categories else list(MAIN_SUPPLIER_CATEGORIES)
+    recent_cut = _d.date.today() - _d.timedelta(days=int(recent_days))
+    short_cut = _d.timedelta(days=int(threshold_months) * 30)
+    qs = (PurchaseExpiryEntry.objects
+          .filter(supplier_category__in=cats, doc_date__gte=recent_cut)
+          .annotate(shelf=ExpressionWrapper(F('entered_expiry') - F('doc_date'),
+                                            output_field=DurationField()))
+          .filter(shelf__lt=short_cut))
+    if since_dt is not None:
+        qs = qs.filter(synced_at__gte=since_dt)
+    return list(qs.values('branch_code', 'supplier_code', 'supplier_name',
+                          'doc_number', 'doc_date', 'item_code', 'item_name',
+                          'entered_expiry', 'qty').order_by('entered_expiry'))
+
+
+def _notify_short_dated(entries, threshold_months=SHORT_DATED_MONTHS):
+    """Send one summary alert to purchasing/admin about short-dated receipts."""
+    import datetime as _d
+    if not entries:
+        return 0
+    try:
+        from apps.notifications.models import Notification
+        from apps.users.models import StaffProfile
+    except Exception:
+        return len(entries)
+
+    n_items = len({e['item_code'] for e in entries})
+    lines = [f"{e['item_name'] or e['item_code']} — انتهاء {e['entered_expiry']} — "
+             f"{e['supplier_name']} (فاتورة {e['doc_number']}، فرع {e['branch_code']})"
+             for e in entries[:15]]
+    body = (f"استُلمت {len(entries)} دفعة قصيرة الأجل (أقل من {threshold_months} أشهر "
+            f"صلاحية عند الاستلام) من موردين رئيسيين، تخص {n_items} صنفًا:\n\n"
+            + "\n".join(lines))
+    if len(entries) > 15:
+        body += f"\n… و{len(entries) - 15} أخرى."
+
+    recipients = StaffProfile.objects.filter(role__in=['purchasing', 'admin'], is_active=True)
+    dedup = f"short_dated_receipt_{_d.date.today().isoformat()}"
+    for r in recipients:
+        try:
+            Notification.objects.create(
+                recipient=r, notification_type='system',
+                title=f"⚠️ {len(entries)} دفعة قصيرة الأجل عند الاستلام",
+                body=body, dedup_key=dedup,
+            )
+        except Exception:
+            logger.exception('short-dated notify failed for %s', getattr(r, 'pk', '?'))
+    return len(entries)
+
+
+# ── C2: expiry-prone items (procurement feedback) ─────────────────────────────
+
+def expiry_prone_items(months_back=12, short_dated_months=SHORT_DATED_MONTHS,
+                       categories=None, min_short_pct=30.0, limit=500):
+    """
+    Items that are chronically bought short-dated (a high share of their main-
+    supplier purchases arrive with < short_dated_months shelf life) — the buyer
+    should reduce reorder qty, negotiate dating, or switch source. Combined with
+    sales velocity (ItemDemandMetrics) so slow + short-dated items rise to the top.
+
+    Returns list[dict] sorted worst-first (by % short-dated, then volume):
+      {item_code, item_name, lines, short_dated_lines, pct_short_dated,
+       suppliers, monthly_velocity, first_date, last_date, reorder_review}
+    """
+    import datetime as _d
+    from django.db.models import (F, ExpressionWrapper, DurationField, Count, Q,
+                                  Min, Max)
+    from apps.branches.models import Branch
+    from .models import PurchaseExpiryEntry
+
+    cats = list(categories) if categories else list(MAIN_SUPPLIER_CATEGORIES)
+    cut = _d.date.today() - _d.timedelta(days=int(months_back) * 30)
+    short_cut = _d.timedelta(days=int(short_dated_months) * 30)
+
+    qs = (PurchaseExpiryEntry.objects
+          .filter(supplier_category__in=cats, doc_date__gte=cut)
+          .annotate(shelf=ExpressionWrapper(F('entered_expiry') - F('doc_date'),
+                                            output_field=DurationField())))
+    agg = (qs.values('item_code')
+             .annotate(lines=Count('id'),
+                       short_dated_lines=Count('id', filter=Q(shelf__lt=short_cut)),
+                       suppliers=Count('supplier_code', distinct=True),
+                       first_date=Min('doc_date'), last_date=Max('doc_date')))
+    per = {r['item_code']: r for r in agg}
+    if not per:
+        return []
+
+    codes = list(per.keys())
+    names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').distinct())
+    branch_codes = list(Branch.objects.filter(is_active=True)
+                        .values_list('softech_branch_id', flat=True))
+    vel_map, _ = _velocity_map(codes, branch_codes)
+
+    out = []
+    for ic, r in per.items():
+        lines = r['lines'] or 0
+        short = r['short_dated_lines'] or 0
+        pct = round(100.0 * short / lines, 1) if lines else 0.0
+        q90 = sum(vel_map.get((ic, bc), 0.0) for bc in branch_codes)
+        monthly_velocity = round(q90 / 3.0, 1)   # qty_90d → monthly
+        out.append({
+            'item_code':        ic,
+            'item_name':        names.get(ic, ''),
+            'lines':            lines,
+            'short_dated_lines': short,
+            'pct_short_dated':  pct,
+            'suppliers':        r['suppliers'],
+            'monthly_velocity': monthly_velocity,
+            'first_date':       r['first_date'].isoformat() if r['first_date'] else None,
+            'last_date':        r['last_date'].isoformat() if r['last_date'] else None,
+            'reorder_review':   pct >= float(min_short_pct),
+        })
+    out.sort(key=lambda x: (-x['pct_short_dated'], -x['lines']))
+    return out[:int(limit)]
 
 
 def _item_attr_map(item_codes):

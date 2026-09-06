@@ -2052,6 +2052,8 @@ export const batchesApi = {
   purchaseExpirySupplierScorecard: (params) => api.get('/batches/purchase-expiry/supplier-scorecard/', { params }),
   // Inter-branch rebalancing suggestion: body { item_code, from_branch?, days_to_expiry }
   purchaseExpiryRebalanceSuggest: (body) => api.post('/batches/purchase-expiry/rebalance-suggest/', body),
+  // Expiry-prone items (procurement feedback): params { months_back?, short_dated_months?, min_short_pct? }
+  purchaseExpiryProneItems: (params) => api.get('/batches/purchase-expiry/expiry-prone/', { params }),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

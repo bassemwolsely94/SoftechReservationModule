@@ -17,6 +17,7 @@ from django.test import SimpleTestCase, TestCase
 from apps.batches.expiry_audit import (
     _month_chunks, _valid_expiry, _clean_docnumber, _compute_risk,
     resolve_main_suppliers, audit_candidates, supplier_scorecard, rebalance_suggest,
+    detect_short_dated, expiry_prone_items,
 )
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
@@ -127,6 +128,53 @@ class SupplierScorecardTests(TestCase):
         by = {r['supplier_code']: r for r in rows}
         self.assertEqual(by['S1']['short_dated_lines'], 2)
         self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
+
+class ShortDatedAndProneTests(TestCase):
+    """C1 detect_short_dated + C2 expiry_prone_items (pure PG)."""
+
+    def _e(self, code, sup='S1', cat='OFFICIAL_DISTRIBUTOR', doc='1', doc_date=None,
+           exp=None, item='I1'):
+        PurchaseExpiryEntry.objects.create(
+            branch_code='100', supplier_code=sup, supplier_name=f'Sup {sup}',
+            supplier_category=cat, doc_number=doc, doc_date=doc_date,
+            item_code=item, item_name=f'Item {item}', dblitemflag=1,
+            entered_expiry=exp, qty=Decimal('5'),
+        )
+
+    def test_detect_short_dated_recent_main_only(self):
+        t = _dt.date.today()
+        # recent main, ~2.3mo shelf → short-dated ✓
+        self._e('R1', doc='1', doc_date=t - _dt.timedelta(days=10), exp=t + _dt.timedelta(days=60), item='SD1')
+        # recent main, long shelf → not short
+        self._e('R2', doc='2', doc_date=t - _dt.timedelta(days=10), exp=t + _dt.timedelta(days=400), item='LONG')
+        # old purchase (outside recent window) though short → excluded
+        self._e('R3', doc='3', doc_date=t - _dt.timedelta(days=100), exp=t - _dt.timedelta(days=40), item='OLD')
+        # non-main short → excluded
+        self._e('R4', sup='S9', cat='SMALL_WAREHOUSE', doc='4',
+                doc_date=t - _dt.timedelta(days=10), exp=t + _dt.timedelta(days=60), item='NMN')
+
+        found = detect_short_dated(since_dt=None)   # ignore synced_at for the test
+        codes = {e['item_code'] for e in found}
+        self.assertEqual(codes, {'SD1'})
+
+    def test_expiry_prone_percentages_and_flag(self):
+        t = _dt.date.today()
+        # P1: 3 purchases, 2 short-dated → 66.7% → reorder_review
+        self._e('A', doc='10', doc_date=t - _dt.timedelta(days=30), exp=t + _dt.timedelta(days=60), item='P1')
+        self._e('B', doc='11', doc_date=t - _dt.timedelta(days=30), exp=t + _dt.timedelta(days=60), item='P1')
+        self._e('C', doc='12', doc_date=t - _dt.timedelta(days=30), exp=t + _dt.timedelta(days=500), item='P1')
+        # P2: 2 purchases, 0 short → 0%
+        self._e('D', doc='13', doc_date=t - _dt.timedelta(days=30), exp=t + _dt.timedelta(days=500), item='P2')
+        self._e('E', doc='14', doc_date=t - _dt.timedelta(days=30), exp=t + _dt.timedelta(days=500), item='P2')
+
+        rows = {r['item_code']: r for r in expiry_prone_items(months_back=12, min_short_pct=30)}
+        self.assertEqual(rows['P1']['lines'], 3)
+        self.assertEqual(rows['P1']['short_dated_lines'], 2)
+        self.assertEqual(rows['P1']['pct_short_dated'], 66.7)
+        self.assertTrue(rows['P1']['reorder_review'])
+        self.assertEqual(rows['P2']['pct_short_dated'], 0.0)
+        self.assertFalse(rows['P2']['reorder_review'])
 
 
 class RebalanceSuggestTests(TestCase):

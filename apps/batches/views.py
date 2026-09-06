@@ -234,6 +234,32 @@ def purchase_expiry_rebalance_suggest(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def purchase_expiry_prone_items(request):
+    """
+    C2 — procurement feedback: items chronically bought short-dated (high share of
+    main-supplier purchases arriving with < N months shelf life), with velocity,
+    flagged for reorder review. Read-only.
+    Query: ?months_back=&short_dated_months=&min_short_pct=
+    """
+    from .expiry_audit import expiry_prone_items
+
+    def _num(name, default):
+        v = request.query_params.get(name)
+        try:
+            return type(default)(v) if v not in (None, '') else default
+        except (TypeError, ValueError):
+            return default
+
+    rows = expiry_prone_items(
+        months_back=_num('months_back', 12),
+        short_dated_months=_num('short_dated_months', 6),
+        min_short_pct=_num('min_short_pct', 30.0),
+    )
+    return Response({'count': len(rows), 'items': rows})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def purchase_expiry_supplier_scorecard(request):
     """
     B2 — supplier dating scorecard: how well-dated is each main supplier's stock?
