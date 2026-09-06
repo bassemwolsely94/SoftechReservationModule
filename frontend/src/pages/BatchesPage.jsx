@@ -21,8 +21,11 @@ function _defaultExpiryTo() {
   return _iso(d)
 }
 function _fmtDate(s) {
-  return s ? new Date(s).toLocaleDateString('ar-EG') : '—'
+  return s ? new Date(s).toLocaleDateString('en-GB') : '—'
 }
+// Latin/English digits everywhere (no Arabic-Indic numerals)
+const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
+const fmtInt = (n) => Number(n ?? 0).toLocaleString('en-US')
 const RISK_BADGE = {
   expired:  { label: 'منتهية', cls: 'bg-red-200 text-red-900' },
   critical: { label: 'حرجة',   cls: 'bg-red-100 text-red-700' },
@@ -376,7 +379,7 @@ function PurchaseExpiryAuditTab() {
           {lastRun ? (
             <>آخر مزامنة: <b>{_fmtDate(lastRun.started_at)}</b> —{' '}
               {lastRun.status === 'running' ? <span className="text-amber-600">جارية…</span>
-                : lastRun.status === 'success' ? <span className="text-green-700">ناجحة ({lastRun.lines_upserted?.toLocaleString('ar-EG')} سطر جديد، {lastRun.suppliers_count} مورد)</span>
+                : lastRun.status === 'success' ? <span className="text-green-700">ناجحة ({lastRun.lines_upserted?.toLocaleString('en-US')} سطر جديد، {lastRun.suppliers_count} مورد)</span>
                 : <span className="text-red-600">فشلت</span>}
             </>
           ) : <span className="text-gray-400">لم تُنفّذ مزامنة بعد — شغّل المزامنة لجلب بيانات الشراء (٣ سنوات).</span>}
@@ -493,10 +496,10 @@ function PurchaseExpiryAuditTab() {
             <p className="text-sm text-gray-600">
               عدد الأصناف: <b>{displayRows.length}</b>
               <span className="mx-2 text-gray-300">·</span>
-              قيمة معرّضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('ar-EG')} ج</b>
+              قيمة معرّضة للخطر: <b className="text-red-600">{Math.round(totalVar).toLocaleString('en-US')} ج</b>
               {hasRisk && <>
                 <span className="mx-2 text-gray-300">·</span>
-                خسارة متوقعة: <b className="text-red-700">{Math.round(totalExpLoss).toLocaleString('ar-EG')} ج</b>
+                خسارة متوقعة: <b className="text-red-700">{Math.round(totalExpLoss).toLocaleString('en-US')} ج</b>
               </>}
             </p>
             <div className="flex items-center gap-2">
@@ -564,9 +567,9 @@ function PurchaseExpiryAuditTab() {
                       {r.has_entered_expiry_passed &&
                         <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">منتهية</span>}
                     </td>
-                    <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('ar-EG') : '—'}</td>
-                    <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('ar-EG') : '—'}</td>
-                    <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('ar-EG') : '—'}</td>
+                    <td className="px-3 py-3">{r.current_qty != null ? r.current_qty.toLocaleString('en-US') : '—'}</td>
+                    <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? r.unit_cost.toLocaleString('en-US') : '—'}</td>
+                    <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? Math.round(r.value_at_risk).toLocaleString('en-US') : '—'}</td>
                     <td className="px-3 py-3 text-xs">
                       {r.markdown_discount_pct == null ? <span className="text-gray-400">—</span> : (
                         <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700"
@@ -584,7 +587,7 @@ function PurchaseExpiryAuditTab() {
                           </span>
                         ) : <span className="text-gray-400 text-xs">—</span>}
                       </td>
-                      <td className="px-3 py-3 font-semibold text-red-700">{r.expected_loss != null ? Math.round(r.expected_loss).toLocaleString('ar-EG') : '—'}</td>
+                      <td className="px-3 py-3 font-semibold text-red-700">{r.expected_loss != null ? Math.round(r.expected_loss).toLocaleString('en-US') : '—'}</td>
                       <td className="px-3 py-3 text-xs">
                         {r.days_to_expiry == null ? '—'
                           : r.days_to_expiry <= 0 ? <span className="text-red-700 font-semibold">منتهية</span>
@@ -727,11 +730,11 @@ function SupplierScorecardTab() {
                       {s.pct_short_dated}%
                     </span>
                   </td>
-                  <td className="px-3 py-3">{(s.short_dated_lines || 0).toLocaleString('ar-EG')}</td>
+                  <td className="px-3 py-3">{(s.short_dated_lines || 0).toLocaleString('en-US')}</td>
                   <td className="px-3 py-3">{s.avg_shelf_months != null ? `${s.avg_shelf_months} شهر` : '—'}</td>
                   <td className="px-3 py-3 text-gray-600">{s.min_shelf_months != null ? `${s.min_shelf_months} شهر` : '—'}</td>
-                  <td className="px-3 py-3">{(s.lines || 0).toLocaleString('ar-EG')}</td>
-                  <td className="px-3 py-3">{(s.items || 0).toLocaleString('ar-EG')}</td>
+                  <td className="px-3 py-3">{(s.lines || 0).toLocaleString('en-US')}</td>
+                  <td className="px-3 py-3">{(s.items || 0).toLocaleString('en-US')}</td>
                 </tr>
               ))}
             </tbody>
@@ -833,30 +836,217 @@ function ProcurementReviewTab() {
 }
 
 
+// ── Live stock-expiry tab (SOFTECH stkbalexpiry mirror, all nodes) ────────────
+const _TIER = {
+  expired:  { l: 'منتهية',    c: 'bg-red-200 text-red-900' },
+  critical: { l: '≤30 يوم',   c: 'bg-red-100 text-red-700' },
+  high:     { l: '≤90 يوم',   c: 'bg-amber-100 text-amber-800' },
+  watch:    { l: '≤180 يوم',  c: 'bg-yellow-100 text-yellow-800' },
+  ok:       { l: '>180 يوم',  c: 'bg-green-100 text-green-700' },
+}
+
+function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
+  const user    = useAuthStore(s => s.user)
+  const isAdmin = ['admin', 'supervisor'].includes(user?.role)
+
+  const [mode, setMode]         = useState(initialMode)
+  const [within, setWithin]     = useState(180)
+  const [branch, setBranch]     = useState('')
+  const [includeQ, setIncludeQ] = useState(false)
+  const [search, setSearch]     = useState('')
+  const [importedOnly, setImp]  = useState(false)
+  const [fridgeOnly, setFridge] = useState(false)
+  const [medType, setMedType]   = useState('')
+  const [sortKey, setSortKey]   = useState('value_at_risk')
+  const [sortDir, setSortDir]   = useState('desc')
+
+  const { data: branchesData } = useQuery({
+    queryKey: ['branches', 'all-for-expiry'],
+    queryFn:  () => branchesApi.list().then(r => r.data),
+  })
+  const branches = branchesData?.results || branchesData || []
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['batches', 'stock-expiry-report', mode, within, branch, includeQ],
+    queryFn:  () => batchesApi.stockExpiryReport({
+      mode, within_days: within, branches: branch || undefined,
+      include_quarantine: includeQ || undefined,
+    }).then(r => r.data),
+  })
+  const rows = data?.items || []
+
+  const { data: runsData } = useQuery({
+    queryKey: ['batches', 'stock-expiry-runs'],
+    queryFn:  () => batchesApi.stockExpiryRuns().then(r => r.data),
+    refetchInterval: (q) => ((q.state.data || []).some(r => r.status === 'running') ? 4000 : false),
+  })
+  const runs = runsData || []
+  const lastRun = runs[0]
+  const qc = useQueryClient()
+  const sync = useMutation({
+    mutationFn: () => batchesApi.stockExpirySync({}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', 'stock-expiry-runs'] }),
+  })
+
+  const NUMERIC = new Set(['total_qty', 'unit_cost', 'value_at_risk', 'batch_count', 'days_to_expiry'])
+  const arrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
+  const sortBy = (k) => {
+    if (k === sortKey) { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); return }
+    setSortKey(k); setSortDir(NUMERIC.has(k) ? 'desc' : 'asc')
+  }
+  const medOpts = useMemo(
+    () => Array.from(new Set(rows.map(r => r.medicine_type).filter(Boolean)))
+      .sort((a, b) => String(a).localeCompare(String(b), 'ar')), [rows])
+
+  const view = useMemo(() => {
+    const out = rows.filter(r => {
+      if (importedOnly && !r.is_imported) return false
+      if (fridgeOnly && !r.is_fridge) return false
+      if (medType && r.medicine_type !== medType) return false
+      if (search) {
+        const q = search.toLowerCase()
+        if (!((r.item_name || '').toLowerCase().includes(q) || (r.item_code || '').includes(q))) return false
+      }
+      return true
+    })
+    const dir = sortDir === 'asc' ? 1 : -1, isNum = NUMERIC.has(sortKey)
+    out.sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey]
+      const na = va == null || va === '', nb = vb == null || vb === ''
+      if (na && nb) return 0; if (na) return 1; if (nb) return -1
+      if (isNum) return (va - vb) * dir
+      return String(va).localeCompare(String(vb), 'ar') * dir
+    })
+    return out
+  }, [rows, importedOnly, fridgeOnly, medType, search, sortKey, sortDir])
+
+  const totalVar = useMemo(() => view.reduce((s, r) => s + (r.value_at_risk || 0), 0), [view])
+
+  return (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-900 leading-relaxed">
+        بيانات حية من <b>SOFTECH (stkbalexpiry)</b> — الأرصدة الفعلية بتواريخ صلاحيتها عبر
+        <b> كل الفروع والمخازن</b> (تُحدَّث بمزامنة يومية). «قرب الانتهاء» = صالحة وتنتهي خلال المدة،
+        و«منتهية» = مضت صلاحيتها ولا تزال بالمخزون (تحتاج إتلاف/مرتجع).
+      </div>
+
+      {/* Server-side scope + sync */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
+        {modeSwitch && (
+          <select value={mode} onChange={e => setMode(e.target.value)} className="border rounded-lg px-2 py-1.5">
+            <option value="near">قرب الانتهاء</option>
+            <option value="expired">منتهية (متبقية)</option>
+            <option value="all">الكل</option>
+          </select>
+        )}
+        {mode === 'near' && (
+          <select value={within} onChange={e => setWithin(Number(e.target.value))} className="border rounded-lg px-2 py-1.5">
+            <option value={30}>خلال 30 يوم</option>
+            <option value={90}>خلال 90 يوم</option>
+            <option value={180}>خلال 180 يوم</option>
+            <option value={365}>خلال سنة</option>
+          </select>
+        )}
+        <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded-lg px-2 py-1.5 min-w-[9rem]">
+          <option value="">كل الفروع</option>
+          {branches.map(b => <option key={b.id} value={b.softech_branch_id}>{b.name_ar || b.display_name || b.softech_branch_id}</option>)}
+        </select>
+        <label className="flex items-center gap-1 text-gray-600">
+          <input type="checkbox" checked={includeQ} onChange={e => setIncludeQ(e.target.checked)} /> يشمل العزل/التالف
+        </label>
+        <span className="text-gray-300">·</span>
+        <span className="text-xs text-gray-500">
+          آخر مزامنة: {lastRun ? `${_fmtDate(lastRun.started_at)} — ${lastRun.status === 'running' ? 'جارية…' : `${fmtInt(lastRun.rows_synced)} سطر / ${lastRun.nodes_ok}/${lastRun.nodes_total} فرع`}` : 'لم تُنفّذ بعد'}
+        </span>
+        {isAdmin && (
+          <button onClick={() => sync.mutate()} disabled={sync.isPending || lastRun?.status === 'running'}
+                  className="px-3 py-1.5 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+            {sync.isPending || lastRun?.status === 'running' ? 'المزامنة جارية…' : '🔄 مزامنة الآن'}
+          </button>
+        )}
+      </div>
+
+      {/* Client-side filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم / الكود…"
+               className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
+        <select value={medType} onChange={e => setMedType(e.target.value)} className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
+          <option value="">التصنيف العام: الكل</option>
+          {medOpts.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
+        <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" checked={importedOnly} onChange={e => setImp(e.target.checked)} /> مستورد</label>
+        <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" checked={fridgeOnly} onChange={e => setFridge(e.target.checked)} /> ❄️ ثلاجة</label>
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-gray-600">
+          عدد الأصناف: <b>{fmtInt(view.length)}</b>
+          <span className="mx-2 text-gray-300">·</span>
+          قيمة معرّضة للخطر: <b className="text-red-600">{fmtNum(totalVar)} ج</b>
+        </p>
+        {isFetching && <span className="text-xs text-gray-400">جاري التحميل…</span>}
+      </div>
+
+      {view.length === 0 ? (
+        <div className="text-center py-14 text-gray-400">لا توجد أصناف — تأكد من تشغيل مزامنة صلاحية المخزون.</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 select-none">
+                {[
+                  ['item_code', 'كود'], ['item_name', 'الصنف'], ['total_qty', 'الكمية'],
+                  ['unit_cost', 'تكلفة الوحدة'], ['value_at_risk', 'قيمة معرّضة'],
+                  ['earliest_expiry', 'أقرب صلاحية'], ['days_to_expiry', 'الحالة'],
+                  ['batch_count', 'دفعات'], ['medicine_type', 'التصنيف العام'], ['origin', 'المنشأ'],
+                ].map(([k, label]) => (
+                  <th key={k} onClick={() => sortBy(k)}
+                      className="px-3 py-3 text-right font-semibold text-gray-600 cursor-pointer hover:text-brand-700"
+                      title="اضغط للترتيب">{label}{arrow(k)}</th>
+                ))}
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الفروع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.map(r => (
+                <tr key={r.item_code} className={`border-b border-gray-100 hover:bg-gray-50 ${r.tier === 'expired' ? 'bg-red-50' : ''}`}>
+                  <td className="px-3 py-3 font-mono text-xs text-gray-500">{r.item_code}</td>
+                  <td className="px-3 py-3 font-medium">
+                    {r.item_name || '—'}
+                    {r.is_fridge && <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-sky-100 text-sky-700">❄️</span>}
+                    {r.is_imported && <span className="mr-2 px-2 py-0.5 rounded-full text-xs bg-indigo-100 text-indigo-700">مستورد</span>}
+                  </td>
+                  <td className="px-3 py-3">{fmtNum(r.total_qty, 2)}</td>
+                  <td className="px-3 py-3 text-gray-600">{r.unit_cost != null ? fmtNum(r.unit_cost, 2) : '—'}</td>
+                  <td className="px-3 py-3 font-semibold text-red-600">{r.value_at_risk != null ? fmtNum(r.value_at_risk) : '—'}</td>
+                  <td className="px-3 py-3 text-gray-700 text-xs">{_fmtDate(r.earliest_expiry)}</td>
+                  <td className="px-3 py-3">
+                    {r.tier && <span className={`px-2 py-0.5 rounded-full text-xs ${_TIER[r.tier]?.c || 'bg-gray-100'}`}
+                                     title={r.days_to_expiry != null ? `${r.days_to_expiry} يوم` : ''}>{_TIER[r.tier]?.l || r.tier}</span>}
+                  </td>
+                  <td className="px-3 py-3">{fmtInt(r.batch_count)}</td>
+                  <td className="px-3 py-3 text-gray-500 text-xs">{r.medicine_type || '—'}</td>
+                  <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
+                  <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches || []).join('، ') || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export default function BatchesPage() {
-  const [tab, setTab]           = useState('alerts')
-  const [quarantineBatch, setQ] = useState(null)
-  const [filters, setFilters]   = useState({ expiring_in_days: 180 })
+  const [tab, setTab] = useState('alerts')
 
+  // KPI cards now read the live stkbalexpiry mirror (all nodes).
   const { data: summary } = useQuery({
-    queryKey: ['batches', 'near-expiry-summary'],
-    queryFn:  () => batchesApi.nearExpirySummary({}).then(r => r.data),
+    queryKey: ['batches', 'stock-expiry-summary'],
+    queryFn:  () => batchesApi.stockExpirySummary({}).then(r => r.data),
   })
-
-  const { data: alertsData, isLoading: alertsLoading } = useQuery({
-    queryKey: ['batches', 'alerts'],
-    queryFn:  () => batchesApi.alerts({}).then(r => r.data),
-    enabled:  tab === 'alerts',
-  })
-
-  const { data: batchData, isLoading: batchLoading } = useQuery({
-    queryKey: ['batches', 'list', filters],
-    queryFn:  () => batchesApi.list(filters).then(r => r.data),
-    enabled:  tab === 'list',
-  })
-
-  const alerts  = alertsData?.results || alertsData || []
-  const batches = batchData?.results  || batchData  || []
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
@@ -865,21 +1055,22 @@ export default function BatchesPage() {
         <p className="text-sm text-gray-500 mt-1">مراقبة انتهاء الصلاحية · نظام الصرف الأول انتهاء أولاً</p>
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — live from the stkbalexpiry mirror (all nodes) */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <KpiCard label="دفعات تنتهي خلال 30 يوم"  value={summary.lt_30?.batches}  sub={`${summary.lt_30?.qty?.toLocaleString('ar-EG') ?? 0} وحدة`}  color="text-red-600" />
-          <KpiCard label="دفعات تنتهي خلال 90 يوم"  value={summary.lt_90?.batches}  sub={`${summary.lt_90?.qty?.toLocaleString('ar-EG') ?? 0} وحدة`}  color="text-amber-600" />
-          <KpiCard label="دفعات تنتهي خلال 180 يوم" value={summary.lt_180?.batches} sub={`${summary.lt_180?.qty?.toLocaleString('ar-EG') ?? 0} وحدة`} color="text-yellow-600" />
-          <KpiCard label="قيمة البضاعة المعرضة للخطر" value={summary.total_at_risk_value != null ? `${Math.round(summary.total_at_risk_value).toLocaleString('ar-EG')} ج` : '—'} color="text-gray-700" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <KpiCard label="أصناف تنتهي خلال 30 يوم"  value={fmtInt(summary.lt_30?.items)}  sub={`${fmtNum(summary.lt_30?.value)} ج`}  color="text-red-600" />
+          <KpiCard label="خلال 90 يوم"              value={fmtInt(summary.lt_90?.items)}  sub={`${fmtNum(summary.lt_90?.value)} ج`}  color="text-amber-600" />
+          <KpiCard label="خلال 180 يوم"             value={fmtInt(summary.lt_180?.items)} sub={`${fmtNum(summary.lt_180?.value)} ج`} color="text-yellow-600" />
+          <KpiCard label="قيمة معرّضة للخطر (≤180ي)" value={`${fmtNum(summary.total_at_risk_value)} ج`} color="text-gray-700" />
+          <KpiCard label="منتهية ولا تزال بالمخزون"  value={fmtInt(summary.expired?.items)} sub={`${fmtNum(summary.expired?.value)} ج`} color="text-red-700" />
         </div>
       )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {[
-          { key: 'alerts', label: '🚨 تنبيهات الانتهاء' },
-          { key: 'list',   label: '📦 قائمة الدفعات'   },
+          { key: 'alerts', label: '🚨 قرب الانتهاء' },
+          { key: 'list',   label: '📦 أرصدة الصلاحية (كل الفروع)' },
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
           { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
           { key: 'reorder', label: '♻️ مراجعة الشراء' },
@@ -893,137 +1084,14 @@ export default function BatchesPage() {
         ))}
       </div>
 
-      {/* Alerts tab */}
-      {tab === 'alerts' && (
-        alertsLoading ? (
-          <div className="text-center py-16 text-gray-400">جاري التحميل...</div>
-        ) : alerts.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <div className="text-4xl mb-3">✅</div>
-            <p>لا توجد تنبيهات انتهاء صلاحية نشطة</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الفرع</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">رقم الدفعة</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">تاريخ الانتهاء</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الكمية</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">الحد (أيام)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {alerts.map(a => (
-                  <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{a.batch?.item_name || a.item_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{a.batch?.branch_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{a.batch?.batch_number || '—'}</td>
-                    <td className="px-4 py-3 text-red-600 font-medium">
-                      {a.batch?.expiry_date ? new Date(a.batch.expiry_date).toLocaleDateString('ar-EG') : '—'}
-                    </td>
-                    <td className="px-4 py-3">{a.batch?.current_qty ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800">
-                        {a.threshold_days} يوم
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {/* Batch list tab */}
-      {tab === 'list' && (
-        <>
-          <div className="flex gap-3 mb-4">
-            <select
-              value={filters.expiring_in_days}
-              onChange={e => setFilters(f => ({ ...f, expiring_in_days: e.target.value }))}
-              className="border rounded-lg px-3 py-2 text-sm"
-            >
-              <option value={30}>تنتهي خلال 30 يوم</option>
-              <option value={90}>تنتهي خلال 90 يوم</option>
-              <option value={180}>تنتهي خلال 180 يوم</option>
-              <option value={365}>تنتهي خلال سنة</option>
-            </select>
-            <select
-              value={filters.is_quarantined || ''}
-              onChange={e => setFilters(f => ({ ...f, is_quarantined: e.target.value || undefined }))}
-              className="border rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">الكل</option>
-              <option value="false">غير معزول</option>
-              <option value="true">في العزل</option>
-            </select>
-          </div>
-
-          {batchLoading ? (
-            <div className="text-center py-16 text-gray-400">جاري التحميل...</div>
-          ) : batches.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">لا توجد دفعات بهذه المعايير</div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الصنف</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الفرع</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">رقم الدفعة</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">تاريخ الانتهاء</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الكمية</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">الحالة</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {batches.map(b => (
-                    <tr key={b.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{b.item_name || b.item?.name || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500">{b.branch_name || b.branch?.name || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">{b.batch_number}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {b.expiry_date ? new Date(b.expiry_date).toLocaleDateString('ar-EG') : '—'}
-                      </td>
-                      <td className="px-4 py-3">{b.current_qty}</td>
-                      <td className="px-4 py-3">
-                        {b.is_quarantined ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">معزول</span>
-                        ) : b.is_expired ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">منتهي</span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">نشط</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {!b.is_quarantined && !b.is_expired && (
-                          <button
-                            onClick={() => setQ(b)}
-                            className="text-xs text-red-600 hover:underline"
-                          >
-                            عزل
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+      {/* Near-expiry (live stkbalexpiry mirror, all nodes) */}
+      {tab === 'alerts' && <LiveStockExpiryTab initialMode="near" />}
+      {/* Stock-expiry balances — near / expired / all, with mode switch */}
+      {tab === 'list'   && <LiveStockExpiryTab initialMode="all" modeSwitch />}
 
       {tab === 'audit' && <PurchaseExpiryAuditTab />}
       {tab === 'suppliers' && <SupplierScorecardTab />}
       {tab === 'reorder' && <ProcurementReviewTab />}
-
-      {quarantineBatch && <QuarantineModal batch={quarantineBatch} onClose={() => setQ(null)} />}
     </div>
   )
 }

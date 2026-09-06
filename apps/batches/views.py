@@ -530,6 +530,80 @@ def spawn_expiry_count_session(request):
     }, status=status.HTTP_201_CREATED)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def stock_expiry_summary_view(request):
+    """KPI cards for the FEFO tabs from the StockExpiryBalance mirror (all nodes)."""
+    from .stock_expiry import stock_expiry_summary
+    branches = _branch_list(request.query_params) or None
+    inc_q = str(request.query_params.get('include_quarantine', '')).lower() == 'true'
+    return Response(stock_expiry_summary(branch_codes=branches, include_quarantine=inc_q))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def stock_expiry_report_view(request):
+    """
+    Near-expiry / expired report over the mirror.
+    Query: mode=near|expired|all, within_days, branches, include_quarantine,
+           imported_only, fridge_only, medicine_type, sort, limit.
+    """
+    from .stock_expiry import stock_expiry_report
+    p = request.query_params
+    branches = _branch_list(p) or None
+
+    def _b(name):
+        return str(p.get(name, '')).lower() == 'true'
+
+    try:
+        within = int(p.get('within_days', 180))
+    except (TypeError, ValueError):
+        within = 180
+    rows = stock_expiry_report(
+        mode=p.get('mode', 'near'), within_days=within, branch_codes=branches,
+        include_quarantine=_b('include_quarantine'), imported_only=_b('imported_only'),
+        fridge_only=_b('fridge_only'), medicine_type=(p.get('medicine_type') or None),
+        sort=(p.get('sort') or None),
+    )
+    return Response({'count': len(rows), 'items': rows})
+
+
+class StockExpirySyncRunListView(generics.ListAPIView):
+    """GET — recent stock-expiry sync runs (per-node status)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        from .models import StockExpirySyncRun
+        runs = StockExpirySyncRun.objects.all()[:20]
+        return Response([{
+            'id': r.id, 'started_at': r.started_at, 'finished_at': r.finished_at,
+            'status': r.status, 'nodes_total': r.nodes_total, 'nodes_ok': r.nodes_ok,
+            'nodes_failed': r.nodes_failed, 'rows_synced': r.rows_synced,
+            'detail': r.detail, 'triggered_by': r.triggered_by,
+        } for r in runs])
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def stock_expiry_sync_trigger(request):
+    """Kick off a multi-node stkbalexpiry sync in the background (admin)."""
+    from .models import StockExpirySyncRun
+    from .stock_expiry import sync_stock_expiry_all
+    branch = str(request.data.get('branch') or '').strip() or None
+    run = StockExpirySyncRun.objects.create(triggered_by=str(request.user))
+
+    def _run():
+        try:
+            sync_stock_expiry_all(run=run, only_branch=branch)
+        except Exception as e:   # noqa: BLE001
+            logger.exception('stock-expiry sync failed (run #%s)', run.pk)
+            run.status = 'failed'; run.detail = {'fatal': str(e)[:300]}; run.finish('failed')
+
+    threading.Thread(target=_run, daemon=True).start()
+    return Response({'detail': 'بدأت مزامنة صلاحية المخزون في الخلفية.', 'run_id': run.pk},
+                    status=status.HTTP_202_ACCEPTED)
+
+
 class StockBatchViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,

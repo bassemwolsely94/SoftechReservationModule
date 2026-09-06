@@ -1898,6 +1898,16 @@ def _run_markdown_revert_reminders():
         logger.error('[APScheduler] markdown-revert reminders failed: %s', exc)
 
 
+def _run_stock_expiry_sync():
+    """Daily multi-node stkbalexpiry mirror sweep (near-expiry / expired FEFO tabs)."""
+    try:
+        from django.core.management import call_command
+        call_command('sync_stock_expiry', verbosity=0)
+        logger.info('[APScheduler] stock-expiry sync done')
+    except Exception as exc:
+        logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
+
+
 def _send_followup_reminders():
     """Fire reminder notifications for FollowUpTask records whose reminder_at has passed."""
     try:
@@ -2765,6 +2775,11 @@ def start_scheduler():
         _run_markdown_revert_reminders, 'cron', day_of_week='sun', hour=8, minute=30,
         id='markdown_revert_reminders', replace_existing=True, max_instances=1,
         misfire_grace_time=3600,
+    )
+    # Daily multi-node stkbalexpiry mirror sweep (FEFO near-expiry / expired tabs).
+    _scheduler.add_job(
+        _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).

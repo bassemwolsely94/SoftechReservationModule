@@ -12,6 +12,10 @@ from .views import (
     PurchaseExpiryRunListView,
     trigger_purchase_expiry_sync,
     spawn_expiry_count_session,
+    stock_expiry_summary_view,
+    stock_expiry_report_view,
+    StockExpirySyncRunListView,
+    stock_expiry_sync_trigger,
 )
 
 router = DefaultRouter()
@@ -38,4 +42,9 @@ urlpatterns = [
          name='purchase-expiry-sync'),
     path('purchase-expiry/spawn-count/', spawn_expiry_count_session,
          name='purchase-expiry-spawn-count'),
+    # ── Live stock-expiry (stkbalexpiry mirror, all nodes) ────────────────────
+    path('stock-expiry/summary/', stock_expiry_summary_view, name='stock-expiry-summary'),
+    path('stock-expiry/report/',  stock_expiry_report_view,  name='stock-expiry-report'),
+    path('stock-expiry/runs/',    StockExpirySyncRunListView.as_view(), name='stock-expiry-runs'),
+    path('stock-expiry/sync/',    stock_expiry_sync_trigger, name='stock-expiry-sync'),
 ] + router.urls

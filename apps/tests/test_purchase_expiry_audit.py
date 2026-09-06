@@ -20,6 +20,7 @@ from apps.batches.expiry_audit import (
     resolve_main_suppliers, audit_candidates, supplier_scorecard, rebalance_suggest,
     detect_short_dated, expiry_prone_items, _markdown_reco, remind_markdown_reversals,
 )
+from apps.batches.stock_expiry import stock_expiry_report, stock_expiry_summary
 from apps.batches.models import PurchaseExpiryEntry
 from apps.procurement.models import SupplierSegmentation
 from apps.catalog.models import Item
@@ -145,6 +146,62 @@ class SupplierScorecardTests(TestCase):
         by = {r['supplier_code']: r for r in rows}
         self.assertEqual(by['S1']['short_dated_lines'], 2)
         self.assertEqual(by['S1']['pct_short_dated'], 100.0)
+
+
+class StockExpiryReportTests(TestCase):
+    """Live near-expiry / expired mirror (StockExpiryBalance) report + summary."""
+
+    def setUp(self):
+        from apps.catalog.models import Item
+        from apps.batches.models import StockExpiryBalance
+        t = _dt.date.today()
+        Item.objects.create(softech_id='X1', name='Item X1', cost_price=Decimal('10'),
+                            pack_price=Decimal('15'))
+        Item.objects.create(softech_id='X2', name='Item X2', cost_price=Decimal('200'),
+                            pack_price=Decimal('260'), is_imported=True, requires_fridge=True)
+
+        def e(**k):
+            base = dict(branch_code='130', store_code='101', item_name='x', batch_no='',
+                        is_quarantine=False)
+            base.update(k)
+            StockExpiryBalance.objects.create(**base)
+
+        e(item_code='X1', expiry_date=t + _dt.timedelta(days=20),  qty=Decimal('5'))   # near
+        e(item_code='X1', branch_code='140', expiry_date=t + _dt.timedelta(days=400), qty=Decimal('3'))  # far
+        e(item_code='X2', expiry_date=t - _dt.timedelta(days=10),  qty=Decimal('2'))   # expired
+        e(item_code='X3', store_code='102', is_quarantine=True,
+          expiry_date=t + _dt.timedelta(days=5), qty=Decimal('100'))                   # quarantine
+
+    def test_near_aggregates_in_window_only(self):
+        by = {r['item_code']: r for r in stock_expiry_report(mode='near', within_days=180)}
+        self.assertIn('X1', by)
+        self.assertNotIn('X2', by)          # expired, not near
+        self.assertNotIn('X3', by)          # quarantine excluded
+        self.assertEqual(by['X1']['total_qty'], 5.0)     # only the in-window row
+        self.assertEqual(by['X1']['value_at_risk'], 50.0)
+        self.assertEqual(by['X1']['tier'], 'critical')
+
+    def test_expired_mode(self):
+        by = {r['item_code']: r for r in stock_expiry_report(mode='expired')}
+        self.assertIn('X2', by)
+        self.assertNotIn('X1', by)
+        self.assertEqual(by['X2']['tier'], 'expired')
+        self.assertEqual(by['X2']['value_at_risk'], 400.0)
+
+    def test_quarantine_gate(self):
+        self.assertNotIn('X3', {r['item_code'] for r in stock_expiry_report(mode='all')})
+        self.assertIn('X3', {r['item_code'] for r in
+                             stock_expiry_report(mode='all', include_quarantine=True)})
+
+    def test_imported_filter(self):
+        codes = {r['item_code'] for r in stock_expiry_report(mode='all', imported_only=True)}
+        self.assertIn('X2', codes)
+        self.assertNotIn('X1', codes)
+
+    def test_summary_bands(self):
+        s = stock_expiry_summary()
+        self.assertEqual(s['lt_30']['items'], 1)      # X1
+        self.assertEqual(s['expired']['items'], 1)    # X2
 
 
 class MarkdownRevertReminderTests(TestCase):

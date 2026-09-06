@@ -2056,6 +2056,11 @@ export const batchesApi = {
   purchaseExpiryProneItems: (params) => api.get('/batches/purchase-expiry/expiry-prone/', { params }),
   // A5.2 request a near-expiry markdown (pending discount-approval): body { item_code, discount_pct, days_to_expiry?, branch? }
   purchaseExpiryRequestMarkdown: (body) => api.post('/batches/purchase-expiry/request-markdown/', body),
+  // Live stock-expiry (stkbalexpiry mirror across all nodes)
+  stockExpirySummary: (params) => api.get('/batches/stock-expiry/summary/', { params }),
+  stockExpiryReport:  (params) => api.get('/batches/stock-expiry/report/', { params }),
+  stockExpiryRuns:    ()       => api.get('/batches/stock-expiry/runs/'),
+  stockExpirySync:    (body)   => api.post('/batches/stock-expiry/sync/', body || {}),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

@@ -356,6 +356,77 @@ class PurchaseExpiryAuditRun(models.Model):
                                  'suppliers_count', 'lines_fetched', 'lines_upserted'])
 
 
+class StockExpiryBalance(models.Model):
+    """
+    Local mirror of SOFTECH `stkbalexpiry` (current on-hand per-batch expiry)
+    swept across ALL operational nodes — HQ/central (store-level) AND each sales
+    branch's own Sybase node — so the FEFO tabs show live near-expiry / expired
+    stock chain-wide, fast, without hitting 6 flaky nodes on every page load.
+
+    `branch_code` = the operational branch whose node this row came from (HQ='100').
+    `store_code`  = the raw storecode within that node (stkbalexpiry.branchcode is
+                    always 0 in SOFTECH, so location lives in storecode).
+    Refreshed by `sync_stock_expiry` (replace-per-branch snapshot). Unlike
+    PurchaseExpiryEntry (a 3-yr additive purchase-entry mirror), this is a current
+    balance — each sync REPLACES the synced branch's rows.
+    """
+    branch_code = models.CharField(max_length=10, db_index=True, verbose_name='الفرع')
+    store_code  = models.CharField(max_length=10, blank=True, verbose_name='المخزن')
+    item_code   = models.CharField(max_length=6, db_index=True, verbose_name='كود الصنف')
+    item_name   = models.CharField(max_length=255, blank=True, verbose_name='اسم الصنف')
+    batch_no    = models.CharField(max_length=50, blank=True, verbose_name='رقم التشغيلة')
+    expiry_date = models.DateField(db_index=True, verbose_name='تاريخ الصلاحية')
+    qty         = models.DecimalField(max_digits=14, decimal_places=5, default=0,
+                                      verbose_name='الكمية')
+    is_quarantine = models.BooleanField(default=False, verbose_name='مخزن عزل/تالف')
+
+    synced_at   = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name        = 'رصيد صلاحية مخزون'
+        verbose_name_plural = 'أرصدة صلاحية المخزون'
+        indexes = [
+            models.Index(fields=['expiry_date', 'qty'],       name='sxb_expiry_qty_idx'),
+            models.Index(fields=['branch_code', 'expiry_date'], name='sxb_branch_expiry_idx'),
+            models.Index(fields=['item_code'],                 name='sxb_item_idx'),
+        ]
+        ordering = ['expiry_date', 'item_code']
+
+    def __str__(self):
+        return f'{self.item_code} exp {self.expiry_date} qty {self.qty} @ {self.branch_code}/{self.store_code}'
+
+
+class StockExpirySyncRun(models.Model):
+    """Audit trail for one `sync_stock_expiry` multi-node sweep."""
+    STATUS_CHOICES = [('running', 'يعمل'), ('success', 'ناجح'),
+                      ('partial', 'جزئي'), ('failed', 'فشل')]
+
+    started_at  = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
+    nodes_total    = models.PositiveIntegerField(default=0)
+    nodes_ok       = models.PositiveIntegerField(default=0)
+    nodes_failed   = models.PositiveIntegerField(default=0)
+    rows_synced    = models.PositiveIntegerField(default=0)
+    detail         = models.JSONField(default=dict)   # {branch_code: {ok/rows/error}}
+    triggered_by   = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        verbose_name        = 'تشغيل مزامنة صلاحية المخزون'
+        verbose_name_plural = 'تشغيلات مزامنة صلاحية المخزون'
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f'StockExpirySync #{self.pk} — {self.status} — {self.started_at:%Y-%m-%d %H:%M}'
+
+    def finish(self, status='success'):
+        from django.utils import timezone as _tz
+        self.status = status
+        self.finished_at = _tz.now()
+        self.save(update_fields=['status', 'finished_at', 'nodes_total', 'nodes_ok',
+                                 'nodes_failed', 'rows_synced', 'detail'])
+
+
 class NearExpiryAlert(models.Model):
     """
     One row per (batch × threshold_days) — prevents duplicate alerts.
