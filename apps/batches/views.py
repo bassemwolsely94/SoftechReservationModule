@@ -604,6 +604,131 @@ def stock_expiry_sync_trigger(request):
                     status=status.HTTP_202_ACCEPTED)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def export_stock_expiry(request):
+    """Export the displayed live stock-expiry rows to xlsx (Latin digits, RTL)."""
+    from django.http import HttpResponse
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    items = request.data.get('items') or []
+    label = str(request.data.get('label') or 'كل الفروع')
+    mode = str(request.data.get('mode') or '')
+    _TIER_AR = {'expired': 'منتهية', 'critical': '≤30 يوم', 'high': '≤90 يوم',
+                'watch': '≤180 يوم', 'ok': '>180 يوم'}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'صلاحية المخزون'
+    ws.sheet_view.rightToLeft = True
+    cols = [
+        ('كود', 'item_code', 12), ('الصنف', 'item_name', 40),
+        ('الكمية', 'total_qty', 12), ('تكلفة الوحدة', 'unit_cost', 12),
+        ('قيمة معرّضة', 'value_at_risk', 14), ('أقرب صلاحية', 'earliest_expiry', 14),
+        ('الحالة', 'tier', 12), ('دفعات', 'batch_count', 8),
+        ('التصنيف العام', 'medicine_type', 18), ('المنشأ', 'origin', 14),
+        ('مستورد', 'is_imported', 8), ('ثلاجة', 'is_fridge', 8),
+        ('الفروع', 'branches', 16),
+    ]
+    ws.append([f'أرصدة الصلاحية — {label} — {mode}'])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
+    ws['A1'].font = Font(bold=True, size=13)
+    ws.append([])
+    ws.append([c[0] for c in cols])
+    fill = PatternFill('solid', fgColor='022871')
+    for i, c in enumerate(cols, start=1):
+        cell = ws.cell(row=3, column=i)
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal='center')
+        ws.column_dimensions[cell.column_letter].width = c[2]
+
+    def _f(row, key):
+        v = row.get(key)
+        if key in ('is_imported', 'is_fridge'):
+            return 'نعم' if v else ''
+        if key == 'tier':
+            return _TIER_AR.get(v, v or '')
+        if key == 'branches':
+            return '، '.join(v or [])
+        return v if v is not None else ''
+
+    red = Font(color='C00000')
+    for row in items:
+        ws.append([_f(row, c[1]) for c in cols])
+        if row.get('tier') == 'expired':
+            for i in range(1, len(cols) + 1):
+                ws.cell(row=ws.max_row, column=i).font = red
+    ws.freeze_panes = 'A4'
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    resp = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="stock_expiry.xlsx"'
+    return resp
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def spawn_stock_expiry_count(request):
+    """
+    Create a physical stock-count session (mode=expiry_audit) from the LIVE
+    stock-expiry grid — for one branch + the given item_codes. The entered-expiry
+    hint comes from the stkbalexpiry mirror (the actual on-hand expiry).
+    Body: { branch (required), item_codes (required), name? }.
+    """
+    from apps.stockcount.models import StockCountSession, StockCountSnapshot
+    from apps.stockcount.engine import generate_snapshot
+    from django.db.models import Min
+    from .models import StockExpiryBalance
+
+    branch = str(request.data.get('branch') or '').strip()
+    raw = request.data.get('item_codes') or []
+    codes = [str(c).strip() for c in raw if str(c).strip()] if isinstance(raw, (list, tuple)) else []
+    if not branch:
+        return Response({'detail': 'كود الفرع مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not codes:
+        return Response({'detail': 'لا توجد أصناف محددة.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    profile = getattr(request.user, 'staff_profile', None)
+    name = request.data.get('name') or f'جرد صلاحية (حي) — فرع {branch}'
+    session = StockCountSession.objects.create(
+        name=name, mode='expiry_audit', branch_code=branch,
+        item_codes_filter=codes, created_by=profile,
+        notes='مولّدة من أرصدة صلاحية المخزون الحية (stkbalexpiry).',
+    )
+    try:
+        count = generate_snapshot(session)
+    except ValueError as e:
+        session.delete()
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        session.delete()
+        logger.exception('spawn_stock_expiry_count snapshot failed')
+        return Response({'detail': f'خطأ في الاتصال بـ SOFTECH: {e}'},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    # Hint = earliest on-hand expiry for this item at this branch (from the mirror).
+    hints = {r['item_code']: r['h'] for r in StockExpiryBalance.objects
+             .filter(branch_code=branch, item_code__in=codes)
+             .values('item_code').annotate(h=Min('expiry_date'))}
+    to_update = []
+    for snap in StockCountSnapshot.objects.filter(session=session):
+        h = hints.get(snap.item_code)
+        if h:
+            snap.entered_expiry_hint = h
+            to_update.append(snap)
+    if to_update:
+        StockCountSnapshot.objects.bulk_update(to_update, ['entered_expiry_hint'])
+
+    return Response({'detail': f'تم إنشاء جلسة جرد صلاحية لـ {count} صنف.',
+                     'session_id': session.pk, 'item_count': count, 'branch_code': branch,
+                     'status': session.status}, status=status.HTTP_201_CREATED)
+
+
 class StockBatchViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,

@@ -63,6 +63,38 @@ class RequestMarkdownTests(TestCase):
         self.assertEqual(r2.status_code, status.HTTP_409_CONFLICT)
 
 
+class SpawnStockExpiryCountTests(TestCase):
+    """Spawn a physical count from the LIVE stock-expiry grid; hint = mirror expiry."""
+    URL = '/api/batches/stock-expiry/spawn-count/'
+
+    def setUp(self):
+        self.user, self.profile, self.client = make_admin('se_admin')
+        from apps.batches.models import StockExpiryBalance
+        for exp in (_dt.date(2026, 3, 1), _dt.date(2026, 1, 15)):   # earliest = 2026-01-15
+            StockExpiryBalance.objects.create(
+                branch_code='130', store_code='101', item_code='SE1', item_name='Item SE1',
+                batch_no='', expiry_date=exp, qty=Decimal('5'), is_quarantine=False)
+
+    def _fake_stock(self, branch_code, item_codes):
+        return [{'item_code': c, 'item_name': f'Item {c}', 'item_medicine': '',
+                 'category_name': 'cat', 'qty': Decimal('8')} for c in item_codes]
+
+    def test_spawn_with_mirror_hint(self):
+        with patch('apps.stockcount.engine.fetch_filtered_stock', side_effect=self._fake_stock):
+            r = self.client.post(self.URL, {'branch': '130', 'item_codes': ['SE1']}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+        s = StockCountSession.objects.get(pk=r.data['session_id'])
+        self.assertEqual(s.mode, 'expiry_audit')
+        snap = StockCountSnapshot.objects.get(session=s, item_code='SE1')
+        self.assertEqual(snap.entered_expiry_hint, _dt.date(2026, 1, 15))   # earliest mirror expiry
+
+    def test_spawn_requires_branch_and_codes(self):
+        r = self.client.post(self.URL, {'item_codes': ['SE1']}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        r2 = self.client.post(self.URL, {'branch': '130', 'item_codes': []}, format='json')
+        self.assertEqual(r2.status_code, status.HTTP_400_BAD_REQUEST)
+
+
 class ApplySingleCountExpiryTests(TestCase):
     def setUp(self):
         self.session = StockCountSession.objects.create(

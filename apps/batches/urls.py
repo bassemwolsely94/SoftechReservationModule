@@ -16,6 +16,8 @@ from .views import (
     stock_expiry_report_view,
     StockExpirySyncRunListView,
     stock_expiry_sync_trigger,
+    export_stock_expiry,
+    spawn_stock_expiry_count,
 )
 
 router = DefaultRouter()
@@ -47,4 +49,6 @@ urlpatterns = [
     path('stock-expiry/report/',  stock_expiry_report_view,  name='stock-expiry-report'),
     path('stock-expiry/runs/',    StockExpirySyncRunListView.as_view(), name='stock-expiry-runs'),
     path('stock-expiry/sync/',    stock_expiry_sync_trigger, name='stock-expiry-sync'),
+    path('stock-expiry/export/',  export_stock_expiry,       name='stock-expiry-export'),
+    path('stock-expiry/spawn-count/', spawn_stock_expiry_count, name='stock-expiry-spawn-count'),
 ] + router.urls

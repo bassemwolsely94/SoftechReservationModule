@@ -888,6 +888,12 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', 'stock-expiry-runs'] }),
   })
 
+  const navigate = useNavigate()
+  const [err, setErr] = useState(null)
+  const branchLabel = branch
+    ? (branches.find(b => b.softech_branch_id === branch)?.name_ar || branch)
+    : 'كل الفروع'
+
   const NUMERIC = new Set(['total_qty', 'unit_cost', 'value_at_risk', 'batch_count', 'days_to_expiry'])
   const arrow = (k) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
   const sortBy = (k) => {
@@ -921,6 +927,22 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   }, [rows, importedOnly, fridgeOnly, medType, search, sortKey, sortDir])
 
   const totalVar = useMemo(() => view.reduce((s, r) => s + (r.value_at_risk || 0), 0), [view])
+
+  const exportXlsx = useMutation({
+    mutationFn: () => batchesApi.stockExpiryExport({ items: view, label: branchLabel, mode }),
+    onSuccess: (res) => {
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url; a.download = `stock_expiry_${branchLabel}_${mode}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url)
+    },
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر التصدير'),
+  })
+  const spawn = useMutation({
+    mutationFn: () => batchesApi.stockExpirySpawnCount({ branch, item_codes: view.map(r => r.item_code) }),
+    onSuccess: (res) => navigate(`/stock-count?session=${res.data.session_id}`),
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء جلسة الجرد'),
+  })
 
   return (
     <div>
@@ -978,14 +1000,26 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
         <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" checked={fridgeOnly} onChange={e => setFridge(e.target.checked)} /> ❄️ ثلاجة</label>
       </div>
 
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <p className="text-sm text-gray-600">
           عدد الأصناف: <b>{fmtInt(view.length)}</b>
           <span className="mx-2 text-gray-300">·</span>
           قيمة معرّضة للخطر: <b className="text-red-600">{fmtNum(totalVar)} ج</b>
+          {isFetching && <span className="mr-2 text-xs text-gray-400">جاري التحميل…</span>}
         </p>
-        {isFetching && <span className="text-xs text-gray-400">جاري التحميل…</span>}
+        <div className="flex items-center gap-2">
+          <button onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending || view.length === 0}
+                  className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
+          </button>
+          <button onClick={() => spawn.mutate()} disabled={spawn.isPending || !branch || view.length === 0}
+                  title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+            {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي'}
+          </button>
+        </div>
       </div>
+      {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
 
       {view.length === 0 ? (
         <div className="text-center py-14 text-gray-400">لا توجد أصناف — تأكد من تشغيل مزامنة صلاحية المخزون.</div>

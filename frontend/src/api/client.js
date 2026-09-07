@@ -2061,6 +2061,8 @@ export const batchesApi = {
   stockExpiryReport:  (params) => api.get('/batches/stock-expiry/report/', { params }),
   stockExpiryRuns:    ()       => api.get('/batches/stock-expiry/runs/'),
   stockExpirySync:    (body)   => api.post('/batches/stock-expiry/sync/', body || {}),
+  stockExpiryExport:  (body)   => api.post('/batches/stock-expiry/export/', body, { responseType: 'blob' }),
+  stockExpirySpawnCount: (body) => api.post('/batches/stock-expiry/spawn-count/', body),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }
