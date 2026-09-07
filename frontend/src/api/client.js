@@ -2059,6 +2059,7 @@ export const batchesApi = {
   // Live stock-expiry (stkbalexpiry mirror across all nodes)
   stockExpirySummary: (params) => api.get('/batches/stock-expiry/summary/', { params }),
   stockExpiryReport:  (params) => api.get('/batches/stock-expiry/report/', { params }),
+  stockExpiryStores:  (params) => api.get('/batches/stock-expiry/stores/', { params }),
   stockExpiryRuns:    ()       => api.get('/batches/stock-expiry/runs/'),
   stockExpirySync:    (body)   => api.post('/batches/stock-expiry/sync/', body || {}),
   stockExpiryExport:  (body)   => api.post('/batches/stock-expiry/export/', body, { responseType: 'blob' }),

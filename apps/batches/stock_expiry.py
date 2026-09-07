@@ -146,17 +146,19 @@ def _expiry_tier(days):
 
 
 def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
+                        store_codes=None, exp_from=None, exp_to=None,
                         include_quarantine=False, imported_only=False,
                         fridge_only=False, medicine_type=None, sort=None, limit=3000):
     """
     Per-item near-expiry / expired report over the StockExpiryBalance mirror,
     enriched with economics + attributes (reuses the audit's item map).
 
-    mode : 'near' (today … today+within_days) | 'expired' (< today) | 'all'.
-    Returns list[dict] sorted (default: value_at_risk desc for near, qty desc
-    for expired), each with total_qty, earliest/latest_expiry, days_to_expiry,
-    tier, branches, batch_count, unit_cost, value_at_risk, is_imported, is_fridge,
-    origin, medicine_type, …
+    mode : 'near' (today … today+within_days) | 'expired' (< today) |
+           'range' (expiry between exp_from … exp_to — the active on-hand batch
+           expiry) | 'all'.
+    store_codes : optional list of storecodes (HQ/branch warehouses) to include.
+    Rows are the per-batch mirror rows filtered by expiry, then aggregated per item
+    (so total_qty / batch_count / earliest-latest reflect only the matching batches).
     """
     import datetime as _d
     from django.db.models import Sum, Min, Max, Count
@@ -169,11 +171,18 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
         qs = qs.filter(is_quarantine=False)
     if branch_codes:
         qs = qs.filter(branch_code__in=list(branch_codes))
+    if store_codes:
+        qs = qs.filter(store_code__in=list(store_codes))
     if mode == 'expired':
         qs = qs.filter(expiry_date__lt=today)
     elif mode == 'near':
         qs = qs.filter(expiry_date__gte=today,
                        expiry_date__lte=today + _d.timedelta(days=int(within_days)))
+    elif mode == 'range':
+        if exp_from:
+            qs = qs.filter(expiry_date__gte=exp_from)
+        if exp_to:
+            qs = qs.filter(expiry_date__lte=exp_to)
     # mode == 'all' → no expiry filter
 
     agg = (qs.values('item_code')
@@ -237,7 +246,24 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
     return out[:int(limit)]
 
 
-def stock_expiry_summary(branch_codes=None, include_quarantine=False):
+def stock_expiry_stores(branch_codes=None):
+    """Distinct (branch_code, store_code) present in the mirror — powers the store
+    filter dropdown. Returns [{branch_code, store_code, is_quarantine}]."""
+    from .models import StockExpiryBalance
+    qs = StockExpiryBalance.objects.all()
+    if branch_codes:
+        qs = qs.filter(branch_code__in=list(branch_codes))
+    seen = {}
+    for bc, sc, quar in qs.values_list('branch_code', 'store_code', 'is_quarantine').distinct():
+        seen[(bc, sc)] = quar
+    return sorted(
+        [{'branch_code': bc, 'store_code': sc, 'is_quarantine': bool(seen[(bc, sc)])}
+         for (bc, sc) in seen],
+        key=lambda x: (x['branch_code'], x['store_code']),
+    )
+
+
+def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine=False):
     """KPI cards for the FEFO tabs, from the mirror: value-at-risk + counts by band."""
     import datetime as _d
     from django.db.models import Sum, Count
@@ -250,6 +276,8 @@ def stock_expiry_summary(branch_codes=None, include_quarantine=False):
         base = base.filter(is_quarantine=False)
     if branch_codes:
         base = base.filter(branch_code__in=list(branch_codes))
+    if store_codes:
+        base = base.filter(store_code__in=list(store_codes))
 
     def band(d_from, d_to):
         q = base.filter(expiry_date__gte=today + _d.timedelta(days=d_from),

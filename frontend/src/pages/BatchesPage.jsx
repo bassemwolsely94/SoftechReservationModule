@@ -852,6 +852,9 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   const [mode, setMode]         = useState(initialMode)
   const [within, setWithin]     = useState(180)
   const [branch, setBranch]     = useState('')
+  const [store, setStore]       = useState('')
+  const [expFrom, setExpFrom]   = useState('')
+  const [expTo, setExpTo]       = useState('')
   const [includeQ, setIncludeQ] = useState(false)
   const [search, setSearch]     = useState('')
   const [importedOnly, setImp]  = useState(false)
@@ -866,10 +869,18 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   })
   const branches = branchesData?.results || branchesData || []
 
+  const { data: storesData } = useQuery({
+    queryKey: ['batches', 'stock-expiry-stores', branch],
+    queryFn:  () => batchesApi.stockExpiryStores({ branches: branch || undefined }).then(r => r.data),
+  })
+  const stores = storesData?.stores || []
+
   const { data, isFetching } = useQuery({
-    queryKey: ['batches', 'stock-expiry-report', mode, within, branch, includeQ],
+    queryKey: ['batches', 'stock-expiry-report', mode, within, branch, store, includeQ, expFrom, expTo],
     queryFn:  () => batchesApi.stockExpiryReport({
-      mode, within_days: within, branches: branch || undefined,
+      mode, within_days: within, branches: branch || undefined, stores: store || undefined,
+      exp_from: mode === 'range' ? (expFrom || undefined) : undefined,
+      exp_to:   mode === 'range' ? (expTo || undefined) : undefined,
       include_quarantine: includeQ || undefined,
     }).then(r => r.data),
   })
@@ -958,6 +969,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
         {modeSwitch && (
           <select value={mode} onChange={e => setMode(e.target.value)} className="border rounded-lg px-2 py-1.5">
             <option value="near">قرب الانتهاء</option>
+            <option value="range">نطاق تاريخ الصلاحية</option>
             <option value="expired">منتهية (متبقية)</option>
             <option value="all">الكل</option>
           </select>
@@ -970,9 +982,23 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
             <option value={365}>خلال سنة</option>
           </select>
         )}
-        <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded-lg px-2 py-1.5 min-w-[9rem]">
+        {mode === 'range' && (
+          <span className="flex items-center gap-1">
+            <span className="text-gray-500 text-xs">صلاحية من</span>
+            <input type="date" value={expFrom} onChange={e => setExpFrom(e.target.value)} className="border rounded-lg px-2 py-1.5" />
+            <span className="text-gray-500 text-xs">إلى</span>
+            <input type="date" value={expTo} onChange={e => setExpTo(e.target.value)} className="border rounded-lg px-2 py-1.5" />
+          </span>
+        )}
+        <select value={branch} onChange={e => { setBranch(e.target.value); setStore('') }} className="border rounded-lg px-2 py-1.5 min-w-[9rem]">
           <option value="">كل الفروع</option>
           {branches.map(b => <option key={b.id} value={b.softech_branch_id}>{b.name_ar || b.display_name || b.softech_branch_id}</option>)}
+        </select>
+        <select value={store} onChange={e => setStore(e.target.value)} className="border rounded-lg px-2 py-1.5 min-w-[8rem]">
+          <option value="">كل المخازن</option>
+          {[...new Set(stores.map(s => s.store_code))].filter(Boolean).sort().map(sc => (
+            <option key={sc} value={sc}>مخزن {sc}{stores.find(s => s.store_code === sc)?.is_quarantine ? ' (عزل)' : ''}</option>
+          ))}
         </select>
         <label className="flex items-center gap-1 text-gray-600">
           <input type="checkbox" checked={includeQ} onChange={e => setIncludeQ(e.target.checked)} /> يشمل العزل/التالف

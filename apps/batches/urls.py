@@ -14,6 +14,7 @@ from .views import (
     spawn_expiry_count_session,
     stock_expiry_summary_view,
     stock_expiry_report_view,
+    stock_expiry_stores_view,
     StockExpirySyncRunListView,
     stock_expiry_sync_trigger,
     export_stock_expiry,
@@ -50,6 +51,7 @@ urlpatterns = [
     # ── Live stock-expiry (stkbalexpiry mirror, all nodes) ────────────────────
     path('stock-expiry/summary/', stock_expiry_summary_view, name='stock-expiry-summary'),
     path('stock-expiry/report/',  stock_expiry_report_view,  name='stock-expiry-report'),
+    path('stock-expiry/stores/',  stock_expiry_stores_view,  name='stock-expiry-stores'),
     path('stock-expiry/runs/',    StockExpirySyncRunListView.as_view(), name='stock-expiry-runs'),
     path('stock-expiry/sync/',    stock_expiry_sync_trigger, name='stock-expiry-sync'),
     path('stock-expiry/export/',  export_stock_expiry,       name='stock-expiry-export'),

@@ -530,14 +530,32 @@ def spawn_expiry_count_session(request):
     }, status=status.HTTP_201_CREATED)
 
 
+def _store_list(params):
+    raw = params.get('stores') or params.get('store') or ''
+    if isinstance(raw, (list, tuple)):
+        return [str(s).strip() for s in raw if str(s).strip()]
+    return [s.strip() for s in str(raw).split(',') if s.strip()]
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def stock_expiry_summary_view(request):
     """KPI cards for the FEFO tabs from the StockExpiryBalance mirror (all nodes)."""
     from .stock_expiry import stock_expiry_summary
     branches = _branch_list(request.query_params) or None
+    stores = _store_list(request.query_params) or None
     inc_q = str(request.query_params.get('include_quarantine', '')).lower() == 'true'
-    return Response(stock_expiry_summary(branch_codes=branches, include_quarantine=inc_q))
+    return Response(stock_expiry_summary(branch_codes=branches, store_codes=stores,
+                                         include_quarantine=inc_q))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def stock_expiry_stores_view(request):
+    """Distinct stores (HQ/branch warehouses) in the mirror — powers the store filter."""
+    from .stock_expiry import stock_expiry_stores
+    branches = _branch_list(request.query_params) or None
+    return Response({'stores': stock_expiry_stores(branch_codes=branches)})
 
 
 @api_view(['GET'])
@@ -545,12 +563,14 @@ def stock_expiry_summary_view(request):
 def stock_expiry_report_view(request):
     """
     Near-expiry / expired report over the mirror.
-    Query: mode=near|expired|all, within_days, branches, include_quarantine,
-           imported_only, fridge_only, medicine_type, sort, limit.
+    Query: mode=near|expired|range|all, within_days, exp_from, exp_to, branches,
+           stores, include_quarantine, imported_only, fridge_only, medicine_type,
+           sort, limit.
     """
     from .stock_expiry import stock_expiry_report
     p = request.query_params
     branches = _branch_list(p) or None
+    stores = _store_list(p) or None
 
     def _b(name):
         return str(p.get(name, '')).lower() == 'true'
@@ -561,6 +581,8 @@ def stock_expiry_report_view(request):
         within = 180
     rows = stock_expiry_report(
         mode=p.get('mode', 'near'), within_days=within, branch_codes=branches,
+        store_codes=stores, exp_from=_parse_date(p.get('exp_from')),
+        exp_to=_parse_date(p.get('exp_to')),
         include_quarantine=_b('include_quarantine'), imported_only=_b('imported_only'),
         fridge_only=_b('fridge_only'), medicine_type=(p.get('medicine_type') or None),
         sort=(p.get('sort') or None),

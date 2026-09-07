@@ -203,6 +203,26 @@ class StockExpiryReportTests(TestCase):
         self.assertEqual(s['lt_30']['items'], 1)      # X1
         self.assertEqual(s['expired']['items'], 1)    # X2
 
+    def test_range_mode_filters_by_expiry(self):
+        t = _dt.date.today()
+        near = {r['item_code']: r for r in stock_expiry_report(
+            mode='range', exp_from=t, exp_to=t + _dt.timedelta(days=30))}
+        self.assertIn('X1', near)                       # today+20 batch matches
+        self.assertNotIn('X2', near)                    # expired (past) — out of range
+        self.assertEqual(near['X1']['total_qty'], 5.0)  # only the in-range batch, not the +400 one
+        far = {r['item_code'] for r in stock_expiry_report(
+            mode='range', exp_from=t + _dt.timedelta(days=300), exp_to=t + _dt.timedelta(days=500))}
+        self.assertIn('X1', far)                         # the today+400 batch
+
+    def test_store_filter(self):
+        from apps.batches.models import StockExpiryBalance
+        t = _dt.date.today()
+        StockExpiryBalance.objects.create(
+            branch_code='130', store_code='104', item_code='X9', item_name='x',
+            batch_no='', expiry_date=t + _dt.timedelta(days=20), qty=Decimal('7'), is_quarantine=False)
+        codes = {r['item_code'] for r in stock_expiry_report(mode='all', store_codes=['104'])}
+        self.assertEqual(codes, {'X9'})
+
 
 class MarkdownRevertReminderTests(TestCase):
     """A5.2 follow-on — flag stale, un-reverted near-expiry markdowns."""
