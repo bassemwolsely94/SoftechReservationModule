@@ -1,0 +1,235 @@
+Import-tables probe: 2026-07-02T05:12:05.026439 (READ-ONLY)
+
+  SCHEMA: imports
+    [  1] importsno                  int          len=4    NOT NULL
+    [  2] itemcode                   varchar      len=6    NOT NULL
+    [  3] itemqty                    decimal      len=5    NOT NULL
+    [  4] itemqtyreal                decimal      len=5    NOT NULL
+    [  5] unitcode                   varchar      len=2    NOT NULL
+    [  6] bcurrency                  tinyint      len=1    NOT NULL
+    [  7] bcrate                     decimal      len=4    NOT NULL
+    [  8] itemcostreal               decimal      len=6    NOT NULL
+    [  9] itemcostmm                 decimal      len=6    NOT NULL
+    [ 10] itemcustomsp               decimal      len=4    NOT NULL
+    [ 11] itemcustoms                decimal      len=6    NOT NULL
+    [ 12] itemcargo_points           decimal      len=4    NOT NULL
+    [ 13] itemcargo                  decimal      len=6    NOT NULL
+    [ 14] itemunitsalestax           decimal      len=5    NOT NULL
+    [ 15] iteminsurance              decimal      len=5    NOT NULL
+    [ 16] itemcredit                 decimal      len=5    NOT NULL
+    [ 17] itemtakhlis1               decimal      len=5    NOT NULL
+    [ 18] itemtakhlis2               decimal      len=5    NOT NULL
+    [ 19] itemtransport              decimal      len=5    NOT NULL
+    [ 20] itemothers1                decimal      len=5    NOT NULL
+    [ 21] itemothers2                decimal      len=5    NOT NULL
+    [ 22] itemunitcost               decimal      len=6    NOT NULL
+    [ 23] itemtotcost                decimal      len=6    NOT NULL
+    [ 24] import_closed              tinyint      len=1    NOT NULL
+    [ 25] usercode                   varchar      len=5    NOT NULL
+    [ 26] trans_time                 datetime     len=8    NOT NULL
+
+--- imports COUNT(*) ---
+  COLS: cnt
+  0
+
+  SCHEMA: importsm
+    [  1] importsno                  int          len=4    NOT NULL
+    [  2] importdescr                varchar      len=100  NOT NULL
+    [  3] importopendate             datetime     len=8    NOT NULL
+    [  4] suppcode                   varchar      len=8    NOT NULL
+    [  5] bcurrency                  tinyint      len=1    NOT NULL
+    [  6] bcrate                     decimal      len=4    NOT NULL
+    [  7] orderno                    decimal      len=6    NULL
+    [  8] importtot_value            decimal      len=6    NOT NULL
+    [  9] importtot_cargo            decimal      len=6    NOT NULL
+    [ 10] importtot_insurance        decimal      len=6    NOT NULL
+    [ 11] importtot_credit           decimal      len=6    NOT NULL
+    [ 12] importtot_takhlis1         decimal      len=6    NOT NULL
+    [ 13] importtot_takhlis2         decimal      len=6    NOT NULL
+    [ 14] importtot_transport        decimal      len=6    NOT NULL
+    [ 15] importtot_others1          decimal      len=6    NOT NULL
+    [ 16] importtot_others2          decimal      len=6    NOT NULL
+    [ 17] import_closed              tinyint      len=1    NOT NULL
+    [ 18] usercode                   varchar      len=5    NOT NULL
+    [ 19] trans_time                 datetime     len=8    NOT NULL
+    [ 20] importcomments             varchar      len=200  NULL
+
+--- importsm COUNT(*) ---
+  COLS: cnt
+  0
+
+  SCHEMA: itemsimports
+    [  1] branchcode                 varchar      len=5    NOT NULL
+    [  2] importsno                  int          len=4    NOT NULL
+    [  3] importlineno               smallint     len=2    NOT NULL
+    [  4] itemcode                   varchar      len=6    NOT NULL
+    [  5] itemqty                    decimal      len=6    NOT NULL
+    [  6] itemexpirydate             datetime     len=8    NULL
+    [  7] bcurrency                  tinyint      len=1    NOT NULL
+    [  8] bcrate                     decimal      len=4    NOT NULL
+    [  9] itemunitcostbc             decimal      len=6    NOT NULL
+    [ 10] itemtotcostbc              decimal      len=6    NOT NULL
+    [ 11] itemunitcostlc             decimal      len=6    NOT NULL
+    [ 12] itemtotcostlc              decimal      len=6    NOT NULL
+    [ 13] import_bcfactor            decimal      len=4    NOT NULL
+    [ 14] import_itemtotcostlc       decimal      len=6    NOT NULL
+    [ 15] import_itemunitcostlc      decimal      len=6    NOT NULL
+
+--- itemsimports COUNT(*) ---
+  COLS: cnt
+  0
+
+  SCHEMA: itemsimportsm
+    [  1] branchcode                 varchar      len=5    NOT NULL
+    [  2] importsno                  int          len=4    NOT NULL
+    [  3] storecode                  varchar      len=3    NOT NULL
+    [  4] importdescr                varchar      len=100  NOT NULL
+    [  5] costcentercode             varchar      len=10   NOT NULL
+    [  6] suppcode                   varchar      len=8    NOT NULL
+    [  7] bcurrency                  tinyint      len=1    NOT NULL
+    [  8] bcrate                     decimal      len=4    NOT NULL
+    [  9] suppdocvaluebc             decimal      len=6    NOT NULL
+    [ 10] suppdocvaluelc             decimal      len=6    NOT NULL
+    [ 11] itemsreceivedate           datetime     len=8    NOT NULL
+    [ 12] importopendate             datetime     len=8    NOT NULL
+    [ 13] orderno                    decimal      len=6    NULL
+    [ 14] importtot_salestax         decimal      len=6    NOT NULL
+    [ 15] importtot_origintax        decimal      len=6    NOT NULL
+    [ 16] importtot_expenses         decimal      len=6    NOT NULL
+    [ 17] import_bcfactor            decimal      len=4    NOT NULL
+    [ 18] usercode                   varchar      len=5    NOT NULL
+    [ 19] trans_time                 datetime     len=8    NOT NULL
+    [ 20] importcomments             varchar      len=200  NULL
+    [ 21] origdoc                    tinyint      len=1    NULL
+
+--- itemsimportsm COUNT(*) ---
+  COLS: cnt
+  0
+
+--- other %recl%/%receiv%/%import% tables ---
+  COLS: name
+  imports
+  importsm
+  itemsimports
+  itemsimportsm
+  itemstoreclassif
+
+--- procs/triggers referencing the import tables ---
+  (no rows)
+
+--- tr_stktrans / tr_stktransm readable? ---
+  COLS: name | 
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktransm | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+  tr_stktrans | HIDDEN
+
+Complete: 2026-07-02T05:12:06.643724

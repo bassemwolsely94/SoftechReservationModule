@@ -1,0 +1,33 @@
+Purchase-draft probe: 2026-06-28T12:47:17.152673  (READ-ONLY)
+
+================================================================================
+  1: lastdocnumbers *_supp counters (did the draft bump in_supp?)
+================================================================================
+
+--- lastdocnumbers all rows ---
+  COLS: branchcode | ver_branch | lastdocnumberin_supp | lastdocnumberout_supp
+  000 | 0 | 0.0 | 0.0
+  100 | 1 | 63546.0 | 11019.0
+
+================================================================================
+  2: stktransm5 doccode=10 (the saved draft header)
+================================================================================
+
+--- stktransm5 doccode=10 — key cols ---
+  (no rows)
+
+--- stktransm5 doccode=10 — FULL header (golden draft template) (vertical) ---
+  (no rows)
+
+================================================================================
+  3: stktrans5 lines for the draft
+================================================================================
+
+================================================================================
+  4: cross-check by supplier doc no docnumber2=1124578
+================================================================================
+
+--- stktransm5 where docnumber2=1124578 ---
+  (no rows)
+
+Complete: 2026-06-28T12:47:18.331744

@@ -1,0 +1,24 @@
+# Slim dependency set for CI (running `manage.py test`).
+#
+# Excludes heavy/optional packages that are imported LAZILY (inside functions) and
+# never touched by the test suite: easyocr/torch, google-genai, pytesseract,
+# imagehash, beautifulsoup4, and pyodbc (Sybase — needs system unixODBC libs).
+# Keep this in sync with the runtime imports in requirements.txt.
+Django==4.2.13
+djangorestframework==3.15.1
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.3.1
+psycopg2-binary>=2.9.9
+APScheduler==3.10.4
+python-decouple==3.8
+django-filter==23.5
+Pillow>=10.3.0
+django-extensions==3.2.3
+qrcode>=8.0
+pyotp>=2.9.0
+openpyxl>=3.1.0
+rapidfuzz>=3.6.0
+channels>=4.0.0
+daphne>=4.0.0
+PyJWT>=2.8.0
+pywebpush>=2.0.0

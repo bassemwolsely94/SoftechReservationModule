@@ -9,3 +9,37 @@ staticfiles/
 node_modules/
 .DS_Store
 Thumbs.db
+
+# ── Local runtime / editor / tooling ─────────────────────────────────────────
+logs/
+*.log.*
+backups/
+_legacy_migrations_backup/
+.vscode/
+.claude/
+
+# Deployment archives / staging area (build artifacts, don't track in git)
+Not Yet Deployed/
+*.tar.gz
+
+# ── Local scratch: one-off scripts & SQL/debug dumps at the repo root ─────────
+/$null
+/_UL
+/_smoke_followup.py
+/fix.py
+/fix_*.py
+/diagnose.py
+/discover_financial_tables.py
+/kill_connections.py
+/read_excel_cols.py
+/investigate_output.txt
+/return_dml.txt
+/save_inserts.txt
+/save_purchase.txt
+/sybase_vps_test.txt
+/tempsave_dml.txt
+/test_results.txt
+/Powershell Commands.txt
+
+# Test/replication scratch state
+_repl_test_state.json

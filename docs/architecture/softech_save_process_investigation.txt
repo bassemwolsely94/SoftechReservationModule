@@ -1,0 +1,807 @@
+Save-process investigation: 2026-06-22T01:52:12.165075
+Mode: READ-ONLY
+
+================================================================================
+  A: Triggers bound to the sale-commit chain tables
+================================================================================
+  stktransm5             INS=tr_stktransm5                UPD=-                            DEL=-
+  stktrans5              INS=-                            UPD=-                            DEL=-
+  branchesales5          INS=tr_branchesales5_insert      UPD=-                            DEL=-
+  stktransm              INS=tr_stktransm                 UPD=-                            DEL=-
+  stktrans               INS=tr_stktrans                  UPD=-                            DEL=-
+  branchesales           INS=tr_branchesales_insert       UPD=-                            DEL=-
+  stkbal                 INS=-                            UPD=tr_stkbal_update             DEL=-
+  stkbalexpiry           INS=-                            UPD=-                            DEL=-
+  picpoints              INS=tr_picpoints                 UPD=-                            DEL=-
+  localcustomers         INS=-                            UPD=-                            DEL=-
+  localcustomerspoints   INS=-                            UPD=-                            DEL=-
+  lcpointstrans          INS=-                            UPD=-                            DEL=-
+  lastdocnumbers         INS=-                            UPD=tr_lastdocnumbers            DEL=-
+
+================================================================================
+  B: Any trigger whose text references a chain table
+================================================================================
+  tr_acctrans3
+  tr_chequeslevels
+  tr_dm_custrating
+  tr_dm_picsloctrans_ins
+  tr_dm_stktrans
+  tr_dm_stktransm
+  tr_dm_trips
+  tr_dm_tripsmissed
+  tr_dm_tripstimes
+  tr_dm_tripstrans
+  tr_fa_fixedassets
+  tr_fa_fixedassetsm
+  tr_invoices
+  tr_items
+  tr_machine_results
+  tr_patientdata
+  tr_patientdata2
+  tr_personphones_insert
+  tr_personphones_update
+  tr_piccrmordersnos_ins
+  tr_piccrmorderstatus_ins
+  tr_picpoints
+  tr_sacctrans3
+  tr_stktransm5
+  tr_stktransm_inv
+  tr_stockordersm
+  tr_temp_r_mon
+
+================================================================================
+  C: Item-derived POINTS source
+================================================================================
+
+  Tables with a points-ish name:
+    - lcpointstrans
+    - localcustomerspoints
+    - picpoints
+    - picpoints_old
+
+  Columns with a points-ish name (table.column):
+    - branches.picpoints
+    - branches_new.picpoints
+    - brancheses.picpoints
+    - cp_brancheshawafez.branchtotpoints
+    - cp_emphawafez.emp_points
+    - cp_emphawafez.pointvalue
+    - cp_emphawafez2.emp_points
+    - cp_emphawafez2.pointvalue
+    - imports.itemcargo_points
+    - itemlastupdate.itempointsys
+    - items.itempointsys
+    - itemstrans.itempointsys
+    - lcpointstrans.conpoints
+    - lcpointstrans.conpointsold
+    - lcpointstrans.totpoints
+    - lcpointstrans.totpointsold
+    - localcustomers.picpoints
+    - localcustomers2.sourcepicpoints
+    - localcustomerspoints.conpoints
+    - localcustomerspoints.totpoints
+    - piccrmitems.itempoints
+    - picpoints.points
+    - picpoints_old.points
+    - picstrans.picpoints
+
+================================================================================
+  C2: items points columns (sample)
+================================================================================
+  items.itempointsys           tinyint len=1
+
+================================================================================
+  D: Procedures referencing chain/points tables
+================================================================================
+
+================================================================================
+  E: FULL TEXT — chain triggers
+================================================================================
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stktransm5
+------------------------------------------------------------------------
+CREATE TRIGGER dbo.tr_stktransm5 ON dbo.stktransm5           
+   FOR INSERT AS           
+      BEGIN          
+        declare  @ver_branch char(5),         
+                 @branch char(5),          
+                 @doccode char(5),@docnumber integer,          
+              @docdate    datetime,          
+                 @trans_time datetime         
+                           
+         
+        select  @branch=branchcode,@doccode=doccode,@docnumber=docnumber,@docdate=docdate         
+           from inserted          
+         
+        select  @trans_time = getdate()         
+        /* ******************************** Update table StkTransM5 ITSELF*/          
+      update stktransm5set stktransm5.trans_time=@trans_time         
+        from stktransm5,inserted          
+        where stktransm5.branchcode=@branch  and         
+              stktransm5.doccode=@doccode        and         
+              stktransm5.docnumber=@docnumber    and         
+              stktransm5.docdate=@docdate          
+        
+     /* ================================ Update lastdocnumbers */         
+    if @doccode='30'        
+        begin /* 150 */        
+            update lastdocnumbers set lastdocnumbers.lastdocnumberin_cust=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 150 */        
+    else if @doccode='115'        
+        begin /* 160 */update lastdocnumbers set lastdocnumbers.lastdocnumberout_cust=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 160 */        
+    else if @doccode='10'        
+        begin /* 170 */        
+            update lastdocnumbers set lastdocnumbers.lastdocnumberin_supp=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 170 */        
+    else if @doccode='120'begin /* 180 */        
+           update lastdocnumbers set lastdocnumbers.lastdocnumberout_supp=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 180 */        
+    elsebegin /* 190 */        
+            if convert(integer,@doccode)<99        
+              begin /* 200 */        
+                update lastdocnumbers set lastdocnumbers.lastdocnumberin=@docnumber from        
+                lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+              end /* 200 */        
+            else        
+              begin /* 300 */        
+                update lastdocnumbers set lastdocnumbers.lastdocnumberout=@docnumber fromlastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+              end /* 300 */        
+          /*end if*/        
+        end /* 190 */        
+    /*end if*/        
+        
+    /* ======================================================== */        
+         
+      END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_branchesales5_insert
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stktransm
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stktrans
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_branchesales_insert
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stkbal_update
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_picpoints
+------------------------------------------------------------------------
+CREATE TRIGGER tr_picpoints ON picpoints         									   
+FOR INSERT AS         										   
+BEGIN        										     
+declare  @phcode char(13), @ph_code char(13), @branchcode char(5),    
+@points  integer   ,@doccode char(3), @docnumber integer,@docdate datetime  								     										   
+ 	 select  @phcode=phcode,@branchcode=branchcode,@points=points ,@doccode=doccode, @docnumber=docnumber, @docdate=docdate   
+   											  from inserted    
+  if @phcode not in (select localcustomerspoints.phcode from localcustomerspoints where localcustomerspoints.phcode = @phcode)      
+												begin   													    
+insert into localcustomerspoints (branchcode, phcode, totpoints, conpoints)    
+values (@branchcode, @phcode, 0, 0)   end      
+if  @points >= 0        
+begin     	update localcustomerspoints     		set localcustomerspoints.totpoints = localcustomerspoints.totpoints + @points     		   
+	from localcustomerspoints, inserted     		   
+	where localcustomerspoints.phcode = @phcodeend        
+	else        
+begin   
+	update localcustomerspoints     	   
+set localcustomerspoints.conpoints = localcustomerspoints.conpoints - @points      
+from localcustomerspoints, inserted        
+	where localcustomerspoints.phcode = @phcodeend     	   
+   
+		/* rep */   
+   
+declare @ver_branchcode char(5)       
+     
+     select @ver_branchcode=lastdocnumbers.branchcode     
+	from  lastdocnumbers, inserted  where lastdocnumbers.ver_branch = '1'       
+     
+     
+		if @branchcode=@ver_branchcode and @branchcode!='100'     
+		begin     
+   
+   
+            update r3stktransm       
+            set    r3stktransm.personnewbal=@points   
+            from   r3stktransm,inserted       
+            where  r3stktransm.branchcode=inserted.branchcode and      
+                    r3stktransm.doccode=inserted.doccode and      
+                    r3stktransm.docnumber=inserted.docnumber    and      
+                    r3stktransm.docdate=inserted.docdate     
+end   
+END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_lastdocnumbers
+------------------------------------------------------------------------
+  (no text — ENCRYPTED or absent)
+
+------------------------------------------------------------------------
+  TRIGGER: tr_acctrans3
+------------------------------------------------------------------------
+CREATE TRIGGER tr_acctrans3 ON acctrans3     
+FOR INSERT AS 
+BEGIN   							   									  declare  @accsno3     numeric(12,0)   							   									  select  @accsno3=accsno from    inserted    							   									  update  	lastdocnumbers   									  setlastdocnumbers.accsno3=@accsno3      							        from		lastdocnumbers,branches,inserted      							        where	lastdocnumbers.branchcode=branches.branchcode	and   										branches.acciteml1=inserted.ver_branch_l1   							   									END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_chequeslevels
+------------------------------------------------------------------------
+CREATE TRIGGER tr_chequeslevels   ON chequeslevels   	for   insert,update  AS  	declare @personcode               varchar(5)  , @leveltrans_time            datetime  , @personblock           tinyint  , @branchcode                      varchar(5)  	select@personcode=personcode        ,@leveltrans_time=leveltrans_time,@branchcode=branchcode from inserted  	begin  		 /* ------------------ at H/Q Only ----------------- */   		/* ========== Check this branch ================= */     	  	declare @ver_branchcode char(10)     		select @ver_branchcode=lastdocnumbers.branchcode    from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'   		if @ver_branchcode= '100'   			update chequeslevels set trans_time=getdate()    where personcode=@personcode  and  leveltrans_time=@leveltrans_time and branchcode=@branchcode  	end
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_custrating
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_custrating ON dm_custrating  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_custrating select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.doccode, inserted.docnumber5, inserted.docdate5, inserted.dm_tripid, inserted.rate_itemno, inserted.rate_awarded, inserted.rate_note, inserted.trans_time, inserted.nbs_updtstamp from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_picsloctrans_ins
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_picsloctrans_ins ON dm_picsloctrans  For INSERT AS BEGIN     update  dm_picsloc     set     dm_picsloc.latitude_x   = inserted.latitude_x,             dm_picsloc.longitude_y  = inserted.longitude_y,             dm_picsloc.usercode= inserted.usercode,             dm_picsloc.trans_time   = inserted.trans_time     from    dm_picsloc, inserted     where   dm_picsloc.phcode = inserted.phcode /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   			
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_picsloctrans select inserted.phcode, inserted.latitude_x, inserted.longitude_y, inserted.usercode, inserted.trans_time from inserted  		end END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_stktrans
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_stktrans ON dm_stktrans  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_stktrans select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.doccode, inserted.docnumber5, inserted.docdate5, inserted.item_sno, inserted.itemcode, inserted.itemname, inserted.itemtrans, inserted.transqty, inserted.itemsaleprice, inserted.transprice, inserted.transprice_total from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_stktransm
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_stktransm ON dm_stktransm  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_stktransm select inserted.partnercode, inserted.tenantid, inserted.cc_branchcode, inserted.cc_orderno, inserted.branchcode, inserted.doccode, inserted.docnumber5, inserted.docdate5, inserted.so_priority, inserted.no_items, inserted.no_services, inserted.phcode, inserted.phcode_name, inserted.phcode_contact, inserted.phcode_address, inserted.refurlemail, inserted.docvalue, inserted.docvaluepay, inserted.money_change, inserted.is_blocked, inserted.order_notes, inserted.so_status, inserted.so_statustime, inserted.dm_tripid, inserted.startp_trans_time, inserted.refstoplocationx, inserted.refstoplocationy, inserted.stoplocationx, inserted.stoplocationy, inserted.travel_mins_actual, inserted.travel_mins_std, inserted.handle_mins_actual, inserted.handle_mins_std, inserted.rating_customer, inserted.rating_system, inserted.money_customer, inserted.money_system, inserted.cusercode, inserted.ctrans_time, inserted.usercode, inserted.trans_time, inserted.dm_tripid_order, inserted.vf1 from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_trips
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_trips ON dm_trips  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_trips select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.dm_tripid, inserted.tripdescr, inserted.tripcreatesource, inserted.tripnature, inserted.tripassigntype, inserted.tripstartplan, inserted.tripstartactual, inserted.drivercode, inserted.drivername, inserted.driverbonus, inserted.trip_notes, inserted.tripstatus, inserted.tripstatustime, inserted.startp_trans_time, inserted.cusercode, inserted.ctrans_time, inserted.usercode, inserted.trans_time, inserted.dm_updtstamp, inserted.nbs_updtstamp, inserted.vf1 from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_tripsmissed
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_tripsmissed ON dm_tripsmissed  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_tripsmissed select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.dm_tripid, inserted.trans_time, inserted.drivercode, inserted.deduct_value, inserted.miss_type from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_tripstimes
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_tripstimes ON dm_tripstimes  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_tripstimes select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.doccode, inserted.docnumber5, inserted.docdate5, inserted.dm_tripid, inserted.trans_type, inserted.trans_datetime, inserted.drivercode, inserted.exec_time_sec, inserted.nbs_updtstamp from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_dm_tripstrans
+------------------------------------------------------------------------
+CREATE TRIGGER tr_dm_tripstrans ON dm_tripstrans  For INSERT AS       BEGIN /* ========== Check this branch ================= */     	declare @ver_branchcode char(10) 	select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'        	if @ver_branchcode !='100'   		begin   		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3dm_tripstrans select inserted.partnercode, inserted.tenantid, inserted.branchcode, inserted.doccode, inserted.docnumber5, inserted.docdate5, inserted.dm_tripid, inserted.trans_type, inserted.trans_datetime, inserted.trans_locationx, inserted.trans_locationy, inserted.drivercode, inserted.travel_mins_actual, inserted.travel_mins_std, inserted.handle_mins_actual, inserted.usercode, inserted.nbs_updtstamp, inserted.vf1, inserted.ref_tripid from inserted 		end  END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_fa_fixedassets
+------------------------------------------------------------------------
+CREATE TRIGGER tr_fa_fixedassets ON fa_fixedassets        
+   FOR INSERT AS        
+      BEGIN       
+     
+     
+        declare  @branch char(5),       
+                 @facode integer     
+      
+      
+        select  @branch=branchcode,@facode=facode     
+         from inserted       
+     
+      
+        update lastdocnumbers set lastdocnumbers.fa_facode=@facode from     
+            lastdocnumbers,inserted where lastdocnumbers.branchcode=@branch     
+      
+      END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_fa_fixedassetsm
+------------------------------------------------------------------------
+CREATE TRIGGER tr_fa_fixedassetsm ON fa_fixedassetsm      
+   FOR INSERT AS      
+      BEGIN     
+   
+   
+        declare  @branch char(5),     
+                 @doccode char(5),     
+                 @docnumber integer,@docdate    datetime,     
+                 @trans_time datetime,   
+                 @personcode char(5),   
+                 @personoldbal numeric(13,2),     
+                 @personnewbal numeric(13,2),   
+                 @docvalue     numeric(13,2),   
+    @docvalue2    numeric(13,2),   
+                 @docvaluepay  numeric(13,2)   
+    
+    
+        select  @branch=branchcode,@doccode=doccode,@docnumber=docnumber,     
+                @docdate=docdate,@personcode=fasuppcode,@docvalue=docvalue,@docvalue2=docvalue2,@docvaluepay=docvaluepay   
+           from inserted     
+    
+    /* _________________________________ New   Jan. 02, 2003 _________ S */   
+    if @doccode='11' or @doccode='121'    
+       begin /* 700 */   
+         if @personcode <> '1500' and @personcode <> '1510'   
+   begin /* 710 */   
+            select   @personoldbal = round(persondebit+persondebit1+persondebit2-personcredit-personcredit1-personcredit2 , 2)     
+              from   personsdata   
+              wherepersonsdata.personcode = @personcode      
+  end   /* 710 */   
+       end   /* 700 */   
+   
+    if @doccode='11'   
+       begin /* 800 */   
+        if @personcode <> '1500' and @personcode <> '1510'   
+           begin /* 8001 */   
+              select @personnewbal = @personoldbal-(@docvalue-@docvaluepay)   
+           end   /* 8001 */   
+       end   /* 800 */   
+    else if @doccode='121'   
+       begin /* 810 */   
+        if @personcode <> '1500' and @personcode <> '1510'   
+           begin /* 8001 */   
+              select @personnewbal = @personoldbal+(@docvalue-@docvaluepay)   
+           end   /* 8001 */   
+       end   /* 810 */   
+   
+   
+       update fa_fixedassetsm     
+       set    fa_fixedassetsm.personnewbal=@personnewbalfrom   fa_fixedassetsm,inserted     
+       where  fa_fixedassetsm.branchcode=@branch      and    
+              fa_fixedassetsm.doccode=@doccode        and    
+              fa_fixedassetsm.docnumber=@docnumber    and    
+              fa_fixedassetsm.docdate=@docdate   
+   
+   
+   
+    /* _________________________________ New   Jan. 02, 2003 _________ E */   
+   
+    /* ================================ Update lastdocnumbers */    
+   
+    if @doccode='11'   
+        begin /* 170 */   
+            update lastdocnumbers set lastdocnumbers.fa_lastdocnumberin=@docnumber from   
+         lastdocnumbers,inserted where lastdocnumbers.branchcode=@branch   
+        end /* 170 */   
+    else if @doccode='121'   
+        begin /* 180 */   
+            updatelastdocnumbers set lastdocnumbers.fa_lastdocnumberout=@docnumber from   
+            lastdocnumbers,inserted where lastdocnumbers.branchcode=@branch   
+        end /* 180 */   
+   
+    /* ======================================================== */END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_invoices
+------------------------------------------------------------------------
+CREATE TRIGGER tr_invoices ON invoices  
+   FOR INSERT AS      
+      BEGIN     
+        declare  	@invoiceserialno integer,  
+                 	@branchcode char(5)  
+    
+        select  @branchcode=branchcode,@invoiceserialno=invoiceserialno  
+        from inserted     
+    
+	update 	lastdocnumbers set lastdocnumbers.lastpatientcode_c=@invoiceserialno  
+	from    	lastdocnumbers, branches, inserted           
+  	where   	lastdocnumbers.branchcode = branches.branchcode   and       
+         		branches.acciteml1 = @branchcode  
+  
+      END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_items
+------------------------------------------------------------------------
+CREATE TRIGGER tr_items ON items 	For INSERT,update AS  	BEGIN          	declare @itemcode char(15) 		select  @itemcode=itemcode  from inserted         		/* ------------------ at H/Q Only ----------------- */  		/* ========== Check this branch ================= */ 				declare @ver_branchcode char(10)    		select @ver_branchcode=lastdocnumbers.branchcode   from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'  		if @ver_branchcode= '100'  		begin  			update items set itemlastupdate=getdate()  where itemcode=@itemcode 			end  	END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_machine_results
+------------------------------------------------------------------------
+CREATE TRIGGER tr_machine_results ON machine_results    
+   FOR INSERT AS    
+      BEGIN /* 100 */   
+           
+            declare @ver_branch_l1      char(2),   
+                    @parametercode      integer,   
+                    @testcodeinteger,   
+                    @vcount             integer,   
+                    @branchcode         char(2),   
+                    @patientcode        integer,   
+                    @patientage         decimal(6,3),   
+                    @patientsex         char(2),   
+                    @phcode             char(13),   
+                    @parametervalue     char(100),   
+                    @resultvalue        char(30),   
+                    @resultnormal1      char(50),@resultnormal2      char(50),   
+                    @vparcode           integer,   
+                    @vparunit           integer,   
+                    @vparamtypecode     integer,   
+                    @vmin               char(10),@vmax               char(10),   
+                    @vparameterdescr    char(15),   
+                    @vparametername     char(50),  
+                    @resultwritten_flag integer,  
+                    @vsamplecode        integer/* _____ */   
+            select  @branchcode=branchcode, @patientcode=patientcode,@resultvalue=resultvalue,   
+                    @resultnormal1=resultnormal1,@resultnormal2=resultnormal2,  
+                    @vsamplecode=convert(integer, substring(resultstring, 1, 3))  
+            from    inserted   
+   
+   
+            /* _____ */   
+            select  @ver_branch_l1 = branches.acciteml1 from branches, lastdocnumbers   
+            where   lastdocnumbers.branchcode = branches.branchcode   and   
+                    lastdocnumbers.ver_branch = '1'   
+   
+   
+   
+            /* _____ */   
+  
+            declare curs_tests cursor for  
+  
+  
+                    select  testparameters.parametercode, testparameters.testcodefrom    patienttests, testparameters, machine_tests, inserted   
+                    where   ( patienttests.testcode         = testparameters.testcode                   ) and     
+                            ( testparameters.parametercode  = machine_tests.parametercode               ) and     
+                            ( testparameters.samplecode     = @vsamplecode                              ) and     
+                            (   ( patienttests.branchcode           = inserted.branchcode       ) AND     
+                                ( patienttests.patientcode          = inserted.patientcode      ) AND     
+                                ( machine_tests.machinecode         = inserted.machinecode      ) AND( machine_tests.machineparamcodeout = inserted.machinetestcode  )               )       
+           
+                            if @parametercode is null   
+                                begin   /* 200 */select @parametercode = 0   
+                                        select @testcode = 0   
+                                end     /* 200 */   
+  
+  
+  
+            open curs_tests        
+                                       
+            fetchcurs_tests into @parametercode , @testcode  
+           
+            /* _______________	For Each Found Item .... */       
+                   
+            while ( @@sqlstatus != 2 )       
+                 BEGIN  /* 250 *//* _____ For All Tests Having Param ______________________________________________________________ SS _____ */  
+  
+  
+                    /* _____ Oct. 28, 2007 */  
+                    update  machine_results   
+                    set     machine_results.testrerun = 0  
+                    from    machine_results, inserted   
+                    where   machine_results.branchcode          = inserted.branchcode       and   
+                            machine_results.patientcode         = inserted.patientcode      and   
+                            machine_results.testcode            = @testcode                 and   
+                            machine_results.parametercode       = @parametercode/* _____ */   
+                    update  machine_results   
+                    set     machine_results.ver_branch_l1 = @ver_branch_l1,   
+                            machine_results.parametercode = @parametercode,   
+                            machine_results.testcode      = @testcode   
+                    from    machine_results, inserted   
+                    where   machine_results.branchcode          = inserted.branchcode       and   
+                            machine_results.patientcode= inserted.patientcode      and   
+                            machine_results.machinecode         = inserted.machinecode      and   
+                            machine_results.machinetestcode     = inserted.machinetestcode  andmachine_results.machinetranstime    = inserted.machinetranstime   
+   
+   
+   
+                    /* _____ */   
+                    select 	@patientage=patientdata.patientage, @patientsex=patientdata.patientsex, @phcode=patientdata.phcodefrom   	patientdata, inserted   
+                    where  	patientdata.branchcode  = inserted.branchcode 	and   
+                            patientdata.patientcode = inserted.patientcode/* _____ */   
+                    select @vcount = count(*) from patientresults where patientresults.branchcode=@branchcode and patientresults.patientcode=@patientcode and patientresults.testcode=@testcode   
+           
+                    if @vcount = 0   
+                        begin   /* 300 */   
+           
+                                declare curs_param cursor for       
+                                   
+                                    select  testparameters.parametercode,parameterranges.minvalue,      
+                                            parameterranges.maxvalue,      
+                                            parameterranges.parameterdescr,testparameters.parameterunit,   
+                                            testparameters.parametername,   
+                                            testparameters.paramtypecode   
+                                    from 	testparameters, parameterranges   
+                                    where 	(testparameters.parametercode = parameterranges.parametercode) AND   
+                                            (testparameters.testcode = 	@testcode 		) 	AND(testparameters.testparamdel	= 	'0' 				) 	AND     
+                                            (parameterranges.agefrom <= @patientage	) 	AND     
+                                            (parameterranges.ageto 	 >= @patientage	) 	AND     
+                                            (parameterranges.sex  	 =  @patientsex or parameterranges.sex = 'mf')    
+                                    order by testparameters.testparameter_order , testparameters.parametercodeopen curs_param        
+                                       
+                                    fetch curs_param into @vparcode,@vmin,@vmax,@vparameterdescr,@vparunit,@vparametername,@vparamtypecode   
+                                   
+                                    /* _______________	For Each Found Item .... */       
+                                           
+                                    while ( @@sqlstatus != 2 )       
+                                         BEGIN  /* 400 */   
+                                       
+                                            select @parametervalue = ''   
+           
+        /*if @parametercode = @vparcode   
+                                                begin   /* 500 */   
+                                                        select @parametervalue  = @resultvalue   
+        /*select @vmin            = @resultnormal1   
+                                                        select @vmax            = @resultnormal2   
+        */   
+                                                end     /* 500 */*/  
+          
+                                            insert into patientresults  ( branchcode , patientcode , testcode , parametercode , parametervalue, minvalue , maxvalue ,  parameterdescr , usercode , phcode , resultsource )values  (@branchcode ,@patientcode ,@testcode ,   @vparcode   ,@parametervalue,  @vmin   ,  @vmax   ,@vparameterdescr ,  'mach'  ,@phcode ,      2       )fetch curs_param into @vparcode,@vmin,@vmax,@vparameterdescr,@vparunit,@vparametername,@vparamtypecode   
+                                               
+                                         END/* 400 */   
+                                       
+                                       
+                                    close curs_param   
+           
+                        end     /* 300 *//* _____ */   
+           
+   
+                    /* ______________ In All Cases ..  */  
+                        update  patientresults  
+                        set     patientresults.parametervalue = inserted.resultvalue,patientresults.usercode       = 'mach'  
+                        from    patientresults,inserted  
+                        where   patientresults.branchcode       = @branchcode   and  
+                                patientresults.patientcode      = @patientcode  and  
+                                patientresults.testcode         = @testcode     and  
+                                patientresults.parametercode    = @parametercode  
+          
+                    /* ________ Fix resultwritten_flag  */  
+                        select  @resultwritten_flag = resultwritten_flag from patienttests  
+                        where	patienttests.branchcode 	= @branchcode	and  
+                                patienttests.patientcode 	= @patientcode	and  
+                                patienttests.testcode 		= @testcode  
+                              
+                        if @resultwritten_flag < 0  
+                            begin  
+                                update 	patienttestsset	  	patienttests.resultwritten_flag = 0  
+                                where	patienttests.branchcode 	= @branchcode	and  
+                                        patienttests.patientcode 	= @patientcode	andpatienttests.testcode 		= @testcode  
+                            end  
+  
+  
+  
+  
+  
+  
+                    fetch curs_tests into @parametercode , @testcodeEND    /* 250 */   
+  
+  
+  
+                close curs_tests   
+  
+  
+  
+                /* _____ For All Tests Having Param ______________________________________________________________ FF _____ */  
+  
+  
+  
+  
+   
+      END   /* 100 */
+
+------------------------------------------------------------------------
+  TRIGGER: tr_patientdata
+------------------------------------------------------------------------
+CREATE TRIGGER tr_patientdata ON patientdata            
+   FOR INSERT AS            
+      BEGIN           
+        declare @branch char(5),           
+                @ver_branch  char(5),          
+                @patientcode integer,          
+  @patientdate datetime,          
+                @pdate         datetime,          
+                @pdate_max    datetime,          
+                @usercode    char(5),          
+                @trans_time datetimeselect  @branch=branchcode, @patientcode=patientcode, @patientdate=patientdate, @usercode=usercode           
+        from inserted           
+          
+        select  @trans_time = getdate()          
+          
+    /* ================================ Branch ================ */          
+   select  @ver_branch = branches.acciteml1       
+        from    lastdocnumbers, branches       
+        where   lastdocnumbers.branchcode = branches.branchcode   and       
+                lastdocnumbers.ver_branch = '1'          
+          
+    /* ================================ Update lastdocnumbers ===============*/          
+            update  lastdocnumbers       
+            set     lastdocnumbers.lastpatientcode_l = @patientcodefrom    lastdocnumbers, branches, inserted           
+           where   lastdocnumbers.branchcode = branches.branchcode   and       
+         branches.acciteml1 = @branch          
+          
+        if @ver_branch = @branch          
+       begin/*        
+                /* ================================ Update patientdata ITSELF ============ */          
+                update patientdata           
+ set patientdata.trans_time=@trans_time          
+                from patientdata,inserted          
+            where patientdata.branchcode=@branch        and          
+              patientdata.patientcode=@patientcode          
+                /* ================================ Check  patientdate =================== */          
+*/select @pdate = pdate  from branches where branches.branchcode = @branch          
+        select @pdate_max = dateadd(dd, 2, @pdate)          
+          
+        if @patientdate < @pdate or @patientdate > @pdate_max          
+            begin          
+            insert into pdatesout values (@branch, @patientcode, @patientdate, @usercode, @trans_time )          
+            end           
+    else          
+            begin          
+            update branches set branches.pdate = @pdate where branches.branchcode = @branch          
+            end           
+       end          
+          
+      END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_patientdata2
+------------------------------------------------------------------------
+CREATE TRIGGER tr_patientdata2 ON patientdata2             
+   FOR INSERT AS             
+      BEGIN            
+        declare @branch char(5),            
+                @ver_branch  char(5),           
+                @patientcode integer,   
+    @patientdate datetime,           
+                @pdate         datetime,           
+                @pdate_max    datetime,           
+                @usercode    char(5),           
+                @trans_time datetimeselect  @branch=branchcode, @patientcode=patientcode, @patientdate=patientdate, @usercode=usercode            
+        from inserted            
+           
+        select  @trans_time = getdate()           
+           
+      /* ================================ Update lastdocnumbers ===============*/           
+            update  lastdocnumbers        
+            set     lastdocnumbers.lastpatientcode_l = @patientcode            
+            from    lastdocnumbers, inserted            
+            where   lastdocnumbers.branchcode = '000'     
+     
+ END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_personphones_insert
+------------------------------------------------------------------------
+CREATE TRIGGER tr_personphones_insert ON personphones   For INSERT AS           BEGIN            declare  @personcode varchar(18),@ptcode varchar(3),@table_dumped datetime             select  @personcode=personcode,@ptcode=ptcode  ,@table_dumped=table_dumped from inserted           /* ========== Check this branch ================= */           declare @ver_branchcode char(10)            select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'/* ========== HQ Only - 2023-02-22 ================= */                      if @ver_branchcode ='100' and @ptcode='11' and @personcode in (select phcode from localcustomers where branchcode=@ver_branchcode )                                    beginupdate personphones set table_dumped='1900-01-01'  where         personcode=@personcode and ptcode=@ptcode                                    end  	END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_personphones_update
+------------------------------------------------------------------------
+CREATE TRIGGER tr_personphones_update ON personphones   For UPDATE AS           BEGIN            declare  @personcode varchar(18),@ptcode varchar(3),@table_dumped datetime             select  @personcode=personcode,@ptcode=ptcode  ,@table_dumped=table_dumped from inserted           /* ========== Check this branch ================= */           declare @ver_branchcode char(10)            select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'/* ========== HQ Only - 2023-02-22 ================= */                        if @ver_branchcode ='100' and @ptcode='11'  and @personcode in (select phcode from localcustomers where branchcode=@ver_branchcode )                    beginupdate personphones set table_dumped='1900-01-01'  where personcode=@personcode and ptcode=@ptcode                    end        END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_piccrmordersnos_ins
+------------------------------------------------------------------------
+Create TRIGGER tr_piccrmordersnos_ins ON piccrmordersnos 	 For INSERT AS       BEGIN              		declare  @snoflag smallint,@branchcode varchar(5), @crmbranchcode varchar(5) ,@crmorderno int,@trans_time datetime 	  select  @snoflag=snoflag,@branchcode=branchcode, @crmbranchcode=crmbranchcode  ,@crmorderno=crmorderno ,@trans_time=trans_time from inserted    			/* ========== Check this branch ================= */           declare @ver_branchcode char(5)           select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'       	            if  @snoflag=0                 begin                     update  piccrmorders                     set     piccrmorders.docnumber=inserted.docnumber,piccrmorders.docdate=inserted.docdate                     from    piccrmorders, inserted                     where   piccrmorders.crmbranchcode  = inserted.crmbranchcode    and                             piccrmorders.crmorderno     = inserted.crmorderno       and                             piccrmorders.branchcode     = inserted.branchcode                 end             else                 begin                     update  piccrmorders                     set     piccrmorders.docnumber5=inserted.docnumber,                             piccrmorders.docdate5=inserted.docdate                     from    piccrmorders, inserted                     where   piccrmorders.crmbranchcode  = inserted.crmbranchcode    and                             piccrmorders.crmorderno     = inserted.crmorderno       and                             piccrmorders.branchcode     = inserted.branchcode                 end 		/* ------------------ Rep ----------------- */            	    if @ver_branchcode !='100' and @branchcode=@ver_branchcode    		begin    				 		
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3piccrmordersnos select piccrmordersnos.crmbranchcode, piccrmordersnos.crmorderno, piccrmordersnos.branchcode, piccrmordersnos.snoflag, piccrmordersnos.docnumber, piccrmordersnos.docdate, piccrmordersnos.trans_time from piccrmordersnos  where  crmbranchcode  = @crmbranchcode    and  crmorderno  = @crmorderno  and  branchcode  = @branchcode  and  trans_time=@trans_time  		endEND
+
+------------------------------------------------------------------------
+  TRIGGER: tr_piccrmorderstatus_ins
+------------------------------------------------------------------------
+create TRIGGER tr_piccrmorderstatus_ins ON piccrmorderstatus    For INSERT AS         BEGIN            declare  @branchcode varchar(5), @crmbranchcode varchar(5),@crmorderno int,@trans_time datetime,@orderstatus int                       select  @branchcode=branchcode, @crmbranchcode=crmbranchcode ,@crmorderno=crmorderno,@trans_time=trans_time,@orderstatus=orderstatus from inserted      /* ========== Check this branch ================= */             declare @ver_branchcode char(5)             select @ver_branchcode=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'                       update  piccrmorders5               set     piccrmorders5.orderstatus=inserted.orderstatus,                       piccrmorders5.orderstatustime=inserted.trans_time               from    piccrmorders5, inserted               where   piccrmorders5.crmbranchcode  = inserted.crmbranchcode    and                       piccrmorders5.crmorderno     = inserted.crmorderno       andpiccrmorders5.branchcode     = inserted.branchcode       and                     piccrmorders5.orderstatus<>80       						   		if  @ver_branchcode='100'   		begin               update  piccrmorders               set     piccrmorders.orderstatus=inserted.orderstatus,                       piccrmorders.orderstatustime=inserted.trans_time               from    piccrmorders, inserted               where   piccrmorders.crmbranchcode  = inserted.crmbranchcode    and                       piccrmorders.crmorderno     = inserted.crmorderno       and                       piccrmorders.branchcode     = inserted.branchcode       and                     piccrmorders.orderstatus<>80       		end   						          /* ------------------ Rep ----------------- */if @ver_branchcode !='100' and @branchcode=@ver_branchcode and @orderstatus<>100                    begin                    
+--Adaptive Server has expanded all '*' elements in the following statement
+insert into r3piccrmorderstatusselect piccrmorderstatus.crmbranchcode, piccrmorderstatus.crmorderno, piccrmorderstatus.branchcode, piccrmorderstatus.orderstatus, piccrmorderstatus.usercode, piccrmorderstatus.trans_time                                         from piccrmorderstatuswhere   piccrmorderstatus.crmbranchcode  = @crmbranchcode    and                   piccrmorderstatus.crmorderno     = @crmorderno       and                   piccrmorderstatus.branchcode     = @branchcode and                 piccrmorderstatus.trans_time=@trans_time                                      end         END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_sacctrans3
+------------------------------------------------------------------------
+CREATE TRIGGER tr_sacctrans3 ON sacctrans3    FOR INSERT AS            BEGIN /* 100 */              declare  @accsno integer, @accsno_sno integer,@accsno_str varchar(12)         select  @accsno=accsno  from inserted           	select @accsno_str  = rtrim(convert(char, @accsno))  	select @accsno_sno = convert(integer,  substring(@accsno_str, 3, 10) )  	/* ------------------ Update table AccDocNumbers ----------------- */                 update  	lastdocnumbers         set     	lastdocnumbers.accsno3=@accsno_sno         from 	lastdocnumbers,inserted                  where   	lastdocnumbers.branchcode=inserted.branchcode        END   /* 100 */
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stktransm_inv
+------------------------------------------------------------------------
+CREATE TRIGGER tr_stktransm_inv ON stktransm_inv       
+   FOR INSERT AS       
+      BEGIN      
+        declare  @branch char(5),      
+                 @doccode char(5),      
+                 @docnumber integer,    
+                 @docnumber_inv integer    
+                       
+     
+        select  @branch=branchcode,@doccode=doccode,@docnumber=docnumber,      
+                @docnumber_inv=docnumber_inv    
+           from inserted      
+     
+     /* __________________________ Updatelastdocnumbers_inv_inv */     
+  if @doccode='30'    
+        begin /* 150 */    
+            update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberin_cust=@docnumber_inv from    
+            lastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+ end /* 150 */    
+    else if @doccode='115'    
+        begin /* 160 */    
+            update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberout_cust=@docnumber_inv from    
+            lastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+  end /* 160 */    
+    else if @doccode='10'    
+        begin /* 170 */    
+            update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberin_supp=@docnumber_inv from    
+            lastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+    end /* 170 */    
+    else if @doccode='120'    
+        begin /* 180 */    
+            update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberout_supp=@docnumber_inv fromlastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+        end /* 180 */    
+    else    
+        begin /* 190 */    
+            if convert(integer,@doccode)<99    
+              begin /* 200 */    
+                update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberin=@docnumber_inv from    
+   lastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+              end /* 200 */    
+            else    
+              begin /* 300 */update lastdocnumbers_inv set lastdocnumbers_inv.lastdocnumberout=@docnumber_inv from    
+                lastdocnumbers_inv,inserted where lastdocnumbers_inv.branchcode=@branch    
+              end /* 300 */    
+          /*end if*/    
+        end /* 190 */    
+    /*end if*/    
+    
+    /* ======================================================== */    
+     
+     END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_stockordersm
+------------------------------------------------------------------------
+CREATE TRIGGER   tr_stockordersm   ON stockordersm         
+   FOR INSERT AS         
+      BEGIN        
+        declare  @ver_branch char(5),       
+                 @branch char(5),        
+                 @docnumber integerselect  @branch=branchcode,@docnumber=docnumber       
+           from inserted        
+       
+    /* ================================ Update lastdocnumbers */       
+      
+            update   lastorderno  set lastorderno.docnumber=@docnumber from      
+     lastorderno,inserted where lastorderno.branchcode=@branch      
+      
+       
+      END
+
+------------------------------------------------------------------------
+  TRIGGER: tr_temp_r_mon
+------------------------------------------------------------------------
+create trigger tr_temp_r_mon on temp_r_mon 	FOR INSERT AS          BEGIN  	          declare  @ver_branch char(5),  @branch char(5),  @cheqsno integer 			/* ========== Check this branch ================= */          	select @ver_branch=lastdocnumbers.branchcode  from  lastdocnumbers  where lastdocnumbers.ver_branch = '1'      	if @ver_branch != '100'        begin   			select 	@branch=branchcode , @cheqsno=cheqsno	from inserted 			
+--Adaptive Server has expanded all '*' elements in the following statementinsert into r3temp_r_mon select temp_r_mon.cheqsno, temp_r_mon.branchcode, temp_r_mon.doctext from temp_r_mon 	  where branchcode=@branch 	  and cheqsno=@cheqsno 	  and @cheqsno !=0 	end 	END
+
+================================================================================
+  F: FULL TEXT — referencing procedures
+================================================================================
+
+Complete: 2026-06-22T01:52:18.201943

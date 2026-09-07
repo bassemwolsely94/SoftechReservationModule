@@ -1,0 +1,28 @@
+temp_r_stk watcher: branch=100 doccode=10 window=600s  started 2026-07-03T15:58:30.749721
+>>> Do the controlled temp-saves now; each distinct draft blob is logged below.
+
+[baseline] ('100', '10', 0)  docdate=2025-02-20 00:00:00  bytes=199
+  00DF 0058 0078 0028 00EB 0062 001F 004C 007B 0034 00EC 0000 0061 0052 00B2 0078 0041 00F6 005C 0015 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000
+
+-- alive, 599s left, 0 change(s) so far --
+-- alive, 569s left, 0 change(s) so far --
+-- alive, 539s left, 0 change(s) so far --
+-- alive, 509s left, 0 change(s) so far --
+-- alive, 479s left, 0 change(s) so far --
+-- alive, 449s left, 0 change(s) so far --
+-- alive, 419s left, 0 change(s) so far --
+-- alive, 389s left, 0 change(s) so far --
+-- alive, 359s left, 0 change(s) so far --
+-- alive, 329s left, 0 change(s) so far --
+-- alive, 299s left, 0 change(s) so far --
+-- alive, 269s left, 0 change(s) so far --
+-- alive, 239s left, 0 change(s) so far --
+-- alive, 209s left, 0 change(s) so far --
+-- alive, 179s left, 0 change(s) so far --
+-- alive, 149s left, 0 change(s) so far --
+-- alive, 119s left, 0 change(s) so far --
+-- alive, 89s left, 0 change(s) so far --
+-- alive, 59s left, 0 change(s) so far --
+-- alive, 29s left, 0 change(s) so far --
+
+Done: 0 change(s) captured. 2026-07-03T16:08:32.070147

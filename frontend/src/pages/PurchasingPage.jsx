@@ -19,16 +19,20 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { purchasingApi } from '../api/client'
+import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import RefreshButton from '../components/RefreshButton'
+
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Design tokens
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const BRAND   = '#1B6B3A'
-const BRAND_L = '#f0f9f4'
+const BRAND   = 'rgb(var(--c-brand-600))'
+const BRAND_L = 'rgb(var(--c-brand-50))'
 const GREEN   = '#10b981'
 const BLUE    = '#3b82f6'
 const ORANGE  = '#f59e0b'
@@ -96,7 +100,7 @@ function KpiCard({ label, value, sub, color = BRAND, bg = BRAND_L, icon }) {
   return (
     <div
       className="rounded-2xl p-4 flex flex-col gap-1 border"
-      style={{ background: bg, borderColor: color + '33' }}
+      style={{ background: bg, borderColor: tint(color, 0.2) }}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold" style={{ color }}>{label}</span>
@@ -322,7 +326,7 @@ function TopItemsTable({ items }) {
               </span>
               {/* Item name */}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-800 truncate">
+                <div className="text-sm font-semibold text-gray-800 break-words">
                   {item['item__name']}
                 </div>
                 <div className="text-xs text-gray-400 font-mono">
@@ -597,7 +601,7 @@ export default function PurchasingPage() {
     )
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['purchasing-dashboard', days],
     queryFn: () => purchasingApi.dashboard(days).then(r => r.data),
     refetchInterval: 120_000,
@@ -620,7 +624,7 @@ export default function PurchasingPage() {
               {data?.generated_at && (
                 <span className="mr-2">
                   · تحديث:{' '}
-                  {format(new Date(data.generated_at), 'HH:mm', { locale: ar })}
+                  {toLatinDigits(format(new Date(data.generated_at), 'HH:mm', { locale: ar }))}
                 </span>
               )}
             </p>
@@ -652,9 +656,9 @@ export default function PurchasingPage() {
           >
             🔀 طلبات التحويل
           </button>
-          <button onClick={() => refetch()} className="btn-secondary text-xs">
+          <RefreshButton loading={isFetching} onClick={() => refetch()} size="sm">
             ↻ تحديث
-          </button>
+          </RefreshButton>
         </div>
       </div>
 
@@ -825,7 +829,7 @@ export default function PurchasingPage() {
 
         {/* ── 8. Recommended for regular order ──────────────────── */}
         {!isLoading && (
-          <Card style={{ borderColor: BRAND + '33', borderWidth: 2 }}>
+          <Card style={{ borderColor: tint(BRAND, 0.2), borderWidth: 2 }}>
             <div className="flex items-start justify-between mb-4">
               <div>
                 <SectionTitle icon="📋">

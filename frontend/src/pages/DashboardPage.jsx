@@ -19,15 +19,18 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardApi, syncApi } from '../api/client'
+import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Design tokens (match tailwind.config brand palette)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const BRAND  = '#1B6B3A'
+const BRAND  = 'rgb(var(--c-brand-600))'
 const GREEN  = '#10b981'
 const BLUE   = '#3b82f6'
 const ORANGE = '#f59e0b'
@@ -99,7 +102,7 @@ function HeroKpi({ icon, label, value, sub, color, bg, borderColor, onClick, pul
       className={`rounded-2xl p-4 text-right w-full border transition-all duration-150 ${
         onClick ? 'hover:shadow-md hover:scale-[1.02] cursor-pointer' : 'cursor-default'
       } ${pulse ? 'animate-pulse' : ''}`}
-      style={{ background: bg || '#f9fafb', borderColor: borderColor || (color + '33') }}
+      style={{ background: bg || '#f9fafb', borderColor: borderColor || tint(color, 0.2) }}
     >
       <div className="flex items-start justify-between mb-2">
         <span className="text-xl">{icon}</span>
@@ -196,7 +199,7 @@ function FollowUpPanel({ navigate }) {
               متابعة اليوم
             </div>
             <div className="text-xs text-orange-600">
-              {format(new Date(), 'EEEE، d MMMM', { locale: ar })}
+              {toLatinDigits(format(new Date(), 'EEEE، d MMMM', { locale: ar }))}
             </div>
           </div>
         </div>
@@ -384,13 +387,13 @@ function SalesMini({ sales }) {
     <div className="grid grid-cols-2 gap-3">
       <div className="bg-gray-50 rounded-xl p-3 text-center">
         <div className="text-2xl font-black text-gray-800 tabular-nums">
-          {sales.invoices_7d?.toLocaleString('ar-EG')}
+          {sales.invoices_7d?.toLocaleString('en-US')}
         </div>
         <div className="text-xs text-gray-500 mt-0.5">فاتورة — آخر 7 أيام</div>
       </div>
-      <div className="rounded-xl p-3 text-center" style={{ background: '#f0f9f4' }}>
+      <div className="rounded-xl p-3 text-center" style={{ background: 'rgb(var(--c-brand-50))' }}>
         <div className="text-2xl font-black tabular-nums" style={{ color: BRAND }}>
-          {sales.revenue_7d?.toLocaleString('ar-EG', { maximumFractionDigits: 0 })}
+          {sales.revenue_7d?.toLocaleString('en-US', { maximumFractionDigits: 0 })}
         </div>
         <div className="text-xs mt-0.5" style={{ color: BRAND }}>ج.م — آخر 7 أيام</div>
       </div>
@@ -413,7 +416,7 @@ function StockAlerts({ alerts }) {
       {alerts.map((a, i) => (
         <div key={i} className="flex items-center justify-between py-2.5 text-sm">
           <div className="min-w-0 flex-1">
-            <div className="font-semibold text-gray-800 text-xs truncate">{a.item_name}</div>
+            <div className="font-semibold text-gray-800 text-xs break-words">{a.item_name}</div>
             <div className="text-gray-400 text-xs mt-0.5">{a.branch_name}</div>
           </div>
           <span
@@ -461,8 +464,8 @@ function SyncWidget({ syncStatus }) {
         </div>
         {syncStatus?.last_at && (
           <div className="text-xs text-gray-500 mt-0.5">
-            {formatDistanceToNow(new Date(syncStatus.last_at), { locale: ar, addSuffix: true })}
-            {syncStatus.records > 0 && ` · ${syncStatus.records.toLocaleString('ar-EG')} سجل`}
+            {toLatinDigits(formatDistanceToNow(new Date(syncStatus.last_at), { locale: ar, addSuffix: true }))}
+            {syncStatus.records > 0 && ` · ${syncStatus.records.toLocaleString('en-US')} سجل`}
           </div>
         )}
       </div>
@@ -472,6 +475,91 @@ function SyncWidget({ syncStatus }) {
     </div>
   )
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Intelligence Alerts Row — churn risk + chronic follow-up
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function IntelligenceAlertsRow({ customers, chronicFollowup, navigate }) {
+  const churnHigh     = (customers.churn_high     || 0)
+  const churnCritical = (customers.churn_critical  || 0)
+  const churnTotal    = (customers.churn_any       || 0)
+  const missedRefills = (chronicFollowup.missed    || 0)
+  const overdueTask   = (chronicFollowup.overdue   || 0)
+  const dueToday      = (chronicFollowup.due_today || 0)
+
+  // Only show this row when there's something actionable
+  const hasAlerts = churnTotal > 0 || missedRefills > 0 || overdueTask > 0 || dueToday > 0
+  if (!hasAlerts) return null
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+
+      {/* Churn: critical */}
+      {churnCritical > 0 && (
+        <button
+          onClick={() => navigate('/customers?churn_segment=critical')}
+          className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3
+                     hover:bg-red-100 transition-colors text-right w-full"
+        >
+          <span className="text-2xl shrink-0">🚨</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-red-800 text-sm">{churnCritical} عميل — خطر انقطاع حرج</div>
+            <div className="text-red-600 text-xs mt-0.5">يحتاجون تواصلاً فورياً</div>
+          </div>
+        </button>
+      )}
+
+      {/* Churn: high */}
+      {churnHigh > 0 && (
+        <button
+          onClick={() => navigate('/customers?churn_segment=high')}
+          className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3
+                     hover:bg-orange-100 transition-colors text-right w-full"
+        >
+          <span className="text-2xl shrink-0">⚠️</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-orange-800 text-sm">{churnHigh} عميل — خطر انقطاع مرتفع</div>
+            <div className="text-orange-600 text-xs mt-0.5">تابعهم قبل أن يغادروا</div>
+          </div>
+        </button>
+      )}
+
+      {/* Chronic: missed refills */}
+      {missedRefills > 0 && (
+        <button
+          onClick={() => navigate('/followups?status=missed')}
+          className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3
+                     hover:bg-purple-100 transition-colors text-right w-full"
+        >
+          <span className="text-2xl shrink-0">💊</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-purple-800 text-sm">{missedRefills} دواء مزمن فائت</div>
+            <div className="text-purple-600 text-xs mt-0.5">مرضى انقطعوا عن علاجهم</div>
+          </div>
+        </button>
+      )}
+
+      {/* Chronic: due today or overdue */}
+      {(dueToday > 0 || overdueTask > 0) && (
+        <button
+          onClick={() => navigate('/followups')}
+          className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3
+                     hover:bg-blue-100 transition-colors text-right w-full"
+        >
+          <span className="text-2xl shrink-0">📅</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-blue-800 text-sm">
+              {dueToday > 0 ? `${dueToday} صرف مستحق اليوم` : `${overdueTask} صرف متأخر`}
+            </div>
+            <div className="text-blue-600 text-xs mt-0.5">متابعة الأدوية المزمنة</div>
+          </div>
+        </button>
+      )}
+    </div>
+  )
+}
+
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Main Page
@@ -518,7 +606,7 @@ export default function DashboardPage() {
               {greeting}، {user?.full_name?.split(' ')[0] || user?.username} 👋
             </h1>
             <p className="text-xs text-gray-400 mt-0.5">
-              {format(now, 'EEEE، d MMMM yyyy', { locale: ar })}
+              {toLatinDigits(format(now, 'EEEE، d MMMM yyyy', { locale: ar }))}
               {user?.branch_name && <span className="mr-2">· {user.branch_name}</span>}
             </p>
           </div>
@@ -557,7 +645,7 @@ export default function DashboardPage() {
               icon="📋" label="نشط الآن"
               value={r.active_total}
               sub="حجز قيد المعالجة"
-              color={BRAND} bg="#f0f9f4"
+              color={BRAND} bg="rgb(var(--c-brand-50))"
               onClick={() => navigate('/reservations')}
             />
             <HeroKpi
@@ -591,7 +679,7 @@ export default function DashboardPage() {
             />
             <HeroKpi
               icon="👥" label="إجمالي العملاء"
-              value={c.total?.toLocaleString('ar-EG')}
+              value={c.total?.toLocaleString('en-US')}
               sub={`${c.new_this_month ?? 0} جديد هذا الشهر`}
               color={INDIGO} bg="#f5f3ff"
             />
@@ -617,10 +705,19 @@ export default function DashboardPage() {
           </button>
         )}
 
-        {/* ── 4. Follow-ups today ─────────────────────────────────── */}
+        {/* ── 4. Intelligence alerts row ──────────────────────────── */}
+        {!isLoading && (
+          <IntelligenceAlertsRow
+            customers={c}
+            chronicFollowup={data?.chronic_followup || {}}
+            navigate={navigate}
+          />
+        )}
+
+        {/* ── 5. Follow-ups today ─────────────────────────────────── */}
         <FollowUpPanel navigate={navigate} />
 
-        {/* ── 5. Transfer alerts ──────────────────────────────────── */}
+        {/* ── 6. Transfer alerts ──────────────────────────────────── */}
         {!isLoading && (tr.pending > 0 || tr.flagged > 0 || tr.incoming_to_my_branch > 0) && (
           <div>
             <SectionTitle icon="🔀">
@@ -688,7 +785,7 @@ export default function DashboardPage() {
                     key={i}
                     onClick={k.status ? () => navigate(`/reservations?status=${k.status}`) : undefined}
                     className={`rounded-xl p-3 border text-right transition-shadow ${k.status ? 'hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
-                    style={{ background: k.bg, borderColor: k.color + '33' }}
+                    style={{ background: k.bg, borderColor: tint(k.color, 0.2) }}
                   >
                     <div className="text-2xl font-black tabular-nums" style={{ color: k.color }}>
                       {k.value ?? 0}
@@ -746,7 +843,7 @@ export default function DashboardPage() {
               {data?.sync?.last_at && (
                 <div className="text-xs text-gray-400 mt-2 text-center">
                   آخر تحديث للبيانات:{' '}
-                  {format(new Date(data.sync.last_at), 'HH:mm', { locale: ar })}
+                  {toLatinDigits(format(new Date(data.sync.last_at), 'HH:mm', { locale: ar }))}
                 </div>
               )}
             </Card>
@@ -756,7 +853,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => navigate('/purchasing')}
                 className="w-full rounded-2xl p-4 border-2 text-right transition-all hover:shadow-md"
-                style={{ borderColor: BRAND + '44', background: '#f0f9f4' }}
+                style={{ borderColor: tint(BRAND, 0.267), background: 'rgb(var(--c-brand-50))' }}
               >
                 <div className="text-2xl mb-1">📊</div>
                 <div className="font-bold text-sm" style={{ color: BRAND }}>

@@ -4,6 +4,8 @@ import { reservationsApi } from '../api/client'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
+const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
+
 const ACTIVITY_OPTIONS = [
   { group: 'مكالمات', options: [
     { value: 'call_answered',           label: '📞 اتصل — رد العميل' },
@@ -191,16 +193,16 @@ export default function ActivityLogPanel({ reservationId }) {
                 )}
                 {log.callback_datetime && (
                   <div className="text-blue-600 text-xs mt-0.5">
-                    موعد: {format(new Date(log.callback_datetime), 'd MMM yyyy HH:mm', { locale: ar })}
+                    موعد: {toLatinDigits(format(new Date(log.callback_datetime), 'd MMM yyyy HH:mm', { locale: ar }))}
                   </div>
                 )}
                 {log.expected_date && (
                   <div className="text-green-600 text-xs mt-0.5">
-                    تاريخ متوقع: {format(new Date(log.expected_date), 'd MMM yyyy', { locale: ar })}
+                    تاريخ متوقع: {toLatinDigits(format(new Date(log.expected_date), 'd MMM yyyy', { locale: ar }))}
                   </div>
                 )}
                 <div className="text-gray-400 text-xs mt-1">
-                  {log.logged_by_name} — {format(new Date(log.logged_at), 'd MMM HH:mm', { locale: ar })}
+                  {log.logged_by_name} — {toLatinDigits(format(new Date(log.logged_at), 'd MMM HH:mm', { locale: ar }))}
                 </div>
               </div>
             </div>

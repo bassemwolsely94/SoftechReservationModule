@@ -1,9 +1,23 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar-u-nu-latn" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>صيدليات الرزيقي — منصة العمليات</title>
+  <!-- PWA (customer self-service portal at /portal) -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#022871" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="الرزيقي" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <!-- Self-hosted brand fonts (loaded via @font-face in index.css). Preload the
+       Arabic + Latin body faces so first paint isn't a fallback flash. Harmless
+       if the files aren't present yet. -->
+  <link rel="preload" href="/fonts/Jozoor.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/HarabaraMaisDemo.woff2" as="font" type="font/woff2" crossorigin />
+  <!-- Cairo kept as Arabic fallback until Jozoor is hosted -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
