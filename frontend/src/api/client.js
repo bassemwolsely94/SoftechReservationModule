@@ -2063,6 +2063,11 @@ export const batchesApi = {
   stockExpirySync:    (body)   => api.post('/batches/stock-expiry/sync/', body || {}),
   stockExpiryExport:  (body)   => api.post('/batches/stock-expiry/export/', body, { responseType: 'blob' }),
   stockExpirySpawnCount: (body) => api.post('/batches/stock-expiry/spawn-count/', body),
+  // Disposal / return workflow (expired backlog)
+  expiryDisposalList:   (params) => api.get('/batches/stock-expiry/disposal/', { params }),
+  expiryDisposalCreate: (body)   => api.post('/batches/stock-expiry/disposal/', body),
+  expiryDisposalStatus: (id, body) => api.post(`/batches/stock-expiry/disposal/${id}/status/`, body),
+  expiryDisposalExport: (body)   => api.post('/batches/stock-expiry/disposal/export/', body, { responseType: 'blob' }),
   // Backfill runs (status)
   purchaseExpiryRuns:       (params) => api.get('/batches/purchase-expiry/runs/', { params }),
   // Trigger a backfill (admin): body { years?|from?|to?, branch?, categories? }

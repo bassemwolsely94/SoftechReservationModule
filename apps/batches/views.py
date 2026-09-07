@@ -729,6 +729,150 @@ def spawn_stock_expiry_count(request):
                      'status': session.status}, status=status.HTTP_201_CREATED)
 
 
+def _disposal_dict(r):
+    return {
+        'id': r.id, 'item_code': r.item_code, 'item_name': r.item_name,
+        'branch_code': r.branch_code, 'store_code': r.store_code, 'batch_no': r.batch_no,
+        'expiry_date': r.expiry_date.isoformat() if r.expiry_date else None,
+        'qty': float(r.qty), 'unit_cost': float(r.unit_cost), 'value': float(r.value),
+        'decision': r.decision, 'decision_display': r.get_decision_display(),
+        'supplier_code': r.supplier_code, 'supplier_name': r.supplier_name,
+        'reason': r.reason, 'status': r.status, 'status_display': r.get_status_display(),
+        'created_by': r.created_by.full_name if r.created_by else None,
+        'created_at': r.created_at,
+        'decided_by': r.decided_by.full_name if r.decided_by else None,
+        'decided_at': r.decided_at,
+    }
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def expiry_disposal(request):
+    """
+    GET  — list disposal/return decisions (filter: status, branch, decision).
+    POST — create one from a flagged expired/near-expiry item (status=draft).
+           Body: item_code, branch_code, qty, decision, expiry_date?, store_code?,
+                 batch_no?, supplier_code?, reason?.
+    Read/record only — no SOFTECH write.
+    """
+    from .models import ExpiryDisposalRecord
+
+    if request.method == 'GET':
+        qs = ExpiryDisposalRecord.objects.select_related('created_by', 'decided_by')
+        p = request.query_params
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('branch'):
+            qs = qs.filter(branch_code=p['branch'])
+        if p.get('decision'):
+            qs = qs.filter(decision=p['decision'])
+        rows = [_disposal_dict(r) for r in qs[:1000]]
+        return Response({'count': len(rows), 'items': rows})
+
+    # POST — create
+    from apps.catalog.models import Item
+    d = request.data
+    item_code = str(d.get('item_code') or '').strip()
+    branch = str(d.get('branch_code') or '').strip()
+    decision = str(d.get('decision') or '').strip()
+    valid = {c[0] for c in ExpiryDisposalRecord.DECISION_CHOICES}
+    if not item_code or not branch:
+        return Response({'detail': 'كود الصنف والفرع مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
+    if decision not in valid:
+        return Response({'detail': 'قرار غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+    from decimal import Decimal, InvalidOperation
+    try:
+        qty = Decimal(str(d.get('qty')))
+    except (InvalidOperation, TypeError, ValueError):
+        qty = None
+    if not qty or qty <= 0:
+        return Response({'detail': 'الكمية يجب أن تكون أكبر من صفر.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    item = Item.objects.filter(softech_id=item_code).only('name', 'cost_price').first()
+    unit_cost = float(item.cost_price) if (item and item.cost_price is not None) else 0.0
+    rec = ExpiryDisposalRecord.objects.create(
+        item_code=item_code, item_name=(item.name if item else '') or str(d.get('item_name') or ''),
+        branch_code=branch, store_code=str(d.get('store_code') or ''),
+        batch_no=str(d.get('batch_no') or ''), expiry_date=_parse_date(d.get('expiry_date')),
+        qty=qty, unit_cost=unit_cost, value=round(float(qty) * unit_cost, 2),
+        decision=decision, supplier_code=str(d.get('supplier_code') or ''),
+        supplier_name=str(d.get('supplier_name') or ''), reason=str(d.get('reason') or ''),
+        created_by=getattr(request.user, 'staff_profile', None),
+    )
+    return Response(_disposal_dict(rec), status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def expiry_disposal_status(request, pk):
+    """Transition a disposal record: approve / done / cancel. approve+done are
+    gated to admin / quality_manager / supervisor. No SOFTECH write."""
+    from django.utils import timezone
+    from .models import ExpiryDisposalRecord
+    try:
+        rec = ExpiryDisposalRecord.objects.get(pk=pk)
+    except ExpiryDisposalRecord.DoesNotExist:
+        return Response({'detail': 'غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+
+    new_status = str(request.data.get('status') or '').strip()
+    if new_status not in {'approved', 'done', 'cancelled', 'draft'}:
+        return Response({'detail': 'حالة غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    profile = getattr(request.user, 'staff_profile', None)
+    role = getattr(profile, 'role', None)
+    if new_status in {'approved', 'done'} and role not in {'admin', 'quality_manager', 'supervisor'}:
+        return Response({'detail': 'يتطلب اعتماد الإتلاف/المرتجع صلاحية مدير/جودة.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    if new_status == 'done' and rec.status != 'approved':
+        return Response({'detail': 'يجب اعتماد القرار قبل تنفيذه.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    rec.status = new_status
+    if request.data.get('notes'):
+        rec.reason = (rec.reason + f"\n[{new_status}] " + str(request.data['notes'])).strip()
+    if new_status in {'approved', 'done'}:
+        rec.decided_by = profile
+        rec.decided_at = timezone.now()
+    rec.save(update_fields=['status', 'reason', 'decided_by', 'decided_at'])
+    return Response(_disposal_dict(rec))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def export_disposal(request):
+    """Export the disposal/return ledger (or a filtered subset) to xlsx — the
+    printable إتلاف/مرتجع document. Body: items (list of dicts as shown)."""
+    from django.http import HttpResponse
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    items = request.data.get('items') or []
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.title = 'إتلاف-مرتجع'; ws.sheet_view.rightToLeft = True
+    cols = [('كود', 'item_code', 12), ('الصنف', 'item_name', 38), ('الفرع', 'branch_code', 8),
+            ('الكمية', 'qty', 10), ('تكلفة الوحدة', 'unit_cost', 12), ('القيمة', 'value', 12),
+            ('الصلاحية', 'expiry_date', 12), ('القرار', 'decision_display', 14),
+            ('المورد', 'supplier_name', 22), ('الحالة', 'status_display', 12), ('السبب', 'reason', 30)]
+    ws.append(['مستند إتلاف / مرتجع الأصناف منتهية الصلاحية'])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
+    ws['A1'].font = Font(bold=True, size=13); ws.append([])
+    ws.append([c[0] for c in cols])
+    fill = PatternFill('solid', fgColor='022871')
+    for i, c in enumerate(cols, start=1):
+        cell = ws.cell(row=3, column=i)
+        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = fill
+        cell.alignment = Alignment(horizontal='center')
+        ws.column_dimensions[cell.column_letter].width = c[2]
+    for row in items:
+        ws.append([row.get(c[1]) if row.get(c[1]) is not None else '' for c in cols])
+    ws.freeze_panes = 'A4'
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    resp = HttpResponse(buf.getvalue(),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = 'attachment; filename="disposal_return.xlsx"'
+    return resp
+
+
 class StockBatchViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,

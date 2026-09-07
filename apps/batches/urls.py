@@ -18,6 +18,9 @@ from .views import (
     stock_expiry_sync_trigger,
     export_stock_expiry,
     spawn_stock_expiry_count,
+    expiry_disposal,
+    expiry_disposal_status,
+    export_disposal,
 )
 
 router = DefaultRouter()
@@ -51,4 +54,8 @@ urlpatterns = [
     path('stock-expiry/sync/',    stock_expiry_sync_trigger, name='stock-expiry-sync'),
     path('stock-expiry/export/',  export_stock_expiry,       name='stock-expiry-export'),
     path('stock-expiry/spawn-count/', spawn_stock_expiry_count, name='stock-expiry-spawn-count'),
+    # Disposal / return workflow (expired backlog)
+    path('stock-expiry/disposal/', expiry_disposal, name='stock-expiry-disposal'),
+    path('stock-expiry/disposal/export/', export_disposal, name='stock-expiry-disposal-export'),
+    path('stock-expiry/disposal/<int:pk>/status/', expiry_disposal_status, name='stock-expiry-disposal-status'),
 ] + router.urls

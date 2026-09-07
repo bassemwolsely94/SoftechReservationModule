@@ -63,6 +63,49 @@ class RequestMarkdownTests(TestCase):
         self.assertEqual(r2.status_code, status.HTTP_409_CONFLICT)
 
 
+class ExpiryDisposalTests(TestCase):
+    """Disposal/return ledger: create (draft, cost snapshot) + gated status flow."""
+    URL = '/api/batches/stock-expiry/disposal/'
+
+    def setUp(self):
+        self.user, self.profile, self.client = make_admin('disp_admin')
+        from apps.catalog.models import Item
+        Item.objects.create(softech_id='DZ1', name='Item DZ1', cost_price=Decimal('50'))
+
+    def test_create_snapshots_cost_and_value(self):
+        r = self.client.post(self.URL, {'item_code': 'DZ1', 'branch_code': '130',
+                                        'qty': 4, 'decision': 'destroy',
+                                        'expiry_date': '2025-01-01'}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(r.data['status'], 'draft')
+        self.assertEqual(r.data['unit_cost'], 50.0)
+        self.assertEqual(r.data['value'], 200.0)
+        self.assertEqual(r.data['item_name'], 'Item DZ1')
+
+    def test_status_flow_and_gate(self):
+        rid = self.client.post(self.URL, {'item_code': 'DZ1', 'branch_code': '130',
+                                          'qty': 2, 'decision': 'destroy'}, format='json').data['id']
+        surl = f'{self.URL}{rid}/status/'
+        # done before approved → 400
+        self.assertEqual(self.client.post(surl, {'status': 'done'}, format='json').status_code,
+                         status.HTTP_400_BAD_REQUEST)
+        # approve (admin) → approved, then done
+        self.assertEqual(self.client.post(surl, {'status': 'approved'}, format='json').data['status'], 'approved')
+        self.assertEqual(self.client.post(surl, {'status': 'done'}, format='json').data['status'], 'done')
+
+    def test_approve_requires_privilege(self):
+        from django.contrib.auth import get_user_model
+        from apps.users.models import StaffProfile
+        from rest_framework.test import APIClient
+        u = get_user_model().objects.create_user(username='sales1', password='x')
+        StaffProfile.objects.create(user=u, role='salesperson')
+        c = APIClient(); c.force_authenticate(user=u)
+        rid = self.client.post(self.URL, {'item_code': 'DZ1', 'branch_code': '130',
+                                          'qty': 1, 'decision': 'destroy'}, format='json').data['id']
+        r = c.post(f'{self.URL}{rid}/status/', {'status': 'approved'}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class SpawnStockExpiryCountTests(TestCase):
     """Spawn a physical count from the LIVE stock-expiry grid; hint = mirror expiry."""
     URL = '/api/batches/stock-expiry/spawn-count/'

@@ -427,6 +427,64 @@ class StockExpirySyncRun(models.Model):
                                  'nodes_failed', 'rows_synced', 'detail'])
 
 
+class ExpiryDisposalRecord(models.Model):
+    """
+    Decision ledger for expired / near-expiry stock flagged from the live
+    stock-expiry grid — destroy, return-to-supplier, quarantine, or review.
+
+    This is the AUDITABLE record + printable worklist; it does NOT write to
+    SOFTECH. The physical inventory deduction (destroy = stock-out / return =
+    doccode 120) stays a deliberate, gated action — never auto-posted here.
+    """
+    DECISION_CHOICES = [
+        ('destroy',         'إتلاف'),
+        ('return_supplier', 'مرتجع للمورد'),
+        ('quarantine',      'عزل'),
+        ('review',          'مراجعة'),
+    ]
+    STATUS_CHOICES = [
+        ('draft',     'مسودة'),
+        ('approved',  'معتمد'),
+        ('done',      'منفّذ'),
+        ('cancelled', 'ملغي'),
+    ]
+
+    item_code   = models.CharField(max_length=6, db_index=True, verbose_name='كود الصنف')
+    item_name   = models.CharField(max_length=255, blank=True, verbose_name='اسم الصنف')
+    branch_code = models.CharField(max_length=10, db_index=True, verbose_name='الفرع')
+    store_code  = models.CharField(max_length=10, blank=True, verbose_name='المخزن')
+    batch_no    = models.CharField(max_length=50, blank=True, verbose_name='رقم التشغيلة')
+    expiry_date = models.DateField(null=True, blank=True, verbose_name='تاريخ الصلاحية')
+    qty         = models.DecimalField(max_digits=14, decimal_places=3, default=0, verbose_name='الكمية')
+    unit_cost   = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name='تكلفة الوحدة')
+    value       = models.DecimalField(max_digits=16, decimal_places=2, default=0, verbose_name='القيمة')
+
+    decision      = models.CharField(max_length=20, choices=DECISION_CHOICES, db_index=True, verbose_name='القرار')
+    supplier_code = models.CharField(max_length=10, blank=True, verbose_name='كود المورد (للمرتجع)')
+    supplier_name = models.CharField(max_length=255, blank=True, verbose_name='اسم المورد')
+    reason        = models.TextField(blank=True, verbose_name='السبب / ملاحظات')
+
+    status      = models.CharField(max_length=12, choices=STATUS_CHOICES, default='draft', db_index=True, verbose_name='الحالة')
+    created_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='disposal_records_created', verbose_name='أنشأ بواسطة')
+    created_at  = models.DateTimeField(auto_now_add=True)
+    decided_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='disposal_records_decided', verbose_name='اعتمد/نفّذ بواسطة')
+    decided_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name        = 'قرار إتلاف/مرتجع صلاحية'
+        verbose_name_plural = 'قرارات الإتلاف/المرتجع'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'branch_code'], name='disp_status_branch_idx'),
+            models.Index(fields=['decision', 'status'],    name='disp_decision_status_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_decision_display()} — {self.item_code} × {self.qty} @ {self.branch_code} [{self.status}]'
+
+
 class NearExpiryAlert(models.Model):
     """
     One row per (batch × threshold_days) — prevents duplicate alerts.

@@ -890,6 +890,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
 
   const navigate = useNavigate()
   const [err, setErr] = useState(null)
+  const [disposalRow, setDisposalRow] = useState(null)
   const branchLabel = branch
     ? (branches.find(b => b.softech_branch_id === branch)?.name_ar || branch)
     : 'كل الفروع'
@@ -1039,6 +1040,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
                       title="اضغط للترتيب">{label}{arrow(k)}</th>
                 ))}
                 <th className="px-3 py-3 text-right font-semibold text-gray-600">الفروع</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">إجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -1062,6 +1064,195 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
                   <td className="px-3 py-3 text-gray-500 text-xs">{r.medicine_type || '—'}</td>
                   <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
                   <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches || []).join('، ') || '—'}</td>
+                  <td className="px-3 py-3">
+                    <button onClick={() => setDisposalRow(r)}
+                            className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                            title="إتلاف / مرتجع">🗑️ إتلاف/مرتجع</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {disposalRow && (
+        <DisposalModal row={disposalRow} branch={branch} onClose={() => setDisposalRow(null)} />
+      )}
+    </div>
+  )
+}
+
+
+// ── Disposal / return decision modal (from an expired/near-expiry row) ────────
+const _DISP = {
+  destroy:         { l: 'إتلاف',         c: 'bg-red-100 text-red-700' },
+  return_supplier: { l: 'مرتجع للمورد',  c: 'bg-blue-100 text-blue-700' },
+  quarantine:      { l: 'عزل',           c: 'bg-amber-100 text-amber-800' },
+  review:          { l: 'مراجعة',        c: 'bg-gray-100 text-gray-600' },
+}
+
+function DisposalModal({ row, branch, onClose }) {
+  const qc = useQueryClient()
+  const bc = branch || row.branches?.[0] || ''
+  const [decision, setDecision] = useState(row.tier === 'expired' ? 'destroy' : 'return_supplier')
+  const [supplier, setSupplier] = useState('')
+  const [qty, setQty]           = useState(row.total_qty)
+  const [reason, setReason]     = useState('')
+  const [err, setErr]           = useState(null)
+  const [done, setDone]         = useState(false)
+
+  const create = useMutation({
+    mutationFn: () => batchesApi.expiryDisposalCreate({
+      item_code: row.item_code, item_name: row.item_name, branch_code: bc,
+      qty: Number(qty), expiry_date: row.earliest_expiry, decision,
+      supplier_name: supplier, reason,
+    }),
+    onSuccess: () => { setDone(true); qc.invalidateQueries({ queryKey: ['batches', 'disposal'] }) },
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر الحفظ'),
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-lg font-bold">إتلاف / مرتجع</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">{row.item_name} — كود {row.item_code} — فرع {bc || '—'}</p>
+        {done ? (
+          <div className="text-center py-6">
+            <div className="text-green-600 mb-2">✓ سُجِّل القرار (مسودة) — راجعه في تبويب «إتلاف/مرتجع».</div>
+            <button onClick={onClose} className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg">تم</button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+              <label>القرار
+                <select value={decision} onChange={e => setDecision(e.target.value)} className="border rounded-lg px-3 py-2 w-full mt-1">
+                  <option value="destroy">إتلاف</option>
+                  <option value="return_supplier">مرتجع للمورد</option>
+                  <option value="quarantine">عزل</option>
+                  <option value="review">مراجعة</option>
+                </select>
+              </label>
+              <label>الكمية
+                <input type="number" value={qty} onChange={e => setQty(e.target.value)} className="border rounded-lg px-3 py-2 w-full mt-1" />
+              </label>
+            </div>
+            {decision === 'return_supplier' && (
+              <label className="text-sm block mb-3">المورد
+                <input value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="اسم المورد" className="border rounded-lg px-3 py-2 w-full mt-1" />
+              </label>
+            )}
+            <label className="text-sm block mb-3">السبب / ملاحظات
+              <textarea value={reason} onChange={e => setReason(e.target.value)} className="border rounded-lg px-3 py-2 w-full mt-1 h-20 resize-none" />
+            </label>
+            <p className="text-xs text-gray-400 mb-3">لا يُخصم من SOFTECH تلقائيًا — هذا سجلّ ومستند للتنفيذ اليدوي/المعتمد.</p>
+            {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={() => create.mutate()} disabled={create.isPending || !bc || !(Number(qty) > 0)}
+                      className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {create.isPending ? 'جاري…' : 'تسجيل القرار'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Disposal / return ledger tab ──────────────────────────────────────────────
+function DisposalTab() {
+  const user = useAuthStore(s => s.user)
+  const canApprove = ['admin', 'quality_manager', 'supervisor'].includes(user?.role)
+  const qc = useQueryClient()
+  const [statusF, setStatusF] = useState('')
+
+  const { data } = useQuery({
+    queryKey: ['batches', 'disposal', statusF],
+    queryFn:  () => batchesApi.expiryDisposalList({ status: statusF || undefined }).then(r => r.data),
+  })
+  const rows = data?.items || []
+  const totalVal = useMemo(() => rows.reduce((s, r) => s + (r.value || 0), 0), [rows])
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }) => batchesApi.expiryDisposalStatus(id, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', 'disposal'] }),
+  })
+  const exp = useMutation({
+    mutationFn: () => batchesApi.expiryDisposalExport({ items: rows }),
+    onSuccess: (res) => {
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a'); a.href = url; a.download = 'disposal_return.xlsx'
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url)
+    },
+  })
+  const STAT = { draft: 'bg-gray-100 text-gray-600', approved: 'bg-green-100 text-green-700',
+                 done: 'bg-indigo-100 text-indigo-700', cancelled: 'bg-red-50 text-red-400' }
+
+  return (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-900 leading-relaxed">
+        سجلّ قرارات <b>الإتلاف / المرتجع</b> للأصناف منتهية الصلاحية — تُنشأ كمسودة من تبويب «أرصدة الصلاحية»،
+        ثم <b>تُعتمد</b> (مدير/جودة) وتُطبَّق يدويًا في SOFTECH. لا يخصم النظام المخزون تلقائيًا.
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-sm">
+        <div className="flex items-center gap-2">
+          <select value={statusF} onChange={e => setStatusF(e.target.value)} className="border rounded-lg px-2 py-1.5">
+            <option value="">كل الحالات</option>
+            <option value="draft">مسودة</option>
+            <option value="approved">معتمد</option>
+            <option value="done">منفّذ</option>
+            <option value="cancelled">ملغي</option>
+          </select>
+          <span className="text-gray-600">العدد: <b>{fmtInt(rows.length)}</b> · القيمة: <b className="text-red-600">{fmtNum(totalVal)} ج</b></span>
+        </div>
+        <button onClick={() => exp.mutate()} disabled={exp.isPending || rows.length === 0}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+          ⬇️ تصدير / طباعة
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-center py-14 text-gray-400">لا توجد قرارات — أنشئها من «أرصدة الصلاحية» (وضع منتهية).</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الصنف</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الفرع</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الكمية</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">القيمة</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">القرار</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">المورد</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">الحالة</th>
+                <th className="px-3 py-3 text-right font-semibold text-gray-600">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-3 font-medium">{r.item_name || r.item_code}</td>
+                  <td className="px-3 py-3 text-gray-500">{r.branch_code}</td>
+                  <td className="px-3 py-3">{fmtNum(r.qty, 2)}</td>
+                  <td className="px-3 py-3 text-red-600">{fmtNum(r.value)}</td>
+                  <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs ${_DISP[r.decision]?.c || ''}`}>{_DISP[r.decision]?.l || r.decision}</span></td>
+                  <td className="px-3 py-3 text-gray-500 text-xs">{r.supplier_name || '—'}</td>
+                  <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs ${STAT[r.status] || ''}`}>{r.status_display}</span></td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-1">
+                      {r.status === 'draft' && canApprove &&
+                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'approved' })} className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700">اعتماد</button>}
+                      {r.status === 'approved' && canApprove &&
+                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
+                      {r.status !== 'cancelled' && r.status !== 'done' &&
+                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1108,6 +1299,7 @@ export default function BatchesPage() {
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
           { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
           { key: 'reorder', label: '♻️ مراجعة الشراء' },
+          { key: 'disposal', label: '🗑️ إتلاف/مرتجع' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
@@ -1126,6 +1318,7 @@ export default function BatchesPage() {
       {tab === 'audit' && <PurchaseExpiryAuditTab />}
       {tab === 'suppliers' && <SupplierScorecardTab />}
       {tab === 'reorder' && <ProcurementReviewTab />}
+      {tab === 'disposal' && <DisposalTab />}
     </div>
   )
 }
