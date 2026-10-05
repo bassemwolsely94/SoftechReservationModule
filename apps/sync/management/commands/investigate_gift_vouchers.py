@@ -21,6 +21,7 @@ replicate that through `apps/invoices/writer.py` (no new write channel):
   6. how a voucher LEAVES stock: every doccode that moved those items, with
      sample rows (does the cashier pick a specific expiry/batch = voucher?)
   7. current on-hand per voucher (stkbal + stkbalexpiry incl. batchno)
+  3b. where the RPA "Serial Number" (e.g. 27101-ZWU704) is stored
   8. itemssuppliers links + any OTHER supplier that sold these items
   9. name-based search for other coupon/voucher items (sanity net)
  10. lastdocnumbers *_supp counters for the branches involved
@@ -51,6 +52,8 @@ class Command(BaseCommand):
         parser.add_argument('--items', default='', help='extra voucher itemcodes, comma-separated')
         parser.add_argument('--since', default='2015-01-01', help='lower docdate bound (YYYY-MM-DD)')
         parser.add_argument('--sample', type=int, default=40, help='rows shown per sample section')
+        parser.add_argument('--serial', default='27101-ZWU704',
+                            help='a known coupon serial from the RPA sheet, to locate its SOFTECH column')
 
     def handle(self, *args, **options):
         from config.sybase import SoftechConnector
@@ -156,7 +159,7 @@ class Command(BaseCommand):
             all_cols = all_cols or cols
             all_rows.extend(rows)
         log(f'  total lines: {len(all_rows)} across {len(headers)} purchase docs')
-        voucher_items = set(x.strip() for x in options['items'].split(',') if x.strip())
+        voucher_items = set(x.strip() for x in (options["items"] or "102230,118639").split(",") if x.strip())
         if all_cols:
             ix = {c: i for i, c in enumerate(all_cols)}
             self._write_csv(all_cols, all_rows)
@@ -198,6 +201,21 @@ class Command(BaseCommand):
                 run('most recent doc — lines (all columns)', f"""
                     SELECT * FROM {DB}.stktrans WHERE branchcode=? AND doccode='10' AND docnumber=?
                 """, [str(last[0]).strip(), last[1]], limit=sample)
+
+        # ── 3b. Where does the RPA "Serial Number" field land? ──────────────────
+        # The DataLoad script types: itemcode ↵ ⇥ qty=1 ⇥ expiry ⇥ SERIAL (e.g. 27101-ZWU704) F2.
+        section(f'3b: SERIAL LOCATION — search for known serial {options["serial"]!r}')
+        ser = options['serial']
+        for code in sorted(voucher_items):
+            run(f'stktrans item_partno={ser} itemcode={code}', f"""
+                SELECT branchcode, doccode, docnumber, docdate, storecode, itemexpirydate, item_partno,
+                       transqty, newqty, personcode
+                FROM {DB}.stktrans WHERE itemcode=? AND item_partno=?
+            """, [code, ser])
+            run(f'stkbalexpiry batchno={ser} itemcode={code}', f"""
+                SELECT storecode, itemexpirydate, batchno, itemqty FROM {DB}.stkbalexpiry
+                WHERE itemcode=? AND batchno=?
+            """, [code, ser])
 
         # ── 4. Item master for the voucher items ───────────────────────────────
         section('4: VOUCHER ITEMS — items master')
