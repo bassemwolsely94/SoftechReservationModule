@@ -331,6 +331,9 @@ def generate_batch(*, size=None, created_by=None, start_number=None, start_date=
 
     rng = rng or secrets.SystemRandom()
     top = CouponSerial.objects.aggregate(m=Max('number'))['m'] or 0
+    if not top and not start_number:
+        raise ValueError('coupon archive is empty — run import_coupon_archive first '
+                         '(or pass an explicit start number)')
     first = int(start_number) if start_number else top + 1
     if first <= top and CouponSerial.objects.filter(number__gte=first,
                                                      number__lt=first + size).exists():

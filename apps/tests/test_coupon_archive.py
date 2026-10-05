@@ -141,6 +141,12 @@ class GeneratorTests(TestCase):
             coupons.generate_batch(size=3, start_number=27299)
         self.assertFalse(CouponBatch.objects.exists())
 
+    def test_empty_archive_needs_explicit_start(self):
+        CouponSerial.objects.all().delete()
+        with self.assertRaises(ValueError):
+            coupons.generate_batch(size=1)
+        self.assertEqual(coupons.generate_batch(size=1, start_number=30001).serial_from, 30001)
+
     def test_default_size_is_two_hundred(self):
         self.assertEqual(coupons.generate_batch().serials.count(), 200)
 
