@@ -79,7 +79,15 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
 - `Coupon_Printing.xlsx › Serial Database` (17001–27300) has **97 duplicate serial numbers** (22504–22600)
   and **100 reused random codes** (17101–17200 = 17201–17300). SOFTECH history has 7,812 distinct
   `item_partno` values, including test values like `20000-ABCFED`/`20002-ABCDEF`.
-- Next free serial: **27301**. Last counter `lastdocnumberin_supp` (branch 100) = 65624.
+- **Archive load (2026-10-06, owner's machine):** 15,463 SOFTECH lines → **7,802 serials** (69 lines
+  skipped: test values like `20000-ABCFED`, item code typed as serial, bare numbers `24315`–`24319`).
+  The Excel `Serial Database` (6,400) matched 4,400 and added **2,000 Excel-only serials = exactly
+  17001–19000**. These were printed but never stocked one-line-per-serial; most likely they fall in the
+  2021–early-2022 era when coupons were bought as bulk qty (1000/500/200) with no serial. Conflict flags:
+  number reused 1,004 (+200 from Excel), code reused 608, leg expiries one day apart 247 (an RPA run from
+  serial 22741 typed the 118639 dates one day behind). **No serial was ever bought twice on the same item.**
+- Batch #1 generated: 27301–27500, expiry 2030-03-11 → 2030-09-26 (6 live stkbalexpiry dates avoided).
+- Next free serial after batch #1: **27501**. Last counter `lastdocnumberin_supp` (branch 100) = 65624.
 
 ## 6. Replication design
 **Steps 1–2 BUILT (2026-10-06)** — no SOFTECH writes:
