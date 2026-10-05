@@ -27,6 +27,8 @@ replicate that through `apps/invoices/writer.py` (no new write channel):
  10. lastdocnumbers *_supp counters for the branches involved
 
 ABSOLUTE RULE: SELECT only. Nothing is written to SOFTECH.
+--docs N,M  -> only dumps those HQ purchase docs in full (header + 2 lines)
+              -> docs/architecture/softech_gift_vouchers_docs.txt
 Output -> docs/architecture/softech_gift_vouchers_investigation.txt
           docs/architecture/softech_gift_vouchers_lines.csv   (full line archive)
 """
@@ -39,6 +41,7 @@ from django.core.management.base import BaseCommand
 _DOCS = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'docs', 'architecture')
 OUTPUT_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_investigation.txt')
 CSV_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_lines.csv')
+DOCS_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_docs.txt')
 
 DB = 'SOFTECHDB9.dbo'
 
@@ -54,6 +57,8 @@ class Command(BaseCommand):
         parser.add_argument('--sample', type=int, default=40, help='rows shown per sample section')
         parser.add_argument('--serial', default='27101-ZWU704',
                             help='a known coupon serial from the RPA sheet, to locate its SOFTECH column')
+        parser.add_argument('--docs', default='',
+                            help='ONLY dump these HQ purchase docnumbers in full (comma-separated), e.g. 63944,63945')
 
     def handle(self, *args, **options):
         from config.sybase import SoftechConnector
@@ -119,6 +124,32 @@ class Command(BaseCommand):
             for n, v in zip(cols, rows[0]):
                 log(f'    {n:<28} = {"NULL" if v is None else str(v).strip()}')
             return dict(zip(cols, rows[0]))
+
+        # ── --docs mode: full header + first lines of specific purchase docs ────
+        if options['docs']:
+            for dn in [x.strip() for x in options['docs'].split(',') if x.strip()]:
+                section(f'DOC 100/10/{dn}')
+                vrow('stktransm header (all columns)', f"""
+                    SELECT * FROM {DB}.stktransm WHERE branchcode='100' AND doccode='10' AND docnumber=?
+                """, [int(dn)])
+                cols, rows = [], []
+                try:
+                    cols, rows = fetch(f"""
+                        SELECT * FROM {DB}.stktrans WHERE branchcode='100' AND doccode='10' AND docnumber=?
+                    """, [int(dn)])
+                except Exception as e:
+                    log(f'  [ERROR] {e}')
+                log(f'\n  {len(rows)} lines')
+                for r in rows[:2]:
+                    log('\n  --- line (vertical) ---')
+                    for n, v in zip(cols, r):
+                        log(f'    {n:<28} = {"NULL" if v is None else str(v).strip()}')
+                run('temp_r_stk on-screen cache row', f"""
+                    SELECT branchcode, doccode, docnumber, docdate FROM {DB}.temp_r_stk
+                    WHERE branchcode='100' AND doccode='10' AND docnumber=?
+                """, [int(dn)])
+            self._save(lines, DOCS_FILE)
+            return
 
         # ── 1. Supplier master ─────────────────────────────────────────────────
         section(f'1: SUPPLIER MASTER — personsdata personcode={supp}')
@@ -304,8 +335,8 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'Could not write CSV: {e}'))
 
-    def _save(self, lines):
-        path = os.path.abspath(OUTPUT_FILE)
+    def _save(self, lines, out=OUTPUT_FILE):
+        path = os.path.abspath(out)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
             with open(path, 'w', encoding='utf-8') as f:

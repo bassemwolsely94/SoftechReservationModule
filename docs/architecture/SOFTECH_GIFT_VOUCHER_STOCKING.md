@@ -1,70 +1,95 @@
 # SOFTECH Gift-Coupon Stocking — Current (RPA) Behaviour & Replication Spec
 
-**Status:** INVESTIGATING (2026-10-06). The RPA inputs are decoded below. The SOFTECH-side storage
-(where the serial lands, how coupons leave stock) still needs the read-only probe
-`python manage.py investigate_gift_vouchers` to be run on-site.
+**Status:** BEHAVIOUR CONFIRMED (2026-10-06) by the read-only probe
+`python manage.py investigate_gift_vouchers` (raw output: `softech_gift_vouchers_investigation.txt`,
+full line archive `softech_gift_vouchers_lines.csv`: 15,463 lines / 107 docs). Two details remain:
+the 102230 line/header values (§4) and the meaning of doccode 170.
 
-## 1. Business context
-- Paper **purchase coupons** (`قسيمة مشتروات من صيدليات الرزيقى بقيمة 50ج.م`) are printed with a
-  unique serial. Each coupon has handwritten fields: client name, phone, **PIC code** (`كود العميل`).
-- Stock is held in SOFTECH as two items: **`102230`** and **`118639`**.
-- Coupons are bought from the internal supplier **`1268` — هدايا الاداره لخدمة العملاء** (ptcode 20,
-  ptclassif 10) as a **supplier purchase (doccode 10)** received at **HQ (branch 100)**. They are
-  then dispensed to branches and **deducted against the PIC client** who receives the coupon.
-- Document user: **BASSEM** (the owner's SOFTECH usercode).
-- **200 coupons per item per invoice.** SOFTECH slows down badly on larger documents.
+## 1. The two items — one paper coupon, two SOFTECH legs
+Both items live in family 9955, `itemmedicine=60` (هدايا عملاء), `itemexpiry=1` (expiry mandatory),
+`itempartno=1` (lot/serial field enabled) and `suppcode=1268`.
 
-## 2. Current process (manual + RPA)
-Source files: `Coupon_Printing.xlsx` and `Dataload_for_Coupon_Serial_Number.dld` (WorkBench DataLoad).
+| | **102230** | **118639** |
+|---|---|---|
+| Name | COUPON FOR POINTS كوبون هدية على مشتروات العملاء بقيمة 50 جنيه | COUPON SERVED TO CUSTOMER إستحقاق كوبون |
+| Role | The coupon **issued against loyalty points** (`itempointsys=1`) | The coupon **redeemed on a sale**: a −50 EGP line on the customer invoice |
+| Price | cost 400 / sale 400 (the points price), `posdiscp=100` | cost 0 / sale **−50**, `pharmacydiscp=100`, `itemnosaleclassif=10` |
+| Note | `itemnomoreuse=1` (flagged discontinued, yet still stocked; our validator would block it, see §6) | comment: «يجب ارفاق سيريال الكوبون و الصرف من الكول سنتر» |
+| Main movements | doccode **170** (45,404 lines, HQ), 125/25 transfers | doccode **115** customer sale (30,520 lines), **125→25** HQ→branch transfers (8.4k), returns 30/80/180/181 |
 
-### 2a. `Coupon_Printing.xlsx`
-| Sheet | Content |
-|---|---|
-| `Serial Database` | The master archive of every serial ever issued: 6,400 rows, serials `17001`→`27300`. Columns: running No., random code, serial number, full serial `NNNNN-AAA999`. A `*` in col E marks the start of each 200-batch, and some rows carry a date (2026-01-31). |
-| `Serial Generator` | 250 rows. Random code formula `=CHAR(RANDBETWEEN(65,90))×3 & RANDBETWEEN(100,999)` (e.g. `ZWU704`) + a sequential serial number (`27101`…), giving a full serial `27101-ZWU704`. Values are pasted as static text into `Serial Database`. |
-| `Coupon Expiry Dates` | 800 consecutive dates, 2028-01-01 → 2030-03-10. |
-| `Printing Sheet` | 100 coupons per print run, 4 per page. The page order is collated: coupon k on page p = generator row `2 + p + 25·k`, so the cut stacks come out in serial order. |
+**Every printed serial is purchased ONCE ON EACH ITEM.** Life of serial `27101-ZWU704` (traced):
+```
+2026-07-15  doccode 10   100/63944  item 102230  +1  serial 27101-ZWU704  exp 2029-08-23  (purchase, supplier 1268)
+2026-07-15  doccode 10   100/63945  item 118639  +1  serial 27101-ZWU704  exp 2029-08-23  (purchase, supplier 1268)
+2026-09-19  doccode 170  100/107802 item 102230  -1  (issued against the customer's points at HQ / call center)
+2026-09-19  doccode 125  100/107799 item 118639  -1  → branch 170   (transfer out of HQ)
+2026-09-23  doccode 25   170/32619  item 118639  +1  ← from 100     (received at branch 170)
+2026-09-23  doccode 115  170/414525 item 118639  -1  customer 1500  (redeemed on a sale at −50 EGP)
+```
 
-### 2b. DataLoad (RPA) script
-The script runs on the native `مشتريات من الموردين` screen. Per coupon line it types:
-`itemcode ↵  ⇥ qty=1 ⇥ expiry dd/mm/yyyy ⇥ serial NNNNN-AAA999 F2`
+## 2. Purchase document shape (confirmed from history)
+- Supplier **1268** (ptcode 20, ptclassif 10, credit days 1000, `personmaxbal` 20,000,000; `personcredit`
+  12,538,820 ≈ sum of all coupon purchase values). Branch/store **100** (HQ), usercode **1509** (BASSEM).
+- **One document per item per batch of 200 serials.** A batch = 2 docs (102230 = 200 × 400 = **80,000**;
+  118639 = 200 × 0 = **0**). Several batches are often posted the same day (2026-07-15: docs
+  63936–63945 = 5 batches = serials 26301–27300).
+- `docnumber2` = date-coded **ddmmyyyy[NN]** (e.g. `15072026`, `2703202602`) and is NOT unique per doc
+  (several docs share it). ⇒ the writer's SofTech dup-guard (supplier + doccode + docnumber2) would
+  wrongly match a same-day sibling. **Coupon docs need a unique docnumber2** (ddmmyyyy + 2-digit sequence,
+  already the house pattern) or a different idempotency key.
+- Header of 118639 doc 63943: `fatstatuscode=30`, `fatcurrentstatus=90`, `docvalue=0`,
+  **`docvalue1=-10000`** (= 200 × −50 sale value), `cashiercode=1509`, `docvaluebc=0`. These differ from the
+  generic purchase capture (10/15, docvalue1=0, no cashiercode). It is not yet known whether the native
+  save sets them or a later "close" step does → compare with the 102230 header (§4).
 
-The last loaded batch had 400 lines:
-- 200 × `102230` + 200 × `118639`.
-- Serials `27101-ZWU704` … `27300-KNQ777`, the **same 200 serials for both items**.
-- Expiry dates **23/08/2029 → 10/03/2030**, one day per line, in the same order for both items.
+### Line (118639, doc 63943, real row)
+```
+itemcode=118639 transqty=1 transprice=0 newqty=<running stkbal> newcostprice=0 (trigger)
+itemexpirydate=<unique per line>  item_partno=<SERIAL e.g. 26901-LBS116>
+itemsaleprice=-50 itemsaleprice_tax=-50 itemsalestax=0 pharmacydiscp=100 additionaldiscp=0
+transprice_total=0 origintaxp=0 custdiscp=1.0 specialdiscp=0 bonusqty=-50 dblitemflag=<1..200>
+storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
+```
 
-**Key finding:** the expiry date is *not* random. It is a **sequential, unique-per-line date**. Every
-coupon therefore becomes its own `(itemcode, expiry)` stock row in `stkbalexpiry`, so it can be
-picked individually. The **serial** is the coupon's identity, and the probe will confirm which
-column it is saved in (`stktrans.item_partno` / `stkbalexpiry.batchno` suspected).
+## 3. The serial and the expiry
+- **Serial = `stktrans.item_partno`** (confirmed). It also lands in `stkbalexpiry.batchno` (e.g. 102230
+  row `25300-TOV143`). Format `NNNNN-AAA999`: a running number plus 3 random letters and 3 random digits.
+- **Expiry is a per-line uniqueness key, not a real expiry.** The RPA assigns consecutive dates (one day
+  per serial) from an 800-date pool (2028-01-01 → 2030-03-10) and **reuses the pool cyclically**. SOFTECH
+  keeps on-hand per `(item, store, expiry)`. When a reused date meets stock still held under the same
+  date, the two serials **merge into one stkbalexpiry row** and the serial identity is lost. Evidence: 102230
+  store 100 has `2030-03-10 / 25300-TOV143 / qty 3` and three `-1` rows at other dates.
+  ⇒ **The new generator must pick dates that are unused by any stkbalexpiry row for the item,
+  and ideally never used before.**
 
-## 3. Data-quality issues in the manual archive (why it must move into the platform)
-- **97 duplicated serial numbers.** `22504–22600` were issued twice with different random codes
-  (rows 2104–2200 re-ran a range).
-- **100 duplicated random codes.** Serials `17101–17200` reuse the codes of `17201–17300`.
-- Number jumps `19000 → 22501` and `25900 → 26301`. These look intentional but are undocumented.
-- The expiry-date pool (800 dates) ends 2030-03-10, and the last batch used up to that date. **The
-  next batch has no dates left** without extending the list.
+## 4. Still to confirm
+- [ ] 102230 line + header values (transprice 400? custdiscp/bonusqty?) and header status fields:
+      `investigate_gift_vouchers --docs 63944,63945` dumps both docs of the last batch in full.
+- [ ] Meaning of **doccode 170** (102230 issue against points). Is it the "deducted from PIC client" step?
+- [ ] Whether the native save sends `item_partno` (yes: it is stored) plus any extra columns when a
+      serial is typed. This will be proven by the rollback clone (§5 step 3), not by a new capture.
 
-## 4. Replication design (to be confirmed after the probe)
-1. **Archive:** a platform table of every coupon serial (number, code, item, expiry, purchase doc,
-   status). Seeded from `Serial Database` + the SOFTECH purchase history from supplier 1268.
-   Uniqueness is enforced on the serial.
-2. **Generator:** continue from the last serial (`27301`). Random codes are unique against the
-   archive. Expiry dates are the next free consecutive per-item dates, never colliding with an
-   existing `(item, expiry)` in `stkbalexpiry`.
-3. **Purchase:** one `SupplierInvoice` per item per batch (vendor 1268, 200 lines, qty 1 each),
-   pushed through the existing `apps/invoices/writer.py`. This is the established writeback
-   channel, which is idempotent and verified after writing. No new write path.
-   - Gap to close: the writer omits `item_partno`. If the probe confirms the serial lives there,
-     the line row must carry it, and the column set must be confirmed by capturing one RPA save
-     (`monSysSQLText`, as in `SOFTECH_PURCHASE_SAVE_DML.md`).
-4. **Printing:** regenerate the `Printing Sheet` layout from the archive.
+## 5. Current state & manual-archive issues
+- **Out of stock:** HQ stkbal is 0 for both items; branches hold a few 118639 (150: 69, 160: 3,
+  170: 2; **130: −309** = sold without stock).
+- `Coupon_Printing.xlsx › Serial Database` (17001–27300) has **97 duplicate serial numbers** (22504–22600)
+  and **100 reused random codes** (17101–17200 = 17201–17300). SOFTECH history has 7,812 distinct
+  `item_partno` values, including test values like `20000-ABCFED`/`20002-ABCDEF`.
+- Next free serial: **27301**. Last counter `lastdocnumberin_supp` (branch 100) = 65624.
 
-## 5. Open questions (answered by `investigate_gift_vouchers`)
-- [ ] Column holding the serial (`item_partno`? `batchno`?).
-- [ ] Price / cost / public price on the coupon lines (50 EGP face value?), and `pharmacydiscp`.
-- [ ] Difference between items `102230` and `118639` (both carry the same serials).
-- [ ] How coupons leave HQ stock (transfer doccode to branches; sale/deduction to the PIC client).
-- [ ] Current on-hand per item (the user reports both are out of stock).
+## 6. Replication design (proposed; needs approval before any write)
+1. **Archive** (`apps/vouchers`): `CouponSerial` (serial unique, number, code, item legs, expiry,
+   purchase doc per leg, status, source), plus `CouponBatch` (200 serials, its two SupplierInvoices).
+   Seeded from the SOFTECH lines CSV (authoritative) and reconciled with the Excel `Serial Database`;
+   conflicts are flagged, not dropped.
+2. **Generator:** next serials from the archive (27301…), random `AAA999` codes unique against the archive,
+   and per-line expiry dates unused by any stkbalexpiry row / archive entry for the item. Print sheet
+   (4 per page, collated) exported from the batch.
+3. **Push:** one batch = two `SupplierInvoice`s (vendor 1268, branch 100, 200 lines each, qty 1)
+   through the existing `apps/invoices/writer.py`. Required writer changes:
+   - carry `item_partno` (serial) on purchase lines;
+   - coupon line template exactly as §2 (price fields, `custdiscp`, `bonusqty`);
+   - unique `docnumber2` per doc; idempotency = PG batch status + docnumber2 guard;
+   - a scoped validator allowance for `itemnomoreuse=1` on 102230 (it is stocked deliberately);
+   - verify-readback of 200 lines; **rollback clone of doc 63943/63944 first, then diff every column**
+     (existing `clone_purchase` pattern); then ONE real batch, gated by `INVOICE_WRITER_ENABLED`.
