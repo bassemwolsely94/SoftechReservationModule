@@ -551,3 +551,104 @@ class VoucherRedemption(models.Model):
 
     def __str__(self):
         return f'Redemption #{self.id} — {self.voucher.code}'
+
+
+# ── Gift-coupon stock archive (SOFTECH supplier 1268) ─────────────────────────
+# Spec: docs/architecture/SOFTECH_GIFT_VOUCHER_STOCKING.md — logic in coupons.py.
+
+class CouponBatch(models.Model):
+    """A run of coupon serials stocked together (200 per SOFTECH invoice per item)."""
+
+    SOURCE_CHOICES = [
+        ('generated', 'مولّدة من النظام'),
+        ('imported',  'مستوردة'),
+    ]
+    STATUS_CHOICES = [
+        ('generated', 'مولّدة — بانتظار الإدخال في SOFTECH'),
+        ('stocked',   'تم الإدخال في SOFTECH'),
+        ('void',      'ملغاة'),
+    ]
+
+    source      = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='generated',
+                                   verbose_name='المصدر')
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='generated',
+                                   verbose_name='الحالة')
+    size        = models.PositiveIntegerField(verbose_name='عدد الكوبونات')
+    serial_from = models.PositiveIntegerField(verbose_name='من سريال')
+    serial_to   = models.PositiveIntegerField(verbose_name='إلى سريال')
+    expiry_from = models.DateField(null=True, blank=True, verbose_name='من تاريخ صلاحية')
+    expiry_to   = models.DateField(null=True, blank=True, verbose_name='إلى تاريخ صلاحية')
+    created_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='coupon_batches',
+                                    verbose_name='أنشئت بواسطة')
+    notes       = models.TextField(blank=True, verbose_name='ملاحظات')
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'دفعة كوبونات'
+        verbose_name_plural = 'دفعات الكوبونات'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'دفعة #{self.pk} ({self.serial_from}–{self.serial_to})'
+
+
+class CouponSerial(models.Model):
+    """One printed gift coupon. Stocked in SOFTECH on two legs (points 102230 /
+    served 118639), each a qty-1 purchase line from supplier 1268 with the serial in
+    stktrans.item_partno and a per-serial expiry date as the stock key."""
+
+    SOURCE_CHOICES = [
+        ('softech',   'من مشتريات SOFTECH'),
+        ('excel',     'من ملف الإكسل فقط'),
+        ('generated', 'مولّد من النظام'),
+    ]
+    STATUS_CHOICES = [
+        ('generated', 'مولّد — لم يُدخل بعد'),
+        ('partial',   'أُدخل على صنف واحد فقط'),
+        ('stocked',   'أُدخل على الصنفين'),
+        ('unstocked', 'غير موجود في SOFTECH'),
+        ('void',      'ملغى'),
+    ]
+
+    serial  = models.CharField(max_length=20, unique=True, verbose_name='السريال')
+    number  = models.PositiveIntegerField(db_index=True, verbose_name='الرقم المسلسل')
+    code    = models.CharField(max_length=10, db_index=True, verbose_name='الكود العشوائي')
+    batch   = models.ForeignKey(CouponBatch, null=True, blank=True, on_delete=models.PROTECT,
+                                related_name='serials', verbose_name='الدفعة')
+    source  = models.CharField(max_length=10, choices=SOURCE_CHOICES, verbose_name='المصدر')
+    status  = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True,
+                               verbose_name='الحالة')
+
+    points_expiry    = models.DateField(null=True, blank=True, db_index=True,
+                                        verbose_name='صلاحية صنف النقاط')
+    points_docnumber = models.PositiveIntegerField(null=True, blank=True,
+                                                   verbose_name='مستند شراء صنف النقاط')
+    points_docdate   = models.DateField(null=True, blank=True)
+    served_expiry    = models.DateField(null=True, blank=True, db_index=True,
+                                        verbose_name='صلاحية صنف الاستحقاق')
+    served_docnumber = models.PositiveIntegerField(null=True, blank=True,
+                                                   verbose_name='مستند شراء صنف الاستحقاق')
+    served_docdate   = models.DateField(null=True, blank=True)
+
+    conflict_note = models.TextField(blank=True, default='', verbose_name='تعارضات')
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'سريال كوبون'
+        verbose_name_plural = 'سريالات الكوبونات'
+        ordering            = ['number']
+        constraints = [
+            # Legacy (Excel/SOFTECH) data has duplicates; everything we generate is unique.
+            models.UniqueConstraint(fields=['number'], condition=models.Q(source='generated'),
+                                    name='uniq_coupon_generated_number'),
+            models.UniqueConstraint(fields=['code'], condition=models.Q(source='generated'),
+                                    name='uniq_coupon_generated_code'),
+            models.UniqueConstraint(fields=['points_expiry'], condition=models.Q(source='generated'),
+                                    name='uniq_coupon_generated_expiry'),
+        ]
+
+    def __str__(self):
+        return self.serial

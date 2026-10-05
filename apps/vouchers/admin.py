@@ -30,3 +30,23 @@ class VoucherOTPAdmin(admin.ModelAdmin):
     list_display  = ('voucher', 'phone', 'is_used', 'expires_at', 'created_at')
     list_filter   = ('is_used',)
     readonly_fields = ('code_hash', 'created_at')
+
+
+from .models import CouponBatch, CouponSerial  # noqa: E402
+
+
+@admin.register(CouponBatch)
+class CouponBatchAdmin(admin.ModelAdmin):
+    list_display  = ('id', 'source', 'status', 'size', 'serial_from', 'serial_to',
+                     'expiry_from', 'expiry_to', 'created_by', 'created_at')
+    list_filter   = ('source', 'status')
+    readonly_fields = [f.name for f in CouponBatch._meta.fields]
+
+
+@admin.register(CouponSerial)
+class CouponSerialAdmin(admin.ModelAdmin):
+    list_display  = ('serial', 'number', 'source', 'status', 'points_docnumber', 'points_expiry',
+                     'served_docnumber', 'served_expiry', 'batch')
+    list_filter   = ('source', 'status')
+    search_fields = ('serial', 'code', '=number')
+    readonly_fields = [f.name for f in CouponSerial._meta.fields]

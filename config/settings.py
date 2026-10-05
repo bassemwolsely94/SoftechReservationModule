@@ -374,6 +374,17 @@ INVOICE_WRITER_PROFILE  = config('INVOICE_WRITER_PROFILE', default='test')   # t
 INVOICE_DEFAULT_USERCODE = config('INVOICE_DEFAULT_USERCODE', default='')    # fallback buyer usercode
 INVOICE_WRITE_CHARSET   = config('INVOICE_WRITE_CHARSET', default='cp1256')
 
+# ── Gift-coupon stocking (apps/vouchers/coupons.py) ──────────────────────────
+# One coupon serial = one purchase line on EACH item from supplier 1268 into HQ.
+# See docs/architecture/SOFTECH_GIFT_VOUCHER_STOCKING.md
+COUPON_POINTS_ITEM      = config('COUPON_POINTS_ITEM', default='102230')   # COUPON FOR POINTS
+COUPON_SERVED_ITEM      = config('COUPON_SERVED_ITEM', default='118639')   # COUPON SERVED TO CUSTOMER
+COUPON_SUPPLIER         = config('COUPON_SUPPLIER', default='1268')        # هدايا الاداره لخدمة العملاء
+COUPON_BRANCH           = config('COUPON_BRANCH', default='100')           # HQ
+COUPON_BATCH_SIZE       = config('COUPON_BATCH_SIZE', default=200, cast=int)
+COUPON_MIN_EXPIRY_DAYS  = config('COUPON_MIN_EXPIRY_DAYS', default=730, cast=int)
+COUPON_PRINT_TITLE      = config('COUPON_PRINT_TITLE', default='قسيمة مشتروات من صيدليات الرزيقى بقيمة 50ج.م')
+
 # ── Market-shortage SOFTECH writeback (items.itemmodified=صنف نواقص, itemcode_alt2=تحذير) ──
 # Kill-switch: keep False until validated on the demo item; confirm/revert then stays
 # LOCAL (queued) and the retry job pushes when SOFTECH is reachable.

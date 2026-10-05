@@ -63,8 +63,12 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
   and ideally never used before.**
 
 ## 4. Still to confirm
-- [ ] 102230 line + header values (transprice 400? custdiscp/bonusqty?) and header status fields:
-      `investigate_gift_vouchers --docs 63944,63945` dumps both docs of the last batch in full.
+- [x] 102230 doc (63944): standard purchase header (`fatstatuscode=10`, `fatcurrentstatus=15`,
+      `docvalue=docvaluebc=80000`, `docvalue1=0`, `cashiercode=1509`); lines `transprice=itemsaleprice=400`,
+      `pharmacydiscp=0`, `custdiscp=1`, `bonusqty=0`, `item_partno=<serial>`, `newcostprice` 400 (trigger).
+      118639 doc (63945) differs: header `30/90`, `docvalue1=-10000`, lines `bonusqty=-50`. Whether the
+      native client or a trigger sets these is settled by the rollback clone diff (§6 step 3).
+      Both docs also have a `temp_r_stk` on-screen cache row (the writer skips it, as proven for purchases).
 - [ ] Meaning of **doccode 170** (102230 issue against points). Is it the "deducted from PIC client" step?
 - [ ] Whether the native save sends `item_partno` (yes: it is stored) plus any extra columns when a
       serial is typed. This will be proven by the rollback clone (§5 step 3), not by a new capture.
@@ -77,7 +81,21 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
   `item_partno` values, including test values like `20000-ABCFED`/`20002-ABCDEF`.
 - Next free serial: **27301**. Last counter `lastdocnumberin_supp` (branch 100) = 65624.
 
-## 6. Replication design (proposed; needs approval before any write)
+## 6. Replication design
+**Steps 1–2 BUILT (2026-10-06)** — no SOFTECH writes:
+- Models `vouchers.CouponBatch` / `vouchers.CouponSerial` (migration vouchers/0005), logic in
+  `apps/vouchers/coupons.py`, tests `apps/tests/test_coupon_archive.py`.
+- `import_coupon_archive --csv softech_gift_vouchers_lines.csv --excel Coupon_Printing.xlsx`
+  (or `--softech` to read the lines live, SELECT only). Idempotent; conflicts go to `conflict_note`.
+- `generate_coupon_batch [--size 200] --out DIR`: next serials, unique codes, expiry dates that move
+  forward from the latest ever used (no cycling), skipping every SOFTECH stkbalexpiry date of both
+  items (read live). Writes `coupon_batch_<id>_print.xlsx` (4-up, collated) and
+  `coupon_batch_<id>_dataload.tsv` (the RPA grid, as an interim fallback).
+- `export_coupon_batch <id> --out DIR` re-exports a batch.
+- Settings: `COUPON_POINTS_ITEM`, `COUPON_SERVED_ITEM`, `COUPON_SUPPLIER`, `COUPON_BRANCH`,
+  `COUPON_BATCH_SIZE`, `COUPON_MIN_EXPIRY_DAYS`, `COUPON_PRINT_TITLE`.
+
+**Step 3 (SOFTECH push) — NOT built, awaiting approval:**
 1. **Archive** (`apps/vouchers`): `CouponSerial` (serial unique, number, code, item legs, expiry,
    purchase doc per leg, status, source), plus `CouponBatch` (200 serials, its two SupplierInvoices).
    Seeded from the SOFTECH lines CSV (authoritative) and reconciled with the Excel `Serial Database`;

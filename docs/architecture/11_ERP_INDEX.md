@@ -13,6 +13,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | — | [SOFTECH_INDIRECT_POS_ORDER_WRITEBACK.md](SOFTECH_INDIRECT_POS_ORDER_WRITEBACK.md) | ✅ INVESTIGATED (2026-06-21) | Full read-only reverse-engineering of the SOFTECH Indirect-POS → Cashier pending-order subsystem: tables (`stktransm5`/`stktrans5`/`branchesales5`), dual serial sequences (`lastdocnumbers` `'000'` staging vs branch `ver_branch=1` final), pricing/tax/cost/discount formulas, channels, payments, points, and the full create→settle→refund lifecycle empirically validated on branch 130. |
 | 14 | [14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md](14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md) | ✅ BUILT (2026-07-25) | Phase-2 SOFTECH pending-order **writer is shipped** as `apps/pos_orders`: PG mirror `SoftechSalesOrder`+lines+payments (referral-doctor/prescription/multi-channel extras), transactional writer modeled on `discount_approvals/replication.py` (collision-safe serial alloc + verify-readback + dry-run), read-back reconciler, **offline retry queue** (`queue-status`/`flush`), discount authority + batch availability. Live SOFTECH writeback (PENDING side only: `stktransm5`/`stktrans5`/`branchesales5`). Desktop `/pos` + mobile `/m/pos`. Ops: `POS_OFFLINE_RESILIENCE.md`, `POS_OPERATOR_RUNBOOK.md`, `MDA_INSTALL_RUNBOOK.md`. See [02_MODULE_REGISTRY.md#pos-orders-indirect-pos-writeback](02_MODULE_REGISTRY.md). |
 | 15 | [15_CEP_OMNICHANNEL_DESIGN.md](15_CEP_OMNICHANNEL_DESIGN.md) | ✅ ALL PHASES 0–5 BUILT (2026-07-05) | Omnichannel Communication & Engagement Platform: thin `apps/omni` envelope layer (ChannelAccount / Conversation / TimelineEvent) unifying the EXISTING `apps/whatsapp` (Cloud API), `apps/pbx` (Issabel AMI), `apps/callcenter` (cases + AI) into one customer-grouped timeline; multi-account WhatsApp + provider abstraction, routing/SLA, supervisor wallboard, automation engine, social channels (FB/IG/TG/TikTok). 6-phase roadmap; extend-don't-rebuild. |
+| — | [SOFTECH_GIFT_VOUCHER_STOCKING.md](SOFTECH_GIFT_VOUCHER_STOCKING.md) | 🟡 ARCHIVE BUILT (2026-10-06) | Gift coupons stocked from supplier 1268 on two items (102230 points / 118639 served −50), one qty-1 purchase line per serial (`item_partno`) with a unique expiry key. Archive + generator + print/DataLoad export built; SOFTECH auto-push via `apps/invoices/writer.py` pending approval. |
 | 16 | [16_BRANCH_KPI_FORECASTING.md](16_BRANCH_KPI_FORECASTING.md) | ✅ PHASES 1–6 BUILT (2026-07-29) | Branch-KPI forecasting + target engine replacing the manual monthly Excel target/achievement workbooks (`تارجت/تحقيق شهر`). **Extends** `incentives.SalesTarget` (widen metrics) + adds a branch-KPI layer to `apps/forecasting` (`ForecastScenario`/`ForecastFactor`/`KpiActualRollup`/`ForecastBacktest` + config-driven `ChannelBucketMap`). All KPIs (cash/credit/delivery/beauty/gross-profit/customers/call-center) derived from the PG mirror; two engines (Model A base×growth÷threshold, Model B LM/PM/YoY blend) + average, backtested to auto-pick the best. Feeds the incentive ÷threshold gate. 6-phase plan; NOT built yet. |
 
 ---
@@ -31,7 +32,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Notifications | `apps/notifications` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#notifications) |
 | Purchasing / Demand Engine | `apps/purchasing` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#purchasing) |
 | Supplier Invoices | `apps/invoices` | PARTIAL | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#invoices) |
-| Vouchers | `apps/vouchers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#vouchers) |
+| Vouchers | `apps/vouchers` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#vouchers) — incl. **gift-coupon stock archive + serial generator** ([SOFTECH_GIFT_VOUCHER_STOCKING.md](SOFTECH_GIFT_VOUCHER_STOCKING.md)) |
 | Sales Incentives | `apps/incentives` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#incentives) |
 | Stock Count | `apps/stockcount` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#stockcount) |
 | Shortage Lists | `apps/shortage` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#shortage) |
@@ -171,6 +172,8 @@ Full endpoint details: [04_API_REGISTRY.md](04_API_REGISTRY.md)
 | `vouchers_voucherotp` | OTP records (hashed) |
 | `vouchers_voucherredemptiondocument` | POS redemption documents |
 | `vouchers_voucherredemption` | Immutable redemption audit |
+| `vouchers_couponbatch` | Gift-coupon serial batch (200 per SOFTECH invoice per item) |
+| `vouchers_couponserial` | Gift-coupon serial archive — both SOFTECH legs (102230 points / 118639 served), expiry key, conflicts |
 | `incentives_incentiveprogram` | Incentive program |
 | `incentives_incentiverule` | Per-item/category rules |
 | `incentives_incentiveruleitem` | Multi-item rule members |
@@ -401,6 +404,9 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `run_forecast` | forecasting | Run demand/sales forecast | Daily |
 | `near_expiry_scan` | batches | Scan batches nearing expiry | Daily |
 | `sync_purchase_expiry` | batches | Backfill purchase-invoice lines carrying an entered expiry (`stktrans.itemexpirydate`, doccode 10) from **main** suppliers (`SupplierSegmentation` OFFICIAL_DISTRIBUTOR+MANUFACTURER) into `PurchaseExpiryEntry` — the mirror behind the **Purchase-Expiry Physical Audit** report (`/batches` → تدقيق صلاحيات الشراء → spawns a `stockcount` `expiry_audit` session). `--years 3` \| `--from/--to` \| `--branch` \| `--categories`. Idempotent + re-runnable (re-run after re-classifying suppliers as main). Read-only SOFTECH. Needs `run_procurement_engine` run first to classify suppliers | One-time `--years 3` backfill; then **scheduled daily 07:00** (`purchase_expiry_sync` APScheduler job, rolling ~4-month incremental window, additive); re-run `--years 3` when the main-supplier set changes |
+| `import_coupon_archive` | vouchers | Build the gift-coupon serial archive from SOFTECH supplier-1268 purchases (`--csv` probe export or `--softech` live, SELECT only) + the Excel `Serial Database` (`--excel`); idempotent, flags reused numbers/codes | One-time; re-run after each stocking |
+| `generate_coupon_batch` / `export_coupon_batch` | vouchers | Next coupon serial batch (unique serials/codes, never-reused expiry keys checked against SOFTECH stkbalexpiry) + print sheet + DataLoad grid | Per restock |
+| `investigate_gift_vouchers` | sync | READ-ONLY probe of coupon stocking (supplier 1268); `--docs N,M` dumps docs in full | Manual |
 | `run_procurement_engine` | procurement | Recompute procurement/supplier metrics | Daily |
 | `sync_insurance_cache` / `sync_motalbas` / `reimport_all_claims` | insurance | Sync SOFTECH motalba claims into PG mirror | Configurable |
 | `seed_loyalty` | loyalty | Seed loyalty program defaults | One-time setup |
