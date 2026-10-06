@@ -69,8 +69,16 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
       118639 doc (63945) differs: header `30/90`, `docvalue1=-10000`, lines `bonusqty=-50`. Whether the
       native client or a trigger sets these is settled by the rollback clone diff (§6 step 3).
       Both docs also have a `temp_r_stk` on-screen cache row (the writer skips it, as proven for purchases).
-- [ ] Meaning of **doccode 170** (102230 issue against points): `investigate_gift_vouchers --doctypes 170,125,25,115`
-      looks up SOFTECH's document-type names and samples the latest coupon document of each type.
+- [x] Document types (SOFTECH `transdoc`, probe `--doctypes`, 2026-10-06) — the full coupon lifecycle:
+      | doccode | `transdoc.docdescr` | Coupon step (real sample) |
+      |---|---|---|
+      | 10  | شراء من مورد | stocking (this module) |
+      | **170** | **صرف أصناف مصروفات** (issue items as expenses) | **102230 issued to a customer against points** at HQ by the call center (usercode 64): header `phcode`=customer code (`05HD759`), `docvalue`=`patientpayment`=400, `personnewbal`=−400; line `item_partno`=serial (`27286-MFW296`) |
+      | 125 | صرف - تبادل بين الفروع | 118639 transferred HQ → branch (`cust_branch_code`=140), serial on the line |
+      | 25  | إستلام - تبادل بين الفروع | 118639 received at the branch (`docnumber2`=the 125 docnumber) |
+      | 115 | مبيعات لعميل | 118639 redeemed on a customer sale at −50 EGP (`27288-ZXO674`, branch 170) |
+      ⇒ every step carries the serial in `item_partno`, so the archive can track each coupon
+      stocked → issued (to which customer) → sent to branch → redeemed.
 - [ ] Whether the native save sends `item_partno` (yes: it is stored) plus any extra columns when a
       serial is typed. This will be proven by the rollback clone (§5 step 3), not by a new capture.
 
