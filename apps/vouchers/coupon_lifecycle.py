@@ -284,7 +284,24 @@ def report():
             flags[f] += 1
     no_serial = (CouponEvent.objects.filter(serial_id=None, kind='redeem')
                  .values('branchcode').annotate(n=Count('id'), qty=Sum('qty')).order_by('-n'))
+    from django.db.models.functions import ExtractYear
+    by_year = (CouponEvent.objects.filter(serial_id=None, kind='redeem')
+               .annotate(y=ExtractYear('docdate')).values('y').annotate(n=Count('id')).order_by('y'))
+    recent = (CouponEvent.objects.filter(serial_id=None, kind='redeem',
+                                         docdate__gte=dt.date.today() - dt.timedelta(days=365))
+              .values('branchcode').annotate(n=Count('id'), qty=Sum('qty')).order_by('-n'))
+    flagged_by_year = defaultdict(lambda: defaultdict(int))
+    for lst, d in (CouponSerial.objects.exclude(anomalies=[])
+                   .values_list('anomalies', 'redeemed_at')):
+        for f in lst:
+            flagged_by_year[f][d.year if d else '—'] += 1
+    kinds = (CouponEvent.objects.filter(kind='other')
+             .values('leg', 'doccode', 'doc_name').annotate(n=Count('id')).order_by('-n'))
     return {
+        'no_serial_redeems_by_year': [(r['y'], r['n']) for r in by_year],
+        'no_serial_redeems_last_365d_by_branch': [(r['branchcode'], r['n'], float(r['qty'] or 0)) for r in recent],
+        'anomalies_by_redeem_year': {k: dict(v) for k, v in flagged_by_year.items()},
+        'unclassified_movements': [(r['leg'], r['doccode'], r['doc_name'], r['n']) for r in kinds],
         'stages': dict(CouponSerial.objects.values_list('stage').annotate(n=Count('id')).values_list('stage', 'n')),
         'anomalies': dict(flags),
         'redeemed_without_valid_serial_by_branch': [(r['branchcode'], r['n'], float(r['qty'] or 0)) for r in no_serial],

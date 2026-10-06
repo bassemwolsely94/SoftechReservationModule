@@ -18,12 +18,13 @@ class Command(BaseCommand):
         parser.add_argument('--serial', default='')
         parser.add_argument('--anomaly', default='', choices=[''] + list(coupon_lifecycle.ANOMALY_LABELS))
         parser.add_argument('--limit', type=int, default=50)
+        parser.add_argument('--detail', type=int, default=3, help='with --anomaly: full timelines of the first N')
 
     def handle(self, *args, **o):
         if o['serial']:
             return self._serial(o['serial'])
         if o['anomaly']:
-            return self._anomaly(o['anomaly'], o['limit'])
+            return self._anomaly(o['anomaly'], o['limit'], o['detail'])
         r = coupon_lifecycle.report()
         self.stdout.write('── Coupons by stage ──')
         labels = dict(CouponSerial.STAGE_CHOICES)
@@ -34,10 +35,21 @@ class Command(BaseCommand):
         if not r['anomalies']:
             self.stdout.write('  none')
         for code, n in sorted(r['anomalies'].items(), key=lambda x: -x[1]):
-            self.stdout.write(f'  {code}: {n}  — {coupon_lifecycle.ANOMALY_LABELS.get(code, "")}')
+            years = r['anomalies_by_redeem_year'].get(code, {})
+            ys = ', '.join(f'{y}: {c}' for y, c in sorted(years.items(), key=lambda x: str(x[0])))
+            self.stdout.write(f'  {code}: {n}  — {coupon_lifecycle.ANOMALY_LABELS.get(code, "")}  [{ys}]')
         self.stdout.write('── Redemptions WITHOUT a valid serial, by branch (lines, qty) ──')
         for bc, n, qty in r['redeemed_without_valid_serial_by_branch'] or [('—', 0, 0)]:
             self.stdout.write(f'  branch {bc}: {n} lines, qty {qty:g}')
+        self.stdout.write('── Redemptions WITHOUT a valid serial, by year ──')
+        for y, n in r['no_serial_redeems_by_year']:
+            self.stdout.write(f'  {y}: {n} lines')
+        self.stdout.write('── … in the LAST 365 DAYS, by branch (lines, qty) ──')
+        for bc, n, qty in r['no_serial_redeems_last_365d_by_branch'] or [('—', 0, 0)]:
+            self.stdout.write(f'  branch {bc}: {n} lines, qty {qty:g}')
+        self.stdout.write('── Movements not yet classified (leg, doccode, name, lines) ──')
+        for leg, code, name, n in r['unclassified_movements']:
+            self.stdout.write(f'  {leg} {code} {name or "?"}: {n}')
         self.stdout.write('── Redeemed coupons by branch ──')
         for bc, n in r['redeemed_by_branch']:
             self.stdout.write(f'  branch {bc}: {n}')
@@ -60,10 +72,13 @@ class Command(BaseCommand):
             self.stdout.write(f'  {e.docdate}  {e.get_kind_display():<32} {e.leg:<6} '
                               f'{e.branchcode}/{e.doccode}/{e.docnumber}{party}{who}')
 
-    def _anomaly(self, code, limit):
+    def _anomaly(self, code, limit, detail=0):
         qs = CouponSerial.objects.filter(anomalies__contains=[code]).order_by('number')
         self.stdout.write(f'{qs.count()} serial(s) flagged {code} — {coupon_lifecycle.ANOMALY_LABELS[code]}')
         for c in qs[:limit]:
             self.stdout.write(f'  {c.serial}: issued {c.issued_at or "—"} to {c.issued_pic or "—"} | '
                               f'sent {c.sent_branch or "—"} | redeemed x{c.redeem_count} at '
                               f'{c.redeemed_branch or "—"} {c.redeemed_at or ""} by {c.redeemed_pic or "—"}')
+        for c in qs[:detail]:
+            self.stdout.write('')
+            self._serial(c.serial)
