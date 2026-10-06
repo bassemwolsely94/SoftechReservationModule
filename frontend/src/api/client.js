@@ -867,6 +867,21 @@ export const vouchersApi = {
   documentPrint: (refCode) => api.get(`/vouchers/documents/${refCode}/print/`),
 }
 
+// ── Gift coupons (paper coupons, SOFTECH supplier 1268) — apps/vouchers/coupon_views.py ──
+export const couponsApi = {
+  overview:     ()            => api.get('/vouchers/coupons/overview/'),
+  serial:       (q)           => api.get('/vouchers/coupons/serial/', { params: { q } }),
+  customers:    (params)      => api.get('/vouchers/coupons/customers/', { params }),
+  noSerial:     (params)      => api.get('/vouchers/coupons/no-serial/', { params }),
+  sync:         ()            => api.post('/vouchers/coupons/sync/'),
+  batches:      ()            => api.get('/vouchers/coupons/batches/'),
+  generate:     (data)        => api.post('/vouchers/coupons/batches/', data),
+  exportFile:   (id, kind)    => api.get(`/vouchers/coupons/batches/${id}/export/`, { params: { kind }, responseType: 'blob' }),
+  probe:        (id)          => api.post(`/vouchers/coupons/batches/${id}/probe/`),
+  push:         (id, data)    => api.post(`/vouchers/coupons/batches/${id}/push/`, data),
+  verify:       (id)          => api.get(`/vouchers/coupons/batches/${id}/verify/`),
+}
+
 // ── Shortage ──────────────────────────────────────────────────────────────────
 
 export const shortageApi = {

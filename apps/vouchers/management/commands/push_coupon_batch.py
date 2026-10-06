@@ -36,13 +36,18 @@ class Command(BaseCommand):
             return self._verify(batch)
         if batch.status == 'stocked' and not o['probe']:
             raise CommandError(f'batch #{batch.pk} is already stocked in SOFTECH')
-        try:
-            if o['probe']:
-                self._probe(batch)
-            else:
-                self._push(batch, commit=o['commit'], force=o['force'])
-        except ValueError as e:
-            raise CommandError(str(e))
+        from apps.vouchers.coupon_dashboard import LOCK_PUSH, pg_lock
+        # same per-batch lock as the screen (coupon_views) — never two pushes of one batch at once
+        with pg_lock(LOCK_PUSH * 1000 + batch.pk) as got:
+            if not got:
+                raise CommandError(f'batch #{batch.pk} is being pushed / probed right now — try again later')
+            try:
+                if o['probe']:
+                    self._probe(batch)
+                else:
+                    self._push(batch, commit=o['commit'], force=o['force'])
+            except ValueError as e:
+                raise CommandError(str(e))
 
     def _probe(self, batch):
         self.stdout.write(f'Rollback rehearsal of batch #{batch.pk} ({batch.serial_from}–{batch.serial_to}) …')

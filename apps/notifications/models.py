@@ -38,6 +38,7 @@ class Notification(models.Model):
         ('churn_alert',               '⚠️ تنبيه انقطاع عميل'),
         ('weekly_summary',            '📊 ملخص أسبوعي'),
         ('monthly_report',            '📈 تقرير شهري'),
+        ('coupon_digest',             '🎟️ رقابة كوبونات الهدايا'),
         # ── Transfer ─────────────────────────────────────────────────────────
         ('transfer_request',          '🔀 طلب تحويل جديد'),
         ('transfer_response',         '↩️ رد على طلب تحويل'),
@@ -171,6 +172,7 @@ class Notification(models.Model):
         # ── Periodic digests → 📊 reports feed (quiet) ────────────────────────
         'weekly_summary':       CATEGORY_REPORTS,
         'monthly_report':       CATEGORY_REPORTS,
+        'coupon_digest':        CATEGORY_REPORTS,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
         'chatter_mention':      CATEGORY_MENTIONS,

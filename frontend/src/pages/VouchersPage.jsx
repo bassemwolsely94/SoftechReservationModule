@@ -13,6 +13,8 @@ import RefreshButton from '../components/RefreshButton'
 import CanDo from '../components/CanDo'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import GiftCouponsTab from './vouchers/GiftCouponsTab'
+import useAuthStore from '../store/authStore'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
@@ -1356,11 +1358,16 @@ export default function VouchersPage() {
   const [activeTab,    setActiveTab]    = useState('vouchers')
   const [redeemTarget, setRedeemTarget] = useState(null)
 
+  const { user } = useAuthStore()
+  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py).
+  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role)
+
   const tabs = [
     { key: 'vouchers',  label: '🎫 القسائم' },
     { key: 'redeem',    label: '💳 استرداد' },
     { key: 'documents', label: '🏪 وثائق POS' },
     { key: 'report',    label: '📊 تقارير' },
+    ...(canSeeCoupons ? [{ key: 'coupons', label: '🎟️ كوبونات الهدايا' }] : []),
   ]
 
   return (
@@ -1424,6 +1431,7 @@ export default function VouchersPage() {
         )}
         {activeTab === 'documents' && <DocumentsTab />}
         {activeTab === 'report'    && <ReportTab />}
+        {activeTab === 'coupons'   && canSeeCoupons && <GiftCouponsTab />}
       </div>
     </div>
   )

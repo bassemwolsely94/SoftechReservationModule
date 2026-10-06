@@ -378,7 +378,7 @@ def customer_balances(redeemed_since=None, limit=20):
     return {'since': since, 'customers_over': len(over),
             'excess_total': sum(x['excess'] for x in over),
             'active_over': len(active), 'active_excess': sum(x['excess'] for x in active),
-            'top': active[:limit],
+            'top': active[:limit], 'all': over,
             'redeemed_without_customer': float(blank)}
 
 

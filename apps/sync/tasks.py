@@ -2028,6 +2028,21 @@ def _run_stock_expiry_sync():
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
 
 
+def _run_coupon_lifecycle_sync():
+    """Daily gift-coupon mirror (READ-ONLY from SOFTECH) + yesterday's misuse digest
+    (lines without a serial, reused serials, customers over their issued coupons) as an
+    in-app notification to COUPON_DIGEST_ROLES. Off with COUPON_DAILY_SYNC_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'COUPON_DAILY_SYNC_ENABLED', True):
+        return
+    try:
+        from django.core.management import call_command
+        call_command('sync_coupon_lifecycle', notify=True, verbosity=0)
+        logger.info('[APScheduler] coupon lifecycle sync + digest done')
+    except Exception as exc:
+        logger.error('[APScheduler] coupon lifecycle sync failed: %s', exc)
+
+
 def _run_item_suppliers_sync():
     """Nightly itemssuppliers mirror — supplier codes / "supplier carries it" offline."""
     try:
@@ -2994,6 +3009,11 @@ def start_scheduler():
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
     _scheduler.add_job(
         _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.
+    _scheduler.add_job(
+        _run_coupon_lifecycle_sync, 'cron', hour=6, minute=20, id='coupon_lifecycle_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Nightly pos_cancel → PosCancelDaily rollup (lost-sale trends + demand/procurement feed).

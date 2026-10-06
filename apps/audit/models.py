@@ -91,6 +91,11 @@ class AuditLog(models.Model):
         ('replacement_leg_posted',      'بدل — ترحيل مستند'),
         ('replacement_leg_failed',      'بدل — فشل ترحيل'),
         ('replacement_contract_linked', 'بدل — ربط فاتورة التعاقد'),
+
+        # Gift coupons (apps/vouchers/coupon_views.py)
+        ('coupon_batch_generated',     'كوبونات — توليد دفعة'),
+        ('coupon_batch_exported',      'كوبونات — تنزيل ملف الطباعة'),
+        ('coupon_batch_stocked',       'كوبونات — إدخال دفعة في SOFTECH'),
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

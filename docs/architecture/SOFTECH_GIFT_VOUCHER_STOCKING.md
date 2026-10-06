@@ -240,3 +240,38 @@ Original part-2 notes:
    for the served coupon item 118639 and ONLY while `COUPON_POS_GUARD_ENABLED` is on
    (`validators._coupon_negative_price_ok`), so a −50 line can never pass without its serial verified.
 Daily `sync_coupon_lifecycle` + `coupon_report` remains the control for coupons redeemed directly in SOFTECH.
+
+## 9. Daily misuse digest + coupon screen — BUILT (2026-10-06)
+
+**Daily job** (`apps/sync/tasks._run_coupon_lifecycle_sync`, 06:20, id `coupon_lifecycle_sync`; runs in
+`run_scheduler`): `sync_coupon_lifecycle --notify` = the incremental READ-ONLY mirror, then
+`coupon_dashboard.daily_digest()` for YESTERDAY → one in-app notification (type `coupon_digest`, 📊 reports
+feed, deduped per day) to `COUPON_DIGEST_ROLES` (default admin, supervisor) listing:
+redemption lines without a valid serial (by branch + SOFTECH user), uses of an already-used serial, and
+customers who redeemed that day and now hold more redemptions than issues. Quiet day → nothing sent.
+Lines booked later with an older date are not in the digest (the screen shows them).
+Off switch: `COUPON_DAILY_SYNC_ENABLED=False`. Sync runs under a PostgreSQL advisory lock (screen, CLI and
+scheduler never overlap).
+
+**Screen** — القسائم → 🎟️ كوبونات الهدايا (`frontend/src/pages/vouchers/GiftCouponsTab.jsx`),
+API `apps/vouchers/coupon_views.py` under `/api/vouchers/coupons/`:
+
+| Endpoint | Who | What |
+|---|---|---|
+| `GET overview/` | view | stage counts, flagged customers, no-serial (30 d), writer / guard state |
+| `GET serial/?q=` | view | serial (or number / code) with every movement; junk text used as a serial |
+| `GET customers/[?all=1][?pic=]` | view | customers over their issued coupons; one customer's lines |
+| `GET no-serial/?branch=&days=` | view | redemption lines without a valid serial, by branch / user |
+| `GET/POST batches/` | view / manage | list · generate (reads SOFTECH expiry dates first — fail-closed) |
+| `GET batches/<id>/export/?kind=print\|dataload` | manage | print sheet xlsx / RPA DataLoad TSV |
+| `POST batches/<id>/probe/` | manage | rollback rehearsal vs reference docs (nothing kept) |
+| `POST batches/<id>/push/` `{confirm:true[,force]}` | manage | stock in SOFTECH via `coupon_push.push_batch` |
+| `GET batches/<id>/verify/` | manage | read-only check of a stocked batch |
+| `POST sync/` | manage | run the mirror now |
+
+*view* = `COUPON_VIEW_ROLES` (default admin, supervisor, purchasing, quality_manager); *manage* = the
+supplier-invoice push roles (`SupplierInvoiceViewSet._PUSH_ROLES`: admin, purchasing, supervisor). Call-center
+and branch roles get 403. Stocking still needs `INVOICE_WRITER_ENABLED=True` (409 otherwise), runs under a
+per-batch advisory lock shared with `push_coupon_batch` (no double push), and generate / export / stock are
+written to the AuditLog (`coupon_batch_generated` / `_exported` / `_stocked`, before/after status).
+Tests: `apps/tests/test_coupon_dashboard.py`.
