@@ -136,6 +136,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/customers',          icon: '👥', label: 'العملاء',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager','delivery'] },
       { to: '/vouchers',           icon: '🎫', label: 'القسائم',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','quality_manager'] },
+      { to: '/vouchers?tab=coupons', icon: '🎟️', label: 'كوبونات الهدايا',   roles: ['admin','supervisor','purchasing','quality_manager'] },
       { to: '/offers',             icon: '🎁', label: 'العروض والتخفيضات',   roles: ['admin','supervisor','purchasing'] },
       { to: '/loyalty',            icon: '🏆', label: 'النقاط والولاء',      roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
       { to: '/loyalty/branch',     icon: '🔍', label: 'استعلام نقاط الفرع', roles: ['admin','branch','pharmacist','supervisor'] },

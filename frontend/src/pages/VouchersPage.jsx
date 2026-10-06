@@ -8,6 +8,7 @@
  *   Tab 4 — تقارير     : usage report
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { vouchersApi, customersApi, branchesApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
 import CanDo from '../components/CanDo'
@@ -1355,7 +1356,10 @@ function ReportTab() {
 
 // ── Page Root ─────────────────────────────────────────────────────────────────
 export default function VouchersPage() {
-  const [activeTab,    setActiveTab]    = useState('vouchers')
+  const [searchParams] = useSearchParams()
+  const [activeTab,    setActiveTab]    = useState(searchParams.get('tab') || 'vouchers')
+  const tabParam = searchParams.get('tab')
+  useEffect(() => { if (tabParam) setActiveTab(tabParam) }, [tabParam])
   const [redeemTarget, setRedeemTarget] = useState(null)
 
   const { user } = useAuthStore()
