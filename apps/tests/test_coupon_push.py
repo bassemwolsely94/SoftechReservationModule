@@ -267,3 +267,22 @@ class DiffTests(TestCase):
                 'custdiscp': '0.00', 'docnumber': '65625'}
         self.assertEqual(coupon_push.diff_rows(ours, ref, {'docnumber'}),
                          [('custdiscp', '0.00', 1.0)])
+
+
+class VerifyTests(_Base):
+    def test_verify_reads_docs_and_stock(self):
+        b = coupon_push.ensure_invoices(self.batch)
+        for inv, dn in ((b.points_invoice, 65625), (b.served_invoice, 65626)):
+            inv.status, inv.softech_docnumber = 'finalized', dn
+            inv.save()
+        cur = mock.Mock()
+        cur.fetchone.side_effect = [(200.0,), (3, 3.0), (200.0,), (3, 3.0)]
+        conn = mock.Mock(cursor=mock.Mock(return_value=cur))
+        with mock.patch('config.sybase.get_sybase_connection', return_value=conn), \
+                mock.patch.object(writer, 'reconcile',
+                                  side_effect=lambda inv: {'present': True, 'lines': 3,
+                                                           'docnumber': int(inv.softech_docnumber)}):
+            r = coupon_push.verify_batch(b)
+        self.assertEqual(r['legs']['points']['docnumber'], 65625)
+        self.assertEqual(r['stock'], {'102230': 200.0, '118639': 200.0})
+        self.assertEqual(r['serial_rows']['118639'], {'rows': 3, 'qty': 3.0})

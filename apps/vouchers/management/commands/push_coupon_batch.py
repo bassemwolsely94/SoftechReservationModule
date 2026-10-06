@@ -2,6 +2,7 @@
 python manage.py push_coupon_batch BATCH_ID            # dry-run: show both SOFTECH document plans
 python manage.py push_coupon_batch BATCH_ID --probe    # rollback rehearsal on HQ + diff vs docs 63944/63945
 python manage.py push_coupon_batch BATCH_ID --commit   # REAL write (needs INVOICE_WRITER_ENABLED=True)
+python manage.py push_coupon_batch BATCH_ID --verify   # read-only: docs present + HQ stock after a commit
 
 Stocks a coupon batch in SOFTECH as two supplier-1268 purchase documents (points 102230 /
 served 118639), through apps/invoices/writer.py. --probe inserts the full documents, reads
@@ -23,6 +24,7 @@ class Command(BaseCommand):
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument('--probe', action='store_true', help='rollback rehearsal + column diff')
         mode.add_argument('--commit', action='store_true', help='REAL write to SOFTECH')
+        mode.add_argument('--verify', action='store_true', help='read-only check of a stocked batch')
         parser.add_argument('--force', action='store_true', help='push despite validation WARNINGS')
 
     def handle(self, *args, **o):
@@ -30,6 +32,8 @@ class Command(BaseCommand):
             batch = CouponBatch.objects.get(pk=o['batch_id'])
         except CouponBatch.DoesNotExist:
             raise CommandError(f'batch {o["batch_id"]} not found')
+        if o['verify']:
+            return self._verify(batch)
         if batch.status == 'stocked' and not o['probe']:
             raise CommandError(f'batch #{batch.pk} is already stocked in SOFTECH')
         try:
@@ -55,6 +59,19 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(f'  {label}: all compared columns match'))
                 for col, ours, ref in diffs:
                     self.stdout.write(self.style.WARNING(f'  {label} DIFF {col}: ours={ours!r} reference={ref!r}'))
+
+    def _verify(self, batch):
+        r = coupon_push.verify_batch(batch)
+        n = batch.size
+        for leg, x in r['legs'].items():
+            ok = x.get('present') and x.get('lines') == n
+            style = self.style.SUCCESS if ok else self.style.ERROR
+            self.stdout.write(style(f'{leg} leg: doc {x.get("docnumber")} present={x.get("present")} '
+                                    f'lines={x.get("lines")}/{n} docvalue={x.get("docvalue")}'))
+        for code, qty in r['stock'].items():
+            rows = r['serial_rows'].get(code, {})
+            self.stdout.write(f'item {code}: HQ stock now {qty:g} | this batch\'s serial rows at HQ: '
+                              f'{rows.get("rows")} (qty {rows.get("qty", 0):g})')
 
     def _push(self, batch, *, commit, force):
         results = coupon_push.push_batch(batch, commit=commit, force=force)

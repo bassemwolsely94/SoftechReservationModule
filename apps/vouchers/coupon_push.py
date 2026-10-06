@@ -308,3 +308,39 @@ def _mark_leg_stocked(batch, leg, inv):
     CouponSerial.objects.bulk_update(rows, [f'{leg}_docnumber', f'{leg}_docdate', 'status'])
     logger.info('[coupons] batch #%s %s leg stocked → SOFTECH 100/10/%s', batch.pk, leg,
                 inv.softech_docnumber)
+
+
+# ── verify (read-only) ─────────────────────────────────────────────────────────
+def verify_batch(batch):
+    """READ-ONLY check of a stocked batch: both documents still in SOFTECH with all their
+    lines (writer.reconcile), HQ stock of both items, and how many of the batch's
+    per-serial stock rows (stkbalexpiry, by expiry range) HQ holds."""
+    from config.sybase import get_sybase_connection
+    from apps.invoices import writer
+
+    out = {'legs': {}, 'stock': {}, 'serial_rows': {}}
+    for leg, inv in _invoices(batch).items():
+        if inv is None or inv.status != 'finalized':
+            out['legs'][leg] = {'present': False, 'note': 'not pushed'}
+            continue
+        out['legs'][leg] = writer.reconcile(inv)
+    conn = get_sybase_connection()
+    try:
+        for leg in LEGS:
+            code = leg_item(leg)
+            cur = conn.cursor()
+            cur.execute("SELECT nowqty FROM stkbal WHERE branchcode=? AND storecode=? AND itemcode=?",
+                        [coupons.hq_branch(), coupons.hq_branch(), code])
+            r = cur.fetchone()
+            out['stock'][code] = float(r[0]) if r and r[0] is not None else 0.0
+            if batch.expiry_from and batch.expiry_to:
+                cur = conn.cursor()
+                cur.execute("SELECT count(*), sum(itemqty) FROM stkbalexpiry WHERE storecode=? AND itemcode=? "
+                            "AND itemexpirydate BETWEEN ? AND ?",
+                            [coupons.hq_branch(), code, batch.expiry_from.isoformat(),
+                             batch.expiry_to.isoformat() + ' 23:59:59'])
+                r = cur.fetchone()
+                out['serial_rows'][code] = {'rows': int(r[0] or 0), 'qty': float(r[1] or 0)}
+    finally:
+        conn.close()
+    return out
