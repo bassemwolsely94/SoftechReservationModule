@@ -126,6 +126,9 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
 - **First `--probe` on HQ (batch #1, 2026-10-06): both 200-line docs inserted (ok, 200/200, serials in
   order) and rolled back; every line column matched 63944/63945; only header diff was `cashiercode`
   (NULL vs 1509) — the native save sends it, now added.**
+- **Second `--probe`: header + line 1 of both legs match 63944/63945 on every compared column.**
+- **FIRST LIVE STOCKING (2026-10-06 03:12): batch #1 (27301–27500) → SOFTECH 100/10/65625 (points 102230,
+  80,000) + 100/10/65626 (served 118639) — batch status `stocked`. The robot is no longer needed.**
 - `--probe`: inserts both full documents on HQ, reads them back, ALWAYS rolls back, and diffs header + line 1
   against 63944/63945 (ignoring identity, dates, serial, expiry, running newqty). Run off-peak.
 - `--commit` (needs `INVOICE_WRITER_ENABLED=True`): points leg first; served is not pushed if points fails;
