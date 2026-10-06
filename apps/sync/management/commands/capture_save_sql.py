@@ -47,11 +47,26 @@ class Command(BaseCommand):
         parser.add_argument('--profile', default='prod')
         parser.add_argument('--enable-monitoring', action='store_true',
                             help='turn monitoring ON for the capture (server config write; restored after)')
+        parser.add_argument('--pipe-messages', type=int, default=0,
+                            help='temporarily raise "sql text pipe max messages" (e.g. 200000) so a '
+                            'concurrent query flood cannot evict the save from the monSysSQLText ring '
+                            'buffer; restored afterwards')
         parser.add_argument('--spid', type=int, default=0, help='capture ONLY this SPID (e.g. 42 = the client)')
-        parser.add_argument('--poll', type=float, default=0.3, help='poll interval seconds')
+        parser.add_argument('--poll', type=float, default=0.15, help='poll interval seconds')
+        parser.add_argument('--source', default='auto', choices=['auto', 'syssql', 'procsql'],
+                            help='auto (monSysSQLText, evicts under load) | procsql '
+                            '(monProcessSQLText — per-process current SQL, survives concurrent floods; '
+                            'best with a specific --spid and fast --poll)')
+        parser.add_argument('--out', default='', help='output filename under docs/architecture/ '
+                            '(default softech_save_sql_capture.txt; use softech_ap_save_sql_capture.txt for سداد)')
+        parser.add_argument('--preflight-only', action='store_true',
+                            help='print monitoring config + candidate SPIDs and stop (no capture)')
 
     def handle(self, *args, **o):
         from config.sybase import SoftechConnector
+        self._out_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..',
+                                      'docs', 'architecture',
+                                      o['out'] or 'softech_save_sql_capture.txt')
         lines = []
 
         def log(t=''):
@@ -128,6 +143,15 @@ class Command(BaseCommand):
               AND p.program_name NOT LIKE 'Adaptive%'
             ORDER BY p.spid""")
 
+        if o['preflight_only']:
+            section('PREFLIGHT ONLY — no capture')
+            log(f'monitoring_ready = {monitoring_ready}. To capture a سداد Save, note YOUR SofTech')
+            log('client SPID from the list above (match your hostname/login), then run:')
+            log('  python manage.py capture_save_sql --spid <YOUR_SPID> --seconds 90 '
+                '--out softech_ap_save_sql_capture.txt')
+            log('and click Save on ONE invoice-settlement (سداد فواتير) within the window.')
+            conn.close(); return   # preflight is console-only; never writes a capture file
+
         # ── optionally enable monitoring for the capture ───────────────────────
         prior = {}
         if not monitoring_ready and o['enable_monitoring']:
@@ -152,6 +176,18 @@ class Command(BaseCommand):
             log("  sp_configure 'sql text pipe max messages', 2000")
             conn.close(); self._save(lines); return
 
+        # ── optionally enlarge the SQL-text pipe so a concurrent flood cannot evict
+        #    the save before we poll it (dynamic; restored in the finally) ─────────
+        if o['pipe_messages']:
+            section('2c: temporarily raising sql text pipe max messages')
+            prior['sql text pipe max messages'] = mon_on.get('sql text pipe max messages')
+            try:
+                q(f"EXEC sp_configure 'sql text pipe max messages', {o['pipe_messages']}")
+                log(f"  set sql text pipe max messages = {o['pipe_messages']} "
+                    f"(was {prior['sql text pipe max messages']})")
+            except Exception as e:
+                log(f'  [ERROR raising pipe] {e}')
+
         # ── 3. CAPTURE window (restore ALWAYS runs, even on error) ─────────────
         batches = {}
         spid_host = {}
@@ -160,27 +196,52 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f'  >>> Do ONE Save in SofTech within the next {o["seconds"]} seconds <<<'))
             target = o['spid'] or None
-            text_sql = self._pick_text_query(q, log, target)
+            text_sql = self._pick_text_query(q, log, target, source=o['source'])
             filt = [target] if target else [my_spid or -1]
             end = time.time() + o['seconds']
             polls = 0
+            # procsql mode: monProcessSQLText gives the SPID's CURRENT SQL per poll,
+            # reconstructed from LineNumber order. We snapshot every DISTINCT full text
+            # (keyed by hash) so a transient in-flight INSERT is kept even though it is
+            # gone by the next poll. This survives the monSysSQLText ring-buffer eviction.
+            import hashlib
+            distinct = {}   # (spid, hash) -> full text
+            proc_mode = 'monProcessSQLText' in text_sql
             while time.time() < end:
                 polls += 1
                 try:
                     cols, rows = q(text_sql, filt)
                     idx = {c.lower(): i for i, c in enumerate(cols)}
-                    for r in rows:
-                        spid = r[idx.get('spid', 0)]
-                        batchid = r[idx.get('batchid', 1)] if 'batchid' in idx else 0
-                        seq = r[idx.get('sequenceinbatch', 2)] if 'sequenceinbatch' in idx else 0
-                        txt = r[idx.get('sqltext', len(cols) - 1)]
-                        key = (int(spid), int(batchid or 0))
-                        batches.setdefault(key, {})[int(seq or 0)] = txt
+                    if proc_mode:
+                        # group this poll's rows per SPID, order by LineNumber, join
+                        per = {}
+                        for r in rows:
+                            spid = int(r[idx.get('spid', 0)])
+                            ln = r[idx.get('linenumber', 1)] if 'linenumber' in idx else 0
+                            txt = r[idx.get('sqltext', len(cols) - 1)]
+                            per.setdefault(spid, []).append((int(ln or 0), txt or ''))
+                        for spid, parts in per.items():
+                            full = ''.join(t for _, t in sorted(parts)).strip()
+                            if full:
+                                h = hashlib.md5(full.encode('utf-8', 'replace')).hexdigest()[:10]
+                                distinct[(spid, h)] = full
+                    else:
+                        for r in rows:
+                            spid = r[idx.get('spid', 0)]
+                            batchid = r[idx.get('batchid', 1)] if 'batchid' in idx else 0
+                            seq = r[idx.get('sequenceinbatch', 2)] if 'sequenceinbatch' in idx else 0
+                            txt = r[idx.get('sqltext', len(cols) - 1)]
+                            key = (int(spid), int(batchid or 0))
+                            batches.setdefault(key, {})[int(seq or 0)] = txt
                 except Exception as e:
                     if polls == 1:
                         log(f'  [capture query error] {e}')
                 time.sleep(o['poll'])
-            log(f'  polled {polls} times; captured {len(batches)} batch(es)')
+            # fold distinct procsql texts into the batches structure for the dump
+            for i, ((spid, h), full) in enumerate(sorted(distinct.items())):
+                batches[(spid, 900000 + i)] = {0: full}
+            log(f'  polled {polls} times; captured {len(batches)} batch(es) '
+                f'({len(distinct)} distinct proc texts)')
 
             try:
                 _, rows = q("SELECT p.spid, p.hostname, p.program_name, l.name FROM master..sysprocesses p "
@@ -218,17 +279,21 @@ class Command(BaseCommand):
         log(f'\nComplete: {datetime.datetime.now().isoformat()}')
         self._save(lines)
 
-    def _pick_text_query(self, q, log, target=None):
-        """Return the best available SQL-text query (monSysSQLText preferred,
-        monProcessSQLText fallback). When `target` is set we filter to that SPID
-        (=, cleaner); otherwise we exclude our own SPID (!=)."""
+    def _pick_text_query(self, q, log, target=None, source='auto'):
+        """Return the best available SQL-text query. source='procsql' forces
+        monProcessSQLText (per-process current SQL — survives concurrent floods);
+        'auto'/'syssql' prefer the monSysSQLText completed-statement pipe. When
+        `target` is set we filter to that SPID (=); otherwise we exclude ours (!=)."""
         op = '=' if target else '!='
-        candidates = [
+        procsql = [
+            f"SELECT SPID, LineNumber, SQLText FROM master..monProcessSQLText WHERE SPID {op} ?",
+        ]
+        syssql = [
             f"SELECT SPID, BatchID, SequenceInBatch, SQLText FROM master..monSysSQLText WHERE SPID {op} ?",
             f"SELECT SPID, SequenceInBatch, SQLText FROM master..monSysSQLText WHERE SPID {op} ?",
-            f"SELECT SPID, LineNumber, SQLText FROM master..monProcessSQLText WHERE SPID {op} ?",
             f"SELECT * FROM master..monSysSQLText WHERE SPID {op} ?",
         ]
+        candidates = (procsql + syssql) if source == 'procsql' else (syssql + procsql)
         for sql in candidates:
             try:
                 q(sql, [-1])   # smoke test
@@ -240,7 +305,7 @@ class Command(BaseCommand):
         return candidates[0]
 
     def _save(self, lines):
-        path = os.path.abspath(OUTPUT_FILE)
+        path = os.path.abspath(getattr(self, '_out_file', OUTPUT_FILE))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))

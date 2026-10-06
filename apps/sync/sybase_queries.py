@@ -55,6 +55,7 @@ QUERY_CATEGORIES = """
 #  [30] i.itemnosaleclassif     dispensing/contract restriction code (10=normal,20=#2,30=#3,31=#4)
 #  [31] i.fmi                   fast-moving item flag (1=FMI)
 #  [32] i.itemstoreclassif      FK → custdiscpclassif.custdiscpcode (contract discount tier)
+#  [39] i.itempartno            «رقم القطعة أو الباتش» — 1 = batch/expiry selection MANDATORY at POS (sparse: ~9 items)
 QUERY_ITEMS = """
     SELECT
         i.itemcode, i.itemname, i.itemname_scientific, i.itembarcode,
@@ -84,7 +85,8 @@ QUERY_ITEMS = """
         i.specialdiscp,
         i.posdiscp,
         i.itemsaleprice_tax,
-        i.itemsalestaxp
+        i.itemsalestaxp,
+        i.itempartno
     FROM SOFTECHDB9.dbo.items i
 """
 # NOTE: no WHERE filter — the FULL master is synced. Discontinued

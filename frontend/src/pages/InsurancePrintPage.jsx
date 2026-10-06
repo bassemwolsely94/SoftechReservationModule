@@ -90,6 +90,26 @@ export default function InsurancePrintPage() {
     }
   }
 
+  const exportStatistical = async () => {
+    setExporting('statistical')
+    try {
+      const { data } = await insuranceApi.exportStatistical(id)
+      const blob = new Blob([data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url  = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href  = url
+      link.download = `احصائية_${claim?.claim_number || id}.xlsx`
+      document.body.appendChild(link); link.click(); document.body.removeChild(link)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) {
+      alert('فشل التصدير: ' + (err?.message || 'خطأ غير متوقع'))
+    } finally {
+      setExporting(null)
+    }
+  }
+
   if (loading) return <div className="p-8 text-center text-gray-400">جارٍ تحميل بيانات الفاتورة...</div>
 
   const cover = dataset?.cover || {}
@@ -112,12 +132,21 @@ export default function InsurancePrintPage() {
             <h1 className="text-xl font-bold text-gray-900">طباعة وتصدير الفواتير</h1>
             <p className="text-sm text-gray-500">{claim?.client_name} — {claim?.subclient_name}</p>
           </div>
-          <button
-            onClick={() => exportExcel('all')}
-            disabled={!!exporting}
-            className="px-5 py-2.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
-            {exporting === 'all' ? 'جارٍ التصدير...' : '⬇ تصدير كل الفواتير (Excel)'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={exportStatistical}
+              disabled={!!exporting}
+              title="مسلسل · اسم المريض رباعى · التاريخ · اجمالى الروشتة · اسم الصيدلية · ملاحظات (الجهة + الفئة)"
+              className="px-5 py-2.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-50">
+              {exporting === 'statistical' ? 'جارٍ التصدير...' : '📊 الاحصائية الشهرية'}
+            </button>
+            <button
+              onClick={() => exportExcel('all')}
+              disabled={!!exporting}
+              className="px-5 py-2.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
+              {exporting === 'all' ? 'جارٍ التصدير...' : '⬇ تصدير كل الفواتير (Excel)'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -218,8 +247,12 @@ export default function InsurancePrintPage() {
                       className={`px-2.5 py-1 rounded text-xs border ${layout === 'flat' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 text-gray-600'}`}>
                       قائمة مسطحة (بدون تجميع يومى)
                     </button>
+                    <button onClick={() => setLayout('flat_paged')}
+                      className={`px-2.5 py-1 rounded text-xs border ${layout === 'flat_paged' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 text-gray-600'}`}>
+                      قائمة مسطحة + إجماليات الصفحات
+                    </button>
                   </div>
-                  {layout === 'flat' && (
+                  {(layout === 'flat' || layout === 'flat_paged') && (
                     <div className="flex items-center gap-2 flex-wrap text-sm">
                       <span className="text-gray-500">فرز حسب:</span>
                       <select value={sortBy} onChange={e => setSortBy(e.target.value)}
@@ -236,7 +269,9 @@ export default function InsurancePrintPage() {
                         <option value="desc">تنازلى (ي → أ)</option>
                       </select>
                       <span className="text-[11px] text-blue-600">
-                        قائمة واحدة متصلة، كل الأعمدة، بإجمالى كلى واحد.
+                        {layout === 'flat_paged'
+                          ? 'قائمة واحدة متصلة + إجمالى فى أسفل كل صفحة + إجمالى كلى فى النهاية.'
+                          : 'قائمة واحدة متصلة، كل الأعمدة، بإجمالى كلى واحد.'}
                       </span>
                     </div>
                   )}

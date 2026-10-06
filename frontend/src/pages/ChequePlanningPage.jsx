@@ -329,7 +329,7 @@ function PlanForm({ onSave, onCancel }) {
         <h3 className="text-sm font-semibold text-gray-600 border-b pb-1">جدول السداد</h3>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">إجمالي المبلغ (ج.م) *</label>
-          <input type="number" min="1" step="0.01" value={form.total_amount}
+          <input type="number" min="1" step="any" value={form.total_amount}
             onChange={e => set('total_amount', e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
             placeholder="0.00" />
@@ -337,7 +337,7 @@ function PlanForm({ onSave, onCancel }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">عدد الشيكات *</label>
-            <input type="number" min="1" max="120" value={form.cheque_count}
+            <input type="number" min="1" max="120" step="1" value={form.cheque_count}
               onChange={e => set('cheque_count', e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
           </div>
@@ -351,7 +351,7 @@ function PlanForm({ onSave, onCancel }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">الفترة بين الشيكات</label>
-            <input type="number" min="1" value={form.interval_value}
+            <input type="number" min="1" step="1" value={form.interval_value}
               onChange={e => set('interval_value', e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
           </div>

@@ -13,12 +13,15 @@ Severities:
   info    → informational
   ok      → check passed
 """
+import logging
 from decimal import Decimal
 
 from .models import (
     InsuranceClaim, InsuranceClaimPrescription, InsuranceClaimExclusion,
     MotalbaCache,
 )
+
+logger = logging.getLogger('elrezeiky.insurance')
 
 _TOL = Decimal('1.00')   # tolerance (EGP) for total reconciliation
 
@@ -51,6 +54,7 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
         try:
             _eff_net[rx.id] = Decimal(str(_effective_rx_values(rx, claim)['net_after'] or 0))
         except Exception:
+            logger.debug('[readiness] effective-net calc failed for rx %s; using frozen net', rx.id)
             _eff_net[rx.id] = Decimal(str(rx.net_after or 0))
 
     # 1) Has any prescriptions at all ────────────────────────────────────────
@@ -82,6 +86,95 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
     else:
         checks.append(_check('missing_patient_name', 'كل الروشتات لها اسم مريض', 'ok'))
 
+    # 3b) Short patient names (not 4-part) — weaker names get a stronger flag ──
+    #     Insurance bodies expect a full quadruple name (اسم رباعى).  A single/
+    #     double/triple name risks rejection; the fewer the tokens, the higher the
+    #     severity.  Reported with a per-branch breakdown so staff can chase the
+    #     branches that under-record patient names.
+    from .separation import normalize_name, _tokens
+    _NAME_TIER = {1: ('فردى', 'high'), 2: ('ثنائى', 'high'),
+                  3: ('ثلاثى', 'medium')}   # 4+ = رباعى = pass
+    short_names = []          # failing prescriptions
+    tier_counts = {'فردى': 0, 'ثنائى': 0, 'ثلاثى': 0}
+    branch_stats = {}         # branch -> {total, failed, فردى, ثنائى, ثلاثى}
+    for rx in active_rx:
+        name = (rx.patient_name or '').strip()
+        if not name:
+            continue          # handled by the missing-name check
+        n = len(_tokens(normalize_name(name)))
+        branch = rx.softech_branchcode or '—'
+        bs = branch_stats.setdefault(branch, {'total': 0, 'failed': 0,
+                                              'فردى': 0, 'ثنائى': 0, 'ثلاثى': 0})
+        bs['total'] += 1
+        if n >= 4:
+            continue
+        tier_label, tier_sev = _NAME_TIER.get(n, ('ثلاثى', 'medium'))
+        tier_counts[tier_label] += 1
+        bs['failed'] += 1
+        bs[tier_label] += 1
+        short_names.append({
+            'docnumber':  rx.softech_docnumber,
+            'patient':    name,
+            'branch':     branch,
+            'tokens':     n,
+            'tier':       tier_label,
+            'tier_severity': tier_sev,   # high (1–2 tokens) | medium (3 tokens)
+        })
+
+    if short_names:
+        # For each short name, check whether history offers a SAFE اكمال (an
+        # unambiguous longer completion) — this is the actionable subset staff most
+        # want to fix.  Tag each item + count them.
+        completable = 0
+        try:
+            from .name_match import normalize_ar, suggest_name_improvement
+            from .models import InsuranceClaimManualRx
+            from django.db.models import Count
+            cid = claim.subclient.client_id
+            agg = {}
+            for model in (InsuranceClaimPrescription, InsuranceClaimManualRx):
+                for row in (model.objects.filter(claim__subclient__client_id=cid)
+                            .exclude(patient_name='').values('patient_name')
+                            .annotate(count=Count('id'))):
+                    nm = row['patient_name']
+                    agg[nm] = {'name': nm, 'count': agg.get(nm, {}).get('count', 0) + row['count']}
+            erows = list(agg.values())
+            for r in erows:
+                r['ntokens'] = normalize_ar(r['name']).split() if r['name'] else []
+            for sn in short_names:
+                imp = suggest_name_improvement(sn['patient'], erows)
+                if imp and imp.get('type') == 'complete':
+                    sn['completion'] = imp['suggestion']
+                    completable += 1
+                else:
+                    sn['completion'] = None
+        except Exception:
+            for sn in short_names:
+                sn.setdefault('completion', None)
+
+        # Worst tier present drives the overall check severity: any single/double
+        # name → warning that really should be fixed; only triples → milder note.
+        overall_sev = 'warning'
+        # Sort: completable first (actionable), then fewest tokens, then branch.
+        short_names.sort(key=lambda x: (x.get('completion') is None, x['tokens'], x['branch']))
+        branch_breakdown = sorted(
+            [{'branch': b, **s} for b, s in branch_stats.items() if s['failed']],
+            key=lambda x: x['failed'], reverse=True)
+        detail = (f"غير رباعى: {tier_counts['فردى']} فردى · "
+                  f"{tier_counts['ثنائى']} ثنائى · {tier_counts['ثلاثى']} ثلاثى "
+                  f"(كلما قلّ عدد المقاطع زاد التحذير). "
+                  + (f"منها {completable} يمكن إكمالها تلقائياً من السجل. " if completable else "")
+                  + "راجعها قبل الإصدار.")
+        chk = _check('short_patient_names', 'روشتات بأسماء غير رباعية',
+                     overall_sev, len(short_names), detail, items=short_names[:200])
+        chk['tiers'] = tier_counts
+        chk['branches'] = branch_breakdown
+        chk['completable'] = completable
+        checks.append(chk)
+    else:
+        checks.append(_check('short_patient_names',
+                             'كل الأسماء رباعية', 'ok', 0))
+
     # 4) Negative-net prescriptions (returns) — informational ─────────────────
     neg_rx = [rx for rx in active_rx if _eff_net[rx.id] < 0]
     if neg_rx:
@@ -111,7 +204,8 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
                 items=disc.get('not_found_items', [])[:100],
             ))
     except Exception:
-        pass
+        # A dropped pre-issuance check must not be invisible.
+        logger.warning('[readiness] catalog-drift / items-not-found check failed', exc_info=True)
 
     # 6) Per-prescription NET vs SOFTECH — Power-Query deviates BY DESIGN ───────
     # Our net uses the finance team's Power-Query formula (محلى·0.83 + مستورد·0.94),
@@ -154,7 +248,7 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
         elif have_ref:
             checks.append(_check('net_vs_softech', 'الصافى مطابق لسوفتك', 'ok'))
     except Exception:
-        pass
+        logger.warning('[readiness] net-vs-SOFTECH check failed', exc_info=True)
 
     # 7) Cross-claim duplicate docnumbers (double-billing) ─────────────────────
     docnos = [rx.softech_docnumber for rx in active_rx if rx.softech_docnumber]

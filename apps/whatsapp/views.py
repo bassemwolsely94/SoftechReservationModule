@@ -23,6 +23,7 @@ from apps.whatsapp.serializers import (
 )
 from apps.whatsapp.webhook import process_webhook
 from apps.whatsapp.sender import WhatsAppSender
+from apps.catalog.wildcard import wq
 
 logger = logging.getLogger('elrezeiky.whatsapp')
 
@@ -105,7 +106,7 @@ class ConversationListView(generics.ListAPIView):
         if q:
             qs = qs.filter(
                 Q(wa_id__icontains=q) |
-                Q(customer__name__icontains=q) |
+                wq(q, 'customer__name') |
                 Q(customer__phone__icontains=q)
             )
         return qs.order_by('-last_message_at')

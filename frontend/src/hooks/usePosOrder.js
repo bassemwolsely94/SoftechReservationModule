@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import api from '../api/client'
+
+// stable cart id — correlates selection telemetry with the eventual order (client_token)
+const _genToken = () => (globalThis.crypto?.randomUUID?.()
+  || `${Date.now()}-${Math.random().toString(16).slice(2)}`)
 
 /*
  * usePosOrder — shared state + logic for the Indirect-POS screen (web + mobile),
@@ -82,6 +86,25 @@ export const CONTRACT_EMP_FIELDS = [
 export const money = n =>
   Number(n || 0).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+/* ── Strip/units ↔ pack-fraction quantity (SOFTECH-exact) ────────────────────────────────────
+ * SOFTECH stores line qty (transqty, "الكمية Q") in PACKS. Selling K loose strips of an N-strip
+ * pack is simply Q = round(K / N, 5) with round-half-up — VERIFIED against the live SOFTECH Q
+ * modal ("مبيعات صنف — كمية جزئية من العبوة"): 3/3→1.00000, 4/3→1.33333, 5/3→1.66667 (NOT the
+ * truncated 1.66666). Whole packs fall out naturally as integers. This reverses cleanly through
+ * the writer's decomposition (loose_units = round(frac(Q)×packqty)), so SOFTECH's Pkg+Unit
+ * reconciliation recovers the exact strip count. Deterministic — no fuzzy rounding. */
+export function stripsToQty(strips, packQty) {
+  const N = Math.max(1, Math.floor(Number(packQty) || 1))
+  const K = Math.max(0, Math.round(Number(strips) || 0))
+  if (N <= 1) return K                                   // whole-unit item — 1 strip == 1 pack
+  return Math.round((K / N) * 1e5) / 1e5                 // round-half-up to SOFTECH's 5 decimals
+}
+// Inverse (for display): how many whole strips does a pack-fraction qty represent?
+export function qtyToStrips(qty, packQty) {
+  const N = Math.max(1, Math.floor(Number(packQty) || 1))
+  return Math.round((Number(qty) || 0) * N)
+}
+
 const blankClaim = () => ({
   patientname: '', patientno: '', financialno: '', fileno: '', roshettano: '',
   membershipno: '', deptname: '', patientnationality: '', relativedegree: '',
@@ -92,6 +115,24 @@ const blankTender = () => ({
   pay_type: 'cash', amount: 0, currency: 'L.E', exchange_rate: 1,
   card_type: '', cheque_card_no: '', due_date: '', internal_payserial: '',
 })
+
+// Rebuild the collect-now (نقدى) tender so the total paid equals `net`, preserving any
+// آجل (credit) portion. Used when a server-side offer discount changes the order net
+// after the tenders were entered from the pre-offer total.
+const rebalanceToNet = (ts, net) => {
+  // single tender (the common retail case): just set it to the net
+  if (ts.length === 1) return [{ ...ts[0], amount: +Number(net).toFixed(2) }]
+  // split: keep the آجل portion, absorb the change in نقدى (waterfall to cash first)
+  const creditLocal = ts.filter(t => t.pay_type !== 'cash')
+    .reduce((s, t) => s + Number(t.amount || 0) * Number(t.exchange_rate || 1), 0)
+  const cashTarget = Math.max(0, +(net - creditLocal).toFixed(2))
+  let placed = false
+  const next = ts.map(t => (t.pay_type === 'cash' && !placed)
+    ? (placed = true, { ...t, amount: cashTarget, exchange_rate: 1, currency: 'L.E' })
+    : t)
+  if (!placed) next.unshift({ ...blankTender(), amount: cashTarget })
+  return next
+}
 
 export default function usePosOrder() {
   const [branches, setBranches] = useState([])
@@ -105,6 +146,7 @@ export default function usePosOrder() {
   // delivery (and any channel needing an individual PIC): the "Home Delivery Customer" is the
   // account (customer); picCustomer is the actual person selected via the directory (real PIC).
   const [picCustomer, setPicCustomer] = useState(null)
+  const [picHistory, setPicHistory] = useState(null)   // PIC's last-order lines (revalidated) → history + suggestions
   // SOFTECH two-level customer: نوع العميل (type) → إسم العميل (entity) + branch stores
   const [custTypes, setCustTypes] = useState([])
   const [custType, setCustType] = useState('cash')       // selected type KEY
@@ -122,6 +164,9 @@ export default function usePosOrder() {
   const [patientPayment, setPatientPayment] = useState('')      // ما يسدده المريض (contract co-pay; '' = pays full net)
   const [notes, setNotes] = useState('')                        // ملاحظات
   const [returnInvoice, setReturnInvoice] = useState('')
+  // مرتجع: the loaded original-invoice preview (null until an invoice is looked up). The lines it
+  // loads are READ-ONLY — the backend re-mirrors the sale authoritatively at create (source_raw).
+  const [returnMeta, setReturnMeta] = useState(null)
   // mode flags
   const [altPrice, setAltPrice] = useState(false)               // السعر البديل
   const [sellAtCost, setSellAtCost] = useState(false)           // بيع بالتكلفة
@@ -146,6 +191,7 @@ export default function usePosOrder() {
   const [batchModal, setBatchModal] = useState(null)
   const [busy, setBusy] = useState(false)
   const [plan, setPlan] = useState(null)
+  const [offersPlan, setOffersPlan] = useState(null)   // read-only offers preview for the live basket
   const [msg, setMsg] = useState('')
   const [errs, setErrs] = useState([])
   // Odoo-style extras
@@ -188,6 +234,14 @@ export default function usePosOrder() {
   useEffect(() => {
     api.get('/pos-orders/customer-types/').then(({ data }) => setCustTypes(data.types || [])).catch(() => {})
   }, [])
+
+  // channel RBAC: if the (server-filtered) type list doesn't include the current نوع العميل,
+  // fall back to the first allowed one so a restricted seller never sits on a blocked channel.
+  useEffect(() => {
+    if (custTypes.length && !custTypes.some(t => t.key === custType)) {
+      setCustType(custTypes[0].key)
+    }
+  }, [custTypes])  // eslint-disable-line
 
   // branch → its stores (branch-dependent) + pick the default store. Fall back to the
   // branch code so store is never left blank (which would block submit).
@@ -296,6 +350,32 @@ export default function usePosOrder() {
       }).catch(() => {})
   }, [branch, channel, _codes, _personcode])  // eslint-disable-line
 
+  // ── Offers preview (READ-ONLY): evaluate the live basket against the offers engine.
+  // Deterministic, backend-owned, NO writes, NO effect on the order total or checkout —
+  // it only surfaces which offers apply + gift items to suggest. Applying an offer's
+  // discount onto the lines is a separate, gated step (POS_OFFERS_EXECUTION_ENABLED).
+  const _offersChannel = channel === 'delivery' ? 'home_delivery'
+    : CLAIM_CHANNELS.includes(channel) ? 'contract' : 'cash'
+  const _basketKey = useMemo(() => JSON.stringify(
+    lines.filter(l => l.softech_itemcode && Number(l.qty) > 0)
+         .map(l => [l.softech_itemcode, Number(l.qty), Number(l.item_sale_price)])
+  ), [lines])
+  useEffect(() => {
+    const basket = lines
+      .filter(l => l.softech_itemcode && Number(l.qty) > 0)
+      .map(l => ({ softech_id: l.softech_itemcode, qty: Number(l.qty), unit_price: Number(l.item_sale_price) }))
+    if (!basket.length) { setOffersPlan(null); return }
+    let alive = true
+    const id = setTimeout(() => {
+      api.post('/offers/evaluate/', {
+        basket, branch: branch ? Number(branch) : undefined,
+        customer: customer?.id || undefined, channel: _offersChannel,
+      }).then(({ data }) => { if (alive) setOffersPlan(data) })
+        .catch(() => { if (alive) setOffersPlan(null) })
+    }, 400)
+    return () => { alive = false; clearTimeout(id) }
+  }, [_basketKey, branch, customer?.id, _offersChannel])  // eslint-disable-line
+
   // per-contract "Contract Emp. Data" field spec — which claim fields to show + their custom labels
   // (SOFTECH motalba_fields, keyed by the contract personcode). Fetched when a contract customer is set.
   useEffect(() => {
@@ -355,6 +435,9 @@ export default function usePosOrder() {
   }, [_itemPks])  // eslint-disable-line
 
   const isClaim = CLAIM_CHANNELS.includes(channel)
+  // On contract/permanent/claim channels the discount is retrieved + manager-locked: a
+  // non-manager can't edit it (mirrors the server rule validate_contract_discount_role).
+  const discountLocked = isClaim && !(ref?.can_edit_contract_discount)
   // Resolved Contract-Emp-Data fields to render: the live per-contract spec if loaded (only the
   // enabled fields, with each contract's custom label), else the static 12 std. defaults.
   const empDataFields = useMemo(() => {
@@ -367,11 +450,25 @@ export default function usePosOrder() {
   // channels that require a separate individual PIC customer (SOFTECH: Home Delivery must
   // provide a PIC). The account (Home Delivery Customer) is the إسم العميل entity; the PIC is
   // an individual picked from the directory.
-  const needsPicCustomer = POS_LIMITS.PIC_REQUIRED.includes(channel)
+  // The PIC (the actual individual — recipient/patient) may be attached on ANY channel;
+  // it is only MANDATORY before sending on home delivery. It is NOT the نوع العميل (type)
+  // nor the إسم العميل (account) — those pick the pricing account; the PIC identifies the
+  // person, so we can pull their own history + suggestions and stamp the ERP softech_pic.
+  const needsPicCustomer = POS_LIMITS.PIC_REQUIRED.includes(channel)   // = required-to-send
   const customerType = typeCfg?.label || CHANNELS.find(c => c.value === channel)?.label || ''
+  // (PIC persists across channel changes — the same person may buy cash today, delivery tomorrow.)
 
-  // a PIC individual only makes sense for its channel — drop it when the channel changes away
-  useEffect(() => { if (!POS_LIMITS.PIC_REQUIRED.includes(channel)) setPicCustomer(null) }, [channel])
+  // PIC history + suggestions: the individual's (or account's) most recent SALE, revalidated
+  // against today's price/stock/safety (read-only; the cashier chooses what to add).
+  useEffect(() => {
+    const pid = picCustomer?.id || customer?.id
+    if (!pid) { setPicHistory(null); return }
+    let alive = true
+    api.get(`/customers/${pid}/repeat-order/`, { params: { branch: branch ? Number(branch) : undefined } })
+      .then(({ data }) => { if (alive) setPicHistory(data) })
+      .catch(() => { if (alive) setPicHistory(null) })
+    return () => { alive = false }
+  }, [picCustomer?.id, customer?.id, branch])
 
   const totals = useMemo(() => {
     let gross = 0, discount = 0, net = 0, tax = 0
@@ -487,6 +584,8 @@ export default function usePosOrder() {
     item_expiry: null,                              // ت الصلاحية
     batchno: '',                                    // رقم القطعة أو الباتش
     bonus: 0,                                       // العبوة (bonus qty)
+    pack_qty: Number(item.pack_qty) || 1,           // items.packqty — units (strips/vials) per pack
+    unit_name: item.unit_name || '',                // itemsunits.unitname (strip / vial / ampoule)
     qty: 1,                                         // الكمية (بالعبوات — عدد عشرى للبيع الجزئى)
     // qty is in PACKS, so the base price is the PACK price (SOFTECH items.itemsaleprice).
     // Selling a fraction of a pack (e.g. 0.4) prices as pack_price × 0.4. The live-pricing
@@ -497,17 +596,26 @@ export default function usePosOrder() {
     sale_tax_pct: 0,                                // ض ق مضافة %
     cust_discp: 0,                                  // خصم %
     is_reservation: false,
+    not_stockable: item.is_stockable === false,     // service/fee item (itemtrans=0): no batch, no حجز
+    // SOFTECH items.itempartno «رقم القطعة أو الباتش» — 1 = batch/expiry selection MANDATORY at POS.
+    // Drives the batch matrix: single batch auto-selects, multiple must be picked, none → حجز.
+    batch_required: !!item.batch_required,
     ...extra,
   })
 
   const addItem = useCallback(async (item) => {
     if (!item) return
     setMsg('')
+    _captureSelection(item, 'add')   // telemetry: the selection happened now (Wave 3 inc3)
+    // Service / non-stocked items (SOFTECH itemtrans=0) have NO stock, batch or reservation — they
+    // go straight in as a single plain line (matches the writer's _allocate_line). Skip the read.
+    const service = item.is_stockable === false
     // no branch yet → still add the line so the cart can be built in ANY order; availability
     // and batch/expiry resolve once a branch is chosen. (Never drop the selected item.)
-    if (!branch) {
+    if (!branch || service) {
       setLines(prev => [...prev, _newLine(item)])
-      setMsg(`أُضيف "${item.name}" — اختر الفرع لعرض الرصيد والتشغيلة.`)
+      setMsg(service ? `"${item.name}" صنف غير مخزون (خدمي) — أُضيف مباشرة، بلا تشغيلة أو حجز.`
+                     : `أُضيف "${item.name}" — اختر الفرع لعرض الرصيد والتشغيلة.`)
       return
     }
     try {
@@ -516,20 +624,46 @@ export default function usePosOrder() {
         // branch code. Without this the read hits the wrong store and everything looks OOS.
         params: { branch: Number(branch), item: item.softech_id, store: storeCode || undefined },
       })
-      const avail = item ? { ...item, qty_at_branch: data.total } : item
-      if (data.out_of_stock || !data.batches?.length) {
+      // authoritative batch-required flag: the batches endpoint returns it from the synced master, so
+      // add-paths whose item payload lacks it (favorites / barcode / repeat) still drive the matrix.
+      const mustBatch = !!(item.batch_required || data.batch_required)
+      const avail = item ? { ...item, qty_at_branch: data.total, batch_required: mustBatch } : item
+      // The batch matrix (CASE 1-5) is decided SERVER-SIDE (backend owns the rule); the POS enforces
+      // the verdict. Fall back to the derived branch only if an older backend omits `batch_action`.
+      const action = data.batch_action || (
+        data.stockable === false ? 'plain'
+        : (data.out_of_stock || !data.batches?.length) ? 'reserve'
+        : mustBatch ? (data.batches.length === 1 ? 'auto_select' : 'must_select')
+        : 'optional')
+      if (action === 'plain') {
+        // non-stockable (service/fee) → plain line, no batch, no حجز.
+        setLines(prev => [...prev, _newLine(avail, { not_stockable: true })])
+        setMsg(`"${item.name}" صنف غير مخزون (خدمي) — أُضيف مباشرة، بلا تشغيلة أو حجز.`)
+      } else if (action === 'reserve') {
+        // CASE 3 — no batch stock at all → reservation (applies to every item).
         setLines(prev => [...prev, _newLine(avail, { is_reservation: true })])
         setMsg(`"${item.name}" غير متوفر بالمخزن ${data.store || storeCode || ''} — أُضيف كحجز.`)
+      } else if (action === 'auto_select') {
+        // CASE 2 — mandatory-batch item with exactly ONE available batch → SOFTECH auto-selects it
+        // (owner-confirmed). Skip the modal and add the line already bound to that batch/expiry.
+        const b = data.batches[0]
+        setLines(prev => [...prev, _newLine(avail, {
+          item_expiry: b.expiry, batchno: b.batchno || '', available_expiry_qty: b.qty,
+        })])
+        setMsg(`أُضيف "${item.name}" — تشغيلة واحدة متاحة (${b.expiry}) اختِيرت تلقائيًا.`)
       } else {
+        // CASE 1 (must_select — mandatory, multiple batches) OR CASE 4/5 (optional FEFO helper).
+        // `mandatory` tells confirmBatchPick to refuse a confirm that leaves the line without a batch.
         setBatchModal({ item: avail, batches: data.batches, total: data.total,
-                        picks: data.batches.map(() => ''), need: 1, shortfall: 0 })
+                        picks: data.batches.map(() => ''), need: 1, shortfall: 0,
+                        mandatory: action === 'must_select' })
       }
     } catch (e) {
       setLines(prev => [...prev, _newLine(item)])
       const why = e.response?.data?.detail
       setMsg(`أُضيف "${item.name}" — تعذّر قراءة الأرصدة${why ? ': ' + why : ''} (بدون تشغيلة).`)
     }
-  }, [branch, storeCode])
+  }, [branch, storeCode, _captureSelection])
 
   const setBatchNeed = useCallback((v) => setBatchModal(m => m ? { ...m, need: v } : m), [])
 
@@ -557,6 +691,14 @@ export default function usePosOrder() {
       const chosen = m.batches.map((b, i) => ({ b, q: Number(m.picks[i] || 0) })).filter(x => x.q > 0)
       const over = chosen.find(x => x.q > x.b.qty)
       if (over) { setMsg(`الكمية من تشغيلة ${over.b.expiry} تتجاوز المتاح (${over.b.qty}).`); return m }
+      const pickedQty = chosen.reduce((s, x) => s + x.q, 0)
+      // CASE 1 — mandatory-batch item with multiple batches: refuse to add without a real pick.
+      // (A shortfall remainder still becomes a حجز line below — that is allowed; a batch-less
+      //  plain line is not.) Non-mandatory items keep the optional confirm-anything behavior.
+      if (m.mandatory && pickedQty <= 1e-9) {
+        setMsg('هذا الصنف يتطلب اختيار التشغيلة (الباتش) إلزاميًا قبل الإضافة.')
+        return m
+      }
       const extra = []
       if (chosen.length) {
         extra.push(...chosen.map(({ b, q }) =>
@@ -579,8 +721,27 @@ export default function usePosOrder() {
     return suggest.ceiling != null ? Number(suggest.ceiling) : 100
   }
   const setLine = (i, k, v) => {
+    const line = lines[i] || {}
+    // THREE views of the SAME line discount, all keeping the list price (item_sale_price) as the base and
+    // resolving to a single خصم% (cust_discp) so every dependent field (net/total/tax/patient share) follows:
+    //   • disc_value (مبلغ الخصم)  = amount off the line gross
+    //   • sell_price (سعر العبوة)  = the intended NET price per pack (100 list, type 90 → 10% off)
+    // Each converts to a % then flows through the identical %-path (cap + recompute) below.
+    if (k === 'disc_value') {
+      const gross = (Number(line.item_sale_price) || 0) * (Number(line.qty) || 0)
+      const pct = gross > 0 ? ((Number(v) || 0) / gross) * 100 : 0
+      k = 'cust_discp'; v = Math.round(pct * 1000) / 1000
+    } else if (k === 'sell_price') {
+      const base = Number(line.item_sale_price) || 0
+      const pct = base > 0 ? (1 - (Number(v) || 0) / base) * 100 : 0
+      k = 'cust_discp'; v = Math.round(Math.max(0, pct) * 1000) / 1000
+    }
     if (k === 'cust_discp') {
-      const cap = discCapFor(lines[i]?.softech_itemcode)
+      if (discountLocked) {   // contract/permanent discount is manager-locked (numpad/apply too)
+        setMsg('خصم قنوات التعاقد/العملاء الدائمين يتطلب صلاحية مدير')
+        return
+      }
+      const cap = discCapFor(line.softech_itemcode)
       if (v !== '' && !isNaN(Number(v)) && Number(v) > cap) {
         setMsg(`الحد الأقصى للخصم لهذا الصنف ${cap}%`)
         v = cap
@@ -589,7 +750,53 @@ export default function usePosOrder() {
     setLines(prev => prev.map((l, idx) =>
       idx === i ? { ...l, [k]: v, ...(k === 'cust_discp' ? { disc_manual: true } : {}) } : l))
   }
-  const removeLine = i => { setLines(prev => prev.filter((_, idx) => idx !== i)); setSelected(-1) }
+  // the line discount AS A VALUE (مبلغ الخصم) and the NET sell price per pack (سعر العبوة) — both DERIVED
+  // from % so they always reflect the capped/normalized discount.
+  const lineDiscValue = (l) => Math.round((Number(l.item_sale_price) || 0) * (Number(l.qty) || 0)
+                                          * (Number(l.cust_discp) || 0) / 100 * 100) / 100
+  const lineSellPrice = (l) => Math.round((Number(l.item_sale_price) || 0)
+                                          * (1 - (Number(l.cust_discp) || 0) / 100) * 100) / 100
+  // ── item-selection telemetry → SOFTECH pos_cancel (Wave 3 inc3) ─────────────────────────────
+  // Every add/clear of an item is captured (fire-and-forget, buffered+debounced) so our POS feeds
+  // the native «المبيعات غير المخزنة» log. cart_token == the eventual order client_token, so the
+  // backend can suppress items that ended up sold. Telemetry NEVER blocks or breaks the POS.
+  const cartTokenRef = useRef(_genToken())
+  const selBufRef = useRef([])
+  const selTimerRef = useRef(null)
+  const _flushSelections = useCallback(() => {
+    const evs = selBufRef.current
+    if (!evs.length || !branch) return          // need a branch; else keep buffering until one is set
+    selBufRef.current = []
+    api.post('/pos-orders/selection-events/', {
+      branch: Number(branch), cart_token: cartTokenRef.current, events: evs,
+    }).catch(() => { /* telemetry is advisory — drop on failure, never surface */ })
+  }, [branch])
+  const _captureSelection = useCallback((src, eventType) => {
+    const list = Number(src.item_sale_price ?? src.pack_price ?? src.unit_price) || 0
+    const qty = eventType === 'clear' ? 0 : (Number(src.qty) || 1)
+    const unit = Math.round(list * (1 - (Number(src.cust_discp) || 0) / 100) * 10000) / 10000
+    selBufRef.current.push({
+      item: src.item_id || src.item || src.id || null,
+      item_code: src.softech_itemcode || src.softech_id || '',
+      item_name: src.item_name || src.name || '',
+      doc_kind: docKind, event_type: eventType,
+      itemsaleprice: list, transprice: unit, transqty: qty,
+      transprice_total: Math.round(unit * qty * 10000) / 10000,
+      custcode: (picCustomer?.cust_branch_code || customer?.cust_branch_code
+                 || picCustomer?.softech_pic || customer?.softech_pic || ''),
+      occurred_at: new Date().toISOString(),
+    })
+    if (selTimerRef.current) clearTimeout(selTimerRef.current)
+    selTimerRef.current = setTimeout(_flushSelections, 2000)
+  }, [docKind, customer, picCustomer, _flushSelections])
+  // flush buffered selections once a branch is chosen (items added before branch selection)
+  useEffect(() => { if (branch) _flushSelections() }, [branch, _flushSelections])
+
+  const removeLine = i => {
+    const gone = lines[i]
+    if (gone && gone.softech_itemcode) _captureSelection(gone, 'clear')
+    setLines(prev => prev.filter((_, idx) => idx !== i)); setSelected(-1)
+  }
   const setTender = (i, k, v) => setTenders(prev => prev.map((t, idx) => idx === i ? { ...t, [k]: v } : t))
   const addTender = () => setTenders(p => [...p, blankTender()])
   const removeTender = i => setTenders(p => p.length > 1 ? p.filter((_, x) => x !== i) : p)
@@ -628,46 +835,56 @@ export default function usePosOrder() {
     }))
   }, [selected, numMode, suggest])  // eslint-disable-line
 
+  // Each error carries WHERE to fix it (`tab` → jump target) so the UI can offer one actionable
+  // fix at a time (§7 "one question at a time"). tab null = a header field (no tab jump).
   function clientValidate(live) {
     const out = []
-    if (!branch) out.push('اختر الفرع.')
-    if (docKind === 'return' && !returnInvoice) out.push('رقم الفاتورة الأصلية مطلوب للمرتجع.')
-    if (isClaim && !(customer?.softech_pic)) out.push('عميل التعاقد/التأمين يتطلب تحديد العميل (PIC).')
-    if (isClaim && !claim.patientname) out.push('بيانات المريض مطلوبة (تبويب بيانات التعاقد).')
+    const add = (text, tab = null) => out.push({ text, tab })
+    if (!branch) add('اختر الفرع.')
+    if (docKind === 'return' && !returnInvoice) add('رقم الفاتورة الأصلية مطلوب للمرتجع.')
+    if (isClaim && !(customer?.softech_pic)) add('عميل التعاقد/التأمين يتطلب تحديد العميل (PIC).')
+    if (isClaim && !claim.patientname) add('بيانات المريض مطلوبة (تبويب بيانات التعاقد).', 'contract')
     // Home-Delivery needs an individual PIC customer — required only to SAVE (live), not preview.
     if (live && needsPicCustomer && !(picCustomer?.softech_pic))
-      out.push('التوصيل المنزلى يتطلب تحديد عميل PIC (بحث/اختيار أو إضافة) قبل الحفظ.')
+      add('التوصيل المنزلى يتطلب تحديد عميل PIC (بحث/اختيار أو إضافة) قبل الحفظ.')
     if (Number(changeDiscount || 0) > POS_LIMITS.MAX_FAKKA)
-      out.push(`خصم الفكة يتجاوز الحد المسموح (${money(POS_LIMITS.MAX_FAKKA)} جنيه).`)
-    if (!lines.length) out.push('أضف صنفاً واحداً على الأقل.')
+      add(`خصم الفكة يتجاوز الحد المسموح (${money(POS_LIMITS.MAX_FAKKA)} جنيه).`)
+    if (!lines.length) add('أضف صنفاً واحداً على الأقل.', 'items')
     lines.forEach((l, i) => {
       const n = i + 1
-      if (!(Number(l.qty) > 0)) out.push(`سطر ${n}: الكمية يجب أن تكون أكبر من صفر.`)
+      if (!(Number(l.qty) > 0)) add(`سطر ${n}: الكمية يجب أن تكون أكبر من صفر.`, 'items')
       else if (Number(l.qty) > POS_LIMITS.MAX_QTY_LINE)
-        out.push(`سطر ${n}: الكمية تتجاوز الحد الأقصى (${POS_LIMITS.MAX_QTY_LINE}).`)
+        add(`سطر ${n}: الكمية تتجاوز الحد الأقصى (${POS_LIMITS.MAX_QTY_LINE}).`, 'items')
+      // CASE 1/2 backstop: a mandatory-batch item must reach checkout bound to a batch (or be a حجز).
+      // Guards the add-paths that skip the batch fetch (no branch yet, or a read error).
+      if (l.batch_required && !l.is_reservation && !l.not_stockable && !String(l.batchno || '').trim())
+        add(`سطر ${n}: هذا الصنف يتطلب اختيار التشغيلة (الباتش) إلزاميًا.`, 'items')
       const d = Number(l.cust_discp)
-      if (!(d >= 0 && d <= 100)) out.push(`سطر ${n}: الخصم يجب أن يكون بين 0 و 100.`)
+      if (!(d >= 0 && d <= 100)) add(`سطر ${n}: الخصم يجب أن يكون بين 0 و 100.`, 'items')
       else {
         const cap = discCapFor(l.softech_itemcode)
-        if (d > cap) out.push(`سطر ${n}: الخصم (${d}%) يتجاوز الحد المسموح لهذا الصنف (${cap}%).`)
+        if (d > cap) add(`سطر ${n}: الخصم (${d}%) يتجاوز الحد المسموح لهذا الصنف (${cap}%).`, 'items')
       }
     })
     const pays = tenders.filter(t => Number(t.amount) > 0)
     pays.forEach((t, i) => {
       if (t.pay_type === 'credit' && (channel === 'cash' || channel === 'delivery'))
-        out.push(`سداد ${i + 1}: لا يُسمح بالآجل في قناة نقدى/توصيل.`)
+        add(`سداد ${i + 1}: لا يُسمح بالآجل في قناة نقدى/توصيل.`, 'payment')
     })
     if (live) {
       const sum = pays.reduce((s, t) => s + Number(t.amount) * Number(t.exchange_rate || 1), 0)
       if (Math.abs(sum - Number(totals.net)) > 0.01)
-        out.push(`مجموع السداد (${money(sum)}) لا يساوي صافي الأمر (${money(totals.net)}).`)
+        add(`مجموع السداد (${money(sum)}) لا يساوي صافي الأمر (${money(totals.net)}).`, 'payment')
     }
     return out
   }
 
   const reset = () => {
+    if (selTimerRef.current) clearTimeout(selTimerRef.current)
+    _flushSelections()                         // land buffered selections, then start a fresh cart id
+    cartTokenRef.current = _genToken()
     setLines([]); setSelected(-1); setTenders([blankTender()]); setCustomer(null); setPicCustomer(null)
-    setDoctorName(''); setDoctorCode(''); setRx(null); setReturnInvoice('')
+    setDoctorName(''); setDoctorCode(''); setRx(null); setReturnInvoice(''); setReturnMeta(null)
     setClaim(blankClaim()); setNotes(''); setChangeDiscount(0); setPatientPayment(''); setPlan(null); setActiveTab('items')
   }
 
@@ -718,11 +935,25 @@ export default function usePosOrder() {
   }
   const addByBarcode = async (code) => {
     if (!code) return
+    // prefer an EXACT match (softech_id / barcode) — a short softech_id like "2445"
+    // fuzzy-matches many items' barcodes, so never blind-add on a fuzzy result.
+    const pickExact = (arr) => (arr || []).find(it =>
+      String(it.softech_id) === String(code) ||
+      String(it.barcode) === String(code) ||
+      (it.all_barcodes || []).map(String).includes(String(code)))
     try {
-      const { data } = await api.get('/items/', { params: { search: code, page_size: 2 } })
-      const r = data.results || data
-      if (r.length === 1) addItem(_favShape(r[0]))
-      else if (r.length > 1) setMsg('أكثر من صنف لنفس الكود — استخدم البحث')
+      // 1) exact softech_id lookup
+      let { data } = await api.get('/items/', { params: { softech_id: code, page_size: 5 } })
+      let r = data.results || data
+      let hit = pickExact(r) || (r.length === 1 ? r[0] : null)
+      // 2) fall back to fuzzy search (covers scanned EAN-13 barcodes)
+      if (!hit) {
+        ({ data } = await api.get('/items/', { params: { search: code, page_size: 10 } }))
+        r = data.results || data
+        hit = pickExact(r) || (r.length === 1 ? r[0] : null)
+      }
+      if (hit) addItem(_favShape(hit))
+      else if ((r || []).length > 1) setMsg('أكثر من صنف لنفس الكود — استخدم البحث')
       else setMsg('لم يُعثر على صنف بهذا الباركود')
     } catch { setMsg('تعذّر البحث بالباركود') }
   }
@@ -738,6 +969,57 @@ export default function usePosOrder() {
     } finally { setBusy(false); refreshQueue() }
   }
 
+  // ── مرتجع: load an original finalized invoice for return ─────────────────────
+  // Reads the sale (read-only preview) and populates the basket + refund tenders. The lines are
+  // display-only; at create the BACKEND re-mirrors the sale authoritatively (source_raw) — see
+  // perform_create / build_return_from_sale. This keeps the return "exactly like SOFTECH".
+  const _PT_REV = { '30': 'cash', '10': 'credit', '40': 'card' }
+  const _returnLine = (l) => ({
+    item: null, softech_itemcode: l.itemcode, barcode: '', item_name: l.item_name,
+    available_qty: null, available_expiry_qty: null, item_expiry: null, batchno: '',
+    bonus: 0, pack_qty: 1, unit_name: '',
+    qty: Number(l.returnable ?? l.qty),             // default to what's STILL returnable (sold − مرتجع سابق)
+    item_sale_price: Number(l.unit_price), pkg_price: Number(l.unit_price), unit_price: Number(l.unit_price),
+    sale_tax_pct: 0, cust_discp: Number(l.cust_discp), is_reservation: !!l.is_reservation,
+    not_stockable: false, return_readonly: true,
+    dblitemflag: l.dblitemflag,                     // stable ref → partial-return selection (remove line / edit qty)
+    sold_qty: Number(l.qty), returned_prev: Number(l.returned_prev || 0), returnable: Number(l.returnable || 0),
+  })
+  async function loadReturn(inv) {
+    const invoice = String(inv ?? returnInvoice ?? '').trim()
+    if (!branch) { setMsg('اختر الفرع أولاً'); return }
+    if (!/^\d+$/.test(invoice)) { setMsg('أدخل رقم فاتورة صحيح للمرتجع'); return }
+    setBusy(true); setMsg(''); setErrs([]); setPlan(null)
+    try {
+      const { data } = await api.get('/pos-orders/return-lookup/',
+                                     { params: { branch: Number(branch), invoice } })
+      const all = data.lines || []
+      // only DISPENSED, still-returnable lines are actionable; reservations (blocked) + already-returned
+      // lines are surfaced as a note (the backend enforces this too).
+      const eligible = all.filter(l => !l.blocked && Number(l.returnable) > 0)
+      const blocked = all.filter(l => l.blocked)
+      if (!eligible.length) {
+        setReturnMeta(null); setLines([])
+        setMsg('لا توجد أصناف قابلة للإرتجاع' + (blocked.length ? ' — أصناف محجوزة مُسلّمة تتطلب عكس التسليم أولاً' : ' (رُبما أُرتجعت بالكامل)'))
+        return
+      }
+      setLines(eligible.map(_returnLine))
+      const rt = (data.payments || []).map(p => ({
+        ...blankTender(), pay_type: _PT_REV[p.type] || 'cash', amount: Number(p.value) }))
+      setTenders(rt.length ? rt : [blankTender()])
+      setReturnInvoice(invoice)
+      setReturnMeta({ invoice: data.invoice, docdate: data.docdate, total: data.returnable_total ?? data.total,
+                      count: eligible.length, fullOnly: !!data.full_only, blockedCount: blocked.length })
+      const notes = []
+      if (data.full_only) notes.push('التعاقد: إرتجاع كامل الفاتورة فقط')
+      if (blocked.length) notes.push(`${blocked.length} صنف محجوز مُسلّم مستبعَد (اعكس التسليم أولاً)`)
+      setMsg(`تم تحميل الفاتورة ${data.invoice} (${eligible.length} صنف قابل للإرتجاع)` + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — راجِع ثم أرسِل المرتجع')
+    } catch (e) {
+      setReturnMeta(null); setLines([])
+      setMsg('تعذّر تحميل الفاتورة: ' + (e.response?.data?.detail || e.message))
+    } finally { setBusy(false) }
+  }
+
   async function submit(live) {
     setMsg(''); setPlan(null); setErrs([])
     const ce = clientValidate(live)
@@ -747,13 +1029,18 @@ export default function usePosOrder() {
     try {
       // stable idempotency token for THIS attempt — if the request is queued offline and
       // replayed, the backend get-or-create returns the same order instead of duplicating.
-      const clientToken = (crypto?.randomUUID?.() ||
-        `${Date.now()}-${Math.random().toString(16).slice(2)}`)
+      // It is ALSO this cart's selection-telemetry token, so pos_cancel writeback can tell
+      // which selected items ended up sold (order.client_token == event.cart_token).
+      if (selTimerRef.current) clearTimeout(selTimerRef.current)
+      _flushSelections()                       // land any buffered selections before submit
+      const clientToken = cartTokenRef.current
       const payload = {
         client_token: clientToken,
         branch: Number(branch), channel, doc_kind: docKind, store_code: storeCode || undefined,
-        // the individual PIC (delivery) drives the PIC + link; the account name is the إسم العميل
-        customer: picCustomer?.id || customer?.id || null,
+        // Claim channels bill the ACCOUNT (contract/insurance entity) → keep it as the
+        // order customer; the PIC is only the patient (softech_pic). Retail: the PIC
+        // individual is the customer. softech_pic always carries the actual person.
+        customer: (isClaim ? (customer?.id || picCustomer?.id) : (picCustomer?.id || customer?.id)) || null,
         softech_pic: picCustomer?.softech_pic || customer?.softech_pic || '',
         customer_name: customer?.name || picCustomer?.name || 'Walk-In Customer',
         seller_usercode: salesperson || undefined,   // مسئول البيع — usercode ONLY to the ERP
@@ -768,6 +1055,11 @@ export default function usePosOrder() {
         print_receipt: printReceipt, items_reservation: itemsReservation,
         notes,
         ...(isClaim && claim.patientname ? { claim } : {}),
+        // مرتجع: which sale lines (+ qty) to return. The backend mirrors the sale authoritatively; sending
+        // the current basket lets the user drop lines / reduce qty → a PARTIAL return (else full mirror).
+        ...(docKind === 'return'
+          ? { return_lines: lines.map(l => ({ dblitemflag: l.dblitemflag, qty: Number(l.qty) })) }
+          : {}),
         lines: lines.map(l => ({
           item: l.item, softech_itemcode: l.softech_itemcode, item_name: l.item_name,
           qty: Number(l.qty), item_sale_price: Number(l.item_sale_price),
@@ -779,9 +1071,61 @@ export default function usePosOrder() {
         })),
       }
       const { data: order } = await api.post('/pos-orders/', payload)
-      // send FULL tender objects so currency/rate/cheque/card/internal-serial persist
-      await api.post(`/pos-orders/${order.id}/ready/`, {
-        tenders: tenders.filter(t => Number(t.amount) > 0).map(t => ({
+
+      // Attach the prescription image (multipart) if one was picked — PG-only metadata,
+      // best-effort, never blocks the sale. Foundation for OCR-Rx.
+      if (rx) {
+        try {
+          const fd = new FormData()
+          fd.append('prescription_image', rx)
+          await api.post(`/pos-orders/${order.id}/prescription/`, fd,
+                         { headers: { 'Content-Type': 'multipart/form-data' } })
+        } catch { /* prescription upload is advisory — keep the sale going */ }
+      }
+
+      // ── Gated offer apply (server-gated by POS_OFFERS_EXECUTION_ENABLED) ──────────
+      // While the flag is OFF this returns {enabled:false} and is a pure no-op —
+      // checkout is byte-for-byte unchanged. While ON, the backend re-evaluates the
+      // order's own lines (authoritative), writes each promo line's cust_discp +
+      // discount_source='offer' (the writer then stamps the Ctrl+M/OFFERS override,
+      // supp_main_code=89), and for offer-mode magnitudes submits a supervisor approval
+      // instead of attaching. Best-effort: a failure in the offers layer must NEVER
+      // block a sale. When an offer attaches, the نقدى tender is rebalanced to the new
+      // net just below (retail). ⚠ The owner's live dry-run (§10b/§14) must sign off
+      // before POS_OFFERS_EXECUTION_ENABLED is flipped on.
+      let offerApply = null
+      try {
+        // مرتجع: never run offers on a return (it reverses a past sale, not a new promo).
+        if (docKind === 'return') throw new Error('skip-offers-on-return')
+        const { data: oa } = await api.post('/offers/apply-to-order/', { order: order.id, commit: true })
+        offerApply = oa
+      } catch { /* offers are advisory here — never fail the checkout on them */ }
+      if (offerApply?.enabled && offerApply.requires_approval && !offerApply.attached && live) {
+        setMsg(`⏸ العرض يتطلب اعتماد مشرف قبل الترحيل — أُرسل طلب الاعتماد (أمر #${order.id}). لن يُرسل حتى الموافقة.`)
+        return   // stop before ready/push; the finally block clears busy + refreshes the queue
+      }
+
+      // If an offer actually attached, the server just lowered the order net (the tenders
+      // above were built from the PRE-offer total). Re-read the authoritative line totals
+      // and rebalance the نقدى tender so paid == net. Retail only — claim channels bill the
+      // difference to the contract, so the patient's co-pay tender must stay put.
+      let effectiveTenders = tenders
+      if (offerApply?.enabled && offerApply.attached && !isClaim) {
+        try {
+          const { data: fresh } = await api.get(`/pos-orders/${order.id}/`)
+          const freshNet = Math.max(0,
+            (fresh.lines || []).reduce((s, l) => s + Number(l.trans_price_total || 0), 0)
+            - Number(changeDiscount || 0))
+          effectiveTenders = rebalanceToNet(tenders, freshNet)
+          setTenders(effectiveTenders)   // reflect the corrected tender in the UI too
+        } catch { /* fall back to the entered tenders if the re-read fails */ }
+      }
+
+      // send FULL tender objects so currency/rate/cheque/card/internal-serial persist.
+      // مرتجع: send NO tenders — the backend already mirrored the sale's own payment rows as the
+      // refund (build_return_from_sale), and prepare_order reuses them (co-pay refunds stay exact).
+      await api.post(`/pos-orders/${order.id}/ready/`, (docKind === 'return') ? {} : {
+        tenders: effectiveTenders.filter(t => Number(t.amount) > 0).map(t => ({
           pay_type: t.pay_type, amount: Number(t.amount),
           currency: t.currency, exchange_rate: Number(t.exchange_rate || 1),
           card_brand: t.card_type || null, cheque_date: t.due_date || null,
@@ -816,22 +1160,23 @@ export default function usePosOrder() {
   return {
     branches, ref,
     branch, setBranch, storeCode, setStoreCode, docKind, setDocKind, channel, setChannel,
-    isClaim, customerType, customer, setCustomer, docDate, setDocDate, dispenseSerial,
-    picCustomer, setPicCustomer, needsPicCustomer,
+    isClaim, discountLocked, customerType, customer, setCustomer, docDate, setDocDate, dispenseSerial,
+    picCustomer, setPicCustomer, needsPicCustomer, picHistory,
     salesperson, setSalesperson, salespersonName, salespeople, salespersonQuery, setSalespersonQuery, selectSalesperson,
     paymentMethod, setPaymentMethod, changeDiscount, setChangeDiscount,
     patientPayment, setPatientPayment, setPatientCopay,
-    notes, setNotes, returnInvoice, setReturnInvoice,
+    notes, setNotes, returnInvoice, setReturnInvoice, returnMeta, loadReturn,
     altPrice, setAltPrice, sellAtCost, setSellAtCost, printReceipt, setPrintReceipt,
     itemsReservation, setItemsReservation,
     doctorName, setDoctorName, doctorCode, setDoctorCode, rx, setRx, claim, setClaim,
     empDataFields, contractFields,
-    lines, setLine, removeLine, addItem, selected, setSelected, numMode, setNumMode, numpad,
+    lines, setLine, lineDiscValue, lineSellPrice, removeLine, addItem, selected, setSelected, numMode, setNumMode, numpad,
     batchModal, setBatchModal, confirmBatchPick, setBatchNeed, fefoFill,
     suggest, applySuggested, applyAllSuggested,
     loyalty, pointsInfo, parked, parkOrder, recallOrder, deleteParked,
     favorites, isFavorite, toggleFavorite, addByBarcode,
     fbt, addFbt: (rec) => addByBarcode(rec.softech_id),
+    offersPlan, addGift: (sug) => addByBarcode(sug.softech_id || sug.item_softech_id),
     queueStatus, flushNow, refreshQueue,
     // two-level customer + branch stores
     custTypes, custType, setCustType, typeCfg,

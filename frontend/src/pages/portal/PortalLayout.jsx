@@ -5,7 +5,8 @@
  * Registers the portal service worker for PWA installability.
  */
 import { useEffect } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import ErrorBoundary from '../../components/ErrorBoundary'
 import { portalToken } from '../../portal/portalApi'
 
 const TABS = [
@@ -16,6 +17,7 @@ const TABS = [
 
 export default function PortalLayout() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   useEffect(() => {
     if (!portalToken.get()) navigate('/portal/login', { replace: true })
@@ -39,7 +41,9 @@ export default function PortalLayout() {
         <button onClick={logout} className="text-xs bg-white/15 rounded-lg px-3 py-1.5">خروج</button>
       </header>
 
-      <main className="flex-1 p-4 pb-24"><Outlet /></main>
+      <main className="flex-1 p-4 pb-24">
+        <ErrorBoundary scope="page" resetKey={pathname}><Outlet /></ErrorBoundary>
+      </main>
 
       <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 grid grid-cols-3">
         {TABS.map(t => (

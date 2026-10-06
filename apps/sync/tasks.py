@@ -34,6 +34,7 @@ from apps.sync.sybase_queries import (
     QUERY_ITEM_BARCODES,
 )
 from apps.catalog.models import Item, Category, ItemStock, ItemBarcode
+from apps.catalog.search_index import build_search_name
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.branches.models import Branch
 from apps.sync.models import SyncRun, SyncLog
@@ -233,12 +234,23 @@ def run_fast_sync():
     """
     sync_run = SyncRun.objects.create(status='running')
     total = 0
+
+    def _p(step, phase, message):
+        # live progress for the on-screen bar (same shape as the items lane)
+        sync_run.progress = {'phase': phase, 'message': message, 'step': step, 'steps': 4}
+        sync_run.save(update_fields=['progress'])
+
     try:
+        _p(0, 'connect', 'الاتصال بسيرفر SOFTECH…')
         conn = get_sybase_connection()
+        _p(1, 'branches', 'تحديث الفروع…')
         total += sync_branches(conn, sync_run)
+        _p(2, 'stock', 'سحب أرصدة الفروع (stkbal)…')
         total += sync_stock(conn, sync_run)
+        _p(3, 'sales', 'سحب حركات البيع (stktrans)…')
         total += sync_sales(conn, sync_run, full_history=False)
         conn.close()
+        sync_run.progress = {'phase': 'done', 'message': 'اكتملت مزامنة الأرصدة والمبيعات', 'step': 4, 'steps': 4}
 
         sync_run.status = 'success'
         sync_run.records_synced = total
@@ -290,6 +302,58 @@ def run_slow_sync():
         sync_run.completed_at = timezone.now()
         sync_run.save()
         logger.error(f"Slow sync failed: {e}", exc_info=True)
+    return sync_run
+
+
+def run_items_sync(sync_run=None):
+    """
+    CATALOG lane (on-demand): refresh categories + items + barcodes ONLY — picks
+    up NEW items and column updates (pack/unit/cost price, itemtrans validity
+    branch/supplier/customer, امر التوريد = no_more_use, archive, tax rates, etc.)
+    via the same sync_items upsert the slow lane uses — WITHOUT the heavier
+    customers/sales lanes. Used by the manual "مزامنة الأصناف" button and folded
+    into the purchasing full-sync so a full run also refreshes the catalog first.
+    Read-only on SOFTECH (SELECT). Reuses sync_categories / sync_items /
+    sync_item_barcodes.
+
+    sync_run: reuse an already-created SyncRun (so the caller can return its id and
+    poll it); one is created when None.
+    """
+    if sync_run is None:
+        sync_run = SyncRun.objects.create(status='running')
+    total = 0
+
+    def _p(phase, message, step):
+        # Live phase for the purchasing items-sync toast to poll (3 steps).
+        sync_run.progress = {'phase': phase, 'message': message, 'step': step, 'steps': 3}
+        try:
+            sync_run.save(update_fields=['progress'])
+        except Exception:
+            pass
+
+    try:
+        conn = get_sybase_connection()
+        _p('categories', 'مزامنة الفئات…', 1)
+        total += sync_categories(conn, sync_run)
+        _p('items', 'مزامنة الأصناف (قد تستغرق ~دقيقتين)…', 2)
+        total += sync_items(conn, sync_run)
+        _p('barcodes', 'مزامنة الباركود…', 3)
+        total += sync_item_barcodes(conn, sync_run)
+        conn.close()
+
+        sync_run.status = 'success'
+        sync_run.records_synced = total
+        sync_run.completed_at = timezone.now()
+        sync_run.progress = {'phase': 'done', 'message': 'اكتملت مزامنة الأصناف', 'step': 3, 'steps': 3}
+        sync_run.save()
+        logger.info(f"Items sync complete — {total} records in "
+                    f"{(timezone.now() - sync_run.started_at).seconds}s")
+    except Exception as e:
+        sync_run.status = 'failed'
+        sync_run.error_message = str(e)
+        sync_run.completed_at = timezone.now()
+        sync_run.save()
+        logger.error(f"Items sync failed: {e}", exc_info=True)
     return sync_run
 
 
@@ -617,6 +681,7 @@ def sync_items(conn, sync_run):
             supplier_trans  = str(int(row[28] or 0)) if len(row) > 28 else ''
             customer_trans  = str(int(row[29] or 0)) if len(row) > 29 else ''
             nosale_classif  = str(row[30] or '').strip() if len(row) > 30 else ''
+            batch_required  = (int(row[39] or 0) == 1) if len(row) > 39 else False  # items.itempartno
             is_fast_moving  = (str(row[31] or '0').strip() == '1') if len(row) > 31 else False
             store_classif   = str(row[32] or '').strip() if len(row) > 32 else ''
             pharmacy_discp   = _to_decimal(row[33]) if len(row) > 33 else Decimal('0')
@@ -689,6 +754,7 @@ def sync_items(conn, sync_run):
                 no_more_use=no_more_use,
                 item_archive=item_archive,
                 is_stockable=is_stockable,
+                batch_required=batch_required,
                 is_fast_moving=is_fast_moving,
                 insurance_type=insurance_type,
                 item_level=item_level,
@@ -706,6 +772,12 @@ def sync_items(conn, sync_run):
                 pos_discp=pos_discp,
                 pack_price_tax=pack_price_tax,
                 sale_tax_pct=sale_tax_pct,
+                # Product-intelligence overlay: normalized universal-search haystack,
+                # derived from the same synced fields (never written back to SOFTECH).
+                search_name=build_search_name(
+                    softech_id=item_code, name=row[1] or '',
+                    name_scientific=row[2] or '', barcode=barcode_val,
+                ),
             ))
         except Exception as e:
             logger.warning(f"Item build error itemcode={row[0]}: {e}")
@@ -738,6 +810,7 @@ def sync_items(conn, sync_run):
                 'store_classif', 'store_classif_name',
                 'pharmacy_discp', 'additional_discp', 'special_discp', 'pos_discp',
                 'pack_price_tax', 'sale_tax_pct',
+                'search_name',   # derived overlay, refreshed inline from synced fields
             ],
             batch_size=500,
         )
@@ -1877,6 +1950,53 @@ def _run_purchase_expiry_sync():
         logger.error('[APScheduler] purchase-expiry sync failed: %s', exc)
 
 
+def _run_supply_case_sweep():
+    """Daily supply follow-up (doc 24 Phase 4): refresh the DemandSignal ledger from its
+    sources, then open / refresh / auto-resolve SupplyCases against the latest successful
+    demand run. Writes only apps.supply tables (never SOFTECH). Alerts are sent only when
+    SUPPLY_CASE_NOTIFY is on — once per case, capped per sweep."""
+    try:
+        from django.core.management import call_command
+        call_command('sweep_supply_cases', verbosity=0)
+        logger.info('[APScheduler] supply case sweep done')
+    except Exception as exc:
+        logger.error('[APScheduler] supply case sweep failed: %s', exc)
+
+
+def _run_ap_reconciliation_sync():
+    """Daily INCREMENTAL A/P–A/R reconciliation mirror sync (doc 23). Rolling
+    ~4-month window over all suppliers (idempotent update_or_create picks up new
+    and slightly back-dated سداد activity while everything mirrored before is
+    preserved) + refreshes SOFTECH balance snapshots at the end. The one-time
+    historical load is a separate `backfill_ap_reconciliation --from-year …` run."""
+    try:
+        import datetime as _d
+        from django.core.management import call_command
+        frm = (_d.date.today() - _d.timedelta(days=120)).strftime('%Y-%m-%d')
+        to = _d.date.today().strftime('%Y-%m-%d')
+        call_command('sync_ap_reconciliation', party_type='supplier',
+                     date_from=frm, date_to=to, verbosity=0)
+        logger.info('[APScheduler] AP-reconciliation sync done (from %s)', frm)
+    except Exception as exc:
+        logger.error('[APScheduler] AP-reconciliation sync failed: %s', exc)
+        return
+    # Re-propose matches over the fresh mirror (per-supplier commits; approved /
+    # rejected / written decisions are preserved) then re-scan anomalies incl.
+    # mis-allocations. Both are PostgreSQL-only — nothing here writes to SOFTECH.
+    # fill any new out-of-range invoice stubs + recent return→purchase links first
+    try:
+        call_command('backfill_ap_invoice_stubs', verbosity=0)
+        call_command('sync_ap_return_links', date_from=frm, verbosity=0)
+    except Exception as exc:
+        logger.error('[APScheduler] AP-reconciliation stubs/return links failed: %s', exc)
+    for cmd in ('run_ap_matching', 'scan_ap_anomalies'):
+        try:
+            call_command(cmd, party_type='supplier', verbosity=0)
+            logger.info('[APScheduler] AP-reconciliation %s done', cmd)
+        except Exception as exc:
+            logger.error('[APScheduler] AP-reconciliation %s failed: %s', cmd, exc)
+
+
 def _run_expiry_worklists():
     """Weekly per-branch near-expiry worklist → in-app notification to branch
     managers (D4). Resilient per branch; deduped per ISO week."""
@@ -1906,6 +2026,84 @@ def _run_stock_expiry_sync():
         logger.info('[APScheduler] stock-expiry sync done')
     except Exception as exc:
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
+
+
+def _run_item_suppliers_sync():
+    """Nightly itemssuppliers mirror — supplier codes / "supplier carries it" offline."""
+    try:
+        from django.core.management import call_command
+        call_command('sync_item_suppliers', verbosity=0)
+        logger.info('[APScheduler] itemssuppliers mirror done')
+    except Exception as exc:
+        logger.error('[APScheduler] itemssuppliers mirror failed: %s', exc)
+
+
+def _run_pos_cancel_sync():
+    """Nightly multi-node pos_cancel → PosCancelDaily rollup (lost-sale / «المبيعات غير المخزنة»
+    trends + demand/procurement feed). Read-only against SOFTECH; refreshes the last 30 days."""
+    try:
+        from django.core.management import call_command
+        call_command('sync_pos_cancel', days=30, verbosity=0)
+        logger.info('[APScheduler] pos_cancel sync done')
+    except Exception as exc:
+        logger.error('[APScheduler] pos_cancel sync failed: %s', exc)
+
+
+def _run_pos_cancel_write():
+    """Every few hours: batch-write OUR POS item-selection telemetry INTO SOFTECH pos_cancel.
+    No-op (dry-run) unless POS_CANCEL_WRITE_ENABLED; idempotent (claim-before-write)."""
+    try:
+        from apps.pos_orders.pos_cancel_writer import write_pos_cancel_batch, write_enabled
+        if not write_enabled():
+            return                      # flag OFF → do nothing on the schedule
+        s = write_pos_cancel_batch()    # dry_run resolves to False when the flag is ON
+        logger.info('[APScheduler] pos_cancel write: written=%s skipped_sold=%s',
+                    s.get('written'), s.get('skipped_sold'))
+    except Exception as exc:
+        logger.error('[APScheduler] pos_cancel write failed: %s', exc)
+
+
+def _run_demand_engine_scheduled():
+    """Scheduled QUICK demand-engine run (same as the dashboard «▶ تشغيل»), on the
+    days in DEMAND_ENGINE_SCHEDULE_DAYS. Gated by DEMAND_ENGINE_SCHEDULE_ENABLED.
+    Its rates still need a human to approve/execute in /supply; the coverage top-up
+    job picks the new run up automatically within 30 minutes."""
+    try:
+        from django.conf import settings as _s
+        if not getattr(_s, 'DEMAND_ENGINE_SCHEDULE_ENABLED', False):
+            return
+        from apps.purchasing.models import DemandCalculationRun
+        if DemandCalculationRun.objects.filter(status='running').exists():
+            logger.warning('[APScheduler] scheduled engine run skipped — a run is already in progress')
+            return
+        from apps.purchasing.engine import DemandEngine
+        run = DemandEngine().run(full_backfill=False)
+        logger.info('[APScheduler] scheduled engine run %s finished: %s',
+                    getattr(run, 'id', None), getattr(run, 'status', None))
+    except Exception as exc:
+        logger.error('[APScheduler] scheduled engine run failed: %s', exc)
+
+
+def _run_coverage_topup():
+    """Every 30 min: if a new engine run finished and hasn't been topped up yet, give
+    items with no coverage the default and refresh stale maxes on the branch servers.
+    No-op unless COVERAGE_WRITER_ENABLED + COVERAGE_AUTO_TOPUP_ENABLED. Idempotent —
+    only writes what differs; never changes a coverage set on purpose."""
+    try:
+        from apps.purchasing import coverage_writer as cw
+        if not (cw.coverage_writer_enabled() and cw.topup_settings()['enabled']):
+            return
+        run = cw._latest_run()
+        if run is None or not cw.topup_due(run):
+            return
+        res = cw.topup_coverage(run=run, dry_run=False)
+        cw.persist_topup(res, trigger='schedule')
+        t = res['totals']
+        logger.info('[APScheduler] coverage top-up run=%s %s: fill=%s refresh=%s verified=%s '
+                    'not_confirmed=%s unreachable=%s', run.id, res['status'], t['fill'],
+                    t['refresh'], t['verified'], t['not_confirmed'], t['unreachable'])
+    except Exception as exc:
+        logger.error('[APScheduler] coverage top-up failed: %s', exc)
 
 
 def _send_followup_reminders():
@@ -2764,6 +2962,18 @@ def start_scheduler():
         _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
+    # Daily incremental A/P–A/R reconciliation mirror sync (doc 23) — 07:30, after
+    # the procurement/purchase-expiry syncs. Rolling ~4-month window, idempotent.
+    _scheduler.add_job(
+        _run_ap_reconciliation_sync, 'cron', hour=7, minute=30, id='ap_reconciliation_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Daily supply follow-up sweep (doc 24 Phase 4) — 08:00, after the procurement /
+    # purchase-expiry / A/P syncs so sourcing history is current. Writes apps.supply only.
+    _scheduler.add_job(
+        _run_supply_case_sweep, 'cron', hour=8, minute=0, id='supply_case_sweep',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
     # Weekly per-branch near-expiry worklist → branch managers (Sunday 08:00, D4).
     _scheduler.add_job(
         _run_expiry_worklists, 'cron', day_of_week='sun', hour=8, minute=0,
@@ -2780,6 +2990,37 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
+    _scheduler.add_job(
+        _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Nightly pos_cancel → PosCancelDaily rollup (lost-sale trends + demand/procurement feed).
+    _scheduler.add_job(
+        _run_pos_cancel_sync, 'cron', hour=5, minute=0, id='pos_cancel_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Every 3h: write OUR POS selection telemetry INTO SOFTECH pos_cancel (no-op while flag OFF).
+    _scheduler.add_job(
+        _run_pos_cancel_write, 'interval', hours=3, id='pos_cancel_write',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Coverage top-up after each engine run (new items / stale maxes) — gated,
+    # idempotent, writes only what differs; checks every 30 min for a new run.
+    _scheduler.add_job(
+        _run_coverage_topup, 'interval', minutes=30, id='coverage_topup',
+        replace_existing=True, max_instances=1, misfire_grace_time=900,
+    )
+    # Demand engine on a fixed schedule (owner: Sunday + Wednesday nights). Gated by
+    # DEMAND_ENGINE_SCHEDULE_ENABLED inside the job; days/time from settings.
+    _scheduler.add_job(
+        _run_demand_engine_scheduled, 'cron',
+        day_of_week=str(getattr(_dj_settings, 'DEMAND_ENGINE_SCHEDULE_DAYS', 'sun,wed')),
+        hour=int(getattr(_dj_settings, 'DEMAND_ENGINE_SCHEDULE_HOUR', 1)),
+        minute=int(getattr(_dj_settings, 'DEMAND_ENGINE_SCHEDULE_MINUTE', 0)),
+        id='demand_engine_scheduled', replace_existing=True, max_instances=1,
+        misfire_grace_time=3600,
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).

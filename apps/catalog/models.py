@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.indexes import GinIndex
 
 # Stores that hold expired / quarantine stock at HQ branch (code 100).
 # These must NEVER appear in any stock balance queries or displays.
@@ -9,10 +10,43 @@ class Category(models.Model):
     softech_id = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
     name_ar = models.CharField(max_length=255, blank=True)
+    # Subcategory hierarchy — platform-native (SOFTECH categories are flat). Admin-
+    # managed; NOT synced, so it survives category syncs (update_fields allowlist).
+    parent = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='subcategories', verbose_name='التصنيف الأب',
+    )
 
     class Meta:
         verbose_name_plural = 'Categories'
         ordering = ['name']
+
+    def __str__(self):
+        return self.name_ar or self.name
+
+
+class ItemTag(models.Model):
+    """
+    Curated, admin-managed free tag for merchandising / POS filtering (e.g.
+    'عرض', 'الأكثر مبيعًا', 'موسمي'). Platform-native — NOT from SOFTECH. Kept
+    separate from SOFTECH's own classifications (family/medicine_type/store_classif)
+    which stay authoritative for pricing/clinical grouping.
+    """
+    slug = models.SlugField(max_length=50, unique=True, verbose_name='المعرّف')
+    name = models.CharField(max_length=60, verbose_name='الاسم')
+    name_ar = models.CharField(max_length=60, blank=True, verbose_name='الاسم بالعربية')
+    color = models.CharField(max_length=7, blank=True, default='', help_text='#RRGGBB')
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey(
+        'users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_item_tags',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'وسم صنف'
+        verbose_name_plural = 'وسوم الأصناف'
 
     def __str__(self):
         return self.name_ar or self.name
@@ -136,11 +170,12 @@ class Item(models.Model):
     # hidden from candidates but fully retrievable, and re-surface automatically only
     # if they later show a strong new shortage signal (re-entered).
     DISMISS_REASONS = [
-        ('variant',      'مقاس/شكل بديل لمنتج متاح'),   # size/variant of an available product
-        ('on_request',   'يُطلب عند الحاجة فقط'),        # brought only upon request
-        ('obsolete',     'غير متوفر بالسوق المصري'),      # obsolete in the Egyptian market
-        ('not_shortage', 'ليس نقصًا (موقوف/موسمي)'),      # false positive
-        ('other',        'أخرى'),
+        ('variant',        'مقاس/شكل بديل لمنتج متاح'),   # size/variant of an available product
+        ('on_request',     'يُطلب عند الحاجة'),            # brought only upon request
+        ('obsolete',       'غير متوفر بالسوق المصري'),      # obsolete in the Egyptian market
+        ('not_shortage',   'ليس ناقصًا (موقوف/موسمي)'),    # stopped/seasonal — not a genuine shortage
+        ('false_positive', 'اكتشاف خاطئ — ليس ناقصًا'),    # detector error → carries NO state in the export
+        ('other',          'أخرى'),
     ]
     shortage_dismissed = models.BooleanField(
         default=False, db_index=True, verbose_name='مُستبعد من النواقص',
@@ -165,6 +200,96 @@ class Item(models.Model):
         'self', symmetrical=False, blank=True,
         related_name='covers_shortage_variants', verbose_name='المنتجات البديلة المتاحة',
     )
+
+    # ── Phantom substitution (مبيعات وهمية) ───────────────────────────────────
+    # Contract patients sell their prescribed drug back; SOFTECH records it as a
+    # purchase (doccode 10) from an internal buy-back "supplier" account + an
+    # immediate contract-channel sale — the unit is never sourced from a real
+    # distributor. Such "sales" are NOT genuine demand, so the demand sheet must
+    # not order (or must heavily reduce) them. Auto-detected each engine run:
+    # phantom_ratio = buyback_qty / sold_qty over a rolling window; flagged at a
+    # configurable threshold (default 0.50). Human-reviewable (phantom_override).
+    PHANTOM_OVERRIDE_CHOICES = [
+        ('',         'تلقائي (بدون مراجعة)'),   # auto only
+        ('confirmed', 'مؤكَّد يدويًا'),           # human confirmed it IS phantom (sticky)
+        ('excluded',  'ليست مبيعات وهمية'),       # human says NOT phantom → suppress flag
+    ]
+    is_phantom_substitution = models.BooleanField(
+        default=False, db_index=True, verbose_name='مبيعات وهمية',
+        help_text='معظم مبيعاته يُعاد شراؤها من العميل/المريض (تعاقد) لا من الموردين — لا يُطلب أو تُقلَّل كميته.',
+    )
+    phantom_ratio = models.FloatField(
+        default=0.0, verbose_name='نسبة الوهمية',
+        help_text='buyback_qty / sold_qty على مدى نافذة التحديد (12 شهر) — أساس التحديد.',
+    )
+    phantom_contract_ratio = models.FloatField(
+        default=0.0, verbose_name='نسبة قناة التعاقد',
+        help_text='حصة مبيعات قناة التعاقد/التأمين — سياقية فقط، ليست شرط التحديد.',
+    )
+    phantom_order_pct = models.FloatField(
+        default=1.0, verbose_name='النسبة الموصى بطلبها',
+        help_text='1 − النسبة الوهمية (مرجَّحة زمنيًا) — الجزء الحقيقي المطلوب توريده من الموردين.',
+    )
+    phantom_buyback_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
+                                              verbose_name='كمية إعادة الشراء (نافذة)')
+    phantom_sold_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
+                                           verbose_name='كمية المبيعات (نافذة)')
+    phantom_genuine_need = models.DecimalField(max_digits=12, decimal_places=3, default=0,
+                                               verbose_name='الطلب الحقيقي (مبيعات − إعادة شراء)')
+    phantom_detected_at = models.DateTimeField(null=True, blank=True,
+                                               verbose_name='آخر فحص وهمية')
+    phantom_source = models.CharField(max_length=10, blank=True, default='',
+                                      verbose_name='مصدر التحديد',
+                                      help_text="'auto' | 'manual'.")
+    phantom_override = models.CharField(
+        max_length=10, blank=True, default='', choices=PHANTOM_OVERRIDE_CHOICES,
+        verbose_name='قرار المراجعة',
+    )
+    phantom_override_note = models.CharField(max_length=300, blank=True, default='',
+                                             verbose_name='ملاحظة المراجعة')
+    phantom_reviewed_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_phantom_items', verbose_name='راجعه',
+    )
+    phantom_reviewed_at = models.DateTimeField(null=True, blank=True,
+                                               verbose_name='تاريخ المراجعة')
+
+    # ── Cash & inventory optimization (docs/architecture/22) ──────────────────
+    # Strategic hold: a manual flag we set on items deliberately kept despite ~no
+    # sales (oncology / fridge biologics for a known contract patient). Excludes
+    # the item from dead-stock flagging so it never nags.
+    strategic_hold = models.BooleanField(
+        default=False, db_index=True, verbose_name='احتفاظ استراتيجي',
+        help_text='مُحتفَظ به عمدًا رغم قلة البيع (مريض تعاقد/أورام) — يُستثنى من رصد الركود.',
+    )
+    # ── Demand-spike over-purchase (📈) — behavioral "doctor-target" burst ──────
+    # recent = qty_90d/3 ; prior = (qty_365d−qty_90d)/9. STRONG = new-burst (prior<0.15)
+    # OR recent/prior ≥ 10× → cap-eligible; WATCH = 6–10× → monitor only. Computed
+    # each engine run from the run's metrics. The order cap is REVIEW-GATED
+    # (spike_confirmed) + opt-in, so genuine new-product ramps aren't starved.
+    SPIKE_TIER_CHOICES = [('', '—'), ('strong', 'ذروة قوية'), ('watch', 'ذروة للمراقبة')]
+    is_spike = models.BooleanField(
+        default=False, db_index=True, verbose_name='ذروة طلب غير مؤكدة',
+        help_text='قفزة طلب حديثة قد لا تدوم (نمط الوصفة المستهدفة) — راجِع قبل الشراء بكمية كبيرة.',
+    )
+    spike_tier = models.CharField(max_length=8, blank=True, default='',
+                                  choices=SPIKE_TIER_CHOICES, verbose_name='درجة الذروة')
+    spike_ratio = models.FloatField(default=0.0, verbose_name='مضاعف الذروة',
+                                    help_text='الطلب الربع أخير ÷ طلب الأشهر التسعة السابقة.')
+    spike_recent = models.FloatField(default=0.0, verbose_name='المعدل الحديث (شهري)')
+    spike_prior = models.FloatField(default=0.0, verbose_name='المعدل السابق (شهري)')
+    spike_confirmed = models.BooleanField(
+        default=False, verbose_name='مؤكَّدة (طبّق التقليل)',
+        help_text='مراجعة بشرية: ذروة غير مستدامة فعلاً — يُسمح بتقليل الكمية عند التفعيل.',
+    )
+    spike_detected_at = models.DateTimeField(null=True, blank=True,
+                                             verbose_name='آخر رصد ذروة')
+    spike_reviewed_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_spike_items', verbose_name='راجع الذروة',
+    )
+    spike_reviewed_at = models.DateTimeField(null=True, blank=True)
+
     is_stockable = models.BooleanField(
         default=True,
         db_index=True,
@@ -174,6 +299,16 @@ class Item(models.Model):
             '1 = stockable (included in demand calculations). '
             '0 = non-stockable (excluded from all demand, purchasing, and inventory calculations). '
             'Only 38 items are non-stockable out of ~37,500.'
+        ),
+    )
+    batch_required = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='اختيار الباتش إلزامي (Batch required)',
+        help_text=(
+            'Synced from SOFTECH items.itempartno («رقم القطعة أو الباتش»). '
+            '1 = batch/expiry selection is MANDATORY at POS before dispensing (not merely "batches exist"). '
+            '0 = optional. Sparse: only ~9 items master-wide carry it.'
         ),
     )
 
@@ -308,10 +443,32 @@ class Item(models.Model):
         help_text='SOFTECH items.posdiscp — retail POS discount %. Currently 10% on 87.5% of items.',
     )
 
+    # ── Product-intelligence overlay (PG-only, derived — NOT synced from SOFTECH) ──
+    # Normalized, Arabic-folded haystack (code + barcode + AR/EN + scientific name)
+    # for fast universal search via a pg_trgm GIN index. Rebuilt at item sync and by
+    # the `backfill_search_name` command. NOT in the sync update_fields allowlist as
+    # a SOFTECH column — it's computed from the synced fields, never written back.
+    search_name = models.TextField(
+        blank=True, default='',
+        verbose_name='اسم البحث (منسّق)',
+        help_text='Derived normalized search haystack — powers universal search. Do not edit by hand.',
+    )
+    # Curated merchandising tags (platform-native, admin-managed). Not from SOFTECH.
+    tags = models.ManyToManyField(
+        'ItemTag', blank=True, related_name='items', verbose_name='الوسوم',
+    )
+
     last_synced = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']
+        indexes = [
+            GinIndex(
+                name='catalog_item_searchname_trgm',
+                fields=['search_name'],
+                opclasses=['gin_trgm_ops'],
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -570,6 +727,9 @@ class ItemAlias(models.Model):
         ('invoice',  'فاتورة مورد'),
         ('import',   'استيراد'),
         ('manual',   'يدوي'),
+        ('whatsapp', 'طلبات واتساب'),
+        ('availability', 'إتاحة مورد'),
+        ('pos_rx_ocr', 'روشتة POS'),
     )
     normalized  = models.CharField(max_length=300, db_index=True,
                                    verbose_name='الاسم المُعيَّر')
@@ -591,9 +751,84 @@ class ItemAlias(models.Model):
         unique_together     = ('normalized', 'vendor_code', 'item')
         indexes = [
             models.Index(fields=['normalized', 'vendor_code'], name='itemalias_lookup_idx'),
+            # close-spelling lookups (apps/shortage/learning — trigram similarity)
+            GinIndex(fields=['normalized'], name='itemalias_norm_trgm', opclasses=['gin_trgm_ops']),
         ]
         ordering = ['-use_count']
 
     def __str__(self):
         scope = f'[{self.vendor_code}] ' if self.vendor_code else ''
         return f'{scope}{self.normalized} → {self.item.name} (×{self.use_count})'
+
+
+class ItemAliasRejection(models.Model):
+    """Negative learning: a person REPLACED the machine's suggestion ``item`` for this
+    spelling. Each rejection pushes that item down for the spelling (and close spellings)
+    next time, and weakens any alias that pointed there; a later confirmation of the same
+    item forgives one rejection. Fed by apps/shortage/learning.record_rejection."""
+    normalized  = models.CharField(max_length=300, db_index=True)
+    item        = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='alias_rejections')
+    vendor_code = models.CharField(max_length=8, blank=True, db_index=True)
+    count       = models.PositiveIntegerField(default=1)
+    sample_raw  = models.CharField(max_length=300, blank=True)
+    source      = models.CharField(max_length=20, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'مطابقة مرفوضة'
+        verbose_name_plural = 'المطابقات المرفوضة'
+        unique_together     = ('normalized', 'vendor_code', 'item')
+
+    def __str__(self):
+        return f'{self.normalized} ✗ {self.item_id} (×{self.count})'
+
+
+class ItemAliasGroup(models.Model):
+    """Learned ONE-TO-MANY mapping: a spelling that stands for several catalog items
+    ("بيبيلاك 1....2....3" → BEBELAC (1), (2), (3)). Learned when a person confirms a line
+    as several items; next time the same (or a close) spelling is split into those items
+    as a suggestion. ``item_ids`` keeps the confirmed order; ``items_key`` = sorted ids."""
+    normalized  = models.CharField(max_length=300, db_index=True)
+    vendor_code = models.CharField(max_length=8, blank=True, db_index=True)
+    item_ids    = models.JSONField(default=list)
+    items_key   = models.CharField(max_length=300)
+    use_count   = models.PositiveIntegerField(default=1)
+    source      = models.CharField(max_length=20, blank=True)
+    sample_raw  = models.CharField(max_length=300, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'اسم مُتعلَّم لعدة أصناف'
+        verbose_name_plural = 'الأسماء المُتعلَّمة لعدة أصناف'
+        unique_together     = ('normalized', 'vendor_code', 'items_key')
+        ordering            = ['-use_count']
+
+    def __str__(self):
+        return f'{self.normalized} → {self.item_ids} (×{self.use_count})'
+
+
+class ItemSupplierLink(models.Model):
+    """Nightly mirror of SOFTECH ``itemssuppliers`` — which supplier carries which item,
+    the supplier's OWN product code for it (``suppitemcode``, often blank) and the main
+    supplier flag. Read-only copy (apps/catalog/supplier_links.py), so supplier codes and
+    "this supplier carries it" work while SOFTECH is unreachable. SOFTECH stays the truth:
+    writes still go through apps/invoices/supplier_items.inject_mapping only."""
+    item_code      = models.CharField(max_length=10, db_index=True, verbose_name='كود الصنف')
+    item           = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='supplier_links', verbose_name='الصنف')
+    supp_code      = models.CharField(max_length=10, db_index=True, verbose_name='كود المورد')
+    supp_item_code = models.CharField(max_length=60, blank=True, db_index=True,
+                                      verbose_name='كود الصنف لدى المورد')
+    is_main        = models.BooleanField(default=False, verbose_name='المورد الأساسي')
+    synced_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'صنف لدى مورد (SOFTECH)'
+        verbose_name_plural = 'أصناف الموردين (SOFTECH)'
+        unique_together     = ('item_code', 'supp_code')
+        indexes = [models.Index(fields=['supp_code', 'supp_item_code'], name='isl_supp_code_idx')]
+
+    def __str__(self):
+        return f'{self.supp_code}:{self.supp_item_code or "—"} → {self.item_code}'

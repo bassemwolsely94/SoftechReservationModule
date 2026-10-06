@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
+import { wildcardMatch } from '../utils/wildcard'
 
 const daysBehind = (d) => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return Math.max(0, Math.floor(ms / 86400000)) }
 
@@ -83,6 +84,8 @@ const tierMeta = (t) => TIERS.find(x => t?.startsWith(x.key)) || TIERS[2]
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['shortage-candidates', 'shortage-confirmed', 'shortage-dismissed',
   'shortage-deltas', 'shortage-medtypes'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
+// Surface a failed action instead of failing silently (buttons used to give no feedback).
+const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء — حاول مجددًا.')
 
 // ── Sortable-table helpers (shared) ──────────────────────────────────────────
 function useSort(initKey = '', initDir = 'desc') {
@@ -119,7 +122,7 @@ const matchFilter = (r, med, q) => {
   if (med && (r.med_type_code || '') !== med) return false
   if (q) {
     const s = q.trim().toLowerCase()
-    if (!(`${r.name}`.toLowerCase().includes(s) || `${r.code}`.toLowerCase().includes(s))) return false
+    if (!(wildcardMatch(r.name, q) || `${r.code}`.toLowerCase().includes(s))) return false
   }
   return true
 }
@@ -145,9 +148,10 @@ function DismissModal({ item, onClose }) {
   const [matches, setMatches] = useState([])   // up to 2 matching products
   const REASONS = [
     ['variant', 'مقاس/شكل بديل لمنتج متاح'],
-    ['on_request', 'يُطلب عند الحاجة فقط'],
+    ['on_request', 'يُطلب عند الحاجة'],
     ['obsolete', 'غير متوفر بالسوق المصري'],
-    ['not_shortage', 'ليس نقصًا (موقوف/موسمي)'],
+    ['not_shortage', 'ليس ناقصًا (موقوف/موسمي)'],
+    ['false_positive', 'اكتشاف خاطئ — ليس ناقصًا'],
     ['other', 'أخرى'],
   ]
   const { data: search } = useQuery({
@@ -368,8 +372,8 @@ function CandidatesTab({ med, q }) {
     queryKey: ['shortage-candidates'],
     queryFn: () => purchasingApi.shortageCandidates({ include_flagged: '0' }).then(r => r.data),
   })
-  const confirm = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, source: 'auto' }), onSuccess: () => invalidate(qc) })
-  const notShortage = useMutation({ mutationFn: (id) => purchasingApi.shortageDismiss({ item_id: id, reason: 'not_shortage' }), onSuccess: () => invalidate(qc) })
+  const confirm = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, source: 'auto' }), onSuccess: () => invalidate(qc), onError: onErr })
+  const notShortage = useMutation({ mutationFn: (id) => purchasingApi.shortageDismiss({ item_id: id, reason: 'not_shortage' }), onSuccess: () => invalidate(qc), onError: onErr })
   const [sortBy, setSortBy] = useState('severity')
   const counts = data?.tier_counts || {}
   let rows = (data?.candidates || []).filter(c => (!tier || c.tier.startsWith(tier)) && matchFilter(c, med, q))
@@ -413,10 +417,10 @@ function ChangesTab({ med, q }) {
   const [dismissItem, setDismissItem] = useState(null)
   const { data, isLoading } = useQuery({ queryKey: ['shortage-deltas'],
     queryFn: () => purchasingApi.shortageDeltas().then(r => r.data) })
-  const confirm = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, source: 'auto' }), onSuccess: () => invalidate(qc) })
-  const notShortage = useMutation({ mutationFn: (id) => purchasingApi.shortageDismiss({ item_id: id, reason: 'not_shortage' }), onSuccess: () => invalidate(qc) })
-  const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc) })
-  const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc) })
+  const confirm = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, source: 'auto' }), onSuccess: () => invalidate(qc), onError: onErr })
+  const notShortage = useMutation({ mutationFn: (id) => purchasingApi.shortageDismiss({ item_id: id, reason: 'not_shortage' }), onSuccess: () => invalidate(qc), onError: onErr })
+  const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc), onError: onErr })
+  const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc), onError: onErr })
   if (isLoading) return <p className="text-gray-400 py-8 text-center">جارٍ التحميل…</p>
   const flt = (arr) => (arr || []).filter(c => matchFilter(c, med, q))
   const newRows = flt(data.new), recovering = flt(data.recovering), reEntered = flt(data.re_entered)
@@ -435,7 +439,9 @@ function ChangesTab({ med, q }) {
             <div key={c.item_id} className="flex items-center justify-between px-4 py-2 text-sm">
               <span><span className="font-mono text-xs text-gray-400">{c.code}</span> — {c.name}
                 <span className="text-xs text-emerald-600 mr-2">تغطية {c.coverage.toFixed(1)} شهر</span></span>
-              <button onClick={() => clear.mutate(c.item_id)} className="px-3 py-1 text-xs text-emerald-700 border border-emerald-300 rounded hover:bg-emerald-50">أزل النقص (توفّر)</button>
+              <button onClick={() => clear.mutate(c.item_id)} disabled={clear.isPending}
+                className="px-3 py-1 text-xs text-emerald-700 border border-emerald-300 rounded hover:bg-emerald-50 disabled:opacity-50">
+                {clear.isPending && clear.variables === c.item_id ? '…' : 'أزل النقص (توفّر)'}</button>
             </div>
           ))}
         </div>
@@ -447,7 +453,9 @@ function ChangesTab({ med, q }) {
           {reEntered.map(c => (
             <div key={c.item_id} className="flex items-center justify-between px-4 py-2 text-sm">
               <span><TierBadge tier={c.tier} /> <span className="font-mono text-xs text-gray-400 mr-1">{c.code}</span> — {c.name}</span>
-              <button onClick={() => retrieve.mutate(c.item_id)} className="px-3 py-1 text-xs text-orange-700 border border-orange-300 rounded hover:bg-orange-50">استرجاع للمراجعة</button>
+              <button onClick={() => retrieve.mutate(c.item_id)} disabled={retrieve.isPending}
+                className="px-3 py-1 text-xs text-orange-700 border border-orange-300 rounded hover:bg-orange-50 disabled:opacity-50">
+                {retrieve.isPending && retrieve.variables === c.item_id ? '…' : 'استرجاع للمراجعة'}</button>
             </div>
           ))}
         </div>
@@ -494,7 +502,7 @@ function ConfirmedTab({ med, q }) {
   const [dismissItem, setDismissItem] = useState(null)
   const { data, isLoading } = useQuery({ queryKey: ['shortage-confirmed', ''],
     queryFn: () => purchasingApi.shortageConfirmed().then(r => r.data) })
-  const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc) })
+  const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc), onError: onErr })
   const sort = useSort()
   const items = applySort((data?.items || []).filter(r => matchFilter(r, med, q)), sort, {
     code: r => r.code, name: r => r.name, med: r => r.med_type,
@@ -554,7 +562,7 @@ function DismissedTab({ med, q }) {
   const [reason, setReason] = useState('')
   const { data, isLoading } = useQuery({ queryKey: ['shortage-dismissed'],
     queryFn: () => purchasingApi.shortageDismissed().then(r => r.data) })
-  const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc) })
+  const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc), onError: onErr })
   const sort = useSort('', 'asc')
   const items = applySort((data?.items || []).filter(r => (!reason || r.reason === reason) && matchFilter(r, med, q)), sort, {
     code: r => r.code, name: r => r.name, reason: r => r.reason_label,

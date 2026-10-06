@@ -281,8 +281,10 @@ def compute_claim_discrepancy(claim: InsuranceClaim, tarsia_codes: set | None = 
                       else 'rate_change')
 
             detail.append({
+                'line_id':         ln.pk,
                 'prescription_id': ln.prescription_id,
                 'docnumber':       ln.prescription.softech_docnumber,
+                'branchcode':      ln.prescription.softech_branchcode,
                 'patient_name':    ln.prescription.patient_name,
                 'docdate':         ln.prescription.softech_docdate.isoformat()
                                    if ln.prescription.softech_docdate else None,
@@ -360,7 +362,7 @@ def compute_claim_discrepancy(claim: InsuranceClaim, tarsia_codes: set | None = 
 
 def apply_current_master(claim: InsuranceClaim, tarsia_codes: set | None = None,
                          apply_price: bool = True, apply_category: bool = True,
-                         user=None) -> dict:
+                         line_ids: set | None = None, user=None) -> dict:
     """
     Re-freeze the claim's lines + prescription totals to CURRENT item master data.
 
@@ -372,6 +374,11 @@ def apply_current_master(claim: InsuranceClaim, tarsia_codes: set | None = None,
     Flags let the caller choose what to apply:
       apply_category — adopt the current محلى/مستورد/ترسية classification
       apply_price    — adopt the current سعر الجمهور (unit price before discount)
+      line_ids       — if given, ONLY these InsuranceClaimLine ids are re-frozen;
+                       every other line keeps its frozen value (but still counts
+                       toward its prescription's re-aggregated totals).  Lets the
+                       user apply corrections to a hand-picked subset of the table
+                       instead of the whole claim.
 
     Manual per-prescription adjustments (InsuranceClaimAdjustment) are left
     intact — they continue to layer on top in the invoice builder.
@@ -430,9 +437,18 @@ def apply_current_master(claim: InsuranceClaim, tarsia_codes: set | None = None,
         run = InsuranceApplyMasterRun.objects.create(
             claim=claim, applied_by=user,
             apply_price=apply_price, apply_category=apply_category,
+            scope_line_ids=(sorted(line_ids) if line_ids is not None else None),
             net_before=net_before, pre_state=pre_state,
         )
         backups = []   # bulk-created after the loop
+        skipped = []   # lines that raised — skipped-and-logged, batch continues
+
+        def _agg_add(bucket, cat, amount):
+            # Tolerate a stray/blank frozen category so ONE malformed line can't
+            # KeyError-crash the whole batch; unknown → LOCAL bucket (surfaced).
+            if cat not in bucket:
+                cat = ITEM_CATEGORY_LOCAL
+            bucket[cat] += amount
 
         for rx in prescriptions:
             rx_lines = list(rx.lines.all())
@@ -443,52 +459,84 @@ def apply_current_master(claim: InsuranceClaim, tarsia_codes: set | None = None,
 
             line_objs_to_save = []
             for ln in rx_lines:
-                item = item_map.get(ln.softech_itemcode)
-                qty  = Decimal(str(ln.quantity or 0))
+                # When a subset was picked, untouched lines keep their frozen value
+                # but must still contribute to the prescription re-aggregation.
+                if line_ids is not None and ln.pk not in line_ids:
+                    _agg_add(agg, ln.item_category, Decimal(str(ln.line_total or 0)))
+                    continue
 
-                new_cat   = ln.item_category
-                new_unit  = Decimal(str(ln.unit_price or 0))
-                if item:
-                    if apply_category:
-                        new_cat = classify_item(
-                            imported_origin='1' if item.is_imported else '0',
-                            store_classif=item.store_classif,
-                            tarsia_codes=tarsia_codes,
-                            item_code=ln.softech_itemcode,
-                            overrides=_overrides,
-                        )
-                    if apply_price:
-                        new_unit = Decimal(str(item.pack_price or 0))
+                try:
+                    item = item_map.get(ln.softech_itemcode)
+                    qty  = Decimal(str(ln.quantity or 0))
 
-                new_total = (new_unit * qty).quantize(_Q)
-                disc, net = calculate_line_discount(
-                    new_cat, new_total, rates['local'], rates['imported'], rates['tarsia'],
-                )
+                    new_cat   = ln.item_category
+                    new_unit  = Decimal(str(ln.unit_price or 0))
+                    if item:
+                        if apply_category:
+                            new_cat = classify_item(
+                                imported_origin='1' if item.is_imported else '0',
+                                store_classif=item.store_classif,
+                                tarsia_codes=tarsia_codes,
+                                item_code=ln.softech_itemcode,
+                                overrides=_overrides,
+                            )
+                        if apply_price:
+                            new_unit = Decimal(str(item.pack_price or 0))
 
-                if (new_cat != ln.item_category
-                        or new_unit != Decimal(str(ln.unit_price or 0))
-                        or new_total != Decimal(str(ln.line_total or 0))):
-                    # Snapshot BEFORE values for undo/audit
-                    backups.append(InsuranceClaimLineBackup(
-                        run=run, line=ln,
-                        item_category=ln.item_category,
-                        unit_price=ln.unit_price,
-                        line_total=ln.line_total,
-                        discount_pct=ln.discount_pct,
-                        discount_amt=ln.discount_amt,
-                        net_amount=ln.net_amount,
-                    ))
-                    ln.item_category = new_cat
-                    ln.unit_price    = new_unit
-                    ln.line_total    = new_total
-                    ln.discount_pct  = _rate_for(new_cat, rates)
-                    ln.discount_amt  = disc
-                    ln.net_amount    = net
-                    line_objs_to_save.append(ln)
-                    lines_updated += 1
-                    rx_dirty = True
+                    # Derive the new gross by SCALING the frozen gross by the price
+                    # ratio — NOT by re-multiplying the stored quantity.  The quantity
+                    # column keeps only 3 decimals (⅔ → 0.667) while the frozen
+                    # line_total was computed at import from the FULL-precision qty
+                    # (0.66667 × 81 = 54.00).  Re-multiplying the truncated qty here
+                    # inflates it (0.667 × 81 = 54.03) — the exact SOFTECH gross drift
+                    # the user hit on the August motalbas.  Scaling preserves the true
+                    # unit economics: price unchanged → gross byte-identical to frozen;
+                    # price changed → new_price × true_qty, matching SOFTECH exactly.
+                    frozen_unit_dec = Decimal(str(ln.unit_price or 0))
+                    frozen_total_dec = Decimal(str(ln.line_total or 0))
+                    if frozen_unit_dec > 0:
+                        new_total = (frozen_total_dec * new_unit / frozen_unit_dec).quantize(_Q)
+                    else:
+                        new_total = (new_unit * qty).quantize(_Q)
+                    disc, net = calculate_line_discount(
+                        new_cat, new_total, rates['local'], rates['imported'], rates['tarsia'],
+                    )
 
-                agg[new_cat] += new_total
+                    if (new_cat != ln.item_category
+                            or new_unit != Decimal(str(ln.unit_price or 0))
+                            or new_total != Decimal(str(ln.line_total or 0))):
+                        # Snapshot BEFORE values for undo/audit
+                        backups.append(InsuranceClaimLineBackup(
+                            run=run, line=ln,
+                            item_category=ln.item_category,
+                            unit_price=ln.unit_price,
+                            line_total=ln.line_total,
+                            discount_pct=ln.discount_pct,
+                            discount_amt=ln.discount_amt,
+                            net_amount=ln.net_amount,
+                        ))
+                        ln.item_category = new_cat
+                        ln.unit_price    = new_unit
+                        ln.line_total    = new_total
+                        ln.discount_pct  = _rate_for(new_cat, rates)
+                        ln.discount_amt  = disc
+                        ln.net_amount    = net
+                        line_objs_to_save.append(ln)
+                        lines_updated += 1
+                        rx_dirty = True
+
+                    _agg_add(agg, new_cat, new_total)
+                except Exception as _line_exc:
+                    # One malformed line must not roll back the whole batch: keep
+                    # its frozen value in the re-aggregation and record why it was
+                    # skipped so the UI can surface the exact culprit.
+                    _agg_add(agg, ln.item_category, Decimal(str(ln.line_total or 0)))
+                    skipped.append({
+                        'line_id':  ln.pk,
+                        'itemcode': ln.softech_itemcode,
+                        'error':    str(_line_exc),
+                        'error_type': type(_line_exc).__name__,
+                    })
 
             if line_objs_to_save:
                 InsuranceClaimLine.objects.bulk_update(
@@ -546,6 +594,8 @@ def apply_current_master(claim: InsuranceClaim, tarsia_codes: set | None = None,
         'net_before':            _f(net_before),
         'net_after':             _f(net_after),
         'net_delta':             _f(net_after - net_before),
+        'skipped':               skipped,
+        'skipped_count':         len(skipped),
     }
 
 
@@ -1064,3 +1114,120 @@ def revert_apply_run(run, user=None) -> dict:
         'net_after':      _f(net_after),
         'net_delta':      _f(net_after - net_before),
     }
+
+
+def line_variance_map(claim: InsuranceClaim, lines, tarsia_codes: set | None = None) -> dict:
+    """
+    READ-ONLY per-line drift check for a set of InsuranceClaimLine objects (one
+    prescription's بنود).  Returns {line_id: variance} where variance flags a line
+    whose CURRENT master classification and/or public price differs from its
+    FROZEN snapshot — the item driving a prescription's variance.  Display-only:
+    it never mutates the snapshot and never touches exports (which use frozen
+    values).  Mirrors compute_claim_discrepancy's per-line logic exactly.
+    """
+    tarsia_codes = tarsia_codes or DEFAULT_TARSIA_CLASSIF_CODES
+    _overrides = load_classification_overrides()
+    rates = {
+        'local':    Decimal(str(claim.applied_local_disc_pct    or 0)),
+        'imported': Decimal(str(claim.applied_imported_disc_pct or 0)),
+        'tarsia':   Decimal(str(claim.applied_tarsia_disc_pct   or 0)),
+    }
+    codes = {ln.softech_itemcode for ln in lines if ln.softech_itemcode}
+    item_map = {
+        i.softech_id: i
+        for i in Item.objects.filter(softech_id__in=codes)
+        .only('softech_id', 'name', 'is_imported', 'store_classif', 'pack_price')
+    }
+
+    out = {}
+    for ln in lines:
+        item = item_map.get(ln.softech_itemcode)
+        frozen_cat  = ln.item_category
+        frozen_unit = Decimal(str(ln.unit_price or 0))
+        line_total  = Decimal(str(ln.line_total or 0))
+        frozen_net  = Decimal(str(ln.net_amount or 0))
+
+        # Deterministic SOFTECH-classification disagreement: how SOFTECH's OWN raw
+        # fields (frozen at import) would classify the line, vs the category we
+        # actually applied.  A real driver of net divergence — no live round-trip.
+        soft_raw_cat = classify_item(
+            imported_origin='1' if ln.softech_imported_flag else '0',
+            store_classif=ln.softech_store_classif, tarsia_codes=tarsia_codes,
+            item_code=ln.softech_itemcode, overrides={},
+        )
+        soft_mismatch = soft_raw_cat != frozen_cat
+
+        # Value-discrepancy detector (partial-pack rounding).  The quantity column
+        # keeps only 3 decimals; a 5dp SOFTECH pack fraction like ⅔ = 0.66667 is
+        # truncated to 0.667.  A line drifts from SOFTECH only when its frozen
+        # gross was (re)computed from that truncated qty AND the multiplication
+        # actually LOST precision — i.e. the raw product unit×qty_3dp has a non-zero
+        # 3rd decimal that had to be rounded away.  JUSPRIN ⅔: 81×0.667 = 54.027 →
+        # rounds to 54.03 (SOFTECH's true gross is 81×0.66667 = 54.00) → FLAG.  A
+        # quantity that is already exact at 3dp (3.5, 1.6, 0.4) yields a clean
+        # product (90×3.5 = 315.000) and is NOT a discrepancy even though fractional.
+        # Correctly-imported partial-pack lines also don't match (their gross 54.00
+        # ≠ round(81×0.667)=54.03), so this isolates exactly the drifted lines.
+        qty_dec = Decimal(str(ln.quantity or 0))
+        is_fractional = (qty_dec % 1) != 0
+        raw_from_qty = frozen_unit * qty_dec
+        value_discrepancy = bool(is_fractional and frozen_unit > 0
+                                 and raw_from_qty.quantize(_Q) == line_total
+                                 and raw_from_qty != raw_from_qty.quantize(_Q))
+
+        # Discount-discrepancy detector: our per-line net (uniform category rate) vs
+        # SOFTECH's OWN net for the line (transprice_total, captured at import).  When
+        # SOFTECH charged a different per-item contract discount, the two differ — this
+        # is the line that drives the prescription's softech_net_diff, now pinpointed.
+        soft_line_net = ln.softech_line_net
+        soft_net_diff = None
+        discount_discrepancy = False
+        if soft_line_net is not None:
+            soft_net_diff = (frozen_net - Decimal(str(soft_line_net))).quantize(_Q)
+            discount_discrepancy = abs(soft_net_diff) > Decimal('0.05')
+
+        _extra = {
+            'value_discrepancy':      value_discrepancy,
+            'discount_discrepancy':   discount_discrepancy,
+            'softech_line_net':       _f(soft_line_net) if soft_line_net is not None else None,
+            'softech_net_diff':       _f(soft_net_diff) if soft_net_diff is not None else None,
+        }
+
+        if not item:
+            out[ln.pk] = {'has_variance': False, 'item_not_found': True,
+                          'softech_class_mismatch': soft_mismatch,
+                          'softech_raw_category': soft_raw_cat,
+                          'softech_raw_category_label': _CAT_LABEL.get(soft_raw_cat, soft_raw_cat),
+                          **_extra}
+            continue
+        current_cat = classify_item(
+            imported_origin='1' if item.is_imported else '0',
+            store_classif=item.store_classif, tarsia_codes=tarsia_codes,
+            item_code=ln.softech_itemcode, overrides=_overrides,
+        )
+        current_unit = Decimal(str(item.pack_price or 0))
+        if frozen_unit > 0:
+            current_total = (line_total * current_unit / frozen_unit).quantize(_Q)
+        else:
+            current_total = (current_unit * Decimal(str(ln.quantity or 0))).quantize(_Q)
+        current_disc = (current_total * _rate_for(current_cat, rates) / 100).quantize(_Q)
+        current_net  = current_total - current_disc
+
+        cat_changed   = current_cat != frozen_cat
+        price_changed = abs(current_unit - frozen_unit) > Decimal('0.001')
+        net_delta     = current_net - frozen_net
+        has = cat_changed or price_changed or abs(net_delta) > Decimal('0.01')
+        out[ln.pk] = {
+            'has_variance':    has,
+            'cat_changed':     cat_changed,
+            'price_changed':   price_changed,
+            'current_category':       current_cat,
+            'current_category_label': _CAT_LABEL.get(current_cat, current_cat),
+            'current_unit_price':     _f(current_unit),
+            'net_delta':              _f(net_delta),
+            'softech_class_mismatch':     soft_mismatch,
+            'softech_raw_category':       soft_raw_cat,
+            'softech_raw_category_label': _CAT_LABEL.get(soft_raw_cat, soft_raw_cat),
+            **_extra,
+        }
+    return out

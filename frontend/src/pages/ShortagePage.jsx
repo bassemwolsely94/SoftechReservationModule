@@ -17,6 +17,7 @@ import { shortageApi, branchesApi, invoicesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import ItemSearchInput from '../components/ItemSearchInput'
+import useGridKeyboard from '../hooks/useGridKeyboard'
 import { createWorker } from 'tesseract.js'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
@@ -759,8 +760,9 @@ function VoiceInput({ onReview }) {
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 
-function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen }) {
+function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, openReq }) {
   const [showMatch, setShowMatch] = useState(false)
+  useEffect(() => { if (openReq?.id === si.id) setShowMatch(true) }, [openReq, si.id])   // M key
   const [editing,   setEditing]   = useState(false)
   const [qty,       setQty]       = useState(si.quantity_needed)
   const [rawName,   setRawName]   = useState(si.raw_name)
@@ -798,11 +800,12 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen }) {
         />
       )}
 
-      <div className={`border rounded-xl mb-1.5 overflow-hidden transition-all ${borderClass}`}>
+      <div ref={kb?.ref} onMouseDown={kb?.onMouseDown} data-kb-active={kb?.['data-kb-active']}
+        className={`border rounded-xl mb-1.5 overflow-hidden transition-all ${borderClass} ${kb?.className || ''}`}>
         <div className="flex items-start gap-3 px-3 py-2.5">
           {/* Status indicator */}
-          <div className="mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold
-            ${si.is_unmatched ? 'bg-gray-400' : si.is_confirmed ? 'bg-emerald-500' : si.item_name ? 'bg-blue-400' : 'bg-amber-400'}">
+          <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold
+            ${si.is_unmatched ? 'bg-gray-400' : si.is_confirmed ? 'bg-emerald-500' : si.item_name ? 'bg-blue-400' : 'bg-amber-400'}`}>
             {si.is_unmatched ? '✕' : si.is_confirmed ? '✓' : si.item_name ? '~' : '?'}
           </div>
 
@@ -931,6 +934,22 @@ function ShortageDetail({ listId, onBack }) {
   }, [listId])
 
   useEffect(() => { load() }, [load])
+
+  // keyboard flow (shared review-grid keys), rows in screen order: pending → confirmed →
+  // unmatched. Enter confirms the suggested item and moves on; M opens the match picker.
+  const kbRows = [...(sl?.items || []).filter(i => !i.is_confirmed && !i.is_unmatched),
+                  ...(sl?.items || []).filter(i => i.is_confirmed),
+                  ...(sl?.items || []).filter(i => i.is_unmatched)]
+  const [openReq, setOpenReq] = useState(null)
+  const kb = useGridKeyboard({
+    rows: kbRows, getKey: i => i.id, enabled: sl?.status === 'open', advanceOnConfirm: true,
+    onConfirm: async (si) => {
+      if (!si.item || si.is_confirmed) return
+      await shortageApi.updateItem(listId, si.id, { item: si.item, is_confirmed: true })
+      try { setSl((await shortageApi.get(listId)).data) } catch { /* next load */ }   // quiet refresh
+    },
+    onOpen: si => setOpenReq(r => ({ id: si.id, n: (r?.n || 0) + 1 })),
+  })
 
   // ── Manual add (free text) ───────────────────────────────────────────────────
   const handleAddSingle = async () => {
@@ -1104,7 +1123,7 @@ function ShortageDetail({ listId, onBack }) {
     load()
   }
 
-  if (loading) return (
+  if (loading && !sl) return (
     <div className="flex items-center justify-center h-64 text-gray-400 animate-pulse">جاري التحميل...</div>
   )
   if (!sl) return null
@@ -1432,7 +1451,8 @@ function ShortageDetail({ listId, onBack }) {
             <div>أضف أصنافاً باستخدام أي من طرق الإدخال أعلاه</div>
           </div>
         ) : (
-          <div className="max-w-3xl">
+          <div {...kb.containerProps} className={`max-w-3xl ${kb.containerProps.className}`}>
+            {isOpen && <div className="text-[11px] text-gray-400 mb-1">⌨ ↑↓ تنقل · Enter تأكيد والتالي · M اختيار الصنف</div>}
             {/* Group: pending review first */}
             {pending > 0 && (
               <div className="mb-1 text-xs font-semibold text-amber-600 flex items-center gap-1.5">
@@ -1446,6 +1466,7 @@ function ShortageDetail({ listId, onBack }) {
                 <ShortageItemRow
                   key={si.id} item={si} listId={listId}
                   onUpdated={load} onDelete={handleDelete} isOpen={isOpen}
+                  kb={kb.rowProps(si, { block: true })} openReq={openReq}
                 />
               ))}
 
@@ -1459,6 +1480,7 @@ function ShortageDetail({ listId, onBack }) {
               <ShortageItemRow
                 key={si.id} item={si} listId={listId}
                 onUpdated={load} onDelete={handleDelete} isOpen={isOpen}
+                kb={kb.rowProps(si, { block: true })} openReq={openReq}
               />
             ))}
 
@@ -1472,6 +1494,7 @@ function ShortageDetail({ listId, onBack }) {
               <ShortageItemRow
                 key={si.id} item={si} listId={listId}
                 onUpdated={load} onDelete={handleDelete} isOpen={isOpen}
+                kb={kb.rowProps(si, { block: true })} openReq={openReq}
               />
             ))}
           </div>

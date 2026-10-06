@@ -109,7 +109,7 @@ export default function MobileShortageDetailPage() {
         setMsg('لم يتم استخراج أصناف من الصورة')
       }
     } catch (err) {
-      setMsg(err.response?.status === 503 ? 'محرك OCR غير متاح على الخادم' : 'تعذّرت قراءة الصورة')
+      setMsg(err.response?.status === 503 ? 'محرك OCR غير متاح على السيرفر' : 'تعذّرت قراءة الصورة')
     } finally {
       setOcrBusy(false)
       e.target.value = ''

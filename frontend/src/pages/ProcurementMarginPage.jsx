@@ -190,7 +190,7 @@ function PriceControlTab() {
         <label className="text-sm text-gray-600 flex items-center gap-2">
           حد التذبذب المئوي:
           <input
-            type="number" min={0} max={100} value={minDrift}
+            type="number" step="0.5" min={0} max={100} value={minDrift}
             onChange={e => setMinDrift(Number(e.target.value))}
             className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center"
           />

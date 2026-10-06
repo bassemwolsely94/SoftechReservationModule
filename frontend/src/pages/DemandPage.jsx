@@ -350,7 +350,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
                       value={row.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
                       className="w-20 border border-amber-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-amber-400" />
                     <div className="flex items-center gap-1">
-                      <input type="number" min="0" step="0.01" placeholder="سعر العبوة (تقديري)"
+                      <input type="number" min="0" step="any" placeholder="سعر العبوة (تقديري)"
                         value={row.price} onChange={e => updateItem(idx, 'price', e.target.value)}
                         className="w-36 border border-amber-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-amber-400" />
                       <span className="text-[10px] text-amber-600">ج.م · تقديري</span>

@@ -108,19 +108,19 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1 text-right">أيام مسبقة للاستحقاق</label>
-          <input type="number" min={0} max={30} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.advance_days} onChange={e => set('advance_days', parseInt(e.target.value) || 1)} />
+          <input type="number" min={0} max={30} step={1} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.advance_days} onChange={e => set('advance_days', parseInt(e.target.value) || 1)} />
         </div>
 
         {form.frequency === 'weekly' && (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1 text-right">يوم الأسبوع (0=الاثنين)</label>
-            <input type="number" min={0} max={6} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.day_of_week} onChange={e => set('day_of_week', e.target.value)} />
+            <input type="number" min={0} max={6} step={1} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.day_of_week} onChange={e => set('day_of_week', e.target.value)} />
           </div>
         )}
         {form.frequency === 'monthly' && (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1 text-right">يوم الشهر (1-31)</label>
-            <input type="number" min={1} max={31} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.day_of_month} onChange={e => set('day_of_month', e.target.value)} />
+            <input type="number" min={1} max={31} step={1} className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.day_of_month} onChange={e => set('day_of_month', e.target.value)} />
           </div>
         )}
 

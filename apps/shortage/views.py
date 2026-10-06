@@ -33,7 +33,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ShortageList, ShortageItem
-from .matching import find_best_matches, _normalize, parse_quantity_from_text, dedup_key
+from .matching import find_best_matches, _normalize, dedup_key
+from apps.supply.ingest import parse_entry, resolve_line, teach_alias
 from .stock_check import check_stock_for_list
 from .export import export_list_excel, export_aggregated_excel
 from .serializers import (
@@ -49,6 +50,39 @@ logger = logging.getLogger('elrezeiky.shortage')
 
 # Below this catalog-match score an OCR'd line is flagged for human review.
 _OCR_REVIEW_THRESHOLD = 0.55
+
+
+def _link_corpus_confirmation(list_pk, raw_name, item):
+    """Label the list's banked OCR sample with a human confirmation (best-effort)."""
+    if not item:
+        return
+    try:
+        from apps.vision.models import OcrSample, add_confirmation
+        s = (OcrSample.objects.filter(module='purchasing_shortage', source_ref=str(list_pk or ''))
+             .order_by('-created_at').first())
+        if s:
+            add_confirmation(s.id, reading=raw_name, item=item)
+    except Exception:
+        pass
+
+
+def _bank_ocr_sample(image_file, readings, list_pk, user, engine='gemini', engine_readings=None):
+    """Bank a purchasing-shortage OCR image into the in-house corpus (best-effort),
+    including per-engine readings when engines ran in parallel."""
+    try:
+        image_file.seek(0)
+    except Exception:
+        pass
+    try:
+        from apps.vision.models import record_sample
+        s = record_sample(module='purchasing_shortage', media_type='image', engine=engine,
+                          image=image_file, raw_readings=readings or [], user=user,
+                          source_ref=str(list_pk or ''))
+        if s and engine_readings:
+            s.engine_readings = engine_readings
+            s.save(update_fields=['engine_readings'])
+    except Exception:
+        pass
 
 
 def _ocr_response(lines: list, engine: str, raw_text: str, readings: list = None) -> dict:
@@ -395,16 +429,12 @@ class ShortageListViewSet(viewsets.ModelViewSet):
 
         # Auto-match (top-1 at high threshold) — user must still confirm
         if not item.item_id:
-            matches = find_best_matches(item.raw_name, top_n=1, min_score=0.70)
-            if matches:
-                from apps.catalog.models import Item
-                best = matches[0]
-                try:
-                    item.item        = Item.objects.get(pk=best['item_id'])
-                    item.match_score = best['score']
-                    item.save(update_fields=['item', 'match_score'])
-                except Item.DoesNotExist:
-                    pass
+            from apps.supply.ingest import AUTO_MATCH_SINGLE
+            resolved = resolve_line(item.raw_name, threshold=AUTO_MATCH_SINGLE)
+            if resolved.item is not None:
+                item.item        = resolved.item
+                item.match_score = resolved.score
+                item.save(update_fields=['item', 'match_score'])
 
         return Response(ShortageItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
@@ -422,9 +452,6 @@ class ShortageListViewSet(viewsets.ModelViewSet):
 
         Returns { created: [...], skipped: [...] }.
         """
-        from apps.catalog.models import Item as CatalogItem
-        from .matching import learn_alias
-
         # Key on (drug_name, strength) — same drug, different concentration = allowed
         existing_keys = {
             dedup_key(n)
@@ -435,64 +462,58 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         skipped = []
 
         for entry in lines:
-            if isinstance(entry, dict):
-                raw         = str(entry.get('raw', '')).strip()
-                override_id = entry.get('item_id')
-                override_sid = (entry.get('item_softech_id') or '').strip() if entry.get('item_softech_id') else ''
-            else:
-                raw, override_id, override_sid = str(entry).strip(), None, ''
-            if not raw:
+            # Shared parse (quantity split + dedup key + optional explicit pick).
+            parsed = parse_entry(entry)
+            if parsed is None:
                 continue
 
-            raw_name, qty = parse_quantity_from_text(raw)
-            dk = dedup_key(raw_name)
-
-            if dk in existing_keys:
-                skipped.append(raw_name)
+            if parsed.dedup_key in existing_keys:
+                skipped.append(parsed.raw_name)
                 continue
-            existing_keys.add(dk)
+            existing_keys.add(parsed.dedup_key)
 
-            item_obj  = None
-            score     = None
-            picked    = False
+            # A remembered ONE-TO-MANY spelling ("ستربسلز كل النكهات" → the 3 flavours people
+            # picked before, apps/shortage/learning) → one row per item, unconfirmed.
+            if not (parsed.override_id or parsed.override_sid):
+                from .learning import lookup_alias_group
+                group = lookup_alias_group(parsed.raw_name)
+                if group:
+                    from apps.catalog.models import Item
+                    items = {i.id: i for i in Item.objects.filter(id__in=group['item_ids'])}
+                    for iid in group['item_ids']:
+                        if iid in items:
+                            si = ShortageItem.objects.create(
+                                shortage_list=shortage_list, raw_name=parsed.raw_name,
+                                quantity_needed=parsed.qty, item=items[iid], match_score=group['score'],
+                                source=source, notes='من الذاكرة · عدة أصناف')
+                            created.append(ShortageItemSerializer(si).data)
+                    continue
 
-            # 1. Explicit user pick wins (by PG pk, else SOFTECH itemcode) ──────
-            if override_id or override_sid:
-                try:
-                    item_obj = (CatalogItem.objects.get(pk=override_id) if override_id
-                                else CatalogItem.objects.get(softech_id=override_sid))
-                    score, picked = 1.0, True
-                except (CatalogItem.DoesNotExist, ValueError, TypeError):
-                    item_obj = None
-
-            # 2. Otherwise auto-match at medium threshold — user still confirms ─
-            if item_obj is None:
-                matches = find_best_matches(raw_name, top_n=1, min_score=0.55)
-                if matches:
-                    best = matches[0]
-                    try:
-                        item_obj = CatalogItem.objects.get(pk=best['item_id'])
-                        score    = best['score']
-                    except CatalogItem.DoesNotExist:
-                        pass
+            # Shared resolution: explicit pick wins, else auto-match at import threshold.
+            resolved = resolve_line(
+                parsed.raw_name,
+                override_id=parsed.override_id,
+                override_sid=parsed.override_sid,
+            )
 
             si = ShortageItem.objects.create(
                 shortage_list   = shortage_list,
-                raw_name        = raw_name,
-                quantity_needed = qty,
-                item            = item_obj,
-                match_score     = score,
+                raw_name        = parsed.raw_name,
+                quantity_needed = parsed.qty,
+                item            = resolved.item,
+                match_score     = resolved.score,
                 source          = source,
-                is_confirmed    = picked,
-                confirmed_by    = confirmed_by if picked else None,
-                confirmed_at    = timezone.now() if picked else None,
+                is_confirmed    = resolved.picked,
+                confirmed_by    = confirmed_by if resolved.picked else None,
+                confirmed_at    = timezone.now() if resolved.picked else None,
             )
             # A hand-picked correction is high-quality training for the corpus.
-            if picked and item_obj:
+            if resolved.picked and resolved.item:
                 try:
-                    learn_alias(raw_name, item_obj, source='shortage')
+                    teach_alias(parsed.raw_name, resolved.item, source='shortage')
                 except Exception as e:
-                    logger.warning('learn_alias failed on import for %r: %s', raw_name, e)
+                    logger.warning('learn_alias failed on import for %r: %s', parsed.raw_name, e)
+                _link_corpus_confirmation(getattr(shortage_list, 'pk', ''), parsed.raw_name, resolved.item)
             created.append(ShortageItemSerializer(si).data)
 
         return {'created': created, 'skipped': skipped}
@@ -543,41 +564,25 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         image_file = request.FILES['image']
 
         from django.conf import settings as django_settings
+        from apps.vision.ocr import run_engines, pick_primary
 
-        # ── 1. Google Gemini (optional, free tier) ─────────────────────────────
+        # Unified with the POS path: run every available engine IN PARALLEL (Gemini +
+        # in-house EasyOCR + Tesseract), keep the best for the UI, bank ALL engines'
+        # readings into the corpus so purchasing feeds the same accuracy comparison.
         gemini_key = getattr(django_settings, 'GEMINI_API_KEY', '') or ''
-        if gemini_key:
-            lines, engine, raw_text, readings = _ocr_gemini(image_file, gemini_key)
-            if lines is not None:
-                return Response(_ocr_response(lines, engine, raw_text, readings))
+        engine_readings = run_engines(image_file, api_key=gemini_key)
+        engine, primary = pick_primary(engine_readings)
+        if primary:
+            _bank_ocr_sample(image_file, primary, pk, request.user,
+                             engine=engine or 'gemini', engine_readings=engine_readings)
+            lines = [((r.get('readings') or [''])[0] + ' ' + (r.get('strength') or '')).strip()
+                     for r in primary]
+            return Response(_ocr_response(lines, engine, '', primary))
 
-        # ── 2. EasyOCR (local, no API key, good for handwriting) ──────────────
-        image_file.seek(0)
-        lines, engine, raw_text, readings = _ocr_easyocr(image_file)
-        if lines is not None:
-            return Response(_ocr_response(lines, engine, raw_text, readings))
-
-        # ── 3. pytesseract (printed text only) ────────────────────────────────
-        image_file.seek(0)
-        try:
-            import pytesseract
-            from PIL import Image
-            from .preprocess import preprocess_for_ocr
-            img      = Image.open(image_file).convert('RGB')
-            # Classical engine → binarized profile (crisp black/white on print).
-            img      = preprocess_for_ocr(img, binarize=True)
-            raw_text = pytesseract.image_to_string(img, lang='ara+eng', config='--psm 11 --oem 1')
-            lines    = _clean_ocr_lines(raw_text)
-            return Response(_ocr_response(lines, 'pytesseract', raw_text))
-        except ImportError:
-            pass
-        except Exception as exc:
-            logger.error('pytesseract OCR failed: %s', exc, exc_info=True)
-
-        # ── 4. Nothing available ───────────────────────────────────────────────
+        # ── Nothing available ──────────────────────────────────────────────────
         return Response(
             {'detail': (
-                'لا يوجد محرك OCR متاح على الخادم.\n'
+                'لا يوجد محرك OCR متاح على السيرفر.\n'
                 'الخيارات المجانية:\n'
                 '• EasyOCR (محلي): pip install easyocr\n'
                 '• Google Gemini (مجاني 1500 طلب/يوم): '
@@ -659,9 +664,17 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         except ShortageItem.DoesNotExist:
             return Response({'detail': 'العنصر غير موجود'}, status=status.HTTP_404_NOT_FOUND)
 
+        # the machine's suggestion before this edit (learning from corrections, below)
+        suggested_id = si.item_id if not si.is_confirmed else None
         ser = ShortageItemUpdateSerializer(si, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         si = ser.save()
+        if suggested_id and 'item' in request.data and si.item_id != suggested_id:
+            try:
+                from .learning import record_rejection
+                record_rejection(si.raw_name, suggested_id, source='shortage')
+            except Exception as e:
+                logger.warning('record_rejection failed for shortage item %s: %s', si.pk, e)
 
         # Auto-confirm when item is explicitly selected and not previously confirmed
         if si.item_id and not si.is_confirmed and request.data.get('is_confirmed'):
@@ -676,6 +689,7 @@ class ShortageListViewSet(viewsets.ModelViewSet):
                 learn_alias(si.raw_name, si.item, source='shortage')
             except Exception as e:
                 logger.warning('learn_alias failed for shortage item %s: %s', si.pk, e)
+            _link_corpus_confirmation(getattr(si, 'shortage_list_id', ''), si.raw_name, si.item)
 
         return Response(ShortageItemSerializer(si).data)
 

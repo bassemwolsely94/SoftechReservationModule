@@ -30,6 +30,14 @@ const ROLES = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, labe
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+const POS_CHANNELS = [
+  { value: 'cash', label: 'نقدى' }, { value: 'delivery', label: 'توصيل' },
+  { value: 'permanent', label: 'دائم' }, { value: 'contract', label: 'تعاقد' },
+  { value: 'insurance', label: 'تأمين' }, { value: 'employee', label: 'موظفين' },
+  { value: 'compensation', label: 'تعويضات' }, { value: 'donation', label: 'تبرعات' },
+  { value: 'card_receipt', label: 'بطاقة' },
+]
+
 function RoleBadge({ role }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
@@ -64,6 +72,7 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
     phone:               user?.phone          || '',
     hr_code:             user?.hr_code        || '',
     is_active:           user?.is_active      ?? true,
+    allowed_pos_channels: user?.allowed_pos_channels || [],
   })
 
   const [erpSearch, setErpSearch] = useState('')
@@ -307,6 +316,26 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
               />
               <span className="text-sm text-gray-700">وصول شامل لجميع الفروع</span>
             </label>
+
+            {/* POS channel RBAC — which sales channels this member may operate (empty = all) */}
+            <div className="pt-1">
+              <span className="text-sm text-gray-700 block mb-1">قنوات البيع المسموح بها
+                <span className="text-xs text-gray-400"> (فارغ = كل القنوات)</span></span>
+              <div className="flex flex-wrap gap-1.5">
+                {POS_CHANNELS.map(c => {
+                  const on = (form.allowed_pos_channels || []).includes(c.value)
+                  return (
+                    <button type="button" key={c.value}
+                      onClick={() => set('allowed_pos_channels', on
+                        ? form.allowed_pos_channels.filter(x => x !== c.value)
+                        : [...(form.allowed_pos_channels || []), c.value])}
+                      className={`text-xs px-2 py-1 rounded border ${on ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-300'}`}>
+                      {c.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             <label className="flex items-center gap-3 cursor-pointer">
               <input

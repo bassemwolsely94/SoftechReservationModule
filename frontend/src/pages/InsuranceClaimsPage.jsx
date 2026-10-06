@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
@@ -517,8 +518,11 @@ export default function InsuranceClaimsPage() {
   const [clients, setClients]         = useState([])
   const [subclients, setSubclients]   = useState([])
   const [selected, setSelected]       = useState(new Set())
+  const [deleting, setDeleting]       = useState(false)
   const [syncing, setSyncing]         = useState(false)
   const [cacheStats, setCacheStats]   = useState(null)
+  const [sortKey, setSortKey]         = useState('claim_number')
+  const [sortDir, setSortDir]         = useState('desc')
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState({
@@ -585,8 +589,7 @@ export default function InsuranceClaimsPage() {
       const q = filters.search.toLowerCase()
       list = list.filter(c =>
         c.claim_number?.toLowerCase().includes(q) ||
-        c.client_name?.includes(filters.search) ||
-        c.subclient_name?.includes(filters.search) ||
+        wildcardMatch([c.client_name, c.subclient_name], filters.search) ||
         c.softech_motalba_no?.includes(filters.search)
       )
     }
@@ -598,6 +601,46 @@ export default function InsuranceClaimsPage() {
     }
     return list
   }, [claims, filters.search, filters.date_from, filters.date_to])
+
+  // ── Sortable data grid ─────────────────────────────────────────────────────
+  // Column definition drives both the header row and the comparator.
+  const CLAIM_COLUMNS = [
+    { key: 'claim_number',        label: 'رقم المطالبة', type: 'text' },
+    { key: 'client_name',         label: 'العميل',       type: 'text' },
+    { key: 'subclient_name',      label: 'الفئة',        type: 'text' },
+    { key: 'period_from',         label: 'الفترة',       type: 'text' },
+    { key: 'final_rx_count',      label: 'الروشتات',     type: 'num', align: 'center' },
+    { key: 'final_gross_before',  label: 'الإجمالى',     type: 'num', align: 'left' },
+    { key: 'final_total_discount',label: 'الخصم',        type: 'num', align: 'left' },
+    { key: 'final_net_after',     label: 'الصافى',       type: 'num', align: 'left' },
+    { key: 'total_paid',          label: 'المُحصَّل',    type: 'num', align: 'left' },
+    { key: 'balance',             label: 'الرصيد',       type: 'num', align: 'left' },
+    { key: 'status',              label: 'الحالة',       type: 'text' },
+  ]
+
+  const sortBy = (key, type) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(type === 'text' ? 'asc' : 'desc')
+    }
+  }
+
+  const sortedClaims = useMemo(() => {
+    const col = CLAIM_COLUMNS.find(c => c.key === sortKey)
+    if (!col) return filteredClaims
+    const list = [...filteredClaims].sort((a, b) => {
+      let cmp
+      if (col.type === 'text') {
+        cmp = String(a[col.key] ?? '').localeCompare(String(b[col.key] ?? ''), 'ar-EG')
+      } else {
+        cmp = (Number(a[col.key]) || 0) - (Number(b[col.key]) || 0)
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return list
+  }, [filteredClaims, sortKey, sortDir])
 
   const filteredSubclients = useMemo(() =>
     subclients.filter(sc => !filters.client_id || String(sc.client_id) === String(filters.client_id)),
@@ -620,6 +663,33 @@ export default function InsuranceClaimsPage() {
     )
 
   const allSelected = filteredClaims.length > 0 && selected.size === filteredClaims.length
+
+  // ── Delete motalba(s) ──────────────────────────────────────────────────────
+  // Removes our imported copy only (prescriptions/lines cascade). SOFTECH is
+  // untouched — the motalba can be re-imported. Used to drop a wrong/duplicate
+  // import for a period before pulling a fresh one.
+  const deleteClaims = async (ids) => {
+    const list = [...ids]
+    if (!list.length || deleting) return
+    const rows = claims.filter(c => list.includes(c.id))
+    const nums = rows.map(c => c.claim_number)
+    const locked = rows.filter(c => c.status && c.status !== 'draft')
+    let warn = ''
+    if (locked.length) warn = `\n⚠ ${locked.length} منها ليست مسودة (${locked.map(c => c.claim_number).slice(0,5).join('، ')}).`
+    if (!window.confirm(
+      `حذف ${list.length} مطالبة نهائياً؟\n${nums.slice(0, 12).join('، ')}${nums.length > 12 ? ' …' : ''}` +
+      `${warn}\n\nيُحذف الاستيراد المحلى فقط — بيانات سوفتك لا تتأثر ويمكن إعادة الاستيراد.`)) return
+    setDeleting(true)
+    let ok = 0, fail = []
+    for (const id of list) {
+      try { await insuranceApi.deleteClaim(id); ok++ }
+      catch (e) { fail.push(claims.find(c => c.id === id)?.claim_number || id) }
+    }
+    setSelected(new Set())
+    await load()
+    setDeleting(false)
+    if (fail.length) alert(`حُذف ${ok}. تعذّر حذف: ${fail.join('، ')}`)
+  }
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
   const totalNet     = filteredClaims.reduce((s, c) => s + Number(c.final_net_after || 0), 0)
@@ -744,7 +814,11 @@ export default function InsuranceClaimsPage() {
       {selected.size > 0 && (
         <div className="mx-6 mb-3 px-4 py-2.5 bg-blue-600 text-white rounded-lg flex items-center justify-between">
           <span className="text-sm font-medium">تم تحديد {selected.size} مطالبة</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <button onClick={() => deleteClaims(selected)} disabled={deleting}
+              className="text-xs bg-white/15 hover:bg-red-600 border border-white/30 rounded px-3 py-1 font-medium disabled:opacity-50">
+              {deleting ? '⏳ جارٍ الحذف…' : `🗑 حذف المحدد (${selected.size})`}
+            </button>
             <button onClick={() => setSelected(new Set())}
               className="text-xs text-blue-200 hover:text-white">إلغاء التحديد</button>
           </div>
@@ -773,14 +847,26 @@ export default function InsuranceClaimsPage() {
                   <th className="w-8 px-3 py-3">
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded" />
                   </th>
-                  {['رقم المطالبة', 'العميل', 'الفئة', 'الفترة', 'الروشتات',
-                    'الإجمالى', 'الخصم', 'الصافى', 'المُحصَّل', 'الرصيد', 'الحالة', ''].map(h => (
-                    <th key={h} className="text-right px-3 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
-                  ))}
+                  {CLAIM_COLUMNS.map(col => {
+                    const active = sortKey === col.key
+                    return (
+                      <th key={col.key}
+                        onClick={() => sortBy(col.key, col.type)}
+                        className={`px-3 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 ${
+                          col.align === 'left' ? 'text-left' : col.align === 'center' ? 'text-center' : 'text-right'
+                        } ${active ? 'text-blue-700' : 'text-gray-500'}`}>
+                        {col.label}
+                        <span className={`ml-1 ${active ? 'text-blue-600' : 'text-gray-300'}`}>
+                          {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                        </span>
+                      </th>
+                    )
+                  })}
+                  <th className="px-3 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredClaims.map(claim => (
+                {sortedClaims.map(claim => (
                   <tr key={claim.id}
                     className={`hover:bg-gray-50/70 cursor-pointer ${selected.has(claim.id) ? 'bg-blue-50' : ''}`}
                     onClick={() => navigate(`/insurance/claims/${claim.id}`)}>
@@ -806,11 +892,17 @@ export default function InsuranceClaimsPage() {
                     <td className="px-3 py-2.5 text-left font-mono text-green-700 text-xs">{fmt(claim.total_paid)}</td>
                     <td className="px-3 py-2.5 text-left font-mono text-amber-700 text-xs">{fmt(claim.balance)}</td>
                     <td className="px-3 py-2.5"><StatusBadge status={claim.status} /></td>
-                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                    <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => navigate(`/insurance/claims/${claim.id}/print`)}
-                        className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5 whitespace-nowrap">
+                        className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5">
                         طباعة
+                      </button>
+                      <button
+                        onClick={() => deleteClaims([claim.id])} disabled={deleting}
+                        title="حذف المطالبة (الاستيراد المحلى فقط)"
+                        className="text-xs text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 mr-1 disabled:opacity-50">
+                        🗑
                       </button>
                     </td>
                   </tr>

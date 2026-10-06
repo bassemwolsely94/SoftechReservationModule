@@ -147,9 +147,14 @@ def _normalize(text: str) -> str:
     # alef maqsura → ي
     text = re.sub(r'ى', 'ي', text)
     text = text.lower()
+    # Arabic-Indic / Persian digits → ASCII ("اوميز ١٠" == "اوميز 10")
+    text = text.translate(_DIGITS)
     # Remove punctuation except digits and Arabic/Latin letters
     text = re.sub(r'[^\w\s]', ' ', text)
     return ' '.join(text.split())
+
+
+_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')
 
 
 def _ar_to_en_phonetic(text: str, alt: bool = False) -> str:
@@ -627,13 +632,150 @@ def _build_prefilter_q(raw_name: str):
     return q
 
 
+def _arabic_name_q(raw_name: str):
+    """Items whose name contains an Arabic word of the line (≥3 letters, not a filler /
+    dosage-form word) — catalog names like «CETAL 120MG 5SUPP سيتال»."""
+    from django.db.models import Q
+    from . import phonetic
+    q = Q()
+    for tok in re.findall(r'[؀-ۿ]{3,}', _normalize(raw_name)):
+        if tok in phonetic.AR_FILLER or tok in phonetic.AR_FORMS or tok in phonetic.AR_WORDS:
+            continue
+        q |= Q(name__icontains=tok)
+    return q
+
+
+def _arabic_name_tokens(raw_name: str) -> list:
+    from . import phonetic
+    return [t for t in re.findall(r'[؀-ۿ]{2,}', _normalize(raw_name))
+            if t not in phonetic.AR_FILLER and t not in phonetic.AR_FORMS and t not in phonetic.AR_WORDS]
+
+
+def _arabic_word_score(q_tokens: list, item) -> float:
+    """Arabic line vs an item's ARABIC name words, WHOLE words (no substring credit):
+    0.92 for an exact first word, scaled by similarity; 0 below 0.8 (no evidence)."""
+    if not q_tokens:
+        return 0.0
+    it = re.findall(r'[؀-ۿ]{2,}', _normalize(item.name or ''))
+    if not it:
+        return 0.0
+    head = max(_ratio(q_tokens[0], t) for t in it)
+    if head < 0.8:
+        return 0.0
+    rest = q_tokens[1:]
+    cover = (sum(max(_ratio(q, t) for t in it) for q in rest) / len(rest)) if rest else 1.0
+    return round(0.62 + 0.30 * (0.8 * head + 0.2 * cover if rest else head), 4)
+
+
+def _sound_score(raw_name: str, item) -> float:
+    """Arabic line → Latin item by SOUND (apps/shortage/phonetic.sound_score) on the
+    matcher's 0..1 scale: a perfect sound match of the name = 0.92. Below 0.75 sound
+    similarity there is no evidence (0)."""
+    from . import phonetic
+    snd = phonetic.sound_score(raw_name, item.id)
+    return round(0.62 + 0.30 * snd, 4) if snd >= 0.75 else 0.0
+
+
+def _arabic_adjust(item, q_nums: list, q_forms: set, q_words: set) -> float:
+    """Agreement of the Arabic line's OTHER information with the item, added to its score:
+      numbers — the FIRST number written is usually the strength: +0.06 when it is the
+                item's first number, +0.03 when it appears elsewhere in the name, −0.05
+                when it doesn't appear at all (small: Arabic lines often end with a count);
+      form    — +0.03 when a dosage-form word (نقط → drop, جيل → gel …) is in the name;
+      words   — +0.04 per translated descriptor found (فواكه → fruit, اطفال → inf/pediatric,
+                مطهر → antiseptic, وومان → woman …), at most +0.08."""
+    name_l = (item.name or '').lower()
+    adj = 0.0
+    if q_nums:
+        item_nums = re.findall(r'\d+(?:\.\d+)?', name_l)
+        # the item's strength = its first number WITH a unit ("3FRUITS … 125GM" → 125)
+        unit_num = re.search(r'(\d+(?:\.\d+)?)\s*(?:mg|mcg|ug|µg|gm|g\b|ml|iu|%|m\.?i\.?u|billion)', name_l)
+        lead = unit_num.group(1) if unit_num else (item_nums[0] if item_nums else None)
+        # a stage / variant number standing alone — «NAN (1)», «HERO BABY 1 …» — counts as
+        # fully as a strength («نان 1» = NAN (1), not NANO … 1 L)
+        # (not a COUNT: "OMEZ 40 MG 10 CAP" — the 10 is the capsule count, not a variant)
+        standalone = re.findall(
+            r'(?:^|[\s(])(\d+(?:\.\d+)?)(?=\)|$|\s+(?!(?:tab|cap|sach|amp|vial|supp|loz|piece|pcs|strip|'
+            r'mg|ml|gm|g\b|mcg|iu|ug|caps|tablet|capsule)))', name_l)
+        if (lead is not None and float(q_nums[0]) == float(lead)) or \
+                any(float(q_nums[0]) == float(n) for n in standalone[:2]):
+            adj += 0.06
+        elif q_nums[0] in item_nums or any(float(q_nums[0]) == float(n) for n in item_nums):
+            adj += 0.03
+        else:
+            adj -= 0.05
+        # further numbers ("50/500" → the 500 tells 50/500 from 50/850)
+        others = [n for n in q_nums[1:4] if n != q_nums[0]]
+        if others:
+            adj += 0.02 * sum(1 for n in others if any(float(n) == float(m) for m in item_nums))
+    if q_forms and any(f in name_l for f in q_forms):
+        adj += 0.03
+    if q_words:
+        adj += min(0.08, 0.04 * sum(1 for w in q_words if w in name_l))
+    return adj
+
+
+class _trigram_indexes:
+    """Run the candidate prefilter on the trigram indexes (catalog mig 0041).
+
+    PostgreSQL badly over-estimates how many items match short '%BIB%' patterns (~17k of
+    51k), so it picks a sequential scan and evaluates the ~25–50 LIKE terms on every row:
+    1.1–1.5 s per lookup. Forced onto the indexes the same query returns the IDENTICAL
+    rows in ~0.02 s (measured 2026-10-04). enable_seqscan is switched off only for these
+    statements (SET LOCAL inside a savepoint) and restored right after."""
+
+    def __enter__(self):
+        from django.db import connection, transaction
+        self._atomic = None
+        if connection.vendor != 'postgresql':
+            return self
+        self._atomic = transaction.atomic()
+        self._atomic.__enter__()
+        with connection.cursor() as cur:
+            cur.execute('SET LOCAL enable_seqscan = off')
+        return self
+
+    def __exit__(self, *exc):
+        from django.db import connection
+        if self._atomic is None:
+            return False
+        try:
+            with connection.cursor() as cur:
+                cur.execute('SET LOCAL enable_seqscan = on')   # an outer transaction continues normally
+        except Exception:
+            pass
+        return self._atomic.__exit__(*exc)
+
+
+def _anchor_q(raw_name: str):
+    """Q for the read DRUG WORD(S) — letter-only tokens of ≥4 chars from the cleaned name
+    (no digits, not a dosage-form/pack word). Latin reads only; None when there is none."""
+    from django.db.models import Q
+    if _is_arabic(raw_name):
+        return None
+    clean = _normalize(extract_components(raw_name).name_clean)
+    toks = [t for t in clean.split()
+            if len(t) >= 4 and t.isalpha() and t[:3] not in _PREFILTER_SKIP_3
+            and not _FORM_LOOKUP.get(t)][:2]
+    if not toks:
+        return None
+    q = Q()
+    for t in toks:
+        q |= Q(name__icontains=t)
+    return q
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 _FALLBACK_LIMIT = 800   # when prefilter returns too few, scan this many items
+# Arabic → Latin sound matching (apps/shortage/phonetic). A switch only so the
+# eval_matching benchmark can measure the engine without it (--baseline).
+SOUND_MATCHING = True
 
 
 def find_best_matches(raw_name: str, top_n: int = 3,
-                      min_score: float = 0.20, vendor_code: str = '') -> list[dict]:
+                      min_score: float = 0.20, vendor_code: str = '',
+                      use_memory: bool = True) -> list[dict]:
     """
     Search the Item catalog for the best matches to raw_name.
 
@@ -650,14 +792,36 @@ def find_best_matches(raw_name: str, top_n: int = 3,
     """
     from apps.catalog.models import Item
 
-    learned = lookup_alias(raw_name, vendor_code=vendor_code)
+    # use_memory=False: the matcher alone (no learned aliases / rejections) — used by the
+    # eval_matching benchmark so accuracy measures the engine, not what it memorised.
+    learned = lookup_alias(raw_name, vendor_code=vendor_code) if use_memory else None
 
-    q = _build_prefilter_q(raw_name)
-
-    if q:
-        candidates = list(Item.objects.filter(is_active=True).filter(q)[:1200])
+    # Arabic lines: the Latin catalog is reached by SOUND (below, ms-fast); the DB prefilter
+    # only needs items whose names CONTAIN the Arabic words (~13% carry an Arabic name). The
+    # old transliterated-prefix net (dozens of 3-letter LIKEs → 1200 candidates scored
+    # letter-by-letter) is what the sound index replaces — measured faster AND more accurate.
+    if SOUND_MATCHING and _is_arabic(raw_name):
+        q = _arabic_name_q(raw_name)
     else:
-        candidates = []
+        q = _build_prefilter_q(raw_name)
+
+    # Anchor candidates first: items containing the drug word itself. Pack tokens like
+    # "30tab" / "3stripsx10" match thousands of items, and the capped prefilter used to
+    # drop the real product before scoring (PREVAGLIP 5MG 30TAB: 2291 prefilter hits,
+    # PREVAGLIP not in the first 1200 → BIOPREX won, 2026-10-04).
+    anchor_q = _anchor_q(raw_name)
+    # Only the columns scoring needs (Item has ~100 columns; fetching 1200 full rows per
+    # lookup was most of the query time).
+    cols = ('id', 'softech_id', 'name', 'name_scientific', 'pack_price', 'unit_price')
+    # .order_by(): Item's default ORDER BY name made PostgreSQL walk all ~51k rows in name
+    # order testing every '%…%' pattern (≈1.1 s); unordered, it answers from the trigram
+    # indexes (catalog mig 0041). Candidates are re-ranked by score below anyway.
+    base = Item.objects.filter(is_active=True).only(*cols).order_by()
+    with _trigram_indexes():
+        candidates = list(base.filter(anchor_q)[:400]) if anchor_q else []
+        if q:
+            seen = {c.id for c in candidates}
+            candidates += [c for c in base.filter(q).exclude(id__in=seen)[:max(0, 1200 - len(candidates))]]
 
     # Fallback: if prefilter is too sparse, widen the net
     if len(candidates) < 15:
@@ -666,7 +830,7 @@ def find_best_matches(raw_name: str, top_n: int = 3,
         if broad_tok:
             from django.db.models import Q as _Q
             extra = list(
-                Item.objects.filter(is_active=True)
+                base
                 .filter(
                     _Q(name__icontains=broad_tok) |
                     _Q(name_scientific__icontains=broad_tok)
@@ -679,19 +843,84 @@ def find_best_matches(raw_name: str, top_n: int = 3,
         # Last resort: top items by activity if still nothing
         if len(candidates) < 5:
             extra2 = list(
-                Item.objects.filter(is_active=True)
+                base
                 .exclude(id__in=[c.id for c in candidates])
                 [:_FALLBACK_LIMIT]
             )
             candidates.extend(extra2)
 
+    # ARABIC → LATIN BY SOUND (apps/shortage/phonetic): سيريلاك = CERELAC. The catalog is
+    # mostly English, so for an Arabic line the strongest evidence is how the name SOUNDS.
+    # Sound candidates (ms-fast, in-process skeleton index) join the pool, and every
+    # candidate gets a sound score + number / dosage-form agreement.
+    arabic = _is_arabic(raw_name) and SOUND_MATCHING
+    sound = {}
+    q_nums, q_forms, q_words = [], set(), set()
+    if arabic:
+        from . import phonetic
+        try:
+            sound = dict(phonetic.candidates(raw_name, limit=60))
+            have = {c.id for c in candidates}
+            missing = [i for i in sound if i not in have]
+            if missing:
+                candidates += list(base.filter(id__in=missing))
+            q_nums = re.findall(r'\d+(?:\.\d+)?', _normalize(raw_name))
+            pq = phonetic.parse_query(raw_name)
+            q_forms, q_words = pq['forms'], pq['words']
+        except Exception:                                 # never let the hint break matching
+            sound = {}
+
     raw_comp = extract_components(raw_name)
 
-    scored: list[tuple[float, dict]] = []
+    # Drug-name agreement. Pack descriptors ("5MG 30TAB (3STRIPSX10)") are shared by
+    # hundreds of products, so token-overlap + strength bonus can push an UNRELATED
+    # product to the 1.0 cap, tied with the real one, and DB order then decided:
+    # "PREVAGLIP 5MG 30TAB (3STRIPSX10)" → BIOPREX 5MG 30TAB at 1.00 although
+    # PREVAGLIP 5MG 30TAB exists (2026-10-04). A candidate whose name disagrees with
+    # the read drug word (head_mismatch — Latin reads only) is penalised, and ties go
+    # to the one that agrees.
+    HEAD_MISMATCH_PENALTY = 0.15
+    # Negative learning: items people REPLACED for this spelling (or a close one) drop
+    # 0.2 per rejection, up to 3 (apps/shortage/learning.record_rejection).
+    REJECTION_PENALTY = 0.2
+    from . import learning
+    rejected = learning.rejections(raw_name, vendor_code=vendor_code) if use_memory else {}
+
+    raw_norm_full = _normalize(raw_name)
+    scored: list[tuple[float, int, float, dict]] = []
+    # A PURE-Arabic line skips the legacy letter-by-letter scorer: its substring scoring
+    # rated «نان» 100% against «نانو» (NANO PROTEIN over NAN (1)) and it was the slowest
+    # step. Sound (Latin names) + whole-word Arabic (Arabic names) replace it. Mixed lines
+    # («Limitless الزايم ماكس») keep it for their Latin words.
+    pure_arabic = arabic and not re.search(r'[A-Za-z]', raw_name)
+    latin_nums = [] if arabic else re.findall(r'\d+(?:\.\d+)?', _normalize(raw_name))
+    q_ar_tokens = _arabic_name_tokens(raw_name) if arabic else []
     for item in candidates:
-        s = score_match(raw_name, item.name, getattr(item, 'name_scientific', '') or '')
+        if pure_arabic:
+            s = 0.0
+        else:
+            s = score_match(raw_name, item.name, getattr(item, 'name_scientific', '') or '')
+        agrees = 1
+        if s >= min_score and head_mismatch(raw_name, item.name):
+            s, agrees = round(max(0.0, s - HEAD_MISMATCH_PENALTY), 4), 0
+        rank_s = None
+        if arabic:
+            raw_s = max(s, _sound_score(raw_name, item), _arabic_word_score(q_ar_tokens, item)) \
+                + _arabic_adjust(item, q_nums, q_forms, q_words)
+            rank_s = round(raw_s, 4)                 # uncapped: bonuses must not tie at 1.0
+            s = round(min(1.0, max(0.0, raw_s)), 4)
+        elif SOUND_MATCHING and latin_nums and s >= min_score:
+            # Latin lines: the same strength agreement ("Euthyrox 25mcg" → 25, not 75)
+            rank_s = round(s + _arabic_adjust(item, latin_nums, set(), set()), 4)
+        if rejected.get(item.id):
+            pen = REJECTION_PENALTY * min(rejected[item.id], 3)
+            s = round(max(0.0, s - pen), 4)
+            rank_s = None if rank_s is None else rank_s - pen
         if s >= min_score:
-            scored.append((s, {
+            # 3rd key: whole-name closeness — breaks ties at the 1.0 cap toward the
+            # pack actually written ("…5MG 30TAB" → the 30TAB item, not 10TAB)
+            scored.append((s if rank_s is None else rank_s, agrees,
+                           _ratio(raw_norm_full, _normalize(item.name)), {
                 'item_id':          item.id,
                 'item_name':        item.name,
                 'item_scientific':  getattr(item, 'name_scientific', '') or '',
@@ -702,72 +931,49 @@ def find_best_matches(raw_name: str, top_n: int = 3,
                 'form':             raw_comp.form,
             }))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    results = [d for _, d in scored[:top_n]]
+    scored.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    results = [d for _, _, _, d in scored[:top_n]]
 
-    # Pin the learned match at the top (score 1.0), de-duplicating if fuzzy also
-    # surfaced it, and trim back to top_n.
+    # Pin the learned match at the top, de-duplicating if fuzzy also surfaced it. An
+    # EXACT memory always leads. A CLOSE-spelling memory leads too — unless the catalog
+    # itself has a near-perfect match for a DIFFERENT product (then the memory is shown
+    # second, so a typo-tolerant memory can never hijack a correct exact catalog match).
     if learned:
-        results = [learned] + [d for d in results if d['item_id'] != learned['item_id']]
+        rest = [d for d in results if d['item_id'] != learned['item_id']]
+        demote = False
+        if rest and learned.get('learned_fuzzy') and \
+                _ratio(raw_norm_full, _normalize(rest[0]['item_name'])) >= max(0.95, learned.get('similarity', 0)):
+            demote = True
+        # A CONTRADICTED memory (Latin text; the catalog has a ≥0.9 match for ANOTHER
+        # product; the remembered item barely resembles the text) — e.g. «tRENTA» once
+        # confirmed as DECLOPHEN while TRENTAL exists (an OCR line misaligned with the pick,
+        # invoice session 2026-07-27). Still offered, never pinned first. Arabic memories are
+        # exempt: Arabic text never resembles the English name.
+        elif rest and not _is_arabic(raw_name) and rest[0]['score'] >= 0.65 \
+                and not head_mismatch(raw_name, rest[0]['item_name']) \
+                and head_mismatch(raw_name, learned['item_name']) \
+                and score_match(raw_name, learned['item_name'], learned.get('item_scientific', '')) < 0.45:
+            # the written drug word names the catalog's top item (tRENTA → TRENTAL), not the
+            # remembered one (DECLOPHEN), which also fits the text poorly overall
+            demote = True
+            learned = {**learned, 'contradicted': True}
+        results = ([rest[0], learned] + rest[1:]) if demote else ([learned] + rest)
         results = results[:top_n]
     return results
 
 
 def lookup_alias(raw_name: str, *, vendor_code: str = '') -> dict | None:
-    """Return a previously-confirmed match for ``raw_name`` from the ItemAlias
-    corpus, or None. A vendor-scoped alias wins over a global one; ties break on
-    ``use_count``. The returned dict matches ``find_best_matches`` items, with
-    ``score=1.0`` and ``learned=True``."""
-    from apps.catalog.models import ItemAlias
-
-    norm = _normalize(raw_name)
-    if not norm:
-        return None
-    # Vendor-scoped alias wins over a global one; ties break on use_count.
-    a = None
-    if vendor_code:
-        a = (ItemAlias.objects.filter(normalized=norm, vendor_code=vendor_code)
-             .select_related('item').order_by('-use_count').first())
-    if a is None:
-        a = (ItemAlias.objects.filter(normalized=norm, vendor_code='')
-             .select_related('item').order_by('-use_count').first())
-    if a is None:
-        return None
-    item = a.item
-    comp = extract_components(raw_name)
-    return {
-        'item_id':         item.id,
-        'item_name':       item.name,
-        'item_scientific': getattr(item, 'name_scientific', '') or '',
-        'item_softech_id': item.softech_id,
-        'item_sale_price': float(item.pack_price or item.unit_price or 0),
-        'score':           1.0,
-        'strength':        comp.strength,
-        'form':            comp.form,
-        'learned':         True,
-        'use_count':       a.use_count,
-    }
+    """The remembered item for this spelling — exact (score 1.0, ``learned``) or a close
+    spelling (0.90–0.98, ``learned_fuzzy``), net of rejections. See apps/shortage/learning."""
+    from . import learning
+    return learning.lookup_alias(raw_name, vendor_code=vendor_code)
 
 
 def learn_alias(raw_name: str, item, *, source: str = 'manual', vendor_code: str = ''):
-    """Record/reinforce a confirmed raw-name → Item mapping. Idempotent: repeated
-    confirmations of the same (name, vendor, item) just bump ``use_count``.
-    ``item`` may be an Item instance or its pk. Returns the ItemAlias or None."""
-    from apps.catalog.models import ItemAlias
-
-    norm = _normalize(raw_name)
-    if not norm or item is None:
-        return None
-    item_id = getattr(item, 'pk', item)
-    alias, created = ItemAlias.objects.get_or_create(
-        normalized=norm, vendor_code=vendor_code or '', item_id=item_id,
-        defaults={'source': source, 'sample_raw': (raw_name or '')[:300]},
-    )
-    if not created:
-        alias.use_count += 1
-        alias.sample_raw = (raw_name or '')[:300]
-        alias.save(update_fields=['use_count', 'sample_raw', 'updated_at'])
-    return alias
+    """Record/reinforce a confirmed raw-name → Item mapping (repeats raise use_count;
+    forgives one earlier rejection). See apps/shortage/learning."""
+    from . import learning
+    return learning.learn_alias(raw_name, item, source=source, vendor_code=vendor_code)
 
 
 def dedup_key(raw_name: str) -> str:

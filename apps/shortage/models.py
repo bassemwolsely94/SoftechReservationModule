@@ -49,6 +49,7 @@ class ShortageItem(models.Model):
         ('voice',  'صوتي'),
         ('ocr',    'OCR'),
         ('bulk',   'استيراد نصي'),
+        ('whatsapp', 'واتساب'),     # /supply «طلبات واتساب» (apps/supply BranchRequest)
     ]
 
     shortage_list    = models.ForeignKey(ShortageList, on_delete=models.CASCADE,

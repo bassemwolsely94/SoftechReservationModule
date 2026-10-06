@@ -138,6 +138,11 @@ def check_order(order, reader):
         entered = _d(ln.cust_discp)
         if entered <= 0:
             continue  # no discount → nothing to authorize
+        # Offer-sourced lines carry their OWN authority (the approved offer) — the
+        # analogue of SOFTECH's Ctrl+M "OFFERS" max-discount override. Skip the
+        # seller-ceiling check for them (see docs/PHASE3_OFFER_EXECUTION_DESIGN.md §13).
+        if getattr(ln, 'discount_source', 'manual') == 'offer':
+            continue
 
         if is_contract:
             category = reader.item_category(ln.softech_itemcode)
@@ -167,6 +172,36 @@ def check_order(order, reader):
             if entered > cap:
                 errors.append({'index': i, 'field': 'cust_discp',
                                'detail': f'الخصم {entered}% يتجاوز الحد المسموح ({cap}%) لهذا الصنف.'})
+    return errors
+
+
+# Channels where the line discount is RETRIEVED (contracted) and manager-locked.
+CLAIM_DISCOUNT_CHANNELS = {'contract', 'insurance', 'employee', 'permanent'}
+
+
+def validate_contract_discount_role(order, privileged):
+    """
+    Role rule (server-enforced, deterministic, no live-DB read): on contract / permanent /
+    claim channels the discount is RETRIEVED and manager-locked — a non-privileged seller
+    may NOT apply or raise it. Admins/supervisors bypass. Offer-sourced lines carry their
+    own authority and are skipped.
+
+    The entitled rate defaults to 0 until the contract→personcode mapping is resolved (a
+    known gap in `check_order`); so today this rejects ANY positive hand-set discount by a
+    non-privileged seller on these channels. When that mapping lands, replace the `> 0`
+    bound with `> entitled_contracted_rate` so an auto-filled contracted discount passes.
+    """
+    if privileged or order.channel not in CLAIM_DISCOUNT_CHANNELS:
+        return []
+    errors = []
+    for i, ln in enumerate(order.lines.all()):
+        if getattr(ln, 'discount_source', 'manual') == 'offer':
+            continue
+        if _d(ln.cust_discp) > 0:
+            errors.append({
+                'index': i, 'field': 'cust_discp',
+                'detail': 'تعديل أو إضافة خصم على قنوات التعاقد/العملاء الدائمين يتطلب صلاحية مدير.',
+            })
     return errors
 
 

@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import useAuthStore from '../store/authStore'
+import ErrorBoundary from './ErrorBoundary'
 import useNotificationStore from '../store/notificationStore'
 import { useQuery } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
@@ -8,6 +9,9 @@ import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import NotificationBell from './NotificationBell'
 import ModuleNotificationBell from './ModuleNotificationBell'
+import ThemeToggle from './ThemeToggle'
+import CommandPalette from './CommandPalette'
+import CustomerDrawer from './CustomerDrawer'
 import BrandMark from './BrandMark'
 
 const toLatinDigits = s =>
@@ -98,6 +102,7 @@ const NAV_GROUPS = [
     id: 'operations', label: 'العمليات', section: 'العمليات',
     items: [
       { to: '/pos',           icon: '🧾', label: 'نقطة البيع',        roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
+      { to: '/pos/exceptions', icon: '🛠️', label: 'مركز الاستثناءات', roles: ['admin','supervisor','pharmacist'] },
       { to: '/reservations',  icon: '📋', label: 'الحجوزات',         roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
       { to: '/transfers',     icon: '🔀', label: 'طلبات التحويل',    roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/transits',      icon: '🚛', label: 'التحويلات قيد النقل', roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
@@ -131,6 +136,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/customers',          icon: '👥', label: 'العملاء',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager','delivery'] },
       { to: '/vouchers',           icon: '🎫', label: 'القسائم',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','quality_manager'] },
+      { to: '/offers',             icon: '🎁', label: 'العروض والتخفيضات',   roles: ['admin','supervisor','purchasing'] },
       { to: '/loyalty',            icon: '🏆', label: 'النقاط والولاء',      roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
       { to: '/loyalty/branch',     icon: '🔍', label: 'استعلام نقاط الفرع', roles: ['admin','branch','pharmacist','supervisor'] },
       { to: '/referral',           icon: '🔗', label: 'الإحالات',            roles: ['admin','call_center','supervisor'] },
@@ -144,8 +150,12 @@ const NAV_GROUPS = [
       { to: '/batches',              icon: '🧪', label: 'الدفعات والانتهاء', roles: ['admin','pharmacist','purchasing','quality_manager','supervisor'] },
       { to: '/shortage',             icon: '🚨', label: 'النواقص',         roles: ['admin','pharmacist','call_center','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/market-shortage',      icon: '📉', label: 'نواقص السوق',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
+      { to: '/phantom-sales',        icon: '🩹', label: 'مبيعات وهمية',    roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
+      { to: '/cash-optimization',    icon: '💰', label: 'تحسين الكاش',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
       { to: '/catalog-intelligence', icon: '🧠', label: 'ذكاء الكتالوج',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/chronic-classifier',   icon: '🧬', label: 'الأدوية المزمنة',  roles: ['admin','pharmacist','call_center','supervisor'] },
+      { to: '/composition',          icon: '⚗️', label: 'تنقية المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor'] },
+      { to: '/ingredient-search',    icon: '🔬', label: 'بحث المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor','call_center','quality_manager'] },
       { to: '/image-enrichment',     icon: '🖼️', label: 'صور المنتجات',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/recommendations',      icon: '🔗', label: 'التوصيات الذكية', roles: ['admin','pharmacist','call_center','purchasing'] },
     ],
@@ -153,8 +163,9 @@ const NAV_GROUPS = [
   {
     id: 'purchasing', label: 'المشتريات', section: 'المشتريات',
     items: [
-      { to: '/purchasing',        icon: '📊', label: 'توصيات الشراء',    roles: ['admin','purchasing','viewer'] },
+      { to: '/purchasing',        icon: '📊', label: 'توصيات الشراء',    roles: ['admin','purchasing','viewer'], cap: 'can_run_engine' },
       { to: '/procurement',       icon: '🛒', label: 'ذكاء المشتريات',   roles: ['admin','purchasing'] },
+      { to: '/supply',            icon: '🔄', label: 'التوريد والمعدلات', roles: ['admin','purchasing','supervisor'], cap: 'can_supply_write' },
       { to: '/invoices',          icon: '🧾', label: 'فواتير الموردين',   roles: ['admin','purchasing'] },
       { to: '/pricing-approvals', icon: '🏷️', label: 'موافقات الأسعار', roles: ['admin','purchasing','pharmacist'] },
       { to: '/discount-alignment', icon: '🎯', label: 'مطابقة الخصومات', roles: ['admin','purchasing','pharmacist'] },
@@ -171,6 +182,8 @@ const NAV_GROUPS = [
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/forecast-scenarios', icon: '🔮', label: 'سيناريوهات التنبؤ', roles: ['admin','supervisor','purchasing'] },
       { to: '/insights',    icon: '📋', label: 'التقارير السردية', roles: ['admin','supervisor','purchasing','quality_manager','viewer'] },
+      { to: '/referral-stats', icon: '🩺', label: 'إحالات الأطباء', roles: ['admin','supervisor','pharmacist','quality_manager','viewer'] },
+      { to: '/vision-corpus', icon: '👁️', label: 'المحرك البصري', roles: ['admin','supervisor','purchasing','pharmacist'] },
     ],
   },
   {
@@ -180,7 +193,10 @@ const NAV_GROUPS = [
       { to: '/cheques',        icon: '📝', label: 'تخطيط الشيكات',  roles: ['admin','purchasing','pharmacist'] },
       { to: '/payments',       icon: '💳', label: 'متابعة المدفوعات', roles: ['admin','purchasing','pharmacist'] },
       { to: '/payment-audit',  icon: '🏦', label: 'مراجعة الكشوف',  roles: ['admin','purchasing','pharmacist'] },
+      { to: '/reconciliation', icon: '🔗', label: 'سداد الموردين',  roles: ['admin','purchasing','pharmacist'] },
       { to: '/insurance',      icon: '🏥', label: 'مطالبات التأمين', roles: ['admin','purchasing'] },
+      { to: '/replacement',    icon: '🔁', label: 'بدل الروشتة',     roles: ['admin','supervisor','purchasing','quality_manager','pharmacist'] },
+      { to: '/commerce',       icon: '🧩', label: 'المستندات التجارية', roles: ['admin','purchasing'] },
     ],
   },
   {
@@ -223,9 +239,11 @@ export default function Layout() {
   const location  = useLocation()
   const userRole  = user?.role || 'viewer'
 
-  // Filter groups + items by role
+  // Filter groups + items by role — or by a server-computed capability (`cap`), e.g.
+  // /supply for SOFTECH groups مخزن/Administrator/Internal Auditor (purchasing/access.py)
   const visibleGroups = NAV_GROUPS
-    .map(g => ({ ...g, items: g.items.filter(n => !n.roles || n.roles.includes(userRole)) }))
+    .map(g => ({ ...g, items: g.items.filter(n =>
+      !n.roles || n.roles.includes(userRole) || (n.cap && !!user?.[n.cap])) }))
     .filter(g => g.items.length > 0)
 
   // Which group is pinned open (clicked) — auto-tracks active route
@@ -438,25 +456,35 @@ export default function Layout() {
       <main className="flex-1 overflow-auto flex flex-col min-w-0">
 
         {/* Top header bar */}
-        <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="font-semibold text-gray-800">صيدليات الرزيقي</span>
-            <span className="text-gray-300">·</span>
+        <header className="shrink-0 bg-surface border-b border-line px-6 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <span className="font-semibold text-content">صيدليات الرزيقي</span>
+            <span className="text-faint">·</span>
             <span>منصة العمليات</span>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new Event('palette:open'))}
+              title="بحث شامل (Ctrl+K)"
+              className="hidden sm:flex items-center gap-2 text-xs text-faint bg-surface-2 hover:bg-surface-3 border border-line rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              <span>🔎</span>
+              <span>بحث…</span>
+              <kbd className="text-[10px] border border-line rounded px-1 py-0.5">Ctrl K</kbd>
+            </button>
+            <ThemeToggle />
             <NotificationBell />
             {/* Quiet feeds beside the bell — hidden if the role can't see them */}
             {notifVisible.has('mentions')   && <ModuleNotificationBell category="mentions"   icon="💬" label="الإشارات (المنشن)" />}
             {notifVisible.has('reports')    && <ModuleNotificationBell category="reports"    icon="📊" label="التقارير الدورية" />}
             {notifVisible.has('monitoring') && <ModuleNotificationBell category="monitoring" icon="📡" label="المراقبة (SLA والمسار)" />}
             {notifVisible.has('settings')   && <ModuleNotificationBell category="settings"   icon="⚙️" label="النظام والإعدادات" />}
-            <div className="w-px h-5 bg-gray-200" />
+            <div className="w-px h-5 bg-line" />
             <NavLink
               to="/security"
               title="أمان الحساب — المصادقة الثنائية"
-              className="text-gray-400 hover:text-brand-600 transition-colors p-1 rounded-lg hover:bg-brand-50"
+              className="text-faint hover:text-brand-600 transition-colors p-1 rounded-lg hover:bg-brand-50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -469,8 +497,8 @@ export default function Layout() {
                 </span>
               </div>
               <div className="text-sm leading-tight hidden sm:block">
-                <div className="font-semibold text-gray-800">{user?.full_name || user?.username}</div>
-                <div className="text-xs text-gray-400">{user?.branch_name || user?.role}</div>
+                <div className="font-semibold text-content">{user?.full_name || user?.username}</div>
+                <div className="text-xs text-faint">{user?.branch_name || user?.role}</div>
               </div>
             </div>
             <button
@@ -488,9 +516,18 @@ export default function Layout() {
 
         {/* Page content */}
         <div className="flex-1 overflow-auto">
-          <Outlet />
+          {/* a broken page shows a short message + reload here; the sidebar keeps working
+              and opening another page clears it */}
+          <ErrorBoundary scope="page" resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
+
+      {/* Global Ctrl+K command palette + universal search */}
+      <CommandPalette />
+      {/* Global Customer-360 side-drawer (opens on window 'customer360:open') */}
+      <CustomerDrawer />
     </div>
   )
 }

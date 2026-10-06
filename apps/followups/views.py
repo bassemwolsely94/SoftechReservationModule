@@ -21,6 +21,7 @@ from datetime import date
 
 from django.db.models import Q, Sum, Count
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -32,6 +33,7 @@ from .serializers import (
     FollowUpTaskCreateSerializer, FollowUpActionSerializer,
 )
 from . import services
+from apps.catalog.wildcard import wq
 
 
 def _profile(request):
@@ -40,7 +42,7 @@ def _profile(request):
 
 class ChronicMedicationProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    filter_backends    = [filters.SearchFilter]
+    filter_backends    = [WildcardSearchFilter]
     search_fields      = ['item__name', 'item__softech_id']
 
     def get_queryset(self):
@@ -167,8 +169,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         item_search = (p.get('item_search') or '').strip()
         if item_search:
             qs = qs.filter(
-                Q(item__name__icontains=item_search) |
-                Q(item__name_scientific__icontains=item_search) |
+                wq(item_search, 'item__name', 'item__name_scientific') |
                 Q(item__softech_id__icontains=item_search) |
                 Q(item__active_ingredients__icontains=item_search)
             )
@@ -192,12 +193,12 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         if cust_search:
             qs = qs.filter(
                 # Full Customer record (linked)
-                Q(customer__name__icontains=cust_search) |
+                wq(cust_search, 'customer__name') |
                 Q(customer__phone__icontains=cust_search) |
                 Q(customer__whatsapp_phone__icontains=cust_search) |
                 Q(customer__softech_pic__icontains=cust_search) |
                 # LocalCustomer (PIC / delivery — most tasks link here, not Customer)
-                Q(local_customer__name__icontains=cust_search) |
+                wq(cust_search, 'local_customer__name') |
                 Q(local_customer__phone__icontains=cust_search) |
                 Q(local_customer__phone_alt__icontains=cust_search) |
                 Q(local_customer__phcode__icontains=cust_search) |

@@ -58,7 +58,7 @@ def _write_warning(result):
         parts.append(f"المركز الرئيسي: {result.get('hq_result') or 'فشل'}")
     if not _branch_ok(result):
         host = result.get('branch_host') or ''
-        parts.append(f"خادم الفرع{(' ' + host) if host else ''}: {result.get('branch_result')}")
+        parts.append(f"سيرفر الفرع{(' ' + host) if host else ''}: {result.get('branch_result')}")
     return ' · '.join(parts)
 
 
@@ -304,7 +304,7 @@ def set_document_comment(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:  # SOFTECH connectivity / driver failure
-        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+        return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
                          'error': str(e)[:150]}, status=502)
 
     DocumentCommentEdit.objects.create(
@@ -379,7 +379,7 @@ def set_cheque_note(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
-        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+        return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
                          'error': str(e)[:150]}, status=502)
 
     DocumentCommentEdit.objects.create(
@@ -465,7 +465,7 @@ def set_revision(request):
     except CommentWriteError as e:
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
-        return Response({'detail': 'تعذّر الاتصال بخادم SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
+        return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
                          'error': str(e)[:150]}, status=502)
 
     rec.status = DocumentRevision.STATUS_REVISED if revised else DocumentRevision.STATUS_REVOKED

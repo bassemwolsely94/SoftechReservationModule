@@ -32,6 +32,87 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(domain=d)
         return qs
 
+    @action(detail=False, methods=['get'])
+    def freshness(self, request):
+        """Live mirror freshness — data_through per source (sales/purchasing) + last sync — so the
+        UI can confirm SOFTECH data is fully collected up to a period end BEFORE generating a
+        report. GET /api/insights/reports/freshness/?domain=sales|purchasing&end=YYYY-MM-DD
+        (end defaults to yesterday, the default report ref date)."""
+        from datetime import date, datetime, timedelta
+        from apps.insights.rules import data_freshness
+        domain = request.query_params.get('domain', 'sales')
+        end_s = request.query_params.get('end'); start_s = request.query_params.get('start')
+        try:
+            end = datetime.strptime(end_s, '%Y-%m-%d').date() if end_s else (date.today() - timedelta(days=1))
+            start = datetime.strptime(start_s, '%Y-%m-%d').date() if start_s else end
+        except ValueError:
+            return Response({'detail': 'bad date'}, status=status.HTTP_400_BAD_REQUEST)
+        fr = data_freshness(start, end, domain)
+        iso = lambda d: d.isoformat() if d else None
+        return Response({
+            'domain': domain, 'start': iso(start), 'end': iso(end),
+            'sales_through': iso(fr['sales_through']), 'purch_through': iso(fr['purch_through']),
+            'src_through': iso(fr['src_through']),
+            'last_sync_at': fr['last_sync_at'].isoformat() if fr['last_sync_at'] else None,
+            'last_sync_failed': fr['last_sync_failed'],
+            'gap_days': fr['gap_days'], 'covered': fr['covered'], 'complete': fr['complete'],
+            'empty_days': fr['empty_days'], 'low_days': fr['low_days'],
+        })
+
+    @action(detail=False, methods=['post'])
+    def backfill(self, request):
+        """Re-sync SOFTECH data for the report period to FILL detected gaps — a background job
+        that surfaces on the sync status poll (GET /api/sync/status/), exactly like the sync page.
+        SALES  → backfill_sales_history --start --end (month-by-month idempotent upsert + rollup
+                 rebuild; fills empty/partial days).
+        PURCHASING → run_procurement_engine --days N (covers the period), wrapped in a SyncRun so
+                 it polls the same way. Admin/supervisor only. Returns 202 immediately."""
+        sp = getattr(request.user, 'staff_profile', None)
+        if not (sp and sp.role in {'admin', 'supervisor'}):
+            return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+        import threading
+        from datetime import datetime, date, timedelta
+        from django.core.management import call_command
+        from django.db import connections
+        from django.utils import timezone
+        from apps.sync.models import SyncRun
+        domain = request.data.get('domain', 'sales')
+        parse = lambda s: datetime.strptime(s, '%Y-%m-%d').date() if s else None
+        try:
+            start = parse(request.data.get('start')); end = parse(request.data.get('end'))
+        except ValueError:
+            return Response({'detail': 'تاريخ غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
+        if not start or not end:
+            return Response({'detail': 'حدد فترة صالحة'}, status=status.HTTP_400_BAD_REQUEST)
+        if end < start:
+            start, end = end, start
+        # don't stack a second heavy run on one already in flight (stale >30 min ignored)
+        cutoff = timezone.now() - timedelta(minutes=30)
+        if SyncRun.objects.filter(status='running', started_at__gte=cutoff).exists():
+            return Response({'status': 'running', 'detail': 'مزامنة جارية بالفعل'},
+                            status=status.HTTP_202_ACCEPTED)
+        ym_start, ym_end = start.strftime('%Y-%m'), end.strftime('%Y-%m')
+
+        def _worker():
+            run = None
+            try:
+                if domain == 'purchasing':
+                    run = SyncRun.objects.create(status='running')
+                    call_command('run_procurement_engine', days=max((date.today() - start).days + 1, 1))
+                    run.status = 'success'; run.completed_at = timezone.now(); run.save()
+                else:
+                    call_command('backfill_sales_history', start=ym_start, end=ym_end)  # owns its SyncRun
+            except Exception:
+                logger.exception('[insights backfill] failed')
+                if run:
+                    run.status = 'failed'; run.completed_at = timezone.now(); run.save()
+            finally:
+                connections.close_all()
+
+        threading.Thread(target=_worker, name='insights-backfill', daemon=True).start()
+        return Response({'status': 'running', 'domain': domain, 'months': sorted({ym_start, ym_end}),
+                         'detail': 'بدأت إعادة المزامنة/التعبئة'}, status=status.HTTP_202_ACCEPTED)
+
     @action(detail=True, methods=['get'])
     def scopes(self, request, pk=None):
         """Branches + salespeople that have findings in this run (for the scope dropdowns).

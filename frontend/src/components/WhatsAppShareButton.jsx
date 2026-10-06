@@ -5,26 +5,39 @@
  * then opens WhatsApp Web in a new tab.
  *
  * Props:
- *   type     {string}  — "reservation" | "transfer"
+ *   type     {string}  — "reservation" | "transfer" | "pos_order"
  *   docId    {number}
  *   size     {string}  — "sm" | "md" (default "md")
+ *   label    {string}  — override the button text (md size only)
+ *   text     {string}  — optional: share this ready-made text directly (no backend call),
+ *                        e.g. a supply order list already built on screen
  */
 import { useState } from 'react'
-import { reservationsApi, transfersApi } from '../api/client'
+import api, { reservationsApi, transfersApi } from '../api/client'
 
-export default function WhatsAppShareButton({ type, docId, size = 'md' }) {
+export default function WhatsAppShareButton({ type, docId, size = 'md', label, text: readyText }) {
   const [loading, setLoading] = useState(false)
 
   const handleShare = async () => {
+    if (readyText !== undefined) {
+      window.open(`https://wa.me/?text=${encodeURIComponent(readyText || '')}`,
+        '_blank', 'noopener,noreferrer')
+      return
+    }
     setLoading(true)
     try {
       const fetcher = type === 'reservation'
         ? () => reservationsApi.shareWhatsapp(docId)
-        : () => transfersApi.shareWhatsapp(docId)
+        : type === 'pos_order'
+          ? () => api.post(`/pos-orders/${docId}/share-whatsapp/`)
+          : () => transfersApi.shareWhatsapp(docId)
 
       const { data } = await fetcher()
-      const text     = encodeURIComponent(data.message_text || '')
-      window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer')
+      const text  = encodeURIComponent(data.message_text || '')
+      // when the backend returns the customer's phone, open a direct chat; else the picker.
+      const phone = String(data.phone || '').replace(/\D/g, '')
+      const url   = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
+      window.open(url, '_blank', 'noopener,noreferrer')
     } catch {
       // silently ignore — user can retry
     } finally {
@@ -51,7 +64,7 @@ export default function WhatsAppShareButton({ type, docId, size = 'md' }) {
           </svg>
         )
       }
-      {size !== 'sm' && 'مشاركة عبر واتساب'}
+      {size !== 'sm' && (label || 'مشاركة عبر واتساب')}
     </button>
   )
 }

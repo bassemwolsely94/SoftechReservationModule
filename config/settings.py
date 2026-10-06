@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'apps.transits',
     'apps.demand',
     'apps.chronic',
+    'apps.composition',   # SOFTECH active-ingredient reconciliation pipeline
     'apps.followups',
     'apps.callcenter',
     'apps.audit',
@@ -86,6 +87,7 @@ INSTALLED_APPS = [
     'apps.invoices',
     'apps.incentives',
     'apps.insurance',
+    'apps.commerce',
     'apps.purchasing',
     'apps.delivery',
     'apps.payments',
@@ -100,6 +102,11 @@ INSTALLED_APPS = [
     'apps.omni',       # Omnichannel unification layer (doc 15) — envelopes whatsapp/pbx/callcenter
     'apps.social',     # Social channels (doc 15 Phase 3) — Messenger/Instagram/Telegram
     'apps.loyalty',
+    'apps.offers',     # Offers & promotions engine (Commerce OS Phase 3 — money-critical)
+    'apps.vision',     # In-house OCR engine (Phase 1 — OcrSample corpus; sales + purchasing)
+    'apps.supply',     # Demand/Allocation/Procurement orchestration spine (doc 24) — reuses engines
+    'apps.lineage',    # Shared transaction-lineage graph (DocumentRef/DocumentEdge) — doc 25
+    'apps.replacement',  # بدل الروشتة / buy-back case orchestration (doc 25) — Phase 0 read-only
     'apps.referral',
     'apps.pbx',
     'apps.cheques',
@@ -189,6 +196,10 @@ DATABASES = {
         'OPTIONS': {
             'connect_timeout': 10,
         },
+        # Optional isolated test-DB name so concurrent `manage.py test` runs (e.g.
+        # two sessions) don't fight over the single default `test_<PG_NAME>`.
+        # Unset → Django's default naming (unchanged behaviour).
+        'TEST': {'NAME': config('TEST_DB_NAME', default=None)},
     }
 }
 
@@ -336,6 +347,75 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
+# Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
+# «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the
+# owner signs off a dry-run. When False, write_pos_cancel_batch runs in dry-run only.
+POS_CANCEL_WRITE_ENABLED = config('POS_CANCEL_WRITE_ENABLED', default=False, cast=bool)
+# Feature 1 (/supply): write our engine's monthly_avg → SOFTECH stkbal.monthlyqty
+# (معدل الإستهلاك). OFF = /supply propose+approve work but execute is refused (409).
+# Flip True ONLY after a reviewed dry-run + a validated rollback write-probe.
+SALES_RATE_WRITER_ENABLED = config('SALES_RATE_WRITER_ENABLED', default=False, cast=bool)
+# Feature 2 (/supply): generate a SOFTECH ISR (طلب توريد, stockisr) from our engine
+# for a requesting branch → flows into native اعتماد → إذن الصرف. OFF = dry-run plan
+# only. Flip True ONLY after a validated rollback ISR-probe on a real serial.
+ISR_WRITER_ENABLED = config('ISR_WRITER_ENABLED', default=False, cast=bool)
+# Feature 2: allow scheduled/CLI generation to AUTO-APPROVE (stockisrm.israpp=1) without
+# a human review step in /supply. OFF by default (human-in-the-loop). Needs ISR_WRITER_ENABLED.
+ISR_AUTO_APPROVE_ENABLED = config('ISR_AUTO_APPROVE_ENABLED', default=False, cast=bool)
+# Doc 24 Phase 4: send actionable supply-case alerts (new urgent case / supplier availability
+# matching waiting customers / unresolved 3-7 days) from the daily sweep to admin/supervisor/
+# purchasing. Once-per-case (dedup_once) + capped per sweep. OFF by default — enable after
+# reviewing the queue volume on /supply. The sweep itself still runs and keeps cases current.
+SUPPLY_CASE_NOTIFY = config('SUPPLY_CASE_NOTIFY', default=False, cast=bool)
+# Batch 2b (/supply): write the max-stock COVERAGE window into SOFTECH
+# stkbal.maxnowqtymonths (the field SOFTECH multiplies by monthlyqty to derive the
+# maxnowqty ceiling). OFF = dry-run plan only (nothing written). Flip True ONLY after
+# a reviewed dry-run + rollback write-probe. Independent of the rate gate on purpose.
+COVERAGE_WRITER_ENABLED = config('COVERAGE_WRITER_ENABLED', default=False, cast=bool)
+# When the coverage write runs, ALSO set the derived stkbal.maxnowqty
+# (= monthlyqty × maxnowqtymonths) instead of leaving it for SOFTECH's own recompute.
+# OFF by default — owner confirms from a dry-run whether SOFTECH needs the stored max too.
+COVERAGE_WRITE_MAXQTY = config('COVERAGE_WRITE_MAXQTY', default=False, cast=bool)
+# After each successful engine run, the scheduler tops up coverage: items with no
+# coverage get COVERAGE_AUTO_TOPUP_MONTHS, stale maxes are refreshed; coverages set on
+# purpose are never changed. Needs COVERAGE_WRITER_ENABLED too. Owner chose option (a)
+# on 2026-09-28 → set 'both' in .env (branch servers + server 100's copies of the
+# branches). Code default stays 'node'; branch 100's own rows are never written.
+COVERAGE_AUTO_TOPUP_ENABLED = config('COVERAGE_AUTO_TOPUP_ENABLED', default=False, cast=bool)
+# SOFTECH user groups (usergroup codes) that may operate /supply (approve/execute rates,
+# ISRs, توزيعة) and start a quick engine run, on top of the app roles — see
+# apps/purchasing/access.py. Default: 10 Administrator, 19 مخزن, 21 كارت صنف,
+# 27 Internal Auditor (owner, 2026-10-02).
+SUPPLY_ERP_GROUPS = config('SUPPLY_ERP_GROUPS', default='10,19,21,27')
+# Automatic demand-engine runs (owner, 2026-10-02: Sunday + Wednesday nights, Cairo).
+# The rates it produces still need a human to approve/execute in /supply; coverage is
+# topped up automatically afterwards. OFF by default.
+DEMAND_ENGINE_SCHEDULE_ENABLED = config('DEMAND_ENGINE_SCHEDULE_ENABLED', default=False, cast=bool)
+DEMAND_ENGINE_SCHEDULE_DAYS    = config('DEMAND_ENGINE_SCHEDULE_DAYS', default='sun,wed')
+DEMAND_ENGINE_SCHEDULE_HOUR    = config('DEMAND_ENGINE_SCHEDULE_HOUR', default=1, cast=int)
+DEMAND_ENGINE_SCHEDULE_MINUTE  = config('DEMAND_ENGINE_SCHEDULE_MINUTE', default=0, cast=int)
+COVERAGE_AUTO_TOPUP_MONTHS  = config('COVERAGE_AUTO_TOPUP_MONTHS', default=1.5, cast=float)
+COVERAGE_AUTO_TOPUP_TARGET  = config('COVERAGE_AUTO_TOPUP_TARGET', default='node')
+# Optional per-branch storecode override for the rate writer (JSON not needed —
+# code map lives in settings if ever required): SALES_RATE_STORE_MAP = {}
+# Commerce-OS Phase 3: allow the offers engine to ATTACH computed discounts onto a
+# real POS order (still PG-only; the SOFTECH push is the existing writer). OFF until
+# an owner-reviewed live dry-run signs it off (design doc step 5).
+POS_OFFERS_EXECUTION_ENABLED = config('POS_OFFERS_EXECUTION_ENABLED', default=False, cast=bool)
+# Commerce Document engine (quotations / retail invoices / hospital allocation
+# grids).  Phase 1 = data + pricing only; the flag gates the UI/API surface that
+# later phases add.  OFF until the engine is proven.
+COMMERCE_DOCS_ENABLED = config('COMMERCE_DOCS_ENABLED', default=False, cast=bool)
+# Channel A: let a FLAT-RATE offer push its % to items.posdiscp (master data, all
+# cashier sales) via the discount_approvals writeback. OFF until owner-reviewed.
+POS_OFFERS_POSDISCP_WRITE_ENABLED = config('POS_OFFERS_POSDISCP_WRITE_ENABLED', default=False, cast=bool)
+# SOFTECH manager-override usercode stamped on stktransm5.supp_main_code for an
+# offer-discounted order, so a discount above the seller's normal ceiling is
+# pre-authorized (the DB-recorded equivalent of the Ctrl+M / OFFERS override).
+POS_OFFERS_OVERRIDE_USERCODE = config('POS_OFFERS_OVERRIDE_USERCODE', default='89')
+# Channel B: write our gift/spend-threshold/single-item-percent offers into SOFTECH's
+# native `specialoffers` promo table (runs at the cashier). OFF until owner-reviewed.
+POS_OFFERS_PROMO_WRITE_ENABLED = config('POS_OFFERS_PROMO_WRITE_ENABLED', default=False, cast=bool)
 # (Historically blocked points sales from the writer.) We now compute personnewbal correctly
 # (points = Σ floor(net × custdiscounts[rep, itemcode_alt3]/100); SOFTECH copies it at
 # finalization), so points-eligible sales are ALLOWED. Set True only to force them native again.
@@ -384,16 +464,75 @@ COUPON_BRANCH           = config('COUPON_BRANCH', default='100')           # HQ
 COUPON_BATCH_SIZE       = config('COUPON_BATCH_SIZE', default=200, cast=int)
 COUPON_MIN_EXPIRY_DAYS  = config('COUPON_MIN_EXPIRY_DAYS', default=730, cast=int)
 COUPON_PRINT_TITLE      = config('COUPON_PRINT_TITLE', default='قسيمة مشتروات من صيدليات الرزيقى بقيمة 50ج.م')
+# ── A/P reconciliation writeback (سداد allocations → chequestrans + stktransm) ──
+# Records reconstructed allocations of EXISTING vouchers to invoices. NEVER creates
+# a cheques row (irreversible). OFF by default (human-in-the-loop, no rollback net).
+AP_RECONCILE_WRITER_ENABLED    = config('AP_RECONCILE_WRITER_ENABLED', default=False, cast=bool)
+# A test run must NEVER reach live SOFTECH, whatever .env says (tests that exercise
+# the live path opt back in with override_settings + a mocked connection).
+if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    AP_RECONCILE_WRITER_ENABLED = False
+AP_RECONCILE_UPDATE_PATIENTDATA = config('AP_RECONCILE_UPDATE_PATIENTDATA', default=False, cast=bool)
+# Kill-switch for the owner's auto-approve policy (recon_actions.auto_approve). When
+# False, rounds propose + hold but approve nothing, so nothing new reaches the writer.
+AP_RECONCILE_AUTO_APPROVE      = config('AP_RECONCILE_AUTO_APPROVE', default=True, cast=bool)
+AP_RECONCILE_DEFAULT_USERCODE  = config('AP_RECONCILE_DEFAULT_USERCODE', default='')
+
+# ── بدل الروشتة live workflow (doc 25 Phase 1) ──
+# Master switch for SOFTECH postings FROM a case (purchase / contract sale / product sale legs).
+# OFF ⇒ every leg returns the writer's dry-run plan. The invoices / POS writers keep their own
+# gates (INVOICE_WRITER_ENABLED / POS_WRITER_ENABLED) as a second, independent lock.
+REPLACEMENT_POSTING_ENABLED = config('REPLACEMENT_POSTING_ENABLED', default=False, cast=bool)
+if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    REPLACEMENT_POSTING_ENABLED = False
 
 # ── Market-shortage SOFTECH writeback (items.itemmodified=صنف نواقص, itemcode_alt2=تحذير) ──
 # Kill-switch: keep False until validated on the demo item; confirm/revert then stays
 # LOCAL (queued) and the retry job pushes when SOFTECH is reachable.
 SHORTAGE_SOFTECH_WRITE_ENABLED = config('SHORTAGE_SOFTECH_WRITE_ENABLED', default=False, cast=bool)
 SHORTAGE_WARNING_TEXT = config('SHORTAGE_WARNING_TEXT', default='صنف ناقص جدا بالسوق المصري!!!')
+
+# ── Phantom substitution (مبيعات وهمية) detector ─────────────────────────────
+# Flag items whose "sales" are mostly patient buy-backs (bought from internal
+# buy-back accounts, re-sold on contract) — over-ordered by the demand sheet.
+# STRONG = ratio ≥ 0.50; WATCH = ratio ≥ 0.30 with ≥100 buyback units (massively-
+# sold items). Detector runs inline in the engine run unless disabled here.
+PHANTOM_FLAG_THRESHOLD    = config('PHANTOM_FLAG_THRESHOLD',    default=0.50, cast=float)
+PHANTOM_WATCH_THRESHOLD   = config('PHANTOM_WATCH_THRESHOLD',   default=0.30, cast=float)
+PHANTOM_WATCH_MIN_BUYBACK = config('PHANTOM_WATCH_MIN_BUYBACK', default=100,  cast=float)
+PHANTOM_SCAN_IN_ENGINE_RUN = config('PHANTOM_SCAN_IN_ENGINE_RUN', default=True, cast=bool)
+# Order-qty reduction is DORMANT by default — flag/monitor only. When enabled (or
+# passed per engine run), the recommended qty is scaled by the order-% but kept
+# above a small genuine cushion (SAFETY_FLOOR_WEEKS × weekly genuine demand).
+PHANTOM_APPLY_REDUCTION   = config('PHANTOM_APPLY_REDUCTION',   default=False, cast=bool)
+PHANTOM_SAFETY_FLOOR_WEEKS = config('PHANTOM_SAFETY_FLOOR_WEEKS', default=1.0, cast=float)
+# 'strong' (ease-in default) → reduce STRONG-tier only; WATCH stays monitor-only.
+# 'all' → reduce both tiers. Overridable per run via phantom_reduce_tier.
+PHANTOM_REDUCE_TIER       = config('PHANTOM_REDUCE_TIER',       default='strong')
+
+# ── Cash & inventory optimization (docs/architecture/22) ─────────────────────
+# 📈 Demand-spike over-purchase: recent=qty_90d/3, prior=(qty_365d−qty_90d)/9.
+# STRONG = new-burst (prior<0.15) OR recent/prior≥10× (cap-eligible); WATCH = 6–10×.
+# The order cap is REVIEW-GATED (item.spike_confirmed) AND opt-in per run — cut to
+# CAP_MONTHS of coverage at the recent rate only when both hold.
+CASH_SPIKE_MIN_RECENT      = config('CASH_SPIKE_MIN_RECENT',      default=5.0,  cast=float)
+CASH_SPIKE_STRONG_RATIO    = config('CASH_SPIKE_STRONG_RATIO',    default=10.0, cast=float)
+CASH_SPIKE_WATCH_RATIO     = config('CASH_SPIKE_WATCH_RATIO',     default=6.0,  cast=float)
+CASH_SPIKE_NEW_BURST_PRIOR = config('CASH_SPIKE_NEW_BURST_PRIOR', default=0.15, cast=float)
+CASH_SPIKE_CAP_MONTHS      = config('CASH_SPIKE_CAP_MONTHS',      default=1.0,  cast=float)
+CASH_SPIKE_DETECT_IN_ENGINE_RUN = config('CASH_SPIKE_DETECT_IN_ENGINE_RUN', default=True, cast=bool)
+CASH_APPLY_SPIKE_CAP       = config('CASH_APPLY_SPIKE_CAP',       default=False, cast=bool)
 INVOICE_RETURN_REASON_CODE = config('INVOICE_RETURN_REASON_CODE', default='4')  # docnumber2 on a 120 doc
 # Write confirmed vendor_item_code → SOFTECH itemssuppliers.suppitemcode (trigger-free
 # master data). Default off; enables first-invoice code→item resolution once seeded.
 INVOICE_SUPPLIER_ITEM_WRITE_ENABLED = config('INVOICE_SUPPLIER_ITEM_WRITE_ENABLED', default=False, cast=bool)
+
+# Kill-switch for the insurance receipt re-price writeback (edits stktrans/stktransm/
+# branchesales on HQ + branch so a reprinted receipt matches a re-priced claim).
+# HIGHEST-RISK write; keep False until validated live on one receipt. Even when True,
+# every apply is per-receipt, confirm-gated, draft-only, and blocked if the branch
+# node is unreachable. See docs/architecture/21_SOFTECH_INSURANCE_REPRICE_WRITEBACK.md.
+INSURANCE_SOFTECH_WRITE_ENABLED = config('INSURANCE_SOFTECH_WRITE_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike
@@ -471,6 +610,9 @@ SCHEDULER_AUTOSTART = config('SCHEDULER_AUTOSTART', default=False, cast=bool)
 # Provider 1 — Gemini primary account (https://aistudio.google.com/)
 GEMINI_API_KEY = config('GEMINI_API_KEY',  default='')
 GEMINI_MODEL   = config('GEMINI_MODEL',    default='gemini-2.5-flash')
+# In-house fine-tuned OCR model (P3): a directory of a saved Donut/VisionEncoderDecoder
+# model. Empty = no in-house engine (run_engines skips it). Set after training on a GPU box.
+INHOUSE_OCR_MODEL_DIR = config('INHOUSE_OCR_MODEL_DIR', default='')
 GEMINI_RPM     = config('GEMINI_RPM',      default=10, cast=float)   # free tier: 10 RPM
 #
 # Provider 2 — Gemini secondary account (second Google account / Gemini Pro)

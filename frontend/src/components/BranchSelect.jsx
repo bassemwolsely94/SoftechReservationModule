@@ -16,6 +16,7 @@
  *   size         – "sm" (filter bars) | "md" (forms, default)
  */
 import { useState, useRef, useEffect } from 'react'
+import { wildcardMatch } from '../utils/wildcard'
 
 export default function BranchSelect({
   value       = '',
@@ -53,8 +54,7 @@ export default function BranchSelect({
     return (
       b.softech_branch_id?.toLowerCase().includes(q) ||
       b.code?.toLowerCase().includes(q) ||
-      b.name?.toLowerCase().includes(q) ||
-      (b.name_ar || '').includes(query)
+      wildcardMatch([b.name, b.name_ar], query)
     )
   })
 

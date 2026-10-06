@@ -114,7 +114,10 @@ _OCR_INVOICE_PROMPT = (
     'IMPORTANT:\n'
     '- distributor_margin_amt and pharmacist_margin_amt are MONETARY AMOUNTS (ج.م.), NOT percentages\n'
     '- vat_pct IS a percentage (e.g. 14)\n'
-    '- vendor_item_code is the short alphanumeric code printed by the supplier (e.g. "6594", "AT24 0457")\n'
+    '- vendor_item_code = ONLY a column titled كود الصنف / كود المورد / Item Code. If the invoice has no such\n'
+    '  column, leave vendor_item_code EMPTY. Many invoices (e.g. Pharma Overseas) print only رقم التشغيلة.\n'
+    '- batch_no = the رقم التشغيلة / Batch / Lot column. Write the WHOLE value in batch_no — never cut it,\n'
+    '  never split one printed value across two fields, never copy the same value into both fields.\n'
     '- ONE product per line, 13 fields separated by |\n'
     '- Keep Arabic product names exactly as written\n'
     '- Include dosage form & strength (e.g. "نيفيلوب 5 مجم قرص", "Novonorm 14")\n'
@@ -123,8 +126,9 @@ _OCR_INVOICE_PROMPT = (
     '- Do NOT output section headers (e.g. "اصناف خاضعة للضريبة"), totals, or explanatory text\n'
     '- Output the pipe-separated product list ONLY\n\n'
     'Example output:\n'
-    'ايفيروسبان 100 ملى شراب | ماركيول للصناع | 25 | 2442687 | 2442687 | 08.2027 | 55.00 | 25 | 5.066 | 36.18 | 14 | 126.65 | 0\n'
-    'سبازمو-ديجستين 30 قرص | فاركو للادوية | 30 | 6594 | 6594 | 09.2027 | 78.00 | 25 | 0 | 54.00 | 0 | 0 | 0\n'
+    '(an invoice WITH an item-code column, then one WITHOUT — batch only)\n'
+    'ايفيروسبان 100 ملى شراب | ماركيول للصناع | 25 | 643352 | 2442687 | 08.2027 | 55.00 | 25 | 5.066 | 36.18 | 14 | 126.65 | 0\n'
+    'سبازمو-ديجستين 30 قرص | فاركو للادوية | 30 |  | 6594 | 09.2027 | 78.00 | 25 | 0 | 54.00 | 0 | 0 | 0\n'
 )
 
 
@@ -228,6 +232,49 @@ _HEADER_RE = re.compile(
 )
 
 
+def _flat(v: str) -> str:
+    return re.sub(r'\s+', '', str(v or '')).upper()
+
+
+def separate_code_and_batch(code: str, batch: str) -> tuple:
+    """(vendor_item_code, batch_number, fix) — repairs the reader putting ONE printed batch
+    value into the supplier-code field (owner 2026-10-05; found on Pharma Overseas invoices,
+    whose sheets carry رقم التشغيلة but no item-code column). Deterministic:
+      1. same value in both fields             → it is the batch; code cleared   ('same')
+      2. one is the start of the other          → the batch was cut; keep the whole
+         value as the batch; code cleared                                       ('cut')
+      3. a short 1–3 digit "code" next to a 4–5 character batch → one value split
+         in two ('24426' + '87' = '2442687'); rejoin as the batch; code cleared  ('split')
+    Anything else is left exactly as read (fix = '')."""
+    code, batch = str(code or '').strip(), str(batch or '').strip()
+    fc, fb = _flat(code), _flat(batch)
+    if not fc or not fb:
+        return code, batch, ''
+    if fc == fb:
+        return '', batch, 'same'
+    if len(fb) >= 2 and fc.startswith(fb):
+        return '', code, 'cut'
+    if len(fc) >= 2 and fb.startswith(fc):
+        return '', batch, 'cut'
+    if fc.isdigit() and len(fc) <= 3 and 4 <= len(fb) <= 5:
+        return '', batch + code, 'split'
+    return code, batch, ''
+
+
+FIX_NOTES = {'same': 'كود المورد كان نفس رقم التشغيلة — نُقل للتشغيلة',
+             'cut': 'رقم التشغيلة كان مقطوعاً داخل كود المورد — جُمِع في التشغيلة',
+             'split': 'رقم التشغيلة كان مقسوماً بين الحقلين — جُمِع في التشغيلة'}
+
+
+def _clean_code_batch(line: dict) -> dict:
+    code, batch, fix = separate_code_and_batch(line.get('vendor_item_code'), line.get('batch_number'))
+    if fix:
+        line['read_as'] = {'vendor_item_code': line.get('vendor_item_code'), 'batch_number': line.get('batch_number')}
+        line['vendor_item_code'], line['batch_number'] = code, batch
+        line['notes'] = FIX_NOTES[fix]
+    return line
+
+
 def parse_lines(raw_text: str) -> list:
     """
     Parse raw OCR/Gemini output into structured invoice line dicts.
@@ -288,7 +335,7 @@ def parse_lines(raw_text: str) -> list:
                     public_price * (1 - discount_pct / 100) * (1 - extra_discount_pct / 100), 4
                 )
 
-            results.append({
+            results.append(_clean_code_batch({
                 'raw_text':               line,
                 'manual_name':            name,
                 'manufacturer':           manufacturer,
@@ -303,7 +350,7 @@ def parse_lines(raw_text: str) -> list:
                 'vat_pct':                vat_pct,
                 'distributor_margin_amt': distributor_margin_amt,
                 'pharmacist_margin_amt':  pharmacist_margin_amt,
-            })
+            }))
 
         else:
             # ── Free-text fallback (EasyOCR / pytesseract) ─────────────────────
@@ -431,14 +478,13 @@ _OCR_JSON_PROMPT = (
     '     "item_name": string,         // keep Arabic EXACTLY; include form & strength\n'
     '     "generic_name_en": string,   // the English generic/brand name you recognise for this drug, else ""\n'
     '     "manufacturer": string,\n'
-    '     "vendor_item_code": string,  // CRITICAL: the supplier product code (كود الصنف / كود المورد)\n'
-    '                                  // printed on THIS row in the item-code column. It may be all DIGITS\n'
-    '                                  // (e.g. "643352") OR ALPHANUMERIC — letters+digits, sometimes with\n'
-    '                                  // a letter prefix (e.g. "AT240457", "DEG075", "OGE2100", "YD502").\n'
-    '                                  // Capture the WHOLE token exactly incl. any letters; present on\n'
-    '                                  // almost every row — never leave blank if a code is visible.\n'
-    '                                  // NOT the barcode, batch/التشغيلة, price, or quantity.\n'
-    '     "batch_number": string,      // رقم التشغيلة/الباتش\n'
+    '     "vendor_item_code": string,  // the supplier product code — ONLY from a column titled\n'
+    '                                  // كود الصنف / كود المورد / Item Code (e.g. "643352"). If the invoice\n'
+    '                                  // has NO such column, return "". NEVER the batch/التشغيلة/Lot value,\n'
+    '                                  // barcode, price or quantity.\n'
+    '     "batch_number": string,      // رقم التشغيلة / Batch / Lot — the WHOLE value exactly as printed\n'
+    '                                  // (e.g. "240808A", "AT24 0457", "2442687"); never cut it, never split\n'
+    '                                  // it across two fields, never copy it into vendor_item_code.\n'
     '     "expiry_date": string,       // as printed, e.g. "08.2027"\n'
     '     "quantity": number,\n'
     '     "public_price": number,      // سعر الجمهور\n'
@@ -583,7 +629,7 @@ def parse_structured(data: dict):
         if net == 0 and public > 0:
             net = round(public * (1 - disc / 100) * (1 - extra / 100), 4)
         raw_exp  = str(ln.get('expiry_date') or '').strip()
-        lines.append({
+        lines.append(_clean_code_batch({
             'raw_text':               json.dumps(ln, ensure_ascii=False)[:500],
             'manual_name':            name,
             'generic_name_en':        (ln.get('generic_name_en') or '').strip(),
@@ -600,7 +646,7 @@ def parse_structured(data: dict):
             'distributor_margin_amt': _num(ln.get('distributor_margin_amt')),
             'pharmacist_margin_amt':  _num(ln.get('pharmacist_margin_amt')),
             'ocr_confidence':         _conf(ln.get('confidence')),
-        })
+        }))
     return header, lines
 
 

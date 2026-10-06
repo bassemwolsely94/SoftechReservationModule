@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from django.db.models import Count, Sum
 from rest_framework import filters, generics, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -155,7 +156,7 @@ class FinancialPeriodListView(generics.ListAPIView):
 class AccountListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class   = AccountSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['code', 'name', 'name_ar', 'softech_code']
     ordering_fields    = ['code', 'level', 'account_type']
     ordering           = ['code']
@@ -273,7 +274,7 @@ def profit_and_loss(request):
 
 class JournalEntryListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_number', 'description', 'reference']
     ordering_fields    = ['entry_date', 'total_debit']
     ordering           = ['-entry_date']
@@ -371,7 +372,7 @@ def trial_balance(request):
 class TreasuryMovementListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class   = TreasuryMovementSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_number', 'party_name', 'party_code', 'reference']
     ordering_fields    = ['movement_date', 'amount']
     ordering           = ['-movement_date']
@@ -429,7 +430,7 @@ def cash_flow_summary(request):
 class ExpenseRecordListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class   = ExpenseRecordSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_ref', 'description', 'vendor', 'reference']
     ordering_fields    = ['expense_date', 'amount']
     ordering           = ['-expense_date']
@@ -585,7 +586,7 @@ def expense_subcategories(request):
 class FinanceSchemaTableListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class   = FinanceSchemaTableListSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['table_name', 'inferred_purpose', 'category']
     ordering_fields    = ['table_name', 'row_count', 'category']
     ordering           = ['category', 'table_name']

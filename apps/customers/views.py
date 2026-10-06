@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -19,7 +20,8 @@ def _profile(request):
 
 class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes  = [IsAuthenticated]
-    filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # search after ordering: exact text first, the chosen sort within each rank
+    filter_backends     = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']
     search_fields       = ['name', 'phone', 'phone_alt', 'softech_id', 'softech_pic']
     ordering_fields     = ['name', 'created_at', 'updated_at', 'churn_score', 'ltv',
@@ -43,6 +45,42 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=_profile(self.request))
+
+    # ── GET|PATCH /api/customers/segmentation-config/ ─────────────────────────
+    # Tunable CRM segmentation thresholds (singleton). PATCH is admin-only.
+    @action(detail=False, methods=['get', 'patch'], url_path='segmentation-config')
+    def segmentation_config(self, request):
+        from .models import SegmentationConfig
+        cfg = SegmentationConfig.get_solo()
+        fields = ['vip_ltv_threshold', 'loyal_min_purchases', 'new_grace_days',
+                  'at_risk_min_days', 'at_risk_max_days', 'dormant_max_days']
+
+        if request.method == 'PATCH':
+            p = _profile(request)
+            if not (p and p.role == 'admin'):
+                return Response({'detail': 'يتطلب صلاحية مدير'}, status=status.HTTP_403_FORBIDDEN)
+            for f in fields:
+                if f in request.data:
+                    setattr(cfg, f, request.data[f])
+            cfg.updated_by = p
+            cfg.save()
+
+        data = {f: getattr(cfg, f) for f in fields}
+        data['vip_ltv_threshold'] = float(data['vip_ltv_threshold'])
+        data['updated_at'] = cfg.updated_at.isoformat() if cfg.updated_at else None
+        return Response(data)
+
+    # ── GET /api/customers/recognize/?q=<phone|name> ──────────────────────────
+    @action(detail=False, methods=['get'], url_path='recognize')
+    def recognize(self, request):
+        """Recognize-on-type for the POS customer field + duplicate surfacing."""
+        from .recognition import recognize as _recognize
+        try:
+            limit = min(int(request.query_params.get('limit', 6)), 15)
+        except (TypeError, ValueError):
+            limit = 6
+        data = _recognize(request.query_params.get('q', ''), limit=max(1, limit))
+        return Response(data)
 
     # ── GET /api/customers/{id}/purchases/ ────────────────────────────────────
 
@@ -211,6 +249,48 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         note.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ── GET /api/customers/{id}/pos-summary/ ──────────────────────────────────
+    # Compact Customer-360 for the POS side-drawer (fast; not the full profile).
+    @action(detail=True, methods=['get'], url_path='pos-summary')
+    def pos_summary(self, request, pk=None):
+        from .pos_summary import build_pos_summary
+        return Response(build_pos_summary(self.get_object()))
+
+    # ── GET /api/customers/{id}/receipt/?invoice=  ·  POST .../receipt/ {channel}
+    # Unified digital receipt payload + channel delivery (honest stubs).
+    @action(detail=True, methods=['get', 'post'], url_path='receipt')
+    def receipt(self, request, pk=None):
+        from .receipt import build_receipt, send_receipt
+        customer = self.get_object()
+        invoice_id = request.query_params.get('invoice') or request.data.get('invoice')
+        if invoice_id:
+            purchase = PurchaseHistory.objects.filter(pk=invoice_id, customer=customer).first()
+        else:
+            from .repeat_order import last_sale_for
+            purchase = last_sale_for(customer)
+        if not purchase:
+            return Response({'detail': 'لا توجد فاتورة'}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == 'POST':
+            return Response(send_receipt(purchase, request.data.get('channel', 'print')))
+        return Response(build_receipt(purchase))
+
+    # ── GET /api/customers/{id}/repeat-order/?branch=&invoice= ────────────────
+    # Rebuild a past order into a REVALIDATED cart proposal (never blind-copy).
+    @action(detail=True, methods=['get'], url_path='repeat-order')
+    def repeat_order(self, request, pk=None):
+        from .repeat_order import build_repeat_order, last_sale_for
+        customer = self.get_object()
+        invoice_id = request.query_params.get('invoice')
+        if invoice_id:
+            purchase = PurchaseHistory.objects.filter(pk=invoice_id, customer=customer).first()
+        else:
+            purchase = last_sale_for(customer)
+        if not purchase:
+            return Response({'detail': 'لا توجد فاتورة سابقة'}, status=status.HTTP_404_NOT_FOUND)
+        branch_id = request.query_params.get('branch')
+        branch_id = int(branch_id) if branch_id and str(branch_id).isdigit() else None
+        return Response(build_repeat_order(purchase, branch_id=branch_id))
 
     # ── GET /api/customers/{id}/patient-profile/ ──────────────────────────────
 

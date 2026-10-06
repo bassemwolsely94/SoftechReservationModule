@@ -194,7 +194,7 @@ function EngineStatusStrip({ onTriggerSuccess }) {
         <div className="mt-3 flex flex-wrap gap-4 p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs">
           <label className="flex flex-col gap-1">
             <span className="text-gray-500 font-medium">فترة الرصد (أيام)</span>
-            <input type="number" min={30} max={1825} value={params.lookback_days}
+            <input type="number" min={30} max={1825} step={1} value={params.lookback_days}
               onChange={e => setParams(p => ({ ...p, lookback_days: +e.target.value }))}
               className="border border-gray-200 rounded px-2 py-1 w-24 focus:outline-none focus:border-indigo-400" />
           </label>

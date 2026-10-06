@@ -43,3 +43,11 @@ Not Yet Deployed/
 
 # Test/replication scratch state
 _repl_test_state.json
+# Generated review / audit exports (contain patient & financial data) — never commit
+exports/
+coupons_out/
+docs/architecture/softech_gift_vouchers_lines.csv
+scratch/
+reconciliation.xlsx
+.envdocs/architecture/softech_gift_vouchers_investigation.txt
+docs/architecture/softech_gift_vouchers_docs.txt

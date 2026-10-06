@@ -23,6 +23,7 @@ import csv
 import io
 import logging
 from decimal import Decimal, InvalidOperation
+from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 
 logger = logging.getLogger('elrezeiky.stockcount')
 
@@ -162,7 +163,7 @@ def _export_xlsx(session, snapshots, include_variance: bool,
     ws.merge_cells('A1:H1' if include_variance else 'A1:G1')
     title_cell = ws['A1']
     title_cell.value = (
-        f'ورقة الجرد المادي — {session.name}  |  فرع: {session.branch_code}  '
+        f'ورقة الجرد المادي — {session.name}  |  فرع: {BL(session.branch_code)}  '
         f'|  جلسة رقم: {session.pk}'
         + ('  |  مرتبة حسب مناطق الترصيص 🗄️' if zone_map else '')
     )

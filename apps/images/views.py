@@ -43,6 +43,7 @@ from rest_framework.views import APIView
 
 from apps.catalog.models import Item
 from .models import ImageCandidate, ImageSearchJob
+from apps.catalog.wildcard import wq
 from .serializers import (
     ImageCandidateSerializer, ImageSearchJobSerializer,
     JobCreateSerializer, CandidateReviewSerializer,
@@ -396,7 +397,7 @@ def product_image_search(request):
     # ── text search ───────────────────────────────────────────────────────────
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(name__icontains=q) | Q(softech_id__icontains=q))
+        qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))
 
     # ── category filter ───────────────────────────────────────────────────────
     cat_id = p.get('category_id')

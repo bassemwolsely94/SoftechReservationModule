@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import useGridKeyboard from '../hooks/useGridKeyboard'
 
 // ── Download helper ────────────────────────────────────────────────────────────
 function triggerDownload(data, filename, mime) {
@@ -60,7 +61,7 @@ async function learnWithApproval(invoiceId, lineId, onNotify) {
   } catch { /* learning is best-effort; never blocks the confirm */ }
 }
 
-function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNotify }) {
+function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNotify, kb, openReq }) {
   const [editing,     setEditing]     = useState(false)
   const [draft,       setDraft]       = useState({ ...line })
   const [showMatches, setShowMatches] = useState(false)
@@ -112,11 +113,15 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
     onUpdated()
   }
 
+  // M (keyboard) toggles this line's match suggestions
+  useEffect(() => { if (openReq?.id === line.id) fetchMatches() }, [openReq])   // eslint-disable-line react-hooks/exhaustive-deps
+
   const total = Number(line.line_total || 0).toFixed(3)
 
   const needsReview = line.match_review && !line.is_confirmed
   return (
-    <div className={`border rounded-xl mb-2 overflow-hidden
+    <div ref={kb?.ref} onMouseDown={kb?.onMouseDown} data-kb-active={kb?.['data-kb-active']}
+      className={`border rounded-xl mb-2 overflow-hidden ${kb?.className || ''}
       ${line.is_confirmed ? 'border-green-200 bg-green-50/20' :
         needsReview ? 'border-orange-300 bg-orange-50/40' :
         line.item ? 'border-blue-200 bg-blue-50/10' :
@@ -158,7 +163,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
               </div>
               <div>
                 <label className="text-[10px] text-gray-500">خصم %</label>
-                <input type="number" value={draft.discount_pct}
+                <input type="number" step="0.5" value={draft.discount_pct}
                   onChange={e => setDraft(d => ({ ...d, discount_pct: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
@@ -387,6 +392,22 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     load()
   }
 
+  // keyboard flow (shared review-grid keys): ↑↓ move · Enter confirm the suggested item and
+  // go to the next line · M show the match suggestions. A quiet refresh keeps focus in the list.
+  const quietReload = async () => { try { setInv((await invoicesApi.get(invoiceId)).data) } catch { /* next load */ } }
+  const [openReq, setOpenReq] = useState(null)
+  const kbEditable = ['pending', 'review'].includes(inv?.status)
+  const kb = useGridKeyboard({
+    rows: inv?.lines || [], getKey: l => l.id, enabled: kbEditable, advanceOnConfirm: true,
+    onConfirm: async (l) => {
+      if (!l.item || l.is_confirmed) return
+      await invoicesApi.updateLine(invoiceId, l.id, { item: l.item, is_confirmed: true })
+      learnWithApproval(invoiceId, l.id, showToast)
+      quietReload()
+    },
+    onOpen: l => setOpenReq(r => ({ id: l.id, n: (r?.n || 0) + 1 })),
+  })
+
   const handleDelete = async (lid) => {
     if (!confirm('حذف هذا السطر؟')) return
     await invoicesApi.deleteLine(invoiceId, lid)
@@ -518,7 +539,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 animate-pulse">جاري التحميل...</div>
+  if (loading && !inv) return <div className="flex items-center justify-center h-64 text-gray-400 animate-pulse">جاري التحميل...</div>
   if (!inv) return null
 
   const stCfg   = STATUS_CONFIG[inv.status] || {}
@@ -837,7 +858,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
               </div>
               <div>
                 <label className="text-[10px] text-gray-500 block mb-0.5">خصم %</label>
-                <input type="number" value={newLine.discount_pct}
+                <input type="number" step="0.5" value={newLine.discount_pct}
                   onChange={e => setNewLine(n => ({ ...n, discount_pct: e.target.value }))}
                   className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
@@ -905,9 +926,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           </div>
         ) : (
           <div className="max-w-3xl">
+            {editable && <div className="text-[11px] text-gray-400 mb-1">⌨ ↑↓ تنقل · Enter تأكيد والتالي · M اقتراحات المطابقة</div>}
+            <div {...kb.containerProps}>
             {lines.map(l => (
               <InvoiceLineRow
                 key={l.id}
+                kb={kb.rowProps(l, { block: true })}
+                openReq={openReq}
                 line={l}
                 invoiceId={invoiceId}
                 onUpdated={load}
@@ -916,6 +941,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 onNotify={showToast}
               />
             ))}
+            </div>
             {/* Total */}
             <div className="mt-4 flex justify-end">
               <div className="bg-white rounded-xl border border-gray-200 p-4 text-right min-w-48">

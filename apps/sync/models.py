@@ -13,6 +13,10 @@ class SyncRun(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     records_synced = models.IntegerField(default=0)
     error_message = models.TextField(blank=True)
+    # Live phase/message for on-demand runs (e.g. items sync toast). Shape:
+    # {'phase': 'items', 'message': '...', 'done': int, 'total': int}. Optional —
+    # scheduled lanes leave it empty.
+    progress = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-started_at']

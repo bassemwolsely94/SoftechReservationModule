@@ -41,6 +41,7 @@ from rest_framework.response import Response
 from apps.branches.models import Branch
 from apps.catalog.models import Item
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
+from apps.catalog.wildcard import wq
 
 logger = logging.getLogger('elrezeiky.analytics')
 
@@ -1647,7 +1648,7 @@ def customer_search(request):
     qs = (
         Customer.objects
         .filter(
-            Q(name__icontains=q)
+            wq(q, 'name')
             | Q(phone__icontains=q)
             | Q(phone_alt__icontains=q)
             | Q(softech_pic__icontains=q)

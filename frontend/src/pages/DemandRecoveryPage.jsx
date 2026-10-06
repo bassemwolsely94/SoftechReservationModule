@@ -94,7 +94,7 @@ function RecoverModal({ row, onConfirm, onClose, busy }) {
           {row.display_name} — العميل {row.customer_name || row.phone}
         </p>
         <label className="label text-xs">الإيراد المُسترَد (ج.م)</label>
-        <input type="number" min="0" step="0.01" className="input-field" dir="ltr"
+        <input type="number" min="0" step="any" className="input-field" dir="ltr"
           value={revenue} onChange={e => setRevenue(e.target.value)} />
         <p className="text-xs text-gray-400 mt-1">
           القيمة المقترحة محسوبة من السعر المُجمَّد × الكمية. عدّلها لتطابق الفاتورة الفعلية.

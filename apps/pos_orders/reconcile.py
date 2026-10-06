@@ -73,19 +73,33 @@ def reconcile_order(order, reader) -> str:
         return order.status
 
     if reader.pending_exists(order):
-        return order.status  # still awaiting the cashier
+        # still awaiting the cashier — clear any stale review flag from a previous uncertain read.
+        if order.needs_review:
+            order.needs_review = False
+            order.review_reason = ''
+            order.save(update_fields=['needs_review', 'review_reason', 'updated_at'])
+        return order.status
 
     final = reader.final_doc(order)
     if final:
         order.softech_final_docnumber = final
         order.status = SoftechSalesOrder.STATUS_SETTLED
-        order.save(update_fields=['softech_final_docnumber', 'status', 'updated_at'])
+        order.needs_review = False          # resolved → clear the flag
+        order.review_reason = ''
+        order.save(update_fields=['softech_final_docnumber', 'status',
+                                  'needs_review', 'review_reason', 'updated_at'])
         logger.info('[pos_orders] order=%s settled → final doc %s', order.pk, final)
         return order.status
 
+    # pending gone but no final doc: a possible cashier Delete or a lookup miss. NEVER auto-cancel
+    # on an uncertain read — flag it for the Exception Center (leakage bucket) and leave as pushed.
+    if not order.needs_review or order.review_reason != 'pending_gone_no_final':
+        order.needs_review = True
+        order.review_reason = 'pending_gone_no_final'
+        order.save(update_fields=['needs_review', 'review_reason', 'updated_at'])
     logger.warning(
         '[pos_orders] order=%s: pending row gone but no final doc found '
-        '(possible cashier Delete, or lookup miss) — left as pushed for manual review', order.pk)
+        '(possible cashier Delete, or lookup miss) — flagged needs_review', order.pk)
     return order.status
 
 
@@ -126,8 +140,11 @@ def run_reconcile(profile=None) -> dict:
                 if st == SoftechSalesOrder.STATUS_SETTLED and before != st:
                     summary['settled'] += 1
                 elif st == SoftechSalesOrder.STATUS_PUSHED:
-                    # distinguish "still pending" from "gone but unresolved" via a cheap re-check
-                    summary['still_pending'] += 1
+                    # flagged for review (pending gone, no final doc) vs genuinely still pending
+                    if o.needs_review:
+                        summary['unresolved'] += 1
+                    else:
+                        summary['still_pending'] += 1
             except Exception as exc:
                 summary['errors'] += 1
                 logger.warning('[pos_orders] reconcile order=%s failed: %s', o.pk, exc)

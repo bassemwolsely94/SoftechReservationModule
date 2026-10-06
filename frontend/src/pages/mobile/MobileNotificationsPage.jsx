@@ -47,7 +47,7 @@ function PushToggle() {
       setStatus('denied')
       setMsg('تم رفض إذن الإشعارات — فعّله من إعدادات المتصفح')
     } else if (res.reason === 'disabled') {
-      setMsg('إشعارات المتصفح غير مُفعّلة على الخادم')
+      setMsg('إشعارات المتصفح غير مُفعّلة على السيرفر')
     } else {
       setMsg('تعذّر تفعيل إشعارات المتصفح على هذا الجهاز')
     }

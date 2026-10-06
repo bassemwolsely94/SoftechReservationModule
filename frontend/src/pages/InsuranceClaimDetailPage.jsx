@@ -9,10 +9,13 @@
  *   - التحصيل     : Payments & deductions
  *   - المراجعة    : Audit — drill into items per prescription
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
+import { wildcardMatch } from '../utils/wildcard'
+import useGridKeyboard from '../hooks/useGridKeyboard'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -41,14 +44,139 @@ function Btn({ children, onClick, variant = 'primary', size = 'sm', className = 
 }
 
 // ── Prescription Row ───────────────────────────────────────────────────────────
-function RxRow({ rx, claimId, discPcts, onRefresh }) {
+/**
+ * PatientNameAutocomplete — suggests full patient names from the same insurer's
+ * history (exact ID-card spelling preserved).  Debounced; keyboard-navigable.
+ * Picking a suggestion fills the EXACT stored spelling. onCommit fires on Enter/pick.
+ */
+const _sugCache = new Map()   // module-level tiny cache: `${claimId}|${q}` → results
+
+function PatientNameAutocomplete({ claimId, value, onChange, onCommit, className, autoFocus }) {
+  const [sugs, setSugs]   = useState([])
+  const [open, setOpen]   = useState(false)
+  const [hi, setHi]       = useState(-1)
+  const [loading, setLoading] = useState(false)
+  const [rect, setRect]   = useState(null)
+  const inputRef = useRef(null)
+  const reqId    = useRef(0)
+
+  const measure = () => {
+    const el = inputRef.current
+    if (el) setRect(el.getBoundingClientRect())
+  }
+
+  useEffect(() => {
+    const q = (value ?? '').trim()
+    if (q.length < 2) { setSugs([]); setOpen(false); return }
+    const key = `${claimId}|${q}`
+    if (_sugCache.has(key)) {
+      const filtered = _sugCache.get(key).filter(s => s.name !== q)
+      setSugs(filtered); setHi(-1); if (filtered.length) { measure(); setOpen(true) } else setOpen(false)
+      return
+    }
+    const my = ++reqId.current
+    setLoading(true)
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await insuranceApi.patientNameSuggest(claimId, q)
+        _sugCache.set(key, data || [])
+        if (my !== reqId.current) return           // a newer keystroke superseded this
+        const filtered = (data || []).filter(s => s.name !== q)
+        setSugs(filtered); setHi(-1)
+        if (filtered.length) { measure(); setOpen(true) } else setOpen(false)
+      } catch { if (my === reqId.current) { setSugs([]); setOpen(false) } }
+      finally { if (my === reqId.current) setLoading(false) }
+    }, 140)
+    return () => clearTimeout(t)
+  }, [value, claimId])
+
+  // keep the portal glued to the input while open
+  useEffect(() => {
+    if (!open) return
+    const onScroll = () => measure()
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', onScroll) }
+  }, [open])
+
+  const pick = (s) => { onChange(s.name); setOpen(false); setSugs([]); onCommit && onCommit(s.name) }
+
+  return (
+    <span className="relative inline-block">
+      <input
+        ref={inputRef}
+        value={value ?? ''}
+        autoFocus={autoFocus}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => {
+          if (open && sugs.length) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h + 1, sugs.length - 1)); return }
+            if (e.key === 'ArrowUp')   { e.preventDefault(); setHi(h => Math.max(h - 1, -1)); return }
+            if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); pick(sugs[hi]); return }
+            if (e.key === 'Escape')    { setOpen(false); return }
+          }
+          if (e.key === 'Enter') onCommit && onCommit(value)
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => { if (sugs.length) { measure(); setOpen(true) } }}
+        className={className} />
+      {open && rect && createPortal(
+        <div
+          style={{ position: 'fixed', top: rect.bottom + 2, right: window.innerWidth - rect.right, width: Math.max(rect.width, 240), zIndex: 9999 }}
+          className="max-h-64 overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl text-right">
+          {sugs.map((s, i) => (
+            <button key={s.name + i} type="button"
+              onMouseDown={e => { e.preventDefault(); pick(s) }}
+              className={`w-full text-right px-3 py-1.5 text-sm flex items-center justify-between gap-2 ${i === hi ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="font-medium text-gray-800 truncate">{s.name}</span>
+                {s.kind === 'complete' && <span className="text-[9px] bg-emerald-100 text-emerald-700 rounded px-1 py-0.5 shrink-0">إكمال</span>}
+                {s.kind === 'spelling' && <span className="text-[9px] bg-sky-100 text-sky-700 rounded px-1 py-0.5 shrink-0">تصحيح إملائي</span>}
+              </span>
+              <span className="text-[10px] text-gray-400 shrink-0" dir="ltr">
+                {s.count}× {s.last ? '· ' + s.last : ''}
+              </span>
+            </button>
+          ))}
+          {loading && <div className="px-3 py-1 text-[11px] text-gray-400">…</div>}
+        </div>,
+        document.body)}
+    </span>
+  )
+}
+
+function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
   const [showAdjust, setShowAdjust] = useState(false)
   const [showLines, setShowLines]   = useState(false)
   const [lines, setLines]           = useState(rx.lines || null)
   const [linesLoading, setLinesLoading] = useState(false)
-  const [editLines, setEditLines]   = useState(false)   // unlock line editing
+  const [editLines, setEditLines]   = useState(false)   // unlock line editing (also unlocks the patient name)
   const [lineEdits, setLineEdits]   = useState({})      // lineId → {item_code, quantity, unit_price, lookup}
   const [savingLine, setSavingLine] = useState(null)
+  const [nameDraft, setNameDraft]   = useState(null)    // patient-name edit buffer (null = not touched)
+  const [savingName, setSavingName] = useState(false)
+  const [editingName, setEditingName] = useState(false) // name-only edit, INDEPENDENT of the line lock
+
+  const saveName = async (override) => {
+    // `override` (from a picked suggestion) beats the async-stale nameDraft.
+    // Guard: ignore a non-string arg (e.g. a click event) so it can't crash.
+    const src = (typeof override === 'string') ? override : nameDraft
+    const v = (src ?? '').trim()
+    if (v === '' || v === (rx.patient_name || '')) { setNameDraft(null); setEditingName(false); return }
+    setSavingName(true)
+    try {
+      await insuranceApi.updatePatientName(claimId, rx.id, v)
+      setNameDraft(null); setEditingName(false); onRefresh()
+    } finally { setSavingName(false) }
+  }
+
+  const revertName = async () => {
+    setSavingName(true)
+    try {
+      await insuranceApi.revertPatientName(claimId, rx.id)
+      setNameDraft(null); setEditingName(false); onRefresh()
+    } finally { setSavingName(false) }
+  }
 
   const reloadLines = async () => {
     const { data } = await insuranceApi.prescriptionLines(claimId, rx.id)
@@ -134,17 +262,79 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
   const mismatch = rx.softech_mismatch && !isExcluded
   return (
     <>
-      <tr className={`border-b border-gray-100 text-sm ${isExcluded ? 'opacity-40 line-through' : ''} ${mismatch ? 'bg-amber-50' : ''}`}>
+      <tr className={`border-b border-gray-100 text-sm ${isExcluded ? 'opacity-40 line-through' : ''} ${mismatch ? 'bg-amber-50' : ''} ${selected ? 'bg-blue-50/60' : ''}`}>
+        <td className="px-2 py-2 text-center">
+          {onToggleSelect && <input type="checkbox" checked={!!selected} onChange={onToggleSelect} />}
+        </td>
         <td className="px-3 py-2 text-gray-400 text-xs">{rx.sequence}</td>
         <td className="px-3 py-2 text-xs text-gray-500">
           {rx.softech_docdate}
         </td>
+        <td className="px-3 py-2 text-xs font-mono text-gray-500">{rx.softech_docnumber || '—'}</td>
+        <td className="px-3 py-2 text-xs text-center text-gray-500">{rx.softech_branchcode || '—'}</td>
         <td className="px-3 py-2 font-medium text-gray-800">
           {mismatch && (
             <span title={`صافينا ${fmt(net)} مقابل سوفتك ${fmt(rx.softech_net)} (فرق ${rx.softech_net_diff > 0 ? '+' : ''}${fmt(rx.softech_net_diff)})`}
               className="text-amber-500 ml-1">⚑</span>
           )}
-          {rx.patient_name || '—'}
+          {rx.is_manual && (
+            <span title="روشتة مضافة يدوياً (تفصيلية)"
+              className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded ml-1">يدوي</span>
+          )}
+          {(editLines || editingName) ? (
+            <span className="inline-flex items-center gap-1">
+              <PatientNameAutocomplete
+                claimId={claimId}
+                value={nameDraft ?? rx.patient_name ?? ''}
+                onChange={setNameDraft}
+                onCommit={(v) => saveName(v)}
+                autoFocus={editingName}
+                className="border border-blue-300 rounded px-2 py-0.5 text-sm w-52" />
+              <button onClick={() => saveName()} disabled={savingName}
+                className="text-[11px] bg-blue-600 text-white rounded px-1.5 py-0.5 disabled:opacity-50">
+                {savingName ? '…' : 'حفظ الاسم'}
+              </button>
+              {editingName && !editLines && (
+                <button onClick={() => { setNameDraft(null); setEditingName(false) }} disabled={savingName}
+                  className="text-[11px] text-gray-400 hover:text-gray-600">إلغاء</button>
+              )}
+              {rx.softech_patient_name && rx.patient_name !== rx.softech_patient_name && (
+                <button onClick={revertName} disabled={savingName}
+                  title={`استرجاع اسم سوفتك الأصلي: ${rx.softech_patient_name}`}
+                  className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1.5 py-0.5 disabled:opacity-50">
+                  ↩ اسم سوفتك
+                </button>
+              )}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 group flex-wrap">
+              <span>{rx.patient_name || '—'}</span>
+              <button onClick={() => { setNameDraft(rx.patient_name || ''); setEditingName(true) }}
+                title="تعديل الاسم (بدون فتح قفل البنود)"
+                className="text-[11px] text-gray-300 hover:text-blue-600">✎</button>
+              {sug && sug.type === 'complete' && (
+                <button onClick={() => saveName(sug.suggestion)} disabled={savingName}
+                  title={`إكمال الاسم رباعياً من السجل — اضغط للتطبيق (قابل للتراجع):\n${sug.suggestion}`}
+                  className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-1.5 py-0.5 hover:bg-emerald-100 disabled:opacity-50">
+                  ⇢ إكمال: {sug.suggestion}
+                </button>
+              )}
+              {sug && sug.type === 'spelling' && (
+                <button onClick={() => saveName(sug.suggestion)} disabled={savingName}
+                  title={`تصحيح إملائى مقترح — اضغط للتطبيق (قابل للتراجع):\n${sug.suggestion}`}
+                  className="text-[10px] bg-sky-50 border border-sky-200 text-sky-700 rounded px-1.5 py-0.5 hover:bg-sky-100 disabled:opacity-50">
+                  ✎ {sug.suggestion}
+                </button>
+              )}
+              {rx.softech_patient_name && rx.patient_name !== rx.softech_patient_name && (
+                <button onClick={revertName} disabled={savingName}
+                  title={`استرجاع اسم سوفتك الأصلي: ${rx.softech_patient_name}`}
+                  className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1 py-0.5 disabled:opacity-50">
+                  ↩
+                </button>
+              )}
+            </span>
+          )}
         </td>
         <td className="px-3 py-2 text-left font-mono text-gray-600">{fmt(local)}</td>
         <td className="px-3 py-2 text-left font-mono text-gray-600">{fmt(imported)}</td>
@@ -189,6 +379,13 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
             <Btn onClick={toggleExclude} variant={isExcluded ? 'secondary' : 'danger'}>
               {isExcluded ? 'إعادة إدراج' : 'استثناء'}
             </Btn>
+            {rx.is_manual && (
+              <Btn variant="danger" onClick={async () => {
+                if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
+                await insuranceApi.deleteManualPrescription(claimId, rx.id)
+                onRefresh()
+              }}>حذف يدوي</Btn>
+            )}
           </div>
         </td>
       </tr>
@@ -196,9 +393,26 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
       {/* Item lines drill-down */}
       {showLines && lines && (
         <tr>
-          <td colSpan={10} className="bg-gray-50 px-6 py-3">
+          <td colSpan={12} className="bg-gray-50 px-6 py-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500">بنود الروشتة ({lines.length})</span>
+              <span className="text-xs text-gray-500">
+                بنود الروشتة ({lines.length})
+                {lines.filter(l => l.variance?.has_variance).length > 0 && (
+                  <span className="text-amber-600 mr-2" title="أصناف بها فرق عن الكتالوج الحالى — عرض فقط، لا يظهر فى المستندات المصدَّرة">
+                    · ⚠️ {lines.filter(l => l.variance?.has_variance).length} صنف يختلف عن الكتالوج
+                  </span>
+                )}
+                {lines.filter(l => l.variance?.softech_class_mismatch).length > 0 && (
+                  <span className="text-orange-600 mr-2" title="أصناف تصنيفنا لها يختلف عن تصنيف سوفتك الخام">
+                    · ⚑ {lines.filter(l => l.variance?.softech_class_mismatch).length} صنف تصنيفه يخالف سوفتك
+                  </span>
+                )}
+                {lines.filter(l => l.variance?.value_discrepancy).length > 0 && (
+                  <span className="text-rose-600 mr-2" title="أصناف إجمالى قيمتها محسوب من كمية مُقرَّبة (٣ خانات) وقد يختلف عن سوفتك — راجعها">
+                    · 💰 {lines.filter(l => l.variance?.value_discrepancy).length} صنف قيمته قد تخالف سوفتك
+                  </span>
+                )}
+              </span>
               <button onClick={() => setEditLines(v => !v)}
                 className={`text-xs rounded px-2 py-1 border ${editLines
                   ? 'bg-red-50 text-red-700 border-red-200'
@@ -206,10 +420,24 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
                 {editLines ? '🔒 قفل التعديل' : '🔓 تفعيل تعديل البنود'}
               </button>
             </div>
+            {mismatch && (
+              <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 leading-relaxed">
+                ⚑ صافى هذه الروشتة يختلف عن سوفتك بمقدار{' '}
+                <b className="font-mono">{rx.softech_net_diff > 0 ? '+' : ''}{fmt(rx.softech_net_diff)}</b>{' '}
+                (صافينا {fmt(net)} مقابل سوفتك {fmt(rx.softech_net)}).
+                {lines.some(l => l.variance?.discount_discrepancy)
+                  ? ' السبب أصناف بعينها 💸 طبّق سوفتك عليها خصماً يخالف نسبة الفئة الموحّدة — راجع البنود المعلَّمة أدناه. عرض فقط — لا يؤثر على التصدير.'
+                  : lines.some(l => l.variance?.softech_class_mismatch)
+                  ? ' الأصناف المعلَّمة ⚑ تصنيفها لدينا يخالف سوفتك — راجعها.'
+                  : lines.some(l => l.variance?.softech_line_net != null)
+                  ? ' لا يوجد بند مفرد يفسّر الفرق (فروق تقريب متراكمة). عرض فقط — لا يؤثر على التصدير.'
+                  : ' الفرق ناتج عن خصم سوفتك على مستوى الصنف — شغّل «تحديث صافى سوفتك للبنود» لتحديد الصنف المسبّب بدقة.'}
+              </div>
+            )}
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-500 border-b">
-                  {editLines && <th className="text-right pb-1">الكود</th>}
+                  <th className="text-right pb-1">الكود</th>
                   <th className="text-right pb-1">الصنف</th>
                   <th className="text-right pb-1">التصنيف</th>
                   <th className="text-left pb-1">الكمية</th>
@@ -231,14 +459,54 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
                     </span>
                   )
                   const setE = (patch) => setLineEdits(s => ({ ...s, [l.id]: { ...s[l.id], ...patch } }))
+                  const v = l.variance
+                  const hasDrift = v && v.has_variance                 // frozen vs current catalog
+                  const hasSoftClass = v && v.softech_class_mismatch   // our class ≠ SOFTECH raw
+                  const flagged = hasDrift || hasSoftClass
+                  const driftTip = hasDrift ? [
+                    v.cat_changed && `التصنيف: ${l.item_category_display || l.item_category} ← ${v.current_category_label}`,
+                    v.price_changed && `السعر الحالى: ${fmt(v.current_unit_price)}`,
+                    `فرق الصافى: ${v.net_delta > 0 ? '+' : ''}${fmt(v.net_delta)}`,
+                  ].filter(Boolean).join(' · ') : ''
+                  const hasValueDisc = v && v.value_discrepancy       // gross computed from rounded qty
+                  const hasDiscDisc = v && v.discount_discrepancy    // our net ≠ SOFTECH's own line net
                   if (!editLines) {
                     return (
-                      <tr key={l.id} className="border-b border-gray-100">
+                      <tr key={l.id} className={`border-b border-gray-100 ${flagged || hasValueDisc || hasDiscDisc ? 'bg-amber-50' : ''}`}>
+                        <td className="py-1 font-mono text-gray-500 text-[11px]">{l.softech_itemcode}</td>
                         <td className="py-1 text-gray-700">
+                          {hasDrift && (
+                            <span title={`صنف به فرق عن الكتالوج الحالى (عرض فقط — لا يؤثر على التصدير) — ${driftTip}`}
+                              className="text-amber-500 ml-1">⚠️</span>
+                          )}
+                          {hasSoftClass && (
+                            <span title={`تصنيفنا (${l.item_category_display || l.item_category}) يختلف عن تصنيف سوفتك الخام (${v.softech_raw_category_label}) — سبب محتمل لاختلاف الصافى عن سوفتك`}
+                              className="text-orange-600 ml-1">⚑</span>
+                          )}
+                          {hasValueDisc && (
+                            <span title="إجمالى هذا البند محسوب من كمية مُقرَّبة (٣ خانات) وقد يختلف عن قيمة سوفتك الحقيقية — راجعه واعتمده من تبويب مراجعة الفروق"
+                              className="text-rose-600 ml-1">💰</span>
+                          )}
+                          {hasDiscDisc && (
+                            <span title={`خصم سوفتك لهذا الصنف يختلف عن نسبة الفئة — صافينا ${fmt(l.net_amount)} مقابل سوفتك ${fmt(v.softech_line_net)} (فرق ${v.softech_net_diff > 0 ? '+' : ''}${fmt(v.softech_net_diff)}). هذا البند هو سبب اختلاف صافى الروشتة عن سوفتك.`}
+                              className="text-rose-700 ml-1 font-bold">💸</span>
+                          )}
                           {l.item_name}
                           {l.is_manually_edited && <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded mr-1">مُعدَّل</span>}
                         </td>
-                        <td className="py-1">{catBadge(l.item_category)}</td>
+                        <td className="py-1">
+                          {catBadge(l.item_category)}
+                          {hasDrift && v.cat_changed && (
+                            <span className="text-[10px] text-amber-600 mr-1" title={`التصنيف الحالى فى الكتالوج: ${v.current_category_label}`}>
+                              → {v.current_category_label}
+                            </span>
+                          )}
+                          {hasSoftClass && (
+                            <span className="text-[10px] text-orange-600 mr-1" title="تصنيف سوفتك الخام">
+                              (سوفتك: {v.softech_raw_category_label})
+                            </span>
+                          )}
+                        </td>
                         <td className="py-1 text-left">{l.quantity}</td>
                         <td className="py-1 text-left font-mono">{fmt(l.line_total)}</td>
                         <td className="py-1 text-left font-mono text-red-600">{fmt(l.discount_amt)} ({l.discount_pct}%)</td>
@@ -304,7 +572,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
       {/* Adjust Modal */}
       {showAdjust && (
         <tr>
-          <td colSpan={10}>
+          <td colSpan={12}>
             <div className="bg-amber-50 border-y border-amber-200 px-6 py-4">
               <p className="text-sm font-semibold text-amber-800 mb-3">تعديل قيم الروشتة</p>
               <div className="grid grid-cols-4 gap-3 mb-3">
@@ -316,7 +584,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh }) {
                 ].map(([label, key]) => (
                   <div key={key}>
                     <label className="text-xs text-gray-600 mb-1 block">{label}</label>
-                    <input type="number" step="0.01"
+                    <input type="number" step="any"
                       className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                       value={adjForm[key]}
                       onChange={e => setAdjForm(p => ({ ...p, [key]: e.target.value }))} />
@@ -388,16 +656,30 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
     onRefresh()
   }
 
+  async function revertName() {
+    await insuranceApi.updateManualRx(claimId, mrx.id, { revert: true })
+    onRefresh()
+  }
+
   return (
     <>
       <tr className={`border-b border-blue-100 text-sm bg-blue-50/60 ${excluded ? 'opacity-40 line-through' : ''}`}>
+        <td className="px-2 py-2"></td>
         <td className="px-3 py-2 text-blue-400 text-xs">—</td>
         <td className="px-3 py-2 text-xs text-gray-500">{mrx.print_date || mrx.softech_docdate || '—'}</td>
+        <td className="px-3 py-2 text-xs font-mono text-gray-500">{mrx.softech_docnumber || '—'}</td>
+        <td className="px-3 py-2 text-xs text-center text-gray-500">{mrx.softech_branchcode || '—'}</td>
         <td className="px-3 py-2 font-medium text-gray-800">
           <span className="text-[10px] bg-blue-600 text-white rounded px-1.5 py-0.5 ml-1">يدوي</span>
           {mrx.patient_name || '—'}
-          {mrx.softech_docnumber && <span className="text-gray-400 text-xs mr-1">#{mrx.softech_docnumber}</span>}
           {mrx.is_manually_edited && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded mr-1">مُعدَّلة يدوياً</span>}
+          {mrx.softech_patient_name && mrx.patient_name !== mrx.softech_patient_name && (
+            <button onClick={revertName}
+              title={`استرجاع اسم سوفتك الأصلي: ${mrx.softech_patient_name}`}
+              className="text-[10px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1.5 py-0.5 mr-1">
+              ↩ اسم سوفتك
+            </button>
+          )}
         </td>
         <td className="px-3 py-2 text-left font-mono text-gray-600">{fmt(mrx.local_before)}</td>
         <td className="px-3 py-2 text-left font-mono text-gray-600">{fmt(mrx.imported_before)}</td>
@@ -422,7 +704,7 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
       {/* "بنود" — manual receipts have no itemised lines; show the aggregate split */}
       {showLines && (
         <tr>
-          <td colSpan={10} className="bg-blue-50/40 px-6 py-3">
+          <td colSpan={12} className="bg-blue-50/40 px-6 py-3">
             <p className="text-xs text-blue-800 mb-2">
               ℹ️ روشتة مُضافة يدوياً — قيم مُجمّعة بلا بنود مفصّلة. التفصيل حسب التصنيف:
             </p>
@@ -447,14 +729,14 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
       {/* Inline edit form */}
       {showEdit && (
         <tr>
-          <td colSpan={10} className="bg-blue-50 px-6 py-3">
+          <td colSpan={12} className="bg-blue-50 px-6 py-3">
             <p className="text-xs font-semibold text-blue-900 mb-2">تعديل روشتة يدوية — عدّل التصنيف أو حدّد صافياً مباشرة</p>
             <div className="grid grid-cols-4 gap-3 max-w-2xl">
               {[['محلى قبل الخصم', 'local_before'], ['مستورد قبل الخصم', 'imported_before'],
                 ['ترسية قبل الخصم', 'tarsia_before'], ['صافى مباشر (اختياري)', 'net_override']].map(([lbl, key]) => (
                 <div key={key}>
                   <label className="block text-xs text-gray-600 mb-1">{lbl}</label>
-                  <input type="number" step="0.01" value={form[key]}
+                  <input type="number" step="any" value={form[key]}
                     onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
                 </div>
@@ -574,7 +856,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
             {[['محلى قبل الخصم', 'local_before'], ['مستورد قبل الخصم', 'imported_before'], ['ترسية قبل الخصم', 'tarsia_before']].map(([lbl, key]) => (
               <div key={key}>
                 <label className="block text-xs text-gray-600 mb-1">{lbl}</label>
-                <input type="number" step="0.01" value={form[key]}
+                <input type="number" step="any" value={form[key]}
                   onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
                   className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
               </div>
@@ -691,7 +973,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
             ].map(([label, key]) => (
               <div key={key}>
                 <label className="text-xs text-gray-600 mb-1 block">{label}</label>
-                <input type="number" step="0.01" className={inp}
+                <input type="number" step="any" className={inp}
                   value={form[key]} onChange={e => set(key, e.target.value)} />
               </div>
             ))}
@@ -737,6 +1019,8 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
   const [adding, setAdding] = useState(false)
   const [override, setOverride] = useState('')   // '' = automatic
   const [printDate, setPrintDate] = useState('')
+  const [mode, setMode] = useState('simple')     // 'simple' totals-only | 'detailed' full prescription
+  const [patientName, setPatientName] = useState('')  // editable, autocomplete-backed (exact ID-card spelling)
 
   const load = () => {
     insuranceApi.claimDetail(claimId).then(r => setManualRx(r.data.manual_rx || []))
@@ -749,6 +1033,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
     try {
       const { data } = await insuranceApi.lookupRx(claimId, docnumber)
       setLookupResult(data)
+      setPatientName(data.patient_name || '')
       setOverride(''); setPrintDate('')
     } catch (e) {
       setLookupError(e.response?.data?.error || 'لم يتم العثور على الفاتورة')
@@ -774,9 +1059,11 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
         branchcode: lookupResult?.softech_branchcode || '',
         position: override || undefined,          // undefined → server auto-derives
         print_date: override === 'date' ? (printDate || lookupResult?.softech_docdate) : null,
+        mode,                                     // 'simple' totals-only | 'detailed' full prescription
+        patient_name: (patientName || '').trim() || undefined,  // override → exact ID-card spelling
         reason: '',
       })
-      setDocnumber(''); setLookupResult(null); setOverride(''); setPrintDate('')
+      setDocnumber(''); setLookupResult(null); setOverride(''); setPrintDate(''); setPatientName('')
       load(); onRefresh()
     } catch (e) {
       setAddError(e.response?.data?.error || 'تعذّرت الإضافة')
@@ -825,12 +1112,40 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
               </div>
             )}
             <div className="grid grid-cols-3 gap-3 text-sm mb-3">
-              <div><span className="text-gray-500 text-xs">المريض:</span> {lookupResult.patient_name || '—'}</div>
+              <div className="col-span-3 flex items-center gap-2">
+                <span className="text-gray-500 text-xs shrink-0">المريض:</span>
+                <PatientNameAutocomplete
+                  claimId={claimId}
+                  value={patientName}
+                  onChange={setPatientName}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm w-64" />
+                <span className="text-[10px] text-gray-400">اكتب الاسم رباعياً كما فى البطاقة تماماً</span>
+              </div>
               <div><span className="text-gray-500 text-xs">التاريخ:</span> {lookupResult.softech_docdate}</div>
               <div><span className="text-gray-500 text-xs">الصافى:</span> <span className="font-mono font-semibold">{fmt(lookupResult.net_after)}</span></div>
               <div><span className="text-gray-500 text-xs">محلى:</span> {fmt(lookupResult.local_before)}</div>
               <div><span className="text-gray-500 text-xs">مستورد:</span> {fmt(lookupResult.imported_before)}</div>
               <div><span className="text-gray-500 text-xs">الفرع:</span> {lookupResult.softech_branchcode}</div>
+            </div>
+
+            {/* Add mode: totals-only vs full item detail */}
+            <div className="mb-3">
+              <label className="text-xs text-gray-600 mb-1 block">طريقة الإضافة</label>
+              <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+                <button type="button" onClick={() => setMode('simple')}
+                  className={`px-3 py-1.5 ${mode === 'simple' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  إجمالى فقط
+                </button>
+                <button type="button" onClick={() => setMode('detailed')}
+                  className={`px-3 py-1.5 border-r border-gray-300 ${mode === 'detailed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  تفصيلى بالأصناف
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {mode === 'detailed'
+                  ? `📋 ستُضاف كروشتة كاملة (${lookupResult.lines?.length ?? '؟'} صنف) تظهر في «الروشتات» و«أصناف المطالبة» و«فحص الفروقات» و«فصل الأسماء»، ويمكن تعديل أصنافها بندًا بندًا (🔓 تفعيل تعديل البنود).`
+                  : 'ℹ️ ستُضاف بإجمالياتها فقط (محلى/مستورد/ترسية) كما كان سابقاً.'}
+              </p>
             </div>
 
             {/* Auto-placement preview */}
@@ -867,26 +1182,51 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
         )}
       </div>
 
-      <div className="space-y-2">
-        {manualRx.map(mrx => (
-          <div key={mrx.id} className="bg-white border border-gray-200 rounded-lg p-3 flex justify-between items-center">
-            <div>
-              <span className="text-xs bg-purple-50 text-purple-700 px-2 rounded mr-2">
-                {posLabels[mrx.position] || mrx.position}
-                {mrx.position === 'date' && mrx.print_date ? ` ${mrx.print_date}` : ''}
-              </span>
-              <span className="font-mono text-xs text-gray-500 mr-2">#{mrx.softech_docnumber}</span>
-              <span className="font-medium text-gray-800">{mrx.patient_name || '—'}</span>
-              <span className="text-xs text-gray-400 mr-2">{mrx.softech_docdate}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-sm font-semibold">{fmt(mrx.net_after)}</span>
-              <Btn variant="danger" onClick={() => removeRx(mrx.id)}>حذف</Btn>
-            </div>
+      {(() => {
+        const detailed = (claim?.prescriptions || []).filter(p => p.is_manual)
+        const total = manualRx.length + detailed.length
+        return (
+          <div className="space-y-2">
+            {detailed.length > 0 && (
+              <div className="text-xs font-semibold text-gray-600 mb-1">
+                إضافات تفصيلية (كروشتة كاملة) — {detailed.length} · تُعدَّل وتُحذف من تبويب «الروشتات»
+              </div>
+            )}
+            {detailed.map(rx => (
+              <div key={`d${rx.id}`} className="bg-indigo-50/50 border border-indigo-200 rounded-lg p-3 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded mr-2">تفصيلى</span>
+                  <span className="font-mono text-xs text-gray-500 mr-2">#{rx.softech_docnumber}</span>
+                  <span className="font-medium text-gray-800">{rx.patient_name || '—'}</span>
+                  <span className="text-xs text-gray-400 mr-2">{rx.softech_docdate} · فرع {rx.softech_branchcode}</span>
+                </div>
+                <span className="font-mono text-sm font-semibold">{fmt(rx.net_after)}</span>
+              </div>
+            ))}
+            {manualRx.length > 0 && detailed.length > 0 && (
+              <div className="text-xs font-semibold text-gray-600 mt-3 mb-1">إضافات بالإجمالى فقط — {manualRx.length}</div>
+            )}
+            {manualRx.map(mrx => (
+              <div key={mrx.id} className="bg-white border border-gray-200 rounded-lg p-3 flex justify-between items-center">
+                <div>
+                  <span className="text-xs bg-purple-50 text-purple-700 px-2 rounded mr-2">
+                    {posLabels[mrx.position] || mrx.position}
+                    {mrx.position === 'date' && mrx.print_date ? ` ${mrx.print_date}` : ''}
+                  </span>
+                  <span className="font-mono text-xs text-gray-500 mr-2">#{mrx.softech_docnumber}</span>
+                  <span className="font-medium text-gray-800">{mrx.patient_name || '—'}</span>
+                  <span className="text-xs text-gray-400 mr-2">{mrx.softech_docdate}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm font-semibold">{fmt(mrx.net_after)}</span>
+                  <Btn variant="danger" onClick={() => removeRx(mrx.id)}>حذف</Btn>
+                </div>
+              </div>
+            ))}
+            {total === 0 && <p className="text-gray-400 text-sm text-center py-6">لا توجد روشتات مضافة يدوياً</p>}
           </div>
-        ))}
-        {manualRx.length === 0 && <p className="text-gray-400 text-sm text-center py-6">لا توجد روشتات مضافة يدوياً</p>}
-      </div>
+        )
+      })()}
     </div>
   )
 }
@@ -930,7 +1270,7 @@ function PaymentsTab({ claim, onRefresh }) {
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded p-3 mb-3 space-y-2">
           <input type="date" className={inp} value={form.payment_date} onChange={e => setForm(p => ({...p, payment_date: e.target.value}))} />
-          <input type="number" step="0.01" placeholder="المبلغ" className={inp} value={form.amount} onChange={e => setForm(p => ({...p, amount: e.target.value}))} />
+          <input type="number" step="any" placeholder="المبلغ" className={inp} value={form.amount} onChange={e => setForm(p => ({...p, amount: e.target.value}))} />
           <input placeholder="رقم التحويل / الشيك" className={inp} value={form.reference} onChange={e => setForm(p => ({...p, reference: e.target.value}))} />
           <Btn onClick={addPayment} disabled={!form.payment_date || !form.amount} size="md">+ تسجيل دفعة</Btn>
         </div>
@@ -962,7 +1302,7 @@ function PaymentsTab({ claim, onRefresh }) {
           </select>
           <input placeholder="الصنف المرفوض (اختياري)" className={inp} value={dedForm.item_name} onChange={e => setDedForm(p => ({...p, item_name: e.target.value}))} />
           <input placeholder="التفاصيل" className={inp} value={dedForm.reason_detail} onChange={e => setDedForm(p => ({...p, reason_detail: e.target.value}))} />
-          <input type="number" step="0.01" placeholder="قيمة الخصم" className={inp} value={dedForm.amount} onChange={e => setDedForm(p => ({...p, amount: e.target.value}))} />
+          <input type="number" step="any" placeholder="قيمة الخصم" className={inp} value={dedForm.amount} onChange={e => setDedForm(p => ({...p, amount: e.target.value}))} />
           <Btn onClick={addDeduction} disabled={!dedForm.amount} variant="danger" size="md">+ تسجيل خصم</Btn>
         </div>
         {deductions.map(d => (
@@ -1181,11 +1521,21 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
                   </div>
                   <div className="max-h-64 overflow-y-auto border border-gray-100 rounded">
                     <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr className="text-gray-500">
+                          <th className="px-2 py-1 w-6"></th>
+                          <th className="px-2 py-1 text-right font-semibold">رقم الفاتورة</th>
+                          <th className="px-2 py-1 text-right font-semibold">التاريخ</th>
+                          <th className="px-2 py-1 text-right font-semibold">اسم المريض</th>
+                          <th className="px-2 py-1 text-right font-semibold"></th>
+                          <th className="px-2 py-1 text-left font-semibold">الصافى</th>
+                        </tr>
+                      </thead>
                       <tbody>
                         {[
-                          ...unassignedRx.map(rx => ({ key: 'p' + rx.id, doc: rx.softech_docnumber, name: rx.patient_name, extra: rx.relative_degree || '', net: rx.net_after, kind: 'rx' })),
-                          ...unassignedManual.map(m => ({ key: 'm' + m.id, doc: m.softech_docnumber, name: m.patient_name, net: m.net_after, kind: 'manual' })),
-                          ...unassignedSup.map(s => ({ key: 's' + s.id, doc: s.supplement_number || '', name: s.label, net: s.net_after, kind: 'sup' })),
+                          ...unassignedRx.map(rx => ({ key: 'p' + rx.id, doc: rx.softech_docnumber, date: rx.softech_docdate, name: rx.patient_name, extra: rx.relative_degree || '', net: rx.net_after, kind: 'rx' })),
+                          ...unassignedManual.map(m => ({ key: 'm' + m.id, doc: m.softech_docnumber, date: m.softech_docdate, name: m.patient_name, net: m.net_after, kind: 'manual' })),
+                          ...unassignedSup.map(s => ({ key: 's' + s.id, doc: s.supplement_number || '', date: s.print_date || null, name: s.label, net: s.net_after, kind: 'sup' })),
                         ].map(row => (
                           <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50">
                             <td className="px-2 py-1">
@@ -1197,6 +1547,7 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
                                 }} />
                             </td>
                             <td className="px-2 py-1 text-gray-400">{row.doc}</td>
+                            <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{row.date || '—'}</td>
                             <td className="px-2 py-1">{row.name || '—'}</td>
                             <td className="px-2 py-1">
                               {row.kind === 'manual'
@@ -1233,15 +1584,52 @@ export default function InsuranceClaimDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('prescriptions')
   const [rxFilter, setRxFilter] = useState('')
+  const [rxSortKey, setRxSortKey] = useState('sequence')
+  const [rxSortDir, setRxSortDir] = useState('asc')
+  const [nameFilterMode, setNameFilterMode] = useState('')   // '' | 'complete' | 'spelling'
+  const [selRx, setSelRx] = useState(new Set())              // bulk-select prescription ids
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
+  const [showResync, setShowResync] = useState(false)
+  // Item-name search across prescriptions (backend lookup — lines aren't in the payload)
+  const [itemMatchIds, setItemMatchIds]   = useState(null)   // Set of rx ids, or null
+  const [itemMatchInfo, setItemMatchInfo] = useState([])
+  // Name-completion/spelling suggestions per prescription (for the grid markers)
+  const [nameSug, setNameSug] = useState({})   // rx_id → {type, suggestion, ...}
+
+  const loadNameSug = useCallback(() => {
+    insuranceApi.nameSuggestions(id)
+      .then(r => {
+        const m = {}
+        for (const row of (r.data.rows || [])) m[row.rx_id] = row
+        setNameSug(m)
+      })
+      .catch(() => setNameSug({}))
+  }, [id])
 
   const load = useCallback(async () => {
     const { data } = await insuranceApi.claimDetail(id)
     setClaim(data)
     setLoading(false)
-  }, [id])
+    loadNameSug()
+  }, [id, loadNameSug])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    const q = rxFilter.trim()
+    if (q.length < 2) { setItemMatchIds(null); setItemMatchInfo([]); return }
+    let cancelled = false
+    const t = setTimeout(() => {
+      insuranceApi.prescriptionsByItem(id, q)
+        .then(r => { if (!cancelled) {
+          setItemMatchIds(new Set(r.data.prescription_ids || []))
+          setItemMatchInfo(r.data.matched_items || [])
+        } })
+        .catch(() => { if (!cancelled) { setItemMatchIds(null); setItemMatchInfo([]) } })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [rxFilter, id])
 
   if (loading) return <div className="p-8 text-center text-gray-400">جارٍ التحميل...</div>
   if (!claim)  return <div className="p-8 text-center text-red-500">المطالبة غير موجودة</div>
@@ -1251,23 +1639,80 @@ export default function InsuranceClaimDetailPage() {
     { id: 'items',         label: 'أصناف المطالبة' },
     { id: 'billing',       label: `فئات الفوترة (${claim.billing_groups?.length || 0})` },
     { id: 'supplements',   label: `الملاحق (${claim.supplements?.length || 0})` },
-    { id: 'manual',        label: `إضافة يدوية (${claim.manual_rx?.length || 0})` },
+    { id: 'manual',        label: `إضافة يدوية (${(claim.manual_rx?.length || 0) + (claim.prescriptions?.filter(p => p.is_manual).length || 0)})` },
     { id: 'payments',      label: 'التحصيل' },
     { id: 'pivot',         label: 'تحليل البيانات' },
+    { id: 'separation',    label: 'فصل الأسماء' },
+    { id: 'name_review',   label: 'مراجعة الأسماء' },
     { id: 'discrepancy',   label: 'فحص الفروقات' },
+    { id: 'revision',      label: 'مراجعة الفروق' },
+    { id: 'softech_reprice', label: 'تعديلات سوفتك' },
     { id: 'readiness',     label: 'الجاهزية للإصدار' },
+    { id: 'activity',      label: 'سجل النشاط' },
   ]
 
+  // name-suggestion counts (for the grid banner + optional filter)
+  const completeCount = Object.values(nameSug).filter(s => s.type === 'complete').length
+  const spellingCount = Object.values(nameSug).filter(s => s.type === 'spelling').length
+
   const filteredRx = (claim.prescriptions || []).filter(rx =>
-    !rxFilter ||
-    rx.patient_name?.includes(rxFilter) ||
-    rx.softech_docnumber?.includes(rxFilter)
+    (!rxFilter ||
+      wildcardMatch(rx.patient_name, rxFilter) ||
+      rx.softech_docnumber?.includes(rxFilter) ||
+      (itemMatchIds && itemMatchIds.has(rx.id)))
+    && (!nameFilterMode || nameSug[rx.id]?.type === nameFilterMode)
   )
   const filteredManual = (claim.manual_rx || []).filter(m =>
-    !rxFilter ||
-    m.patient_name?.includes(rxFilter) ||
-    m.softech_docnumber?.includes(rxFilter)
+    !nameFilterMode && (
+      !rxFilter ||
+      wildcardMatch(m.patient_name, rxFilter) ||
+      m.softech_docnumber?.includes(rxFilter))
   )
+
+  // ── Sortable الروشتات grid (real + manual share these field names) ──────────
+  const RX_TEXT_KEYS = new Set(['softech_docdate', 'softech_docnumber', 'softech_branchcode', 'patient_name'])
+  const rxSortVal = (r, key) => {
+    if (key === 'net_after') return Number(r.effective_net_after ?? r.net_after) || 0
+    if (RX_TEXT_KEYS.has(key)) return (r[key] ?? '').toString()
+    return Number(r[key]) || 0
+  }
+  const rxCmp = (a, b) => {
+    const av = rxSortVal(a, rxSortKey), bv = rxSortVal(b, rxSortKey)
+    let c
+    if (RX_TEXT_KEYS.has(rxSortKey)) c = av.localeCompare(bv, 'ar-EG')
+    else c = av - bv
+    return rxSortDir === 'asc' ? c : -c
+  }
+  const sortedRx     = [...filteredRx].sort(rxCmp)
+  const sortedManual = [...filteredManual].sort(rxCmp)
+
+  // ── bulk select + exclude (prescriptions only) ──────────────────────────────
+  const visibleRxIds = sortedRx.map(r => r.id)
+  const allVisibleSelected = visibleRxIds.length > 0 && visibleRxIds.every(i => selRx.has(i))
+  const toggleSelRx = (rxId) => setSelRx(s => { const n = new Set(s); n.has(rxId) ? n.delete(rxId) : n.add(rxId); return n })
+  const toggleSelectAll = () => setSelRx(s => {
+    if (visibleRxIds.every(i => s.has(i))) { const n = new Set(s); visibleRxIds.forEach(i => n.delete(i)); return n }
+    return new Set([...s, ...visibleRxIds])
+  })
+  const bulkExcludeSelected = async () => {
+    const ids = [...selRx]
+    if (!ids.length) return
+    const reason = window.prompt(`سبب استثناء ${ids.length} روشتة (اختيارى):`, '')
+    if (reason === null) return
+    if (!window.confirm(`استثناء ${ids.length} روشتة من المطالبة؟ (يمكن إعادة إدراجها لاحقاً)`)) return
+    setBulkBusy(true)
+    try {
+      await insuranceApi.bulkExclude(id, ids, reason || 'استبعاد جماعى')
+      setSelRx(new Set())
+      await load()
+    } catch (e) {
+      alert(e?.response?.data?.error || 'تعذّر الاستبعاد الجماعى')
+    } finally { setBulkBusy(false) }
+  }
+  const rxSortBy = (key, isText) => {
+    if (rxSortKey === key) setRxSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setRxSortKey(key); setRxSortDir(isText ? 'asc' : 'desc') }
+  }
 
   const discPcts = {
     local:    claim.applied_local_disc_pct,
@@ -1296,6 +1741,14 @@ export default function InsuranceClaimDetailPage() {
           <div className="flex gap-2 items-center">
             {claim.is_locked && (
               <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded">🔒 مقفلة</span>
+            )}
+            {!claim.is_locked && (
+              <button
+                onClick={() => setShowResync(true)}
+                title="جلب تعديلات سوفتك الجديدة (إضافة/حذف/تغيير) دون المساس بالتعديلات المحلية"
+                className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600">
+                🔄 مزامنة سوفتك
+              </button>
             )}
             <button
               onClick={() => setShowWizard(true)}
@@ -1355,8 +1808,8 @@ export default function InsuranceClaimDetailPage() {
         <div className="px-6 py-4">
           <div className="mb-3 flex gap-3 items-center">
             <input
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-64"
-              placeholder="بحث باسم المريض أو رقم الفاتورة..."
+              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-72"
+              placeholder="بحث باسم المريض أو رقم الفاتورة أو اسم الصنف..."
               value={rxFilter}
               onChange={e => setRxFilter(e.target.value)}
             />
@@ -1366,25 +1819,104 @@ export default function InsuranceClaimDetailPage() {
                 منها {filteredManual.length} يدوية
               </span>
             )}
+            {itemMatchIds && itemMatchInfo.length > 0 && (
+              <span className="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-0.5"
+                title={itemMatchInfo.map(m => `${m.code} — ${m.name}`).join('\n')}>
+                🔎 صنف: {itemMatchIds.size} روشتة تحتوي «{itemMatchInfo[0].name}»
+                {itemMatchInfo.length > 1 ? ` +${itemMatchInfo.length - 1}` : ''}
+              </span>
+            )}
           </div>
+
+          {/* Name-completion hint banner — high-visibility, filterable */}
+          {(completeCount > 0 || spellingCount > 0) && (
+            <div className="mb-3 flex items-center gap-2 flex-wrap bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              <span className="text-sm">🟢</span>
+              {completeCount > 0 && (
+                <button onClick={() => setNameFilterMode(m => m === 'complete' ? '' : 'complete')}
+                  className={`text-xs font-semibold rounded px-2.5 py-1 border ${nameFilterMode === 'complete'
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-100'}`}>
+                  ⇢ {completeCount} اسم يمكن إكمالها رباعياً {nameFilterMode === 'complete' ? '(عرض الكل)' : '(عرضها فقط)'}
+                </button>
+              )}
+              {spellingCount > 0 && (
+                <button onClick={() => setNameFilterMode(m => m === 'spelling' ? '' : 'spelling')}
+                  className={`text-xs font-semibold rounded px-2.5 py-1 border ${nameFilterMode === 'spelling'
+                    ? 'bg-sky-600 text-white border-sky-600'
+                    : 'bg-white text-sky-700 border-sky-300 hover:bg-sky-100'}`}>
+                  ✎ {spellingCount} تصحيح إملائى {nameFilterMode === 'spelling' ? '(عرض الكل)' : '(عرضها فقط)'}
+                </button>
+              )}
+              <span className="text-[11px] text-emerald-800">
+                اضغط الاقتراح بجوار الاسم لتطبيقه (قابل للتراجع)، أو راجعها دفعة واحدة من
+              </span>
+              <button onClick={() => setTab('name_review')}
+                className="text-[11px] font-semibold text-emerald-700 underline hover:text-emerald-900">
+                تبويب «مراجعة الأسماء»
+              </button>
+            </div>
+          )}
+          {selRx.size > 0 && (
+            <div className="mb-3 flex items-center gap-3 flex-wrap bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              <span className="text-sm text-blue-800 font-medium">{selRx.size} روشتة محددة</span>
+              <button onClick={bulkExcludeSelected} disabled={bulkBusy}
+                className="text-xs px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+                {bulkBusy ? '…' : `استثناء المحدد (${selRx.size})`}
+              </button>
+              <button onClick={() => setSelRx(new Set())} className="text-xs text-gray-500 hover:text-gray-700">إلغاء التحديد</button>
+            </div>
+          )}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  {['م', 'التاريخ', 'اسم المريض', 'محلى', 'مستورد', 'ترسية', 'الإجمالى', 'الصافى', '', ''].map((h, i) => (
-                    <th key={i} className="text-right px-3 py-2 text-xs font-semibold text-gray-500">{h}</th>
+            <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-2 py-2 w-8 text-center">
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll}
+                        title="تحديد كل الروشتات الظاهرة" />
+                    </th>
+                    {[
+                      ['م', 'sequence', false, 'center'],
+                      ['التاريخ', 'softech_docdate', true],
+                      ['رقم الفاتورة', 'softech_docnumber', true],
+                      ['الفرع', 'softech_branchcode', true, 'center'],
+                      ['اسم المريض', 'patient_name', true],
+                      ['محلى', 'local_before', false, 'left'],
+                      ['مستورد', 'imported_before', false, 'left'],
+                      ['ترسية', 'tarsia_before', false, 'left'],
+                      ['الإجمالى', 'gross_before', false, 'left'],
+                      ['الصافى', 'net_after', false, 'left'],
+                    ].map(([label, key, isText, align]) => {
+                      const active = rxSortKey === key
+                      return (
+                        <th key={key}
+                          onClick={() => rxSortBy(key, isText)}
+                          className={`px-3 py-2 text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 ${
+                            align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right'
+                          } ${active ? 'text-blue-700' : 'text-gray-500'}`}>
+                          {label}
+                          <span className={`ml-0.5 ${active ? 'text-blue-600' : 'text-gray-300'}`}>
+                            {active ? (rxSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </th>
+                      )
+                    })}
+                    <th className="px-3 py-2"></th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRx.map(rx => (
+                    <RxRow key={rx.id} rx={rx} claimId={id} discPcts={discPcts} onRefresh={load} sug={nameSug[rx.id]}
+                      selected={selRx.has(rx.id)} onToggleSelect={() => toggleSelRx(rx.id)} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRx.map(rx => (
-                  <RxRow key={rx.id} rx={rx} claimId={id} discPcts={discPcts} onRefresh={load} />
-                ))}
-                {filteredManual.map(m => (
-                  <ManualRxRow key={`m${m.id}`} mrx={m} claimId={id} onRefresh={load} onManage={() => setTab('manual')} />
-                ))}
-              </tbody>
-            </table>
+                  {sortedManual.map(m => (
+                    <ManualRxRow key={`m${m.id}`} mrx={m} claimId={id} onRefresh={load} onManage={() => setTab('manual')} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1417,13 +1949,230 @@ export default function InsuranceClaimDetailPage() {
         <DiscrepancyTab claimId={id} onRefresh={load} />
       )}
 
+      {tab === 'revision' && (
+        <RevisionTab claimId={id} />
+      )}
+
+      {tab === 'separation' && (
+        <SeparationTab claimId={id} onRefresh={load} />
+      )}
+
+      {tab === 'name_review' && (
+        <NameReviewTab claimId={id} onRefresh={load} />
+      )}
+
+      {tab === 'softech_reprice' && (
+        <SoftechRepriceTab claimId={id} claim={claim} />
+      )}
+
       {tab === 'readiness' && (
         <ReadinessTab claimId={id} />
+      )}
+
+      {tab === 'activity' && (
+        <ActivityTab claimId={id} />
       )}
 
       {showWizard && (
         <IssuanceWizard claim={claim} onClose={() => setShowWizard(false)} onRefresh={load} />
       )}
+      {showResync && (
+        <ResyncModal claimId={id} claim={claim} onClose={() => setShowResync(false)} onRefresh={load} />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RE-SYNC MODAL — surgical import of SOFTECH delta (new / removed / changed)
+// ═══════════════════════════════════════════════════════════════════════════════
+function ResyncModal({ claimId, claim, onClose, onRefresh }) {
+  const [pv, setPv]       = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr]     = useState(null)
+  const [approved, setApproved] = useState(new Set())   // changed rx_ids to re-freeze
+  const [busy, setBusy]   = useState(false)
+  const [done, setDone]   = useState(null)
+  const [runs, setRuns]   = useState([])
+  const [motalbaNo, setMotalbaNo] = useState(claim?.softech_motalba_no || '')
+
+  const loadRuns = () => insuranceApi.resyncRuns(claimId).then(r => setRuns(r.data)).catch(() => {})
+
+  const runPreview = (mno) => {
+    if (!mno) { setErr('أدخل رقم مطالبة سوفتك لجلب بياناتها.'); return }
+    setLoading(true); setErr(null); setPv(null)
+    insuranceApi.resyncPreview(claimId, mno)
+      .then(r => setPv(r.data))
+      .catch(e => setErr(e.response?.data?.error || 'تعذّرت المزامنة'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadRuns()
+    if (claim?.softech_motalba_no) runPreview(claim.softech_motalba_no)
+  }, [claimId])   // eslint-disable-line
+
+  const revertRun = async (runId) => {
+    if (!window.confirm('التراجع عن هذه المزامنة؟ ستُحذف الروشتات المُضافة، ويُلغى استثناء المحذوفة، وتُستعاد الروشتات المُعاد تجميدها.')) return
+    setBusy(true); setErr(null)
+    try {
+      await insuranceApi.resyncRevert(claimId, runId)
+      loadRuns(); onRefresh && onRefresh()
+    } catch (e) {
+      setErr(e.response?.data?.error || 'تعذّر التراجع')
+    } finally { setBusy(false) }
+  }
+
+  const toggle = (id) => setApproved(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const apply = async () => {
+    if (!window.confirm('تطبيق المزامنة؟ ستُضاف الروشتات الجديدة، وتُستثنى المحذوفة، وتُعاد الروشتات المتغيّرة المحددة فقط. التعديلات المحلية الأخرى لن تُمس.')) return
+    setBusy(true); setErr(null)
+    try {
+      const { data } = await insuranceApi.resyncApply(claimId, { confirm: true, approved_change_ids: [...approved], motalba_no: motalbaNo || undefined })
+      setDone(data); onRefresh && onRefresh()
+    } catch (e) {
+      setErr(e.response?.data?.error || 'تعذّر التطبيق')
+    } finally { setBusy(false) }
+  }
+
+  const c = pv?.counts
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">🔄 مزامنة تعديلات سوفتك {pv?.motalba_no ? `— مطالبة ${pv.motalba_no}` : ''}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+        </div>
+        <div className="p-5 overflow-y-auto">
+          {/* motalba number — editable when the claim has none stored, or to override */}
+          {!done && (
+            <div className="flex items-end gap-2 mb-3 flex-wrap">
+              <label className="text-xs text-gray-600">رقم مطالبة سوفتك
+                <input className="block mt-0.5 border border-gray-300 rounded px-3 py-1.5 text-sm w-36"
+                  value={motalbaNo} onChange={e => setMotalbaNo(e.target.value)}
+                  placeholder="مثال: 82" onKeyDown={e => e.key === 'Enter' && runPreview(motalbaNo.trim())} />
+              </label>
+              <button onClick={() => runPreview(motalbaNo.trim())} disabled={loading || !motalbaNo.trim()}
+                className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">جلب ومقارنة</button>
+              {!claim?.softech_motalba_no && (
+                <span className="text-[11px] text-amber-600">هذه المطالبة ليس لها رقم مطالبة سوفتك محفوظ — أدخله ليُحفظ عند التطبيق.</span>
+              )}
+            </div>
+          )}
+          {loading && <div className="text-sm text-gray-400 py-8 text-center">جارٍ مقارنة الحالة الحالية فى سوفتك…</div>}
+          {err && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3 mb-3">{err}</div>}
+          {done && (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3 mb-3">
+              ✓ تمت المزامنة: أُضيفت {done.added} · استُثنيت {done.removed} · أُعيد تجميد {done.changed}.
+              {done.reprice_flags?.length > 0 && (
+                <div className="mt-1 text-amber-700">
+                  ⚠️ روشتات محذوفة لها تعديل سعر مُطبَّق — راجع استرجاع السعر من «تعديلات سوفتك»:
+                  {done.reprice_flags.map(f => ` #${f.docnumber}`).join('،')}
+                </div>
+              )}
+            </div>
+          )}
+          {pv && !done && (
+            <>
+              <div className="flex gap-2 flex-wrap mb-4 text-xs">
+                <span className="rounded px-2 py-1 bg-emerald-100 text-emerald-800">جديدة {c.new}</span>
+                <span className="rounded px-2 py-1 bg-red-100 text-red-700">محذوفة {c.removed}</span>
+                <span className="rounded px-2 py-1 bg-amber-100 text-amber-800">متغيّرة {c.changed}</span>
+                <span className="rounded px-2 py-1 bg-gray-100 text-gray-600">بدون تغيير {c.unchanged}</span>
+                <span className="rounded px-2 py-1 bg-blue-100 text-blue-700" title="إضافات يدوية من مطالبات أخرى — لن تُمس">محمية (يدوية) {c.protected_manual}</span>
+              </div>
+              {c.new + c.removed + c.changed === 0 && (
+                <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded p-4 text-center">
+                  ✓ لا توجد تعديلات جديدة فى سوفتك — كل شىء متطابق.
+                </div>
+              )}
+              {c.new > 0 && (
+                <Section title={`روشتات جديدة (${c.new}) — ستُضاف`}>
+                  {pv.new.map(x => (
+                    <div key={x.docnumber} className="text-xs flex justify-between border-b border-gray-100 py-1">
+                      <span><span className="font-mono">#{x.docnumber}</span> · فرع {x.branch} · {x.date}</span>
+                      <span className="font-mono text-gray-600">{fmt(x.net)}</span>
+                    </div>
+                  ))}
+                </Section>
+              )}
+              {c.removed > 0 && (
+                <Section title={`روشتات محذوفة من سوفتك (${c.removed}) — ستُستثنى (قابل للتراجع)`}>
+                  {pv.removed.map(x => (
+                    <div key={x.docnumber} className="text-xs flex justify-between border-b border-gray-100 py-1">
+                      <span><span className="font-mono">#{x.docnumber}</span> · {x.patient}
+                        {x.has_reprice && <span className="text-amber-700"> · ⚠️ لها تعديل سعر — راجع الاسترجاع</span>}
+                        {x.already_excluded && <span className="text-gray-400"> · مستثناة بالفعل</span>}
+                      </span>
+                      <span className="font-mono text-gray-600">{fmt(x.net)}</span>
+                    </div>
+                  ))}
+                </Section>
+              )}
+              {c.changed > 0 && (
+                <Section title={`روشتات تغيّرت فى سوفتك (${c.changed}) — حدد ما تريد إعادة تجميده`}>
+                  <p className="text-[11px] text-gray-500 mb-1">إعادة التجميد تعتمد بيانات سوفتك الحالية وتلغى التعديلات المحلية على هذه الروشتة فقط.</p>
+                  {pv.changed.map(x => (
+                    <label key={x.rx_id} className="text-xs flex items-center gap-2 border-b border-gray-100 py-1 cursor-pointer">
+                      <input type="checkbox" checked={approved.has(x.rx_id)} onChange={() => toggle(x.rx_id)} />
+                      <span className="flex-1"><span className="font-mono">#{x.docnumber}</span> · {x.patient}</span>
+                      <span className="font-mono text-gray-500">صافينا {fmt(x.our_net)} → سوفتك {fmt(x.softech_net)}
+                        <span className={x.diff >= 0 ? 'text-emerald-600' : 'text-red-600'}> ({x.diff >= 0 ? '+' : ''}{fmt(x.diff)})</span>
+                      </span>
+                    </label>
+                  ))}
+                </Section>
+              )}
+            </>
+          )}
+
+          {/* Previous re-sync runs — revert */}
+          {runs.length > 0 && (
+            <div className="mt-4 border-t border-gray-200 pt-3">
+              <div className="text-xs font-semibold text-gray-700 mb-1">سجل عمليات المزامنة</div>
+              {runs.map(r => (
+                <div key={r.id} className="text-xs flex items-center justify-between border-b border-gray-100 py-1.5">
+                  <span>
+                    #{r.id} · {toLatinDigits(new Date(r.applied_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }))}
+                    {' · '}<span className="text-emerald-700">+{r.added}</span>
+                    {' / '}<span className="text-red-600">{r.removed}</span>
+                    {' / '}<span className="text-amber-700">~{r.changed}</span>
+                    {r.status === 'reverted' && <span className="text-gray-400"> · مُتراجَع</span>}
+                  </span>
+                  {r.status === 'applied' && (
+                    <button onClick={() => revertRun(r.id)} disabled={busy}
+                      className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-50">↩ تراجع</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {pv && !done && (c.new + c.removed + c.changed > 0) && (
+          <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 rounded border border-gray-300">إلغاء</button>
+            <button onClick={apply} disabled={busy}
+              className="px-4 py-2 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
+              {busy ? 'جارٍ التطبيق…' : `تطبيق المزامنة (${c.new} إضافة · ${c.removed} استثناء · ${approved.size} إعادة تجميد)`}
+            </button>
+          </div>
+        )}
+        {done && (
+          <div className="px-5 py-3 border-t border-gray-200 flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 text-sm bg-gray-800 text-white rounded">إغلاق</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, children }) {
+  return (
+    <div className="mb-4">
+      <div className="text-xs font-semibold text-gray-700 mb-1">{title}</div>
+      <div className="border border-gray-200 rounded p-2 max-h-52 overflow-y-auto">{children}</div>
     </div>
   )
 }
@@ -1640,6 +2389,1043 @@ const SEV_CFG = {
   ok:      { cls: 'bg-green-50 border-green-200 text-green-700', icon: '✓', badge: 'bg-green-100 text-green-700' },
 }
 
+// ── Name separation tab — flag prescriptions matching a separation list ────────
+function SeparationTab({ claimId, onRefresh }) {
+  const [data, setData]   = useState(null)
+  const [listId, setListId] = useState('')
+  const [loading, setLoad]  = useState(true)
+  const [sel, setSel]       = useState(new Set())
+  const [busy, setBusy]     = useState(false)
+  const [msg, setMsg]       = useState(null)
+  const [sortKey, setSortKey] = useState('match_type')
+  const [sortDir, setSortDir] = useState('asc')
+  const navigate = useNavigate()
+
+  const sortBy = (k) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
+
+  const load = (lid) => {
+    setLoad(true)
+    insuranceApi.separationMatches(claimId, lid || '')
+      .then(r => {
+        setData(r.data)
+        // pre-select the confident (full) non-excluded matches
+        setSel(new Set(r.data.matches.filter(m => m.match_type === 'full' && !m.is_excluded).map(m => m.prescription_id)))
+      })
+      .finally(() => setLoad(false))
+  }
+  useEffect(() => { load(listId) }, [claimId, listId])   // eslint-disable-line
+
+  const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const errText = (e, fallback) => {
+    if (!e.response) return 'تعذّر الاتصال بالسيرفر — تأكد أن السيرفر يعمل ثم أعد المحاولة'
+    return e.response.data?.error || e.response.data?.detail || `${fallback} (خطأ ${e.response.status})`
+  }
+
+  const setReviewed = async (ids, reviewed) => {
+    if (!ids.length) return
+    setMsg(null)
+    try {
+      await insuranceApi.markReviewed(claimId, ids, reviewed)
+      setData(d => ({
+        ...d,
+        matches: d.matches.map(m => ids.includes(m.prescription_id) ? { ...m, reviewed } : m),
+        reviewed_count: d.matches.filter(m => ids.includes(m.prescription_id) ? reviewed : m.reviewed).length,
+      }))
+      setMsg(`تم تعليم ${ids.length} روشتة كمُراجَعة`)
+    } catch (e) { setMsg(errText(e, 'تعذّر تعليم المراجعة')) }
+  }
+
+  const doExclude = async () => {
+    const ids = [...sel]
+    if (!ids.length) return
+    if (!window.confirm(`استبعاد ${ids.length} روشتة من هذه المطالبة (لفصلها إلى مطالبة أخرى)؟ يمكن التراجع بإعادة إدراجها.`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data: res } = await insuranceApi.bulkExclude(claimId, ids, 'فصل — قائمة الأسماء')
+      setMsg(`تم استبعاد ${res.excluded} روشتة · الصافى الآن ${fmt(res.claim_net_after)}`)
+      setSel(new Set()); load(listId); onRefresh && onRefresh()
+    } catch (e) { setMsg(errText(e, 'تعذّر الاستبعاد')) } finally { setBusy(false) }
+  }
+
+  if (loading) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ فحص الأسماء…</div>
+  if (!data)   return null
+
+  const NUMERIC = new Set(['gross_before', 'net_after', 'score'])
+  const sortVal = (m) => {
+    if (sortKey === 'match_type') return m.match_type === 'full' ? 0 : 1   // full first
+    if (sortKey === 'reviewed')   return m.reviewed ? 1 : 0
+    const v = m[sortKey]
+    return NUMERIC.has(sortKey) ? Number(v || 0) : (v || '').toString()
+  }
+  const sortedMatches = [...data.matches].sort((a, b) => {
+    const va = sortVal(a), vb = sortVal(b)
+    let c = typeof va === 'number' ? va - vb : va.localeCompare(vb, 'ar')
+    return sortDir === 'asc' ? c : -c
+  })
+
+  const SortTh = ({ k, children, align = 'right' }) => (
+    <th onClick={() => sortBy(k)}
+      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap ${sortKey === k ? 'text-blue-600' : ''}`}>
+      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <span className="text-sm font-semibold text-gray-700">فصل الأسماء</span>
+        <select value={listId} onChange={e => setListId(e.target.value)}
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm">
+          <option value="">كل القوائم المُفعَّلة</option>
+          {data.lists.map(l => <option key={l.id} value={l.id}>{l.label} ({l.name_count})</option>)}
+        </select>
+        <span className="text-sm text-gray-500">{data.match_count} مطابقة من {data.checked_names} اسم</span>
+        <span className={`text-xs rounded px-2 py-0.5 ${data.reviewed_count >= data.match_count && data.match_count > 0
+          ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+          روجِع {data.reviewed_count} / {data.match_count}
+        </span>
+        <button onClick={() => navigate('/insurance/separation-lists')}
+          className="text-xs text-blue-600 hover:underline mr-auto">⚙ إدارة قوائم الأسماء</button>
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        الروشتات التي يطابق اسم مريضها اسماً في قائمة الفصل. راجع واختر ثم استبعدها من هذه المطالبة لإضافتها لاحقاً إلى مطالبتها الصحيحة.
+        <span className="text-green-700"> المطابقة الكاملة مُحدَّدة تلقائياً</span>، والجزئية تحتاج مراجعتك.
+      </p>
+      {msg && <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">{msg}</div>}
+
+      <div className="mb-3 flex gap-2">
+        <button onClick={doExclude} disabled={busy || sel.size === 0}
+          className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
+          {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
+        </button>
+        <button onClick={() => setReviewed([...sel], true)} disabled={sel.size === 0}
+          className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
+          تعليم المحدد كمُراجَع ({sel.size})
+        </button>
+        <button onClick={() => setReviewed(data.matches.map(m => m.prescription_id), true)}
+          className="px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50">
+          تعليم الكل كمُراجَع
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
+            <tr>
+              <th className="px-2 py-2 w-8"></th>
+              <SortTh k="patient_name">اسم المريض (بالروشتة)</SortTh>
+              <SortTh k="matched_name">الاسم في القائمة</SortTh>
+              <SortTh k="match_type" align="center">المطابقة</SortTh>
+              <SortTh k="reviewed" align="center">روجعت</SortTh>
+              <SortTh k="docnumber">رقم الفاتورة</SortTh>
+              <SortTh k="docdate">التاريخ</SortTh>
+              <SortTh k="branch" align="center">الفرع</SortTh>
+              <SortTh k="national_id">الرقم القومي/المالي</SortTh>
+              <SortTh k="list_label">القائمة</SortTh>
+              <SortTh k="gross_before" align="left">الإجمالى</SortTh>
+              <SortTh k="net_after" align="left">الصافى</SortTh>
+              <th className="text-center px-2 py-2 font-semibold">الحالة</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {sortedMatches.map(m => (
+              <tr key={m.prescription_id} className={`hover:bg-gray-50 ${m.is_excluded ? 'opacity-50' : ''}`}>
+                <td className="px-2 py-1.5 text-center">
+                  <input type="checkbox" checked={sel.has(m.prescription_id)}
+                    disabled={m.is_excluded}
+                    onChange={() => toggle(m.prescription_id)} />
+                </td>
+                <td className="px-2 py-1.5 font-medium text-gray-800">
+                  {m.patient_name}
+                  {m.dept_name && <span className="block text-[10px] text-gray-400">{m.dept_name}</span>}
+                </td>
+                <td className="px-2 py-1.5 text-gray-600">{m.matched_name}</td>
+                <td className="px-2 py-1.5 text-center">
+                  <span className={`text-[10px] rounded px-1.5 py-0.5 ${m.match_type === 'full'
+                    ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {m.match_type === 'full' ? 'كاملة' : 'جزئية'}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 text-center">
+                  <input type="checkbox" checked={!!m.reviewed}
+                    onChange={e => setReviewed([m.prescription_id], e.target.checked)}
+                    className="accent-green-600" title="تم مراجعة هذه الروشتة" />
+                </td>
+                <td className="px-2 py-1.5 font-mono text-xs">{m.docnumber || '—'}</td>
+                <td className="px-2 py-1.5 text-xs text-gray-600">{m.docdate || '—'}</td>
+                <td className="px-2 py-1.5 text-center text-xs">{m.branch || '—'}</td>
+                <td className="px-2 py-1.5 font-mono text-xs">{m.national_id || <span className="text-gray-300">—</span>}</td>
+                <td className="px-2 py-1.5 text-xs text-gray-500">{m.list_label}</td>
+                <td className="px-2 py-1.5 text-left font-mono text-gray-600">{fmt(m.gross_before)}</td>
+                <td className="px-2 py-1.5 text-left font-mono">{fmt(m.net_after)}</td>
+                <td className="px-2 py-1.5 text-center text-xs">
+                  {m.is_excluded ? <span className="text-red-600">مُستبعدة</span> : <span className="text-gray-400">—</span>}
+                </td>
+              </tr>
+            ))}
+            {data.matches.length === 0 && (
+              <tr><td colSpan={13} className="px-3 py-8 text-center text-gray-400">لا مطابقات في هذه المطالبة.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Activity / audit-log tab ───────────────────────────────────────────────
+const _AUDIT_TONE = {
+  status_change: 'bg-blue-50 text-blue-700',   apply_master: 'bg-indigo-50 text-indigo-700',
+  apply_overrides: 'bg-indigo-50 text-indigo-700', apply_review: 'bg-purple-50 text-purple-700',
+  revert_apply: 'bg-gray-100 text-gray-600',   line_edit: 'bg-amber-50 text-amber-700',
+  line_reset: 'bg-gray-100 text-gray-600',     patient_edit: 'bg-amber-50 text-amber-700',
+  rx_adjust: 'bg-amber-50 text-amber-700',     rx_exclude: 'bg-red-50 text-red-700',
+  manual_add: 'bg-emerald-50 text-emerald-700', manual_delete: 'bg-red-50 text-red-700',
+  supplement: 'bg-teal-50 text-teal-700',      payment: 'bg-green-50 text-green-700',
+  deduction: 'bg-orange-50 text-orange-700',   billing_group: 'bg-sky-50 text-sky-700',
+  bulk_exclude: 'bg-red-50 text-red-700',      other: 'bg-gray-100 text-gray-600',
+}
+
+// ── Name review: bulk-fix incomplete / misspelled patient names ────────────────
+function NameReviewTab({ claimId, onRefresh }) {
+  const [rows, setRows]     = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [sel, setSel]       = useState({})     // rx_id → chosen name
+  const [busy, setBusy]     = useState(false)
+  const [msg, setMsg]       = useState(null)
+
+  const load = () => {
+    setLoading(true)
+    insuranceApi.nameSuggestions(claimId)
+      .then(r => {
+        setRows(r.data.rows || [])
+        // preselect confident (non-ambiguous) suggestions
+        const pre = {}
+        for (const row of (r.data.rows || [])) {
+          if (row.suggestion && row.type !== 'ambiguous') pre[row.rx_id] = row.suggestion
+        }
+        setSel(pre)
+      })
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [claimId])   // eslint-disable-line
+
+  const toggle = (row) => setSel(s => {
+    const n = { ...s }
+    if (n[row.rx_id] != null) delete n[row.rx_id]
+    else n[row.rx_id] = row.suggestion || (row.options && row.options[0]) || ''
+    return n
+  })
+  const setChoice = (rxId, name) => setSel(s => ({ ...s, [rxId]: name }))
+
+  const applySel = async () => {
+    const choices = {}
+    for (const [k, v] of Object.entries(sel)) if (v && v.trim()) choices[k] = v.trim()
+    if (!Object.keys(choices).length) return
+    if (!window.confirm(`تطبيق ${Object.keys(choices).length} اسم؟ (الاسم حقل طباعة فقط — لا يؤثر على الإجماليات، وقابل للتراجع لكل روشتة).`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.applyNameSuggestions(claimId, choices)
+      setMsg(`تم تطبيق ${data.applied} اسم.`)
+      load(); onRefresh && onRefresh()
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'تعذّر التطبيق')
+    } finally { setBusy(false) }
+  }
+
+  const revertOne = async (rxId) => {
+    setBusy(true)
+    try { await insuranceApi.revertPatientName(claimId, rxId); load(); onRefresh && onRefresh() }
+    finally { setBusy(false) }
+  }
+
+  const typeBadge = (t) => t === 'complete'
+    ? <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">إكمال</span>
+    : t === 'spelling'
+    ? <span className="text-[10px] bg-sky-100 text-sky-700 rounded px-1.5 py-0.5">تصحيح إملائي</span>
+    : <span className="text-[10px] bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">متعدد — اختر يدوياً</span>
+
+  if (loading) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ فحص الأسماء…</div>
+
+  const selCount = Object.values(sel).filter(v => v && v.trim()).length
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 className="font-semibold text-gray-800">مراجعة أسماء المرضى</h3>
+          <p className="text-xs text-gray-500">
+            اقتراحات آمنة من سجل نفس الجهة: إكمال الاسم رباعياً أو تصحيح الإملاء. الاسم حقل طباعة فقط
+            (لا يؤثر على الإجماليات) وقابل للتراجع. الأسماء متعددة الاحتمالات تُترك للاختيار اليدوى تفادياً لأى خطأ.
+          </p>
+        </div>
+        <button onClick={applySel} disabled={busy || selCount === 0}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded disabled:opacity-40">
+          تطبيق المحدد ({selCount})
+        </button>
+      </div>
+      {msg && <div className="mb-2 text-sm text-blue-700">{msg}</div>}
+      {rows.length === 0 ? (
+        <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg p-4">
+          ✓ لا توجد أسماء تحتاج إلى تصحيح أو إكمال حسب السجل التاريخى.
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-gray-500 text-xs border-b border-gray-200">
+            <tr>
+              <th className="py-2 w-8"></th>
+              <th className="text-right">التاريخ</th>
+              <th className="text-right">الإيصال</th>
+              <th className="text-right">الاسم الحالى</th>
+              <th className="text-right">الاقتراح</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => {
+              const chosen = sel[row.rx_id]
+              const checked = chosen != null
+              return (
+                <tr key={row.rx_id} className="border-b border-gray-100">
+                  <td className="py-2 text-center">
+                    <input type="checkbox" checked={checked} onChange={() => toggle(row)} />
+                  </td>
+                  <td className="text-xs text-gray-500 whitespace-nowrap">{row.date}</td>
+                  <td className="text-xs font-mono text-gray-500">#{row.docnumber}</td>
+                  <td className="text-gray-800">{row.current_name}</td>
+                  <td>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {typeBadge(row.type)}
+                      {row.type === 'ambiguous' ? (
+                        <select value={chosen ?? ''} onChange={e => setChoice(row.rx_id, e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-xs">
+                          <option value="">— اختر —</option>
+                          {(row.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <span className="font-medium text-gray-900">{row.suggestion}</span>
+                      )}
+                      {row.count ? <span className="text-[10px] text-gray-400" dir="ltr">{row.count}×</span> : null}
+                    </div>
+                  </td>
+                  <td className="text-left">
+                    {row.softech_name && row.current_name !== row.softech_name && (
+                      <button onClick={() => revertOne(row.rx_id)} disabled={busy}
+                        title={`استرجاع اسم سوفتك: ${row.softech_name}`}
+                        className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1.5 py-0.5">
+                        ↩ سوفتك
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+function ActivityTab({ claimId }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter]   = useState('')
+
+  const load = () => {
+    setLoading(true)
+    insuranceApi.auditLog(claimId, filter ? { action: filter } : {})
+      .then(r => setData(r.data)).catch(() => setData({ events: [], count: 0 }))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [claimId, filter])
+
+  const events = data?.events || []
+  // distinct actions present (for the filter chips)
+  const [allActions, setAllActions] = useState([])
+  useEffect(() => {
+    if (!filter && data?.events) {
+      const seen = {}
+      data.events.forEach(e => { seen[e.action] = e.action_label })
+      setAllActions(Object.entries(seen))
+    }
+  }, [data, filter])
+
+  const fmtDelta = (b, a) => {
+    if (b?.net != null && a?.net != null) {
+      const d = Number(a.net) - Number(b.net)
+      return <span className={d > 0.005 ? 'text-green-600' : d < -0.005 ? 'text-red-600' : 'text-gray-400'}>
+        {' '}({fmt(b.net)} → {fmt(a.net)}{Math.abs(d) > 0.005 ? `, ${d > 0 ? '+' : ''}${fmt(d)}` : ''})
+      </span>
+    }
+    return null
+  }
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">
+          سجل النشاط {data ? <span className="text-gray-400 font-normal">({data.count} حدث)</span> : ''}
+        </h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setFilter('')}
+            className={`text-xs px-2 py-1 rounded border ${filter === '' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}>الكل</button>
+          {allActions.map(([a, label]) => (
+            <button key={a} onClick={() => setFilter(a)}
+              className={`text-xs px-2 py-1 rounded border ${filter === a ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{label}</button>
+          ))}
+          <button onClick={load} className="text-xs px-2 py-1 rounded border bg-white text-gray-500 border-gray-300 hover:bg-gray-50">↻ تحديث</button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-gray-400 text-sm text-center py-10">جارٍ التحميل…</p>
+      ) : events.length === 0 ? (
+        <p className="text-gray-400 text-sm text-center py-10">لا يوجد نشاط مُسجَّل بعد.</p>
+      ) : (
+        <ol className="relative border-r-2 border-gray-100 pr-4 space-y-0">
+          {events.map(e => (
+            <li key={e.id} className="relative pb-4">
+              <span className="absolute -right-[9px] top-1.5 w-3 h-3 rounded-full bg-white border-2 border-gray-300" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-[11px] rounded px-1.5 py-0.5 ${_AUDIT_TONE[e.action] || _AUDIT_TONE.other}`}>{e.action_label}</span>
+                <span className="text-xs text-gray-400 font-mono">
+                  {toLatinDigits(new Date(e.at).toLocaleString('ar-EG'))}
+                </span>
+                {e.actor && <span className="text-xs text-gray-500">— {e.actor}</span>}
+              </div>
+              <div className="text-sm text-gray-800 mt-0.5">
+                {e.summary}{fmtDelta(e.before, e.after)}
+              </div>
+              {e.reason && <div className="text-xs text-gray-500 mt-0.5">السبب: {e.reason}</div>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+// ── Revision tab: sortable/filterable flagged lines + manual sign-off ─────────
+const _FLAG_META = {
+  value:         { icon: '💰', label: 'فرق قيمة', cls: 'bg-rose-50 text-rose-700',
+                   tip: 'الإجمالى محسوب من كمية مُقرَّبة (٣ خانات) وقد يخالف قيمة سوفتك الحقيقية' },
+  discount:      { icon: '💸', label: 'خصم سوفتك', cls: 'bg-rose-100 text-rose-800',
+                   tip: 'خصم سوفتك لهذا الصنف يخالف نسبة الفئة — هذا البند سبب اختلاف صافى الروشتة عن سوفتك' },
+  drift:         { icon: '⚠️', label: 'فرق كتالوج', cls: 'bg-amber-50 text-amber-700',
+                   tip: 'التصنيف/السعر الحالى فى الكتالوج يختلف عن اللقطة المجمَّدة' },
+  softech_class: { icon: '⚑', label: 'تصنيف سوفتك', cls: 'bg-orange-50 text-orange-700',
+                   tip: 'تصنيفنا للصنف يخالف تصنيف سوفتك الخام' },
+}
+
+function RevisionTab({ claimId }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(null)
+  const [flagFilter, setFlagFilter] = useState('')     // '', 'value', 'drift', 'softech_class'
+  const [statusFilter, setStatusFilter] = useState('') // '', 'pending', 'approved'
+  const [q, setQ]             = useState('')
+  const [sort, setSort]       = useState({ key: 'net_amount', dir: 'desc' })
+  const [noteDraft, setNoteDraft] = useState({})
+
+  const load = () => {
+    setLoading(true)
+    insuranceApi.flaggedLines(claimId)
+      .then(r => setData(r.data)).catch(() => setData({ lines: [], count: 0 }))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [claimId])
+
+  const review = async (row, approved) => {
+    setSaving(row.line_id)
+    try {
+      await insuranceApi.reviewLine(claimId, row.prescription_id, row.line_id,
+        { approved, note: noteDraft[row.line_id] ?? row.review_note ?? '' })
+      await load()
+    } finally { setSaving(null) }
+  }
+
+  const rows = (data?.lines || [])
+    .filter(r => !flagFilter || r.flags.includes(flagFilter))
+    .filter(r => !statusFilter
+      || (statusFilter === 'pending' && !r.review_approved)
+      || (statusFilter === 'approved' && r.review_approved))
+    .filter(r => !q || wildcardMatch(r.item_name, q) || (r.itemcode || '').includes(q)
+      || wildcardMatch(r.patient_name, q) || String(r.docnumber || '').includes(q))
+  const sorted = [...rows].sort((a, b) => {
+    const av = a[sort.key], bv = b[sort.key]
+    const cmp = (typeof av === 'number' && typeof bv === 'number')
+      ? av - bv : String(av ?? '').localeCompare(String(bv ?? ''), 'ar')
+    return sort.dir === 'asc' ? cmp : -cmp
+  })
+  // keyboard flow (shared review-grid keys): Enter approves the line and moves on, Space
+  // toggles approve / un-approve
+  const kb = useGridKeyboard({
+    rows: sorted, getKey: r => r.line_id, advanceOnConfirm: true,
+    onConfirm: r => { if (!r.review_approved && saving == null) review(r, true) },
+    onToggle: r => { if (saving == null) review(r, !r.review_approved) },
+  })
+  const th = (key, label, extra = '') => (
+    <th onClick={() => setSort(s => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))}
+      className={`pb-1 cursor-pointer select-none hover:text-gray-700 ${extra}`}>
+      {label}{sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : ''}
+    </th>
+  )
+
+  if (loading && !data) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ تحميل البنود المُعلَّمة…</div>
+
+  const chip = (val, cur, set, label) => (
+    <button onClick={() => set(cur === val ? '' : val)}
+      className={`text-xs px-2 py-1 rounded border ${cur === val
+        ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{label}</button>
+  )
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h3 className="text-sm font-semibold text-gray-700">
+          مراجعة الفروق {data ? <span className="text-gray-400 font-normal">
+            ({data.count} بند مُعلَّم · {data.pending_count} بانتظار الاعتماد · 💰 {data.value_count} فرق قيمة)</span> : ''}
+        </h3>
+        <button onClick={load} className="text-xs px-2 py-1 rounded border bg-white text-gray-500 border-gray-300 hover:bg-gray-50">↻ تحديث</button>
+      </div>
+      <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
+        كل بند به علامة فرق (💰 قيمة قد تخالف سوفتك · ⚠️ فرق عن الكتالوج · ⚑ تصنيف يخالف سوفتك). المراجعة والاعتماد
+        تسجيليان فقط ولا يغيّران القيم المجمَّدة أو المستندات المصدَّرة — الهدف توثيق أنك راجعت الفرق ووافقت عليه قبل التسليم.
+      </p>
+
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <span className="text-xs text-gray-400">النوع:</span>
+        {chip('value', flagFilter, setFlagFilter, '💰 قيمة')}
+        {chip('drift', flagFilter, setFlagFilter, '⚠️ كتالوج')}
+        {chip('softech_class', flagFilter, setFlagFilter, '⚑ تصنيف')}
+        <span className="text-xs text-gray-400 mr-2">الحالة:</span>
+        {chip('pending', statusFilter, setStatusFilter, 'بانتظار الاعتماد')}
+        {chip('approved', statusFilter, setStatusFilter, 'معتمَد')}
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالصنف/الكود/المريض/الروشتة…"
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-56 mr-2" />
+        <span className="text-[11px] text-gray-400 mr-auto">⌨ ↑↓ تنقل · Enter اعتماد والتالي · مسافة اعتماد/إلغاء</span>
+      </div>
+
+      {sorted.length === 0 ? (
+        <p className="text-gray-400 text-sm text-center py-10">
+          {data?.count ? 'لا توجد بنود مطابقة للتصفية.' : 'لا توجد بنود بها فروق تحتاج مراجعة. 🎉'}
+        </p>
+      ) : (
+        <div {...kb.containerProps} className={`overflow-x-auto border border-gray-200 rounded-lg ${kb.containerProps.className}`}>
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-500 border-b">
+              <tr>
+                <th className="text-right pb-1 pt-2 px-2">العلامات</th>
+                {th('itemcode', 'الكود', 'text-right px-2')}
+                {th('item_name', 'الصنف', 'text-right px-2')}
+                {th('patient_name', 'المريض', 'text-right px-2')}
+                {th('docnumber', 'الروشتة', 'text-right px-2')}
+                {th('branchcode', 'الفرع', 'text-center px-2')}
+                {th('docdate', 'التاريخ', 'text-right px-2')}
+                {th('quantity', 'الكمية', 'text-left px-2')}
+                {th('line_total', 'الإجمالى', 'text-left px-2')}
+                {th('net_amount', 'الصافى', 'text-left px-2')}
+                <th className="text-center pb-1 pt-2 px-2">الاعتماد</th>
+                <th className="text-right pb-1 pt-2 px-2">ملاحظة المراجعة</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {sorted.map(r => (
+                <tr key={r.line_id} {...kb.rowProps(r)}
+                  className={`${r.review_approved ? 'bg-green-50/40' : ''} ${kb.rowProps(r).className}`}>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    {r.flags.map(f => (
+                      <span key={f} title={_FLAG_META[f]?.tip}
+                        className={`inline-block text-[10px] rounded px-1 ml-0.5 ${_FLAG_META[f]?.cls}`}>
+                        {_FLAG_META[f]?.icon}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="px-2 py-1.5 font-mono text-gray-500">{r.itemcode}</td>
+                  <td className="px-2 py-1.5 text-gray-800">{r.item_name}</td>
+                  <td className="px-2 py-1.5 text-gray-600">{r.patient_name || '—'}</td>
+                  <td className="px-2 py-1.5 font-mono text-gray-500">{r.docnumber}</td>
+                  <td className="px-2 py-1.5 text-center font-mono text-gray-600">{r.branchcode}</td>
+                  <td className="px-2 py-1.5 font-mono text-gray-500 whitespace-nowrap">{r.docdate || '—'}</td>
+                  <td className="px-2 py-1.5 text-left font-mono">{r.quantity}</td>
+                  <td className="px-2 py-1.5 text-left font-mono">{fmt(r.line_total)}</td>
+                  <td className="px-2 py-1.5 text-left font-mono font-semibold">{fmt(r.net_amount)}</td>
+                  <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                    {r.review_approved ? (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <button onClick={() => review(r, false)} disabled={saving === r.line_id}
+                          className="text-[11px] text-green-700 bg-green-100 rounded px-2 py-0.5 hover:bg-green-200 disabled:opacity-50">
+                          ✓ معتمَد
+                        </button>
+                        {r.reviewed_by && <span className="text-[9px] text-gray-400">{r.reviewed_by}</span>}
+                      </div>
+                    ) : (
+                      <button onClick={() => review(r, true)} disabled={saving === r.line_id}
+                        className="text-[11px] bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700 disabled:opacity-50">
+                        {saving === r.line_id ? '…' : 'اعتماد'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={noteDraft[r.line_id] ?? r.review_note ?? ''}
+                      onChange={e => setNoteDraft(s => ({ ...s, [r.line_id]: e.target.value }))}
+                      onBlur={e => { if ((e.target.value || '') !== (r.review_note || '')) review(r, r.review_approved) }}
+                      placeholder="سبب الاعتماد / ملاحظة…"
+                      className="border border-gray-200 rounded px-2 py-0.5 text-[11px] w-full min-w-[140px]" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SOFTECH RE-PRICE TAB — preview a receipt price edit on HQ+branch, gated apply,
+// rebalance the contract client's running balance, and revert. WRITES are disabled
+// unless the backend flag INSURANCE_SOFTECH_WRITE_ENABLED is on.
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── Temporary SOFTECH receipt-date edit (for the 7-day reprint window) ─────────
+function SoftechDateEditCard({ claimId, claim, inp }) {
+  const [docno, setDocno]   = useState('')
+  const [branch, setBranch] = useState('')
+  const [newDate, setNewDate] = useState('')
+  const [pv, setPv]         = useState(null)
+  const [runs, setRuns]     = useState([])
+  const [busy, setBusy]     = useState(false)
+  const [msg, setMsg]       = useState(null)
+
+  const loadRuns = () => insuranceApi.dateEditRuns(claimId).then(r => setRuns(r.data)).catch(() => {})
+  useEffect(() => { loadRuns() }, [claimId])   // eslint-disable-line
+
+  const preview = async () => {
+    if (!docno.trim() || !branch.trim()) return
+    setBusy(true); setMsg(null); setPv(null)
+    try {
+      const { data } = await insuranceApi.dateEditPreview(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate })
+      setPv(data)
+    } catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّرت المعاينة' }) }
+    finally { setBusy(false) }
+  }
+  const apply = async () => {
+    if (!newDate) { setMsg({ err: 'اختر التاريخ الجديد' }); return }
+    if (!window.confirm(`تغيير التاريخ المطبوع للإيصال #${docno} إلى ${newDate} على HQ والفرع؟ (مؤقت — استرجعه بعد الطباعة).`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.dateEditApply(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate, confirm: true })
+      setMsg({ ok: `تم توحيد التاريخ (الإيصال + المطالبة): ${data.old_date} → ${data.new_date}. اطبع الإيصال الآن ثم استرجع تاريخ الإيصال من السجل بالأسفل (يبقى تاريخ المطالبة مصححاً).` })
+      setPv(null); loadRuns()
+    } catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّر التطبيق' }) }
+    finally { setBusy(false) }
+  }
+  const revert = async (runId) => {
+    if (!window.confirm('استرجاع التاريخ الأصلى للإيصال؟')) return
+    setBusy(true); setMsg(null)
+    try { await insuranceApi.dateEditRevert(claimId, runId); setMsg({ ok: 'تم استرجاع التاريخ الأصلى.' }); loadRuns() }
+    catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّر الاسترجاع' }) }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="bg-white border border-purple-200 rounded-xl p-4">
+      <div className="text-sm font-medium text-purple-800 mb-1">📅 تعديل تاريخ الإيصال (مؤقت — للطباعة ثم الاسترجاع)</div>
+      <p className="text-[11px] text-gray-500 mb-3">
+        عند إعادة إدخال روشتة مُرتجعة كفاتورة جديدة تأخذ تاريخ اليوم، اضبط التاريخ المطبوع ليقع ضمن ٧ أيام من تاريخ الروشتة الفعلى،
+        اطبع النسخة الجديدة، ثم استرجع تاريخ الإيصال الأصلى.
+        <br/>عند التطبيق: يُوحَّد التاريخ على <b>الإيصال (HQ + الفرع)</b> و<b>المطالبة (motalba)</b>.
+        عند الاسترجاع: يُعاد <b>تاريخ الإيصال فقط</b> — بينما يبقى تاريخ المطالبة على القيمة المصححة. (لا يُمَس وقت المعاملة.)
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno} onChange={e => setDocno(e.target.value)} /></label>
+        <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch} onChange={e => setBranch(e.target.value)} /></label>
+        <label className="text-xs text-gray-500">التاريخ الجديد<input type="date" className={`${inp} w-40 block mt-0.5`} value={newDate} onChange={e => setNewDate(e.target.value)} /></label>
+        <button onClick={preview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة</button>
+        <button onClick={apply} disabled={busy || !newDate || claim?.status !== 'draft'} className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded disabled:opacity-50">تطبيق التاريخ</button>
+      </div>
+      {pv && (
+        <div className="mt-2 text-xs text-gray-700">
+          التاريخ الحالى: <span className="font-mono">{pv.current_date}</span> → الجديد: <span className="font-mono">{pv.new_date || '—'}</span>
+          {' · '}الفرع {pv.branch_reachable ? <span className="text-green-600">متصل</span> : <span className="text-red-600">غير متاح</span>}
+          {!pv.write_enabled && <span className="text-amber-600"> · الكتابة معطّلة</span>}
+        </div>
+      )}
+      {msg?.ok && <div className="mt-2 text-xs text-green-700">{msg.ok}</div>}
+      {msg?.err && <div className="mt-2 text-xs text-red-600">{msg.err}</div>}
+      {runs.length > 0 && (
+        <div className="mt-3 border-t border-gray-100 pt-2">
+          <div className="text-xs font-medium text-gray-600 mb-1">سجل تعديلات التاريخ</div>
+          {runs.map(r => (
+            <div key={r.id} className="text-xs flex items-center justify-between border-b border-gray-100 py-1">
+              <span><span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} → {r.new_date}
+                {r.status === 'reverted' && <span className="text-gray-400"> · مُسترجَع</span>}
+                {r.status === 'failed' && <span className="text-red-500"> · فشل</span>}
+              </span>
+              {r.status === 'applied' && (
+                <button onClick={() => revert(r.id)} disabled={busy} className="text-[11px] text-red-500 hover:text-red-700">↩ استرجاع التاريخ</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SoftechRepriceTab({ claimId, claim }) {
+  const [docno, setDocno]   = useState('')
+  const [branch, setBranch] = useState('')
+  const [rows, setRows]     = useState([{ itemcode: '', price: '' }])
+  const [pv, setPv]         = useState(null)
+  const [busy, setBusy]     = useState(false)
+  const [msg, setMsg]       = useState(null)
+  const [runs, setRuns]     = useState([])
+  const [recLines, setRecLines] = useState(null)   // fetched receipt lines to pick from
+  // item-code → multi-receipt batch
+  const [bCode, setBCode]   = useState('')
+  const [bList, setBList]   = useState(null)        // {receipts:[...]}
+  const [bSel, setBSel]     = useState(new Set())
+  const [bPrice, setBPrice] = useState('')
+  const [bRes, setBRes]     = useState(null)
+
+  const loadRuns = () => insuranceApi.repriceRuns(claimId).then(r => setRuns(r.data)).catch(() => {})
+  useEffect(() => { loadRuns() }, [claimId])   // eslint-disable-line
+
+  const exportRuns = async (status) => {
+    try {
+      const { data: blob } = await insuranceApi.repriceRunsExport(claimId, status)
+      const url = URL.createObjectURL(new Blob([blob], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = status === 'failed' ? `تعديلات_سوفتك_فاشلة_${claimId}.xlsx` : `تعديلات_سوفتك_${claimId}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch { /* noop */ }
+  }
+
+  const fetchLines = async () => {
+    if (!docno.trim() || !branch.trim()) return
+    setBusy(true); setMsg(null); setRecLines(null)
+    try {
+      const { data } = await insuranceApi.repriceReceiptLines(claimId, docno.trim(), branch.trim())
+      setRecLines(data.lines || [])
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر جلب البنود' }) }
+    finally { setBusy(false) }
+  }
+  const pickLine = (l) => {
+    setRows(rs => {
+      const empty = rs.findIndex(r => !r.itemcode.trim())
+      if (empty >= 0) return rs.map((r, i) => i === empty ? { ...r, itemcode: l.itemcode } : r)
+      return [...rs, { itemcode: l.itemcode, price: '' }]
+    })
+  }
+
+  const searchItem = async () => {
+    if (!bCode.trim()) return
+    setBusy(true); setMsg(null); setBList(null); setBRes(null)
+    try {
+      const { data } = await insuranceApi.repriceItemReceipts(claimId, bCode.trim())
+      setBList(data)
+      setBSel(new Set((data.receipts || []).map(r => `${r.docno}__${r.branch}`)))
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر البحث' }) }
+    finally { setBusy(false) }
+  }
+  const applyBatch = async () => {
+    const receipts = (bList?.receipts || []).filter(r => bSel.has(`${r.docno}__${r.branch}`))
+    if (!receipts.length || bPrice === '') return
+    if (!window.confirm(`تطبيق سعر ${bPrice} للصنف ${bList.itemcode} على ${receipts.length} إيصال؟ كل إيصال عملية مستقلة قابلة للتراجع.`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.repriceApplyBatch(claimId, {
+        itemcode: bList.itemcode, new_price: bPrice,
+        receipts: receipts.map(r => ({ docno: r.docno, branch: r.branch })), confirm: true })
+      setBRes(data)
+      setMsg({ ok: `تم تطبيق ${data.applied} من ${receipts.length}${data.failed ? ` (فشل ${data.failed})` : ''}.` })
+      loadRuns()
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التطبيق الدفعى' }) }
+    finally { setBusy(false) }
+  }
+
+  const pricesObj = () => Object.fromEntries(
+    rows.filter(r => r.itemcode.trim() && r.price !== '').map(r => [r.itemcode.trim(), r.price]))
+
+  const doPreview = async () => {
+    setBusy(true); setMsg(null); setPv(null)
+    try {
+      const { data } = await insuranceApi.repricePreview(claimId, { docnumber: docno.trim(), branch: branch.trim(), prices: pricesObj() })
+      setPv(data)
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّرت المعاينة' }) }
+    finally { setBusy(false) }
+  }
+
+  const doApply = async () => {
+    if (!window.confirm(`تأكيد الكتابة إلى سوفتك (HQ + الفرع) للإيصال #${docno}؟`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.repriceApply(claimId, { docnumber: docno.trim(), branch: branch.trim(), prices: pricesObj(), confirm: true })
+      setMsg({ ok: `تم التطبيق (عملية #${data.run_id}). صافى Δ ${data.net_delta}. إعادة ضبط الرصيد اختيارية من سجل العمليات بالأسفل.` })
+      loadRuns()
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التطبيق' }) }
+    finally { setBusy(false) }
+  }
+
+  const doRebalance = async (run) => {
+    // read-only footprint first
+    let foot
+    try { foot = (await insuranceApi.repriceRebalance(claimId, run.id, {})).data } catch { /* ignore */ }
+    const n = foot?.affected ?? '؟'
+    if (foot && foot.is_ledger === false) {
+      setMsg({ err: `هذا الحساب لا يحمل رصيداً تراكمياً دفترياً (فحص ${foot.ledger_checked} عملية) — إعادة الضبط محظورة لتجنّب إفساد قيمة غير دفترية.` })
+      return
+    }
+    if (!window.confirm(`إعادة ضبط الرصيد التراكمى لعميل التعاقد ${run.cust_branch_code} (رصيد ${foot?.edit_balance ?? '—'}): سيُزاح ${n} صف على HQ فقط (ترتيب الرصيد) بمقدار صافى Δ ${run.net_delta}. القيمة داخلية (رصيد ائتمان) ولا تظهر على الإيصال المطبوع. متابعة؟`)) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.repriceRebalance(claimId, run.id, { confirm: true })
+      setMsg({ ok: `أُعيد ضبط ${data.updated} صف.` })
+      loadRuns()
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّرت إعادة الضبط' }) }
+    finally { setBusy(false) }
+  }
+
+  const doRevert = async (run) => {
+    if (!window.confirm(`التراجع عن العملية #${run.id}؟`)) return
+    setBusy(true); setMsg(null)
+    try { await insuranceApi.repriceRevert(claimId, run.id); setMsg({ ok: 'تم التراجع.' }); loadRuns() }
+    catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التراجع' }) }
+    finally { setBusy(false) }
+  }
+
+  const inp = 'border border-gray-300 rounded px-2 py-1.5 text-sm'
+  const canApply = pv && pv.write_enabled && pv.branch_consistency?.reachable && claim?.status === 'draft'
+
+  return (
+    <div className="space-y-4" dir="rtl">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+        تعديل سعر إيصال داخل سوفتك (stktrans + stktransm + branchesales) على HQ والفرع، ليتطابق الإيصال المطبوع مع المطالبة بعد إعادة التسعير.
+        الكتابة معطّلة افتراضياً — المعاينة متاحة دائماً، والتطبيق يتطلب تفعيل العلم بالسيرفر + مطالبة مسودة + فرع متصل.
+      </div>
+
+      <SoftechDateEditCard claimId={claimId} claim={claim} inp={inp} />
+
+
+      {/* ─── (1) Receipt-driven: fetch a receipt's lines and pick an item ─── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="text-sm font-medium text-gray-700 mb-2">١) تعديل بإيصال — اكتب رقم الإيصال والفرع، اجلب البنود، اختر الصنف واكتب السعر</div>
+        <div className="flex flex-wrap items-end gap-2 mb-3">
+          <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno}
+            onChange={e => setDocno(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
+          <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch}
+            onChange={e => setBranch(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
+          <button onClick={fetchLines} disabled={busy || !docno.trim() || !branch.trim()}
+            className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">جلب البنود</button>
+        </div>
+        {recLines && (
+          <div className="mb-3 border border-gray-100 rounded-lg overflow-hidden">
+            {recLines.length === 0 ? <div className="text-xs text-gray-400 p-2">لا توجد بنود لهذا الإيصال.</div> : (
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500"><tr>
+                  <th className="text-right px-2 py-1">الكود</th><th className="text-right px-2 py-1">الصنف</th>
+                  <th className="text-left px-2 py-1">كمية</th><th className="text-left px-2 py-1">السعر الحالى</th><th></th></tr></thead>
+                <tbody>
+                  {recLines.map((l, i) => (
+                    <tr key={i} className="border-t border-gray-100 hover:bg-sky-50/40">
+                      <td className="px-2 py-1 font-mono text-gray-500">{l.itemcode}</td>
+                      <td className="px-2 py-1 text-gray-800">{l.item_name}</td>
+                      <td className="px-2 py-1 text-left font-mono">{l.qty}</td>
+                      <td className="px-2 py-1 text-left font-mono">{fmt(l.itemsaleprice)}</td>
+                      <td className="px-2 py-1 text-left"><button onClick={() => pickLine(l)} className="text-sky-600 text-xs hover:underline">اختيار ←</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+        <table className="text-sm mb-2">
+          <thead><tr className="text-xs text-gray-500"><th className="text-right px-2">كود الصنف</th><th className="text-right px-2">السعر الجديد</th><th></th></tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="px-2 py-1"><input className={`${inp} w-32`} value={r.itemcode} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, itemcode: e.target.value } : x))} /></td>
+                <td className="px-2 py-1"><input type="number" step="any" className={`${inp} w-28 text-left`} value={r.price} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} /></td>
+                <td className="px-2 py-1">{rows.length > 1 && <button onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} className="text-red-500 text-xs">حذف</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="flex gap-2">
+          <button onClick={() => setRows(rs => [...rs, { itemcode: '', price: '' }])} className="text-xs text-blue-600">+ صنف</button>
+          <button onClick={doPreview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة (قراءة فقط)</button>
+        </div>
+      </div>
+
+      {/* ─── (2) Item-driven: batch re-price one item across many receipts ─── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="text-sm font-medium text-gray-700 mb-2">٢) تعديل صنف عبر عدة إيصالات — اكتب كود الصنف لعرض كل إيصالاته فى هذه المطالبة وتحديثها دفعة واحدة</div>
+        <div className="flex flex-wrap items-end gap-2 mb-2">
+          <label className="text-xs text-gray-500">كود الصنف<input className={`${inp} w-36 block mt-0.5`} value={bCode}
+            onChange={e => setBCode(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchItem()} /></label>
+          <button onClick={searchItem} disabled={busy || !bCode.trim()}
+            className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">بحث</button>
+          {bList && bList.receipts.length > 0 && <>
+            <label className="text-xs text-gray-500">السعر الجديد<input type="number" step="any" className={`${inp} w-28 block mt-0.5 text-left`} value={bPrice} onChange={e => setBPrice(e.target.value)} /></label>
+            <button onClick={applyBatch} disabled={busy || bSel.size === 0 || bPrice === '' || claim?.status !== 'draft'}
+              className="px-4 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-40"
+              title={claim?.status !== 'draft' ? 'المطالبة ليست مسودة' : ''}>
+              تطبيق دفعة على {bSel.size} إيصال
+            </button>
+          </>}
+        </div>
+        {bList && (bList.receipts.length === 0
+          ? <div className="text-xs text-gray-400">لا توجد إيصالات بهذا الصنف فى هذه المطالبة.</div>
+          : (
+          <div className="border border-gray-100 rounded-lg overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500"><tr>
+                <th className="px-2 py-1"><input type="checkbox" checked={bSel.size === bList.receipts.length}
+                  onChange={() => setBSel(s => s.size === bList.receipts.length ? new Set() : new Set(bList.receipts.map(r => `${r.docno}__${r.branch}`)))} /></th>
+                <th className="text-right px-2 py-1">الإيصال</th><th className="text-center px-2 py-1">الفرع</th>
+                <th className="text-right px-2 py-1">التاريخ</th><th className="text-right px-2 py-1">المريض</th>
+                <th className="text-left px-2 py-1">السعر المجمّد</th><th className="text-left px-2 py-1">كمية</th><th className="px-2 py-1"></th></tr></thead>
+              <tbody>
+                {bList.receipts.map((r, i) => {
+                  const key = `${r.docno}__${r.branch}`
+                  const res = bRes?.results?.find(x => String(x.docno) === String(r.docno) && String(x.branch) === String(r.branch))
+                  return (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="px-2 py-1 text-center"><input type="checkbox" checked={bSel.has(key)}
+                        onChange={() => setBSel(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })} /></td>
+                      <td className="px-2 py-1 font-mono text-gray-600">#{r.docno}</td>
+                      <td className="px-2 py-1 text-center font-mono">{r.branch}</td>
+                      <td className="px-2 py-1 font-mono text-gray-500 whitespace-nowrap">{r.docdate || '—'}</td>
+                      <td className="px-2 py-1 text-gray-700">{r.patient || '—'}</td>
+                      <td className="px-2 py-1 text-left font-mono">{fmt(r.unit_price)}</td>
+                      <td className="px-2 py-1 text-left font-mono">{r.quantity}</td>
+                      <td className="px-2 py-1 text-left">{res && (res.ok
+                        ? <span className="text-green-600">✓ #{res.run_id} (Δ{res.net_delta})</span>
+                        : <span className="text-red-500" title={res.error}>✕ فشل</span>)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      {msg && <div className={`text-sm rounded-lg p-2 ${msg.err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{msg.err || msg.ok}</div>}
+
+      {/* Preview result */}
+      {pv && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-sm space-y-3">
+          <div className="flex flex-wrap gap-3 text-xs">
+            <span className={`px-2 py-0.5 rounded ${pv.write_enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>الكتابة {pv.write_enabled ? 'مُفعّلة' : 'معطّلة'}</span>
+            <span className={`px-2 py-0.5 rounded ${pv.branch_consistency?.reachable ? (pv.branch_consistency.consistent ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700') : 'bg-amber-100 text-amber-700'}`}>
+              الفرع {pv.branch_consistency?.reachable ? (pv.branch_consistency.consistent ? 'متصل ومتطابق' : 'متصل لكن غير متطابق') : 'غير متصل'}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700">عميل التعاقد {pv.cust_branch_code || '—'}</span>
+          </div>
+          {pv.lines.map((l, i) => (
+            <div key={i} className="border-b border-gray-100 pb-2">
+              <div className="font-medium">صنف {l.itemcode} <span className="text-xs text-gray-400">(ض {l.vat_rate}%, كمية {l.transqty})</span></div>
+              {Object.entries(l.changes).map(([f, ch]) => (
+                <div key={f} className="text-xs text-gray-600 flex gap-2"><span className="w-40">{f}</span><span className="font-mono">{ch.old} → <b className="text-gray-900">{ch.new}</b></span></div>
+              ))}
+            </div>
+          ))}
+          <div className="text-xs text-gray-700 grid grid-cols-2 gap-1 max-w-md">
+            {Object.entries(pv.header).map(([f, ch]) => <div key={f}><span className="text-gray-400">{f}</span> {ch.old} → <b>{ch.new}</b></div>)}
+            <div><span className="text-gray-400">docvalue2 (تكلفة)</span> {pv.docvalue2_cost} (ثابت)</div>
+            <div><span className="text-gray-400">التحصيل الجديد</span> {pv.tender_new}</div>
+            <div><span className="text-gray-400">صافى Δ</span> <b>{pv.net_delta}</b></div>
+            {pv.motalba_rows > 0 && <div className="text-blue-700">سيُحدَّث «المطلوب سداده» فى {pv.motalba_rows} مطالبة (سوفتك) ليطابق الصافى الجديد</div>}
+            <div className="text-gray-500">إعادة ضبط الرصيد التراكمى اختيارية (من سجل العمليات بعد التطبيق)</div>
+          </div>
+          <button onClick={doApply} disabled={busy || !canApply}
+            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-40"
+            title={!canApply ? 'التطبيق محظور (الكتابة معطّلة / الفرع غير متصل / المطالبة ليست مسودة)' : ''}>
+            تطبيق على سوفتك (HQ + الفرع)
+          </button>
+        </div>
+      )}
+
+      {/* Runs history */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-medium text-gray-800 text-sm">
+            سجل تعديلات سوفتك ({runs.length})
+            {runs.some(r => r.status === 'failed') &&
+              <span className="text-red-500 font-normal"> · {runs.filter(r => r.status === 'failed').length} فشل</span>}
+          </div>
+          {runs.length > 0 && (
+            <div className="flex gap-2">
+              <button onClick={() => exportRuns()} className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                📥 تصدير السجل
+              </button>
+              {runs.some(r => r.status === 'failed') &&
+                <button onClick={() => exportRuns('failed')} className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                  📥 تصدير الفاشلة فقط
+                </button>}
+            </div>
+          )}
+        </div>
+        {runs.length === 0 ? <div className="text-xs text-gray-400">لا توجد عمليات.</div> : (
+          <table className="w-full text-xs">
+            <thead className="text-gray-500"><tr><th className="text-right py-1">التاريخ</th><th>الإيصال</th><th>الفرع</th><th>الحالة</th><th>صافى Δ</th><th>عميل التعاقد</th><th></th></tr></thead>
+            <tbody>
+              {runs.map(r => {
+                const statusLabel = { preview: 'معاينة', applied: 'مُطبَّق', reverted: 'مُتراجَع', failed: 'فشل' }[r.status] || r.status
+                const statusCls = r.status === 'failed' ? 'text-red-600 font-semibold'
+                  : r.status === 'applied' ? 'text-green-600' : 'text-gray-500'
+                return (
+                <tr key={r.id} className={`border-t border-gray-100 ${r.status === 'failed' ? 'bg-red-50/60' : ''}`}>
+                  <td className="py-1 text-center whitespace-nowrap" dir="ltr">
+                    {r.applied_at ? toLatinDigits(new Date(r.applied_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })) : '—'}
+                  </td>
+                  <td className="font-mono">#{r.docnumber}</td>
+                  <td className="text-center">{r.branch}</td>
+                  <td className={`text-center ${statusCls}`} title={r.status === 'failed' ? (r.error || '') : ''}>{statusLabel}</td>
+                  <td className="text-center font-mono">{r.net_delta}</td>
+                  <td className="text-center">{r.cust_branch_code}</td>
+                  <td className="text-left space-x-1 space-x-reverse">
+                    {r.status === 'applied' && <>
+                      <button onClick={() => doRebalance(r)} disabled={busy || r.rebalanced} className="text-sky-600 disabled:text-gray-300"
+                        title="اختيارى وتقريبى — يصحّح رصيد الائتمان الداخلى فقط (لا يظهر على الإيصال المطبوع)">
+                        {r.rebalanced ? '✓ أُعيد الضبط' : 'إعادة ضبط الرصيد (اختيارى)'}</button>
+                      <button onClick={() => doRevert(r)} disabled={busy} className="text-red-500">تراجع</button>
+                    </>}
+                  </td>
+                </tr>
+              )})}
+            </tbody>
+          </table>
+        )}
+        {runs.some(r => r.status === 'failed') && (
+          <div className="mt-3 border-t border-red-100 pt-2">
+            <div className="text-[11px] font-semibold text-red-600 mb-1">التعديلات الفاشلة (سبب الفشل)</div>
+            {runs.filter(r => r.status === 'failed').map(r => (
+              <div key={`e-${r.id}`} className="text-[11px] text-red-700 mb-0.5">
+                <span className="font-mono">#{r.docnumber}</span> / فرع {r.branch}: {r.error || '—'}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ReadinessTab({ claimId }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -1702,7 +3488,79 @@ function ReadinessTab({ claimId }) {
                 )}
               </div>
               {c.detail && <p className="text-xs text-gray-600 mt-1 mr-7">{c.detail}</p>}
-              {c.items?.length > 0 && (() => {
+
+              {/* Short patient-name check: tier badges + per-branch breakdown */}
+              {c.key === 'short_patient_names' && c.branches && (
+                <div className="mt-2 mr-7 space-y-2">
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[11px] rounded px-1.5 py-0.5 bg-red-100 text-red-700 font-medium" title="اسم فردى — أعلى خطورة">فردى {c.tiers?.['فردى'] || 0}</span>
+                    <span className="text-[11px] rounded px-1.5 py-0.5 bg-orange-100 text-orange-700 font-medium" title="اسم ثنائى — خطورة عالية">ثنائى {c.tiers?.['ثنائى'] || 0}</span>
+                    <span className="text-[11px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700 font-medium" title="اسم ثلاثى — تحذير أخف">ثلاثى {c.tiers?.['ثلاثى'] || 0}</span>
+                    {c.completable > 0 && (
+                      <span className="text-[11px] rounded px-2 py-0.5 bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300"
+                        title="عدد الأسماء التى يمكن إكمالها رباعياً تلقائياً من السجل — من تبويب «مراجعة الأسماء» أو مباشرة من شبكة الروشتات">
+                        ⇢ قابل للإكمال {c.completable}
+                      </span>
+                    )}
+                  </div>
+                  <details>
+                    <summary className="text-[11px] text-gray-600 cursor-pointer select-none hover:text-gray-800">
+                      التوزيع حسب الفرع ({c.branches.length} فرع)
+                    </summary>
+                    <div className="overflow-x-auto mt-1">
+                      <table className="text-[11px] border border-gray-200 rounded">
+                        <thead className="bg-gray-50 text-gray-500">
+                          <tr>
+                            <th className="text-right px-2 py-1">الفرع</th>
+                            <th className="text-left px-2 py-1">غير رباعية</th>
+                            <th className="text-left px-2 py-1">من إجمالى</th>
+                            <th className="text-left px-2 py-1 text-red-600">فردى</th>
+                            <th className="text-left px-2 py-1 text-orange-600">ثنائى</th>
+                            <th className="text-left px-2 py-1 text-amber-600">ثلاثى</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {c.branches.map(b => (
+                            <tr key={b.branch} className="border-t border-gray-100">
+                              <td className="px-2 py-1 font-mono">{b.branch}</td>
+                              <td className="px-2 py-1 text-left font-semibold">{b.failed}</td>
+                              <td className="px-2 py-1 text-left text-gray-500">{b.total}</td>
+                              <td className="px-2 py-1 text-left">{b['فردى'] || 0}</td>
+                              <td className="px-2 py-1 text-left">{b['ثنائى'] || 0}</td>
+                              <td className="px-2 py-1 text-left">{b['ثلاثى'] || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                  <details>
+                    <summary className="text-[11px] text-gray-600 cursor-pointer select-none hover:text-gray-800">
+                      عرض الروشتات ({c.count})
+                    </summary>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {c.items.slice(0, 200).map((it, i) => (
+                        <span key={i} title={`${it.tokens} مقاطع · فرع ${it.branch}${it.completion ? ' · إكمال مقترح: ' + it.completion : ''}`}
+                          className={`text-[11px] rounded px-1.5 py-0.5 border ${
+                            it.completion
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                              : it.tier_severity === 'high'
+                              ? (it.tokens === 1 ? 'bg-red-50 text-red-700 border-red-200'
+                                                 : 'bg-orange-50 text-orange-700 border-orange-200')
+                              : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                          <span className="font-mono">#{it.docnumber}</span> {it.patient}
+                          {it.completion
+                            ? <span className="text-emerald-600"> ⇢ {it.completion}</span>
+                            : <span className="opacity-60"> · {it.tier}</span>}
+                        </span>
+                      ))}
+                      {c.count > 200 && <span className="text-[11px] text-gray-500">+{c.count - 200}…</span>}
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {c.key !== 'short_patient_names' && c.items?.length > 0 && (() => {
                 const isItemCodes = !!c.items[0]?.item_code
                 return (
                   <details className="mt-1 mr-7">
@@ -1753,7 +3611,12 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   const [matchMode, setMatchMode] = useState('contains')  // contains | begins | ends
   const [searchIn, setSearchIn]   = useState('both')      // both | code | name
   const [catFilter, setCat] = useState('')     // '', local, imported, tarsia, mixed
-  const [sort, setSort]     = useState('gross')  // gross | discount | net | discount_pct
+  const [sort, setSort]     = useState('gross')
+  const [sortDir, setSortDir] = useState('desc')
+  const sortByCol = (k) => {
+    if (sort === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSort(k); setSortDir(k === 'item_code' || k === 'item_name' || k === 'origin' || k === 'contract_classif' || k === 'category' ? 'asc' : 'desc') }
+  }
   const [sel, setSel]       = useState({})     // item_code -> chosen category
   const [busy, setBusy]     = useState(null)
   const [msg, setMsg]       = useState(null)
@@ -1784,24 +3647,34 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   let items = data.items
   if (q.trim()) {
     const s = q.trim().toLowerCase()
-    const test = (v) => {
+    const contains = (v) => {
       v = (v || '').toString().toLowerCase()
       if (matchMode === 'begins') return v.startsWith(s)
       if (matchMode === 'ends')   return v.endsWith(s)
-      return v.includes(s)
+      return v.includes(s)   // 'contains' and 'notcontains' both use includes
     }
-    items = items.filter(it =>
-      (searchIn !== 'name' && test(it.item_code)) ||
-      (searchIn !== 'code' && test(it.item_name)))
+    // any in-scope field matches (code and/or name)
+    const anyMatch = (it) =>
+      (searchIn !== 'name' && contains(it.item_code)) ||
+      (searchIn !== 'code' && contains(it.item_name))
+    items = matchMode === 'notcontains'
+      ? items.filter(it => !anyMatch(it))   // keep rows that do NOT contain the term
+      : items.filter(anyMatch)
   }
   if (catFilter === 'mixed') items = items.filter(it => it.is_mixed)
   else if (catFilter)        items = items.filter(it => it.category === catFilter)
-  items = [...items].sort((a, b) => (b[sort] || 0) - (a[sort] || 0))
+  const TEXT_COLS = new Set(['item_code', 'item_name', 'origin', 'contract_classif', 'category'])
+  items = [...items].sort((a, b) => {
+    let c
+    if (TEXT_COLS.has(sort)) c = (a[sort] || '').toString().localeCompare((b[sort] || '').toString(), 'ar')
+    else c = (Number(a[sort]) || 0) - (Number(b[sort]) || 0)
+    return sortDir === 'asc' ? c : -c
+  })
 
-  const SortTh = ({ k, children }) => (
-    <th onClick={() => setSort(k)}
-      className={`text-left px-2 py-2 cursor-pointer select-none ${sort === k ? 'text-blue-600' : 'text-gray-500'}`}>
-      {children}{sort === k ? ' ↓' : ''}
+  const SortTh = ({ k, children, align = 'right' }) => (
+    <th onClick={() => sortByCol(k)}
+      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap ${sort === k ? 'text-blue-600' : 'text-gray-500'}`}>
+      {children}{sort === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   )
 
@@ -1811,6 +3684,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
         <select value={matchMode} onChange={e => setMatchMode(e.target.value)}
           title="طريقة المطابقة" className="border border-gray-300 rounded px-2 py-2 text-sm">
           <option value="contains">يحتوي على</option>
+          <option value="notcontains">لا يحتوي على</option>
           <option value="begins">يبدأ بـ</option>
           <option value="ends">ينتهي بـ</option>
         </select>
@@ -1846,18 +3720,17 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-right px-2 py-2 text-gray-500 font-semibold">م</th>
-              <th className="text-right px-2 py-2 text-gray-500 font-semibold">الكود</th>
-              <th className="text-right px-2 py-2 text-gray-500 font-semibold">الصنف</th>
-              <th className="text-right px-2 py-2 text-gray-500 font-semibold" title="من كارت الصنف (itemsorigin)">المنشأ</th>
-              <th className="text-right px-2 py-2 text-gray-500 font-semibold" title="تصنيف خصم التعاقدات (custdiscpclassif)">تصنيف التعاقدات</th>
-              <SortTh k="basic_discount">خصم أساسى</SortTh>
-              <th className="text-center px-2 py-2 text-gray-500 font-semibold"
-                  title="عدد بنود الصرف لهذا الصنف في المطالبة (كم مرة ظهر على الروشتات)">عدد بنود الصرف</th>
-              <SortTh k="gross">الإجمالى</SortTh>
-              <SortTh k="discount_pct">نسبة الخصم</SortTh>
-              <SortTh k="discount">قيمة الخصم</SortTh>
-              <SortTh k="net">الصافى</SortTh>
-              <th className="text-right px-2 py-2 text-gray-500 font-semibold">التصنيف</th>
+              <SortTh k="item_code">الكود</SortTh>
+              <SortTh k="item_name">الصنف</SortTh>
+              <SortTh k="origin">المنشأ</SortTh>
+              <SortTh k="contract_classif">تصنيف التعاقدات</SortTh>
+              <SortTh k="basic_discount" align="left">خصم أساسى</SortTh>
+              <SortTh k="line_count" align="center">عدد بنود الصرف</SortTh>
+              <SortTh k="gross" align="left">الإجمالى</SortTh>
+              <SortTh k="discount_pct" align="left">نسبة الخصم</SortTh>
+              <SortTh k="discount" align="left">قيمة الخصم</SortTh>
+              <SortTh k="net" align="left">الصافى</SortTh>
+              <SortTh k="category">التصنيف</SortTh>
               <th className="text-right px-2 py-2 text-gray-500 font-semibold">تعديل التصنيف لهذه المطالبة</th>
             </tr>
           </thead>
@@ -1940,6 +3813,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
   const [applyMsg, setApplyMsg]   = useState(null)
   const [applyPrice, setApplyPrice]       = useState(true)
   const [applyCategory, setApplyCategory] = useState(true)
+  const [selLines, setSelLines] = useState(() => new Set())   // chosen line_ids (empty = all)
 
   const [history, setHistory] = useState([])
   const loadHistory = () => insuranceApi.applyHistory(claimId).then(r => setHistory(r.data)).catch(() => {})
@@ -1958,8 +3832,10 @@ function DiscrepancyTab({ claimId, onRefresh }) {
   const loadReview = () => insuranceApi.reviewItems(claimId)
     .then(r => setReviewItems(r.data.items || [])).catch(() => setReviewItems([]))
 
-  const applyReview = async (code) => {
-    const cat = reviewSel[code]
+  const applyReview = async (code, cat) => {
+    // `cat` is the EFFECTIVE selection (the dropdown shows a computed default even
+    // when reviewSel[code] is still empty) — never read reviewSel here or the
+    // button silently no-ops when the user leaves the default untouched.
     if (!cat) return
     setReviewBusy(code); setReviewMsg(null)
     try {
@@ -2022,15 +3898,26 @@ function DiscrepancyTab({ claimId, onRefresh }) {
 
   const applyMaster = async () => {
     if (!applyPrice && !applyCategory) return
+    const ids = selLines.size ? [...selLines] : null
+    const scope = ids ? `${ids.length} بند محدد` : 'كل البنود المتغيّرة'
     const what = [applyCategory && 'التصنيف', applyPrice && 'الأسعار'].filter(Boolean).join(' و')
-    if (!window.confirm(`سيتم تحديث بنود المطالبة لتطابق ${what} الحالية في الكتالوج. هذا الإجراء يعدّل قيم المطالبة المجمّدة. متابعة؟`)) return
+    if (!window.confirm(`سيتم تحديث ${scope} لتطابق ${what} الحالية في الكتالوج. هذا الإجراء يعدّل قيم المطالبة المجمّدة (قابل للتراجع). متابعة؟`)) return
     setApplying(true); setApplyMsg(null)
     try {
       const { data: res } = await insuranceApi.applyCurrentMaster(claimId, {
         apply_price: applyPrice, apply_category: applyCategory,
+        ...(ids ? { line_ids: ids } : {}),
       })
-      setApplyMsg(`تم التحديث: ${res.lines_updated} بند في ${res.prescriptions_updated} روشتة · `
-        + `الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
+      let msg = `تم التحديث: ${res.lines_updated} بند في ${res.prescriptions_updated} روشتة · `
+        + `الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`
+      if (res.skipped_count) {
+        const codes = (res.skipped || []).slice(0, 8)
+          .map(s => `${s.itemcode || s.line_id} (${s.error})`).join('، ')
+        msg += ` · ⚠️ تم تخطّى ${res.skipped_count} بند لتعذّر معالجته: ${codes}`
+          + (res.skipped_count > 8 ? ' …' : '')
+      }
+      setApplyMsg(msg)
+      setSelLines(new Set())
       await reload(); await loadHistory()
       onRefresh && onRefresh()
     } catch (e) {
@@ -2047,9 +3934,31 @@ function DiscrepancyTab({ claimId, onRefresh }) {
 
   const deltaCls = v => v > 0.005 ? 'text-green-600' : v < -0.005 ? 'text-red-600' : 'text-gray-400'
 
+  const driftLines = data.lines || []
+  const allLineIds = driftLines.map(l => l.line_id).filter(Boolean)
+  const allSelected = allLineIds.length > 0 && allLineIds.every(id => selLines.has(id))
+  const toggleLine = (id) => setSelLines(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const toggleAll = () => setSelLines(prev =>
+    allLineIds.every(id => prev.has(id)) ? new Set() : new Set(allLineIds))
+
   const columns = [
+    { key: '_sel', sortable: false, width: 40, align: 'center',
+      label: (
+        <input type="checkbox" checked={allSelected} onChange={toggleAll}
+          onClick={e => e.stopPropagation()} title="تحديد الكل" />
+      ),
+      render: (_v, r) => (
+        <input type="checkbox" checked={selLines.has(r.line_id)}
+          onChange={() => toggleLine(r.line_id)} disabled={!r.line_id} />
+      ) },
     { key: 'docnumber', label: 'الفاتورة', type: 'text', width: 80,
       render: (v) => <span className="font-mono text-xs">#{v}</span> },
+    { key: 'branchcode', label: 'الفرع', type: 'text', width: 55, align: 'center',
+      render: (v) => <span className="font-mono text-xs text-gray-600">{v}</span> },
+    { key: 'itemcode', label: 'الكود', type: 'text', width: 70,
+      render: (v) => <span className="font-mono text-xs text-gray-500">{v}</span> },
     { key: 'item_name', label: 'الصنف', type: 'text', width: 180 },
     { key: 'quantity', label: 'كمية', type: 'number', width: 60, align: 'center' },
     { key: 'frozen_unit_price', label: 'سعر مجمّد', type: 'number', width: 95, align: 'left',
@@ -2169,7 +4078,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
                         </select>
                       </td>
                       <td className="px-2 py-1">
-                        <button onClick={() => applyReview(it.item_code)} disabled={reviewBusy === it.item_code}
+                        <button onClick={() => applyReview(it.item_code, sel)} disabled={reviewBusy === it.item_code}
                           className="px-2.5 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
                           {reviewBusy === it.item_code ? '…' : 'تطبيق'}
                         </button>
@@ -2190,6 +4099,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
           {exporting ? 'جارٍ التصدير…' : 'تصدير Excel'}
         </button>
         <div className="h-6 w-px bg-gray-200" />
+        <span className="text-xs text-gray-500">طبّق:</span>
         <label className="text-sm text-gray-600 flex items-center gap-1">
           <input type="checkbox" checked={applyCategory} onChange={e => setApplyCategory(e.target.checked)} />
           التصنيف
@@ -2198,12 +4108,25 @@ function DiscrepancyTab({ claimId, onRefresh }) {
           <input type="checkbox" checked={applyPrice} onChange={e => setApplyPrice(e.target.checked)} />
           الأسعار
         </label>
+        <div className="h-6 w-px bg-gray-200" />
+        <span className={`text-xs ${selLines.size ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
+          {selLines.size ? `${selLines.size} بند محدد` : 'لم يُحدَّد بند (سيُطبَّق على الكل)'}
+        </span>
+        {selLines.size > 0 && (
+          <button onClick={() => setSelLines(new Set())}
+            className="text-xs text-gray-500 underline hover:text-gray-700">مسح التحديد</button>
+        )}
         <button onClick={applyMaster} disabled={applying || !hasDrift || (!applyPrice && !applyCategory)}
           className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {applying ? 'جارٍ التطبيق…' : 'تطبيق بيانات الكتالوج الحالية'}
+          {applying ? 'جارٍ التطبيق…'
+            : selLines.size ? `تطبيق على المحدد (${selLines.size})`
+            : 'تطبيق بيانات الكتالوج على الكل'}
         </button>
         {applyMsg && <span className="text-xs text-gray-600">{applyMsg}</span>}
       </div>
+      <p className="text-[11px] text-gray-400 -mt-2 mb-4">
+        حدِّد خانتَي «التصنيف»/«الأسعار» لتطبيق أحدهما أو كليهما، وحدِّد صفوفاً بعينها من الجدول لتطبيق التصويب على جزء من البنود فقط.
+      </p>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
@@ -2346,6 +4269,12 @@ function DiscrepancyTab({ claimId, onRefresh }) {
                   </span>
                   <span className="text-xs text-gray-500">
                     {[run.apply_category && 'تصنيف', run.apply_price && 'سعر'].filter(Boolean).join(' + ')}
+                  </span>
+                  <span className={`text-[11px] rounded px-1.5 py-0.5 shrink-0 ${
+                    run.scoped ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                               : 'bg-gray-100 text-gray-500'}`}
+                    title={run.scoped ? `طُبِّق على ${run.scope_count} بند محدد من الجدول` : 'طُبِّق على كل البنود المتغيّرة'}>
+                    {run.scoped ? `محدد · ${run.scope_count} بند` : 'الكل'}
                   </span>
                   <span className={`font-mono text-xs ${deltaCls(run.net_delta)}`}>
                     {run.net_delta > 0 ? '+' : ''}{fmt(run.net_delta)}

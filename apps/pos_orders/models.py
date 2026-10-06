@@ -169,6 +169,12 @@ class SoftechSalesOrder(models.Model):
     erp_payload     = models.JSONField(default=dict, blank=True, verbose_name='الحمولة المُرسلة')
     erp_readback    = models.JSONField(default=dict, blank=True, verbose_name='قراءة التحقق')
     erp_error       = models.TextField(blank=True)
+    # Set by run_reconcile when a PUSHED order's pending rows vanished but NO final document was
+    # found (possible cashier Delete, or a lookup miss) — a settlement/leakage signal surfaced in
+    # the Exception Center for manual review. Cleared automatically once the order settles or its
+    # pending row is seen again. This is OUR flag only — never written to / read from SOFTECH.
+    needs_review    = models.BooleanField(default=False, db_index=True, verbose_name='يحتاج مراجعة')
+    review_reason   = models.CharField(max_length=40, blank=True, verbose_name='سبب المراجعة')
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -213,12 +219,23 @@ class SoftechSalesOrderLine(models.Model):
     softech_itemcode = models.CharField(max_length=6, verbose_name='كود الصنف')
     item_name        = models.CharField(max_length=120, blank=True)
 
-    qty                 = models.DecimalField(max_digits=12, decimal_places=3, default=1, verbose_name='الكمية')
+    # 5 dp to match SOFTECH transqty EXACTLY — a strip fraction is 0.33333 (1/3); 3 dp truncated it
+    # to 0.333 and drifted the net (18.18 vs 18.20) + transqty. Verified vs native golden 7871.
+    qty                 = models.DecimalField(max_digits=12, decimal_places=5, default=1, verbose_name='الكمية')
     item_sale_price     = models.DecimalField(max_digits=12, decimal_places=4, default=0)  # itemsaleprice (per branch)
     item_sale_price_tax = models.DecimalField(max_digits=12, decimal_places=4, default=0)  # itemsaleprice_tax
     sale_tax_pct        = models.DecimalField(max_digits=6, decimal_places=2, default=0)   # itemsalestaxp
     cust_discp          = models.DecimalField(max_digits=6, decimal_places=2, default=0,
                                               verbose_name='خصم %')                          # custdiscp (INPUT)
+    # ── Offer provenance (Commerce-OS Phase 3, PG-only — flags an offer-driven line) ──
+    # Set by offers.order_attach when an offer supplies this line's cust_discp. Audit
+    # only; the writer still posts `cust_discp` exactly as today (no new SOFTECH field).
+    DISCOUNT_SOURCES = [('manual', 'يدوي'), ('offer', 'عرض')]
+    discount_source = models.CharField(max_length=6, choices=DISCOUNT_SOURCES, default='manual',
+                                       verbose_name='مصدر الخصم')
+    applied_offer   = models.ForeignKey('offers.Offer', null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name='pos_order_lines',
+                                        verbose_name='العرض المطبَّق')
     # computed (pricing.py)
     trans_price        = models.DecimalField(max_digits=12, decimal_places=4, default=0)   # transprice
     trans_price_total  = models.DecimalField(max_digits=12, decimal_places=2, default=0)   # transprice_total
@@ -276,3 +293,99 @@ class SoftechSalesOrderPayment(models.Model):
 
     def __str__(self):
         return f'{self.get_pay_type_display()} {self.amount}'
+
+
+class PosCancelDaily(models.Model):
+    """Postgres mirror of SOFTECH `pos_cancel` (the «المبيعات غير المخزنة» / lost-sale log),
+    rolled up to one row per (branch, day, item, doccode) by `sync_pos_cancel` (Wave 3 inc2).
+
+    Read-only projection of ERP data — a demand/procurement + trend feed so the lost-sale signal
+    can be summed over any period cross-branch WITHOUT hitting the 6 flaky Sybase nodes on every
+    query. NEVER written back to SOFTECH. The live per-branch view still reads pos_cancel directly
+    (pos_cancel_read); this mirror is for history/trends.
+
+    `events` = all logged POS lines for the item that day (incl. transqty=0 clears);
+    `priced_events` = lines that had a qty>0 then were cancelled before saving (real lost sales);
+    `lost_value` = Σ transprice_total (money that was on the screen then removed).
+    """
+    branch_code   = models.CharField(max_length=5, db_index=True)
+    day           = models.DateField(db_index=True)
+    doccode       = models.CharField(max_length=3, default='115')  # 115 would-be sale / 30 return
+    item          = models.ForeignKey('catalog.Item', null=True, blank=True,
+                                      on_delete=models.SET_NULL, related_name='pos_cancel_daily')
+    item_code     = models.CharField(max_length=6, db_index=True)
+    item_name     = models.CharField(max_length=255, blank=True)
+    events        = models.PositiveIntegerField(default=0)
+    priced_events = models.PositiveIntegerField(default=0)
+    lost_value    = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    synced_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'مبيعات غير مخزنة (يومي)'
+        verbose_name_plural = 'المبيعات غير المخزنة (يومي)'
+        unique_together = [('branch_code', 'day', 'item_code', 'doccode')]
+        indexes = [
+            models.Index(fields=['branch_code', 'day']),
+            models.Index(fields=['item_code', 'day']),
+        ]
+
+    def __str__(self):
+        return f'{self.branch_code} {self.day} {self.item_code} lost={self.lost_value}'
+
+
+class PosSelectionEvent(models.Model):
+    """Capture of an item SELECTION in OUR indirect-POS (Wave 3 inc3), so our activity feeds the
+    SOFTECH `pos_cancel` log the same way the native POS does. One row per add/clear of an item on a
+    POS cart. The batch writer (`pos_cancel_writer`) later INSERTs the qualifying rows into each
+    branch's SOFTECH pos_cancel — matching the native schema exactly — and stamps `softech_written_at`
+    so a retry never double-posts (pos_cancel has no PK; idempotency lives here).
+
+    Exclusion rule (owner: "every add, exclude sold"): an 'add' whose cart (`cart_token` ==
+    the order's client_token) became a SETTLED sale that CONTAINS this item is suppressed — it was
+    sold, so it already lives in stktrans. 'clear' (qty=0) events are always written (mirror native).
+    """
+    EVENT_ADD   = 'add'
+    EVENT_CLEAR = 'clear'
+    EVENT_CHOICES = [(EVENT_ADD, 'إضافة صنف'), (EVENT_CLEAR, 'مسح صنف')]
+
+    cart_token = models.UUIDField(null=True, blank=True, db_index=True,
+                                  help_text='== the order client_token when the cart is submitted')
+    branch = models.ForeignKey('branches.Branch', on_delete=models.PROTECT,
+                               related_name='pos_selection_events')
+    softech_branchcode = models.CharField(max_length=5)
+    doc_kind   = models.CharField(max_length=8, default='sale')      # → doccode 115 / 30
+    event_type = models.CharField(max_length=8, choices=EVENT_CHOICES, default=EVENT_ADD)
+
+    item      = models.ForeignKey('catalog.Item', null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name='pos_selection_events')
+    item_code = models.CharField(max_length=6)
+    item_name = models.CharField(max_length=120, blank=True)
+
+    # money — mirrors the pos_cancel columns exactly (list / unit-after-disc / qty / line total)
+    itemsaleprice    = models.DecimalField(max_digits=9,  decimal_places=2, default=0)
+    transprice       = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    transqty         = models.DecimalField(max_digits=12, decimal_places=5, default=0)
+    transprice_total = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+
+    custcode        = models.CharField(max_length=8, blank=True)
+    seller_usercode = models.CharField(max_length=5, blank=True)
+
+    occurred_at = models.DateTimeField(db_index=True)               # when the selection happened
+    created_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='+')
+
+    # idempotency / audit for the SOFTECH write
+    softech_written_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    write_error        = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'حدث اختيار صنف (POS)'
+        verbose_name_plural = 'أحداث اختيار الأصناف (POS)'
+        indexes = [
+            models.Index(fields=['softech_written_at', 'occurred_at']),
+            models.Index(fields=['cart_token']),
+        ]
+
+    def __str__(self):
+        return f'{self.event_type} {self.item_code} @ {self.occurred_at:%Y-%m-%d %H:%M}'

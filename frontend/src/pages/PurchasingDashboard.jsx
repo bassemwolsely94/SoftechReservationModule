@@ -17,7 +17,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { purchasingApi, branchesApi } from '../api/client'
+import { purchasingApi, branchesApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
@@ -1418,6 +1418,9 @@ export default function PurchasingDashboard() {
   const { user }   = useAuthStore()
   const qc         = useQueryClient()
   const isAdmin    = ['admin', 'pharmacist'].includes(user?.role)
+  // quick engine run («▶ تشغيل») also for the Purchasing role + SOFTECH supply groups;
+  // full re-sync / catch-up / items sync / ⚙ settings stay admin-pharmacist (server-enforced)
+  const canRunEngine = isAdmin || user?.role === 'purchasing' || !!user?.can_run_engine
 
   const [viewTab,   setViewTab]   = useState('agg')
   const [abcFilter, setAbcFilter] = useState('all')
@@ -1551,6 +1554,9 @@ export default function PurchasingDashboard() {
   const [exportBranch, setExportBranch] = useState('')
   const [exportAbc,    setExportAbc]    = useState('')
   const [advBudget,    setAdvBudget]    = useState('')
+  // Pivot demand-sheet horizon (empty = engine's 1-month; e.g. 0.8 = fill to 0.8 mo)
+  const [pivotCoverage, setPivotCoverage] = useState('')
+  const [pivotRoundAt,  setPivotRoundAt]  = useState('total')   // total | branch
   const [exporting,    setExporting]    = useState(false)
   const exportRef = useRef(null)
 
@@ -1573,11 +1579,20 @@ export default function PurchasingDashboard() {
       const view     = viewOverride || (viewTab === 'agg' ? 'aggregated' : 'metrics')
       const viewSlug = viewOverride || (viewTab === 'agg' ? 'network'    : 'branch')
 
+      // Demand-fill horizon: applies to every export (flat + pivot) when the user
+      // set a coverage. Empty = engine's frozen 1-month order (revert). round_at
+      // (total|branch) only affects the pivot sheet; the backend ignores it for
+      // flat views. round_dir=nearest rounds order qtys to whole packs.
+      const demandExtra = String(pivotCoverage).trim() !== ''
+        ? { coverage_months: pivotCoverage, round_at: pivotRoundAt, round_dir: 'nearest' }
+        : {}
+
       const res  = await purchasingApi.export({
         format,
         view,
         branch:    exportBranch || undefined,
         abc_class: exportAbc    || undefined,
+        ...demandExtra,
       })
 
       const ext  = format === 'csv' ? 'csv' : 'xlsx'
@@ -1600,7 +1615,7 @@ export default function PurchasingDashboard() {
     } finally {
       setExporting(false)
     }
-  }, [viewTab, exportBranch, exportAbc])
+  }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt])
 
   // Experimental ADVANCED pathway — parallel current-vs-advanced comparison sheet.
   const handleAdvancedExport = useCallback(async () => {
@@ -1707,6 +1722,59 @@ export default function PurchasingDashboard() {
       alert(msg)
     },
   })
+
+  // Items/catalog refresh — new items + column updates (price, itemtrans, امر
+  // التوريد, tax). Runs in the background; we poll /sync/logs/ for OUR SyncRun id
+  // and surface an inline toast on completion (no need to open the Sync page).
+  const [itemsSyncRunId, setItemsSyncRunId] = useState(null)
+  const [itemsToast,     setItemsToast]     = useState(null)   // { type, msg }
+  const itemsSyncMutation = useMutation({
+    mutationFn: () => purchasingApi.syncItems(),
+    onSuccess: (res) => {
+      setItemsToast({ type: 'info', msg: '📦 جارٍ مزامنة كتالوج الأصناف…' })
+      setItemsSyncRunId(res?.data?.sync_run_id ?? null)
+    },
+    onError: (err) => setItemsToast({ type: 'error', msg: err?.response?.data?.detail || 'تعذّرت مزامنة الأصناف' }),
+  })
+
+  // Poll /sync/logs/ while an items sync we started is in flight; match by id so
+  // concurrent scheduled sync lanes don't spoof completion. (RQ v5 removed
+  // useQuery onSuccess → read `data` in an effect below.)
+  const itemsPoll = useQuery({
+    queryKey: ['items-sync-poll', itemsSyncRunId],
+    queryFn:  () => syncApi.logs().then(r => r.data),
+    enabled:  itemsSyncRunId != null,
+    refetchInterval: 2500,
+  })
+
+  useEffect(() => {
+    if (itemsSyncRunId == null) return
+    const runs = itemsPoll.data
+    const run  = Array.isArray(runs) ? runs.find(x => x.id === itemsSyncRunId) : null
+    if (!run) return
+    if (run.status === 'running') {
+      // Live phase from SyncRun.progress (categories → items → barcodes).
+      const p = run.progress || {}
+      if (p.message) {
+        const step = p.step && p.steps ? ` (${p.step}/${p.steps})` : ''
+        setItemsToast({ type: 'info', msg: `📦 ${p.message}${step}` })
+      }
+      return
+    }
+    if (run.status === 'success') {
+      setItemsToast({ type: 'success', msg: `✓ تم تحديث الأصناف — ${(run.records_synced || 0).toLocaleString('en-US')} سجل` })
+    } else {
+      setItemsToast({ type: 'error', msg: `✗ فشلت مزامنة الأصناف: ${run.error_message || ''}`.trim() })
+    }
+    setItemsSyncRunId(null)   // stop polling
+  }, [itemsPoll.data, itemsSyncRunId])
+
+  // Auto-dismiss the toast a few seconds after it reaches a terminal state.
+  useEffect(() => {
+    if (!itemsToast || itemsToast.type === 'info') return
+    const t = setTimeout(() => setItemsToast(null), 7000)
+    return () => clearTimeout(t)
+  }, [itemsToast])
 
   const s = summaryData || {}
 
@@ -2018,7 +2086,7 @@ export default function PurchasingDashboard() {
                       <span className={`text-[11px] font-bold ${tone}`}>{label}</span>
                       <span className="text-[10px] text-gray-400">شهر</span>
                       <input
-                        type="number" step="0.25" min="0.1" max="6"
+                        type="number" step="0.25" min="0.25" max="6"
                         value={params?.[field] ?? ''}
                         onChange={e => handleParamChange(field, e.target.value)}
                         className="border border-indigo-200 rounded-lg px-2 py-1 text-sm text-center
@@ -2193,13 +2261,37 @@ export default function PurchasingDashboard() {
                     </select>
                   </div>
 
+                  {/* Demand-fill horizon — applies to ALL exports below (flat + pivot).
+                      Empty = the normal 1-month order (revert). */}
+                  <div className="border-t border-gray-100 pt-2 mb-2">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-[11px] text-gray-500 shrink-0">📦 تعبئة الطلب لـ</span>
+                      <input type="number" min="0.1" step="0.1" value={pivotCoverage}
+                        onChange={e => setPivotCoverage(e.target.value)} placeholder="1 (افتراضي)"
+                        className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:border-indigo-400" />
+                      <span className="text-[10px] text-gray-400 shrink-0">شهر</span>
+                      <select value={pivotRoundAt} onChange={e => setPivotRoundAt(e.target.value)}
+                        className="flex-1 border border-gray-200 rounded-lg px-1.5 py-1 text-[11px]"
+                        title="مكان التقريب لأقرب عبوة كاملة (المحوري فقط)">
+                        <option value="total">تقريب على الإجمالي (المحوري)</option>
+                        <option value="branch">تقريب لكل فرع (المحوري)</option>
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-gray-400">
+                      اترك الحقل فارغاً للطلب الشهري المعتاد. أقل من 1 = تقليل الطلب لنسبة الشهر (مثال 0.8 = 80%). أكبر من 1 = شراء أعمق مع الحفاظ على حد الأمان للأصناف بطيئة الحركة (بلا تضخيم). يطبَّق على كل التصديرات أدناه.
+                    </p>
+                  </div>
+
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => handleExport('xlsx')}
                       className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-emerald-600 text-white
-                                 hover:bg-emerald-700 font-semibold"
+                                 hover:bg-emerald-700 font-semibold flex items-center justify-center gap-1"
                     >
                       📊 Excel
+                      {String(pivotCoverage).trim() !== '' && (
+                        <span className="text-[10px] bg-white/20 rounded px-1">{pivotCoverage}m</span>
+                      )}
                     </button>
                     <button
                       onClick={() => handleExport('csv')}
@@ -2212,13 +2304,17 @@ export default function PurchasingDashboard() {
 
                   {/* Pivot Excel — matches Power Query reference format */}
                   <div className="border-t border-gray-100 pt-2">
-                    <p className="text-xs text-gray-400 mb-1.5">تصدير المحوري (مطابق لنموذج Power Query)</p>
+                    <p className="text-xs text-gray-400 mb-1.5">تصدير المحوري (مطابق لنموذج Power Query) — يستخدم إعداد التعبئة أعلاه</p>
+
                     <button
                       onClick={() => handleExport('xlsx', 'pivot')}
                       className="w-full text-xs px-2 py-1.5 rounded-lg bg-indigo-600 text-white
                                  hover:bg-indigo-700 font-semibold flex items-center justify-center gap-1.5"
                     >
                       🗂 Pivot Excel (أولويات النواقص)
+                      {String(pivotCoverage).trim() !== '' && (
+                        <span className="text-[10px] bg-white/20 rounded px-1">{pivotCoverage} شهر</span>
+                      )}
                     </button>
                   </div>
 
@@ -2256,8 +2352,9 @@ export default function PurchasingDashboard() {
               )}
             </div>
 
-            {isAdmin && (
+            {canRunEngine && (
               <div className="flex items-center gap-2 flex-wrap">
+                {isAdmin && (<>
                 {/* ── Catch-up ── robust chunked backfill for when the scheduled
                     sync missed SOFTECH and sales went stale. Emphasised when stale. */}
                 <button
@@ -2296,14 +2393,34 @@ export default function PurchasingDashboard() {
                   className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 bg-amber-50
                              text-amber-700 hover:bg-amber-100 disabled:opacity-40 font-semibold
                              transition-colors flex items-center gap-1.5"
-                  title="مزامنة كاملة 365 يوم من SOFTECH — تستغرق 5-8 دقائق"
+                  title="مزامنة كاملة 365 يوم من SOFTECH — تحدّث كتالوج الأصناف (أصناف جديدة + الأسعار وصلاحيات الحركة وحالة امر التوريد) ثم مبيعات السنة وإعادة الحساب — تستغرق 5-8 دقائق"
                 >
                   🔄 مزامنة كاملة
                 </button>
 
+                {/* ── Items catalog sync ── new items + price/itemtrans/امر التوريد updates */}
+                <button
+                  onClick={() => {
+                    if (itemsSyncMutation.isLoading) return
+                    if (!window.confirm(
+                      'مزامنة كتالوج الأصناف من SOFTECH: أصناف جديدة + تحديث الأسعار وصلاحيات الحركة وحالة امر التوريد والضرائب.\nهل تريد المتابعة؟'
+                    )) return
+                    itemsSyncMutation.mutate()
+                  }}
+                  disabled={itemsSyncMutation.isLoading || itemsSyncRunId != null}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-sky-400 bg-sky-50
+                             text-sky-700 hover:bg-sky-100 disabled:opacity-40 font-semibold
+                             transition-colors flex items-center gap-1.5"
+                  title="مزامنة جدول الأصناف فقط (الفئات + الأصناف + الباركود) — أسرع من المزامنة الكاملة، لالتقاط أصناف جديدة أو تغييرات الأعمدة (السعر، صلاحيات الحركة، امر التوريد، الضريبة)"
+                >
+                  {(itemsSyncMutation.isLoading || itemsSyncRunId != null) ? '⏳ جارٍ...' : '📦 مزامنة الأصناف'}
+                </button>
+                </>)}
+
                 {/* ── Settings + Quick Run ── */}
                 <div className="flex items-center rounded-lg overflow-hidden border border-brand-600 shadow-sm">
-                  {/* ⚙ Settings — opens params modal */}
+                  {/* ⚙ Settings — opens params modal (admin/pharmacist only) */}
+                  {isAdmin && (
                   <button
                     onClick={() => setParamsOpen(true)}
                     className="text-xs px-2.5 py-1.5 bg-white text-brand-700 hover:bg-brand-50
@@ -2312,6 +2429,7 @@ export default function PurchasingDashboard() {
                   >
                     ⚙
                   </button>
+                  )}
                   {/* ▶ Run — incremental (gap-based lookback, typically < 1 min) */}
                   <button
                     onClick={() => triggerMutation.mutate({ full: false })}
@@ -2494,6 +2612,26 @@ export default function PurchasingDashboard() {
         </div>
 
       </div>
+
+      {/* Items-sync inline toast — polls /sync/logs/ for our SyncRun; no need to
+          open the Sync page. Separate from the demand-engine progress bar. */}
+      {itemsToast && (
+        <div
+          dir="rtl" role="status"
+          className={`fixed bottom-4 left-4 z-50 max-w-sm rounded-lg shadow-lg px-4 py-2.5 text-sm
+                     flex items-center gap-2 border ${
+            itemsToast.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+            : itemsToast.type === 'error' ? 'bg-red-50 border-red-300 text-red-800'
+            : 'bg-sky-50 border-sky-300 text-sky-800'}`}
+        >
+          {itemsToast.type === 'info' && (
+            <span className="animate-spin inline-block h-3.5 w-3.5 border-b-2 border-sky-500 rounded-full shrink-0" />
+          )}
+          <span className="flex-1">{itemsToast.msg}</span>
+          <button onClick={() => setItemsToast(null)}
+            className="opacity-60 hover:opacity-100 text-base leading-none">×</button>
+        </div>
+      )}
     </div>
   )
 }

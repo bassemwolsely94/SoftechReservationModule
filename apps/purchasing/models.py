@@ -999,3 +999,253 @@ class ShortageObservation(models.Model):
 
     def __str__(self):
         return f'{self.item_id} @ snap{self.snapshot_id} ({self.tier})'
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SALES-RATE WRITEBACK (Feature 1) — audit spine for pushing our monthly_avg
+# into SOFTECH stkbal.monthlyqty. Mirrors the discount_approvals review pattern:
+# a batch is PROPOSED from a dry-run, REVIEWED, then EXECUTED (gated).
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class SalesRatePush(models.Model):
+    """One rate-writeback batch: our engine monthly_avg → SOFTECH stkbal.monthlyqty.
+    Fully auditable (who/when/before→after via lines). Never deletes; status tracks
+    the proposed→approved→executed lifecycle. See apps/purchasing/rate_writer.py."""
+
+    STATUS_PROPOSED = 'proposed'   # dry-run snapshot saved for review (nothing written)
+    STATUS_APPROVED = 'approved'   # a reviewer signed off; awaiting execution
+    STATUS_EXECUTED = 'executed'   # committed to SOFTECH (see per-line verified)
+    STATUS_FAILED   = 'failed'     # execution raised / nothing verified
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PROPOSED, 'مقترح'), (STATUS_APPROVED, 'معتمد'),
+        (STATUS_EXECUTED, 'مُنفّذ'), (STATUS_FAILED, 'فشل'),
+        (STATUS_CANCELLED, 'ملغى'),
+    ]
+
+    run    = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL,
+                               null=True, blank=True, related_name='rate_pushes',
+                               help_text='محرك الطلب الذي جاء منه المعدّل')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES,
+                              default=STATUS_PROPOSED, db_index=True)
+
+    # Scope snapshot (for reproducibility): {'branch_filter': [...], 'item_filter': [...]}
+    scope  = models.JSONField(default=dict, blank=True)
+
+    # Which rate method produced these numbers + its tuning knobs (reproducibility):
+    #   'pivot'    → ItemDemandMetrics.monthly_avg (weighted 30/90/365 blend)
+    #   'advanced' → advanced_engine policy_demand (Croston rate / trend-seasonal forecast)
+    METHOD_PIVOT    = 'pivot'
+    METHOD_ADVANCED = 'advanced'
+    METHOD_CHOICES  = [(METHOD_PIVOT, 'المحورية (Pivot)'),
+                       (METHOD_ADVANCED, 'المتقدمة (Croston)')]
+    method         = models.CharField(max_length=12, choices=METHOD_CHOICES,
+                                      default=METHOD_PIVOT, db_index=True)
+    method_params  = models.JSONField(default=dict, blank=True)
+
+    # Which SOFTECH surface(s) this push writes (Batch 3). node = each branch's own
+    # server (default); hq = HQ mirror rows (branchcode≠100); both = write & verify both.
+    TARGET_NODE = 'node'
+    TARGET_HQ   = 'hq'
+    TARGET_BOTH = 'both'
+    TARGET_CHOICES = [(TARGET_NODE, 'سيرفر الفرع'), (TARGET_HQ, 'نسخة الرئيسي'),
+                      (TARGET_BOTH, 'الاثنان')]
+    target = models.CharField(max_length=8, choices=TARGET_CHOICES,
+                              default=TARGET_BOTH, db_index=True)
+
+    # Totals (mirrors the plan['totals'] plus execution counts)
+    branches_count   = models.PositiveIntegerField(default=0)
+    eligible_count   = models.PositiveIntegerField(default=0)
+    skipped_count    = models.PositiveIntegerField(default=0)
+    unreachable_count = models.PositiveIntegerField(default=0)
+    written_count    = models.PositiveIntegerField(default=0)
+    verified_count   = models.PositiveIntegerField(default=0)
+    reverted_count   = models.PositiveIntegerField(default=0)
+
+    created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='rate_pushes_created')
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='rate_pushes_approved')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    notes       = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'دفعة تحديث معدل الإستهلاك'
+        verbose_name_plural = 'دفعات تحديث معدل الإستهلاك'
+
+    def __str__(self):
+        return f'RatePush {self.pk} | {self.get_status_display()} | {self.eligible_count} صنف'
+
+
+class SalesRatePushLine(models.Model):
+    """Per (branch, store, item) change in a SalesRatePush: before→after rate,
+    eligibility, and (on execution) whether the write verified on readback."""
+
+    push      = models.ForeignKey(SalesRatePush, on_delete=models.CASCADE, related_name='lines')
+    item      = models.ForeignKey('catalog.Item', on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='rate_push_lines')
+    branch    = models.ForeignKey('branches.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='rate_push_lines')
+    itemcode  = models.CharField(max_length=20, db_index=True)   # denormalized SOFTECH code
+    item_name = models.CharField(max_length=120, blank=True)
+    branchcode = models.CharField(max_length=10)
+    storecode  = models.CharField(max_length=10)
+
+    old_rate  = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    # server 100's copy of this branch row BEFORE the write (target='both' only) — the
+    # branch server and server 100 hold independent values, so both "befores" are kept.
+    old_rate_hq = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    new_rate  = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+
+    eligible  = models.BooleanField(default=True)
+    reason    = models.CharField(max_length=120, blank=True)   # why skipped, if not eligible
+    written   = models.BooleanField(default=False)
+    verified  = models.BooleanField(default=False)             # landed on readback
+    error     = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['push', 'branchcode']),
+            models.Index(fields=['itemcode', 'id']),
+        ]
+
+    def __str__(self):
+        return f'{self.itemcode}@{self.branchcode}/{self.storecode} {self.old_rate}→{self.new_rate}'
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ISR REPLENISHMENT (Feature 2) — audit spine for generating a SOFTECH ISR
+# (طلب توريد, stockisrm+stockisr) from our engine, then approving it (israpp=1).
+# proposed → approved (human review) → pushed (written to SOFTECH, israpp=1).
+# The reviewed line snapshot lives in lines_snapshot (JSON) — no separate line
+# table; the authoritative lines live in SOFTECH once pushed.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class IsrPush(models.Model):
+    """One ISR (طلب توريد) our engine proposes for a requesting branch."""
+
+    STATUS_PROPOSED = 'proposed'   # PG snapshot for review — nothing in SOFTECH yet
+    STATUS_APPROVED = 'approved'   # a reviewer signed off; ready to write
+    STATUS_PUSHED   = 'pushed'     # written to SOFTECH (stockisrm israpp=1 + stockisr)
+    STATUS_FAILED   = 'failed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PROPOSED, 'مقترح'), (STATUS_APPROVED, 'معتمد'), (STATUS_PUSHED, 'مُرحّل'),
+        (STATUS_FAILED, 'فشل'), (STATUS_CANCELLED, 'ملغى'),
+    ]
+
+    # kind of ISR by (source → destination) — see softech_isr_replenishment memory:
+    #   branchcode = the branch that PREPARES/dispenses (source), dest_branchcode =
+    #   forbranchcode (receiver). ISR is written on the SOURCE node.
+    KIND_SELF          = 'self'          # branchcode == dest (branch requests for itself)
+    KIND_HQ_TO_BRANCH  = 'hq_to_branch'  # HQ (100) prepares → a branch receives (replenishment)
+    KIND_BRANCH_TO_HQ  = 'branch_to_hq'  # a surplus branch prepares → HQ receives (L2 leg 1)
+    KIND_CHOICES = [
+        (KIND_SELF, 'ذاتي'), (KIND_HQ_TO_BRANCH, 'من الرئيسي إلى فرع'),
+        (KIND_BRANCH_TO_HQ, 'من فرع إلى الرئيسي'),
+    ]
+
+    branch = models.ForeignKey('branches.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='isr_pushes')
+    branchcode = models.CharField(max_length=10, db_index=True)     # SOURCE (preparer / node)
+    dest_branchcode = models.CharField(max_length=10, blank=True)   # forbranchcode (receiver)
+    kind   = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_SELF, db_index=True)
+    # For an L2 two-leg allocation: the paired leg (A→HQ ↔ HQ→B).
+    linked_push = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    run    = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL,
+                               null=True, blank=True, related_name='isr_pushes')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES,
+                              default=STATUS_PROPOSED, db_index=True)
+
+    isrdocnumber = models.BigIntegerField(null=True, blank=True,   # allocated at push time
+                                          help_text='SOFTECH stockisrm.isrdocnumber once pushed')
+    # Coverage months used to (re)compute the order qty at generation time. NULL =
+    # the engine run's own frozen gap (default). >0 = calc_gap re-scaled to this
+    # window (max stock ceiling = monthly_avg × coverage_months). Audit only.
+    coverage_months = models.FloatField(null=True, blank=True)
+    line_count = models.PositiveIntegerField(default=0)
+    docvalue   = models.DecimalField(max_digits=16, decimal_places=3, default=0)
+    lines_snapshot = models.JSONField(default=list, blank=True)   # reviewed lines (itemcode, itemqty, …)
+
+    created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='isr_pushes_created')
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='isr_pushes_approved')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    pushed_at   = models.DateTimeField(null=True, blank=True)
+    readback    = models.JSONField(default=dict, blank=True)
+    error       = models.CharField(max_length=300, blank=True)
+    notes       = models.TextField(blank=True)
+    # «تلبية طلبات الفروع»: the branch's own SOFTECH ISR this donor→HQ return feeds. HQ
+    # then fills that original ISR natively (إذن الصرف) — no second HQ→branch ISR.
+    origin_isr  = models.BigIntegerField(null=True, blank=True, db_index=True,
+                                         help_text='SOFTECH isrdocnumber of the branch request this return serves')
+    # «طلبات واتساب»: the WhatsApp branch request this two-leg transfer serves (donor → HQ
+    # → requesting branch). Unlike a SOFTECH ISR there is no request for HQ to fill, so the
+    # HQ→branch leg is its own ISR. origin_donor = the donor branch, on BOTH legs.
+    origin_request = models.ForeignKey('supply.BranchRequest', on_delete=models.SET_NULL,
+                                       null=True, blank=True, related_name='isr_pushes')
+    origin_donor   = models.CharField(max_length=10, blank=True, default='')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'طلب توريد مقترح'
+        verbose_name_plural = 'طلبات التوريد المقترحة'
+        constraints = [
+            # one live return per (branch request, donor) — a double click / second user
+            # can't queue the same excess twice; cancel/fail frees it for a fresh one
+            models.UniqueConstraint(
+                fields=['origin_isr', 'branchcode'],
+                condition=models.Q(origin_isr__isnull=False,
+                                   status__in=['proposed', 'approved', 'pushed']),
+                name='isrpush_one_live_return_per_origin_donor'),
+            # one live leg of each kind per (WhatsApp request, donor)
+            models.UniqueConstraint(
+                fields=['origin_request', 'origin_donor', 'kind'],
+                condition=models.Q(origin_request__isnull=False,
+                                   status__in=['proposed', 'approved', 'pushed']),
+                name='isrpush_one_live_leg_per_request_donor'),
+        ]
+
+    def __str__(self):
+        return f'IsrPush {self.pk} | br{self.branchcode} | {self.get_status_display()} | {self.line_count} صنف'
+
+
+class CoverageTopUp(models.Model):
+    """One committed coverage top-up after an engine run (apps/purchasing/coverage_writer
+    topup_coverage): items with no coverage got the default, stale maxes were refreshed.
+    Audit trail + tells the scheduler which engine runs are already done."""
+
+    STATUS_CHOICES = [('success', 'تم'), ('partial', 'جزئي'), ('dry_run', 'معاينة')]
+    TRIGGER_CHOICES = [('schedule', 'تلقائي'), ('manual', 'يدوي')]
+
+    run = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL, null=True,
+                            blank=True, related_name='coverage_topups')
+    status  = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    trigger = models.CharField(max_length=10, choices=TRIGGER_CHOICES, default='manual')
+    months  = models.FloatField()
+    target  = models.CharField(max_length=8)
+    filled_count        = models.PositiveIntegerField(default=0)
+    refreshed_count     = models.PositiveIntegerField(default=0)
+    verified_count      = models.PositiveIntegerField(default=0)
+    not_confirmed_count = models.PositiveIntegerField(default=0)
+    unreachable_count   = models.PositiveIntegerField(default=0)
+    summary = models.JSONField(default=list, blank=True)   # per (branch, server) result
+    created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='coverage_topups')
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'استكمال تغطية تلقائي'
+        verbose_name_plural = 'استكمالات التغطية'
+
+    def __str__(self):
+        return (f'CoverageTopUp {self.pk} | run {self.run_id} | {self.status} | '
+                f'fill {self.filled_count} refresh {self.refreshed_count}')

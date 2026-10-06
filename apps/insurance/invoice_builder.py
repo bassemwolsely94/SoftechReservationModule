@@ -160,6 +160,10 @@ def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) 
     return {
         'sequence':         rx.sequence,
         'patient_name':     rx.patient_name,
+        # The prescription's OWN dispensing date — printed in تاريخ الصرف for
+        # every row (essential for ملحق سابق/لاحق blocks that mix months; the
+        # block itself only labels its SUBTOTAL "ملحق").
+        'date':             rx.softech_docdate.isoformat() if rx.softech_docdate else None,
         'local_before':     lb,
         'imported_before':  ib,
         'tarsia_before':    tb,
@@ -223,6 +227,7 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
         return {
             'sequence':         seq,
             'patient_name':     mrx.patient_name,
+            'date':             mrx.softech_docdate.isoformat() if mrx.softech_docdate else None,
             'local_before':     mrx.local_before,
             'imported_before':  mrx.imported_before,
             'tarsia_before':    mrx.tarsia_before,
@@ -266,10 +271,23 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
     )
     if billing_group is not None:
         prescriptions = prescriptions.filter(billing_group=billing_group)
+    # Detailed manual additions (is_manual) with a before/after placement are
+    # routed to the ملحق سابق/لاحق blocks — exactly like the totals-only manual
+    # Rx — instead of grouping under their (out-of-period) transaction date.
+    detailed_before, detailed_after = [], []
     for rx in prescriptions:
         if rx.id in excluded_ids:
             continue
-        key = rx.softech_docdate.isoformat()
+        if rx.is_manual and rx.manual_position == 'before':
+            detailed_before.append(rx)
+            continue
+        if rx.is_manual and rx.manual_position == 'after':
+            detailed_after.append(rx)
+            continue
+        if rx.is_manual and rx.manual_position == 'date' and rx.manual_print_date:
+            key = rx.manual_print_date.isoformat()
+        else:
+            key = rx.softech_docdate.isoformat()
         if key not in days_map:
             days_map[key] = []
         days_map[key].append(_effective_rx_values(rx, claim))
@@ -307,15 +325,24 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
         # Correct rx_count: supplement represents N prescriptions not 1
         claim_totals['rx_count'] += sup.rx_count - 1
 
-    # 2. Before manual Rx (ملحق سابق)
-    if manual_rx_before:
+    # 2. Before manual Rx + detailed manual prescriptions (ملحق سابق)
+    if manual_rx_before or detailed_before:
         before_day_totals = _zero_totals()
         before_rows = []
-        for i, mrx in enumerate(manual_rx_before):
-            row = _mrx_row(mrx, i + 1)
+        seq = 0
+        for mrx in manual_rx_before:
+            seq += 1
+            row = _mrx_row(mrx, seq)
             before_rows.append(_float_row(row))
             _add_to_totals(before_day_totals, row)
             _add_to_totals(claim_totals, row)   # include in grand total
+        for rx in detailed_before:
+            seq += 1
+            row = _effective_rx_values(rx, claim)
+            row['sequence'] = seq
+            before_rows.append(_float_row(row))
+            _add_to_totals(before_day_totals, row)
+            _add_to_totals(claim_totals, row)
         days_output.append({
             'date':           'ملحق سابق',
             'label':          'ملحق يوميات',
@@ -351,15 +378,24 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
             'day_totals':     _float_totals(day_totals, claim),
         })
 
-    # 4. After manual Rx (ملحق لاحق)
-    if manual_rx_after:
+    # 4. After manual Rx + detailed manual prescriptions (ملحق لاحق)
+    if manual_rx_after or detailed_after:
         after_day_totals = _zero_totals()
         after_rows = []
-        for i, mrx in enumerate(manual_rx_after):
-            row = _mrx_row(mrx, i + 1)
+        seq = 0
+        for mrx in manual_rx_after:
+            seq += 1
+            row = _mrx_row(mrx, seq)
             after_rows.append(_float_row(row))
             _add_to_totals(after_day_totals, row)
             _add_to_totals(claim_totals, row)   # include in grand total
+        for rx in detailed_after:
+            seq += 1
+            row = _effective_rx_values(rx, claim)
+            row['sequence'] = seq
+            after_rows.append(_float_row(row))
+            _add_to_totals(after_day_totals, row)
+            _add_to_totals(claim_totals, row)
         days_output.append({
             'date':           'ملحق لاحق',
             'label':          'ملحق يوميات',

@@ -264,7 +264,7 @@ function BundlesTab() {
               <option value="fixed">خصم ثابت</option>
             </select>
             {newBundle.discount_type !== 'none' && (
-              <input type="number" min="0" step="0.01"
+              <input type="number" min="0" step="any"
                 value={newBundle.discount_value}
                 onChange={e => setNewBundle(b => ({ ...b, discount_value: e.target.value }))}
                 placeholder={newBundle.discount_type === 'pct' ? '10 %' : '50 ج.م'}

@@ -20,8 +20,9 @@ import useLangStore  from '../store/langStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DEFAULT_THEME, FONT_OPTIONS, generateScale,
-  applyTheme, cacheTheme,
+  applyTheme, cacheTheme, MODE_OPTIONS,
 } from '../theme/theme'
+import { useThemeMode } from '../theme/useThemeMode'
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 // Most labels come from the DB (Arabic), English shown as sub-labels where provided.
@@ -742,6 +743,7 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
   const [saved,  setSaved]  = useState(null)   // last persisted theme
   const [saving, setSaving] = useState(false)
   const savedRef = useRef(null)
+  const { mode, setMode } = useThemeMode()     // personal light/dark (per-device)
 
   // Load current theme
   useEffect(() => {
@@ -799,9 +801,28 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
         </p>
       </div>
 
+      {/* Display mode — PERSONAL (per-device), available to everyone. */}
+      <SectionCard title={t ? 'Display Mode' : 'وضع العرض'} icon="🌗" accent="blue">
+        <p className="text-[11px] text-gray-400 mb-3">
+          {t ? 'Personal to this device — does not affect other users.'
+             : 'إعداد شخصي لهذا الجهاز فقط — لا يؤثر على باقي المستخدمين.'}
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {MODE_OPTIONS.map(m => (
+            <button key={m.id} type="button" onClick={() => setMode(m.id)}
+              className={`text-center p-3 rounded-xl border-2 transition-all
+                ${mode === m.id ? 'border-brand-500 bg-brand-50' : 'border-line bg-surface hover:border-line-strong'}`}>
+              <div className="text-xl leading-none mb-1">{m.icon}</div>
+              <div className="text-sm font-bold text-content">{t ? m.label : m.label_ar}</div>
+              {mode === m.id && <div className="text-brand-600 text-xs mt-0.5">✓</div>}
+            </button>
+          ))}
+        </div>
+      </SectionCard>
+
       {!isAdmin && (
         <div className="text-xs bg-amber-50 text-amber-700 px-3 py-2 rounded-xl border border-amber-200">
-          {t ? 'View only — admin required to change the theme.' : 'عرض فقط — يتطلب صلاحية مدير لتغيير المظهر.'}
+          {t ? 'Brand colors & font below are view only — admin required to change them.' : 'ألوان الهوية والخط بالأسفل للعرض فقط — يتطلب صلاحية مدير لتغييرها.'}
         </div>
       )}
 

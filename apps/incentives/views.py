@@ -43,6 +43,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 
 from .models import (
     IncentiveProgram, IncentiveRule, IncentiveRuleItem,
@@ -857,7 +858,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
                 float(txn.quantity), float(txn.unit_price),
                 float(txn.incentive_amount),
                 txn.rule.rule_name if txn.rule else '',
-                txn.branch_code,
+                BL(txn.branch_code) if txn.branch_code else '',
                 txn.expiry_date.isoformat() if txn.expiry_date else '',
                 txn.expiry_days_remaining,
             ]

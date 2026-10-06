@@ -156,7 +156,7 @@ class DocumentCommentEdit(models.Model):
 
     # per-server outcome: 'ok' | 'reverted' | 'skipped' | 'error: …'
     hq_result     = models.CharField(max_length=120, blank=True, verbose_name='نتيجة المركز')
-    branch_host   = models.CharField(max_length=60, blank=True, verbose_name='خادم الفرع')
+    branch_host   = models.CharField(max_length=60, blank=True, verbose_name='سيرفر الفرع')
     branch_result = models.CharField(max_length=120, blank=True, verbose_name='نتيجة الفرع')
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)

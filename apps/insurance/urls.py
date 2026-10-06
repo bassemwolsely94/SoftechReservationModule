@@ -6,6 +6,7 @@ from .views import (
     InsuranceParentClientViewSet, InsuranceClaimBillingGroupViewSet,
     InsuranceCacheSyncView, InsuranceExportProfileViewSet,
     InsurancePivotTemplateViewSet, InsuranceItemClassificationOverrideViewSet,
+    InsuranceSeparationListViewSet,
 )
 
 router = DefaultRouter()
@@ -18,6 +19,7 @@ router.register('billing-groups', InsuranceClaimBillingGroupViewSet, basename='i
 router.register('export-profiles', InsuranceExportProfileViewSet, basename='insurance-export-profiles')
 router.register('pivot-templates', InsurancePivotTemplateViewSet, basename='insurance-pivot-templates')
 router.register('item-overrides',  InsuranceItemClassificationOverrideViewSet, basename='insurance-item-overrides')
+router.register('separation-lists', InsuranceSeparationListViewSet, basename='insurance-separation-lists')
 
 urlpatterns = [
     path('sync-cache/', InsuranceCacheSyncView.as_view(), name='insurance-sync-cache'),

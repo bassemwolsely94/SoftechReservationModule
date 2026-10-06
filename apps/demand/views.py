@@ -4,6 +4,7 @@ apps/demand/views.py
 Views are thin — all business logic lives in service.py.
 """
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.throttling import AnonRateThrottle
@@ -73,7 +74,7 @@ class DemandViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['status', 'priority', 'branch', 'source', 'assigned_to']
     search_fields      = [
         'phone', 'customer_name', 'phcode', 'demand_number',

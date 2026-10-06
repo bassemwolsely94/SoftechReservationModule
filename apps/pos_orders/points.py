@@ -61,6 +61,14 @@ def order_points(order):
     non-eligible channel or branch unreachable. Uses each line's net (trans_price_total)."""
     if not channel_earns_points(order.channel):
         return 0, []
+    # A RETURN reverses the SALE's ACTUAL awarded points — recorded in each mirrored line's source_raw
+    # vf4 — NOT a live recompute (the rate may have drifted since the sale). Verified vs native return
+    # 534: header personnewbal = −15 = −(sale 7044's recorded vf4), even though the live rate is now 0.
+    if order.doc_kind == 'return':
+        recorded = [l.source_raw.get('vf4') for l in order.lines.all()
+                    if getattr(l, 'source_raw', None) and l.source_raw.get('vf4') not in (None, '')]
+        if recorded:
+            return -sum(int(v) for v in recorded), []
     try:
         from .discount_authority import DiscountAuthorityReader
         reader = DiscountAuthorityReader(order.branch.effective_db_host,

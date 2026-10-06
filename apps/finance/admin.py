@@ -140,3 +140,82 @@ class FinanceSyncRunAdmin(admin.ModelAdmin):
     list_filter   = ['status', 'sync_type']
     ordering      = ['-started_at']
     readonly_fields = ['started_at', 'finished_at', 'duration_seconds', 'records_synced', 'errors']
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# A/P–A/R RECONCILIATION (سداد فواتير) — read-only mirror inspection
+# ══════════════════════════════════════════════════════════════════════════════
+
+from .models import (  # noqa: E402
+    ReconParty, APInvoice, Payment, Allocation, ReconciliationRun,
+    MatchCandidate, MatchEvidence, ReconException, ReconAuditEvent,
+)
+
+
+@admin.register(ReconParty)
+class ReconPartyAdmin(admin.ModelAdmin):
+    list_display  = ['softech_personcode', 'party_type', 'name', 'opening_balance',
+                     'softech_balance', 'is_active']
+    list_filter   = ['party_type', 'is_active']
+    search_fields = ['softech_personcode', 'name']
+
+
+@admin.register(APInvoice)
+class APInvoiceAdmin(admin.ModelAdmin):
+    list_display  = ['doccode', 'branchcode', 'docnumber', 'docdate', 'docnumber2',
+                     'doc_value', 'doc_value_pay', 'party_type']
+    list_filter   = ['party_type', 'doccode', 'is_return']
+    search_fields = ['docnumber', 'docnumber2']
+    raw_id_fields = ['party']
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display  = ['branchcode', 'cheqsno', 'cheqno', 'ourcheqsno', 'voucher_date',
+                     'amount', 'financial_doc_code', 'direction', 'is_unallocated']
+    list_filter   = ['party_type', 'direction', 'is_unallocated', 'financial_doc_code']
+    search_fields = ['cheqsno', 'cheqno', 'ourcheqsno', 'note']
+    raw_id_fields = ['party']
+
+
+@admin.register(Allocation)
+class AllocationAdmin(admin.ModelAdmin):
+    list_display  = ['payment', 'invoice', 'amount', 'cumulative_paid', 'origin']
+    list_filter   = ['origin']
+    raw_id_fields = ['payment', 'invoice', 'candidate']
+
+
+@admin.register(ReconciliationRun)
+class ReconciliationRunAdmin(admin.ModelAdmin):
+    list_display  = ['id', 'mode', 'status', 'party_type', 'date_from', 'date_to',
+                     'started_at', 'finished_at']
+    list_filter   = ['mode', 'status', 'party_type']
+
+
+class MatchEvidenceInline(admin.TabularInline):
+    model = MatchEvidence
+    extra = 0
+
+
+@admin.register(MatchCandidate)
+class MatchCandidateAdmin(admin.ModelAdmin):
+    list_display  = ['id', 'invoice', 'payment', 'proposed_amount', 'confidence_score',
+                     'confidence_class', 'status']
+    list_filter   = ['status', 'confidence_class']
+    raw_id_fields = ['run', 'party', 'invoice', 'payment']
+    inlines       = [MatchEvidenceInline]
+
+
+@admin.register(ReconException)
+class ReconExceptionAdmin(admin.ModelAdmin):
+    list_display  = ['exception_type', 'severity', 'status', 'party', 'anomaly_score', 'created_at']
+    list_filter   = ['exception_type', 'severity', 'status']
+    raw_id_fields = ['run', 'party', 'invoice', 'payment']
+
+
+@admin.register(ReconAuditEvent)
+class ReconAuditEventAdmin(admin.ModelAdmin):
+    list_display  = ['action', 'party', 'rules_version', 'performed_by', 'performed_at']
+    list_filter   = ['action']
+    raw_id_fields = ['run', 'party', 'candidate', 'allocation', 'performed_by']
+    readonly_fields = ['performed_at']

@@ -17,6 +17,7 @@ ROLE_CHOICES = [
 # Canonical module identifiers used by RoleModuleAccess
 MODULE_CHOICES = [
     # ── Core Operations ──────────────────────────────────────────────────────
+    ('pos',          'نقطة البيع (POS)'),
     ('reservations', 'الحجوزات'),
     ('demand',       'الطلب الضائع / المبيعات المفقودة'),
     ('transfers',    'طلبات التحويل'),
@@ -42,6 +43,9 @@ MODULE_CHOICES = [
     # ── Human Resources ───────────────────────────────────────────────────────
     ('hr',           'الموارد البشرية'),
     ('approvals',    'صندوق الموافقات'),
+    ('insurance',    'مطالبات التأمين'),
+    ('replacement',  'بدل الروشتة / شراء أدوية العملاء'),
+    ('commerce',     'المستندات التجارية'),
     # ── Analytics & Reporting ─────────────────────────────────────────────────
     ('analytics',    'التحليلات والتقارير'),
     # ── System & Admin ────────────────────────────────────────────────────────
@@ -158,6 +162,13 @@ class StaffProfile(models.Model):
         blank=True,
         related_name='staff_restricted',
         verbose_name='فروع محظورة',
+    )
+
+    # POS channel RBAC — which sales channels this member may operate. Empty = ALL
+    # (backward-compatible). Admins/supervisors always get all. Server-enforced.
+    allowed_pos_channels = models.JSONField(
+        default=list, blank=True, verbose_name='قنوات البيع المسموح بها',
+        help_text='قائمة قنوات البيع المسموح بها لهذا الموظف — فارغة تعني كل القنوات',
     )
 
     # ── Notification preferences ───────────────────────────────────────────────
@@ -281,6 +292,18 @@ class StaffProfile(models.Model):
         return RoleModuleAccess.objects.filter(
             role=self.role, module=module, action=action, is_allowed=True
         ).exists()
+
+    def pos_channels(self):
+        """The POS sales channels this member may operate — None means ALL.
+        Managers (admin/supervisor) always get all; an empty allow-list means all."""
+        if self.role in ('admin', 'supervisor'):
+            return None
+        chans = self.allowed_pos_channels or []
+        return set(chans) if chans else None
+
+    def can_pos_channel(self, channel) -> bool:
+        allowed = self.pos_channels()
+        return allowed is None or channel in allowed
 
 
 class UserActivityLog(models.Model):

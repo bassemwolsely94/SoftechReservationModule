@@ -454,7 +454,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">اشترى خلال آخر (يوم)</label>
             <input
-              type="number" min="1"
+              type="number" min="1" step="1"
               value={form.target_filter.last_purchase_days_max}
               onChange={e => setFilter('last_purchase_days_max', e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
@@ -464,7 +464,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">لم يشترِ منذ (يوم)</label>
             <input
-              type="number" min="1"
+              type="number" min="1" step="1"
               value={form.target_filter.last_purchase_days_min}
               onChange={e => setFilter('last_purchase_days_min', e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-400"

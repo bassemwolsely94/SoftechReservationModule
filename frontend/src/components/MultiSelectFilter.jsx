@@ -7,6 +7,7 @@
  *   onChange : (codes[]) => void
  */
 import { useState, useRef, useEffect } from 'react'
+import { wildcardMatch } from '../utils/wildcard'
 
 export default function MultiSelectFilter({ label, options = [], selected = [], onChange, placeholder = 'الكل' }) {
   const [open, setOpen] = useState(false)
@@ -25,7 +26,7 @@ export default function MultiSelectFilter({ label, options = [], selected = [], 
 
   const q = search.trim().toLowerCase()
   const filtered = q
-    ? options.filter(o => (o.name || '').toLowerCase().includes(q) || String(o.code).toLowerCase().includes(q))
+    ? options.filter(o => wildcardMatch(o.name, q) || String(o.code).toLowerCase().includes(q))
     : options
 
   const summary = selected.length === 0

@@ -177,6 +177,28 @@ class InsuranceDeductionSerializer(serializers.ModelSerializer):
         read_only_fields = ['recorded_at']
 
 
+class InsuranceClaimPrescriptionListSerializer(InsuranceClaimPrescriptionSerializer):
+    """Slim per-prescription payload for the claim-detail list (hundreds of rows).
+
+    Reuses the full serializer's computed fields but ships ONLY what the الروشتات
+    grid reads — dropping the nested `adjustment` object (the UI uses the
+    `is_adjusted` flag + effective_* values) and unused raw columns.  Cuts the
+    detail payload materially for large claims with no frontend change.
+    """
+    class Meta(InsuranceClaimPrescriptionSerializer.Meta):
+        fields = [
+            'id', 'sequence', 'softech_docdate', 'softech_docnumber', 'softech_branchcode',
+            'patient_name', 'softech_patient_name', 'is_manual',
+            'local_before', 'imported_before', 'tarsia_before', 'gross_before',
+            'local_discount', 'imported_discount', 'tarsia_discount', 'total_discount',
+            'net_after', 'softech_net',
+            # computed (reused from the parent)
+            'effective_local_before', 'effective_imported_before', 'effective_tarsia_before',
+            'effective_net_after', 'is_excluded', 'is_adjusted',
+            'softech_net_diff', 'softech_mismatch', 'lines',
+        ]
+
+
 class InsuranceClaimListSerializer(serializers.ModelSerializer):
     """Lightweight list — no nested prescriptions."""
     client_name    = serializers.CharField(source='subclient.client.name', read_only=True)
@@ -231,7 +253,7 @@ class InsuranceClaimBillingGroupSerializer(serializers.ModelSerializer):
 class InsuranceClaimDetailSerializer(InsuranceClaimListSerializer):
     """Full detail — includes prescriptions, supplements, manual_rx, payments, deductions."""
     subclient         = InsuranceSubClientSerializer(read_only=True)
-    prescriptions     = InsuranceClaimPrescriptionSerializer(many=True, read_only=True)
+    prescriptions     = InsuranceClaimPrescriptionListSerializer(many=True, read_only=True)
     supplements       = InsuranceClaimSupplementSerializer(many=True, read_only=True)
     manual_rx         = InsuranceClaimManualRxSerializer(many=True, read_only=True)
     payments          = InsurancePaymentSerializer(many=True, read_only=True)
@@ -288,6 +310,9 @@ class AddManualRxSerializer(serializers.Serializer):
     print_date        = serializers.DateField(required=False, allow_null=True)
     branchcode        = serializers.CharField(required=False, allow_blank=True)
     reason            = serializers.CharField(required=False, allow_blank=True)
+    # Optional override of the patient name (exact ID-card spelling) — when omitted
+    # the SOFTECH-fetched name is kept.
+    patient_name      = serializers.CharField(required=False, allow_blank=True)
 
 
 class ClaimStatusSerializer(serializers.Serializer):
@@ -323,3 +348,24 @@ class InsuranceItemClassificationOverrideSerializer(serializers.ModelSerializer)
 
     def validate_item_code(self, value):
         return (value or '').strip()
+
+
+class InsuranceSeparationNameSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import InsuranceSeparationName
+        model  = InsuranceSeparationName
+        fields = ['id', 'name', 'normalized', 'is_active', 'created_at']
+        read_only_fields = ['id', 'normalized', 'created_at']
+
+
+class InsuranceSeparationListSerializer(serializers.ModelSerializer):
+    name_count = serializers.SerializerMethodField()
+
+    def get_name_count(self, obj):
+        return obj.names.filter(is_active=True).count()
+
+    class Meta:
+        from .models import InsuranceSeparationList
+        model  = InsuranceSeparationList
+        fields = ['id', 'label', 'description', 'is_active', 'name_count', 'created_at']
+        read_only_fields = ['id', 'created_at']

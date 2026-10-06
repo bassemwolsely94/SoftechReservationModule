@@ -16,7 +16,7 @@ marked block to be implemented + validated against SOFTECH_TEST_HOST later.
 import logging
 import math
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.utils import timezone
@@ -29,6 +29,32 @@ from .models import (
 )
 
 logger = logging.getLogger('elrezeiky.pos_orders')
+
+# ── Partial-pack (strip/units) quantity — SOFTECH-exact, mirror of the frontend stripsToQty ──
+# SOFTECH stores a line's qty (stktrans.transqty, "الكمية Q") in PACKS; selling K loose units of an
+# N-per-pack item (items.packqty) is Q = round(K/N, 5) round-half-up. VERIFIED against real
+# production stktrans across packqty 2/3/7 (e.g. 2/3→0.66667, 5/7→0.71429, 20/7→2.85714). The loose
+# count SOFTECH keeps in pharmacydiscp is round(frac(Q)×packqty) — see loose_units_from_qty, which
+# _line_row uses. Deterministic; keep this and the JS copy identical.
+_Q5 = Decimal('0.00001')
+
+
+def strips_to_qty(strips, packqty):
+    """K loose units (strips/vials/amps/patches) → pack-fraction line qty = round(K/packqty, 5)."""
+    n = max(1, int(packqty or 1))
+    k = max(0, int(Decimal(str(strips)).to_integral_value(rounding='ROUND_HALF_UP')))
+    if n <= 1:
+        return Decimal(k)
+    return (Decimal(k) / Decimal(n)).quantize(_Q5, rounding='ROUND_HALF_UP')
+
+
+def loose_units_from_qty(qty, packqty):
+    """Inverse used by SOFTECH's Pkg+Unit decomposition: loose units = round(frac(qty) × packqty).
+    Identical to the calc native writes into stktrans.pharmacydiscp (verified 7822/456285)."""
+    q = float(qty or 0)
+    n = float(packqty or 0)
+    return round((q - math.floor(q)) * n) if n else 0
+
 
 # Sentinel header columns observed on real native pending rows (spec §6h golden template).
 # Tuned to a contract/cash sale; refine the few unknowns (bonusqty/dblitemflag) on a test instance.
@@ -119,10 +145,14 @@ def read_live_pricing(order: SoftechSalesOrder) -> dict:
         cur = conn.cursor()
         ph = ','.join('?' for _ in codes)
         cur.execute(
-            f"SELECT itemcode, itemsaleprice, itemsalestaxp FROM items WHERE itemcode IN ({ph})", codes)
+            f"SELECT itemcode, itemsaleprice, itemsalestaxp, itemcode_alt3 FROM items "
+            f"WHERE itemcode IN ({ph})", codes)
         for r in cur.fetchall():
             out[str(r[0]).strip()] = {
                 'item_sale_price': r[1], 'sale_tax_pct': r[2], 'new_cost_price': 0,
+                # itemcode_alt3 = the discount/points CLASSIFICATION key (drives contract line discount
+                # via custdiscounts[acct, alt3] — verified vs golden 7873; NOT itemstoreclassif).
+                'alt3': (str(r[3]).strip() if r[3] is not None else None),
             }
         cur.execute(
             f"SELECT itemcode, nowcostprice FROM stkbal "
@@ -138,6 +168,333 @@ def read_live_pricing(order: SoftechSalesOrder) -> dict:
         except Exception:
             pass
     return out
+
+
+# Named-account channels whose per-line discount is DERIVED from the account's custdiscounts schedule
+# (the "Items Pricing" tab) instead of being typed — verified: contract 4478 (7873), employee 4233 (7875),
+# permanent 4846 (7876, 12%/5%). Insurance not yet golden-verified here; add once confirmed.
+_ACCOUNT_DISCOUNT_CHANNELS = {'contract', 'employee', 'permanent'}
+
+
+def read_contract_copay(order: SoftechSalesOrder) -> dict:
+    """READ-ONLY: the contract account's patient co-pay rule from SOFTECH `personsdata`
+    (verified vs native golden 7873 / contract 4478 «D M S 25%»: patient_paypercent=25,
+    patient_paytype='1' = % of the GROSS pre-discount total «من إجمالي الإذن قبل الخصم»).
+    Keyed by personsdata.personcode = order.cust_branch_code (the contract account, e.g. 4478).
+    Returns {} for non-contract channels, an unnamed account, or an unreachable branch — the
+    caller then keeps the default 100%-credit posture."""
+    if order.channel != 'contract' or not order.cust_branch_code:
+        return {}
+    if not order.branch or not order.branch.effective_db_host:
+        return {}
+    from config.sybase import get_branch_connection
+    conn = get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
+                                 order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT patient_paypercent, patient_paytype FROM personsdata WHERE personcode=?",
+                    [str(order.cust_branch_code).strip()])
+        row = cur.fetchone(); cur.close()
+        if not row:
+            return {}
+        return {'patient_paypercent': float(row[0] or 0), 'patient_paytype': str(row[1] or '1').strip()}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def read_contract_discounts(order: SoftechSalesOrder) -> dict:
+    """READ-ONLY: the contract account's per-classification discount schedule from SOFTECH
+    `custdiscounts` (the contract's "Items Pricing" tab), keyed by the item discount classification
+    = items.itemcode_alt3. Verified vs golden 7873 / contract 4478: alt3 13/14→6% (imported),
+    12→15% (local); alt3 22/84 → allow_sell=0 / custdiscp_nomore='1' = BLOCKED (native «هذا الصنف
+    غير مسموح صرفه لهذا التعاقد»). Also drives EMPLOYEE (موظفين) line discounts — same custdiscounts
+    schedule keyed on the employee-company account (verified vs golden 7875 / account 4233: 10%/15%).
+    Returns {alt3: {'discp': float, 'blocked': bool}} — {} for a non-account channel, an unnamed
+    account, or an unreachable branch."""
+    if order.channel not in _ACCOUNT_DISCOUNT_CHANNELS or not order.cust_branch_code:
+        return {}
+    if not order.branch or not order.branch.effective_db_host:
+        return {}
+    from config.sybase import get_branch_connection
+    conn = get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
+                                 order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+    out = {}
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT custdiscpcode, custdiscp, allow_sell, custdiscp_nomore FROM custdiscounts "
+                    "WHERE personcode=?", [str(order.cust_branch_code).strip()])
+        for r in cur.fetchall():
+            code = str(r[0]).strip()
+            allow = int(r[2] or 0)
+            out[code] = {'discp': float(r[1] or 0),
+                         'blocked': (allow != 1 or str(r[3] or '').strip() == '1')}
+        cur.close()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return out
+
+
+def _contract_copay_tenders(order, doc_value, doc_value_gross):
+    """Deterministic contract co-pay split (verified vs native golden 7873, contract 4478 = 25%):
+       patient (cash, paymenttype 30) = round(patient_paypercent% × base, 2), where base = the GROSS
+       pre-discount total when patient_paytype='1' (native «من إجمالي الإذن قبل الخصم»), else the net
+       doc_value; company (credit, paymenttype 10) = doc_value − patient. The writer's own
+       payment-mix logic then stamps fatstatuscode 50/15 (مشتركة) and emits BOTH branchesales5 rows.
+       Returns a 2-tender list, or None to leave the default (100%-credit / آجل, fatstatuscode 10)
+       posture — used when there is no co-pay rule, the co-pay covers the whole invoice, or the
+       branch is unreachable."""
+    cov = read_contract_copay(order)
+    pct = Decimal(str(cov.get('patient_paypercent') or 0))
+    if pct <= 0:
+        return None
+    base = Decimal(str(doc_value_gross if str(cov.get('patient_paytype')) == '1' else doc_value))
+    patient = (pct / Decimal('100') * base).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    dv = Decimal(str(doc_value))
+    if patient <= 0 or patient >= dv:
+        return None
+    company = (dv - patient).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return [{'pay_type': 'cash', 'amount': str(patient)},
+            {'pay_type': 'credit', 'amount': str(company)}]
+
+
+# ── RETURN (مرتجع) — mirror the original finalized sale ──────────────────────────
+_SALE_LINE_COLS = ['itemcode', 'transqty', 'transprice', 'transprice_total', 'itemsaleprice',
+                   'itemsalestax', 'itemsaleprice_tax', 'custdiscp', 'pharmacydiscp', 'additionaldiscp',
+                   'specialdiscp', 'bonusqty', 'dblitemflag', 'itemexpirydate', 's_doccode', 'item_partno',
+                   'newqty', 'newcostprice', 'personcode', 'suppliercode', 'origintaxp', 'saleprice_extrap',
+                   'r_docnumber', 'retqty', 'vf4']
+
+
+def read_finalized_sale(branch, branchcode, invoice):
+    """READ-ONLY: the ORIGINAL finalized sale (`invoice`) from SOFTECH — its docdate (→ the return
+    line's r_docdate) plus every stktrans line (mirrored verbatim into the return) plus its branchesales
+    payment rows (→ the refund tenders). Reads stktransm/stktrans doccode 115 (the finalized invoice,
+    verified: native sale 7044). Returns (sale_docdate:str, [line_raw:dict], [pay:dict]); itemexpirydate
+    is wrapped as the {'__dt__':…} marker so _line_row_from_raw reproduces the batch. Raises if the
+    invoice is missing or the branch is unreachable. Used by build_return_from_sale AND the POS return
+    lookup endpoint."""
+    if not invoice:
+        raise ValueError('رقم الفاتورة الأصلية مطلوب للمرتجع.')
+    if not branch or not branch.effective_db_host:
+        raise ValueError('الفرع غير متصل بقاعدة البيانات.')
+    from config.sybase import get_branch_connection
+    conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
+                                 branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+    inv = int(invoice)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT docdate FROM stktransm WHERE branchcode=? AND doccode='115' AND docnumber=?",
+                    [branchcode, inv])
+        h = cur.fetchone()
+        if not h:
+            raise ValueError(f'لم يتم العثور على الفاتورة {inv} في هذا الفرع للمرتجع.')
+        sale_docdate = str(h[0])
+        cur.execute(f"SELECT {', '.join(_SALE_LINE_COLS)} FROM stktrans WHERE branchcode=? AND "
+                    f"doccode='115' AND docnumber=? ORDER BY dblitemflag", [branchcode, inv])
+        lines = []
+        for r in cur.fetchall():
+            d = dict(zip(_SALE_LINE_COLS, r))
+            if d.get('itemexpirydate'):
+                d['itemexpirydate'] = {'__dt__': str(d['itemexpirydate'])}
+            lines.append(d)
+        if not lines:
+            raise ValueError(f'الفاتورة {inv} لا تحتوي أصنافاً للمرتجع.')
+        # «مرتجع سابق» (previously-returned qty): SOFTECH does NOT decrement the sale line's retqty when a
+        # return is posted (verified: sale 7052 kept retqty=transqty after returns 540+541), so the return
+        # screen recomputes it by SUMMING prior return docs (doccode 30, r_docnumber=this invoice) per
+        # line. Match by (itemcode, is-reservation, expiry-date) — this disambiguates a multi-batch item's
+        # lines and a dispensed vs reservation slice of the same item.
+        def _d10(v):
+            if isinstance(v, dict):
+                v = v.get('__dt__')
+            return str(v)[:10] if v else None
+        cur.execute("SELECT itemcode, s_doccode, itemexpirydate, transqty FROM stktrans WHERE branchcode=? "
+                    "AND doccode='30' AND r_docnumber=?", [branchcode, inv])
+        returned = {}
+        for r in cur.fetchall():
+            key = (str(r[0]).strip(), str(r[1]).strip() == '100', _d10(r[2]))
+            returned[key] = returned.get(key, 0.0) + float(r[3] or 0)
+        for d in lines:
+            s_dc = str(d.get('s_doccode') or '').strip()
+            d['is_reservation'] = s_dc in ('100', '200')
+            # a DELIVERED reservation (s_doccode 200) can't be returned here — the cashier must reverse the
+            # تسليم حجز (181) first (owner rule 2026-09-07). An undelivered reservation (100) was never
+            # dispensed, so it isn't returnable either. Only dispensed (000) lines are returnable.
+            d['blocked'] = d['is_reservation']
+            d['block_reason'] = ('صنف محجوز مُسلّم — يجب عكس تسليم الحجز أولاً' if s_dc == '200'
+                                 else ('صنف محجوز غير مُسلّم — لا يُرتجع' if s_dc == '100' else ''))
+            prev = returned.get((str(d['itemcode']).strip(), d['is_reservation'], _d10(d.get('itemexpirydate'))), 0.0)
+            d['returned_prev'] = round(prev, 5)
+            d['returnable'] = 0.0 if d['blocked'] else round(float(d.get('transqty') or 0) - prev, 5)
+        # the sale's OWN payment rows → mirrored as the refund tenders (a co-pay contract refunds BOTH
+        # the company credit AND the patient cash — native return 537: type10 1318.8 + type30 500.75).
+        cur.execute("SELECT paymenttype, paymentvalue FROM branchesales WHERE branchcode=? AND "
+                    "doccode='115' AND docnumber=? ORDER BY paymentsno", [branchcode, inv])
+        pays = [{'paymenttype': str(r[0]).strip(), 'paymentvalue': float(r[1] or 0)} for r in cur.fetchall()]
+        cur.close()
+        return sale_docdate, lines, pays
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def read_return_full_only(order: SoftechSalesOrder) -> bool:
+    """Whether the named account's contract config forces a FULL-invoice return (no partial) — the
+    «الإرتجاع بكامل الفاتورة» = Yes flag, DYNAMIC/per-account so it must be read live.
+
+    ⚠ DISABLED (2026-09-08): the owner confirmed personsdata.empftime is NOT this flag (my earlier
+    inference from the 4478='1'/4479='0' diff was coincidental). The correct SOFTECH column/table is not
+    yet identified, so this returns False (partial always allowed) — the enforcement in
+    build_return_from_sale is a no-op until the real field is found (HQ was down when this was corrected).
+    TODO: locate the «الإرتجاع بكامل الفاتورة» source (contract config), then re-enable the live read."""
+    return False
+
+
+def read_contract_branch_blocked(order: SoftechSalesOrder) -> bool:
+    """Whether the named account is BLOCKED at the order's branch — the «OUR Contracted Branches» Block
+    flag, stored in SOFTECH `personsdatabranches.personbranchdel` ('1'=blocked, '0'=active). Verified:
+    account 4227 blocks branches 110/120/180/190/200/210/220. Returns True to BLOCK the dispense. False
+    (allow) for a walk-in channel, a '0'/missing row, or an unreachable branch (permissive — never a
+    false block; an explicit '1' is the only hard block)."""
+    if order.channel not in CLAIM_CHANNELS or not order.cust_branch_code:
+        return False
+    if not order.branch or not order.branch.effective_db_host:
+        return False
+    from config.sybase import get_branch_connection
+    conn = get_branch_connection(order.branch.effective_db_host, order.branch.effective_db_port,
+                                 order.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT personbranchdel FROM personsdatabranches WHERE personcode=? AND branchcode=?",
+                    [str(order.cust_branch_code).strip(), order.softech_branchcode])
+        row = cur.fetchone(); cur.close()
+        return bool(row and str(row[0] or '').strip() == '1')
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def build_return_from_sale(order: SoftechSalesOrder, selection=None):
+    """Populate a RETURN order (doc_kind='return', return_of_invoice set) by MIRRORING the original
+    finalized sale: one SoftechSalesOrderLine per returned sale line carrying source_raw (reproduced
+    verbatim by _line_row_from_raw, with the return overrides r_docnumber/r_docdate/retqty/vf4), the
+    sale's docdate stashed for r_docdate.
+
+    Only DISPENSED lines with returnable qty left are eligible: reservation lines (delivered s_doccode
+    200 OR undelivered 100) are BLOCKED (owner rule — reverse the تسليم حجز first), and each line's
+    returnable qty = sold − «مرتجع سابق» (prior returns of this invoice). `selection`: None → return the
+    whole returnable set; a list of {'dblitemflag', 'qty'?} DROPS lines or REDUCES qty → PARTIAL (each qty
+    capped at that line's returnable). A PRISTINE full return (no blocked lines, no prior returns) refunds
+    by MIRRORING the sale's exact payment rows (byte-exact — native 534/535); any partial-or-excluded
+    return RECOMPUTES the refund from the chosen lines (co-pay contract splits patient-cash + company-
+    credit proportional to the returned amount). Full-invoice-only accounts (empftime='1') reject partials.
+    NOTE: partial-QTY scaling is best-effort, not yet golden-verified — whole-line selection is the safe path."""
+    sale_docdate, lines, sale_pays = read_finalized_sale(
+        order.branch, order.softech_branchcode, order.return_of_invoice)
+    hdr = dict(order.source_header_raw or {})
+    hdr['sale_docdate'] = sale_docdate
+    order.source_header_raw = hdr
+
+    # eligible = dispensed lines (reservations blocked) that still have returnable qty; `excluded` marks
+    # that SOMETHING was left out (a blocked reservation or an already-returned line) → not a pristine mirror.
+    blocked_msgs = {d['block_reason'] for d in lines if d.get('blocked') and d.get('block_reason')}
+    returnable_lines = [d for d in lines if not d.get('blocked') and float(d.get('returnable') or 0) > 0]
+    excluded = any(d.get('blocked') or float(d.get('returnable') or 0) <= 0 for d in lines)
+    if not returnable_lines:
+        raise ValueError('لا توجد أصناف قابلة للإرتجاع فى هذه الفاتورة'
+                         + ((' — ' + '، '.join(blocked_msgs)) if blocked_msgs else ' (رُبما أُرتجعت بالكامل).'))
+
+    partial = False
+    if selection is not None:
+        sel = {int(s['dblitemflag']): s for s in selection if s.get('dblitemflag') is not None}
+        chosen = []
+        for d in returnable_lines:
+            s = sel.get(int(d.get('dblitemflag') or 0))
+            if not s:
+                partial = True                        # a returnable line was dropped from the return
+                continue
+            d = dict(d)
+            cap = float(d.get('returnable') or 0)      # never return more than what is still returnable
+            req = s.get('qty')
+            ret_qty = min(float(req), cap) if req is not None else cap
+            if ret_qty <= 0:
+                partial = True
+                continue
+            if ret_qty < float(d.get('transqty') or 0):  # scale money + points to the returned qty
+                ratio = ret_qty / float(d['transqty'])
+                partial = True
+                d['transprice_total'] = round(float(d.get('transprice_total') or 0) * ratio, 2)
+                if d.get('vf4') not in (None, ''):
+                    d['vf4'] = int(round(int(d['vf4']) * ratio))
+            d['transqty'] = ret_qty
+            chosen.append(d)
+        if not chosen:
+            raise ValueError('لم تُحدَّد أصناف صالحة للمرتجع.')
+        lines = chosen
+    else:
+        lines = [dict(d) for d in returnable_lines]
+
+    # «الإرتجاع بكامل الفاتورة»=Yes (empftime='1') accounts forbid a partial return.
+    if partial and read_return_full_only(order):
+        raise ValueError('هذا التعاقد يسمح بالإرتجاع بكامل الفاتورة فقط — لا يُقبل مرتجع جزئى.')
+
+    order.lines.all().delete()
+    total = Decimal('0'); gross = Decimal('0')
+    for d in lines:
+        code = str(d['itemcode']).strip()
+        SoftechSalesOrderLine.objects.create(
+            order=order, softech_itemcode=code, item_name=code,
+            qty=Decimal(str(d['transqty'] or 0)),
+            item_sale_price=Decimal(str(d['itemsaleprice'] or 0)),
+            cust_discp=Decimal(str(d['custdiscp'] or 0)),
+            source_raw=d,
+        )
+        total += Decimal(str(d['transprice_total'] or 0))
+        gross += Decimal(str(d['itemsaleprice'] or 0)) * Decimal(str(d['transqty'] or 0))
+    order.save()
+
+    order.payments.all().delete()
+    _rev = {'30': 'cash', '10': 'credit', '40': 'card'}
+    if not partial and not excluded and sale_pays:
+        # PRISTINE full return (no prior returns, no blocked reservations) → mirror the sale's OWN payment
+        # rows verbatim (byte-exact — native 534/535; a co-pay contract refunds credit + cash).
+        for p in sale_pays:
+            SoftechSalesOrderPayment.objects.create(
+                order=order, pay_type=_rev.get(p['paymenttype'], 'cash'),
+                amount=Decimal(str(p['paymentvalue'])))
+    else:
+        # PARTIAL (or a sale with no payment rows) → recompute the refund from the CHOSEN lines. A co-pay
+        # contract splits patient-cash + company-credit; contract-0%/employee/insurance refund all credit;
+        # cash/delivery/permanent refund cash.
+        refund = []
+        if order.channel == 'contract':
+            try:
+                pct = Decimal(str((read_contract_copay(order) or {}).get('patient_paypercent') or 0))
+            except Exception:
+                pct = Decimal('0')
+            if pct > 0:
+                patient = min((pct / Decimal('100') * gross).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP), total)
+                refund = [('cash', patient), ('credit', total - patient)]
+            else:
+                refund = [('credit', total)]
+        elif order.channel in ('employee', 'insurance'):
+            refund = [('credit', total)]
+        else:
+            refund = [('cash', total)]
+        for pt, amt in refund:
+            if Decimal(str(amt)) > 0:
+                SoftechSalesOrderPayment.objects.create(order=order, pay_type=pt, amount=Decimal(str(amt)))
+    return order
 
 
 # ── 1. PREPARE — compute all numeric fields ─────────────────────────────────────
@@ -162,6 +519,20 @@ def prepare_order(order: SoftechSalesOrder, tenders=None, live=False):
         if not live_map:
             raise ValueError('تعذّر قراءة الأسعار الحية من قاعدة بيانات الفرع.')
 
+    # CONTRACT branch gate («OUR Contracted Branches» Block): a named account blocked at this branch
+    # (personsdatabranches.personbranchdel='1') can't dispense here. Live sales only — a return mirrors the
+    # original sale's branch, so it isn't re-gated.
+    if live and order.doc_kind != 'return' and read_contract_branch_blocked(order):
+        raise ValueError('هذا التعاقد غير مسموح به فى هذا الفرع (فرع محظور من التعاقد).')
+
+    # CONTRACT coverage (live only): the account's per-classification discount + eligibility schedule
+    # (custdiscounts, keyed by items.itemcode_alt3). Drives the deterministic line discount AND the
+    # Blocked-item gate — an operator never types a contract discount; SOFTECH derives it. Empty schedule
+    # (unreachable / not a contract) leaves the fed line.cust_discp untouched (offline / non-contract).
+    disc_sched = (read_contract_discounts(order)
+                  if (live and order.channel in _ACCOUNT_DISCOUNT_CHANNELS and order.doc_kind != 'return') else {})
+    blocked = []
+
     computed_lines = []
     for line in order.lines.select_related('item').all():
         item = line.item
@@ -177,9 +548,22 @@ def prepare_order(order: SoftechSalesOrder, tenders=None, live=False):
             sale_tax_pct    = line.sale_tax_pct    or (item.sale_tax_pct if item else 0)
             new_cost_price  = line.new_cost_price  or (item.cost_price if item else 0)
 
+        cust_discp = line.cust_discp
+        if disc_sched:
+            # derive the contract discount from custdiscounts[acct, item.itemcode_alt3]; a missing or
+            # allow_sell=0 / custdiscp_nomore='1' classification means the item is NOT dispensable
+            # on this contract (native blocks it). Collect blocked items and reject after the loop.
+            alt3 = (src or {}).get('alt3')
+            cov = disc_sched.get(alt3) if alt3 else None
+            if cov is None or cov['blocked']:
+                blocked.append(str(line.softech_itemcode).strip())
+                continue
+            cust_discp = Decimal(str(cov['discp']))
+            line.cust_discp = cust_discp
+
         c = pricing.compute_line(
             item_sale_price=item_sale_price, sale_tax_pct=sale_tax_pct,
-            qty=line.qty, cust_discp=line.cust_discp, new_cost_price=new_cost_price,
+            qty=line.qty, cust_discp=cust_discp, new_cost_price=new_cost_price,
         )
         line.item_sale_price     = item_sale_price
         line.sale_tax_pct        = sale_tax_pct
@@ -193,6 +577,9 @@ def prepare_order(order: SoftechSalesOrder, tenders=None, live=False):
         line.save()
         computed_lines.append(c)
 
+    if blocked:
+        raise ValueError('الأصناف التالية غير مسموح صرفها لهذا التعاقد: ' + '، '.join(blocked))
+
     if not computed_lines:
         raise ValueError('لا يمكن تجهيز أمر بدون أصناف.')
 
@@ -205,6 +592,16 @@ def prepare_order(order: SoftechSalesOrder, tenders=None, live=False):
     if tenders is None:
         existing = list(order.payments.values('pay_type', 'amount'))
         tenders = existing or None
+
+    # Fresh CONTRACT co-pay: with no operator-entered tenders, derive the patient(cash)/company(credit)
+    # split from the contract's patient_paypercent (personsdata) so the writer emits fatstatuscode 50
+    # + the two branchesales5 rows (native golden 7873). Any failure (unreachable / no rule) falls back
+    # to the default 100%-credit posture below. Only meaningful for a live prepare (needs the branch DB).
+    if tenders is None and order.channel == 'contract' and live and order.doc_kind != 'return':
+        try:
+            tenders = _contract_copay_tenders(order, doc_value, hdr['doc_value_gross']) or None
+        except Exception:
+            tenders = None
 
     pay, patient, norm_tenders = pricing.split_payment(order.channel, doc_value, tenders)
 
@@ -280,6 +677,15 @@ def build_payload(order: SoftechSalesOrder):
         'refdoctorcode': order.referral_doctor_code or None,
         'vf2': softech_token(order),   # short idempotency marker (vf2 is varchar(15))
     })
+    # settlement type (طريقة السداد) is payment-mix driven — same rule as _header_row, so the DRY-RUN
+    # PREVIEW shows the REAL fatstatus (co-pay 50/15, credit 10/15, cash 30/90) not the static sentinel.
+    _pt = [str(p.pay_type) for p in order.payments.all()]
+    if any(pt == 'credit' for pt in _pt) and any(pt != 'credit' for pt in _pt):
+        header['fatstatuscode'], header['fatcurrentstatus'] = '50', '15'
+    elif any(pt == 'credit' for pt in _pt):
+        header['fatstatuscode'], header['fatcurrentstatus'] = '10', '15'
+    else:
+        header['fatstatuscode'], header['fatcurrentstatus'] = '30', '90'
 
     lines = []
     reservations = []
@@ -563,7 +969,9 @@ def _exec_insert(conn, table, row: dict):
 # cust_professional is CHANNEL-specific: only contract(ptclassif 10) & employee(11) → '6'; every other
 # channel → '2' (including credit compensation(17)/donations(16) — native writes '2' there). fat codes are
 # NOT here — they are payment-driven (see _header_row). Verified population-wide (2026, all branches).
-_CHANNEL_CUST_PROF = {'cash': '2', 'delivery': '2', 'permanent': '2', 'contract': '6', 'employee': '6'}
+# cust_professional: only CONTRACT (ptclassif 10) writes '6'; every other channel — including EMPLOYEE
+# (ptclassif 11) — writes '2' (verified vs native: contract 7047 → 6, employee 7875 → 2, cash/delivery → 2).
+_CHANNEL_CUST_PROF = {'cash': '2', 'delivery': '2', 'permanent': '2', 'contract': '6', 'employee': '2'}
 
 
 def _header_row(order, docnumber, seller, personnewbal=None, earns_points=True):
@@ -593,6 +1001,15 @@ def _header_row(order, docnumber, seller, personnewbal=None, earns_points=True):
     # tenders yet native writes cust_professional='2' (verified). See _CHANNEL_CUST_PROF.
     cust_prof = (h.get('cust_professional') or _CHANNEL_CUST_PROF.get(order.channel)
                  or getattr(settings, 'POS_DEFAULT_CUST_PROFESSIONAL', '2'))
+    # SOFTECH manager-override stamp (verified 2026-08-30 via `investigate_override`):
+    # a Ctrl+M / OFFERS-authorized discount records the override manager's usercode in
+    # stktransm5.supp_main_code (89 = OFFERS). We set it for offer-discounted orders so
+    # the high discount is PRE-AUTHORIZED and the cashier's settlement accepts it —
+    # exactly like a manual Ctrl+M sale. Empty otherwise (native default).
+    _offer_override = ''
+    if any(str(getattr(l, 'discount_source', 'manual')) == 'offer' and float(l.cust_discp or 0) > 0
+           for l in order.lines.all()):
+        _offer_override = str(getattr(settings, 'POS_OFFERS_OVERRIDE_USERCODE', '89'))
     return {
         'branchcode': order.softech_branchcode, 'doccode': order.softech_doccode,
         'docnumber': int(docnumber), 'docdate': _TODAY_MIDNIGHT,
@@ -603,7 +1020,7 @@ def _header_row(order, docnumber, seller, personnewbal=None, earns_points=True):
         # docnumber2=0 marks a STANDALONE sale (not linked to another doc). Native sets 0 on every
         # sale; leaving it NULL made the cashier classify a CASH sale as مشتركة instead of نقدى
         # (verified: the only header field differing from native 7808). supp_main_code='' likewise.
-        'docnumber2': 0, 'supp_main_code': '',
+        'docnumber2': 0, 'supp_main_code': _offer_override,
         'specialdiscp': 0.0, 'storecode': order.store_code,
         'docvaluepay': f(order.doc_value_pay), 'fatstatuscode': fatstatus,
         'ptcode': PTCODE_CUSTOMER, 'ptclassifcode': order.softech_ptclassifcode,
@@ -669,8 +1086,13 @@ def _allocate_line(conn, order, line, stock_controlled):
     if remaining > 0:
         # shortfall → reservation line (native pre-split). On a reservation-DISABLED branch the OOS
         # guard already rejected the order, so we only reach here when reservation is enabled.
+        # itemexpirydate on the reservation line is CHANNEL-driven (verified across native goldens):
+        # a CLAIM channel (contract/employee/permanent/insurance) stamps the 2012-12-12 placeholder —
+        # even on a fully-reserved item (golden 7875 employee: 113275/120049); a non-claim channel
+        # (cash/delivery) leaves it NULL (golden 7872 delivery). `partial` kept for reference only.
         allocs.append({'qty': remaining, 'expiry': None, 'batchno': 'Reservation',
-                       's_doccode': '100', 'reservation': True})
+                       's_doccode': '100', 'reservation': True, 'partial': bool(allocs),
+                       'placeholder': order.channel in CLAIM_CHANNELS})
     return allocs
 
 
@@ -690,7 +1112,7 @@ def _line_row(order, line, docnumber, seller, alloc, line_points=None, first=Tru
     is_return = order.doc_kind == 'return' and order.return_of_invoice
     sub_qty = float(alloc['qty'])
     unit_price = f(line.trans_price)                 # per-UNIT net trans price (unchanged across slices)
-    loose_units = round((sub_qty - math.floor(sub_qty)) * packqty) if packqty else 0   # pharmacydiscp
+    loose_units = loose_units_from_qty(sub_qty, packqty)   # pharmacydiscp — SOFTECH-exact (see helper)
     row = {
         'branchcode': order.softech_branchcode, 'doccode': order.softech_doccode,
         'docnumber': int(docnumber), 'docdate': _TODAY_MIDNIGHT, 'storecode': order.store_code,
@@ -700,33 +1122,52 @@ def _line_row(order, line, docnumber, seller, alloc, line_points=None, first=Tru
         'itemsaleprice_tax': f(line.item_sale_price_tax),
         # Pkg+Unit decomposition native writes on EVERY line: loose units in pharmacydiscp, unit price
         # in bonusqty (both required for HQ's Pkg+Unit return screen to reconcile the qty).
-        'pharmacydiscp': float(loose_units), 'additionaldiscp': 0.0,
+        # additionaldiscp stores the LINE VAT RATE (verified taxed golden 7879/7880: 14 on a 14%-VAT item,
+        # 0 on a 0-VAT item), NOT an extra discount — the discount is % on the tax-inclusive price, and the
+        # %-disc/%-VAT order is commutative so pricing.compute_line already matches SOFTECH's method-3.
+        'pharmacydiscp': float(loose_units), 'additionaldiscp': f(getattr(line, 'sale_tax_pct', 0)),
         # only qty + qty×price scale per slice; the per-unit prices/taxes/cost stay the same (native 7818).
-        'transprice_total': round(sub_qty * unit_price, 4), 'custdiscp': f(line.cust_discp),
+        # 2 dp — SOFTECH stores transprice_total rounded to 2 (golden 7871: 0.33333×54.6 → 18.20, not 18.1998).
+        'transprice_total': round(sub_qty * unit_price, 2), 'custdiscp': f(line.cust_discp),
         'specialdiscp': 0.0, 'bonusqty': f(unitprice), 'dblitemflag': int(dblflag),
         'usercode': seller or None, 'trans_time': _NOW, 'personcode': order.cust_branch_code or None,
+        # r_docnumber: NULL by default; the batch-dispensed slice below stamps 0 (native writes 0 ONLY
+        # on a real-batch SALE line — verified vs golden 7870/7872; no-batch & reservation slices stay
+        # NULL). A real return carries the original invoice number here.
         'r_docnumber': (int(order.return_of_invoice) if is_return else None),
         'retqty': 0.0,   # native pending = 0; settlement sets it to transqty. NEVER leave NULL
                          # (a NULL retqty makes the settled sale un-returnable — observed on 452775).
     }
-    # Slice kind (from _allocate_line, verified against native pending 7818):
-    #  • reservation slice (shortfall): item_partno='Reservation', PLACEHOLDER expiry 2012-12-12,
-    #    s_doccode='100', r_docdate NULL. The cashier's finalization then creates the حجز (80).
+    # Slice kind (from _allocate_line, verified field-by-field against native cashier golden 7872):
+    #  • reservation slice (shortfall): item_partno='Reservation', s_doccode='100', r_docnumber NULL,
+    #    r_docdate NULL. itemexpirydate is CHANNEL-driven (verified across goldens 7872/7873/7875): a CLAIM
+    #    channel (contract/employee/permanent/insurance) stamps the 2012-12-12 placeholder (alloc['placeholder'])
+    #    even on a FULLY-reserved item (7875 employee 113275/120049); cash/delivery leave it NULL (7872).
+    #    The cashier's finalization later creates the حجز (80) and picks the real batch at dispense.
     #  • dispensed slice (real batch): item_partno = the batch's stkbalexpiry.batchno (e.g. 'تحت
     #    التصريف' for a clearance batch, else NULL), the batch's real itemexpirydate, s_doccode='000',
-    #    r_docdate 1900-01-01.
-    #  • service / no-batch slice: leave itemexpirydate / s_doccode / item_partno / r_docdate NULL.
+    #    r_docnumber 0, r_docdate 1900-01-01.
+    #  • service / no-batch slice: s_doccode='000', item_partno='' (EMPTY string, not NULL),
+    #    itemexpirydate NULL, r_docnumber NULL, r_docdate NULL.
     if alloc.get('reservation'):
         row['item_partno'] = 'Reservation'
-        row['itemexpirydate'] = _raw_value({'__dt__': RESERVATION_PLACEHOLDER_EXPIRY})
         row['s_doccode'] = '100'
+        if alloc.get('placeholder'):   # claim-channel reservation → native stamps placeholder expiry
+            row['itemexpirydate'] = _raw_value({'__dt__': RESERVATION_PLACEHOLDER_EXPIRY})
     elif alloc.get('expiry'):
         # item_partno = the batch's stkbalexpiry.batchno (a clearance status like 'تحت التصريف').
         # NOT written here — jConnect cannot send Arabic in a statement (cp1256 garbles it to '?',
         # utf8 is rejected by the server), so the caller copies it SERVER-SIDE after the INSERT.
         row['itemexpirydate'] = _raw_value({'__dt__': f"{alloc['expiry']} 00:00:00"})
         row['s_doccode'] = '000'
+        if not is_return:
+            row['r_docnumber'] = 0
         row['r_docdate'] = _raw_value({'__dt__': '1900-01-01 00:00:00'})
+    else:
+        # service / non-stockable / no-batch dispensed slice — native writes s_doccode '000' + an
+        # EMPTY item_partno (not NULL); expiry / r_docnumber / r_docdate stay NULL.
+        row['s_doccode'] = '000'
+        row['item_partno'] = ''
     # vf4 = this slice's loyalty POINTS (SMALLINT). SOFTECH sums the line vf4 → header personnewbal →
     # the picpoints award at finalization. Points channels (cash/delivery): per-slice floor — native 7818
     # split 127917 → 117+58=175, NOT the single-line floor 176; a NULL vf4 on ANY line zeros the whole
@@ -759,8 +1200,30 @@ def _line_row_from_raw(order, raw, docnumber, seller):
         v = raw.get(k)
         return None if v in (None, '') else float(v)
 
+    is_return = order.doc_kind == 'return' and order.return_of_invoice
     exp = raw.get('itemexpirydate')   # {'__dt__': 'YYYY-MM-DD HH:MM:SS'} or None
-    return {
+    # A RETURN links each mirrored line to the ORIGINAL SALE (verified vs native 534 ← sale 7044):
+    #   r_docnumber = the sale invoice, r_docdate = the sale's docdate, retqty = 0 (the sale's own
+    #   retqty is NOT copied), vf4 = the sale line's points NEGATED (return deducts). A plain clone
+    #   keeps the source values (r_docnumber 0, r_docdate 1900-01-01, retqty as-is, no vf4 set).
+    if is_return:
+        r_docnum = int(order.return_of_invoice)
+        _sale_dt = (order.source_header_raw or {}).get('sale_docdate')
+        r_docdate = _raw_value({'__dt__': str(_sale_dt)}) if _sale_dt else _Raw("convert(datetime, '1900-01-01')")
+        retqty = 0.0
+    else:
+        r_docnum = num('r_docnumber') or 0
+        r_docdate = _Raw("convert(datetime, '1900-01-01')")
+        retqty = (num('retqty') or 0)
+    # s_doccode: a RETURN reverts a settled reservation line (finalized sale s_doccode='200') back to
+    # the reservation code '100' (native return 536/537); dispensed '000' is unchanged.
+    s_dc = str(raw.get('s_doccode') or '000')
+    if is_return and s_dc == '200':
+        s_dc = '100'
+    # item_partno (''=service, 'Reservation', or the Arabic clearance label 'تحت التصريف') is written
+    # verbatim — the iso_1/cp1256 write path carries Arabic intact (same as patientname).
+    _partno = raw.get('item_partno')
+    row = {
         'branchcode': order.softech_branchcode, 'doccode': order.softech_doccode,
         'docnumber': int(docnumber), 'docdate': _TODAY_MIDNIGHT, 'storecode': order.store_code,
         'itemcode': str(raw.get('itemcode') or ''),
@@ -772,14 +1235,19 @@ def _line_row_from_raw(order, raw, docnumber, seller):
         'additionaldiscp': num('additionaldiscp'), 'transprice_total': num('transprice_total'),
         'origintaxp': num('origintaxp'), 'custdiscp': num('custdiscp'), 'specialdiscp': num('specialdiscp'),
         'bonusqty': num('bonusqty'), 'dblitemflag': int(raw.get('dblitemflag') or 1),
-        'r_docnumber': (num('r_docnumber') or 0), 'r_docdate': _Raw("convert(datetime, '1900-01-01')"),
+        'r_docnumber': r_docnum, 'r_docdate': r_docdate,
         'saleprice_extrap': (num('saleprice_extrap') or 0),
         'suppliercode': str(raw.get('suppliercode') or '0'),
-        's_doccode': str(raw.get('s_doccode') or '000'),
+        's_doccode': s_dc,
+        'item_partno': (str(_partno) if _partno is not None else None),
         'usercode': seller or None, 'trans_time': _NOW,
         'personcode': (str(raw.get('personcode')).strip() or None) if raw.get('personcode') is not None else None,
-        'retqty': (num('retqty') or 0),
+        'retqty': retqty,
     }
+    if is_return:   # points reverse on a return (native 534 vf4 = −15 vs sale 7044 vf4 = +15)
+        _v = raw.get('vf4')
+        row['vf4'] = (-int(_v) if _v not in (None, '') else None)
+    return row
 
 
 def _payment_row(order, p, docnumber, pno, seller):
@@ -795,6 +1263,7 @@ def _payment_row(order, p, docnumber, pno, seller):
         'paymenttype': p.softech_paymenttype, 'paymentvalue': amt,
         'ref_docnumber': int(order.return_of_invoice) if is_return else int(docnumber),
         'usercode': seller or '1', 'trans_time': _NOW,
+        'personcode': order.cust_branch_code or None,   # native stamps the channel-rep personcode (golden 7870)
         'bcurrency': bcurrency, 'bcrate': rate, 'paymentvaluebc': round(amt / rate, 4),
     }
     if p.card_brand is not None:
@@ -808,6 +1277,20 @@ def _payment_row(order, p, docnumber, pno, seller):
     return row
 
 
+def _claim_dt(v):
+    """Datetime literal for a companiesitems5 claim date. Accepts the {'__dt__':...} marker
+    (cloned native rows), a Python date/datetime, or a plain 'YYYY-MM-DD[ HH:MM:SS]' string
+    (a FRESH contract order from the POS Contract-Emp-Data tab). Returns None for empty."""
+    if not v:
+        return None
+    if isinstance(v, dict) and '__dt__' in v:
+        return _raw_value(v)
+    s = str(v).strip()
+    if len(s) == 10:                       # date only → add midnight
+        s += ' 00:00:00'
+    return _Raw(f"convert(datetime, '{s}')")
+
+
 def _companies_row(order, raw, docnumber):
     """companiesitems5 (insurance/patient claim) built from the source order's row.
     Keeps patient IDs + claim fields; overrides identity/stamps. (patientname is
@@ -817,13 +1300,13 @@ def _companies_row(order, raw, docnumber):
     return {
         'branchcode': order.softech_branchcode, 'docnumber': int(docnumber),
         'docdate': _TODAY_MIDNIGHT, 'doccode': order.softech_doccode,
-        'cdate': (_raw_value(g('cdate')) if g('cdate') else _TODAY_MIDNIGHT),
+        'cdate': (_claim_dt(g('cdate')) or _TODAY_MIDNIGHT),
         'patientname': g('patientname'), 'patientno': g('patientno'),
         'financialno': g('financialno'), 'fileno': g('fileno'),
         'roshettano': g('roshettano'), 'membershipno': g('membershipno'),
         'deptname': g('deptname'), 'patientnationality': g('patientnationality'),
         'relativedegree': g('relativedegree'), 'comment': g('comment'),
-        'examdate': (_raw_value(g('examdate')) if g('examdate') else None),
+        'examdate': _claim_dt(g('examdate')),
         'hi_typecode': g('hi_typecode'), 'table_dumped': _NOW, 'vf1': g('vf1'),
     }
 
@@ -921,7 +1404,15 @@ def _execute_write(conn, order, seller):
     _header_points = 0
     for ln in order.lines.all():
         if ln.source_raw:
-            _plan.append((ln, None, 0, True))             # cloned line → reproduced verbatim below
+            # cloned line → reproduced verbatim below. For a RETURN the header must reverse the sale's
+            # RECORDED points (source vf4 negated) so personnewbal = Σ line vf4 (native 534: −15), NOT a
+            # live recompute — the rate may have drifted since the sale (here to 0).
+            _sp = 0
+            if order.doc_kind == 'return':
+                _v = ln.source_raw.get('vf4')
+                _sp = (-int(_v) if _v not in (None, '') else 0)
+            _header_points += _sp
+            _plan.append((ln, None, _sp, True))
             continue
         code = str(ln.softech_itemcode).strip()
         unit_net = float(ln.trans_price or 0)             # per-unit net sale value (points basis)
@@ -985,8 +1476,11 @@ def _execute_write(conn, order, seller):
     _wrote_cc = 0
     credit_pno = next((pno for pt, pno in tender_pnos if pt == 'credit'),
                       (tender_pnos[0][1] if tender_pnos else None))
-    if order.source_companies_raw:                         # claim record (patient/insurance)
-        _exec_insert(conn, 'companiesitems5', _companies_row(order, order.source_companies_raw, docnumber))
+    # A CLAIM channel ALWAYS gets a companiesitems5 row (native creates one even with NO patient data —
+    # golden 7875 employee = an empty row: just the keys + stamps). Populate it from source_companies_raw
+    # when the Contract-Emp-Data tab was filled, else write the empty keyed row.
+    if order.source_companies_raw or order.channel in CLAIM_CHANNELS:
+        _exec_insert(conn, 'companiesitems5', _companies_row(order, order.source_companies_raw or {}, docnumber))
         _wrote_companies = 1
     if order.source_cc_raw:                                # cloned credit/cost-center record(s)
         for ccraw in order.source_cc_raw:

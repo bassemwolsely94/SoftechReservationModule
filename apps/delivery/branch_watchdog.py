@@ -86,15 +86,15 @@ def _notify_branch_event(branch_id, host, kind, streak=0, since=None,
 
     if kind == 'down':
         title = f'⚠️ تعذّر الاتصال بفرع {branch_id}'
-        body  = f'خادم الفرع ({host}) لا يستجيب. قد يكون انقطاعاً مؤقتاً — ستتم إعادة المحاولة تلقائياً.'
+        body  = f'سيرفر الفرع ({host}) لا يستجيب. قد يكون انقطاعاً مؤقتاً — ستتم إعادة المحاولة تلقائياً.'
     elif kind == 'chronic':
         title = f'🔴 فرع {branch_id} منقطع عن الشبكة'
-        body  = (f'خادم الفرع ({host}) غير متصل منذ {streak} محاولات متتالية'
+        body  = (f'سيرفر الفرع ({host}) غير متصل منذ {streak} محاولات متتالية'
                  + (f' (منذ {since})' if since else '')
-                 + '. يُرجى التأكد من تشغيل الخادم والشبكة بالفرع.')
+                 + '. يُرجى التأكد من تشغيل السيرفر والشبكة بالفرع.')
     else:  # recovered
         title = f'✅ عاد اتصال فرع {branch_id}'
-        body  = f'خادم الفرع ({host}) يعمل الآن بشكل طبيعي.'
+        body  = f'سيرفر الفرع ({host}) يعمل الآن بشكل طبيعي.'
 
     dedup = f'branchconn_{kind}_{branch_id}_{since or "now"}'
 

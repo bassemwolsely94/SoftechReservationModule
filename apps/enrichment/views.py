@@ -21,6 +21,7 @@ from .serializers import (
     EnrichmentSuggestionSerializer, EnrichmentBatchSerializer,
 )
 from .gap_detector import get_completeness_report
+from apps.catalog.wildcard import wq
 
 
 # ── Item Enrichment ViewSet ───────────────────────────────────────────────────
@@ -53,7 +54,7 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
         search = p.get('search', '').strip()
         if search:
             qs = qs.filter(
-                Q(item__name__icontains=search) |
+                wq(search, 'item__name') |
                 Q(item__softech_id__icontains=search) |
                 Q(item__barcode__icontains=search)
             )

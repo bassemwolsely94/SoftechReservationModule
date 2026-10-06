@@ -392,3 +392,5 @@ Every module in the platform is registered here with its purpose, status, and de
 | omni | `/api/omni/` | COMPLETE | Unified inbox / CEP (envelope over whatsapp/pbx/callcenter) |
 | social | `/api/social/` | COMPLETE | Social channel webhooks (Messenger/IG/Telegram/TikTok) |
 | transits | `/api/transits/` | COMPLETE | In-transit replenishment monitoring + picking/stocking export |
+| replacement | `/api/replacement/` | PHASE 0 (read-only) | بدل الروشتة / client buy-back cases (doc 25): one case per virtual-supplier purchase (4469–4472, 3068, 4069), reconstructed from finance A/P + procurement.PurchaseLine + PurchaseHistory mirrors; append-only entitlement ledger = projection of the native A/P balance (invariant I-1); `reconstruct_replacement_cases`; UI `/replacement` + `/replacement/:id`. NO SOFTECH writes |
+| lineage | — (used by replacement) | PHASE 0 | Shared `DocumentRef` (4-part native key) + `DocumentEdge` (pays/funded_by/returns/cancels; native/matched/manual; human decisions never overwritten) |

@@ -15,8 +15,17 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../store/authStore'
+import ErrorBoundary from './ErrorBoundary'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import { useOnline, useOfflineQueue } from './mobileUi'
+import { useThemeMode } from '../theme/useThemeMode'
+
+const MODE_EMOJI = { light: '☀️', dark: '🌙', system: '💻' }
+const MODE_NEXT_AR = {
+  light:  'التبديل إلى الوضع الداكن',
+  dark:   'التبديل إلى وضع النظام',
+  system: 'التبديل إلى الوضع الفاتح',
+}
 
 // Keep the bottom bar to 5 slots; beyond that, overflow into a "More" sheet.
 const INLINE_MAX = 5
@@ -61,6 +70,9 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
   })
   const badgeFor = (tab) => (tab.badge === 'approvals' ? approvalsCount : 0)
 
+  // Personal light/dark/system mode (per-device).
+  const { mode, cycle } = useThemeMode()
+
   // Notifications bell (top bar) — unread count.
   const { data: unread = 0 } = useQuery({
     queryKey: ['m-notif-unread'],
@@ -86,6 +98,14 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={cycle}
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/15 active:bg-white/30"
+            title={MODE_NEXT_AR[mode]}
+            aria-label={MODE_NEXT_AR[mode]}
+          >
+            <span className="text-base leading-none">{MODE_EMOJI[mode]}</span>
+          </button>
           <button
             onClick={() => navigate('/m/notifications')}
             className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-white/15 active:bg-white/30"
@@ -140,7 +160,9 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
       )}
 
       {/* ── Content ──────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-auto pb-20">{children ?? <Outlet />}</main>
+      <main className="flex-1 overflow-auto pb-20">
+        <ErrorBoundary scope="page" resetKey={location.pathname}>{children ?? <Outlet />}</ErrorBoundary>
+      </main>
 
       {/* ── Bottom tab bar ───────────────────────────────────────────────── */}
       {visibleTabs.length > 0 && (

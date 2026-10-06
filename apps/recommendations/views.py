@@ -22,6 +22,28 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+# ── Basket intelligence / Sales opportunities ──────────────────────────────────
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def basket_intel(request):
+    """GET ?items=code1,code2&customer=<id>&branch=<id>&limit=6 — ranked opportunities."""
+    from .basket_intelligence import basket_intelligence
+    items = [c.strip() for c in (request.query_params.get('items') or '').split(',') if c.strip()]
+    customer = request.query_params.get('customer')
+    branch = request.query_params.get('branch')
+    try:
+        limit = min(int(request.query_params.get('limit', 6)), 20)
+    except (TypeError, ValueError):
+        limit = 6
+    results = basket_intelligence(
+        items,
+        customer_id=int(customer) if customer and str(customer).isdigit() else None,
+        branch_id=int(branch) if branch and str(branch).isdigit() else None,
+        limit=max(1, limit),
+    )
+    return Response({'count': len(results), 'results': results})
+
+
 # ── Latest run ────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])

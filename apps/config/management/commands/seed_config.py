@@ -101,6 +101,11 @@ DEFAULT_SETTINGS = [
          description='الصنف الذي يبلغ سعر جمهوره هذا الحد أو أكثر يذهب لمنطقة الغوالي في ورقة التجميع. '
                      'مناطق التجميع وقواعدها تُدار من شاشة /pick-zones (جداول PickZone).',
          value='500', value_type='integer', category='transfers', is_public=False),
+    dict(key='supply_network_case_min_lost_egp', label='حد خسارة المبيعات لفتح حالة نقص سوق (ج.م/شهر)',
+         description='وحدة التوريد (/supply): صنف نقص السوق على مستوى الشركة يُفتح له حالة متابعة يومية فقط إذا '
+                     'أكّده مستخدم في شاشة نواقص السوق، أو كانت مبيعاته الضائعة المقدّرة هذا الحد أو أكثر شهرياً. '
+                     'الأصناف الأخرى تبقى في قائمة مراقبة نواقص السوق.',
+         value='2000', value_type='integer', category='general', is_public=False),
 
     # ━━ Notifications ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     dict(key='notify_on_new_reservation',    label='إشعار عند حجز جديد',         description='',

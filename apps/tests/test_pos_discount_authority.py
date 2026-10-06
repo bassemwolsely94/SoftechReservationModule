@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
-from apps.pos_orders.discount_authority import check_order
+from apps.pos_orders.discount_authority import check_order, validate_contract_discount_role
 from .factories import make_branch
 
 
@@ -81,3 +81,41 @@ class DiscountAuthorityTests(TestCase):
     def test_zero_discount_ignored(self):
         o = _order(); _line(o, 0)
         self.assertEqual(check_order(o, FakeReader(contracted=(Decimal('0'), 0))), [])
+
+
+def _ord(channel):
+    br = make_branch()
+    return SoftechSalesOrder.objects.create(
+        branch=br, softech_branchcode=br.softech_branch_id, store_code='130',
+        seller_usercode='1509', softech_pic='x', channel=channel)
+
+
+class ContractDiscountRoleTests(TestCase):
+    """Manager-locked contract/permanent discount (deterministic, no live DB)."""
+
+    def test_nonpriv_contract_discount_blocked(self):
+        o = _ord('contract'); _line(o, 10)
+        errs = validate_contract_discount_role(o, privileged=False)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0]['field'], 'cust_discp')
+
+    def test_priv_contract_discount_allowed(self):
+        o = _ord('contract'); _line(o, 10)
+        self.assertEqual(validate_contract_discount_role(o, privileged=True), [])
+
+    def test_nonpriv_permanent_discount_blocked(self):
+        o = _ord('permanent'); _line(o, 5)
+        self.assertEqual(len(validate_contract_discount_role(o, privileged=False)), 1)
+
+    def test_nonpriv_cash_discount_allowed(self):
+        o = _ord('cash'); _line(o, 5)          # retail is cap-only, not manager-locked here
+        self.assertEqual(validate_contract_discount_role(o, privileged=False), [])
+
+    def test_offer_line_skipped(self):
+        o = _ord('contract'); ln = _line(o, 10)
+        ln.discount_source = 'offer'; ln.save()
+        self.assertEqual(validate_contract_discount_role(o, privileged=False), [])
+
+    def test_zero_discount_allowed(self):
+        o = _ord('contract'); _line(o, 0)
+        self.assertEqual(validate_contract_discount_role(o, privileged=False), [])

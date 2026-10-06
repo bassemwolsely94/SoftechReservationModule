@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
 from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
 from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
+from .wildcard import WildcardSearchFilter
 
 # ── Static filter option lists (reused by both ItemViewSet and purchasing.filter_options) ──
 
@@ -161,34 +162,13 @@ def apply_item_operational_filters(qs, params):
         except (ValueError, TypeError):
             pass
 
-    # Wildcard name search — used by advanced search modal when user types '*'.
-    # Converts SOFTECH-style wildcards (* = any characters) to PostgreSQL iregex.
-    # Examples:  urosolv*  →  ^urosolv.*   (prefix match, case-insensitive)
-    #            *cillin   →  .*cillin$     (suffix match)
-    #            amox*500  →  ^amox.*500$   (middle wildcard)
-    # When no '*', falls back to plain icontains on name + name_scientific.
+    # Name search (advanced search modal) — the system-wide rules in apps/catalog/wildcard.py:
+    # * and % = any characters, contains, parts in order, space literal; ranked literal text
+    # first, then the pattern, then the same words in any order.
     name_filter = params.get('name')
     if name_filter not in (None, ''):
-        import re as _re
-        name_q = name_filter.strip()
-        if '*' in name_q:
-            # Build regex: escape special chars first, then restore * → .*
-            # Add ^ anchor only if pattern doesn't start with '*' (prefix search)
-            # Add $ anchor only if pattern doesn't end with '*' (suffix search)
-            escaped = _re.escape(name_q).replace(r'\*', '.*')
-            if not name_q.startswith('*'):
-                escaped = '^' + escaped
-            if not name_q.endswith('*'):
-                escaped = escaped + '$'
-            qs = qs.filter(
-                models.Q(name__iregex=escaped) |
-                models.Q(name_scientific__iregex=escaped)
-            )
-        else:
-            qs = qs.filter(
-                models.Q(name__icontains=name_q) |
-                models.Q(name_scientific__icontains=name_q)
-            )
+        from .wildcard import filter_and_rank
+        qs = filter_and_rank(qs, name_filter, ('name', 'name_scientific'))
 
     return qs
 
@@ -201,12 +181,14 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    # search runs AFTER ordering: its rank (literal text → pattern → any word order) leads,
+    # the chosen sort column orders within each rank
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
     filterset_fields = ['category', 'requires_fridge', 'medicine_type',
                         'insurance_type', 'item_level', 'is_fast_moving',
-                        'has_points', 'is_stockable',
+                        'has_points', 'is_stockable', 'batch_required',
                         'branch_trans', 'supplier_trans', 'customer_trans',
-                        'nosale_classif', 'store_classif']
+                        'nosale_classif', 'store_classif', 'softech_id']  # softech_id = EXACT lookup
     # barcodes__barcode searches the ItemBarcode table (multiple barcodes per item,
     # including EAN-13 / GS1 barcodes scanned with physical barcode readers).
     search_fields = ['name', 'name_scientific', 'barcode', 'softech_id', 'barcodes__barcode']
@@ -422,9 +404,11 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         GET /api/items/softech-search/?q=metformin     (active ingredient)
         GET /api/items/softech-search/?q=A10BA02       (ATC code)
 
-        Wildcard rules (mirrors SOFTECH native search):
-          *  anywhere in the query string is converted to SQL LIKE %
-          If no * is present, the term is wrapped with % on both sides (implicit match).
+        Search rules = apps/catalog/wildcard.py (the same in every search box):
+          * and % = any characters (vol*ren*50*tab* = vol%ren%50%tab), always "contains",
+          parts in the order typed, space literal. Ranked: exact code/barcode, learned
+          memory, literal text, pattern, any word order, Arabic by sound; nothing found →
+          typo-tolerant rows flagged approx «تقريبي».
 
         Disease / symptom expansion:
           Arabic and English disease terms (سكر, ضغط, diabetes, hypertension…) are
@@ -432,7 +416,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
           ActiveIngredient.chronic_class mapping. Results are ranked: exact name
           matches first, then ingredient/disease matches.
 
-        Falls back to PostgreSQL catalog if SOFTECH is unavailable.
+        PG catalog first; SOFTECH live only when PG has nothing (new, unsynced items).
         Returns name, code, scientific name, barcode, public price, and per-branch stock.
 
         Optional params:
@@ -447,132 +431,23 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         branch_id = request.query_params.get('branch_id')
 
-        # ── Wildcard conversion ───────────────────────────────────────────────
-        # User types "*" → we convert to SQL "%".
-        # If no wildcard present, wrap both sides (standard substring match).
-        if '*' in q:
-            like_q = q.replace('*', '%')
-        else:
-            like_q = f'%{q}%'
-        like_q = like_q.lower()   # normalize; SOFTECH comparison is case-insensitive
+        # ── ONE search behaviour for the whole system (apps/catalog/wildcard.py) ──
+        # * and % = any characters, parts in the order typed, space literal; ranked:
+        # exact code/barcode → learned memory → literal text → wildcard in order → any word
+        # order → Arabic by sound → (nothing found) typo-tolerant «تقريبي».
+        # PG first (mirrors SOFTECH, and its prices are preferred anyway); SOFTECH live is
+        # only asked when PG finds nothing — behind a breaker so a down server 100 never
+        # makes the box hang for a minute per keystroke.
+        from apps.catalog.wildcard import item_search, parse
+        tiers = item_search(q, limit=50)
+        results = _search_rows(tiers, branch_id)
+        if not any(r.get('tier') != 'approx' for r in results):
+            live = _softech_live_search('%' + '%'.join(parse(q)['segments']).lower() + '%', branch_id)
+            if live:
+                have = {r['softech_id'] for r in results}
+                results = [r for r in live if r['softech_id'] not in have] + results
 
-        results = []
-
-        # ── SOFTECH live search ───────────────────────────────────────────────
-        try:
-            from config.sybase import get_sybase_connection
-            from apps.sync.sybase_queries import QUERY_ITEM_SEARCH
-            conn   = get_sybase_connection()
-            cursor = conn.cursor()
-            cursor.execute(QUERY_ITEM_SEARCH, [like_q, like_q, like_q, like_q])
-            rows   = cursor.fetchall()
-            conn.close()
-
-            for row in rows:
-                softech_id = str(row[0]).strip() if row[0] else ''
-                results.append({
-                    'softech_id':      softech_id,
-                    'name':            str(row[1]).strip() if row[1] else '',
-                    'name_scientific': str(row[2]).strip() if row[2] else '',
-                    'barcode':         str(row[3]).strip() if row[3] else '',
-                    # row[5] = itemsaleprice  = full-pack retail price (what the customer pays)
-                    # row[6] = unitsaleprice  = price per individual unit / strip
-                    'pack_price': float(row[5]) if row[5] is not None else 0.0,
-                    'unit_price': float(row[6]) if row[6] is not None else 0.0,
-                    'requires_fridge': bool(row[9]) if row[9] else False,
-                    'medicine_type':   str(row[10]).strip() if row[10] else '',
-                    'source':          'softech',
-                    'item_id':         None,   # filled below from PG catalog
-                    'qty_at_branch':   None,
-                })
-
-            # Enrich with local PG id + branch stock
-            if results:
-                codes   = [r['softech_id'] for r in results if r['softech_id']]
-                pg_map  = {
-                    item.softech_id: item
-                    for item in Item.objects.filter(softech_id__in=codes, is_active=True)
-                }
-                if branch_id:
-                    from django.db.models import Sum as _Sum
-                    stock_qs = (
-                        ItemStock.objects
-                        .filter(item__softech_id__in=codes, branch_id=branch_id)
-                        .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
-                        .values('item__softech_id')
-                        .annotate(qty=_Sum('quantity_on_hand'))
-                    )
-                    stock_map = {r['item__softech_id']: float(r['qty'] or 0) for r in stock_qs}
-                else:
-                    stock_map = {}
-
-                for r in results:
-                    pg = pg_map.get(r['softech_id'])
-                    if pg:
-                        r['item_id'] = pg.id
-                        # Prefer PG values (synced from SOFTECH) so prices are never stale
-                        r['pack_price'] = float(pg.pack_price) or r['pack_price']
-                        r['unit_price'] = float(pg.unit_price) or r['unit_price']
-                    if branch_id:
-                        r['qty_at_branch'] = stock_map.get(r['softech_id'], 0.0)
-
-        except Exception:
-            # ── PG catalog fallback ───────────────────────────────────────────
-            # Build the same wildcard filter in Django ORM
-            pg_like = like_q.replace('%', '')   # strip SQL %, use icontains
-            # For true wildcard we build a regex-style filter
-            if '*' in q:
-                # Convert user pattern to a series of icontains fragments
-                parts = [p for p in q.split('*') if p.strip()]
-                pg_filter = models.Q()
-                for part in parts:
-                    pg_filter &= (
-                        models.Q(name__icontains=part) |
-                        models.Q(name_scientific__icontains=part)
-                    )
-            else:
-                pg_filter = (
-                    models.Q(name__icontains=q) |
-                    models.Q(softech_id__icontains=q) |
-                    models.Q(barcode__icontains=q) |
-                    models.Q(name_scientific__icontains=q)
-                )
-
-            qs = Item.objects.filter(is_active=True).filter(pg_filter)
-            if branch_id:
-                from django.db.models import Sum as _Sum
-                qs = qs.prefetch_related('stock_levels')
-                stock_qs = (
-                    ItemStock.objects
-                    .filter(item__in=qs, branch_id=branch_id)
-                    .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
-                    .values('item_id')
-                    .annotate(qty=_Sum('quantity_on_hand'))
-                )
-                stock_map = {r['item_id']: float(r['qty'] or 0) for r in stock_qs}
-            else:
-                stock_map = {}
-
-            results = [
-                {
-                    'softech_id':      item.softech_id,
-                    'name':            item.name,
-                    'name_scientific': item.name_scientific,
-                    'barcode':         item.barcode,
-                    'pack_price': float(item.pack_price),  # full pack retail price
-                    'unit_price': float(item.unit_price),  # per-unit/strip price
-                    'requires_fridge': item.requires_fridge,
-                    'medicine_type':   item.medicine_type,
-                    'source':          'pg_catalog',
-                    'item_id':         item.id,
-                    'qty_at_branch':   stock_map.get(item.id) if branch_id else None,
-                }
-                for item in qs[:50]
-            ]
-
-        # ── Disease/ingredient expansion — PG only ────────────────────────────
-        # If SOFTECH returned results, skip this. If SOFTECH was unreachable,
-        # the PG fallback already ran. Only run expansion if results are sparse.
+        # ── Disease/ingredient expansion — only when results are sparse ────────
         if len(results) < 3:
             expanded = _expand_disease_query(q)
             if expanded:
@@ -583,6 +458,84 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
                         already_ids.add(exp_r['softech_id'])
 
         return Response({'results': results, 'count': len(results)})
+
+
+# ── Item search rows (shared by softech_search) ───────────────────────────────
+
+def _search_rows(tiers, branch_id) -> list:
+    """[(item_id, tier)] from wildcard.item_search → softech-search result dicts, same
+    order. Flags for the picker chips: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»."""
+    if not tiers:
+        return []
+    ids = [i for i, _ in tiers]
+    items = {i.id: i for i in Item.objects.filter(id__in=ids)}
+    stock = {}
+    if branch_id:
+        from django.db.models import Sum as _Sum
+        stock = {r['item_id']: float(r['qty'] or 0) for r in (
+            ItemStock.objects.filter(item_id__in=ids, branch_id=branch_id)
+            .exclude(softech_store_code__in=EXCLUDED_STORE_CODES)
+            .values('item_id').annotate(qty=_Sum('quantity_on_hand')))}
+    rows = []
+    for iid, tier in tiers:
+        item = items.get(iid)
+        if item is None:
+            continue
+        row = {
+            'softech_id': item.softech_id, 'name': item.name,
+            'name_scientific': item.name_scientific, 'barcode': item.barcode,
+            'pack_price': float(item.pack_price), 'unit_price': float(item.unit_price),
+            'requires_fridge': item.requires_fridge, 'medicine_type': item.medicine_type,
+            'source': 'pg_catalog', 'item_id': item.id, 'tier': tier,
+            'qty_at_branch': stock.get(item.id, 0.0) if branch_id else None,
+        }
+        if tier in ('learned', 'sound', 'approx'):
+            row[tier] = True
+        rows.append(row)
+    return rows
+
+
+_SOFTECH_SEARCH_BREAKER = 'catalog:softech_search_down'
+
+
+def _softech_live_search(like_q: str, branch_id) -> list:
+    """SOFTECH items LIKE the pattern that the PG catalog doesn't have yet (just created,
+    not synced). A failure trips a 5-minute breaker — no waiting on a down server."""
+    from django.core.cache import cache
+    if cache.get(_SOFTECH_SEARCH_BREAKER):
+        return []
+    try:
+        from config.sybase import get_sybase_connection
+        from apps.sync.sybase_queries import QUERY_ITEM_SEARCH
+        conn = get_sybase_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(QUERY_ITEM_SEARCH, [like_q, like_q, like_q, like_q])
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        cache.set(_SOFTECH_SEARCH_BREAKER, True, 300)
+        return []
+    out = []
+    for row in rows:
+        out.append({
+            'softech_id': str(row[0]).strip() if row[0] else '',
+            'name': str(row[1]).strip() if row[1] else '',
+            'name_scientific': str(row[2]).strip() if row[2] else '',
+            'barcode': str(row[3]).strip() if row[3] else '',
+            'pack_price': float(row[5]) if row[5] is not None else 0.0,
+            'unit_price': float(row[6]) if row[6] is not None else 0.0,
+            'requires_fridge': bool(row[9]) if row[9] else False,
+            'medicine_type': str(row[10]).strip() if row[10] else '',
+            'source': 'softech', 'item_id': None, 'tier': 'ordered',
+            'qty_at_branch': 0.0 if branch_id else None,
+        })
+    pg = {i.softech_id: i.id for i in Item.objects.filter(
+        softech_id__in=[r['softech_id'] for r in out if r['softech_id']], is_active=True)}
+    for r in out:
+        r['item_id'] = pg.get(r['softech_id'])
+    return out
 
 
 # ── Disease / ingredient query expansion ──────────────────────────────────────

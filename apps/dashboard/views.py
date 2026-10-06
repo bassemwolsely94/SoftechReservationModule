@@ -5,6 +5,7 @@ Three endpoints:
   GET /api/dashboard/summary/      — main dashboard (all roles, branch-scoped)
   GET /api/dashboard/followups/    — follow-ups due today with full detail
   GET /api/dashboard/purchasing/   — purchasing analytics (admin/purchasing only)
+  GET /api/dashboard/supply/       — demand & supply control-tower KPIs (doc 24; supply RBAC)
 """
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -457,3 +458,23 @@ def purchasing_dashboard(request):
         'rejection_notes':   rejection_notes,
         'flow_matrix':       flow_matrix,
     })
+
+
+# ── Demand & Supply control-tower KPIs (doc 24 Phase 7) ──────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def supply_dashboard(request):
+    """KPIs for the supply orchestration module: open queue, time to resolve, sourcing mix
+    (internal vs external), cash avoided by internal transfers, supplier fill rate, catalog
+    match accuracy. Every figure ships with its formula in ``definitions``.
+    Same server-side RBAC as the /supply workspace (purchasing/view)."""
+    from apps.supply.kpis import supply_kpis
+    from apps.supply.permissions import supply_allowed
+    if not supply_allowed(request, 'view'):
+        return Response({'detail': 'ليس لديك صلاحية على وحدة التزويد والتوريد.'}, status=403)
+    try:
+        days = max(1, min(int(request.query_params.get('days', 30)), 365))
+    except (TypeError, ValueError):
+        days = 30
+    return Response(supply_kpis(days=days, branch_id=request.query_params.get('branch') or None))

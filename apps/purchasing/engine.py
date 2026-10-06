@@ -313,7 +313,9 @@ class DemandEngine:
     # ── Entry point ───────────────────────────────────────────────────────────
 
     def run(self, *, full_backfill: bool = False, sync_only: bool = False,
-            calc_only: bool = False, existing_run=None):
+            calc_only: bool = False, existing_run=None,
+            apply_phantom_reduction=None, phantom_reduce_tier=None,
+            apply_spike_cap=None):
         """
         Execute the pipeline. Returns the DemandCalculationRun object.
 
@@ -392,6 +394,33 @@ class DemandEngine:
             #  the network total so both reflect the configured coverage.)
             self._apply_coverage(metrics, aggregated)
 
+            # MODULE 10.6 — Phantom-substitution order reduction. DORMANT by default
+            # (flag/monitor only); scales flagged items' recommended gap by their
+            # order-% ONLY when the owner activates it for this run (or by setting).
+            from django.conf import settings as _settings
+            _apply_pr = (getattr(_settings, 'PHANTOM_APPLY_REDUCTION', False)
+                         if apply_phantom_reduction is None else bool(apply_phantom_reduction))
+            _reduce_tier = (getattr(_settings, 'PHANTOM_REDUCE_TIER', 'strong')
+                            if phantom_reduce_tier is None else phantom_reduce_tier)
+            if _apply_pr:
+                try:
+                    self._apply_phantom_reduction(metrics, aggregated, reduce_tier=_reduce_tier)
+                except Exception as exc:
+                    logger.warning('[DemandEngine] MODULE 10.6 phantom reduction skipped: %s', exc)
+
+            # MODULE 10.7 — Demand-spike detection (always) + REVIEW-GATED order cap.
+            # Detection flags STRONG/WATCH spikes for review; the cap cuts المطلوب only
+            # for spike_confirmed STRONG items AND only when activated for the run.
+            if getattr(_settings, 'CASH_SPIKE_DETECT_IN_ENGINE_RUN', True):
+                try:
+                    self._detect_spikes(metrics)
+                    _apply_cap = (getattr(_settings, 'CASH_APPLY_SPIKE_CAP', False)
+                                  if apply_spike_cap is None else bool(apply_spike_cap))
+                    if _apply_cap:
+                        self._apply_spike_cap(metrics, aggregated)
+                except Exception as exc:
+                    logger.warning('[DemandEngine] MODULE 10.7 spike detect/cap skipped: %s', exc)
+
             # MODULE 11 — Persist to DB
             rows_written = self._persist(metrics, aggregated)
 
@@ -423,6 +452,20 @@ class DemandEngine:
             except Exception as exc:
                 # Non-fatal: snapshotting/alerts must never block the demand run.
                 logger.warning('[DemandEngine] MODULE 14 skipped: %s', exc)
+
+            # MODULE 15 — Phantom-substitution detection (مبيعات وهمية). Adds ~60s of
+            # SOFTECH aggregation; set PHANTOM_SCAN_IN_ENGINE_RUN=False to move it to
+            # the scheduled `detect_phantom_substitution` command instead.
+            from django.conf import settings as _settings
+            if getattr(_settings, 'PHANTOM_SCAN_IN_ENGINE_RUN', True):
+                try:
+                    from .phantom import scan as phantom_scan
+                    ps = phantom_scan(persist=True)
+                    logger.info('[DemandEngine] MODULE 15 — phantom scan: %d flagged, %d updated',
+                                ps['flagged'], ps['persisted'])
+                except Exception as exc:
+                    # Non-fatal: phantom detection must never block the demand run.
+                    logger.warning('[DemandEngine] MODULE 15 skipped: %s', exc)
 
             elapsed = time.monotonic() - t0
             self.run_obj.status             = 'success'
@@ -653,9 +696,8 @@ class DemandEngine:
         Returns dict: (item_id, branch_id) → float qty. Empty on any failure
         (in-transit is an enrichment — never block the run over it).
         """
-        from collections import defaultdict
         try:
-            from apps.transits.models import InTransitTransfer
+            from apps.purchasing.in_transit import live_rows, sum_by
         except Exception as exc:
             logger.warning('[DemandEngine] transits app unavailable (%s) — in-transit skipped', exc)
             return {}
@@ -663,38 +705,19 @@ class DemandEngine:
         # softech_id → item_id  (reuse the already-built item map)
         code_to_id = {code: iid for code, (iid, _price) in self._item_map.items()}
 
-        qs = InTransitTransfer.objects.filter(
-            transit_status='in_transit', receiving_branch__isnull=False,
-        )
-        # Freshness cutoff: SOFTECH transfers received in ~3 days (p90); older
-        # "in_transit" rows are stale/unreconciled documents (received-but-unlinked
-        # or abandoned) — NOT live pipeline. Excluding them stops phantom qty from
-        # shrinking the gap. 0 = disable the filter.
-        max_age = getattr(self, '_intransit_max_age', 14)
-        excluded = 0
-        if max_age and max_age > 0:
-            cutoff = timezone.localdate() - datetime.timedelta(days=max_age)
-            excluded = qs.filter(issue_date__lt=cutoff).count()
-            qs = qs.filter(issue_date__gte=cutoff)
-
-        result = defaultdict(float)
-        rows = qs.values_list('receiving_branch_id', 'items_snapshot')
-        n_rows = 0
-        for branch_id, snapshot in rows.iterator():
-            n_rows += 1
-            for line in (snapshot or []):
-                code = str(line.get('itemcode') or '').strip()
-                iid = code_to_id.get(code)
-                if iid is None:
-                    continue
-                try:
-                    result[(iid, branch_id)] += float(line.get('qty') or 0)
-                except (TypeError, ValueError):
-                    pass
+        # ONE shared definition (apps/purchasing/in_transit.py — also used by the branch-
+        # request fulfilment plan): dispatched-not-received doccode-125 transfers issued
+        # within the freshness window. Older "in_transit" rows are stale/unreconciled
+        # documents (received ~3 days p90), NOT live pipeline — excluding them stops
+        # phantom qty from shrinking the gap. 0 = disable the filter.
+        rows, excluded, max_age = live_rows(getattr(self, '_intransit_max_age', 14))
+        rows = list(rows)
+        n_rows = len(rows)
+        result = sum_by(rows, item_key=code_to_id.get, branch_key=lambda bid: bid)
         logger.info('[DemandEngine] in-transit: %d live transfers → %d (item,branch) '
                     'pairs (%d stale >%dd excluded)',
                     n_rows, len(result), excluded, max_age)
-        return dict(result)
+        return result
 
     def _fetch_stkbal(self) -> dict:
         """
@@ -1302,6 +1325,125 @@ class DemandEngine:
             if m['gap'] > 0:
                 a['total_gap']         += m['gap']
                 a['branches_with_gap'] += 1
+
+    # ── MODULE 10.6 — Phantom-substitution order reduction (DORMANT) ───────────
+
+    def _apply_phantom_reduction(self, metrics: dict, aggregated: dict,
+                                 reduce_tier: str = 'strong') -> None:
+        """Scale the recommended gap of flagged phantom items by their order-%
+        (the genuine, non-phantom fraction), keeping a small safety cushion — so
+        the sheet stops over-ordering items whose "sales" are patient buy-backs.
+
+        reduce_tier='strong' (default, ease-in) → reduce STRONG items only
+        (ratio ≥ threshold); WATCH items (high-volume 30–50%) stay monitor-only.
+        reduce_tier='all' → reduce both tiers. Only invoked when the owner
+        activates reduction for the run (default OFF). Mirrors _apply_coverage's
+        re-sum so network totals stay consistent."""
+        from apps.catalog.models import Item
+        from .phantom import reduced_order_qty, THRESHOLD
+        strong_only = (str(reduce_tier).lower() != 'all')
+        flagged = {}
+        for iid, opct, ratio in (Item.objects.filter(is_phantom_substitution=True)
+                                 .values_list('id', 'phantom_order_pct', 'phantom_ratio')):
+            if strong_only and (ratio or 0) < THRESHOLD:
+                continue                       # watch-tier stays monitor-only
+            flagged[iid] = opct
+        if not flagged:
+            return
+        n = 0
+        for (item_id, branch_id), m in metrics.items():
+            if item_id in flagged and m['gap'] > 0:
+                new_gap = reduced_order_qty(m['gap'], flagged[item_id], apply=True,
+                                            monthly_avg=m['monthly_avg'])
+                if new_gap != m['gap']:
+                    m['gap']      = new_gap
+                    m['priority'] = calc_priority(m['coverage_months'], new_gap)
+                    n += 1
+        # Re-sum network total_gap / branches_with_gap from the reduced gaps.
+        for a in aggregated.values():
+            a['total_gap']         = 0.0
+            a['branches_with_gap'] = 0
+        for (item_id, branch_id), m in metrics.items():
+            a = aggregated.get(item_id)
+            if a is None:
+                continue
+            if m['gap'] > 0:
+                a['total_gap']         += m['gap']
+                a['branches_with_gap'] += 1
+        logger.info('[DemandEngine] MODULE 10.6 — phantom reduction applied to %d branch-rows', n)
+
+    # ── MODULE 10.7 — Demand-spike detection + review-gated cap ────────────────
+
+    def _detect_spikes(self, metrics: dict) -> None:
+        """Classify each item's network demand shape (from the run's metrics) and
+        store the spike flag on catalog.Item for human review. Auto-heals: an item
+        that is no longer a spike is cleared (including a stale confirmation)."""
+        from apps.catalog.models import Item
+        from .spike import classify_spike
+        from django.utils import timezone
+        # network qty windows per item
+        wins = {}
+        for (item_id, _b), m in metrics.items():
+            a = wins.setdefault(item_id, [0.0, 0.0, 0.0])
+            a[0] += float(m.get('qty_30d', 0) or 0)
+            a[1] += float(m.get('qty_90d', 0) or 0)
+            a[2] += float(m.get('qty_365d', 0) or 0)
+        now = timezone.now()
+        touched = Item.objects.filter(id__in=list(wins.keys())).only(
+            'id', 'is_spike', 'spike_tier', 'spike_confirmed', 'is_stockable')
+        bulk = []
+        for it in touched:
+            q30, q90, q365 = wins[it.id]
+            r = classify_spike(q30, q90, q365)
+            spike = bool(r['tier']) and it.is_stockable
+            if not spike and not it.is_spike:
+                continue                      # nothing to write
+            it.is_spike       = spike
+            it.spike_tier     = r['tier'] if spike else ''
+            it.spike_ratio    = r['ratio'] if spike else 0.0
+            it.spike_recent   = r['recent']
+            it.spike_prior    = r['prior']
+            it.spike_detected_at = now
+            if not spike:
+                it.spike_confirmed = False    # resolved → clear the review decision
+            bulk.append(it)
+        if bulk:
+            Item.objects.bulk_update(bulk, [
+                'is_spike', 'spike_tier', 'spike_ratio', 'spike_recent',
+                'spike_prior', 'spike_detected_at', 'spike_confirmed'], batch_size=500)
+        logger.info('[DemandEngine] MODULE 10.7 — spike detect: %d flag rows updated', len(bulk))
+
+    def _apply_spike_cap(self, metrics: dict, aggregated: dict) -> None:
+        """Cut the recommended gap of CONFIRMED STRONG spike items to CAP_MONTHS of
+        each branch's own recent rate ("buy a month, watch it"). Review-gated: only
+        items a human set spike_confirmed=True. Mirrors _apply_coverage's re-sum."""
+        from apps.catalog.models import Item
+        from .spike import capped_gap
+        confirmed = set(Item.objects.filter(
+            is_spike=True, spike_tier='strong', spike_confirmed=True
+        ).values_list('id', flat=True))
+        if not confirmed:
+            return
+        n = 0
+        for (item_id, _b), m in metrics.items():
+            if item_id in confirmed and m['gap'] > 0:
+                branch_recent = float(m.get('qty_90d', 0) or 0) / 3.0
+                new_gap = capped_gap(m['gap'], branch_recent, apply=True)
+                if new_gap != m['gap']:
+                    m['gap']      = new_gap
+                    m['priority'] = calc_priority(m['coverage_months'], new_gap)
+                    n += 1
+        for a in aggregated.values():
+            a['total_gap'] = 0.0
+            a['branches_with_gap'] = 0
+        for (item_id, _b), m in metrics.items():
+            a = aggregated.get(item_id)
+            if a is None:
+                continue
+            if m['gap'] > 0:
+                a['total_gap']         += m['gap']
+                a['branches_with_gap'] += 1
+        logger.info('[DemandEngine] MODULE 10.7 — spike cap applied to %d branch-rows', n)
 
     # ── MODULE 11 — Persist ───────────────────────────────────────────────────
 

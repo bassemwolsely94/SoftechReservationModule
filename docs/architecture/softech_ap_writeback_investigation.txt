@@ -1,0 +1,161 @@
+AP write-back discovery: 2026-09-18T23:21:30.303776
+Mode: DISCOVERY = SELECT-only. REHEARSAL (opt-in) = INSERT then ROLLBACK, never COMMIT.
+
+================================================================================
+  A: lastdocnumbers — is there a cheque serial counter?
+================================================================================
+
+--- all lastdocnumbers column names ---
+  COLS: name
+  branchcode
+  lastdocnumberin
+  lastdocnumberout
+  branchcustcode
+  paymentsno
+  localpayment_sno
+  ver_branch
+  lastdocnumberin_cust
+  lastdocnumberout_cust
+  lastdocnumberin_supp
+  lastdocnumberout_supp
+  lastdocnumberout_inv
+  fa_lastdocnumberin
+  fa_lastdocnumberout
+  fa_facode
+  lastpatientcode_l
+  lastpatientcode_s
+  lastpatientcode_c
+  lastpatientcode_r
+  accsno
+  accsno2
+  accsno3
+
+================================================================================
+  B: triggers on cheques / chequestrans + body readability
+================================================================================
+
+--- cheques: named triggers + text-row count ---
+  COLS: name | nrows | ntext
+  tr_chequeslevels | 4 | 4
+  tr_cheques_insert | 35 | 0
+
+--- chequestrans: named triggers + text-row count ---
+  (no rows)
+
+================================================================================
+  C: objects that reference cheques / chequestrans (sysdepends)
+================================================================================
+
+--- procs/triggers depending on the two tables ---
+  COLS: name | type
+  tr_cheques_insert | TR
+
+================================================================================
+  D: per-branch MAX serials vs lastdocnumbers counters (the +1 pattern)
+================================================================================
+
+--- branch 130: max cheqsno / ourcheqsno ---
+  COLS: max_cheqsno | max_ourcheqsno | n
+  51709 | 31793 | 51709
+
+--- branch 130: lastdocnumbers candidate counters ---
+  (no rows)
+
+--- HQ (000) staging counters row ---
+  COLS: branchcode | ver_branch | paymentsno | localpayment_sno | accsno | accsno2 | accsno3
+  000 | 0 | 8343.0 | 0 | 0.0 | 0.0 | 0.0
+
+================================================================================
+  E: schema of cheques + chequestrans (writer NOT-NULL sentinels)
+================================================================================
+
+  SCHEMA: cheques  (colid | name | type | len | NULL?)
+    [  1] cheqsno                    int          len=4     NOT NULL
+    [  2] financialdoccode           varchar      len=2     NOT NULL
+    [  3] cheqtype                   varchar      len=2     NOT NULL
+    [  4] cheqno                     varchar      len=20    NOT NULL
+    [  5] cheqdate                   datetime     len=8     NOT NULL
+    [  6] bankcode                   varchar      len=3     NOT NULL
+    [  7] personcode                 varchar      len=8     NOT NULL
+    [  8] cheqvalue                  decimal      len=6     NOT NULL
+    [  9] cashtype                   smallint     len=2     NULL
+    [ 10] cheqcashdate               datetime     len=8     NULL
+    [ 11] cheqregisterdate           datetime     len=8     NOT NULL
+    [ 12] cheqtobankdate             datetime     len=8     NULL
+    [ 13] ourcheqsno                 int          len=4     NULL
+    [ 14] usercode                   varchar      len=5     NULL
+    [ 15] chequenote                 varchar      len=250   NULL
+    [ 16] wentto_bankstrans          varchar      len=1     NULL
+    [ 17] bankcode2                  varchar      len=3     NULL
+    [ 18] refuse_reason              smallint     len=2     NULL
+    [ 19] refuse_charges             decimal      len=6     NULL
+    [ 20] cheqvaluediscount          decimal      len=6     NULL
+    [ 21] cheqvaluetax               decimal      len=6     NULL
+    [ 22] cheqvaluedamgha            decimal      len=6     NULL
+    [ 23] trans_time                 datetime     len=8     NULL
+    [ 24] branchcode                 varchar      len=5     NOT NULL
+    [ 25] payrefusesno               int          len=4     NULL
+    [ 26] phcode                     varchar      len=13    NULL
+    [ 27] personnewbal               decimal      len=6     NOT NULL
+    [ 28] banknewbal                 decimal      len=6     NOT NULL
+    [ 29] cheqcashfees               decimal      len=6     NOT NULL
+    [ 30] banktrans_time             datetime     len=8     NULL
+    [ 31] open_trans                 tinyint      len=1     NULL
+    [ 32] handedto                   varchar      len=60    NULL
+    [ 33] creditcardtype             tinyint      len=1     NULL
+    [ 34] ourcheqsnop                tinyint      len=1     NULL
+    [ 35] ptcode                     varchar      len=3     NULL
+    [ 36] bcurrency                  tinyint      len=1     NOT NULL
+    [ 37] bcrate                     decimal      len=4     NOT NULL
+    [ 38] banknewbal_lc              decimal      len=6     NOT NULL
+    [ 39] cheqvalue_lc               decimal      len=6     NOT NULL
+    [ 40] table_dumped               datetime     len=8     NULL
+    [ 41] tf_branchcode              varchar      len=5     NULL
+    [ 42] tf_bankcode                varchar      len=3     NULL
+    [ 43] tf_cheqsno                 int          len=4     NULL
+    [ 44] bcrate_std                 decimal      len=4     NOT NULL
+    [ 45] cheqvalueother             decimal      len=6     NOT NULL
+    [ 46] origdoc                    tinyint      len=1     NULL
+    [ 47] blockinv                   tinyint      len=1     NOT NULL
+    [ 48] custbranchcode             varchar      len=5     NULL
+    [ 49] origintaxp                 decimal      len=4     NULL
+
+  SCHEMA: chequestrans  (colid | name | type | len | NULL?)
+    [  1] cheqsno                    int          len=4     NOT NULL
+    [  2] branchcode                 varchar      len=5     NOT NULL
+    [  3] doccode                    varchar      len=3     NOT NULL
+    [  4] docnumber                  numeric      len=6     NOT NULL
+    [  5] docdate                    datetime     len=8     NOT NULL
+    [  6] docvaluepaid               numeric      len=6     NOT NULL
+    [  7] docvaluepaynow             numeric      len=6     NOT NULL
+    [  8] usercode                   varchar      len=5     NULL
+    [  9] cheqbranchcode             varchar      len=5     NOT NULL
+    [ 10] table_dumped               datetime     len=8     NULL
+
+================================================================================
+  F: golden voucher + its allocation (the write template)
+================================================================================
+
+--- a recent cheques voucher for supplier 4471 @ branch 130 ---
+  COLS: cheqsno | financialdoccode | cheqtype | cheqno | cheqdate | bankcode | personcode | cheqvalue | cashtype | cheqcashdate | cheqregisterdate | cheqtobankdate | ourcheqsno | usercode | chequenote | wentto_bankstrans | bankcode2 | refuse_reason | refuse_charges | cheqvaluediscount | cheqvaluetax | cheqvaluedamgha | trans_time | branchcode | payrefusesno | phcode | personnewbal | banknewbal | cheqcashfees | banktrans_time | open_trans | handedto | creditcardtype | ourcheqsnop | ptcode | bcurrency | bcrate | banknewbal_lc | cheqvalue_lc | table_dumped | tf_branchcode | tf_bankcode | tf_cheqsno | bcrate_std | cheqvalueother | origdoc | blockinv | custbranchcode | origintaxp
+  51703 | 10 | 20 | 451 | 2026-09-18 00:00:00 | 40 | 4471 | 743.4 | 0 | 2026-09-18 00:00:00 | 2026-09-18 00:00:00 | 2026-09-18 00:00:00 | 31789 | 1309 | مورد 12207 | 0 | NULL | NULL | NULL | 0.0 | 0.0 | 0.0 | 2026-09-18 13:57:05 | 130 | 0 | NULL | -1598644.04 | 13272723.36 | 0.0 | 2026-09-18 13:56:30 | 0 | NULL | NULL | 0 | 20 | 1 | 1.0 | 13272723.36 | 743.4 | 2026-09-18 14:00:04 | NULL | NULL | NULL | 1.0 | 0.0 | 0 | 0 | NULL | 0.0
+
+--- a recent chequestrans allocation @ branch 130 ---
+  COLS: cheqsno | branchcode | doccode | docnumber | docdate | docvaluepaid | docvaluepaynow | usercode | cheqbranchcode | table_dumped
+  51703 | 130 | 10 | 12207.0 | 2026-08-15 00:00:00 | 743.4 | 743.4 | 1509 | 130 | NULL
+  33514 | 130 | 10 | 6522.0 | 2023-08-31 00:00:00 | 176.4 | 176.4 | 1615 | 130 | 2024-01-31 12:55:21
+  33277 | 130 | 10 | 6436.0 | 2023-08-21 00:00:00 | 672.7 | 672.7 | 1615 | 130 | 2024-01-31 12:55:21
+
+================================================================================
+  G: ROLLBACK INSERT REHEARSAL (real INSERT → observe → ROLLBACK)
+================================================================================
+  marker note = APPROBE1789762891  (unique tag to find the row & detect serial reassignment)
+  allocated cheqsno=51710 ourcheqsno=31794 (branch 130)
+  target invoice: docnumber=12362.0 docdate=2026-09-17 00:00:00 docvalue=840.0 docvaluepay(before)=0.0
+  BEGIN TRAN
+  cheques INSERT executed (no exception)
+  READBACK: no row found by marker — insert did not persist in-txn (trigger may have rolled it back, like tr_stktrans).
+  ROLLBACK issued
+  RESIDUE CHECK: rows with marker after rollback = 0 (must be 0)
+
+Complete: 2026-09-18T23:21:47.932043

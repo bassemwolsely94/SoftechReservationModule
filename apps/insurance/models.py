@@ -18,6 +18,8 @@ Layer map:
   Collections     → InsurancePayment, InsuranceDeduction
 """
 from decimal import Decimal
+from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 
@@ -321,6 +323,9 @@ class InsuranceClaimPrescription(models.Model):
 
     # Patient info (from Softech — frozen at import)
     patient_name      = models.CharField(max_length=200, blank=True, verbose_name='اسم المريض')
+    # The ORIGINAL Softech name at import — never touched by name edits, so the UI
+    # can revert a corrected name back to exactly what Softech had.
+    softech_patient_name = models.CharField(max_length=200, blank=True, verbose_name='اسم المريض (سوفتك الأصلي)')
 
     # Display sequence within the claim (م)
     sequence          = models.PositiveIntegerField(default=0, verbose_name='م')
@@ -341,11 +346,31 @@ class InsuranceClaimPrescription(models.Model):
     softech_net       = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
                                             verbose_name='صافى سوفتك (مرجعي)')
 
+    # Name-separation review flag: marks that staff manually checked this
+    # prescription against the separation lists (even if kept, not excluded).
+    separation_reviewed = models.BooleanField(default=False, verbose_name='روجعت (فصل الأسماء)')
+
+    # ── Manually-added prescriptions (detailed مod) ────────────────────────────
+    # A detailed manual addition is a REAL prescription (with lines) so it flows
+    # through أصناف المطالبة / فحص الفروقات / فصل الأسماء and the per-line editor
+    # — unlike the totals-only InsuranceClaimManualRx.  These fields carry the
+    # manual-addition metadata (print placement + audit) on such a prescription.
+    is_manual         = models.BooleanField(default=False, verbose_name='مضافة يدوياً (تفصيلية)')
+    manual_position   = models.CharField(max_length=10, blank=True, verbose_name='موضع الطباعة (يدوي)')
+    manual_print_date = models.DateField(null=True, blank=True, verbose_name='تاريخ الطباعة (يدوي)')
+    manual_reason     = models.TextField(blank=True, verbose_name='سبب الإضافة اليدوية')
+    added_by          = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+', verbose_name='أُضيفت بواسطة'
+    )
+
     class Meta:
         verbose_name        = 'روشتة مطالبة'
         verbose_name_plural = 'روشتات المطالبة'
         ordering            = ['softech_docdate', 'sequence']
         unique_together     = [['claim', 'softech_docnumber']]
+        indexes             = [GinIndex(fields=['patient_name'], name='ins_rx_pname_trgm',
+                                        opclasses=['gin_trgm_ops'])]
 
     @property
     def softech_net_diff(self):
@@ -394,10 +419,30 @@ class InsuranceClaimLine(models.Model):
     discount_amt      = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='قيمة الخصم')
     net_amount        = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='الصافى')
 
+    # SOFTECH's OWN authoritative net for this line (stktrans.transprice_total),
+    # captured at import.  Our net_amount applies the uniform category discount
+    # rate; when SOFTECH charged a different (per-item contract) discount, the two
+    # differ and Σ over the rx explains softech_net_diff.  NULL for pre-2026-09
+    # imports until backfilled (manage.py backfill_softech_line_net) or re-imported.
+    softech_line_net  = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                            verbose_name='صافى سوفتك للبند')
+
     # Manual line edit (item swap / qty / price) — gated behind an unlock button
     # in the UI.  original_json snapshots the pre-edit line so it can be reset.
     is_manually_edited = models.BooleanField(default=False, verbose_name='عُدِّل يدوياً')
     original_json      = models.JSONField(null=True, blank=True, verbose_name='القيم الأصلية')
+
+    # Manual revision/sign-off of a FLAGGED discrepancy (value mismatch vs SOFTECH,
+    # catalog drift, or a تصنيف خصم التعاقد adjustment).  Workflow/display only —
+    # it never mutates the frozen financial values; it records that a human
+    # reviewed the flagged line and approved (or annotated) the discrepancy so the
+    # motalba can be delivered with a clear audit of what was checked.
+    review_approved = models.BooleanField(default=False, verbose_name='روجِعت/اعتُمدت')
+    review_note     = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة المراجعة')
+    reviewed_by     = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+', verbose_name='روجِعت بواسطة')
+    reviewed_at     = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ المراجعة')
 
     class Meta:
         verbose_name        = 'بند روشتة'
@@ -470,6 +515,7 @@ class InsuranceClaimManualRx(models.Model):
     softech_branchcode = models.CharField(max_length=10, blank=True, verbose_name='الفرع')
     softech_personcode = models.CharField(max_length=20, blank=True, verbose_name='كود العميل الأصلي')
     patient_name       = models.CharField(max_length=200, blank=True, verbose_name='اسم المريض')
+    softech_patient_name = models.CharField(max_length=200, blank=True, verbose_name='اسم المريض (سوفتك الأصلي)')
     original_client_warning = models.TextField(
         blank=True, verbose_name='تحذير',
         help_text='Populated if the Rx belongs to a different client or date range'
@@ -507,6 +553,8 @@ class InsuranceClaimManualRx(models.Model):
         verbose_name        = 'روشتة مضافة يدوياً'
         verbose_name_plural = 'الروشتات المضافة يدوياً'
         ordering            = ['position', 'print_date', 'sequence']
+        indexes             = [GinIndex(fields=['patient_name'], name='ins_mrx_pname_trgm',
+                                        opclasses=['gin_trgm_ops'])]
 
     def __str__(self):
         return f'إضافة يدوية — {self.softech_docnumber}'
@@ -1018,6 +1066,10 @@ class InsuranceApplyMasterRun(models.Model):
     apply_price    = models.BooleanField(default=True, verbose_name='طُبِّقت الأسعار')
     apply_category = models.BooleanField(default=True, verbose_name='طُبِّق التصنيف')
 
+    # If the user applied to a hand-picked subset of the drift table, the chosen
+    # InsuranceClaimLine ids are recorded here.  NULL = applied to the whole claim.
+    scope_line_ids = models.JSONField(null=True, blank=True, verbose_name='بنود محددة')
+
     lines_updated         = models.PositiveIntegerField(default=0, verbose_name='بنود محدَّثة')
     prescriptions_updated = models.PositiveIntegerField(default=0, verbose_name='روشتات محدَّثة')
     net_before     = models.DecimalField(max_digits=14, decimal_places=2, default=0, verbose_name='الصافى قبل')
@@ -1069,6 +1121,216 @@ class InsuranceClaimLineBackup(models.Model):
 
     def __str__(self):
         return f'backup line={self.line_id} run={self.run_id}'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUDIT TRAIL — one immutable record per material change (who/what/when/why/before→after)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class InsuranceAuditEvent(models.Model):
+    """
+    Append-only audit event for any material change to a claim — financial,
+    compositional, or status.  Satisfies the rule that every discount / override /
+    exclusion / manual add / payment / status change be attributable with a
+    before→after snapshot.  Never edited or deleted in normal operation.
+    """
+    # High-level action verb (kept as free-ish slugs so new endpoints can add
+    # their own without a migration).
+    ACTIONS = [
+        ('status_change',   'تغيير الحالة'),
+        ('apply_master',    'تطبيق بيانات الكتالوج'),
+        ('apply_overrides', 'تطبيق تصويبات التصنيف'),
+        ('apply_review',    'قرار صنف مزدوج المنشأ'),
+        ('revert_apply',    'تراجع عن تطبيق'),
+        ('line_edit',       'تعديل بند'),
+        ('line_reset',      'استرجاع بند'),
+        ('line_review',     'اعتماد مراجعة بند'),
+        ('gross_repair',    'إصلاح إجمالى العبوات الجزئية'),
+        ('patient_edit',    'تعديل اسم المريض'),
+        ('rx_adjust',       'تعديل قيم روشتة'),
+        ('rx_exclude',      'استثناء/إدراج روشتة'),
+        ('manual_add',      'إضافة يدوية'),
+        ('manual_delete',   'حذف إضافة يدوية'),
+        ('supplement',      'ملحق'),
+        ('payment',         'تحصيل'),
+        ('deduction',       'خصم/استقطاع'),
+        ('billing_group',   'فئة فوترة'),
+        ('bulk_exclude',    'استبعاد جماعي (فصل)'),
+        ('other',           'أخرى'),
+    ]
+
+    claim       = models.ForeignKey(
+        'InsuranceClaim', on_delete=models.CASCADE,
+        related_name='audit_events', null=True, blank=True, verbose_name='المطالبة'
+    )
+    action      = models.CharField(max_length=30, choices=ACTIONS, db_index=True, verbose_name='الإجراء')
+    at          = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='الوقت')
+    actor       = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+', verbose_name='بواسطة'
+    )
+    actor_name  = models.CharField(max_length=150, blank=True, verbose_name='اسم المُنفِّذ')
+
+    # What was touched (for drill-down / filtering).  target_ref is a docnumber,
+    # line id, payment id, etc. — kept as text so it survives the row's deletion.
+    target_type = models.CharField(max_length=30, blank=True, verbose_name='نوع الهدف')
+    target_ref  = models.CharField(max_length=60, blank=True, verbose_name='مرجع الهدف')
+
+    summary     = models.CharField(max_length=300, verbose_name='الملخص')          # human-readable AR
+    reason      = models.TextField(blank=True, verbose_name='السبب')               # why (if given)
+    before      = models.JSONField(null=True, blank=True, verbose_name='قبل')
+    after       = models.JSONField(null=True, blank=True, verbose_name='بعد')
+    meta        = models.JSONField(null=True, blank=True, verbose_name='تفاصيل')
+
+    class Meta:
+        verbose_name        = 'حدث تدقيق'
+        verbose_name_plural = 'سجل التدقيق'
+        ordering            = ['-at', '-id']
+        indexes             = [
+            models.Index(fields=['claim', '-at']),
+            models.Index(fields=['action', '-at']),
+        ]
+
+    def __str__(self):
+        return f'{self.action} · claim={self.claim_id} · {self.summary[:40]}'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SOFTECH RE-PRICE WRITEBACK — audit + revert store for edits pushed INTO SOFTECH
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SoftechRepriceRun(models.Model):
+    """
+    One writeback operation that edited an insurance receipt's price(s) in SOFTECH
+    (stktrans + stktransm + branchesales, HQ + branch node).  Groups the per-field
+    SoftechRepriceEdit rows so the whole receipt edit can be reverted atomically.
+    Highest-risk write in the system — every run is opt-in, per-receipt, confirmed,
+    and revertible.
+    """
+    STATUS_PREVIEW  = 'preview'
+    STATUS_APPLIED  = 'applied'
+    STATUS_REVERTED = 'reverted'
+    STATUS_FAILED   = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PREVIEW, 'معاينة'), (STATUS_APPLIED, 'مُطبَّق'),
+        (STATUS_REVERTED, 'مُتراجَع'), (STATUS_FAILED, 'فشل'),
+    ]
+
+    claim       = models.ForeignKey('InsuranceClaim', on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='softech_reprice_runs')
+    docnumber   = models.CharField(max_length=20, verbose_name='رقم الإيصال')
+    branchcode  = models.CharField(max_length=10, verbose_name='الفرع')
+    doccode     = models.CharField(max_length=10, default='115')
+    cust_branch_code = models.CharField(max_length=20, blank=True, verbose_name='عميل التعاقد')
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PREVIEW,
+                                   db_index=True)
+    new_prices  = models.JSONField(default=dict, verbose_name='الأسعار الجديدة')   # {itemcode: price}
+    net_delta   = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    nodes       = models.JSONField(default=list, verbose_name='العُقد')            # ['HQ','160']
+    rebalanced  = models.BooleanField(default=False, verbose_name='أُعيد ضبط الرصيد')
+    rebalance_count = models.PositiveIntegerField(default=0)
+    applied_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='+')
+    applied_at  = models.DateTimeField(auto_now_add=True)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+    error       = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'عملية تعديل سعر سوفتك'
+        verbose_name_plural = 'عمليات تعديل سعر سوفتك'
+        ordering = ['-applied_at', '-id']
+        indexes = [models.Index(fields=['docnumber', 'branchcode'])]
+
+    def __str__(self):
+        return f'reprice #{self.docnumber} br{self.branchcode} [{self.status}]'
+
+
+class SoftechRepriceEdit(models.Model):
+    """One field changed on one table/node during a SoftechRepriceRun (for revert)."""
+    run    = models.ForeignKey(SoftechRepriceRun, on_delete=models.CASCADE, related_name='edits')
+    node   = models.CharField(max_length=10)                 # 'HQ' or a branch code
+    table  = models.CharField(max_length=20)                 # stktrans / stktransm / branchesales
+    row_key = models.JSONField(default=dict)                 # PK fields to locate the row
+    field  = models.CharField(max_length=40)
+    before = models.CharField(max_length=60, blank=True)
+    after  = models.CharField(max_length=60, blank=True)
+
+    class Meta:
+        verbose_name = 'تعديل حقل سوفتك'
+        indexes = [models.Index(fields=['run'])]
+
+    def __str__(self):
+        return f'{self.node}.{self.table}.{self.field}: {self.before}→{self.after}'
+
+
+class ResyncRun(models.Model):
+    """
+    One surgical re-sync of a claim against SOFTECH's current motalba.  Stores the
+    before-state (added rx ids, exclusions we created, and full snapshots of the
+    re-frozen prescriptions) so the whole run can be reverted.
+    """
+    STATUS_APPLIED  = 'applied'
+    STATUS_REVERTED = 'reverted'
+    STATUS_CHOICES  = [(STATUS_APPLIED, 'مُطبَّق'), (STATUS_REVERTED, 'مُتراجَع')]
+
+    claim       = models.ForeignKey('InsuranceClaim', on_delete=models.CASCADE,
+                                    related_name='resync_runs')
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                                   default=STATUS_APPLIED, db_index=True)
+    added       = models.PositiveIntegerField(default=0)
+    removed     = models.PositiveIntegerField(default=0)
+    changed     = models.PositiveIntegerField(default=0)
+    payload     = models.JSONField(default=dict)   # {added_rx_ids, excluded[], changed[]}
+    applied_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='+')
+    applied_at  = models.DateTimeField(auto_now_add=True)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'عملية مزامنة سوفتك'
+        ordering = ['-applied_at', '-id']
+
+    def __str__(self):
+        return f'resync claim={self.claim_id} +{self.added}/-{self.removed}/~{self.changed} [{self.status}]'
+
+
+class SoftechDateEditRun(models.Model):
+    """
+    A TEMPORARY change of a SOFTECH receipt's printed date (stktransm.docdate +
+    stktrans.docdate on HQ + branch), so a re-entered prescription can be reprinted
+    within the 7-day dispensing window, then reverted.  Highest-risk write class —
+    gated, per-receipt, confirmed, revertible.  docdate is one value across all the
+    receipt's lines, so old/new dates are stored directly (no per-field records).
+    """
+    STATUS_APPLIED  = 'applied'
+    STATUS_REVERTED = 'reverted'
+    STATUS_FAILED   = 'failed'
+    STATUS_CHOICES  = [(STATUS_APPLIED, 'مُطبَّق'), (STATUS_REVERTED, 'مُتراجَع'),
+                       (STATUS_FAILED, 'فشل')]
+
+    claim       = models.ForeignKey('InsuranceClaim', on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='softech_date_runs')
+    docnumber   = models.CharField(max_length=20, verbose_name='رقم الإيصال')
+    branchcode  = models.CharField(max_length=10, verbose_name='الفرع')
+    doccode     = models.CharField(max_length=10, default='115')
+    old_date    = models.DateField(verbose_name='التاريخ الأصلي')
+    new_date    = models.DateField(verbose_name='التاريخ الجديد')
+    nodes       = models.JSONField(default=list)          # ['HQ','160']
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                                   default=STATUS_APPLIED, db_index=True)
+    error       = models.TextField(blank=True)
+    applied_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='+')
+    applied_at  = models.DateTimeField(auto_now_add=True)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'تعديل تاريخ إيصال سوفتك'
+        ordering = ['-applied_at', '-id']
+        indexes = [models.Index(fields=['docnumber', 'branchcode'])]
+
+    def __str__(self):
+        return f'date #{self.docnumber} br{self.branchcode} {self.old_date}→{self.new_date} [{self.status}]'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1251,3 +1513,57 @@ class InsuranceItemClassificationOverride(models.Model):
 
     def __str__(self):
         return f'{self.item_code} → {self.get_forced_category_display()}'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEPARATION LISTS — flag patient names to pull out into a different motalba
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class InsuranceSeparationList(models.Model):
+    """
+    A named list of patient/employee names that must be SEPARATED out of the
+    motalbas they appear in (e.g. staff moved to شركة الخدمات الطبية) and billed
+    on a different claim.  Prescriptions whose patient name matches (fuzzy) a name
+    on an active list are flagged for review; the user then excludes them.
+    """
+    label       = models.CharField(max_length=150, verbose_name='اسم القائمة',
+                                    help_text='مثال: شركة الخدمات الطبية')
+    description = models.TextField(blank=True, verbose_name='وصف')
+    is_active   = models.BooleanField(default=True, verbose_name='مُفعَّلة')
+    created_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name='+',
+                                    verbose_name='أُنشئت بواسطة')
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'قائمة فصل أسماء'
+        verbose_name_plural = 'قوائم فصل الأسماء'
+        ordering            = ['label']
+
+    def __str__(self):
+        return self.label
+
+
+class InsuranceSeparationName(models.Model):
+    """One name on a separation list.  `normalized` is the Arabic-folded form used
+    for matching (set on save via separation.normalize_name)."""
+    sep_list   = models.ForeignKey(InsuranceSeparationList, on_delete=models.CASCADE,
+                                   related_name='names', verbose_name='القائمة')
+    name       = models.CharField(max_length=200, verbose_name='الاسم')
+    normalized = models.CharField(max_length=200, blank=True, db_index=True,
+                                  verbose_name='الاسم المُعيَّر')
+    is_active  = models.BooleanField(default=True, verbose_name='مُفعَّل')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'اسم للفصل'
+        verbose_name_plural = 'أسماء للفصل'
+        ordering            = ['name']
+
+    def save(self, *args, **kwargs):
+        from .separation import normalize_name
+        self.normalized = normalize_name(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name

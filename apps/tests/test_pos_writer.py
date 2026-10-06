@@ -36,6 +36,30 @@ def _order(channel='contract', doc_kind='sale', **kw):
     return o
 
 
+class WhatsAppReceiptTests(TestCase):
+    """Wave 7 inc2 — POS-order WhatsApp digital-receipt message (pure formatter)."""
+    def test_message_lists_items_and_totals(self):
+        from apps.pos_orders.views import build_order_whatsapp_message
+        o = _order()  # 2 lines: 108 & 216, 15% disc each → gross 324, net 275.40
+        msg = build_order_whatsapp_message(o)
+        self.assertIn('صيدليات الرزيقي', msg)
+        self.assertIn(f'POS-{o.pk}', msg)
+        self.assertIn('ITM1', msg)
+        self.assertIn('ITM2', msg)
+        self.assertIn('الإجمالي: 324.00', msg)   # derived from lines when not yet priced
+        self.assertIn('الصافي: 275.40', msg)
+        self.assertIn('خصم 15%', msg)
+
+    def test_message_prefers_stored_header_totals_when_priced(self):
+        from apps.pos_orders.views import build_order_whatsapp_message
+        o = _order()
+        writer.prepare_order(o, tenders=[{'pay_type': 'cash', 'amount': '275.40'}])
+        o.refresh_from_db()
+        msg = build_order_whatsapp_message(o)
+        self.assertIn('الصافي: 275.40', msg)
+        self.assertIn('بانتظار إتمام الكاشير', msg)  # ready status hint
+
+
 class PrepareTests(TestCase):
     def test_prepare_computes_money_fields(self):
         o = _order()
@@ -70,6 +94,90 @@ class PrepareTests(TestCase):
                                              store_code='130', channel='cash')
         with self.assertRaises(ValueError):
             writer.prepare_order(o)
+
+    def test_contract_copay_tender_split(self):
+        # Deterministic co-pay split (native golden 7873, contract 4478 = 25% of GROSS pre-discount,
+        # patient_paytype '1'): gross 2003.00 → patient 500.75 (cash) + company 1318.80 (credit),
+        # summing to doc_value 1819.55. The payment mix then drives fatstatuscode 50 in _header_row.
+        from unittest.mock import patch
+        o = _order(channel='contract')
+        with patch.object(writer, 'read_contract_copay',
+                          return_value={'patient_paypercent': 25.0, 'patient_paytype': '1'}):
+            tenders = writer._contract_copay_tenders(o, Decimal('1819.55'), Decimal('2003.00'))
+        self.assertEqual(len(tenders), 2)
+        d = {t['pay_type']: Decimal(t['amount']) for t in tenders}
+        self.assertEqual(d['cash'], Decimal('500.75'))       # patient portion (type 30)
+        self.assertEqual(d['credit'], Decimal('1318.80'))    # company portion (type 10)
+        self.assertEqual(d['cash'] + d['credit'], Decimal('1819.55'))
+
+    def test_contract_copay_paytype2_uses_net(self):
+        # patient_paytype != '1' → % is taken from the NET doc_value, not the gross.
+        from unittest.mock import patch
+        o = _order(channel='contract')
+        with patch.object(writer, 'read_contract_copay',
+                          return_value={'patient_paypercent': 25.0, 'patient_paytype': '2'}):
+            tenders = writer._contract_copay_tenders(o, Decimal('1000.00'), Decimal('2003.00'))
+        d = {t['pay_type']: Decimal(t['amount']) for t in tenders}
+        self.assertEqual(d['cash'], Decimal('250.00'))       # 25% of NET 1000
+        self.assertEqual(d['credit'], Decimal('750.00'))
+
+    def test_contract_copay_none_when_no_rule(self):
+        # No co-pay rule (or 0%) → None → prepare_order keeps the 100%-credit posture (fatstatuscode 10).
+        from unittest.mock import patch
+        o = _order(channel='contract')
+        with patch.object(writer, 'read_contract_copay', return_value={}):
+            self.assertIsNone(writer._contract_copay_tenders(o, Decimal('100'), Decimal('120')))
+        with patch.object(writer, 'read_contract_copay',
+                          return_value={'patient_paypercent': 0.0, 'patient_paytype': '1'}):
+            self.assertIsNone(writer._contract_copay_tenders(o, Decimal('100'), Decimal('120')))
+
+    def test_contract_derives_line_discount_from_schedule(self):
+        # (a) Contract line discount is DERIVED from custdiscounts[acct, item.itemcode_alt3], overriding
+        # any fed cust_discp — verified vs golden 7873 (alt3 13→6% imported, 12→15% local).
+        from unittest.mock import patch
+        o = _order(channel='contract', cust_branch_code='4478')   # _order feeds cust_discp=15 on both
+        live = {'107295': {'item_sale_price': 108, 'sale_tax_pct': 0, 'new_cost_price': 81, 'alt3': '13'},
+                '94965':  {'item_sale_price': 216, 'sale_tax_pct': 0, 'new_cost_price': 162, 'alt3': '12'}}
+        sched = {'13': {'discp': 6.0, 'blocked': False}, '12': {'discp': 15.0, 'blocked': False}}
+        with patch.object(writer, 'read_live_pricing', return_value=live), \
+             patch.object(writer, 'read_contract_discounts', return_value=sched), \
+             patch.object(writer, 'read_contract_branch_blocked', return_value=False), \
+             patch.object(writer, 'read_contract_copay', return_value={}):
+            writer.prepare_order(o, live=True)
+        by = {l.softech_itemcode: l for l in o.lines.all()}
+        self.assertEqual(by['107295'].cust_discp, Decimal('6'))    # derived 6%, overrode fed 15
+        self.assertEqual(by['94965'].cust_discp, Decimal('15'))
+
+    def test_contract_blocks_ineligible_item(self):
+        # (b) An item whose classification is Blocked (allow_sell=0 / custdiscp_nomore='1') is rejected
+        # BEFORE any write — mirrors native «هذا الصنف غير مسموح صرفه لهذا التعاقد».
+        from unittest.mock import patch
+        o = _order(channel='contract', cust_branch_code='4478')
+        live = {'107295': {'item_sale_price': 108, 'sale_tax_pct': 0, 'new_cost_price': 81, 'alt3': '13'},
+                '94965':  {'item_sale_price': 216, 'sale_tax_pct': 0, 'new_cost_price': 162, 'alt3': '22'}}
+        sched = {'13': {'discp': 6.0, 'blocked': False}, '22': {'discp': 0.0, 'blocked': True}}
+        with patch.object(writer, 'read_live_pricing', return_value=live), \
+             patch.object(writer, 'read_contract_discounts', return_value=sched), \
+             patch.object(writer, 'read_contract_branch_blocked', return_value=False), \
+             patch.object(writer, 'read_contract_copay', return_value={}):
+            with self.assertRaises(ValueError) as cm:
+                writer.prepare_order(o, live=True)
+        self.assertIn('94965', str(cm.exception))
+
+    def test_contract_branch_block_rejects(self):
+        # «OUR Contracted Branches» Block: a named account blocked at this branch (personsdatabranches.
+        # personbranchdel='1') can't dispense here — prepare_order rejects before any write.
+        from unittest.mock import patch
+        o = _order(channel='contract', cust_branch_code='4227')
+        live = {'107295': {'item_sale_price': 108, 'sale_tax_pct': 0, 'new_cost_price': 81, 'alt3': '13'},
+                '94965':  {'item_sale_price': 216, 'sale_tax_pct': 0, 'new_cost_price': 162, 'alt3': '12'}}
+        with patch.object(writer, 'read_live_pricing', return_value=live), \
+             patch.object(writer, 'read_contract_discounts', return_value={'13': {'discp': 6.0, 'blocked': False}, '12': {'discp': 15.0, 'blocked': False}}), \
+             patch.object(writer, 'read_contract_branch_blocked', return_value=True), \
+             patch.object(writer, 'read_contract_copay', return_value={}):
+            with self.assertRaises(ValueError) as cm:
+                writer.prepare_order(o, live=True)
+        self.assertIn('الفرع', str(cm.exception))
 
 
 class PayloadTests(TestCase):
@@ -138,20 +246,80 @@ class PayloadTests(TestCase):
         self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSHED)
 
     def test_line_row_uses_bonus_and_expiry_fields(self):
-        # bonus_qty → bonusqty; item_expiry → itemexpirydate (fresh picked-batch line)
-        from apps.pos_orders.writer import _line_row, _Raw
-        import datetime
+        # Current _line_row semantics (pkg+unit decomposition + batch-slice allocation):
+        #   bonusqty      = the per-UNIT price passed in (NOT bonus_qty)
+        #   pharmacydiscp = loose_units_from_qty(alloc qty, packqty)  — the loose-strip count
+        #   itemexpirydate = the DISPENSED slice's batch expiry (alloc['expiry']), s_doccode '000'
+        from apps.pos_orders.writer import _line_row, _Raw, loose_units_from_qty
         o = _order(channel='cash')
         ln = type('L', (), {
-            'softech_itemcode': '404', 'qty': 2, 'trans_price': 38, 'new_cost_price': 30,
-            'item_sale_price': 38, 'item_sale_tax': 0, 'item_sale_price_tax': 38,
-            'trans_price_total': 76, 'cust_discp': 0, 'bonus_qty': 5,
-            'item_expiry': datetime.date(2028, 2, 28),
+            'softech_itemcode': '404', 'qty': 0.66667, 'trans_price': 9.5, 'new_cost_price': 7,
+            'item_sale_price': 28.5, 'item_sale_tax': 0, 'item_sale_price_tax': 28.5, 'cust_discp': 0,
         })()
-        row = _line_row(o, ln, 999, '1509')
-        self.assertEqual(row['bonusqty'], 5.0)               # not trans_price_total anymore
+        # one dispensed FEFO slice (see _allocate_line): 2 loose strips of a 3-strip pack
+        alloc = {'qty': 0.66667, 'expiry': '2028-02-28', 'batchno': 'B1',
+                 's_doccode': '000', 'reservation': False}
+        row = _line_row(o, ln, 999, '1509', alloc, packqty=3, unitprice=9.5)
+        self.assertAlmostEqual(row['transqty'], 0.66667, places=5)
+        self.assertEqual(row['bonusqty'], 9.5)                                    # per-UNIT price
+        self.assertEqual(row['pharmacydiscp'], float(loose_units_from_qty(0.66667, 3)))
+        self.assertEqual(row['pharmacydiscp'], 2.0)                               # 2 loose strips
+        self.assertEqual(row['s_doccode'], '000')                                # dispensed slice
         self.assertIsInstance(row['itemexpirydate'], _Raw)
         self.assertIn('2028-02-28', row['itemexpirydate'].sql)
+
+    def test_line_row_reservation_slice(self):
+        # A shortfall (reservation) slice → item_partno 'Reservation', s_doccode '100', and — verified
+        # against native cashier golden 7872 — NULL itemexpirydate and NULL r_docnumber (no placeholder).
+        from apps.pos_orders.writer import _line_row
+        o = _order(channel='cash')
+        ln = type('L', (), {
+            'softech_itemcode': '404', 'qty': 1, 'trans_price': 9.5, 'new_cost_price': 7,
+            'item_sale_price': 28.5, 'item_sale_tax': 0, 'item_sale_price_tax': 28.5, 'cust_discp': 0,
+        })()
+        alloc = {'qty': 1, 'expiry': None, 'batchno': 'Reservation',
+                 's_doccode': '100', 'reservation': True}
+        row = _line_row(o, ln, 999, '1509', alloc, packqty=1, unitprice=9.5)
+        self.assertEqual(row['item_partno'], 'Reservation')
+        self.assertEqual(row['s_doccode'], '100')
+        # FULLY-reserved item (no dispensed slice) → NULL expiry + NULL r_docnumber (golden 7872)
+        self.assertIsNone(row.get('itemexpirydate'))
+        self.assertIsNone(row.get('r_docnumber'))
+
+    def test_line_row_claim_reservation_placeholder(self):
+        # A CLAIM-channel reservation (alloc['placeholder'] set by _allocate_line for contract/employee/…)
+        # → native stamps the 2012-12-12 placeholder expiry, EVEN for a fully-reserved item (golden 7875
+        # employee 113275/120049; also 7873 contract). cash/delivery leave it NULL (test above).
+        from apps.pos_orders.writer import _line_row, _Raw
+        o = _order(channel='contract')
+        ln = type('L', (), {
+            'softech_itemcode': '3476', 'qty': 1, 'trans_price': 9.5, 'new_cost_price': 7,
+            'item_sale_price': 28.5, 'item_sale_tax': 0, 'item_sale_price_tax': 28.5, 'cust_discp': 0,
+        })()
+        alloc = {'qty': 1, 'expiry': None, 'batchno': 'Reservation',
+                 's_doccode': '100', 'reservation': True, 'placeholder': True}
+        row = _line_row(o, ln, 999, '1509', alloc, packqty=1, unitprice=9.5)
+        self.assertEqual(row['s_doccode'], '100')
+        self.assertEqual(row['item_partno'], 'Reservation')
+        self.assertIsInstance(row['itemexpirydate'], _Raw)   # placeholder present
+        self.assertIsNone(row.get('r_docnumber'))            # still NULL
+
+    def test_line_row_service_no_batch_slice(self):
+        # A non-stockable / no-batch dispensed slice → s_doccode '000' + EMPTY item_partno (not NULL),
+        # NULL expiry / r_docnumber / r_docdate — verified vs native golden 7872 (items '1','2').
+        from apps.pos_orders.writer import _line_row
+        o = _order(channel='cash')
+        ln = type('L', (), {
+            'softech_itemcode': '2', 'qty': 1, 'trans_price': 13.0, 'new_cost_price': 0,
+            'item_sale_price': 13.0, 'item_sale_tax': 0, 'item_sale_price_tax': 13.0, 'cust_discp': 0,
+        })()
+        alloc = {'qty': 1, 'expiry': None, 'batchno': None, 's_doccode': None, 'reservation': False}
+        row = _line_row(o, ln, 999, '1509', alloc, packqty=1, unitprice=13.0)
+        self.assertEqual(row['s_doccode'], '000')
+        self.assertEqual(row['item_partno'], '')
+        self.assertIsNone(row.get('itemexpirydate'))
+        self.assertIsNone(row.get('r_docnumber'))
+        self.assertIsNone(row.get('r_docdate'))
 
     def test_payment_row_maps_tender_extras(self):
         from apps.pos_orders.writer import _payment_row, _Raw
@@ -280,3 +448,127 @@ class GateTests(TestCase):
             writer.cancel_order(o)
         o.refresh_from_db()
         self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSHED)  # NOT flipped to cancelled
+
+
+class ReturnTests(TestCase):
+    """The مرتجع (return) writeback — mirror the original finalized sale as a pending doccode-30 doc.
+    Verified end-to-end vs native return 534 ← finalized sale 7044."""
+
+    def _return_order(self):
+        o = _order(channel='cash', doc_kind='return', return_of_invoice=7044)
+        o.source_header_raw = {'sale_docdate': '2026-09-05 00:00:00'}
+        o.save()
+        return o
+
+    def test_line_row_from_raw_return_overrides(self):
+        # A RETURN line mirrors the sale line but overrides r_docnumber→sale, r_docdate→sale date,
+        # retqty→0, vf4→negated (native 534: sale 7044 vf4 +15 → return −15).
+        from apps.pos_orders.writer import _line_row_from_raw, _Raw
+        o = self._return_order()
+        raw = {'itemcode': '404', 'transqty': 1.0, 'transprice': 38.0, 'transprice_total': 38.0,
+               'itemsaleprice': 38.0, 'bonusqty': 38.0, 'dblitemflag': 1, 'custdiscp': 0.0, 's_doccode': '000',
+               'itemexpirydate': {'__dt__': '2028-03-31 00:00:00'}, 'r_docnumber': 0.0, 'retqty': 1.0,
+               'vf4': 15, 'personcode': '1510'}
+        row = _line_row_from_raw(o, raw, 544, '1509')
+        self.assertEqual(row['r_docnumber'], 7044)          # links to the original sale
+        self.assertIsInstance(row['r_docdate'], _Raw)       # the sale's date (not 1900-01-01)
+        self.assertEqual(row['retqty'], 0.0)                # reset on the return
+        self.assertEqual(row['vf4'], -15)                   # points reversed
+        self.assertEqual(row['s_doccode'], '000')
+        self.assertEqual(row['transqty'], 1.0)              # positive (doccode 30 makes it a reversal)
+
+    def test_line_row_from_raw_clone_unchanged(self):
+        # A plain CLONE (doc_kind='sale') keeps the source values — return overrides must NOT leak.
+        from apps.pos_orders.writer import _line_row_from_raw
+        o = _order(channel='cash', doc_kind='sale')
+        raw = {'itemcode': '404', 'transqty': 1.0, 'transprice': 38.0, 'transprice_total': 38.0,
+               'itemsaleprice': 38.0, 'bonusqty': 38.0, 'dblitemflag': 1, 'r_docnumber': 0.0,
+               'retqty': 1.0, 'vf4': 15, 'personcode': '1510'}
+        row = _line_row_from_raw(o, raw, 900, '1509')
+        self.assertEqual(row['r_docnumber'], 0)
+        self.assertEqual(row['retqty'], 1.0)                # kept as-is
+        self.assertNotIn('vf4', row)                        # clone sets no vf4
+
+    def test_order_points_return_reverses_recorded(self):
+        # A return's points = −(sale's RECORDED vf4), NOT a live recompute (native 534: −15).
+        from apps.pos_orders import points
+        o = self._return_order()
+        lns = list(o.lines.all())
+        lns[0].source_raw = {'vf4': 15}; lns[0].save()
+        lns[1].source_raw = {'vf4': 8};  lns[1].save()
+        total, _ = points.order_points(o)
+        self.assertEqual(total, -23)                        # −(15+8), no branch DB touched
+
+    def test_build_return_full_vs_partial(self):
+        # FULL return mirrors the sale's payment rows exactly; PARTIAL (drop a line / reduce qty) keeps
+        # only the chosen lines and RECOMPUTES the refund from them.
+        from unittest.mock import patch
+        o = _order(channel='delivery', doc_kind='return', return_of_invoice=7046, cust_branch_code='1500')
+        # read_finalized_sale now annotates each line with returnable / blocked / returned_prev.
+        fake = [{'itemcode': 'A', 'dblitemflag': 1, 'transqty': 1.0, 'transprice_total': 100.0,
+                 'itemsaleprice': 100.0, 'custdiscp': 0, 'vf4': 10, 's_doccode': '000',
+                 'returnable': 1.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False},
+                {'itemcode': 'B', 'dblitemflag': 2, 'transqty': 1.0, 'transprice_total': 50.0,
+                 'itemsaleprice': 50.0, 'custdiscp': 0, 'vf4': 5, 's_doccode': '000',
+                 'returnable': 1.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False}]
+        pays = [{'paymenttype': '30', 'paymentvalue': 150.0}]
+        with patch.object(writer, 'read_finalized_sale', return_value=('2026-09-05 00:00:00', fake, pays)), \
+             patch.object(writer, 'read_return_full_only', return_value=False):
+            writer.build_return_from_sale(o)                                    # FULL (pristine) → mirror
+            self.assertEqual(o.lines.count(), 2)
+            self.assertEqual([(p.pay_type, str(p.amount)) for p in o.payments.all()], [('cash', '150.00')])
+            writer.build_return_from_sale(o, selection=[{'dblitemflag': 1}])    # PARTIAL → drop line 2
+            self.assertEqual(o.lines.count(), 1)
+            self.assertEqual([(p.pay_type, float(p.amount)) for p in o.payments.all()], [('cash', 100.0)])
+            writer.build_return_from_sale(o, selection=[{'dblitemflag': 1, 'qty': 0.5}])  # PARTIAL qty
+            self.assertEqual(float(o.lines.first().qty), 0.5)
+            self.assertEqual([float(p.amount) for p in o.payments.all()], [50.0])          # 100 × 0.5
+
+    def test_build_return_contract_copay_partial_split(self):
+        # A PARTIAL contract co-pay return splits patient-cash + company-credit proportional to the
+        # RETURNED gross (contract 25% → cash 25%×gross, credit = net − that).
+        from unittest.mock import patch
+        o = _order(channel='contract', doc_kind='return', return_of_invoice=7047, cust_branch_code='4478')
+        fake = [{'itemcode': 'X', 'dblitemflag': 1, 'transqty': 2.0, 'transprice_total': 176.0,
+                 'itemsaleprice': 100.0, 'custdiscp': 12, 'vf4': None, 's_doccode': '000',
+                 'returnable': 2.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False}]  # gross 200, net 176
+        with patch.object(writer, 'read_finalized_sale', return_value=('2026-09-05 00:00:00', fake, [])), \
+             patch.object(writer, 'read_return_full_only', return_value=False), \
+             patch.object(writer, 'read_contract_copay', return_value={'patient_paypercent': 25.0, 'patient_paytype': '1'}):
+            writer.build_return_from_sale(o, selection=[{'dblitemflag': 1}])
+        d = {p.pay_type: float(p.amount) for p in o.payments.all()}
+        self.assertEqual(d['cash'], 50.0)      # 25% × gross 200
+        self.assertEqual(d['credit'], 126.0)   # net 176 − 50
+
+    def test_build_return_excludes_blocked_and_already_returned(self):
+        # Only dispensed, not-yet-returned lines are returnable: a delivered reservation (s_doccode 200,
+        # blocked) and an already-fully-returned dispensed line (returnable 0) are both left out.
+        from unittest.mock import patch
+        o = _order(channel='contract', doc_kind='return', return_of_invoice=7052, cust_branch_code='4479')
+        fake = [
+            {'itemcode': 'A', 'dblitemflag': 1, 'transqty': 1.0, 'transprice_total': 100.0, 'itemsaleprice': 100.0,
+             'custdiscp': 0, 'vf4': None, 's_doccode': '000', 'returnable': 1.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False},
+            {'itemcode': 'B', 'dblitemflag': 2, 'transqty': 1.0, 'transprice_total': 50.0, 'itemsaleprice': 50.0,
+             'custdiscp': 0, 'vf4': None, 's_doccode': '200', 'returnable': 0.0, 'blocked': True, 'block_reason': 'resv', 'returned_prev': 0, 'is_reservation': True},
+            {'itemcode': 'C', 'dblitemflag': 3, 'transqty': 1.0, 'transprice_total': 30.0, 'itemsaleprice': 30.0,
+             'custdiscp': 0, 'vf4': None, 's_doccode': '000', 'returnable': 0.0, 'blocked': False, 'returned_prev': 1.0, 'is_reservation': False},
+        ]
+        with patch.object(writer, 'read_finalized_sale', return_value=('2026-09-05 00:00:00', fake, [])), \
+             patch.object(writer, 'read_return_full_only', return_value=False), \
+             patch.object(writer, 'read_contract_copay', return_value={}):
+            writer.build_return_from_sale(o)
+        self.assertEqual([l.softech_itemcode for l in o.lines.all()], ['A'])   # B blocked, C already returned
+
+    def test_build_return_full_only_rejects_partial(self):
+        # A full-invoice-only account (empftime='1') rejects a partial return.
+        from unittest.mock import patch
+        o = _order(channel='contract', doc_kind='return', return_of_invoice=7052, cust_branch_code='4478')
+        fake = [{'itemcode': 'A', 'dblitemflag': 1, 'transqty': 1.0, 'transprice_total': 100.0, 'itemsaleprice': 100.0,
+                 'custdiscp': 0, 'vf4': None, 's_doccode': '000', 'returnable': 1.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False},
+                {'itemcode': 'B', 'dblitemflag': 2, 'transqty': 1.0, 'transprice_total': 50.0, 'itemsaleprice': 50.0,
+                 'custdiscp': 0, 'vf4': None, 's_doccode': '000', 'returnable': 1.0, 'blocked': False, 'returned_prev': 0, 'is_reservation': False}]
+        with patch.object(writer, 'read_finalized_sale', return_value=('2026-09-05 00:00:00', fake, [])), \
+             patch.object(writer, 'read_return_full_only', return_value=True), \
+             patch.object(writer, 'read_contract_copay', return_value={}):
+            with self.assertRaises(ValueError):
+                writer.build_return_from_sale(o, selection=[{'dblitemflag': 1}])   # partial → rejected

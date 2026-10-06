@@ -37,6 +37,7 @@ from django.db.models import Avg, Count, F, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
@@ -156,7 +157,7 @@ class DriverListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/drivers/"""
     permission_classes = [IsAuthenticated]
     serializer_class   = DeliveryDriverSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['full_name', 'mobile', 'national_id']
     ordering_fields    = ['full_name', 'created_at']
     ordering           = ['full_name']
@@ -216,7 +217,7 @@ class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
 class DeliveryOrderListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/"""
     permission_classes = [IsAuthenticated]
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['order_number', 'customer_name', 'customer_phone',
                           'softech_doc_ref', 'softech_crm_order_no', 'softech_doc_number5']
     ordering_fields    = ['ordered_at', 'created_at', 'status', 'total_value']

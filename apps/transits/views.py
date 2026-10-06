@@ -32,6 +32,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
+from apps.catalog.wildcard import wq
 from .serializers import (
     ForceCloseSerializer,
     InTransitNoteCreateSerializer,
@@ -944,7 +945,7 @@ class PickZoneViewSet(viewsets.ModelViewSet):
         items = Item.objects.filter(is_active=True)
         if q:
             items = items.filter(
-                db_models.Q(name__icontains=q) |
+                wq(q, 'name') |
                 db_models.Q(softech_id__icontains=q)
             )
 
@@ -1175,7 +1176,7 @@ class ItemPickOverrideViewSet(viewsets.ModelViewSet):
         q = str(self.request.query_params.get('q') or '').strip()
         if q:
             qs = qs.filter(
-                db_models.Q(item__name__icontains=q) |
+                wq(q, 'item__name') |
                 db_models.Q(item__softech_id__icontains=q) |
                 db_models.Q(tag__icontains=q)
             )

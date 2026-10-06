@@ -359,7 +359,7 @@ function ContractPanel({ subclient }) {
             ].map(([label, key]) => (
               <div key={key}>
                 <label className={lbl}>{label}</label>
-                <input type="number" step="0.01" min="0" max="100" className={inp}
+                <input type="number" step="0.5" min="0" max="100" className={inp}
                   value={form[key]} onChange={e => setForm(p => ({...p, [key]: e.target.value}))} />
               </div>
             ))}

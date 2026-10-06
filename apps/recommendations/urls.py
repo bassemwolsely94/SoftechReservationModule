@@ -8,4 +8,5 @@ urlpatterns = [
     path('fbt/',          views.FBTPairListView.as_view(), name='rec-fbt-list'),
     path('fbt/for-item/', views.fbt_for_item,       name='rec-fbt-for-item'),
     path('customer/',     views.customer_recs,      name='rec-customer'),
+    path('basket-intel/', views.basket_intel,       name='rec-basket-intel'),
 ]

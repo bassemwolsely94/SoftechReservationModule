@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -256,8 +257,7 @@ function PurchaseExpiryAuditTab() {
       if (minQ && (r.current_qty || 0) < Number(minQ)) return false
       if (search) {
         const q = search.toLowerCase()
-        if (!((r.item_name || '').toLowerCase().includes(q) ||
-              (r.item_code || '').includes(q))) return false
+        if (!(wildcardMatch(r.item_name, search) || (r.item_code || '').includes(q))) return false
       }
       return true
     })
@@ -923,7 +923,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       if (medType && r.medicine_type !== medType) return false
       if (search) {
         const q = search.toLowerCase()
-        if (!((r.item_name || '').toLowerCase().includes(q) || (r.item_code || '').includes(q))) return false
+        if (!(wildcardMatch(r.item_name, search) || (r.item_code || '').includes(q))) return false
       }
       return true
     })

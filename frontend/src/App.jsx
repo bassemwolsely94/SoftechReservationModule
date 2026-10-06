@@ -15,6 +15,8 @@ import TargetsPage from './pages/TargetsPage'
 import KpiBoardPage from './pages/KpiBoardPage'
 import ForecastScenarioPage from './pages/ForecastScenarioPage'
 import InsightsPage from './pages/InsightsPage'
+import ReferralStatsPage from './pages/ReferralStatsPage'
+import VisionCorpusPage from './pages/VisionCorpusPage'
 import AnnouncementsPage from './pages/AnnouncementsPage'
 import ReservationsKanban from './pages/ReservationsKanban'
 import ReservationsPage from './pages/ReservationsPage'
@@ -29,20 +31,27 @@ import NewTransferPage from './pages/NewTransferPage'
 import TransferDetailPage from './pages/TransferDetailPage'
 import PurchasingDashboard from './pages/PurchasingDashboard'
 import MarketShortagePage from './pages/MarketShortagePage'
+import PhantomSalesPage from './pages/PhantomSalesPage'
+import CashOptimizationPage from './pages/CashOptimizationPage'
 import ChronicClassifierPage from './pages/ChronicClassifierPage'
 import SettingsPage from './pages/SettingsPage'
 import StockCountPage from './pages/StockCountPage'
 import ShortagePage from './pages/ShortagePage'
 import POSOrderPage from './pages/POSOrderPage'
+import ExceptionCenterPage from './pages/ExceptionCenterPage'
 import VouchersPage from './pages/VouchersPage'
+import OffersPage from './pages/OffersPage'
 import InvoicePage from './pages/InvoicePage'
 import IncentivesPage from './pages/IncentivesPage'
 import InsuranceClaimsPage from './pages/InsuranceClaimsPage'
+import CommerceDocumentsPage from './pages/CommerceDocumentsPage'
+import CommerceDocumentEditorPage from './pages/CommerceDocumentEditorPage'
 import InsurancePrintProfilesPage from './pages/InsurancePrintProfilesPage'
 import InsuranceClaimDetailPage from './pages/InsuranceClaimDetailPage'
 import InsurancePrintPage from './pages/InsurancePrintPage'
 import InsuranceClientsPage from './pages/InsuranceClientsPage'
 import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
+import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
@@ -53,6 +62,7 @@ import DeliveryAnalyticsPage from './pages/DeliveryAnalyticsPage'
 import DriverDeliveryApp from './pages/DriverDeliveryApp'
 import DispatchBoard from './pages/DispatchBoard'
 import RiderLayout from './components/RiderLayout'
+import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
 import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
 import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
@@ -138,16 +148,23 @@ import ReferralPage from './pages/ReferralPage'
 import PbxLivePage from './pages/PbxLivePage'
 import ChequePlanningPage from './pages/ChequePlanningPage'
 import CatalogIntelligencePage from './pages/CatalogIntelligencePage'
+import CompositionPage from './pages/CompositionPage'
+import IngredientSearchPage from './pages/IngredientSearchPage'
 import ItemIntelPage from './pages/ItemIntelPage'
 import ImageEnrichmentPage from './pages/ImageEnrichmentPage'
 import RecommendationsPage from './pages/RecommendationsPage'
 import CallCenterAnalyticsPage from './pages/CallCenterAnalyticsPage'
 import PricingApprovalsPage from './pages/PricingApprovalsPage'
 import DiscountAlignmentPage from './pages/DiscountAlignmentPage'
+import SupplyPage from './pages/SupplyPage'
+import ReplacementCasesPage from './pages/ReplacementCasesPage'
+import ReplacementCaseDetailPage from './pages/ReplacementCaseDetailPage'
+import ReplacementNewCasePage from './pages/ReplacementNewCasePage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import BatchesPage from './pages/BatchesPage'
 import HRPage from './pages/HRPage'
 import PaymentAuditPage from './pages/PaymentAuditPage'
+import ReconciliationPage from './pages/ReconciliationPage'
 import ForecastingPage from './pages/ForecastingPage'
 import SecurityPage from './pages/SecurityPage'
 // Customer self-service portal (external — magic-link auth, own shell, NOT staff)
@@ -210,6 +227,8 @@ export default function App() {
   const initLang      = useLangStore(s => s.init)
   const loadPerms     = usePermissionStore(s => s.load)
   const resetPerms    = usePermissionStore(s => s.reset)
+
+  useNumberInputGuards()  // app-wide: plain arrows/wheel inert, Shift+arrow/wheel steps
 
   useEffect(() => { loadMe(); initLang() }, [loadMe, initLang])
 
@@ -296,6 +315,8 @@ export default function App() {
             <Route path="kpi-board"          element={<KpiBoardPage />} />
             <Route path="forecast-scenarios" element={<ForecastScenarioPage />} />
             <Route path="insights"           element={<InsightsPage />} />
+            <Route path="referral-stats"     element={<ReferralStatsPage />} />
+            <Route path="vision-corpus"      element={<VisionCorpusPage />} />
 
             {/* ── Operations ───────────────────────────────────────────── */}
             <Route path="reservations"       element={<ReservationsKanban />} />
@@ -354,7 +375,10 @@ export default function App() {
             <Route path="customers"          element={<CustomersPage />} />
             <Route path="customers/:id"      element={<CustomerDetailPage />} />
             <Route path="vouchers"           element={<VouchersPage />} />
+            <Route path="offers"             element={<OffersPage />} />
             <Route path="chronic-classifier" element={<ChronicClassifierPage />} />
+            <Route path="composition"        element={<CompositionPage />} />
+            <Route path="ingredient-search"  element={<IngredientSearchPage />} />
 
             {/* ── Inventory ────────────────────────────────────────────── */}
             <Route path="products"           element={<ProductCatalogPage />} />
@@ -365,13 +389,20 @@ export default function App() {
             <Route path="image-enrichment"      element={<ImageEnrichmentPage />} />
             <Route path="pricing-approvals"     element={<PricingApprovalsPage />} />
             <Route path="discount-alignment"    element={<DiscountAlignmentPage />} />
+            <Route path="supply"                element={<SupplyPage />} />
+            <Route path="replacement"           element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCasesPage /></RequireRole>} />
+            <Route path="replacement/new"       element={<RequireRole roles={['admin','supervisor','pharmacist']}><ReplacementNewCasePage /></RequireRole>} />
+            <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
+            <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />
             <Route path="stock-count"        element={<StockCountPage />} />
             <Route path="shortage"           element={<ShortagePage />} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
             <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
+            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><PhantomSalesPage /></RequireRole>} />
+            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><CashOptimizationPage /></RequireRole>} />
 
             {/* ── Procurement hub (4 tabs) ──────────────────────────────
                 /procurement              → redirects to /procurement/overview
@@ -401,8 +432,11 @@ export default function App() {
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />
+            <Route path="commerce"                            element={<CommerceDocumentsPage />} />
+            <Route path="commerce/documents/:id"              element={<CommerceDocumentEditorPage />} />
             <Route path="insurance/clients"                   element={<InsuranceClientsPage />} />
             <Route path="insurance/item-overrides"            element={<InsuranceItemOverridesPage />} />
+            <Route path="insurance/separation-lists"          element={<InsuranceSeparationListsPage />} />
             <Route path="insurance/print-profiles"            element={<InsurancePrintProfilesPage />} />
             <Route path="insurance/claims/:id"                element={<InsuranceClaimDetailPage />} />
             <Route path="insurance/claims/:id/print"          element={<InsurancePrintPage />} />
@@ -472,6 +506,7 @@ export default function App() {
             <Route path="batches"       element={<BatchesPage />} />
             <Route path="hr"            element={<HRPage />} />
             <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist']}><PaymentAuditPage /></RequireRole>} />
+            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','pharmacist']}><ReconciliationPage /></RequireRole>} />
             <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />
 
           </Route>

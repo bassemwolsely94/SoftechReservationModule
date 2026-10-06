@@ -62,6 +62,35 @@ class AuditLog(models.Model):
         # System
         ('sync_completed',             'مزامنة — اكتمال'),
         ('sync_failed',                'مزامنة — فشل'),
+
+        # Supply orchestration (doc 24)
+        ('supply_case_opened',         'توريد — فتح حالة نقص'),
+        ('supply_case_status_changed', 'توريد — تغيير حالة'),
+        ('supply_case_closed',         'توريد — إغلاق حالة'),
+        ('supply_case_assigned',       'توريد — تعيين مسؤول'),
+        ('supply_transfer_drafted',    'توريد — مسودة تحويل داخلي'),
+        ('supply_purchase_ordered',    'توريد — طلب شراء من مورد'),
+        ('supply_availability_locked',   'إتاحة مورد — إقفال القائمة'),
+        ('supply_availability_unlocked', 'إتاحة مورد — فتح القائمة'),
+        ('supply_availability_edited',   'إتاحة مورد — تعديل'),
+
+        # Replacement / buy-back cases (doc 25)
+        ('replacement_case_reconstructed', 'بدل — إعادة بناء حالة من التاريخ'),
+        ('replacement_link_confirmed',     'بدل — تأكيد ربط فاتورة منتجات'),
+        ('replacement_link_rejected',      'بدل — رفض ربط فاتورة منتجات'),
+        ('replacement_exception_resolved', 'بدل — معالجة استثناء'),
+        ('replacement_case_created',    'بدل — إنشاء حالة'),
+        ('replacement_case_updated',    'بدل — تعديل أصناف'),
+        ('replacement_case_calculated', 'بدل — حساب الرصيد'),
+        ('replacement_case_submitted',  'بدل — إرسال للاعتماد'),
+        ('replacement_case_approved',   'بدل — اعتماد'),
+        ('replacement_case_rejected',   'بدل — رفض'),
+        ('replacement_case_reopened',   'بدل — إعادة فتح'),
+        ('replacement_case_cancelled',  'بدل — إلغاء'),
+        ('replacement_leg_prepared',    'بدل — تجهيز مستند'),
+        ('replacement_leg_posted',      'بدل — ترحيل مستند'),
+        ('replacement_leg_failed',      'بدل — فشل ترحيل'),
+        ('replacement_contract_linked', 'بدل — ربط فاتورة التعاقد'),
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

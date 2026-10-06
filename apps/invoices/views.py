@@ -28,8 +28,41 @@ from .serializers import (
     VendorProfileSerializer,
 )
 from .anomalies import check_invoice_anomalies
+from apps.catalog.wildcard import wq
 
 logger = logging.getLogger('elrezeiky.invoices')
+
+
+def _bank_invoice_sample(invoice, candidates, engine='gemini'):
+    """Bank a supplier-invoice OCR image + its line-item names into the in-house corpus
+    (module purchasing_invoice) so it feeds the same accuracy/training pipeline. Best-effort."""
+    try:
+        from apps.vision.models import record_sample
+        readings = [{'readings': [c.get('raw_text') or c.get('manual_name') or ''],
+                     'strength': '', 'qty': c.get('quantity') or c.get('qty')}
+                    for c in (candidates or [])
+                    if (c.get('raw_text') or c.get('manual_name'))]
+        if not readings:
+            return
+        record_sample(module='purchasing_invoice', media_type='image', engine=engine,
+                      image=invoice.source_image, raw_readings=readings,
+                      branch=getattr(invoice, 'branch', None), source_ref=str(invoice.pk))
+    except Exception:
+        pass
+
+
+def _link_invoice_corpus(invoice_pk, raw_name, item):
+    """Label the invoice's banked OCR sample with a human confirmation (best-effort)."""
+    if not item:
+        return
+    try:
+        from apps.vision.models import OcrSample, add_confirmation
+        s = (OcrSample.objects.filter(module='purchasing_invoice', source_ref=str(invoice_pk or ''))
+             .order_by('-created_at').first())
+        if s:
+            add_confirmation(s.id, reading=raw_name, item=item)
+    except Exception:
+        pass
 
 
 class SupplierInvoiceViewSet(viewsets.ModelViewSet):
@@ -49,7 +82,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if status_q:
             qs = qs.filter(status=status_q)
         if supplier:
-            qs = qs.filter(supplier_name__icontains=supplier)
+            qs = qs.filter(wq(supplier, 'supplier_name'))
         return qs.order_by('-created_at')
 
     def get_serializer_class(self):
@@ -112,6 +145,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             invoice.status = 'review'
             invoice.save()
 
+            # bank the invoice OCR into the in-house corpus (best-effort)
+            _bank_invoice_sample(invoice, candidates)
+
             # Resolve the supplier → SOFTECH personcode and link a VendorProfile
             # BEFORE item matching, so vendor-scoped mappings (steps 1 & 2 below)
             # apply. Offline resolution (learned + curated top-10); never fatal.
@@ -135,16 +171,22 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                 codes = [(c.get('vendor_item_code') or '').strip() for c in candidates]
                 codes = [c for c in codes if c]
                 if codes:
-                    try:
-                        from . import supplier_items
-                        conn = supplier_items.open_conn()
+                    # the nightly itemssuppliers mirror first (works while SOFTECH is down);
+                    # SOFTECH live only for codes the mirror doesn't know yet
+                    from apps.catalog.supplier_links import resolve_codes as mirror_codes
+                    supplier_code_map = mirror_codes(vendor.softech_personcode, codes)
+                    missing = [c for c in codes if c not in supplier_code_map]
+                    if missing:
                         try:
-                            supplier_code_map = supplier_items.resolve_codes(
-                                conn, vendor.softech_personcode, codes)
-                        finally:
-                            conn.close()
-                    except Exception as e:
-                        logger.warning('itemssuppliers recall failed for invoice %s: %s', invoice.pk, e)
+                            from . import supplier_items
+                            conn = supplier_items.open_conn()
+                            try:
+                                supplier_code_map.update(supplier_items.resolve_codes(
+                                    conn, vendor.softech_personcode, missing))
+                            finally:
+                                conn.close()
+                        except Exception as e:
+                            logger.warning('itemssuppliers recall failed for invoice %s: %s', invoice.pk, e)
 
             for idx, cand in enumerate(candidates):
                 name_raw = cand['manual_name'] or cand['raw_text']
@@ -216,6 +258,11 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                     manufacturer           = cand.get('manufacturer', ''),
                     vendor_item_code       = code,
                     batch_number           = cand.get('batch_number', ''),
+                    # what the reader returned before ocr.separate_code_and_batch moved a
+                    # batch out of the supplier-code field (audit: the original reading)
+                    notes                  = (cand.get('notes', '') + (
+                        f" — قُرئ: كود «{cand['read_as']['vendor_item_code']}» تشغيلة «{cand['read_as']['batch_number']}»"
+                        if cand.get('read_as') else ''))[:300],
                     # Normalize expiry at ingest so every line stores a parseable
                     # 'YYYY-MM-DD' (keeps the raw printed text when unparseable).
                     expiry_date            = normalize_expiry(cand.get('expiry_date', '')) or cand.get('expiry_date', ''),
@@ -300,9 +347,20 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             line = invoice.lines.get(pk=lid)
         except InvoiceLine.DoesNotExist:
             return Response({'detail': 'السطر غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+        # the machine's suggestion before this edit — replaced → remembered as rejected for
+        # this spelling (vendor-scoped), so it ranks lower next time (shortage/learning)
+        suggested_id = line.item_id if not line.is_confirmed else None
         ser = InvoiceLineWriteSerializer(line, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         line = ser.save()
+        if suggested_id and 'item' in request.data and line.item_id != suggested_id:
+            try:
+                from apps.shortage.learning import record_rejection
+                vcode = (invoice.vendor.softech_personcode or '') if invoice.vendor_id and invoice.vendor else ''
+                record_rejection(line.manual_name or line.raw_text or '', suggested_id,
+                                 vendor_code=vcode, source='invoice')
+            except Exception as e:
+                logger.warning('record_rejection failed for invoice line %s: %s', line.pk, e)
         # A human confirming (or re-picking) the item resolves any match-review flag.
         if line.match_review and (line.is_confirmed or 'item' in request.data):
             line.match_review = False
@@ -353,6 +411,10 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         norm    = _normalize(line.manual_name or line.raw_text or '')
         profile = getattr(request.user, 'staff_profile', None)
         code    = (line.vendor_item_code or '').strip()
+        # never learn a batch number as the supplier's item code (it changes every delivery)
+        from .ocr import separate_code_and_batch
+        if code and separate_code_and_batch(code, line.batch_number)[2]:
+            code = ''
 
         mapping, created = VendorItemMapping.objects.get_or_create(
             vendor              = invoice.vendor,
@@ -381,6 +443,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                         source='invoice', vendor_code=vcode)
         except Exception as e:
             logger.warning('learn_alias failed for invoice line %s: %s', line.pk, e)
+        _link_invoice_corpus(invoice.pk, line.manual_name or line.raw_text or '', line.item)
 
         # Inject the confirmed code → item into SOFTECH itemssuppliers so the NEXT
         # invoice from this supplier resolves this code instantly (tier 0 above).
@@ -402,6 +465,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                             commit=True, approved=approve_change)
                     finally:
                         conn.close()
+                    if injected.get('committed'):
+                        from apps.catalog.supplier_links import link_code
+                        link_code(vcode, line.item.softech_id, code)     # mirror stays current
                     if injected.get('action') == 'needs_approval':
                         logger.info('itemssuppliers change needs approval %s/%s=%s: %s',
                                     vcode, line.item.softech_id, code, injected['discrepancies'])
@@ -631,7 +697,7 @@ class VendorProfileViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         q  = self.request.query_params.get('q')
         if q:
-            qs = qs.filter(name__icontains=q)
+            qs = qs.filter(wq(q, 'name'))
         if self.request.query_params.get('main') in ('1', 'true'):
             qs = qs.filter(is_main=True)
         return qs

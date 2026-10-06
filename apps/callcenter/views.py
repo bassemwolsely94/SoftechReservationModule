@@ -9,6 +9,7 @@ ViewSets:
   AddressUpdateViewSet  — Read-only list + apply action
 """
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -53,7 +54,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
       - branch staff: own logs only
     """
     permission_classes = [IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
         'phone_number', 'caller_name', 'notes', 'summary',
@@ -892,7 +893,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
     CRUD for CustomerCase with state-machine actions.
     """
     permission_classes = [IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['status', 'category', 'priority', 'branch', 'assigned_to']
     search_fields      = ['case_number', 'title', 'description', 'customer__name', 'customer__phone']
     ordering_fields    = ['created_at', 'updated_at', 'sla_due', 'priority']

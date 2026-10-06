@@ -25,17 +25,30 @@ def _prng(s, e):
     return f'{s}' if s == e else f'{s}→{e}'
 
 
-def _ranking(ctx, code, title_ar, title_en, ranked, is_count=False, top=5):
-    """Build one 'highlight' ranking finding. `ranked` = [(label_ar, label_en, value), …]
-    (any order; sorted desc here). is_count → integer format, no money unit."""
-    ranked = sorted((x for x in ranked if x[2]), key=lambda x: -float(x[2]))[:top]
+def _ranking(ctx, code, title_ar, title_en, ranked, is_count=False, top=5, bottom=False):
+    """Build one ranking finding. `ranked` = [(label_ar, label_en, value), …] (any order).
+    is_count → integer format, no money unit.
+    Default: a 'highlight' TOP leaderboard (sorted desc, top N).
+    bottom=True: a 'bottom' UNDERPERFORMER board (sorted asc, lowest bottom_n; worst first).
+      Only fires when ≥ bottom_min_pop members are ranked (see Ctx) — so a small population
+      (e.g. a few branches) produces no laggard-board. Zero/blank values are excluded from
+      both directions (a zero = didn't participate, not 'worst')."""
+    pool = [x for x in ranked if x[2]]
+    if bottom:
+        if len(pool) < ctx.bottom_min_pop:
+            return None
+        ranked = sorted(pool, key=lambda x: float(x[2]))[:ctx.bottom_n]
+        cat, sev = 'bottom', 'warning'
+    else:
+        ranked = sorted(pool, key=lambda x: -float(x[2]))[:top]
+        cat, sev = 'highlight', 'info'
     if not ranked:
         return None
     f = (lambda v: f'{int(v):,}') if is_count else _fmt
     ua, ue = ('', '') if is_count else (' ج.م', ' EGP')
     ar = ' · '.join(f'{i+1}) {la} {f(v)}' for i, (la, le, v) in enumerate(ranked))
     en = ' · '.join(f'{i+1}) {le} {f(v)}' for i, (la, le, v) in enumerate(ranked))
-    return dict(rule_code=code, category='highlight', severity='info',
+    return dict(rule_code=code, category=cat, severity=sev,
         scope_type='chain', scope_key='', scope_label='',
         value=Decimal(str(ranked[0][2])), baseline=None, threshold=None,
         message_ar=f'{title_ar} ({ctx.label()}): {ar}{ua}.',
@@ -154,17 +167,22 @@ class Ctx:
         from apps.users.models import ERPUser
         self.rep_names = {str(c): (n or '').strip() for c, n in
                           ERPUser.objects.exclude(user_id='').values_list('username', 'user_id')}
-        # pseudo-items to keep OUT of item-level findings (loyalty coupons, etc.) — owner-editable
+        # pseudo/non-retail items to keep OUT of item-level findings — loyalty coupons AND
+        # customer-gift items (هدايا العملاء, medicine_type 60). Owner-editable via two settings:
+        #  • analytics_excluded_item_keywords  — item-name keywords (default COUPON/كوبون/هدايا/هدية)
+        #  • analytics_excluded_medicine_types  — general-category codes (default 60 = client gifts)
+        # Both feed ONE excluded_item_ids set used by item-level SALES and STOCK rules.
         from apps.config.models import SystemSetting
-        kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون') or '').split(',') if k.strip()]
-        self.excluded_item_ids = set()
-        if kws:
-            from django.db.models import Q
-            from apps.catalog.models import Item
-            q = Q()
-            for k in kws:
-                q |= Q(name__icontains=k)
-            self.excluded_item_ids = set(Item.objects.filter(q).values_list('id', flat=True))
+        from django.db.models import Q
+        from apps.catalog.models import Item
+        kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون,هدايا,هدية') or '').split(',') if k.strip()]
+        xtypes = [t.strip() for t in str(SystemSetting.get('analytics_excluded_medicine_types', '60') or '').split(',') if t.strip()]
+        q = Q()
+        for k in kws:
+            q |= Q(name__icontains=k)
+        if xtypes:
+            q |= Q(medicine_type__in=xtypes)
+        self.excluded_item_ids = set(Item.objects.filter(q).values_list('id', flat=True)) if (kws or xtypes) else set()
         # Owner-tunable money floors shared by several rules:
         #  • bulk_cash_floor  — a CASH invoice at/above this counts as a "bulk cash" sale.
         #  • basket_bulk_floor — invoices at/above this are EXCLUDED from basket-size stats
@@ -174,6 +192,41 @@ class Ctx:
         # Minimum transactions for a rep/branch to count as "active" — scaled by period so a
         # DAILY report still lists everyone who worked that day (a rep rarely does 30/day).
         self.min_active = {'day': 5, 'week': 20}.get(period_type, 30)
+        # Bottom-N (underperformer) rankings, parallel to the top-N leaderboards.
+        #  • bottom_n         — how many laggards to list (mirrors the top-5 convention).
+        #  • bottom_min_pop   — only emit a bottom list if this many members are RANKED
+        #    (non-zero) for the metric. Guards against a meaningless "bottom 5 of 5" — a
+        #    ~5-branch chain never produces a branch laggard-board, while salespeople (many
+        #    reps) do. Forced above bottom_n so the two slices can't fully overlap.
+        self.bottom_n = int(SystemSetting.get('insights_bottom_n', 5) or 5)
+        self.bottom_min_pop = max(int(SystemSetting.get('insights_bottom_min_population', 8) or 8),
+                                  self.bottom_n + 1)
+        # Bulk-exclusion floors for the ex-bulk CASH-sales leaderboards (rule_cash_exbulk_ranking):
+        # one ranking per floor, invoices at/above the floor are dropped so everyday selling
+        # compares fairly. Owner-editable, dedicated to this rule (kept separate from the basket /
+        # bulk-cash floors so tuning one doesn't move the other). Default = 5000 and 10000.
+        self.cash_exbulk_floors = []
+        for _tok in str(SystemSetting.get('insights_cash_exbulk_floors', '5000,10000') or '').split(','):
+            _tok = _tok.strip()
+            if _tok:
+                try:
+                    d = Decimal(_tok)
+                except Exception:
+                    continue
+                if d > 0 and d not in self.cash_exbulk_floors:
+                    self.cash_exbulk_floors.append(d)
+        # DAILY "real working day" gate. A rep whose calendar day is NOT a genuine working day is
+        # SET ASIDE from the daily bottom rankings + underperformer flags (never from totals, never
+        # weekly/monthly) so a night-shift tail or an off/partial day isn't mislabelled as
+        # underperformance. PRESENCE decides set-aside: fewer than min_active transactions OR active
+        # across fewer than daily_min_hours distinct trans_time hours (a sliver). A rep who was
+        # PRESENT all day but sold little is NOT set aside — that is real underperformance and stays
+        # in the list. The extreme-drop signal (today's sales < daily_offday_ratio × their own
+        # trailing daily average over daily_trailing_days) only labels an already-set-aside rep as
+        # 'likely off' vs a plain short/night shift.
+        self.daily_min_hours = int(SystemSetting.get('insights_daily_min_active_hours', 3) or 3)
+        self.daily_offday_ratio = Decimal(str(SystemSetting.get('insights_daily_offday_ratio', '0.25') or '0.25'))
+        self.daily_trailing_days = int(SystemSetting.get('insights_daily_trailing_days', 28) or 28)
         # Channel segments (for segment analytics). cash = walk-in + delivery + عميل دائم.
         _delset = set(self.delivery_channels); _regset = set(self.regular_channels)
         self.walkin_channels = [c for c in self.cash_channels if c not in _delset and c not in _regset]  # 91/11/12
@@ -187,6 +240,69 @@ class Ctx:
                     self.tracked_items.append((code.strip(), label.strip() or code.strip()))
         self.branch_by_code = {b.code or b.softech_branch_id: b for b in self.branches}
         self.branch_ids = [b.id for b in self.branches]
+        # ALL branches incl. HQ (المخزن الرئيسي, code 100) — the retail-only branch_by_code
+        # above excludes HQ for SALES analytics, but PURCHASING flows through HQ, so purchasing
+        # rules need HQ labelled properly (was showing raw "100").
+        self.all_branch_by_code = {b.code or b.softech_branch_id: b for b in Branch.objects.all()}
+        # Reps set aside from the DAILY bottom rankings / underperformer flags (see gate above).
+        # Empty for week/month (those already smooth partial days out), so the filters below are
+        # no-ops outside a day report.
+        self.partial_day_reasons = {}
+        self.partial_day_reps = self._compute_partial_day_reps() if period_type == 'day' else set()
+
+    def _compute_partial_day_reps(self):
+        """softech_user codes whose report DAY isn't a genuine working day (presence gate fails
+        or an extreme drop vs their own trailing daily average). Used to keep night-shift tails /
+        off / partial days out of the daily bottom rankings + underperformer flags."""
+        from apps.customers.models import PurchaseHistory
+        from django.db.models.functions import ExtractHour
+        D = lambda x: Decimal(str(x or 0))
+        day = self.start
+        today = (PurchaseHistory.objects.filter(invoice_date__date=day, doc_code='115',
+                    branch_id__in=self.branch_ids, sales_channel__in=self.nonexclude)
+                 .exclude(softech_user=''))
+        # presence: transactions + distinct active trans_time hours, and today's gross per rep
+        pres = {r['softech_user']: (r['n'] or 0, r['hrs'] or 0) for r in
+                today.annotate(h=ExtractHour('trans_time')).values('softech_user')
+                .annotate(n=Count('id'), hrs=Count('h', distinct=True))}
+        today_val = {u: D(v) for u, v in today.values_list('softech_user').annotate(v=Sum('total_amount'))}
+        # trailing per-rep average over the days they were ACTIVE (their typical working-day output)
+        ts = day - timedelta(days=self.daily_trailing_days); te = day - timedelta(days=1)
+        avg = {}
+        for r in (PurchaseHistory.objects.filter(invoice_date__date__gte=ts, invoice_date__date__lte=te,
+                    doc_code='115', branch_id__in=self.branch_ids, sales_channel__in=self.nonexclude)
+                  .exclude(softech_user='').values('softech_user')
+                  .annotate(v=Sum('total_amount'), days=Count('invoice_date__date', distinct=True))):
+            days = r['days'] or 0
+            avg[r['softech_user']] = (D(r['v']) / Decimal(days)) if days else Decimal('0')
+        partial = set()
+        self.partial_day_reasons = {}   # u -> ('partial' short shift/sliver | 'drop' likely off)
+        for u in set(pres) | set(today_val):
+            n, hrs = pres.get(u, (0, 0))
+            # PRESENCE drives set-aside: too-few transactions, OR too-few active hours — but the
+            # hours test only applies when hour data exists (hrs > 0); a missing/absent trans_time
+            # (hrs == 0) is judged by transaction count alone, so a data gap never benches a real
+            # rep. A rep who was PRESENT all day but simply sold little (full presence, no gate
+            # fail) is NOT set aside — that is genuine underperformance and STAYS in the bottom
+            # list. The extreme-drop-vs-own-average signal only refines the REASON label of an
+            # already-set-aside rep (barely present today yet normally sells a lot ⇒ 'likely off').
+            gate_fail = (n < self.min_active) or (0 < hrs < self.daily_min_hours)
+            if not gate_fail:
+                continue
+            a = avg.get(u, Decimal('0'))
+            extreme = a > 0 and today_val.get(u, Decimal('0')) < a * self.daily_offday_ratio
+            partial.add(u)
+            self.partial_day_reasons[u] = 'drop' if extreme else 'partial'
+        return partial
+
+    def branch_name(self, code, lang='ar'):
+        """Branch display name for a SOFTECH branch code, incl. HQ. Falls back to the raw code."""
+        b = self.all_branch_by_code.get(str(code))
+        if b:
+            return (b.name_ar or b.name) if lang == 'ar' else (b.name or b.name_ar)
+        if str(code) == HQ_CODE:
+            return 'المخزن الرئيسي' if lang == 'ar' else 'HQ warehouse'
+        return str(code)
 
     def label(self):
         m = {'day': 'يوم', 'week': 'أسبوع', 'month': 'شهر', 'mtd': 'شهر حتى تاريخه'}
@@ -204,6 +320,65 @@ class Ctx:
     def bn(b, lang):
         """Branch name in the requested language."""
         return (b.name_ar or b.name) if lang == 'ar' else (b.name or b.name_ar)
+
+
+def _period_sales_gaps(start, end):
+    """Per-day INTERIOR completeness for a sales period: days inside [start, end] that are
+    empty (0 invoices) or abnormally low vs the period's own median — i.e. sync GAPS in the
+    middle of the month that a 'latest date' check misses entirely. A whole zero-day for a
+    multi-branch chain is unambiguously missing data; a very-low day (< 30% of median) is a
+    likely partial sync. Returns {empty_days, low_days, median}."""
+    from apps.customers.models import PurchaseHistory
+    counts = dict(PurchaseHistory.objects.filter(
+        doc_code='115', invoice_date__date__gte=start, invoice_date__date__lte=end)
+        .values_list('invoice_date__date').annotate(n=Count('id')))
+    days = []
+    d = start
+    while d <= end:
+        days.append(d); d += timedelta(days=1)
+    per = [(d, counts.get(d, 0)) for d in days]
+    nonzero = sorted(c for _, c in per if c > 0)
+    if not nonzero:
+        return dict(empty_days=[d.isoformat() for d in days], low_days=[], median=0)
+    median = nonzero[len(nonzero) // 2]
+    empty = [d.isoformat() for d, c in per if c == 0]
+    low = [d.isoformat() for d, c in per if 0 < c < median * 0.3]
+    return dict(empty_days=empty, low_days=low, median=median)
+
+
+def data_freshness(start, end, domain='sales'):
+    """Mirror data-freshness + period COMPLETENESS for a narrative report. Beyond the purchasing
+    module's `data_through_date` idea (latest mirrored date), it also checks INTERIOR gaps — days
+    inside the period that were never (or only partially) synced — which a max-date check misses.
+      sales_through/purch_through — latest mirrored date per source
+      last_sync_at / last_sync_failed — most recent SUCCESSFUL SyncRun time / whether latest FAILED
+      src_through   — source relevant to `domain`; gap_days — days the END isn't yet covered
+      covered       — src_through reaches the period end (tail is current)
+      empty_days    — days in [start,end] with ZERO sales invoices (definite gaps; sales only)
+      low_days      — days < 30% of the period median (likely partial sync; sales only)
+      complete      — covered AND no empty/low interior days (nothing missing)
+    Coverage/completeness judged on the ACTUAL DATA, not the SyncRun log. Cheap (indexed dates)."""
+    from django.db.models import Max
+    from apps.customers.models import PurchaseHistory
+    from apps.procurement.models import PurchaseLine
+    from apps.sync.models import SyncRun
+    sm = PurchaseHistory.objects.aggregate(mx=Max('invoice_date'))['mx']
+    sales_through = sm.date() if sm else None
+    purch_through = PurchaseLine.objects.aggregate(mx=Max('doc_date'))['mx']   # already a date
+    last_run = SyncRun.objects.order_by('-started_at').first()
+    last_ok = (SyncRun.objects.filter(status='success', completed_at__isnull=False)
+               .order_by('-completed_at').first())
+    src_through = purch_through if domain == 'purchasing' else sales_through
+    gap = (end - src_through).days if (src_through and src_through < end) else 0
+    covered = src_through is not None and src_through >= end
+    # Interior gaps only for SALES (purchasing is legitimately lumpy — zero days are normal).
+    g = _period_sales_gaps(start, end) if domain == 'sales' else {'empty_days': [], 'low_days': [], 'median': 0}
+    return dict(sales_through=sales_through, purch_through=purch_through,
+                last_sync_at=(last_ok.completed_at if last_ok else None),
+                last_sync_failed=(last_run.status == 'failed' if last_run else False),
+                src_through=src_through, gap_days=gap, covered=covered,
+                empty_days=g['empty_days'], low_days=g['low_days'],
+                complete=(covered and not g['empty_days'] and not g['low_days']))
 
 
 def _ph(ctx, start, end):
@@ -392,7 +567,7 @@ def rule_salesperson_no_beauty(ctx, threshold):
         .values_list('purchase__softech_user', flat=True).distinct())
     out = []
     for user, tot in total_by_user.items():
-        if user in ctx.cc_agents:
+        if user in ctx.cc_agents or user in ctx.partial_day_reps:   # skip partial/off day (daily)
             continue
         if Decimal(str(tot or 0)) >= floor and user not in beauty_users:
             out.append(dict(rule_code='salesperson_no_beauty', category='mix', severity='warning',
@@ -415,7 +590,7 @@ def rule_salesperson_below_avg(ctx, threshold):
                  .values_list('softech_user').annotate(s=Sum('total_amount')))
     out = []
     for user, tot in cur.items():
-        if user in ctx.cc_agents:
+        if user in ctx.cc_agents or user in ctx.partial_day_reps:   # skip partial/off day (daily)
             continue
         avg = Decimal(str(trail.get(user, 0) or 0)) / Decimal('4')
         c = Decimal(str(tot or 0))
@@ -1019,9 +1194,22 @@ _CAT_EN = {'OFFICIAL_DISTRIBUTOR': 'official distributor', 'MANUFACTURER': 'manu
            'INTERNAL_TRANSFER': 'internal transfer', 'SERVICE_VENDOR': 'service', 'UNKNOWN': 'unknown'}
 
 
+def _excluded_supplier_codes():
+    """Supplier codes OMITTED from ALL purchasing analytics — non-goods 'suppliers' whose
+    transactions shouldn't count as real procurement, e.g. the management customer-gift/coupon
+    account «هدايا الادارة لخدمة العملاء» (code 1268: coupons bought to be dispensed to PIC
+    customers). Owner-editable via SystemSetting `analytics_excluded_supplier_codes` (comma list;
+    default '1268'). Applied in _purchases() so every purchasing rule (value, invoices, FOC,
+    supplier-category, rankings…) excludes them consistently."""
+    from apps.config.models import SystemSetting
+    return [c.strip() for c in str(SystemSetting.get('analytics_excluded_supplier_codes', '1268') or '').split(',') if c.strip()]
+
+
 def _purchases(start, end):
     from apps.procurement.models import PurchaseLine
-    return PurchaseLine.objects.filter(doc_date__gte=start, doc_date__lte=end)
+    qs = PurchaseLine.objects.filter(doc_date__gte=start, doc_date__lte=end)
+    excl = _excluded_supplier_codes()
+    return qs.exclude(supplier_code__in=excl) if excl else qs
 
 
 def _item_name(code):
@@ -1038,18 +1226,71 @@ def _item_name_by_id(iid):
     return Item.objects.filter(id=iid).values_list('name', flat=True).first() or str(iid)
 
 
+def _inv_count(qs):
+    """Distinct purchase invoices in a PurchaseLine queryset. doc_number is a per-(branch,
+    supplier) sequence — never globally unique (see SOFTECH docnumber-collision rule) — so count
+    distinct (branch_code, supplier_code, doc_number) tuples, not bare doc_number.
+    `.order_by()` clears the model's Meta ordering (-doc_date) so it isn't silently added to the
+    DISTINCT set (which would inflate the count)."""
+    return qs.order_by().values('branch_code', 'supplier_code', 'doc_number').distinct().count()
+
+
+def _cat_lbl(code, lang):
+    """Supplier-category display label (blank → 'غير مصنّف'/unknown)."""
+    code = code or 'UNKNOWN'
+    return (_CAT_AR if lang == 'ar' else _CAT_EN).get(code, code)
+
+
 def rule_hq_purchase_summary(ctx, threshold):
-    """HQ purchasing headline: value + distinct item codes bought this period."""
+    """HQ purchasing AT-A-GLANCE headline: net value, distinct items, distinct suppliers,
+    invoice count + avg invoice, returns value/rate, free/bonus value, and trend vs prev — one
+    board-level remark so HQ purchasing is front-and-centre."""
     qs = _purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
-    val = qs.aggregate(v=Sum('net_value'))['v'] or 0
+    val = Decimal(str(qs.aggregate(v=Sum('net_value'))['v'] or 0))
     if val <= 0:
-        return []
+        # HQ central buying is LUMPY — big supplier deliveries every few days, nothing in between.
+        # On a no-delivery day the old rule returned [] and HQ vanished from the purchasing branch
+        # scope (while branches, which buy locally most days, stayed). Emit a zero-state note so HQ
+        # is ALWAYS selectable, showing when the last central delivery landed.
+        from apps.procurement.models import PurchaseLine
+        last = (PurchaseLine.objects.filter(branch_code=HQ_CODE, is_return=False, net_value__gt=0,
+                    doc_date__lte=ctx.end).exclude(supplier_code__in=_excluded_supplier_codes())
+                .order_by('-doc_date').values_list('doc_date', flat=True).first())
+        last_ar = f' — آخر توريد مركزي بتاريخ {last}' if last else ''
+        last_en = f' — last central delivery {last}' if last else ''
+        return [dict(rule_code='hq_purchase_summary', category='coverage', severity='info',
+            scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
+            value=Decimal('0'), baseline=None, threshold=None,
+            message_ar=f'🏭 المخزن الرئيسي: لا مشتريات مركزية خلال ال{ctx.label()}{last_ar} (الشراء المركزي يتم على دفعات).',
+            message_en=f'🏭 HQ: no central purchases this {ctx.pw_en()}{last_en} (central buying is batched).')]
     items = qs.values('item_code').distinct().count()
+    suppliers = qs.exclude(supplier_code='').values('supplier_code').distinct().count()
+    invs = _inv_count(qs)
+    avg_inv = (val / Decimal(invs)) if invs else Decimal('0')
+    ret_val = abs(Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=True)
+                             .aggregate(v=Sum('raw_value'))['v'] or 0)))
+    rate = ret_val / (val + ret_val) * 100 if (val + ret_val) else Decimal('0')
+    cost_foc = ExpressionWrapper(F('cost_price') * F('bonus_qty'),   # FOC value = FREE units × cost (NOT paid qty)
+                                 output_field=DecimalField(max_digits=20, decimal_places=4))
+    foc = Decimal(str(_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_foc=True)
+                      .aggregate(v=Sum(cost_foc))['v'] or 0))
+    prev = Decimal(str(_purchases(ctx.prev_start, ctx.prev_end).filter(branch_code=HQ_CODE, is_return=False)
+                       .aggregate(v=Sum('net_value'))['v'] or 0))
+    trend_ar = trend_en = ''
+    if prev > 0:
+        d = (val - prev) / prev * 100
+        arrow = '▲' if d >= 0 else '▼'
+        trend_ar = f' ({arrow}{abs(float(d)):.0f}% عن السابق)'
+        trend_en = f' ({arrow}{abs(float(d)):.0f}% vs prev)'
     return [dict(rule_code='hq_purchase_summary', category='highlight', severity='info',
         scope_type='branch', scope_key=HQ_CODE, scope_label='المخزن الرئيسي',
-        value=Decimal(str(val)), baseline=None, threshold=None,
-        message_ar=f'🏭 مشتريات المخزن الرئيسي: {_fmt(val)} ج.م على {items} صنف خلال ال{ctx.label()}.',
-        message_en=f'🏭 HQ purchases: {_fmt(val)} EGP across {items} distinct items this {ctx.pw_en()}.')]
+        value=val, baseline=(prev or None), threshold=None,
+        message_ar=(f'🏭 مشتريات المخزن الرئيسي ({ctx.label()}): صافي {_fmt(val)} ج.م{trend_ar} على {items} صنف '
+                    f'من {suppliers} مورد · {invs} فاتورة (متوسط {_fmt(avg_inv)} ج.م) · '
+                    f'مرتجعات {_fmt(ret_val)} ({rate:.0f}%) · بضائع مجانية ~{_fmt(foc)} ج.م.'),
+        message_en=(f'🏭 HQ purchases ({ctx.pw_en()}): net {_fmt(val)} EGP{trend_en} across {items} items '
+                    f'from {suppliers} suppliers · {invs} invoices (avg {_fmt(avg_inv)} EGP) · '
+                    f'returns {_fmt(ret_val)} ({rate:.0f}%) · free goods ~{_fmt(foc)} EGP.'))]
 
 
 def rule_purchase_category_mix(ctx, threshold):
@@ -1222,11 +1463,15 @@ def rule_supplier_concentration(ctx, threshold):
 
 
 def rule_foc_captured(ctx, threshold):
-    """Positive: value of free-of-charge / bonus goods negotiated into HQ purchases."""
-    cost = ExpressionWrapper(F('cost_price') * F('raw_qty'),
+    """Positive: value of free-of-charge / bonus goods negotiated into HQ purchases.
+    FOC value = FREE (بونص) units × cost (`bonus_qty` — the units received for free), NOT the
+    paid quantity (`raw_qty`). Booking of a bonus deal: paid line carries raw_qty/raw_value at
+    cost; the free units are captured in `bonus_qty`. Valuing at `cost_price × bonus_qty` gives
+    what those free units cost the supplier / would have cost us — the true 'free goods' worth."""
+    cost = ExpressionWrapper(F('cost_price') * F('bonus_qty'),   # FOC value = FREE units × cost (NOT paid qty)
                              output_field=DecimalField(max_digits=20, decimal_places=4))
-    qs = _purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_foc=True)
-    agg = qs.aggregate(n=Count('id'), q=Sum('raw_qty'), val=Sum(cost))
+    qs = _purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_foc=True, bonus_qty__gt=0)
+    agg = qs.aggregate(n=Count('id'), q=Sum('bonus_qty'), val=Sum(cost))
     val = Decimal(str(agg['val'] or 0))
     if (agg['n'] or 0) == 0 or val <= 0:
         return []
@@ -1302,9 +1547,8 @@ def rule_patient_repurchase_volume(ctx, threshold):
         if v < thr:
             continue
         code = str(r['branch_code'])
-        b = ctx.branch_by_code.get(code)
-        nm = (b.name_ar or b.name) if b else (code or 'المخزن الرئيسي' if code == HQ_CODE else code)
-        ne = (b.name or b.name_ar) if b else code
+        nm = ctx.branch_name(code, 'ar')
+        ne = ctx.branch_name(code, 'en')
         out.append(dict(rule_code='patient_repurchase_volume', category='comparison', severity='info',
             scope_type='branch', scope_key=code, scope_label=nm,
             value=v, baseline=None, threshold=thr,
@@ -1368,7 +1612,7 @@ def rule_purchase_overview(ctx, threshold):
     """Chain-wide purchasing headline: net purchase value (HQ + branches split), distinct
     items, distinct suppliers, returns value + rate, free/bonus value, and trend vs prev."""
     from django.db.models import Count as _C
-    cost_foc = ExpressionWrapper(F('cost_price') * F('raw_qty'),
+    cost_foc = ExpressionWrapper(F('cost_price') * F('bonus_qty'),   # FOC value = FREE units × cost (NOT paid qty)
                                  output_field=DecimalField(max_digits=20, decimal_places=4))
 
     def net(s, e, branch=None):
@@ -1507,7 +1751,8 @@ def rule_supplier_scorecard(ctx, threshold):
     threshold = return% that puts a supplier on the watch-list."""
     thr = Decimal(str(threshold if threshold is not None else 10))
     from apps.procurement.models import SupplierProfile
-    qs = list(SupplierProfile.objects.filter(net_purchase_value__gte=20000))
+    qs = list(SupplierProfile.objects.filter(net_purchase_value__gte=20000)
+              .exclude(supplier_code__in=_excluded_supplier_codes()))
     if not qs:
         return []
     fp = lambda x: float(x or 0)
@@ -1531,6 +1776,192 @@ def rule_supplier_scorecard(ctx, threshold):
             value=Decimal(str(round(fp(s.return_pct), 1))), baseline=Decimal(str(s.net_purchase_value or 0)), threshold=thr,
             message_ar=f'⚠️ مورد للمتابعة: {s.supplier_name or s.supplier_code} — نسبة مرتجعات {fp(s.return_pct):.0f}% · خدمة {fp(s.service_level_pct):.0f}% على مشتريات {_fmt(s.net_purchase_value)} ج.م.',
             message_en=f'⚠️ Supplier to watch: {s.supplier_name or s.supplier_code} — returns {fp(s.return_pct):.0f}% · service {fp(s.service_level_pct):.0f}% on {_fmt(s.net_purchase_value)} EGP.'))
+    return out
+
+
+# ── Purchasing KPI expansion (supplier-category value, invoices, VAT, expiry, buyers) ─
+
+def _cat_breakdown(qs):
+    """[(supplier_category, net_value, distinct_items)] desc by value (blank cat → 'UNKNOWN'),
+    plus the total — for a non-return PurchaseLine queryset. One grouped query."""
+    rows = qs.values('supplier_category').annotate(v=Sum('net_value'), n=Count('item_code', distinct=True))
+    data = [(r['supplier_category'] or 'UNKNOWN', Decimal(str(r['v'] or 0)), r['n'] or 0) for r in rows]
+    data = [d for d in data if d[1] > 0]
+    data.sort(key=lambda x: -x[1])
+    return data, sum(d[1] for d in data)
+
+
+def _purchase_branch_codes(ctx):
+    """SOFTECH branch codes with any non-return purchase this period (HQ + branches).
+    `.order_by()` clears the model's -doc_date ordering so DISTINCT isn't broken by a hidden
+    ORDER BY column (which would return a branch code once per date)."""
+    return sorted(str(c) for c in _purchases(ctx.start, ctx.end).filter(is_return=False)
+                  .exclude(branch_code='').order_by().values_list('branch_code', flat=True).distinct())
+
+
+def rule_purchase_supplier_category(ctx, threshold):
+    """Purchase VALUE (net) by supplier category — EGP value + share% + distinct items per
+    category. Chain board + HQ + each branch (فرع report). 'Purchasing channel' = the supplier
+    category the stock was sourced through (official distributor / manufacturer / small warehouse
+    / patient-Rx / internal transfer / service)."""
+    thr = Decimal(str(threshold if threshold is not None else 5000))   # min branch value to list
+
+    def emit(qs, scope_type, scope_key, label_ar, label_en, category, floor=Decimal('0')):
+        data, total = _cat_breakdown(qs)
+        if total <= floor or not data:
+            return None
+        pa = ' · '.join(f'{_cat_lbl(c, "ar")} {_fmt(v)} ({v/total*100:.0f}% · {n} صنف)' for c, v, n in data)
+        pe = ' · '.join(f'{_cat_lbl(c, "en")} {_fmt(v)} ({v/total*100:.0f}% · {n} items)' for c, v, n in data)
+        pre_ar = 'قيمة المشتريات حسب فئة المورد' if scope_type == 'chain' else f'مشتريات {label_ar} حسب فئة المورد'
+        pre_en = 'Purchases by supplier category' if scope_type == 'chain' else f'{label_en} purchases by supplier category'
+        return dict(rule_code='purchase_supplier_category', category=category, severity='info',
+            scope_type=scope_type, scope_key=scope_key, scope_label=label_ar,
+            value=total, baseline=None, threshold=None,
+            message_ar=f'🧾 {pre_ar} ({ctx.label()}): {pa}.',
+            message_en=f'🧾 {pre_en} ({ctx.pw_en()}): {pe}.')
+
+    out = []
+    base = _purchases(ctx.start, ctx.end).filter(is_return=False)
+    r = emit(base, 'chain', '', '', '', 'highlight')
+    if r:
+        out.append(r)
+    r = emit(base.filter(branch_code=HQ_CODE), 'branch', HQ_CODE,
+             ctx.branch_name(HQ_CODE, 'ar'), ctx.branch_name(HQ_CODE, 'en'), 'highlight')
+    if r:
+        out.append(r)
+    for code in _purchase_branch_codes(ctx):
+        if code == HQ_CODE:
+            continue
+        r = emit(base.filter(branch_code=code), 'branch', code,
+                 ctx.branch_name(code, 'ar'), ctx.branch_name(code, 'en'), 'comparison', floor=thr)
+        if r:
+            out.append(r)
+    return out
+
+
+def rule_purchase_invoice_count(ctx, threshold):
+    """Count of purchase invoices + average invoice value (net) — chain board + per branch
+    (incl HQ). Invoice = distinct (branch, supplier, doc_number)."""
+    thr = Decimal(str(threshold if threshold is not None else 5000))   # min branch value to list
+
+    def emit(qs, scope_type, scope_key, label_ar, label_en, category, floor=Decimal('0')):
+        val = Decimal(str(qs.aggregate(v=Sum('net_value'))['v'] or 0))
+        invs = _inv_count(qs)
+        if invs == 0 or val <= floor:
+            return None
+        suppliers = qs.exclude(supplier_code='').values('supplier_code').distinct().count()
+        avg = val / Decimal(invs)
+        head_ar = 'عدد فواتير الشراء' if scope_type == 'chain' else f'فواتير شراء {label_ar}'
+        head_en = 'Purchase invoices' if scope_type == 'chain' else f'{label_en} purchase invoices'
+        return dict(rule_code='purchase_invoice_count', category=category, severity='info',
+            scope_type=scope_type, scope_key=scope_key, scope_label=label_ar,
+            value=Decimal(invs), baseline=None, threshold=None,
+            message_ar=(f'🧾 {head_ar} ({ctx.label()}): {invs:,} فاتورة من {suppliers} مورد '
+                        f'بمتوسط {_fmt(avg)} ج.م/فاتورة (إجمالى {_fmt(val)} ج.م).'),
+            message_en=(f'🧾 {head_en} ({ctx.pw_en()}): {invs:,} invoices from {suppliers} suppliers, '
+                        f'avg {_fmt(avg)} EGP/invoice (total {_fmt(val)} EGP).'))
+
+    out = []
+    base = _purchases(ctx.start, ctx.end).filter(is_return=False)
+    r = emit(base, 'chain', '', '', '', 'highlight')
+    if r:
+        out.append(r)
+    for code in _purchase_branch_codes(ctx):
+        r = emit(base.filter(branch_code=code), 'branch', code,
+                 ctx.branch_name(code, 'ar'), ctx.branch_name(code, 'en'), 'comparison',
+                 floor=(Decimal('0') if code == HQ_CODE else thr))
+        if r:
+            out.append(r)
+    return out
+
+
+def rule_purchase_input_vat(ctx, threshold):
+    """Input VAT paid on purchases (procurement.PurchaseLine.vat_value) + tax-inclusive cost —
+    chain board + HQ. Useful for input-tax tracking/reconciliation."""
+    def emit(qs, scope_type, scope_key, label_ar, label_en, category):
+        agg = qs.aggregate(vat=Sum('vat_value'), net=Sum('net_value'))
+        vat = Decimal(str(agg['vat'] or 0)); net = Decimal(str(agg['net'] or 0))
+        if vat <= 0 or net <= 0:
+            return None
+        pct = vat / net * 100
+        head_ar = 'ضريبة القيمة المضافة على المشتريات' if scope_type == 'chain' else f'ض.ق.م مشتريات {label_ar}'
+        head_en = 'Input VAT on purchases' if scope_type == 'chain' else f'{label_en} input VAT'
+        return dict(rule_code='purchase_input_vat', category=category, severity='info',
+            scope_type=scope_type, scope_key=scope_key, scope_label=label_ar,
+            value=vat, baseline=net, threshold=None,
+            message_ar=(f'🧾 {head_ar} ({ctx.label()}): {_fmt(vat)} ج.م ({pct:.0f}% من صافي {_fmt(net)}) — '
+                        f'التكلفة شاملة الضريبة {_fmt(net + vat)} ج.م.'),
+            message_en=(f'🧾 {head_en} ({ctx.pw_en()}): {_fmt(vat)} EGP ({pct:.0f}% of net {_fmt(net)}) — '
+                        f'tax-inclusive cost {_fmt(net + vat)} EGP.'))
+
+    out = []
+    base = _purchases(ctx.start, ctx.end).filter(is_return=False)
+    r = emit(base, 'chain', '', '', '', 'highlight')
+    if r:
+        out.append(r)
+    r = emit(base.filter(branch_code=HQ_CODE), 'branch', HQ_CODE,
+             ctx.branch_name(HQ_CODE, 'ar'), ctx.branch_name(HQ_CODE, 'en'), 'comparison')
+    if r:
+        out.append(r)
+    return out
+
+
+def rule_supplier_expiry_returns(ctx, threshold):
+    """Returns-to-supplier flagged as EXPIRY (return_type='expiry') — value + share of all
+    returns. Governance: recovering value on expiring stock, but also an over-buying signal.
+    Chain board + per branch."""
+    thr = Decimal(str(threshold if threshold is not None else 1000))
+
+    def emit(qs, scope_type, scope_key, label_ar, label_en, category):
+        rets = qs.filter(is_return=True)
+        exp = abs(Decimal(str(rets.filter(return_type='expiry').aggregate(v=Sum('raw_value'))['v'] or 0)))
+        allr = abs(Decimal(str(rets.aggregate(v=Sum('raw_value'))['v'] or 0)))
+        if exp < thr:
+            return None
+        share = exp / allr * 100 if allr else Decimal('0')
+        head_ar = 'مرتجعات منتهية الصلاحية للموردين' if scope_type == 'chain' else f'مرتجعات صلاحية {label_ar}'
+        head_en = 'Expiry returns to suppliers' if scope_type == 'chain' else f'{label_en} expiry returns'
+        return dict(rule_code='supplier_expiry_returns', category=category, severity='info',
+            scope_type=scope_type, scope_key=scope_key, scope_label=label_ar,
+            value=exp, baseline=allr, threshold=thr,
+            message_ar=f'⏳↩️ {head_ar} ({ctx.label()}): {_fmt(exp)} ج.م ({share:.0f}% من مرتجعات الموردين).',
+            message_en=f'⏳↩️ {head_en} ({ctx.pw_en()}): {_fmt(exp)} EGP ({share:.0f}% of supplier returns).')
+
+    out = []
+    base = _purchases(ctx.start, ctx.end)
+    r = emit(base, 'chain', '', '', '', 'highlight')
+    if r:
+        out.append(r)
+    for code in _purchase_branch_codes(ctx):
+        r = emit(base.filter(branch_code=code), 'branch', code,
+                 ctx.branch_name(code, 'ar'), ctx.branch_name(code, 'en'), 'comparison')
+        if r:
+            out.append(r)
+    return out
+
+
+def rule_buyer_ranking(ctx, threshold):
+    """Buyer (مسئول الشراء) leaderboard — TOP and BOTTOM by net purchase value handled + their
+    small-warehouse reliance share. HQ buyers (buyer_code on HQ purchases)."""
+    sw_val = Case(When(supplier_category='SMALL_WAREHOUSE', then=F('net_value')),
+                  default=Value(0), output_field=DecimalField(max_digits=18, decimal_places=4))
+    rows = (_purchases(ctx.start, ctx.end).filter(branch_code=HQ_CODE, is_return=False)
+            .exclude(buyer_code='').values('buyer_code').annotate(v=Sum('net_value'), sw=Sum(sw_val)))
+    data, share = [], {}
+    for r in rows:
+        v = Decimal(str(r['v'] or 0))
+        if v <= 0:
+            continue
+        b = ctx.rep(r['buyer_code'])
+        data.append((b, b, v))
+        share[b] = (Decimal(str(r['sw'] or 0)) / v * 100) if v else Decimal('0')
+    out = []
+    r = _ranking(ctx, 'buyer_ranking', '🛒 أكبر مسئولي الشراء قيمةً', 'Top buyers by purchase value', data)
+    if r:
+        out.append(r)
+    r = _ranking(ctx, 'buyer_ranking', '🔻 أدنى مسئولي الشراء قيمةً', 'Lowest buyers by purchase value', data, bottom=True)
+    if r:
+        out.append(r)
     return out
 
 
@@ -2197,6 +2628,7 @@ def rule_stockout_fastmovers(ctx, threshold):
     thr = Decimal(str(threshold if threshold is not None else 30))   # min monthly units to be a 'fast mover'
     qs = (ItemStock.objects.filter(branch_id__in=ctx.branch_ids,
               quantity_on_hand__lte=0, monthly_qty__gte=thr)
+          .exclude(item_id__in=ctx.excluded_item_ids)
           .select_related('item').order_by('-monthly_qty'))
     by_branch = {}
     for s in qs:
@@ -2230,6 +2662,7 @@ def rule_dead_stock(ctx, threshold):
               '40': 'Veterinary', '60': 'Client gifts', '70': 'Services', '00': 'Unclassified', '': 'Unclassified'}
     rows = (ItemStock.objects.filter(branch_id__in=ctx.branch_ids,
                     quantity_on_hand__gt=0, monthly_qty__lte=0)
+            .exclude(item_id__in=ctx.excluded_item_ids)
             .values('branch_id', 'item__medicine_type')
             .annotate(v=Sum(val)))
     per_branch = defaultdict(lambda: defaultdict(Decimal))   # bid → {(cat_ar,cat_en): value}
@@ -2378,14 +2811,23 @@ def rule_branch_segments(ctx, threshold):
     return out
 
 
-def _basket_rank_finding(ctx, code, title_ar, title_en, data):
-    """Ranking finding for a basket-size metric (1-decimal, 'items' unit). data=[(la,le,val)]."""
-    ranked = sorted((x for x in data if x[2]), key=lambda x: -float(x[2]))[:5]
+def _basket_rank_finding(ctx, code, title_ar, title_en, data, bottom=False):
+    """Ranking finding for a basket-size metric (1-decimal, 'items' unit). data=[(la,le,val)].
+    bottom=True → lowest-basket underperformers (asc, worst first) once ≥ bottom_min_pop ranked."""
+    pool = [x for x in data if x[2]]
+    if bottom:
+        if len(pool) < ctx.bottom_min_pop:
+            return None
+        ranked = sorted(pool, key=lambda x: float(x[2]))[:ctx.bottom_n]
+        cat, sev = 'bottom', 'warning'
+    else:
+        ranked = sorted(pool, key=lambda x: -float(x[2]))[:5]
+        cat, sev = 'highlight', 'info'
     if not ranked:
         return None
     ar = ' · '.join(f'{i+1}) {la} {float(v):.1f}' for i, (la, le, v) in enumerate(ranked))
     en = ' · '.join(f'{i+1}) {le} {float(v):.1f}' for i, (la, le, v) in enumerate(ranked))
-    return dict(rule_code=code, category='highlight', severity='info', scope_type='chain', scope_key='', scope_label='',
+    return dict(rule_code=code, category=cat, severity=sev, scope_type='chain', scope_key='', scope_label='',
         value=Decimal(str(round(float(ranked[0][2]), 2))), baseline=None, threshold=None,
         message_ar=f'{title_ar} ({ctx.label()}): {ar} صنف.', message_en=f'{title_en} ({ctx.pw_en()}): {en} items.')
 
@@ -2413,18 +2855,32 @@ def rule_segment_rankings(ctx, threshold):
     for seg_ar, seg_en, channels in [('استلام مباشر', 'walk-in', ctx.walkin_channels),
                                      ('التوصيل', 'delivery', ctx.delivery_channels)]:
         vb, vu, bk_b, bk_u = group(channels)
-        r = _ranking(ctx, 'segment_rankings', f'💰 ترتيب الفروع في قيمة {seg_ar}', f'Branch {seg_en}-value ranking',
-                     [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in vb.items() if b in bmap])
-        if r: out.append(r)
-        r = _ranking(ctx, 'segment_rankings', f'💰 ترتيب مسئولي البيع في قيمة {seg_ar}', f'Salesperson {seg_en}-value ranking',
-                     [(ctx.rep(u), ctx.rep(u), v) for u, v in vu.items() if u not in ctx.cc_agents])
-        if r: out.append(r)
-        r = _basket_rank_finding(ctx, 'segment_rankings', f'🧺 ترتيب الفروع في متوسط سلة {seg_ar}', f'Branch {seg_en} basket-size',
-                     [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in bk_b.items() if b in bmap])
-        if r: out.append(r)
-        r = _basket_rank_finding(ctx, 'segment_rankings', f'🧺 ترتيب مسئولي البيع في متوسط سلة {seg_ar}', f'Salesperson {seg_en} basket-size',
-                     [(ctx.rep(u), ctx.rep(u), v) for u, v in bk_u.items() if u not in ctx.cc_agents])
-        if r: out.append(r)
+        bval = [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in vb.items() if b in bmap]
+        sval = [(ctx.rep(u), ctx.rep(u), v) for u, v in vu.items()
+                if u not in ctx.cc_agents and u not in ctx.partial_day_reps]
+        bbsk = [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in bk_b.items() if b in bmap]
+        sbsk = [(ctx.rep(u), ctx.rep(u), v) for u, v in bk_u.items()
+                if u not in ctx.cc_agents and u not in ctx.partial_day_reps]
+        for top_ar, top_en, bot_ar, bot_en, data in [
+            (f'💰 ترتيب الفروع في قيمة {seg_ar}', f'Branch {seg_en}-value ranking',
+             f'🔻 أدنى الفروع في قيمة {seg_ar}', f'Lowest branches by {seg_en} value', bval),
+            (f'💰 ترتيب مسئولي البيع في قيمة {seg_ar}', f'Salesperson {seg_en}-value ranking',
+             f'🔻 أدنى مسئولي البيع في قيمة {seg_ar}', f'Lowest salespeople by {seg_en} value', sval),
+        ]:
+            r = _ranking(ctx, 'segment_rankings', top_ar, top_en, data)
+            if r: out.append(r)
+            r = _ranking(ctx, 'segment_rankings', bot_ar, bot_en, data, bottom=True)
+            if r: out.append(r)
+        for top_ar, top_en, bot_ar, bot_en, data in [
+            (f'🧺 ترتيب الفروع في متوسط سلة {seg_ar}', f'Branch {seg_en} basket-size',
+             f'🔻 أدنى الفروع في متوسط سلة {seg_ar}', f'Lowest branches by {seg_en} basket-size', bbsk),
+            (f'🧺 ترتيب مسئولي البيع في متوسط سلة {seg_ar}', f'Salesperson {seg_en} basket-size',
+             f'🔻 أدنى مسئولي البيع في متوسط سلة {seg_ar}', f'Lowest salespeople by {seg_en} basket-size', sbsk),
+        ]:
+            r = _basket_rank_finding(ctx, 'segment_rankings', top_ar, top_en, data)
+            if r: out.append(r)
+            r = _basket_rank_finding(ctx, 'segment_rankings', bot_ar, bot_en, data, bottom=True)
+            if r: out.append(r)
     return out
 
 
@@ -2449,15 +2905,13 @@ def rule_rank_cosmetics(ctx, threshold):
             .values_list('purchase__branch_id').annotate(v=Sum('line_total')))
     sale, ret = bty('115'), bty('30')   # net of returns
     net = {bid: Decimal(str(sale.get(bid, 0) or 0)) - Decimal(str(ret.get(bid, 0) or 0)) for bid in set(sale) | set(ret)}
-    ranked = sorted(((bmap[bid], v) for bid, v in net.items() if bid in bmap and v), key=lambda x: -x[1])
-    if not ranked:
-        return []
-    ar = ' · '.join(f'{i+1}) {ctx.bn(b,"ar")} {_fmt(v)}' for i, (b, v) in enumerate(ranked[:5]))
-    en = ' · '.join(f'{i+1}) {ctx.bn(b,"en")} {_fmt(v)}' for i, (b, v) in enumerate(ranked[:5]))
-    return [dict(rule_code='rank_cosmetics', category='highlight', severity='info',
-        scope_type='chain', scope_key='', scope_label='', value=ranked[0][1], baseline=None, threshold=None,
-        message_ar=f'🧴 ترتيب الفروع في التجميل ({ctx.label()}): {ar} ج.م.',
-        message_en=f'🧴 Cosmetics ranking ({ctx.pw_en()}): {en} EGP.')]
+    data = [(ctx.bn(bmap[bid], 'ar'), ctx.bn(bmap[bid], 'en'), v) for bid, v in net.items() if bid in bmap and v]
+    out = []
+    r = _ranking(ctx, 'rank_cosmetics', '🧴 ترتيب الفروع في التجميل', '🧴 Cosmetics ranking', data)
+    if r: out.append(r)
+    r = _ranking(ctx, 'rank_cosmetics', '🔻 أدنى الفروع في التجميل', '🔻 Lowest branches by cosmetics', data, bottom=True)
+    if r: out.append(r)
+    return out
 
 
 def rule_rank_delivery(ctx, threshold):
@@ -2467,16 +2921,27 @@ def rule_rank_delivery(ctx, threshold):
     rows = (PurchaseHistory.objects.filter(
                 invoice_date__date__gte=ctx.start, invoice_date__date__lte=ctx.end,
                 doc_code='115', sales_channel__in=ctx.delivery_channels, branch_id__in=ctx.branch_ids)
-            .values_list('branch_id').annotate(c=Count('id')).order_by('-c'))
-    ranked = [(bmap[bid], c) for bid, c in rows if bid in bmap and c]
-    if not ranked:
+            .values_list('branch_id').annotate(c=Count('id')))
+    pool = [(bmap[bid], c) for bid, c in rows if bid in bmap and c]
+    if not pool:
         return []
-    ar = ' · '.join(f'{i+1}) {ctx.bn(b,"ar")} ({c})' for i, (b, c) in enumerate(ranked[:5]))
-    en = ' · '.join(f'{i+1}) {ctx.bn(b,"en")} ({c})' for i, (b, c) in enumerate(ranked[:5]))
-    return [dict(rule_code='rank_delivery', category='highlight', severity='info',
-        scope_type='chain', scope_key='', scope_label='', value=Decimal(ranked[0][1]), baseline=None, threshold=None,
+    out = []
+    top = sorted(pool, key=lambda x: -x[1])[:5]
+    ar = ' · '.join(f'{i+1}) {ctx.bn(b,"ar")} ({c})' for i, (b, c) in enumerate(top))
+    en = ' · '.join(f'{i+1}) {ctx.bn(b,"en")} ({c})' for i, (b, c) in enumerate(top))
+    out.append(dict(rule_code='rank_delivery', category='highlight', severity='info',
+        scope_type='chain', scope_key='', scope_label='', value=Decimal(top[0][1]), baseline=None, threshold=None,
         message_ar=f'🚚 ترتيب الفروع في عدد طلبات التوصيل ({ctx.label()}): {ar}.',
-        message_en=f'🚚 Delivery orders ranking ({ctx.pw_en()}): {en}.')]
+        message_en=f'🚚 Delivery orders ranking ({ctx.pw_en()}): {en}.'))
+    if len(pool) >= ctx.bottom_min_pop:
+        bot = sorted(pool, key=lambda x: x[1])[:ctx.bottom_n]
+        ar = ' · '.join(f'{i+1}) {ctx.bn(b,"ar")} ({c})' for i, (b, c) in enumerate(bot))
+        en = ' · '.join(f'{i+1}) {ctx.bn(b,"en")} ({c})' for i, (b, c) in enumerate(bot))
+        out.append(dict(rule_code='rank_delivery', category='bottom', severity='warning',
+            scope_type='chain', scope_key='', scope_label='', value=Decimal(bot[0][1]), baseline=None, threshold=None,
+            message_ar=f'🔻 أدنى الفروع في عدد طلبات التوصيل ({ctx.label()}): {ar}.',
+            message_en=f'🔻 Lowest branches by delivery orders ({ctx.pw_en()}): {en}.'))
+    return out
 
 
 def rule_rank_salespeople(ctx, threshold):
@@ -2485,16 +2950,15 @@ def rule_rank_salespeople(ctx, threshold):
     rows = (PurchaseHistory.objects.filter(
                 invoice_date__date__gte=ctx.start, invoice_date__date__lte=ctx.end,
                 doc_code='115', branch_id__in=ctx.branch_ids)
-            .exclude(softech_user='').values_list('softech_user').annotate(s=Sum('total_amount')).order_by('-s'))
-    ranked = [(u, Decimal(str(s))) for u, s in rows if u not in ctx.cc_agents and s][:5]
-    if not ranked:
-        return []
-    ar = ' · '.join(f'{i+1}) {ctx.rep(u)} {_fmt(v)}' for i, (u, v) in enumerate(ranked))
-    en = ' · '.join(f'{i+1}) {ctx.rep(u)} {_fmt(v)}' for i, (u, v) in enumerate(ranked))
-    return [dict(rule_code='rank_salespeople', category='highlight', severity='info',
-        scope_type='chain', scope_key='', scope_label='', value=ranked[0][1], baseline=None, threshold=None,
-        message_ar=f'🏅 أفضل مسئولي البيع ({ctx.label()}): {ar} ج.م.',
-        message_en=f'🏅 Top salespeople ({ctx.pw_en()}): {en} EGP.')]
+            .exclude(softech_user='').values_list('softech_user').annotate(s=Sum('total_amount')))
+    data = [(ctx.rep(u), ctx.rep(u), Decimal(str(s))) for u, s in rows
+            if u not in ctx.cc_agents and u not in ctx.partial_day_reps and s]
+    out = []
+    r = _ranking(ctx, 'rank_salespeople', '🏅 أفضل مسئولي البيع', 'Top salespeople', data)
+    if r: out.append(r)
+    r = _ranking(ctx, 'rank_salespeople', '🔻 أدنى مسئولي البيع', 'Lowest salespeople', data, bottom=True)
+    if r: out.append(r)
+    return out
 
 
 def rule_branch_rankings(ctx, threshold):
@@ -2504,28 +2968,35 @@ def rule_branch_rankings(ctx, threshold):
     bmap = _branch_map(ctx)
     out = []
 
-    def emit(code_title, netmap=None, cnt_qs=None, is_count=False):
-        title_ar, title_en = code_title
+    def emit(top_title, bottom_title, netmap=None, cnt_qs=None, is_count=False):
         if netmap is not None:
             data = [(ctx.bn(bmap[bid], 'ar'), ctx.bn(bmap[bid], 'en'), v)
                     for bid, v in netmap.items() if bid in bmap]
         else:
-            data = [(ctx.bn(bmap[bid], 'ar'), ctx.bn(bmap[bid], 'en'), c)
-                    for bid, c in cnt_qs if bid in bmap]
-        r = _ranking(ctx, 'branch_rankings', title_ar, title_en, data, is_count=is_count)
+            data = list(cnt_qs)   # materialise once — reused for the top AND bottom slice
+            data = [(ctx.bn(bmap[bid], 'ar'), ctx.bn(bmap[bid], 'en'), c) for bid, c in data if bid in bmap]
+        r = _ranking(ctx, 'branch_rankings', top_title[0], top_title[1], data, is_count=is_count)
         if r:
             out.append(r)
+        rb = _ranking(ctx, 'branch_rankings', bottom_title[0], bottom_title[1], data, is_count=is_count, bottom=True)
+        if rb:
+            out.append(rb)
 
     emit(('💰 ترتيب الفروع في إجمالى المبيعات', 'Branch total-sales ranking'),
+         ('🔻 أدنى الفروع في إجمالى المبيعات', 'Lowest branches by total sales'),
          netmap=_net_by_branch(ctx, ctx.start, ctx.end))
     emit(('💵 ترتيب الفروع في قيمة البيع النقدى', 'Branch cash-sales ranking'),
+         ('🔻 أدنى الفروع في قيمة البيع النقدى', 'Lowest branches by cash sales'),
          netmap=_net_by_branch(ctx, ctx.start, ctx.end, channels=ctx.cash_channels))
     emit(('🚚 ترتيب الفروع في قيمة التوصيل', 'Branch delivery-value ranking'),
+         ('🔻 أدنى الفروع في قيمة التوصيل', 'Lowest branches by delivery value'),
          netmap=_net_by_branch(ctx, ctx.start, ctx.end, channels=ctx.delivery_channels))
     emit(('🧾 ترتيب الفروع في عدد عمليات البيع', 'Branch transaction-count ranking'),
+         ('🔻 أدنى الفروع في عدد عمليات البيع', 'Lowest branches by transaction count'),
          cnt_qs=_ph(ctx, ctx.start, ctx.end).filter(doc_code='115').values_list('branch_id').annotate(c=Count('id')),
          is_count=True)
     emit(('💵 ترتيب الفروع في عدد عمليات البيع النقدى', 'Branch cash-transaction-count ranking'),
+         ('🔻 أدنى الفروع في عدد عمليات البيع النقدى', 'Lowest branches by cash-transaction count'),
          cnt_qs=_cash_ph(ctx, ctx.start, ctx.end).values_list('branch_id').annotate(c=Count('id')),
          is_count=True)
     return out
@@ -2537,18 +3008,100 @@ def rule_salesperson_rankings(ctx, threshold):
     out = []
     base = _cash_ph(ctx, ctx.start, ctx.end).filter(doc_code='115').exclude(softech_user='')
     val = [(ctx.rep(u), ctx.rep(u), v) for u, v in _net_by_user(ctx, ctx.cash_channels).items()
-           if u not in ctx.cc_agents and v]   # net of returns
+           if u not in ctx.cc_agents and u not in ctx.partial_day_reps and v]   # net of returns
     r = _ranking(ctx, 'salesperson_rankings', '🏅 أفضل مسئولي البيع في البيع النقدى',
                  'Top salespeople — cash sales', val)
     if r:
         out.append(r)
+    r = _ranking(ctx, 'salesperson_rankings', '🔻 أدنى مسئولي البيع في البيع النقدى',
+                 'Lowest salespeople — cash sales', val, bottom=True)
+    if r:
+        out.append(r)
     cnt = [(ctx.rep(u), ctx.rep(u), c)
            for u, c in base.values_list('softech_user').annotate(c=Count('id'))
-           if u not in ctx.cc_agents and c]
+           if u not in ctx.cc_agents and u not in ctx.partial_day_reps and c]
     r = _ranking(ctx, 'salesperson_rankings', '🧾 ترتيب مسئولي البيع في عدد عمليات البيع النقدى',
                  'Salesperson cash-transaction-count ranking', cnt, is_count=True)
     if r:
         out.append(r)
+    r = _ranking(ctx, 'salesperson_rankings', '🔻 أدنى مسئولي البيع في عدد عمليات البيع النقدى',
+                 'Lowest salespeople by cash-transaction count', cnt, is_count=True, bottom=True)
+    if r:
+        out.append(r)
+    return out
+
+
+def rule_daily_offday_note(ctx, threshold):
+    """Transparency note (DAILY only): the reps SET ASIDE from today's bottom rankings +
+    underperformer flags because the day wasn't a genuine working day (night-shift tail / off /
+    partial), or an extreme drop vs their own trailing daily average (likely off / left early).
+    Names them so a partial/off day is CONFIRMED, not silently hidden. Renders in the 🔻 section."""
+    reps = ctx.partial_day_reps
+    if not reps:
+        return []
+    partial = sorted(ctx.rep(u) for u in reps if ctx.partial_day_reasons.get(u) == 'partial')
+    drop = sorted(ctx.rep(u) for u in reps if ctx.partial_day_reasons.get(u) == 'drop')
+    seg_ar, seg_en = [], []
+    if partial:
+        seg_ar.append('يوم عمل جزئي/وردية ليلية: ' + ' · '.join(partial))
+        seg_en.append('partial/night shift: ' + ' · '.join(partial))
+    if drop:
+        seg_ar.append('انخفاض حاد عن متوسطهم (غالباً إجازة/انصراف مبكر): ' + ' · '.join(drop))
+        seg_en.append('extreme drop vs their own average (likely off/left early): ' + ' · '.join(drop))
+    return [dict(rule_code='daily_offday_note', category='bottom', severity='info',
+        scope_type='chain', scope_key='', scope_label='', value=Decimal(len(reps)),
+        baseline=None, threshold=None,
+        message_ar='ℹ️ مستبعدون من ترتيب اليوم (لا يُحتسبون ضمن الأدنى): ' + ' — '.join(seg_ar) + '.',
+        message_en='ℹ️ Set aside from today’s ranking (not counted as bottom): ' + ' — '.join(seg_en) + '.')]
+
+
+def _net_cash_exbulk_by(ctx, thr, group_field):
+    """Net CASH sales value (doc 115 − doc 30, so it reconciles with SOFTECH تحقيق), for the
+    cash channels (walk-in + delivery + عميل دائم), EXCLUDING invoices whose total is ≥ thr,
+    grouped by `group_field` ('branch_id' or 'softech_user'). Returns {key: net_value}."""
+    from apps.customers.models import PurchaseHistory
+    base = PurchaseHistory.objects.filter(
+        invoice_date__date__gte=ctx.start, invoice_date__date__lte=ctx.end,
+        branch_id__in=ctx.branch_ids, sales_channel__in=ctx.cash_channels,
+        total_amount__lt=thr)
+    if group_field == 'softech_user':
+        base = base.exclude(softech_user='')
+    sale = dict(base.filter(doc_code='115').values_list(group_field).annotate(s=Sum('total_amount')))
+    ret = dict(base.filter(doc_code='30').values_list(group_field).annotate(s=Sum('total_amount')))
+    return {k: Decimal(str(sale.get(k, 0) or 0)) - Decimal(str(ret.get(k, 0) or 0))
+            for k in set(sale) | set(ret)}
+
+
+def rule_cash_exbulk_ranking(ctx, threshold):
+    """Top AND bottom leaderboards of CASH sales value (walk-in + delivery + عميل دائم), NET of
+    returns, EXCLUDING bulk invoices — a SEPARATE remark per floor in ctx.cash_exbulk_floors
+    (default 5000 and 10000). Stripping big one-off invoices makes everyday selling comparable.
+    Branches AND salespeople; call-center agents excluded from the rep boards."""
+    bmap = _branch_map(ctx)
+    out = []
+    for thr in ctx.cash_exbulk_floors:
+        vb = _net_cash_exbulk_by(ctx, thr, 'branch_id')
+        vu = _net_cash_exbulk_by(ctx, thr, 'softech_user')
+        bdata = [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in vb.items() if b in bmap]
+        sdata = [(ctx.rep(u), ctx.rep(u), v) for u, v in vu.items()
+                 if u not in ctx.cc_agents and u not in ctx.partial_day_reps]
+        thr_lbl = _fmt(thr)
+        for top_ar, top_en, bot_ar, bot_en, data in [
+            (f'💵 ترتيب الفروع في البيع النقدى (بدون فواتير ≥{thr_lbl})',
+             f'Branch cash sales, excl. invoices ≥{thr_lbl}',
+             f'🔻 أدنى الفروع في البيع النقدى (بدون فواتير ≥{thr_lbl})',
+             f'Lowest branches by cash sales, excl. invoices ≥{thr_lbl}', bdata),
+            (f'💵 ترتيب مسئولي البيع في البيع النقدى (بدون فواتير ≥{thr_lbl})',
+             f'Salesperson cash sales, excl. invoices ≥{thr_lbl}',
+             f'🔻 أدنى مسئولي البيع في البيع النقدى (بدون فواتير ≥{thr_lbl})',
+             f'Lowest salespeople by cash sales, excl. invoices ≥{thr_lbl}', sdata),
+        ]:
+            r = _ranking(ctx, 'cash_exbulk_ranking', top_ar, top_en, data)
+            if r:
+                out.append(r)
+            r = _ranking(ctx, 'cash_exbulk_ranking', bot_ar, bot_en, data, bottom=True)
+            if r:
+                out.append(r)
     return out
 
 
@@ -2596,7 +3149,7 @@ def rule_basket_ranking(ctx, threshold):
             key = r[group_field]; invs = r['invs'] or 0
             if invs < min_invs:
                 continue
-            if exclude_cc and key in ctx.cc_agents:
+            if exclude_cc and (key in ctx.cc_agents or key in ctx.partial_day_reps):
                 continue
             lab = label_fn(key)
             if not lab:
@@ -2611,27 +3164,24 @@ def rule_basket_ranking(ctx, threshold):
                           lambda k: (ctx.bn(bmap[k], 'ar'), ctx.bn(bmap[k], 'en')) if k in bmap else None, 100)
     s_size, s_val = build('purchase__softech_user',
                           lambda k: (ctx.rep(k), ctx.rep(k)) if k else None, 30, exclude_cc=True)
-    for code, ta, te, data, cnt in [
-        ('basket_ranking', '🧺 ترتيب الفروع في متوسط أصناف الفاتورة', 'Branch basket-size (items/invoice)', b_size, True),
-        ('basket_ranking', '🧺 ترتيب الفروع في متوسط قيمة الفاتورة', 'Branch avg basket value', b_val, False),
-        ('basket_ranking', '🧺 ترتيب مسئولي البيع في متوسط أصناف الفاتورة', 'Salesperson basket-size (items/invoice)', s_size, True),
-        ('basket_ranking', '🧺 ترتيب مسئولي البيع في متوسط قيمة الفاتورة', 'Salesperson avg basket value', s_val, False),
+    for ta, te, bot_ar, bot_en, data, cnt in [
+        ('🧺 ترتيب الفروع في متوسط أصناف الفاتورة', 'Branch basket-size (items/invoice)',
+         '🔻 أدنى الفروع في متوسط أصناف الفاتورة', 'Lowest branches by basket-size (items/invoice)', b_size, True),
+        ('🧺 ترتيب الفروع في متوسط قيمة الفاتورة', 'Branch avg basket value',
+         '🔻 أدنى الفروع في متوسط قيمة الفاتورة', 'Lowest branches by avg basket value', b_val, False),
+        ('🧺 ترتيب مسئولي البيع في متوسط أصناف الفاتورة', 'Salesperson basket-size (items/invoice)',
+         '🔻 أدنى مسئولي البيع في متوسط أصناف الفاتورة', 'Lowest salespeople by basket-size (items/invoice)', s_size, True),
+        ('🧺 ترتيب مسئولي البيع في متوسط قيمة الفاتورة', 'Salesperson avg basket value',
+         '🔻 أدنى مسئولي البيع في متوسط قيمة الفاتورة', 'Lowest salespeople by avg basket value', s_val, False),
     ]:
-        if cnt:   # items/invoice: show 1-decimal, no money unit
-            ranked = sorted((x for x in data if x[2]), key=lambda x: -float(x[2]))[:5]
-            if not ranked:
-                continue
-            ar = ' · '.join(f'{i+1}) {la} {float(v):.1f}' for i, (la, le, v) in enumerate(ranked))
-            en = ' · '.join(f'{i+1}) {le} {float(v):.1f}' for i, (la, le, v) in enumerate(ranked))
-            out.append(dict(rule_code=code, category='highlight', severity='info',
-                scope_type='chain', scope_key='', scope_label='', value=Decimal(str(round(float(ranked[0][2]), 2))),
-                baseline=None, threshold=None,
-                message_ar=f'{ta} ({ctx.label()}): {ar} صنف.',
-                message_en=f'{te} ({ctx.pw_en()}): {en} items.'))
-        else:
-            r = _ranking(ctx, code, ta, te, data)
-            if r:
-                out.append(r)
+        # items/invoice: 1-decimal, no money unit (_basket_rank_finding). value: money (_ranking).
+        fn = _basket_rank_finding if cnt else _ranking
+        r = fn(ctx, 'basket_ranking', ta, te, data)
+        if r:
+            out.append(r)
+        r = fn(ctx, 'basket_ranking', bot_ar, bot_en, data, bottom=True)
+        if r:
+            out.append(r)
     return out
 
 
@@ -2680,6 +3230,16 @@ def rule_customer_mix(ctx, threshold):
         ('🔁 ترتيب مسئولي البيع في العملاء العائدين', 'Salesperson returning-customers ranking', s_ret),
     ]:
         r = _ranking(ctx, 'customer_mix', *args, is_count=True)
+        if r:
+            out.append(r)
+    # Underperformer boards — NEW customers only (a low new-customer count is an acquisition
+    # weakness worth flagging; a low returning-customer count is not inherently 'bad', so it
+    # is not inverted). Fewest-new first.
+    for bot_ar, bot_en, data in [
+        ('🔻 أدنى الفروع في العملاء الجدد', 'Lowest branches by new customers', b_new),
+        ('🔻 أدنى مسئولي البيع في العملاء الجدد', 'Lowest salespeople by new customers', s_new),
+    ]:
+        r = _ranking(ctx, 'customer_mix', bot_ar, bot_en, data, is_count=True, bottom=True)
         if r:
             out.append(r)
     for bid, (new, ret) in per_branch.items():
@@ -2749,6 +3309,44 @@ def rule_cross_sell_pairs(ctx, threshold):
     return out
 
 
+def _bottom_flag(ctx, metrics):
+    """Bottom-N callout for a member's OWN report. `metrics` = [(label_ar, label_en, my_value,
+    all_values)] — my_value is this member's metric value; all_values is every member's value
+    for that metric. Returns (ar_clause, en_clause) naming only the metrics where the member is
+    an UNAMBIGUOUS underperformer, so no one is mislabelled by a sort tie:
+
+      • the field is large enough to rank (≥ bottom_min_pop),
+      • someone is strictly better (not everyone tied — an all-tied field has no laggard),
+      • the member is inside the lowest bottom_n by value, AND
+      • their tie block does not straddle the bottom-N boundary (a value shared by more members
+        than the band can hold is not singled out).
+
+    Value-based (not position-based) so a rep merely placed last by an unstable sort of tied
+    values is never flagged. Empty strings when nothing qualifies."""
+    low = []
+    for la, le, my, allv in metrics:
+        if my is None:
+            continue
+        vals = [float(v) for v in allv if v is not None]
+        n = len(vals)
+        if n < ctx.bottom_min_pop:
+            continue
+        myf = float(my)
+        below = sum(1 for v in vals if v < myf)     # strictly worse than me
+        equal = sum(1 for v in vals if v == myf)
+        above = n - below - equal                    # strictly better than me
+        if above > 0 and below < ctx.bottom_n and (below + equal) <= ctx.bottom_n:
+            pos = n - below                          # descending rank (n = worst); ties → best case
+            low.append((la, le, pos, n))
+    if not low:
+        return '', ''
+    ar = (f'  ⚠️ ضمن الأدنى {ctx.bottom_n}: '
+          + ' · '.join(f'{la} (#{pos}/{n})' for la, le, pos, n in low) + '.')
+    en = (f'  ⚠️ In the bottom {ctx.bottom_n}: '
+          + ' · '.join(f'{le} (#{pos}/{n})' for la, le, pos, n in low) + '.')
+    return ar, en
+
+
 def rule_branch_standings(ctx, threshold):
     """Per-branch standing: where each branch ranks across the key metrics. One finding per
     branch (scope_key=branch) → surfaced in that branch's own report."""
@@ -2771,11 +3369,12 @@ def rule_branch_standings(ctx, threshold):
         b = bmap[bid]
         ar = ' · '.join(f'{la} #{i}/{n}' for la, le, i, n in items)
         en = ' · '.join(f'{le} #{i}/{n}' for la, le, i, n in items)
+        low_ar, low_en = _bottom_flag(ctx, [(la, le, mp.get(bid), list(mp.values())) for la, le, mp in metrics])
         out.append(dict(rule_code='branch_standings', category='comparison', severity='info',
             scope_type='branch', scope_key=b.code, scope_label=ctx.bn(b, 'ar'),
             value=Decimal(items[0][2]), baseline=None, threshold=None,
-            message_ar=f'📊 ترتيب فرعك بين الفروع ({ctx.label()}): {ar}.',
-            message_en=f'📊 Your branch rank among branches ({ctx.pw_en()}): {en}.'))
+            message_ar=f'📊 ترتيب فرعك بين الفروع ({ctx.label()}): {ar}.{low_ar}',
+            message_en=f'📊 Your branch rank among branches ({ctx.pw_en()}): {en}.{low_en}'))
     return out
 
 
@@ -2972,24 +3571,49 @@ def rule_salesperson_profile(ctx, threshold):
             gap = net.get(above[u], Decimal('0')) - net.get(u, Decimal('0'))
             atxt_ar += f' · 🎯 تحتاج {_fmt(gap)} ج.م لتتخطى {ctx.rep(above[u])} (#{rnet[u]-1})'
             atxt_en += f' · 🎯 need {_fmt(gap)} EGP to pass {ctx.rep(above[u])} (#{rnet[u]-1})'
+        # Each metric's field = only the reps that actually HAVE that metric (a missing
+        # basket/cash value is 'unknown', not a zero to be ranked against).
+        # No bottom-N flag for a rep set aside for a partial/off day (daily report) — the field
+        # excludes them too, so it stays a fair full-day comparison.
+        if u in ctx.partial_day_reps:
+            low_ar, low_en = '', ''
+        else:
+            fld = lambda dm: [dm[x] for x in active if x in dm and x not in ctx.partial_day_reps]
+            low_ar, low_en = _bottom_flag(ctx, [
+                ('المبيعات', 'sales', net.get(u), fld(net)),
+                ('الربح', 'profit', pu.get(u), fld(pu)),
+                ('النقدى', 'cash', cashval.get(u), fld(cashval)),
+                ('العمليات', 'transactions', txn.get(u), fld(txn)),
+                ('السلة', 'basket', ipi.get(u), fld(ipi))])
         out.append(dict(base, rule_code='salesperson_profile', category='comparison', severity='info',
             message_ar=(f'🏅 ترتيبك: المبيعات #{rnet[u]}/{N} ({_fmt(net.get(u,0))} · متوسط الزملاء {_fmt(net_avg)} · الأول {_fmt(net_lead)}) · '
                         f'الربح #{rprof[u]}/{N} ({_fmt(pu.get(u,0))} · المتوسط {_fmt(prof_avg)}) · '
-                        f'النقدى #{rcash[u]}/{N} · العمليات #{rtxn[u]}/{N} · السلة #{rbask[u]}/{N}{gtxt_ar}{atxt_ar}.'),
+                        f'النقدى #{rcash[u]}/{N} · العمليات #{rtxn[u]}/{N} · السلة #{rbask[u]}/{N}{gtxt_ar}{atxt_ar}.{low_ar}'),
             message_en=(f'🏅 Your rank: sales #{rnet[u]}/{N} ({_fmt(net.get(u,0))} · peer avg {_fmt(net_avg)} · leader {_fmt(net_lead)}) · '
                         f'profit #{rprof[u]}/{N} ({_fmt(pu.get(u,0))} · avg {_fmt(prof_avg)}) · '
-                        f'cash #{rcash[u]}/{N} · txns #{rtxn[u]}/{N} · basket #{rbask[u]}/{N}{gtxt_en}{atxt_en}.')))
+                        f'cash #{rcash[u]}/{N} · txns #{rtxn[u]}/{N} · basket #{rbask[u]}/{N}{gtxt_en}{atxt_en}.{low_en}')))
     return out
 
 
-def _pct_rank_finding(ctx, code, title_ar, title_en, data):
-    """Ranking finding for a percentage metric. data=[(label_ar, label_en, pct)]."""
-    ranked = sorted((x for x in data if x[2] is not None), key=lambda x: -float(x[2]))[:5]
+def _pct_rank_finding(ctx, code, title_ar, title_en, data, bottom=False):
+    """Ranking finding for a percentage metric. data=[(label_ar, label_en, pct)].
+    bottom=True → lowest-percentage underperformers (asc, worst first) once ≥ bottom_min_pop
+    ranked. Note: a None pct is excluded either way; a genuine 0% IS kept (unlike money/count,
+    a 0% margin is a real ranked outcome, not 'didn't participate')."""
+    pool = [x for x in data if x[2] is not None]
+    if bottom:
+        if len(pool) < ctx.bottom_min_pop:
+            return None
+        ranked = sorted(pool, key=lambda x: float(x[2]))[:ctx.bottom_n]
+        cat, sev = 'bottom', 'warning'
+    else:
+        ranked = sorted(pool, key=lambda x: -float(x[2]))[:5]
+        cat, sev = 'highlight', 'info'
     if not ranked:
         return None
     ar = ' · '.join(f'{i+1}) {la} {float(v):.0f}%' for i, (la, le, v) in enumerate(ranked))
     en = ' · '.join(f'{i+1}) {le} {float(v):.0f}%' for i, (la, le, v) in enumerate(ranked))
-    return dict(rule_code=code, category='highlight', severity='info', scope_type='chain', scope_key='', scope_label='',
+    return dict(rule_code=code, category=cat, severity=sev, scope_type='chain', scope_key='', scope_label='',
         value=Decimal(str(round(float(ranked[0][2]), 1))), baseline=None, threshold=None,
         message_ar=f'{title_ar} ({ctx.label()}): {ar}.', message_en=f'{title_en} ({ctx.pw_en()}): {en}.')
 
@@ -3000,18 +3624,28 @@ def rule_profit_rankings(ctx, threshold):
     bmap = _branch_map(ctx)
     out = []
     pb = _profit_by_branch(ctx, ctx.start, ctx.end); nb = _net_by_branch(ctx, ctx.start, ctx.end)
-    r = _ranking(ctx, 'profit_rankings', '💎 ترتيب الفروع في الربح', 'Branch gross-profit ranking',
-                 [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in pb.items() if b in bmap])
+    b_profit = [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), v) for b, v in pb.items() if b in bmap]
+    b_margin = [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), pb.get(b, 0) / nb[b] * 100) for b in nb if b in bmap and nb[b] > 0]
+    r = _ranking(ctx, 'profit_rankings', '💎 ترتيب الفروع في الربح', 'Branch gross-profit ranking', b_profit)
     if r: out.append(r)
-    r = _pct_rank_finding(ctx, 'profit_rankings', '📐 ترتيب الفروع في هامش الربح', 'Branch margin% ranking',
-                 [(ctx.bn(bmap[b], 'ar'), ctx.bn(bmap[b], 'en'), pb.get(b, 0) / nb[b] * 100) for b in nb if b in bmap and nb[b] > 0])
+    r = _ranking(ctx, 'profit_rankings', '🔻 أدنى الفروع في الربح', 'Lowest branches by gross profit', b_profit, bottom=True)
+    if r: out.append(r)
+    r = _pct_rank_finding(ctx, 'profit_rankings', '📐 ترتيب الفروع في هامش الربح', 'Branch margin% ranking', b_margin)
+    if r: out.append(r)
+    r = _pct_rank_finding(ctx, 'profit_rankings', '🔻 أدنى الفروع في هامش الربح', 'Lowest branches by margin%', b_margin, bottom=True)
     if r: out.append(r)
     pu = _profit_by_user(ctx); nu = _net_by_user(ctx, ctx.nonexclude)
-    r = _ranking(ctx, 'profit_rankings', '💎 أفضل مسئولي البيع في الربح', 'Top salespeople by profit',
-                 [(ctx.rep(u), ctx.rep(u), v) for u, v in pu.items() if u not in ctx.cc_agents])
+    s_profit = [(ctx.rep(u), ctx.rep(u), v) for u, v in pu.items()
+                if u not in ctx.cc_agents and u not in ctx.partial_day_reps]
+    s_margin = [(ctx.rep(u), ctx.rep(u), pu[u] / nu[u] * 100) for u in pu
+                if u not in ctx.cc_agents and u not in ctx.partial_day_reps and nu.get(u, 0) > 20000]
+    r = _ranking(ctx, 'profit_rankings', '💎 أفضل مسئولي البيع في الربح', 'Top salespeople by profit', s_profit)
     if r: out.append(r)
-    r = _pct_rank_finding(ctx, 'profit_rankings', '📐 ترتيب مسئولي البيع في هامش الربح', 'Salesperson margin% ranking',
-                 [(ctx.rep(u), ctx.rep(u), pu[u] / nu[u] * 100) for u in pu if u not in ctx.cc_agents and nu.get(u, 0) > 20000])
+    r = _ranking(ctx, 'profit_rankings', '🔻 أدنى مسئولي البيع في الربح', 'Lowest salespeople by profit', s_profit, bottom=True)
+    if r: out.append(r)
+    r = _pct_rank_finding(ctx, 'profit_rankings', '📐 ترتيب مسئولي البيع في هامش الربح', 'Salesperson margin% ranking', s_margin)
+    if r: out.append(r)
+    r = _pct_rank_finding(ctx, 'profit_rankings', '🔻 أدنى مسئولي البيع في هامش الربح', 'Lowest salespeople by margin%', s_margin, bottom=True)
     if r: out.append(r)
     return out
 
@@ -3743,6 +4377,11 @@ RULES = {
     'rank_purchased_items':   (rule_rank_purchased_items, 'أكثر الأصناف شراءً', 'Top purchased items', 'highlight', 'info', None, 'day,week,month'),
     'branch_purchase_profile': (rule_branch_purchase_profile, 'مشتريات الفرع (تفصيلي)', 'Per-branch purchasing', 'comparison', 'info', 5000, 'day,week,month'),
     'supplier_scorecard':     (rule_supplier_scorecard, 'تقييم الموردين', 'Supplier scorecard', 'highlight', 'info', 10, 'week,month'),
+    'purchase_supplier_category': (rule_purchase_supplier_category, 'قيمة المشتريات حسب فئة المورد', 'Purchases by supplier category (value)', 'highlight', 'info', 5000, 'day,week,month'),
+    'purchase_invoice_count': (rule_purchase_invoice_count, 'عدد فواتير الشراء + المتوسط', 'Purchase invoice count + avg', 'highlight', 'info', 5000, 'day,week,month'),
+    'purchase_input_vat':     (rule_purchase_input_vat, 'ض.ق.م على المشتريات', 'Input VAT on purchases', 'highlight', 'info', None, 'day,week,month'),
+    'supplier_expiry_returns': (rule_supplier_expiry_returns, 'مرتجعات صلاحية للموردين', 'Expiry returns to suppliers', 'highlight', 'info', 1000, 'week,month'),
+    'buyer_ranking':          (rule_buyer_ranking, 'ترتيب مسئولي الشراء', 'Buyer rankings', 'highlight', 'info', None, 'day,week,month'),
     # ── purchasing (HQ cost control) ──
     'hq_purchase_summary':    (rule_hq_purchase_summary, 'ملخص مشتريات HQ', 'HQ purchases', 'highlight', 'info', None, 'day,week,month'),
     'hq_purchase_trend':      (rule_hq_purchase_trend, 'اتجاه مشتريات HQ', 'HQ purchase trend', 'comparison', 'info', 20, 'week,month'),
@@ -3818,6 +4457,8 @@ RULES = {
     'branch_rankings':        (rule_branch_rankings, 'ترتيب الفروع (مبيعات/نقدى/توصيل/عدد)', 'Branch rankings suite', 'highlight', 'info', None, 'day,week,month'),
     'salesperson_rankings':   (rule_salesperson_rankings, 'ترتيب مسئولي البيع (نقدى/عدد)', 'Salesperson rankings suite', 'highlight', 'info', None, 'day,week,month'),
     'bulk_cash_ranking':      (rule_bulk_cash_ranking, 'ترتيب الفواتير النقدية الكبيرة', 'Bulk-cash-invoice rankings', 'highlight', 'info', 10000, 'day,week,month'),
+    'cash_exbulk_ranking':    (rule_cash_exbulk_ranking, 'ترتيب البيع النقدى بدون الفواتير الكبيرة (٥ آلاف/١٠ آلاف)', 'Cash sales ex-bulk rankings (5k/10k)', 'highlight', 'info', None, 'day,week,month'),
+    'daily_offday_note':      (rule_daily_offday_note, 'مستبعدون من ترتيب اليوم (يوم جزئي/إجازة)', 'Set-aside note (partial/off day)', 'comparison', 'info', None, 'day'),
     'basket_ranking':         (rule_basket_ranking, 'ترتيب حجم/قيمة السلة', 'Basket-size & value rankings', 'highlight', 'info', None, 'week,month'),
     'branch_standings':       (rule_branch_standings, 'ترتيب الفرع بين الفروع', 'Per-branch standing', 'comparison', 'info', None, 'day,week,month'),
     'salesperson_profile':    (rule_salesperson_profile, 'ملف مسئول البيع الشامل', 'Salesperson full profile', 'comparison', 'info', None, 'day,week,month'),
@@ -3834,6 +4475,8 @@ RULES = {
 _PURCHASING_CODES = {
     'purchase_overview', 'purchase_general_category', 'rank_suppliers', 'rank_purchased_items',
     'branch_purchase_profile', 'supplier_scorecard',
+    'purchase_supplier_category', 'purchase_invoice_count', 'purchase_input_vat',
+    'supplier_expiry_returns', 'buyer_ranking',
     'hq_purchase_summary', 'hq_purchase_trend', 'purchase_category_mix', 'purchase_price_creep',
     'purchase_thin_margin', 'buyer_small_warehouse', 'supplier_concentration', 'foc_captured',
     'supplier_return_spike', 'branch_local_purchase', 'branch_small_warehouse',

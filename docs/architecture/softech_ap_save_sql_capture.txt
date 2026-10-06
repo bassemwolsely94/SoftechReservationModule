@@ -1,0 +1,3320 @@
+Save-SQL capture: 2026-09-20T10:46:28.542526 (profile=prod)
+my SPID (excluded from capture) = 30
+
+==============================================================================
+  1: monitoring config (master..syscurconfigs run values)
+==============================================================================
+  enable monitoring              run_value=1
+  max SQL text monitored         run_value=16384
+  sql text pipe active           run_value=1
+  sql text pipe max messages     run_value=20000
+  → monitoring_ready = True
+
+==============================================================================
+  2: candidate client connections (master..sysprocesses)
+==============================================================================
+
+--- active user connections ---
+  spid | hostname | program_name | hostprocess | cmd | name
+  15 | SSB-SBRep | SSB-SBRep170 | 8692 | AWAITING COMMAND | SofTech9
+  21 | SSB | BASSEM | 8900 | AWAITING COMMAND | SofTech9
+  23 | SSB | eman abdelghany | 7428 | AWAITING COMMAND | SofTech9
+  27 | SSB | Reda Samy | 6408 | AWAITING COMMAND | SofTech9
+  29 | Server | E-Services Tool. | 5972 | AWAITING COMMAND | SofTech9
+  30 | Bassem_HPZ |  |  | SELECT | SofTech9
+  49 | SSB-SB | SSB-SB | 7928 | AWAITING COMMAND | SofTech9
+  58 | SSB | BASSEM | 32756 | SELECT | SofTech9
+  60 | SSB | gerges shawky | 16860 | AWAITING COMMAND | SofTech9
+  68 | SSB | ehab zaki | 16840 | AWAITING COMMAND | SofTech9
+  80 | SSB | amira samir | 8008 | AWAITING COMMAND | SofTech9
+  81 | SSB | youssef william | 9696 | AWAITING COMMAND | SofTech9
+  84 | SSB | eman abdelghany | 11596 | AWAITING COMMAND | SofTech9
+  97 | SSB | Melad Nabil | 6464 | AWAITING COMMAND | SofTech9
+  105 | Server | E-Services Tool. | 1032 | AWAITING COMMAND | SofTech9
+  107 | SSB | ebtsam ahmed | 8984 | AWAITING COMMAND | SofTech9
+
+==============================================================================
+  2c: temporarily raising sql text pipe max messages
+==============================================================================
+  set sql text pipe max messages = 200000 (was 20000)
+
+==============================================================================
+  3: CAPTURING for 90s — go click SAVE on ONE purchase now
+==============================================================================
+  using text source: master..monSysSQLText
+  polled 526 times; captured 1088 batch(es) (0 distinct proc texts)
+
+==============================================================================
+  4: restoring monitoring config
+==============================================================================
+  restored sql text pipe max messages = 20000
+
+==============================================================================
+  5: CAPTURED SQL (per batch, in order)
+==============================================================================
+
+----- SPID 14 batch 1  [?] -----
+select @@langid
+
+----- SPID 14 batch 2  [?] -----
+select dateformat from master.dbo.syslanguages where langid = 0
+
+----- SPID 14 batch 3  [?] -----
+select @@version
+
+----- SPID 14 batch 4  [?] -----
+sp_server_info 1
+
+----- SPID 14 batch 5  [?] -----
+use SOFTECHDB9
+
+----- SPID 14 batch 6  [?] -----
+select USER_NAME()
+
+----- SPID 14 batch 7  [?] -----
+begin tran
+
+----- SPID 14 batch 8  [?] -----
+select branchcode from lastdocnumbers where lastdocnumbers.ver_branch ='1'
+
+----- SPID 14 batch 9  [?] -----
+update dailyexpenses set dailyexpenses.table_dumped ='9-20-2026 10:50:41.000' where dailyexpenses.branchcode ='100' and dailyexpenses.branchcode2 ='170' and dailyexpenses.table_dumped is null
+
+----- SPID 14 batch 10  [?] -----
+SELECT  dailyexpenses.branchcode ,           dailyexpenses.expensedate ,           dailyexpenses.intervalcode ,           dailyexpenses.expcode ,           dailyexpenses.expvalue ,           dailyexpenses.expcomment ,           dailyexpenses.cheqsno ,dailyexpenses.day_sno ,           dailyexpenses.custcode ,           dailyexpenses.expsource ,           dailyexpenses.costcentercode ,           dailyexpenses.table_dumped ,           dailyexpenses.branchcode2 ,           dailyexpenses.expusercodeFROM dailyexpenses      WHERE ( dailyexpenses.branchcode = '100' ) And          ( dailyexpenses.branchcode2 = '170' ) and          ( dailyexpenses.table_dumped = '9-20-2026 10:50:41.000' )
+
+----- SPID 14 batch 11  [?] -----
+commit tran
+
+----- SPID 14 batch 12  [?] -----
+begin tran
+
+----- SPID 14 batch 13  [?] -----
+update costcenterstrans set costcenterstrans.table_dumped ='9-20-2026 10:50:41.000' where costcenterstrans.ver_branchcode ='100' and costcenterstrans.branchcode ='170' and costcenterstrans.table_dumped is null
+
+----- SPID 14 batch 14  [?] -----
+SELECT  costcenterstrans.ccsno ,           costcenterstrans.branchcode ,           costcenterstrans.doccode ,           costcenterstrans.docnumber ,           costcenterstrans.docdate ,           costcenterstrans.cheqsno ,           costcenterstrans.trans_source ,           costcenterstrans.costcentercode ,           costcenterstrans.costvalue ,           costcenterstrans.usercode ,           costcenterstrans.trans_time ,           costcenterstrans.trans_sign ,           costcenterstrans.expcode ,costcenterstrans.table_dumped ,           costcenterstrans.ver_branchcode ,           costcenterstrans.recdata     FROM costcenterstrans      WHERE ( costcenterstrans.ver_branchcode = '100' ) And          ( costcenterstrans.branchcode = '170' ) and( costcenterstrans.table_dumped = '9-20-2026 10:50:41.000' )
+
+----- SPID 14 batch 15  [?] -----
+commit tran
+
+----- SPID 14 batch 16  [?] -----
+begin tran
+
+----- SPID 14 batch 17  [?] -----
+update chequestrans set chequestrans.table_dumped ='9-20-2026 10:50:41.000' where chequestrans.cheqbranchcode <> '170' and chequestrans.table_dumped is null and chequestrans.branchcode ='170'
+
+----- SPID 14 batch 18  [?] -----
+SELECT  chequestrans.cheqsno ,           chequestrans.branchcode ,           chequestrans.doccode ,           chequestrans.docnumber ,           chequestrans.docdate ,           chequestrans.docvaluepaid ,           chequestrans.docvaluepaynow ,chequestrans.usercode ,           chequestrans.cheqbranchcode ,           chequestrans.table_dumped     FROM chequestrans      WHERE ( chequestrans.branchcode = '170' ) and          ( chequestrans.cheqbranchcode <> '170' ) and          ( chequestrans.table_dumped = '9-20-2026 10:50:41.000' )
+
+----- SPID 14 batch 19  [?] -----
+commit tran
+
+----- SPID 14 batch 20  [?] -----
+begin tran
+
+----- SPID 14 batch 21  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 22  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 23  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 24  [?] -----
+INSERT INTO r3stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn, fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, phcode, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES( '170', '115', 414049, '9-20-2026 0:0:0.000', '', 0, 31.0000, '1510', 0.00, 0.00, 0.00, '170', 31.0000, '30', '10', '91', '8', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:46:38.936', 0.0000, '9-20-2026 10:46:38.940', 31.0000, 19.9300, 0.0000, '08HD72', 12.00, 1, 31.0000, 31.0000, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 14 batch 25  [?] -----
+INSERT INTO r3stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn, fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES ( '170','115', 414050, '9-20-2026 0:0:0.000', '', 0, 79.8900, '4800', 100.00, 0.00, 0.00, '170', 79.8900, '30', '10', '30', '2', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:49:4.020', 79.8900, '9-20-2026 10:49:4.020', 92.0000, 68.3000, 11.3000, 0.00, 1, 79.8900, 79.8900, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 14 batch 26  [?] -----
+INSERT INTO r3stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn, fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES ( '170','115', 414051, '9-20-2026 0:0:0.000', '', 0, 29.9200, '4800', 100.00, 0.00, 0.00, '170', 29.9200, '30', '10', '30', '2', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:49:57.263', 29.9200, '9-20-2026 10:49:57.263', 34.0000, 25.9400, 0.0000, 0.00, 1, 29.9200, 29.9200, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 14 batch 27  [?] -----
+commit tran
+
+----- SPID 14 batch 28  [?] -----
+begin tran
+
+----- SPID 14 batch 29  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 30  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 31  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 32  [?] -----
+INSERT INTO r3stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemexpirydate, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp, custdiscp, specialdiscp, bonusqty, dblitemflag, r_docnumber, r_docdate, saleprice_extrap, suppliercode, r_doccode, s_doccode, usercode, trans_time, personcode, retqty, vf4 ) VALUES ( '170', '115', 414049, '9-20-2026 0:0:0.000', '170', '122929', 1.00000,31.0000, 11.00000, 19.9314, '3-3-2029 0:0:0.000', 31.000, 0.0000, 31.0000, 0.0000, 0.00, 31.0000, 0.00, 0.00, 0.00, 31.00000, 1, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1702', '9-20-2026 10:46:38.966', '1510', 0.00000, 12 )
+
+----- SPID 14 batch 33  [?] -----
+INSERT INTO r3stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp, custdiscp, specialdiscp, bonusqty, dblitemflag, saleprice_extrap, s_doccode, usercode, trans_time, personcode, retqty, item_partno, rcostprice ) VALUES ( '170', '115', 414050, '9-20-2026 0:0:0.000', '170', '127038', 1.00000, 79.8947, 2.00000, 68.2996, 92.000, 11.2982,80.7018, 0.0000, 14.00, 79.8900, 0.00, 15.00, 0.00, 92.00000, 1, 0.00, '000', '1702', '9-20-2026 10:49:4.080', '4800', 0.00000, '', 0.0000 )
+
+----- SPID 14 batch 34  [?] -----
+INSERT INTO r3stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemexpirydate, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp, custdiscp, specialdiscp, bonusqty, dblitemflag, r_docnumber, r_docdate, saleprice_extrap, suppliercode, r_doccode, s_doccode, usercode, trans_time, personcode, retqty, rcostprice ) VALUES ( '170', '115', 414051, '9-20-2026 0:0:0.000', '170', '54', 1.00000, 29.9200, 18.00000, 25.9370, '8-8-2029 0:0:0.000', 34.000, 0.0000, 34.0000, 0.0000, 0.00, 29.9200, 0.00, 12.00, 0.00, 17.00000, 1, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1702', '9-20-2026 10:49:57.273', '4800', 0.00000, 0.0000 )
+
+----- SPID 14 batch 35  [?] -----
+commit tran
+
+----- SPID 14 batch 36  [?] -----
+begin tran
+
+----- SPID 14 batch 37  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 38  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 39  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 40  [?] -----
+INSERT INTO companiesitems ( branchcode, docnumber, docdate, patientname, patientno, relativedegree, table_dumped, doccode, cdate ) VALUES ( '170', 414050, '9-20-2026 0:0:0.000', 'سبيسيل', 'sdgsdg', '41651', '9-20-2026 10:50:41.000', '115', '9-20-2026 0:0:0.000' )
+
+----- SPID 14 batch 41  [?] -----
+INSERT INTO companiesitems ( branchcode, docnumber, docdate, patientname, patientno, relativedegree, table_dumped, doccode, cdate ) VALUES ( '170', 414051, '9-20-2026 0:0:0.000', 'احمد ناجى', 'amis', '333', '9-20-2026 10:50:41.000', '115', '9-20-2026 0:0:0.000' )
+
+----- SPID 14 batch 42  [?] -----
+commit tran
+
+----- SPID 14 batch 43  [?] -----
+begin tran
+
+----- SPID 14 batch 44  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 45  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 46  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 47  [?] -----
+INSERT INTO branchesales ( branchcode, doccode, docnumber, docdate, paymentsno, paymenttype, paymentvalue, ref_docnumber, localpayment_remain, usercode, trans_time, personcode, hour_of_day, samedayhours, table_dumped, intervalcode, intervaldocdate, bcurrency, bcrate, paymentvaluebc ) VALUES ( '170', '115', 414049, '9-20-2026 0:0:0.000', 462781, '30', 31.0000, 425399, 0.0000, '1741', '9-20-2026 10:46:38.983', '1510', 10, '1', '9-20-2026 10:50:41.000', '1', '9-20-2026 0:0:0.000', 1, 1.0000, 31.0000 )
+
+----- SPID 14 batch 48  [?] -----
+INSERT INTO branchesales ( branchcode, doccode, docnumber, docdate, paymentsno, paymenttype, paymentvalue, ref_docnumber, localpayment_remain, usercode, trans_time, comment, personcode, hour_of_day, samedayhours, table_dumped, intervalcode, intervaldocdate, cheqdate, creditcardtype, bcurrency, bcrate, paymentvaluebc ) VALUES ( '170', '115', 414050, '9-20-2026 0:0:0.000', 462782, '40', 79.8900, 425404, 0.0000, '1741', '9-20-2026 10:49:4.100', '271', '4800', 10, '1', '9-20-2026 10:50:41.000', '1', '9-20-2026 0:0:0.000', '9-20-2026 0:0:0.000', 1, 1, 1.0000, 79.8900 )
+
+----- SPID 14 batch 49  [?] -----
+INSERT INTO branchesales ( branchcode, doccode, docnumber, docdate, paymentsno, paymenttype, paymentvalue, ref_docnumber, localpayment_remain, usercode, trans_time, personcode, hour_of_day, samedayhours, table_dumped, intervalcode, intervaldocdate, bcurrency, bcrate, paymentvaluebc ) VALUES ( '170', '115', 414051, '9-20-2026 0:0:0.000', 462783, '30', 29.9200, 425405, 0.0000, '1741', '9-20-2026 10:49:57.280', '4800', 10, '1', '9-20-2026 10:50:41.000', '1', '9-20-2026 0:0:0.000', 1, 1.0000, 29.9200 )
+
+----- SPID 14 batch 50  [?] -----
+commit tran
+
+----- SPID 14 batch 51  [?] -----
+begin tran
+
+----- SPID 14 batch 52  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 53  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 54  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 55  [?] -----
+commit tran
+
+----- SPID 14 batch 56  [?] -----
+begin tran
+
+----- SPID 14 batch 57  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 58  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 59  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 60  [?] -----
+commit tran
+
+----- SPID 14 batch 61  [?] -----
+begin tran
+
+----- SPID 14 batch 62  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 63  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 64  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 65  [?] -----
+commit tran
+
+----- SPID 14 batch 66  [?] -----
+begin tran
+
+----- SPID 14 batch 67  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 68  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 69  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 70  [?] -----
+commit tran
+
+----- SPID 14 batch 71  [?] -----
+begin tran
+
+----- SPID 14 batch 72  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 73  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 74  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 75  [?] -----
+commit tran
+
+----- SPID 14 batch 76  [?] -----
+begin tran
+
+----- SPID 14 batch 77  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 78  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 79  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 80  [?] -----
+commit tran
+
+----- SPID 14 batch 81  [?] -----
+begin tran
+
+----- SPID 14 batch 82  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 83  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 84  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 85  [?] -----
+commit tran
+
+----- SPID 14 batch 86  [?] -----
+begin tran
+
+----- SPID 14 batch 87  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 88  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 89  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 90  [?] -----
+commit tran
+
+----- SPID 14 batch 91  [?] -----
+begin tran
+
+----- SPID 14 batch 92  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 93  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 94  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 95  [?] -----
+commit tran
+
+----- SPID 14 batch 96  [?] -----
+begin tran
+
+----- SPID 14 batch 97  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 98  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 99  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 100  [?] -----
+commit tran
+
+----- SPID 14 batch 101  [?] -----
+begin tran
+
+----- SPID 14 batch 102  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 103  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 104  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 105  [?] -----
+commit tran
+
+----- SPID 14 batch 106  [?] -----
+begin tran
+
+----- SPID 14 batch 107  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 108  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 109  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 110  [?] -----
+commit tran
+
+----- SPID 14 batch 111  [?] -----
+begin tran
+
+----- SPID 14 batch 112  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 113  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 114  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 115  [?] -----
+commit tran
+
+----- SPID 14 batch 116  [?] -----
+begin tran
+
+----- SPID 14 batch 117  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 118  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 119  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 120  [?] -----
+commit tran
+
+----- SPID 14 batch 121  [?] -----
+begin tran
+
+----- SPID 14 batch 122  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 123  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 124  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 125  [?] -----
+INSERT INTO picpoints ( phcode, transdate, points, branchcode, doccode, docnumber, docdate, table_dumped ) VALUES ( '08HD72', '9-20-2026 10:46:38.886', 12, '170', '115', 414049, '9-20-2026 0:0:0.000', '9-20-2026 10:50:41.000' )
+
+----- SPID 14 batch 126  [?] -----
+commit tran
+
+----- SPID 14 batch 127  [?] -----
+begin tran
+
+----- SPID 14 batch 128  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 129  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 130  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 131  [?] -----
+commit tran
+
+----- SPID 14 batch 132  [?] -----
+begin tran
+
+----- SPID 14 batch 133  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 134  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 135  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 136  [?] -----
+commit tran
+
+----- SPID 14 batch 137  [?] -----
+begin tran
+
+----- SPID 14 batch 138  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 139  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 140  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 141  [?] -----
+commit tran
+
+----- SPID 14 batch 142  [?] -----
+begin tran
+
+----- SPID 14 batch 143  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 144  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 145  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 146  [?] -----
+commit tran
+
+----- SPID 14 batch 147  [?] -----
+begin tran
+
+----- SPID 14 batch 148  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 149  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 150  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 151  [?] -----
+commit tran
+
+----- SPID 14 batch 152  [?] -----
+begin tran
+
+----- SPID 14 batch 153  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 154  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 155  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 156  [?] -----
+commit tran
+
+----- SPID 14 batch 157  [?] -----
+begin tran
+
+----- SPID 14 batch 158  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 159  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 160  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 161  [?] -----
+commit tran
+
+----- SPID 14 batch 162  [?] -----
+begin tran
+
+----- SPID 14 batch 163  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 14 batch 164  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 14 batch 165  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 14 batch 166  [?] -----
+commit tran
+
+----- SPID 14 batch 167  [?] -----
+begin tran
+
+----- SPID 14 batch 168  [?] -----
+commit tran
+
+----- SPID 14 batch 169  [?] -----
+begin tran
+
+----- SPID 14 batch 170  [?] -----
+commit tran
+
+----- SPID 21 batch 18676  [SSB / BASSEM / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 21 batch 18677  [SSB / BASSEM / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 21 batch 18678  [SSB / BASSEM / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 21 batch 18679  [SSB / BASSEM / SofTech9] -----
+select count ( * ) from branches
+
+----- SPID 21 batch 18680  [SSB / BASSEM / SofTech9] -----
+select count ( * ) from lastdocnumbers
+
+----- SPID 21 batch 18681  [SSB / BASSEM / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB'
+
+----- SPID 21 batch 18682  [SSB / BASSEM / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB-SB'
+
+----- SPID 21 batch 18683  [SSB / BASSEM / SofTech9] -----
+select branchcode from lastdocnumbers where lastdocnumbers.ver_branch ='1'
+
+----- SPID 21 batch 18684  [SSB / BASSEM / SofTech9] -----
+select count ( * ) from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 21 batch 18685  [SSB / BASSEM / SofTech9] -----
+select docdate , doctext from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 23 batch 3814  [SSB / eman abdelghany / SofTech9] -----
+SELECT items.familycode , items.itemcode , items.itemname , items.itemsaleprice , items.itemorigincode , items.itemproducercode , items.fmi , items.unitsaleprice , vtot_nowqty = sum("stkbal"."nowqty"), items.suppcode , row_selected=0 FROM items , stkbal ,stores WHERE ( items.itemcode = stkbal.itemcode ) and ( stkbal.storecode = stores.storecode ) and ( ( stores.storerealbal = 1 ) and ( items.itemarchive = 0 ) ) and ( stkbal.branchcode = '100' )  and (((items.itemname LIKE 'CA%DOPA%'))) GROUP BY items.familycode,items.itemcode,items.itemname,items.itemsaleprice,items.itemorigincode,items.suppcode,items.itemproducercode,items.fmi,items.unitsaleprice ORDER BY items.itemname ASC
+
+----- SPID 23 batch 3815  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3816  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3817  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3818  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3819  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3820  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3821  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3822  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3823  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3824  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3825  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3826  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3827  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3828  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3829  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3830  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3831  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3832  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3833  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3834  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3835  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3836  [SSB / eman abdelghany / SofTech9] -----
+select count ( * ) from items where items.itemcode ='128526'
+
+----- SPID 23 batch 3837  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemexpiry , itemsaleprice , itemsalestax , itemname , itemcode , unitcode , itemsaleprice_extrap , hi_typecode , itemcode_alt1 , itemcode_alt2 , itemcostprice , itemslevel , itemsalestaxp , itemcode_alt3 , packqty , itemmodified , itemsaleprice2 ,itemstoreclassif , itemnosaleclassif , itemtrans3 , itemtrans , unitsaleprice , costcentercode , pharmacydiscp FROM items WHERE items.itemcode ='128526'
+
+----- SPID 23 batch 3838  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='128526' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3839  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='128526' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3840  [SSB / eman abdelghany / SofTech9] -----
+select custdiscp , allow_sell from custdiscounts where custdiscounts.personcode ='1500' and custdiscounts.custdiscpcode ='11'
+
+----- SPID 23 batch 3841  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='128526' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3842  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='128526' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3843  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3844  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3845  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3846  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =1
+
+----- SPID 23 batch 3847  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =2
+
+----- SPID 23 batch 3848  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =3
+
+----- SPID 23 batch 3849  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =4
+
+----- SPID 23 batch 3850  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =5
+
+----- SPID 23 batch 3851  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =6
+
+----- SPID 23 batch 3852  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3853  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3854  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3855  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3856  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsfamily.familycode, itemsfamily.familyname FROM itemsfamily ORDER BY itemsfamily.familyname
+
+----- SPID 23 batch 3857  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsorigin.itemorigincode, itemsorigin.itemoriginname FROM itemsorigin ORDER BY itemsorigin.itemoriginname
+
+----- SPID 23 batch 3858  [SSB / eman abdelghany / SofTech9] -----
+SELECT personsdata.personcode, personsdata.personname, personsdata.ptcode FROM personsdata WHERE ( personsdata.ptcode = '20' ) AND ( convert(integer,personsdata.personcode) > 0 ) ORDER BY personsdata.personname ASC
+
+----- SPID 23 batch 3859  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3860  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3861  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3862  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3863  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3864  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3865  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3866  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3867  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3868  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3869  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3870  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3871  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3872  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3873  [SSB / eman abdelghany / SofTech9] -----
+SELECT items.familycode , items.itemcode , items.itemname , items.itemsaleprice , items.itemorigincode , items.itemproducercode , items.fmi , items.unitsaleprice , vtot_nowqty = sum("stkbal"."nowqty"), items.suppcode , row_selected=0 FROM items , stkbal ,stores WHERE ( items.itemcode = stkbal.itemcode ) and ( stkbal.storecode = stores.storecode ) and ( ( stores.storerealbal = 1 ) and ( items.itemarchive = 0 ) ) and ( stkbal.branchcode = '100' )  and (((items.itemname LIKE 'VIXAD%'))) GROUP BY items.familycode,items.itemcode,items.itemname,items.itemsaleprice,items.itemorigincode,items.suppcode,items.itemproducercode,items.fmi,items.unitsaleprice ORDER BY items.itemname ASC
+
+----- SPID 23 batch 3874  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3875  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3876  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3877  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3878  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3879  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3880  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3881  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3882  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3883  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3884  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3885  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3886  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3887  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3888  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3889  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3890  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3891  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3892  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3893  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3894  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3895  [SSB / eman abdelghany / SofTech9] -----
+select count ( * ) from items where items.itemcode ='2362'
+
+----- SPID 23 batch 3896  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemexpiry , itemsaleprice , itemsalestax , itemname , itemcode , unitcode , itemsaleprice_extrap , hi_typecode , itemcode_alt1 , itemcode_alt2 , itemcostprice , itemslevel , itemsalestaxp , itemcode_alt3 , packqty , itemmodified , itemsaleprice2 ,itemstoreclassif , itemnosaleclassif , itemtrans3 , itemtrans , unitsaleprice , costcentercode , pharmacydiscp FROM items WHERE items.itemcode ='2362'
+
+----- SPID 23 batch 3897  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='2362' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3898  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='2362' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3899  [SSB / eman abdelghany / SofTech9] -----
+select custdiscp , allow_sell from custdiscounts where custdiscounts.personcode ='1500' and custdiscounts.custdiscpcode ='12'
+
+----- SPID 23 batch 3900  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='2362' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3901  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='2362' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3902  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3903  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3904  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3905  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =1
+
+----- SPID 23 batch 3906  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =2
+
+----- SPID 23 batch 3907  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =3
+
+----- SPID 23 batch 3908  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =4
+
+----- SPID 23 batch 3909  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =5
+
+----- SPID 23 batch 3910  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =6
+
+----- SPID 23 batch 3911  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3912  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3913  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3914  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3915  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsfamily.familycode, itemsfamily.familyname FROM itemsfamily ORDER BY itemsfamily.familyname
+
+----- SPID 23 batch 3916  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsorigin.itemorigincode, itemsorigin.itemoriginname FROM itemsorigin ORDER BY itemsorigin.itemoriginname
+
+----- SPID 23 batch 3917  [SSB / eman abdelghany / SofTech9] -----
+SELECT personsdata.personcode, personsdata.personname, personsdata.ptcode FROM personsdata WHERE ( personsdata.ptcode = '20' ) AND ( convert(integer,personsdata.personcode) > 0 ) ORDER BY personsdata.personname ASC
+
+----- SPID 23 batch 3918  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3919  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3920  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3921  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3922  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3923  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3924  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3925  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3926  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3927  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3928  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3929  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3930  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3931  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3932  [SSB / eman abdelghany / SofTech9] -----
+SELECT items.familycode , items.itemcode , items.itemname , items.itemsaleprice , items.itemorigincode , items.itemproducercode , items.fmi , items.unitsaleprice , vtot_nowqty = sum("stkbal"."nowqty"), items.suppcode , row_selected=0 FROM items , stkbal ,stores WHERE ( items.itemcode = stkbal.itemcode ) and ( stkbal.storecode = stores.storecode ) and ( ( stores.storerealbal = 1 ) and ( items.itemarchive = 0 ) ) and ( stkbal.branchcode = '100' )  and (((items.itemname LIKE 'BIPER%'))) GROUP BY items.familycode,items.itemcode,items.itemname,items.itemsaleprice,items.itemorigincode,items.suppcode,items.itemproducercode,items.fmi,items.unitsaleprice ORDER BY items.itemname ASC
+
+----- SPID 23 batch 3933  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3934  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3935  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3936  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3937  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3938  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3939  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3940  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3941  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3942  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3943  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3944  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3945  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3946  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3947  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3948  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3949  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3950  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3951  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3952  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3953  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3954  [SSB / eman abdelghany / SofTech9] -----
+select count ( * ) from items where items.itemcode ='105090'
+
+----- SPID 23 batch 3955  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemexpiry , itemsaleprice , itemsalestax , itemname , itemcode , unitcode , itemsaleprice_extrap , hi_typecode , itemcode_alt1 , itemcode_alt2 , itemcostprice , itemslevel , itemsalestaxp , itemcode_alt3 , packqty , itemmodified , itemsaleprice2 ,itemstoreclassif , itemnosaleclassif , itemtrans3 , itemtrans , unitsaleprice , costcentercode , pharmacydiscp FROM items WHERE items.itemcode ='105090'
+
+----- SPID 23 batch 3956  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='105090' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3957  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='105090' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3958  [SSB / eman abdelghany / SofTech9] -----
+select custdiscp , allow_sell from custdiscounts where custdiscounts.personcode ='1500' and custdiscounts.custdiscpcode ='10'
+
+----- SPID 23 batch 3959  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='105090' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3960  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='105090' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 3961  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 3962  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 3963  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 3964  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =1
+
+----- SPID 23 batch 3965  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =2
+
+----- SPID 23 batch 3966  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =3
+
+----- SPID 23 batch 3967  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =4
+
+----- SPID 23 batch 3968  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =5
+
+----- SPID 23 batch 3969  [SSB / eman abdelghany / SofTech9] -----
+select itemstitles.ititledescr from itemstitles where itemstitles.ititlecode =6
+
+----- SPID 23 batch 3970  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3971  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3972  [SSB / eman abdelghany / SofTech9] -----
+select branchcode from lastdocnumbers where ver_branch ='1'
+
+----- SPID 23 batch 3973  [SSB / eman abdelghany / SofTech9] -----
+select cfsetupvalue from cfarmasetup where cfsetupcode =491
+
+----- SPID 23 batch 3974  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsfamily.familycode, itemsfamily.familyname FROM itemsfamily ORDER BY itemsfamily.familyname
+
+----- SPID 23 batch 3975  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemsorigin.itemorigincode, itemsorigin.itemoriginname FROM itemsorigin ORDER BY itemsorigin.itemoriginname
+
+----- SPID 23 batch 3976  [SSB / eman abdelghany / SofTech9] -----
+SELECT personsdata.personcode, personsdata.personname, personsdata.ptcode FROM personsdata WHERE ( personsdata.ptcode = '20' ) AND ( convert(integer,personsdata.personcode) > 0 ) ORDER BY personsdata.personname ASC
+
+----- SPID 23 batch 3977  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3978  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3979  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3980  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3981  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3982  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3983  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3984  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3985  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3986  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3987  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3988  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 3989  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3990  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 3991  [SSB / eman abdelghany / SofTech9] -----
+SELECT items.familycode , items.itemcode , items.itemname , items.itemsaleprice , items.itemorigincode , items.itemproducercode , items.fmi , items.unitsaleprice , vtot_nowqty = sum("stkbal"."nowqty"), items.suppcode , row_selected=0 FROM items , stkbal ,stores WHERE ( items.itemcode = stkbal.itemcode ) and ( stkbal.storecode = stores.storecode ) and ( ( stores.storerealbal = 1 ) and ( items.itemarchive = 0 ) ) and ( stkbal.branchcode = '100' )  and (((items.itemname LIKE 'M%CAVA%'))) GROUP BY items.familycode,items.itemcode,items.itemname,items.itemsaleprice,items.itemorigincode,items.suppcode,items.itemproducercode,items.fmi,items.unitsaleprice ORDER BY items.itemname ASC
+
+----- SPID 23 batch 3992  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3993  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3994  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3995  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3996  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3997  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 3998  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 3999  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4000  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4001  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4002  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4003  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4004  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4005  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4006  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4007  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4008  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4009  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4010  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4011  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4012  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4013  [SSB / eman abdelghany / SofTech9] -----
+select count ( * ) from items where items.itemcode ='128589'
+
+----- SPID 23 batch 4014  [SSB / eman abdelghany / SofTech9] -----
+SELECT itemexpiry , itemsaleprice , itemsalestax , itemname , itemcode , unitcode , itemsaleprice_extrap , hi_typecode , itemcode_alt1 , itemcode_alt2 , itemcostprice , itemslevel , itemsalestaxp , itemcode_alt3 , packqty , itemmodified , itemsaleprice2 ,itemstoreclassif , itemnosaleclassif , itemtrans3 , itemtrans , unitsaleprice , costcentercode , pharmacydiscp FROM items WHERE items.itemcode ='128589'
+
+----- SPID 23 batch 4015  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='128589' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 4016  [SSB / eman abdelghany / SofTech9] -----
+select offersno , itemqty_from from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =2 and specialoffers.specialoffer_itemcode ='128589' and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 4017  [SSB / eman abdelghany / SofTech9] -----
+select custdiscp , allow_sell from custdiscounts where custdiscounts.personcode ='1500' and custdiscounts.custdiscpcode ='12'
+
+----- SPID 23 batch 4018  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='100' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='128589' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 4019  [SSB / eman abdelghany / SofTech9] -----
+select offersno , bonus_itemcode , bonus_itemqty from specialoffers where specialoffers.branchcode ='-1' and specialoffers.specialoffertype =1 and specialoffers.specialoffer_itemcode ='128589' and specialoffers.itemqty_from <= 1.00000 and specialoffers.itemqty_to >= 1.00000 and specialoffers.specialoffer_startdate <= '9-20-2026 0:0:0.000' and specialoffers.specialoffer_finishdate >= '9-20-2026 0:0:0.000'
+
+----- SPID 23 batch 4020  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4021  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4022  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4023  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4024  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4025  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4026  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4027  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4028  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4029  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4030  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4031  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4032  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4033  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4034  [SSB / eman abdelghany / SofTech9] -----
+select storecode from branchstores where branchstores.branchcode ='130' and branchstores.defpos ='1'
+
+----- SPID 23 batch 4035  [SSB / eman abdelghany / SofTech9] -----
+select btype from branches where branches.branchcode ='130'
+
+----- SPID 23 batch 4036  [SSB / eman abdelghany / SofTech9] -----
+set quoted_identifier on
+
+----- SPID 23 batch 4037  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4038  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4039  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4040  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4041  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4042  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4043  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4044  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4045  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4046  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4047  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4048  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4049  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4050  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4051  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4052  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4053  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4054  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4055  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4056  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4057  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4058  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4059  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4060  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4061  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4062  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4063  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4064  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4065  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4066  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4067  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4068  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4069  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4070  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4071  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4072  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4073  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4074  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4075  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4076  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4077  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4078  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4079  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4080  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4081  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4082  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4083  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4084  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4085  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4086  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4087  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4088  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4089  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4090  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4091  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4092  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4093  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4094  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4095  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4096  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4097  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4098  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4099  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4100  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4101  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4102  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4103  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4104  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4105  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4106  [SSB / eman abdelghany / SofTech9] -----
+select storecode from branchstores where branchstores.branchcode ='150' and branchstores.defpos ='1'
+
+----- SPID 23 batch 4107  [SSB / eman abdelghany / SofTech9] -----
+select btype from branches where branches.branchcode ='150'
+
+----- SPID 23 batch 4108  [SSB / eman abdelghany / SofTech9] -----
+set quoted_identifier on
+
+----- SPID 23 batch 4109  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4110  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4111  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4112  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4113  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4114  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4115  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4116  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4117  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4118  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4119  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4120  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4121  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4122  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4123  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4124  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4125  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4126  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4127  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4128  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4129  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4130  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4131  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4132  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4133  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4134  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4135  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4136  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4137  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4138  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4139  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4140  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4141  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4142  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4143  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4144  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4145  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4146  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4147  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4148  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4149  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4150  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4151  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4152  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4153  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4154  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4155  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4156  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4157  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4158  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4159  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4160  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4161  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4162  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4163  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4164  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4165  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4166  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4167  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4168  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4169  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4170  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4171  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4172  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4173  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4174  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4175  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4176  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4177  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4178  [SSB / eman abdelghany / SofTech9] -----
+select storecode from branchstores where branchstores.branchcode ='170' and branchstores.defpos ='1'
+
+----- SPID 23 batch 4179  [SSB / eman abdelghany / SofTech9] -----
+select btype from branches where branches.branchcode ='170'
+
+----- SPID 23 batch 4180  [SSB / eman abdelghany / SofTech9] -----
+set quoted_identifier on
+
+----- SPID 23 batch 4181  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4182  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4183  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4184  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4185  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4186  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4187  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4188  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4189  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4190  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4191  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4192  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4193  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4194  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4195  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4196  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4197  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4198  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4199  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4200  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4201  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4202  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4203  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4204  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4205  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4206  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4207  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4208  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4209  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4210  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4211  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4212  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4213  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4214  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4215  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4216  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4217  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4218  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4219  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4220  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4221  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4222  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4223  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4224  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4225  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4226  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4227  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4228  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4229  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4230  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4231  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4232  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4233  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4234  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4235  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4236  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4237  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4238  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4239  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4240  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4241  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4242  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4243  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4244  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4245  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4246  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4247  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4248  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4249  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4250  [SSB / eman abdelghany / SofTech9] -----
+select storecode from branchstores where branchstores.branchcode ='140' and branchstores.defpos ='1'
+
+----- SPID 23 batch 4251  [SSB / eman abdelghany / SofTech9] -----
+select btype from branches where branches.branchcode ='140'
+
+----- SPID 23 batch 4252  [SSB / eman abdelghany / SofTech9] -----
+set quoted_identifier on
+
+----- SPID 23 batch 4253  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4254  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4255  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4256  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4257  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4258  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4259  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4260  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4261  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4262  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4263  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4264  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4265  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4266  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4267  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4268  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4269  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4270  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4271  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4272  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4273  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4274  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4275  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4276  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4277  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4278  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4279  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4280  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4281  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4282  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4283  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4284  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4285  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4286  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4287  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4288  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4289  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4290  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4291  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4292  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4293  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4294  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4295  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4296  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4297  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4298  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4299  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4300  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4301  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4302  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4303  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4304  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4305  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4306  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4307  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4308  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4309  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4310  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4311  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4312  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4313  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4314  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4315  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4316  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4317  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4318  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4319  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4320  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4321  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 23 batch 4322  [SSB / eman abdelghany / SofTech9] -----
+select storecode from branchstores where branchstores.branchcode ='160' and branchstores.defpos ='1'
+
+----- SPID 23 batch 4323  [SSB / eman abdelghany / SofTech9] -----
+select btype from branches where branches.branchcode ='160'
+
+----- SPID 23 batch 4324  [SSB / eman abdelghany / SofTech9] -----
+set quoted_identifier on
+
+----- SPID 23 batch 4325  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4326  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4327  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4328  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4329  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4330  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4331  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4332  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4333  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4334  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4335  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4336  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4337  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4338  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4339  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4340  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4341  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4342  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4343  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4344  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4345  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4346  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4347  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4348  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4349  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4350  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4351  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4352  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4353  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4354  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4355  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4356  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4357  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4358  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4359  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4360  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4361  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4362  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4363  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4364  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4365  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4366  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4367  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4368  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4369  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4370  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4371  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4372  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4373  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4374  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4375  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4376  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4377  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4378  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4379  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4380  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4381  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4382  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4383  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4384  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4385  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4386  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =300
+
+----- SPID 23 batch 4387  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4388  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =301
+
+----- SPID 23 batch 4389  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4390  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4391  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4392  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4393  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4394  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4395  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4396  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4397  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =302
+
+----- SPID 23 batch 4398  [SSB / eman abdelghany / SofTech9] -----
+select ititledescr from itemstitles where itemstitles.ititlecode =303
+
+----- SPID 23 batch 4399  [SSB / eman abdelghany / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 23 batch 4400  [SSB / eman abdelghany / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 23 batch 4401  [SSB / eman abdelghany / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 27 batch 277  [SSB / Reda Samy / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 27 batch 278  [SSB / Reda Samy / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 27 batch 279  [SSB / Reda Samy / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 29 batch 1617  [Server / E-Services Tool. / SofTech9] -----
+select docnumber as receiptNumber,null as uuid,null as receipt_submission_number,null as receipt_log,r_docnumber as return_original_sell_number,trans_time as dateTimeIssued,null as previousUUID,null as referenceUUID,'EGP' as currency,null as exchangeRate,null as sOrderNameCode,'FC' as orderdeliveryMode,doccode as receiptType,null as typeVersion,null as seller_companyTradeName,branchcode as seller_branchCode,null as seller_governate,null as seller_regionCity,null as seller_street,null as seller_buildingNumber,null as seller_deviceVersion,null as seller_deviceSecret,null as seller_deviceID,u&'\0639\0645\064a\0644 \0646\0642\062f\064a' as name,'P' as type,null as id,null as mobileNumber,null as buyer_address,null as paymentNumber,'EG' as country,null as item_is_blacklist,itemcode as internalCode,null as description,null as itemCode,'EA' as unitType,transqty as quantity,transprice as unitPrice,null as netSale,null as totalSale,null as total,null as commercialDiscount1,null as commercialDiscount2,null as itemDiscount1,null as itemDiscount2,null as subType,null as amount,null as rate,null as subType2,null as amount2,null as rate2,null as totalSales,null as totalCommercialDiscount,null as totalItemsDiscount,null as extraReceiptDiscount,null as extraReceiptDiscount2,null as netAmount,null as feesAmount,null as totalAmount,'T1' as taxType,null as amountA,null as taxType2,null as amount2A,'C' as paymentMethod,null as adjustment,null as contractor_name,null as contractor_amount,null as contractor_rate,null as beneficiary_amount,null as beneficiary_rate,null as seller_deviceSerialNumber,null as central_device_name,'1' as receipt_unit_price_include_vat,null as receipt_upload_status,null as buyer_mapping_id,itemcode as item_mapping_id,null as return_original_sell_device from stktrans where CONVERT(INT,doccode ) in (115,30) and (personcode = '1500' or  personcode = '1510')  and  branchcode = '100'  and   ( doccode  in ('115','30') )  and   (  trans_time  between '2026-09-20 00:00:00' and '2026-09-20 23:59:59')
+
+----- SPID 29 batch 1618  [Server / E-Services Tool. / SofTech9] -----
+select docnumber as receiptNumber,null as uuid,null as receipt_submission_number,null as receipt_log,r_docnumber as return_original_sell_number,trans_time as dateTimeIssued,null as previousUUID,null as referenceUUID,'EGP' as currency,null as exchangeRate,null as sOrderNameCode,'FC' as orderdeliveryMode,doccode as receiptType,null as typeVersion,null as seller_companyTradeName,branchcode as seller_branchCode,null as seller_governate,null as seller_regionCity,null as seller_street,null as seller_buildingNumber,null as seller_deviceVersion,null as seller_deviceSecret,null as seller_deviceID,u&'\0639\0645\064a\0644 \0646\0642\062f\064a' as name,'P' as type,null as id,null as mobileNumber,null as buyer_address,null as paymentNumber,'EG' as country,null as item_is_blacklist,itemcode as internalCode,null as description,null as itemCode,'EA' as unitType,transqty as quantity,transprice as unitPrice,null as netSale,null as totalSale,null as total,null as commercialDiscount1,null as commercialDiscount2,null as itemDiscount1,null as itemDiscount2,null as subType,null as amount,null as rate,null as subType2,null as amount2,null as rate2,null as totalSales,null as totalCommercialDiscount,null as totalItemsDiscount,null as extraReceiptDiscount,null as extraReceiptDiscount2,null as netAmount,null as feesAmount,null as totalAmount,'T1' as taxType,null as amountA,null as taxType2,null as amount2A,'C' as paymentMethod,null as adjustment,null as contractor_name,null as contractor_amount,null as contractor_rate,null as beneficiary_amount,null as beneficiary_rate,null as seller_deviceSerialNumber,null as central_device_name,'1' as receipt_unit_price_include_vat,null as receipt_upload_status,null as buyer_mapping_id,itemcode as item_mapping_id,null as return_original_sell_device from stktrans where CONVERT(INT,doccode ) in (115,30) and (personcode = '1500' or  personcode = '1510')  and  branchcode = '200'  and   ( doccode  in ('115','30') )  and   (  trans_time  between '2026-09-20 00:00:00' and '2026-09-20 23:59:59')
+
+----- SPID 29 batch 1619  [Server / E-Services Tool. / SofTech9] -----
+select docnumber as receiptNumber,null as uuid,null as receipt_submission_number,null as receipt_log,r_docnumber as return_original_sell_number,trans_time as dateTimeIssued,null as previousUUID,null as referenceUUID,'EGP' as currency,null as exchangeRate,null as sOrderNameCode,'FC' as orderdeliveryMode,doccode as receiptType,null as typeVersion,null as seller_companyTradeName,branchcode as seller_branchCode,null as seller_governate,null as seller_regionCity,null as seller_street,null as seller_buildingNumber,null as seller_deviceVersion,null as seller_deviceSecret,null as seller_deviceID,u&'\0639\0645\064a\0644 \0646\0642\062f\064a' as name,'P' as type,null as id,null as mobileNumber,null as buyer_address,null as paymentNumber,'EG' as country,null as item_is_blacklist,itemcode as internalCode,null as description,null as itemCode,'EA' as unitType,transqty as quantity,transprice as unitPrice,null as netSale,null as totalSale,null as total,null as commercialDiscount1,null as commercialDiscount2,null as itemDiscount1,null as itemDiscount2,null as subType,null as amount,null as rate,null as subType2,null as amount2,null as rate2,null as totalSales,null as totalCommercialDiscount,null as totalItemsDiscount,null as extraReceiptDiscount,null as extraReceiptDiscount2,null as netAmount,null as feesAmount,null as totalAmount,'T1' as taxType,null as amountA,null as taxType2,null as amount2A,'C' as paymentMethod,null as adjustment,null as contractor_name,null as contractor_amount,null as contractor_rate,null as beneficiary_amount,null as beneficiary_rate,null as seller_deviceSerialNumber,null as central_device_name,'1' as receipt_unit_price_include_vat,null as receipt_upload_status,null as buyer_mapping_id,itemcode as item_mapping_id,null as return_original_sell_device from stktrans where CONVERT(INT,doccode ) in (115,30) and (personcode = '1500' or  personcode = '1510')  and  branchcode = '170'  and   ( doccode  in ('115','30') )  and   (  trans_time  between '2026-09-20 00:00:00' and '2026-09-20 23:59:59')
+
+----- SPID 35 batch 1  [?] -----
+select @@langid
+
+----- SPID 35 batch 2  [?] -----
+select dateformat from master.dbo.syslanguages where langid = 0
+
+----- SPID 35 batch 3  [?] -----
+select @@version
+
+----- SPID 35 batch 4  [?] -----
+sp_server_info 1
+
+----- SPID 35 batch 5  [?] -----
+use SOFTECHDB9
+
+----- SPID 35 batch 6  [?] -----
+select USER_NAME()
+
+----- SPID 35 batch 7  [?] -----
+begin tran
+
+----- SPID 35 batch 8  [?] -----
+set quoted_identifier on
+
+----- SPID 35 batch 9  [?] -----
+select count ( * ) from backup_info where backup_info.backup_date ='9-20-2026 0:0:0.000'
+
+----- SPID 35 batch 10  [?] -----
+commit tran
+
+----- SPID 39 batch 1  [?] -----
+select @@langid
+
+----- SPID 39 batch 2  [?] -----
+select dateformat from master.dbo.syslanguages where langid = 0
+
+----- SPID 39 batch 3  [?] -----
+select @@version
+
+----- SPID 39 batch 4  [?] -----
+sp_server_info 1
+
+----- SPID 39 batch 5  [?] -----
+use SOFTECHDB9
+
+----- SPID 39 batch 6  [?] -----
+select USER_NAME()
+
+----- SPID 39 batch 7  [?] -----
+begin tran
+
+----- SPID 39 batch 8  [?] -----
+select branchcode from lastdocnumbers where lastdocnumbers.ver_branch ='1'
+
+----- SPID 39 batch 9  [?] -----
+update dailyexpenses set dailyexpenses.table_dumped ='9-20-2026 10:50:21.000' where dailyexpenses.branchcode ='100' and dailyexpenses.branchcode2 ='130' and dailyexpenses.table_dumped is null
+
+----- SPID 39 batch 10  [?] -----
+SELECT  dailyexpenses.branchcode ,           dailyexpenses.expensedate ,           dailyexpenses.intervalcode ,           dailyexpenses.expcode ,           dailyexpenses.expvalue ,           dailyexpenses.expcomment ,           dailyexpenses.cheqsno ,dailyexpenses.day_sno ,           dailyexpenses.custcode ,           dailyexpenses.expsource ,           dailyexpenses.costcentercode ,           dailyexpenses.table_dumped ,           dailyexpenses.branchcode2 ,           dailyexpenses.expusercodeFROM dailyexpenses      WHERE ( dailyexpenses.branchcode = '100' ) And          ( dailyexpenses.branchcode2 = '130' ) and          ( dailyexpenses.table_dumped = '9-20-2026 10:50:21.000' )
+
+----- SPID 39 batch 11  [?] -----
+commit tran
+
+----- SPID 39 batch 12  [?] -----
+begin tran
+
+----- SPID 39 batch 13  [?] -----
+update costcenterstrans set costcenterstrans.table_dumped ='9-20-2026 10:50:21.000' where costcenterstrans.ver_branchcode ='100' and costcenterstrans.branchcode ='130' and costcenterstrans.table_dumped is null
+
+----- SPID 39 batch 14  [?] -----
+SELECT  costcenterstrans.ccsno ,           costcenterstrans.branchcode ,           costcenterstrans.doccode ,           costcenterstrans.docnumber ,           costcenterstrans.docdate ,           costcenterstrans.cheqsno ,           costcenterstrans.trans_source ,           costcenterstrans.costcentercode ,           costcenterstrans.costvalue ,           costcenterstrans.usercode ,           costcenterstrans.trans_time ,           costcenterstrans.trans_sign ,           costcenterstrans.expcode ,costcenterstrans.table_dumped ,           costcenterstrans.ver_branchcode ,           costcenterstrans.recdata     FROM costcenterstrans      WHERE ( costcenterstrans.ver_branchcode = '100' ) And          ( costcenterstrans.branchcode = '130' ) and( costcenterstrans.table_dumped = '9-20-2026 10:50:21.000' )
+
+----- SPID 39 batch 15  [?] -----
+commit tran
+
+----- SPID 39 batch 16  [?] -----
+begin tran
+
+----- SPID 39 batch 17  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 18  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 19  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 20  [?] -----
+commit tran
+
+----- SPID 39 batch 21  [?] -----
+begin tran
+
+----- SPID 39 batch 22  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 23  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 24  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 25  [?] -----
+commit tran
+
+----- SPID 39 batch 26  [?] -----
+begin tran
+
+----- SPID 39 batch 27  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 28  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 29  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 30  [?] -----
+commit tran
+
+----- SPID 39 batch 31  [?] -----
+begin tran
+
+----- SPID 39 batch 32  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 33  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 34  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 35  [?] -----
+commit tran
+
+----- SPID 39 batch 36  [?] -----
+begin tran
+
+----- SPID 39 batch 37  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 38  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 39  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 40  [?] -----
+commit tran
+
+----- SPID 39 batch 41  [?] -----
+begin tran
+
+----- SPID 39 batch 42  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 43  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 44  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 45  [?] -----
+commit tran
+
+----- SPID 39 batch 46  [?] -----
+begin tran
+
+----- SPID 39 batch 47  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 48  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 49  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 50  [?] -----
+commit tran
+
+----- SPID 39 batch 51  [?] -----
+begin tran
+
+----- SPID 39 batch 52  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 53  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 54  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 55  [?] -----
+commit tran
+
+----- SPID 39 batch 56  [?] -----
+begin tran
+
+----- SPID 39 batch 57  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 58  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 59  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 60  [?] -----
+commit tran
+
+----- SPID 39 batch 61  [?] -----
+begin tran
+
+----- SPID 39 batch 62  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 63  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 64  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 65  [?] -----
+commit tran
+
+----- SPID 39 batch 66  [?] -----
+begin tran
+
+----- SPID 39 batch 67  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 68  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 69  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 70  [?] -----
+commit tran
+
+----- SPID 39 batch 71  [?] -----
+begin tran
+
+----- SPID 39 batch 72  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 73  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 74  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 75  [?] -----
+commit tran
+
+----- SPID 39 batch 76  [?] -----
+begin tran
+
+----- SPID 39 batch 77  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 78  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 79  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 80  [?] -----
+commit tran
+
+----- SPID 39 batch 81  [?] -----
+begin tran
+
+----- SPID 39 batch 82  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 83  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 84  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 85  [?] -----
+commit tran
+
+----- SPID 39 batch 86  [?] -----
+begin tran
+
+----- SPID 39 batch 87  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 88  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 89  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 90  [?] -----
+commit tran
+
+----- SPID 39 batch 91  [?] -----
+begin tran
+
+----- SPID 39 batch 92  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 93  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 94  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 95  [?] -----
+commit tran
+
+----- SPID 39 batch 96  [?] -----
+begin tran
+
+----- SPID 39 batch 97  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 98  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 99  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 100  [?] -----
+commit tran
+
+----- SPID 39 batch 101  [?] -----
+begin tran
+
+----- SPID 39 batch 102  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 103  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 104  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 105  [?] -----
+commit tran
+
+----- SPID 39 batch 106  [?] -----
+begin tran
+
+----- SPID 39 batch 107  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 108  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 109  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 110  [?] -----
+commit tran
+
+----- SPID 39 batch 111  [?] -----
+begin tran
+
+----- SPID 39 batch 112  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 113  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 114  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 115  [?] -----
+commit tran
+
+----- SPID 39 batch 116  [?] -----
+begin tran
+
+----- SPID 39 batch 117  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 118  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 119  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 120  [?] -----
+commit tran
+
+----- SPID 39 batch 121  [?] -----
+begin tran
+
+----- SPID 39 batch 122  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 123  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 124  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 125  [?] -----
+commit tran
+
+----- SPID 39 batch 126  [?] -----
+begin tran
+
+----- SPID 39 batch 127  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 128  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 129  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 130  [?] -----
+commit tran
+
+----- SPID 39 batch 131  [?] -----
+begin tran
+
+----- SPID 39 batch 132  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 133  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 134  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 135  [?] -----
+commit tran
+
+----- SPID 39 batch 136  [?] -----
+begin tran
+
+----- SPID 39 batch 137  [?] -----
+select object_id('sp_serverdate')
+
+----- SPID 39 batch 138  [?] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 39 batch 139  [?] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 39 batch 140  [?] -----
+commit tran
+
+----- SPID 39 batch 141  [?] -----
+begin tran
+
+----- SPID 39 batch 142  [?] -----
+commit tran
+
+----- SPID 39 batch 143  [?] -----
+begin tran
+
+----- SPID 39 batch 144  [?] -----
+commit tran
+
+----- SPID 49 batch 763185  [SSB-SB / SSB-SB / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 49 batch 763186  [SSB-SB / SSB-SB / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 49 batch 763187  [SSB-SB / SSB-SB / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 49 batch 763188  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docnumber ,           r3stktransm.docdate ,           r3stktransm.supp_main_code ,           r3stktransm.docnumber2 ,           r3stktransm.comments ,           r3stktransm.docvalue ,           r3stktransm.cust_branch_code ,           r3stktransm.origintaxp ,           r3stktransm.custdiscp ,           r3stktransm.specialdiscp ,           r3stktransm.storecode ,           r3stktransm.docvaluepay ,           r3stktransm.fatstatuscode ,           r3stktransm.ptcode ,           r3stktransm.ptclassifcode ,           r3stktransm.cust_branch_store ,           r3stktransm.docvaluereturn ,           r3stktransm.fatcurrentstatus ,           r3stktransm.docwritedate ,           r3stktransm.cust_professional ,           r3stktransm.saleprice_extrap ,           r3stktransm.usercode ,           r3stktransm.trans_time ,           r3stktransm.patientpayment ,           r3stktransm.table_dumped ,           r3stktransm.docvalue1 ,r3stktransm.docvalue2 ,           r3stktransm.docvalue3 ,           r3stktransm.phcode ,           r3stktransm.personnewbal ,           r3stktransm.bcurrency ,           r3stktransm.docvaluebc ,           r3stktransm.docvaluepaybc ,           r3stktransm.bcrate ,           r3stktransm.mitemsys ,           r3stktransm.cashiercode ,           r3stktransm.origdoc ,           r3stktransm.refdoctorcode ,           r3stktransm.docpaydue ,           r3stktransm.vf1 ,           r3stktransm.vf2     FROM r3stktransm
+
+----- SPID 49 batch 763189  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3temp_r_stk.branchcode ,           r3temp_r_stk.doccode ,           r3temp_r_stk.docnumber ,           r3temp_r_stk.docdate ,           r3temp_r_stk.doctext     FROM r3temp_r_stk
+
+----- SPID 49 batch 763190  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate ,           vcount=count(*),           vdocvalue_sum=sum(round(r3stktransm.docvalue,2))    FROM r3stktransm   GROUP BY r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate
+
+----- SPID 49 batch 763191  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docnumber ,           r3stktransm.docdate ,           r3stktransm.docvalue ,           r3temp_r_stk.doctext  FROM r3stktransm LEFT OUTER JOIN r3temp_r_stk ON r3stktransm.branchcode = r3temp_r_stk.branchcode AND r3stktransm.doccode = r3temp_r_stk.doccode AND r3stktransm.docnumber = r3temp_r_stk.docnumber AND r3stktransm.docdate = r3temp_r_stk.docdate
+
+----- SPID 49 batch 763192  [SSB-SB / SSB-SB / SofTech9] -----
+select transvalue , transqty , transclosed from temp_r_trans where temp_r_trans.branchcode ='170' and temp_r_trans.doccode ='115' and temp_r_trans.docdate ='9-20-2026 0:0:0.000'
+
+----- SPID 49 batch 763193  [SSB-SB / SSB-SB / SofTech9] -----
+update temp_r_trans set temp_r_trans.transvalue =21979.33 , temp_r_trans.doctext ='00B5 009E 002E 006B 0016 00D4 003B 00CC 0078 00E0 0041 008F 0009 00C6 009A 0023 00AC 002B 001D 0099 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000' where temp_r_trans.branchcode ='170' and temp_r_trans.doccode ='115' and temp_r_trans.docdate ='9-20-2026 0:0:0.000'
+
+----- SPID 49 batch 763194  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn,fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, phcode, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES ('170', '115', 414049, '9-20-2026 0:0:0.000', '', 0, 31.0000, '1510', 0.00, 0.00, 0.00, '170', 31.0000, '30', '10', '91', '8', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:46:38.936', 0.0000, '9-20-2026 10:46:38.940', 31.0000, 19.9300, 0.0000, '08HD72',12.00, 1, 31.0000, 31.0000, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 49 batch 763195  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn,fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES ( '170', '115', 414050, '9-20-2026 0:0:0.000', '', 0, 79.8900, '4800', 100.00, 0.00, 0.00, '170', 79.8900, '30', '10', '30', '2', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:49:4.020', 79.8900, '9-20-2026 10:49:4.020', 92.0000, 68.3000, 11.3000, 0.00, 1, 79.8900, 79.8900, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 49 batch 763196  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktransm ( branchcode, doccode, docnumber, docdate, supp_main_code, docnumber2, docvalue, cust_branch_code, origintaxp, custdiscp, specialdiscp, storecode, docvaluepay, fatstatuscode, ptcode, ptclassifcode, cust_branch_store, docvaluereturn,fatcurrentstatus, cust_professional, saleprice_extrap, usercode, trans_time, patientpayment, table_dumped, docvalue1, docvalue2, docvalue3, personnewbal, bcurrency, docvaluebc, docvaluepaybc, bcrate, mitemsys, cashiercode, origdoc, vf2 ) VALUES ( '170', '115', 414051, '9-20-2026 0:0:0.000', '', 0, 29.9200, '4800', 100.00, 0.00, 0.00, '170', 29.9200, '30', '10', '30', '2', 0.0000, '90', '2', 0.00, '1702', '9-20-2026 10:49:57.263', 29.9200, '9-20-2026 10:49:57.263', 34.0000, 25.9400, 0.0000, 0.00, 1, 29.9200, 29.9200, 1.0000, 'AR', '1741', 5, '' )
+
+----- SPID 49 batch 763197  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktransm WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414049 AND docdate = '9-20-2026 0:0:0.000'
+
+----- SPID 49 batch 763198  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktransm WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414050 AND docdate = '9-20-2026 0:0:0.000'
+
+----- SPID 49 batch 763199  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktransm WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414051 AND docdate = '9-20-2026 0:0:0.000'
+
+----- SPID 49 batch 763200  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktrans.branchcode ,           r3stktrans.doccode ,           r3stktrans.docnumber ,           r3stktrans.docdate ,           r3stktrans.storecode ,           r3stktrans.itemcode ,           r3stktrans.transqty ,           r3stktrans.transprice,           r3stktrans.newqty ,           r3stktrans.newcostprice ,           r3stktrans.itemexpirydate ,           r3stktrans.itemsaleprice ,           r3stktrans.itemsalestax ,           r3stktrans.itemsaleprice_tax ,           r3stktrans.pharmacydiscp,           r3stktrans.additionaldiscp ,           r3stktrans.transprice_total ,           r3stktrans.origintaxp ,           r3stktrans.custdiscp ,           r3stktrans.specialdiscp ,           r3stktrans.bonusqty ,           r3stktrans.dblitemflag ,r3stktrans.r_docnumber ,           r3stktrans.r_docdate ,           r3stktrans.saleprice_extrap ,           r3stktrans.suppliercode ,           r3stktrans.r_doccode ,           r3stktrans.s_doccode ,           r3stktrans.s_docnumber ,           r3stktrans.s_docdate ,           r3stktrans.usercode ,           r3stktrans.trans_time ,           r3stktrans.personcode ,           r3stktrans.table_dumped ,           r3stktrans.storecode2 ,           r3stktrans.retqty ,           r3stktrans.item_partno ,r3stktrans.costcentercode ,           r3stktrans.rcostprice ,           r3stktrans.vf1 ,           r3stktrans.vf2 ,           r3stktrans.vf3 ,           r3stktrans.vf4 ,           r3stktrans.promsno ,           r3stktrans.promtype     FROM r3stktrans
+
+----- SPID 49 batch 763201  [SSB-SB / SSB-SB / SofTech9] -----
+select itemexpiry , itemcostprice , itemtrans from items where items.itemcode ='122929'
+
+----- SPID 49 batch 763202  [SSB-SB / SSB-SB / SofTech9] -----
+select count ( * ) from stkbal where stkbal.storecode ='170' and stkbal.itemcode ='122929'
+
+----- SPID 49 batch 763203  [SSB-SB / SSB-SB / SofTech9] -----
+select itemexpiry , itemcostprice , itemtrans from items where items.itemcode ='127038'
+
+----- SPID 49 batch 763204  [SSB-SB / SSB-SB / SofTech9] -----
+select count ( * ) from stkbal where stkbal.storecode ='170' and stkbal.itemcode ='127038'
+
+----- SPID 49 batch 763205  [SSB-SB / SSB-SB / SofTech9] -----
+select itemexpiry , itemcostprice , itemtrans from items where items.itemcode ='54'
+
+----- SPID 49 batch 763206  [SSB-SB / SSB-SB / SofTech9] -----
+select count ( * ) from stkbal where stkbal.storecode ='170' and stkbal.itemcode ='54'
+
+----- SPID 49 batch 763207  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemexpirydate, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp,custdiscp, specialdiscp, bonusqty, dblitemflag, r_docnumber, r_docdate, saleprice_extrap, suppliercode, r_doccode, s_doccode, usercode, trans_time, personcode, retqty, vf4 ) VALUES ( '170', '115', 414049, '9-20-2026 0:0:0.000', '170', '122929', 1.00000, 31.0000, 11.00000, 19.9314, '3-3-2029 0:0:0.000', 31.000, 0.0000, 31.0000, 0.0000, 0.00, 31.0000, 0.00, 0.00, 0.00, 31.00000, 1, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1702', '9-20-2026 10:46:38.966', '1510', 0.00000, 12 )
+
+----- SPID 49 batch 763208  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp, custdiscp, specialdiscp, bonusqty, dblitemflag, saleprice_extrap, s_doccode, usercode, trans_time, personcode, retqty, item_partno, rcostprice ) VALUES ( '170', '115', 414050, '9-20-2026 0:0:0.000', '170', '127038', 1.00000, 79.8947, 2.00000, 68.2996, 92.000, 11.2982, 80.7018, 0.0000, 14.00, 79.8900, 0.00, 15.00, 0.00, 92.00000, 1, 0.00, '000', '1702', '9-20-2026 10:49:4.080', '4800', 0.00000, '', 0.0000 )
+
+----- SPID 49 batch 763209  [SSB-SB / SSB-SB / SofTech9] -----
+INSERT INTO stktrans ( branchcode, doccode, docnumber, docdate, storecode, itemcode, transqty, transprice, newqty, newcostprice, itemexpirydate, itemsaleprice, itemsalestax, itemsaleprice_tax, pharmacydiscp, additionaldiscp, transprice_total, origintaxp,custdiscp, specialdiscp, bonusqty, dblitemflag, r_docnumber, r_docdate, saleprice_extrap, suppliercode, r_doccode, s_doccode, usercode, trans_time, personcode, retqty, rcostprice ) VALUES ( '170', '115', 414051, '9-20-2026 0:0:0.000', '170', '54', 1.00000, 29.9200, 18.00000, 25.9370, '8-8-2029 0:0:0.000', 34.000, 0.0000, 34.0000, 0.0000, 0.00, 29.9200, 0.00, 12.00, 0.00, 17.00000, 1, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1702', '9-20-2026 10:49:57.273', '4800', 0.00000, 0.0000 )
+
+----- SPID 49 batch 763210  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktrans WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414049 AND docdate = '9-20-2026 0:0:0.000' AND storecode = '170' AND itemcode = '122929' AND dblitemflag = 1
+
+----- SPID 49 batch 763211  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktrans WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414050 AND docdate = '9-20-2026 0:0:0.000' AND storecode = '170' AND itemcode = '127038' AND dblitemflag = 1
+
+----- SPID 49 batch 763212  [SSB-SB / SSB-SB / SofTech9] -----
+DELETE FROM r3stktrans WHERE branchcode = '170' AND doccode = '115' AND docnumber = 414051 AND docdate = '9-20-2026 0:0:0.000' AND storecode = '170' AND itemcode = '54' AND dblitemflag = 1
+
+----- SPID 49 batch 763213  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3britems.branchcode ,           r3britems.itemcode ,           r3britems.trans_time ,           r3britems.itemsaleprice ,           r3britems.itemsalestax ,           r3britems.itemsalestaxp ,           r3britems.itemsaleprice_tax ,           r3britems.pharmacydiscp ,           r3britems.additionaldiscp ,           r3britems.specialdiscp ,           r3britems.itemcostprice ,           r3britems.unitcode ,           r3britems.packqty ,           r3britems.unitsaleprice     FROM r3britems
+
+----- SPID 49 batch 763214  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3piccrmorderstatus.crmbranchcode ,           r3piccrmorderstatus.crmorderno ,           r3piccrmorderstatus.branchcode ,           r3piccrmorderstatus.orderstatus ,           r3piccrmorderstatus.usercode ,           r3piccrmorderstatus.trans_timeFROM r3piccrmorderstatus
+
+----- SPID 49 batch 763215  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3piccrmordersnos.crmbranchcode ,           r3piccrmordersnos.crmorderno ,           r3piccrmordersnos.branchcode ,           r3piccrmordersnos.snoflag ,           r3piccrmordersnos.docnumber ,           r3piccrmordersnos.docdate ,           r3piccrmordersnos.trans_time     FROM r3piccrmordersnos
+
+----- SPID 49 batch 763216  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_custrating.partnercode ,           r3dm_custrating.tenantid ,           r3dm_custrating.branchcode ,           r3dm_custrating.doccode ,           r3dm_custrating.docnumber5 ,           r3dm_custrating.docdate5 ,           r3dm_custrating.dm_tripid ,           r3dm_custrating.rate_itemno ,           r3dm_custrating.rate_awarded ,           r3dm_custrating.rate_note ,           r3dm_custrating.trans_time ,           r3dm_custrating.nbs_updtstamp     FROM r3dm_custrating
+
+----- SPID 49 batch 763217  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_picsloctrans.phcode ,           r3dm_picsloctrans.latitude_x ,           r3dm_picsloctrans.longitude_y ,           r3dm_picsloctrans.usercode ,           r3dm_picsloctrans.trans_time     FROM r3dm_picsloctrans
+
+----- SPID 49 batch 763218  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_stktransm.partnercode ,           r3dm_stktransm.tenantid ,           r3dm_stktransm.cc_branchcode ,           r3dm_stktransm.cc_orderno ,           r3dm_stktransm.branchcode ,           r3dm_stktransm.doccode ,           r3dm_stktransm.docnumber5 ,           r3dm_stktransm.docdate5 ,           r3dm_stktransm.so_priority ,           r3dm_stktransm.no_items ,           r3dm_stktransm.no_services ,           r3dm_stktransm.phcode ,           r3dm_stktransm.phcode_name ,           r3dm_stktransm.phcode_contact ,           r3dm_stktransm.phcode_address ,           r3dm_stktransm.refurlemail ,           r3dm_stktransm.docvalue ,           r3dm_stktransm.docvaluepay ,           r3dm_stktransm.money_change ,           r3dm_stktransm.is_blocked ,r3dm_stktransm.order_notes ,           r3dm_stktransm.so_status ,           r3dm_stktransm.so_statustime ,           r3dm_stktransm.dm_tripid ,           r3dm_stktransm.startp_trans_time ,           r3dm_stktransm.refstoplocationx ,           r3dm_stktransm.refstoplocationy ,           r3dm_stktransm.stoplocationx ,           r3dm_stktransm.stoplocationy ,           r3dm_stktransm.travel_mins_actual ,           r3dm_stktransm.travel_mins_std ,           r3dm_stktransm.handle_mins_actual ,r3dm_stktransm.handle_mins_std ,           r3dm_stktransm.rating_customer ,           r3dm_stktransm.rating_system ,           r3dm_stktransm.money_customer ,           r3dm_stktransm.money_system ,           r3dm_stktransm.cusercode ,           r3dm_stktransm.ctrans_time ,           r3dm_stktransm.usercode ,           r3dm_stktransm.trans_time ,           r3dm_stktransm.dm_tripid_order ,           r3dm_stktransm.vf1     FROM r3dm_stktransm
+
+----- SPID 49 batch 763219  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_stktrans.partnercode ,           r3dm_stktrans.tenantid ,           r3dm_stktrans.branchcode ,           r3dm_stktrans.doccode ,           r3dm_stktrans.docnumber5 ,           r3dm_stktrans.docdate5 ,           r3dm_stktrans.item_sno ,r3dm_stktrans.itemcode ,           r3dm_stktrans.itemname ,           r3dm_stktrans.itemtrans ,           r3dm_stktrans.transqty ,           r3dm_stktrans.itemsaleprice ,           r3dm_stktrans.transprice ,           r3dm_stktrans.transprice_totalFROM r3dm_stktrans
+
+----- SPID 49 batch 763220  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_trips.partnercode ,           r3dm_trips.tenantid ,           r3dm_trips.branchcode ,           r3dm_trips.dm_tripid ,           r3dm_trips.tripdescr ,           r3dm_trips.tripcreatesource ,           r3dm_trips.tripnature ,           r3dm_trips.tripassigntype ,           r3dm_trips.tripstartplan ,           r3dm_trips.tripstartactual ,           r3dm_trips.drivercode ,           r3dm_trips.drivername ,           r3dm_trips.driverbonus ,           r3dm_trips.trip_notes ,           r3dm_trips.tripstatus ,           r3dm_trips.tripstatustime ,           r3dm_trips.startp_trans_time ,           r3dm_trips.cusercode ,           r3dm_trips.ctrans_time ,           r3dm_trips.usercode ,           r3dm_trips.trans_time ,           r3dm_trips.dm_updtstamp ,           r3dm_trips.nbs_updtstamp ,           r3dm_trips.vf1     FROM r3dm_trips
+
+----- SPID 49 batch 763221  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripsmissed.partnercode ,           r3dm_tripsmissed.tenantid ,           r3dm_tripsmissed.branchcode ,           r3dm_tripsmissed.dm_tripid ,           r3dm_tripsmissed.trans_time ,           r3dm_tripsmissed.drivercode ,           r3dm_tripsmissed.deduct_value ,           r3dm_tripsmissed.miss_type     FROM r3dm_tripsmissed
+
+----- SPID 49 batch 763222  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripstrans.partnercode ,           r3dm_tripstrans.tenantid ,           r3dm_tripstrans.branchcode ,           r3dm_tripstrans.doccode ,           r3dm_tripstrans.docnumber5 ,           r3dm_tripstrans.docdate5 ,           r3dm_tripstrans.dm_tripid ,           r3dm_tripstrans.trans_type ,           r3dm_tripstrans.trans_datetime ,           r3dm_tripstrans.trans_locationx ,           r3dm_tripstrans.trans_locationy ,           r3dm_tripstrans.drivercode ,           r3dm_tripstrans.travel_mins_actual ,           r3dm_tripstrans.travel_mins_std ,           r3dm_tripstrans.handle_mins_actual ,           r3dm_tripstrans.usercode ,           r3dm_tripstrans.nbs_updtstamp ,           r3dm_tripstrans.vf1 ,           r3dm_tripstrans.ref_tripid     FROM r3dm_tripstrans
+
+----- SPID 49 batch 763223  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripstimes.partnercode ,           r3dm_tripstimes.tenantid ,           r3dm_tripstimes.branchcode ,           r3dm_tripstimes.doccode ,           r3dm_tripstimes.docnumber5 ,           r3dm_tripstimes.docdate5 ,           r3dm_tripstimes.dm_tripid ,           r3dm_tripstimes.trans_type ,           r3dm_tripstimes.trans_datetime ,           r3dm_tripstimes.drivercode ,           r3dm_tripstimes.exec_time_sec ,           r3dm_tripstimes.nbs_updtstamp     FROM r3dm_tripstimes
+
+----- SPID 49 batch 763224  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3pos_negsales.branchcode ,           r3pos_negsales.doccode ,           r3pos_negsales.docnumber ,           r3pos_negsales.docdate ,           r3pos_negsales.dblitemflag ,           r3pos_negsales.itemcode ,           r3pos_negsales.transqty ,r3pos_negsales.transprice ,           r3pos_negsales.transprice_total ,           r3pos_negsales.itemexpirydate ,           r3pos_negsales.item_partno ,           r3pos_negsales.usercode ,           r3pos_negsales.trans_time ,           r3pos_negsales.osbranchcode ,           r3pos_negsales.osdoccode ,           r3pos_negsales.osdocnumber ,           r3pos_negsales.osdocdate ,           r3pos_negsales.osdblitemflag ,           r3pos_negsales.ostransprice     FROM r3pos_negsales
+
+----- SPID 49 batch 763225  [SSB-SB / SSB-SB / SofTech9] -----
+commit tran
+
+----- SPID 49 batch 763226  [SSB-SB / SSB-SB / SofTech9] -----
+begin tran
+
+----- SPID 49 batch 763227  [SSB-SB / SSB-SB / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 49 batch 763228  [SSB-SB / SSB-SB / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 49 batch 763229  [SSB-SB / SSB-SB / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 49 batch 763230  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docnumber ,           r3stktransm.docdate ,           r3stktransm.supp_main_code ,           r3stktransm.docnumber2 ,           r3stktransm.comments ,           r3stktransm.docvalue ,           r3stktransm.cust_branch_code ,           r3stktransm.origintaxp ,           r3stktransm.custdiscp ,           r3stktransm.specialdiscp ,           r3stktransm.storecode ,           r3stktransm.docvaluepay ,           r3stktransm.fatstatuscode ,           r3stktransm.ptcode ,           r3stktransm.ptclassifcode ,           r3stktransm.cust_branch_store ,           r3stktransm.docvaluereturn ,           r3stktransm.fatcurrentstatus ,           r3stktransm.docwritedate ,           r3stktransm.cust_professional ,           r3stktransm.saleprice_extrap ,           r3stktransm.usercode ,           r3stktransm.trans_time ,           r3stktransm.patientpayment ,           r3stktransm.table_dumped ,           r3stktransm.docvalue1 ,r3stktransm.docvalue2 ,           r3stktransm.docvalue3 ,           r3stktransm.phcode ,           r3stktransm.personnewbal ,           r3stktransm.bcurrency ,           r3stktransm.docvaluebc ,           r3stktransm.docvaluepaybc ,           r3stktransm.bcrate ,           r3stktransm.mitemsys ,           r3stktransm.cashiercode ,           r3stktransm.origdoc ,           r3stktransm.refdoctorcode ,           r3stktransm.docpaydue ,           r3stktransm.vf1 ,           r3stktransm.vf2     FROM r3stktransm
+
+----- SPID 49 batch 763231  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3temp_r_stk.branchcode ,           r3temp_r_stk.doccode ,           r3temp_r_stk.docnumber ,           r3temp_r_stk.docdate ,           r3temp_r_stk.doctext     FROM r3temp_r_stk
+
+----- SPID 49 batch 763232  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate ,           vcount=count(*),           vdocvalue_sum=sum(round(r3stktransm.docvalue,2))    FROM r3stktransm   GROUP BY r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate
+
+----- SPID 49 batch 763233  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docnumber ,           r3stktransm.docdate ,           r3stktransm.docvalue ,           r3temp_r_stk.doctext  FROM r3stktransm LEFT OUTER JOIN r3temp_r_stk ON r3stktransm.branchcode = r3temp_r_stk.branchcode AND r3stktransm.doccode = r3temp_r_stk.doccode AND r3stktransm.docnumber = r3temp_r_stk.docnumber AND r3stktransm.docdate = r3temp_r_stk.docdate
+
+----- SPID 49 batch 763234  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3stktrans.branchcode ,           r3stktrans.doccode ,           r3stktrans.docnumber ,           r3stktrans.docdate ,           r3stktrans.storecode ,           r3stktrans.itemcode ,           r3stktrans.transqty ,           r3stktrans.transprice,           r3stktrans.newqty ,           r3stktrans.newcostprice ,           r3stktrans.itemexpirydate ,           r3stktrans.itemsaleprice ,           r3stktrans.itemsalestax ,           r3stktrans.itemsaleprice_tax ,           r3stktrans.pharmacydiscp,           r3stktrans.additionaldiscp ,           r3stktrans.transprice_total ,           r3stktrans.origintaxp ,           r3stktrans.custdiscp ,           r3stktrans.specialdiscp ,           r3stktrans.bonusqty ,           r3stktrans.dblitemflag ,r3stktrans.r_docnumber ,           r3stktrans.r_docdate ,           r3stktrans.saleprice_extrap ,           r3stktrans.suppliercode ,           r3stktrans.r_doccode ,           r3stktrans.s_doccode ,           r3stktrans.s_docnumber ,           r3stktrans.s_docdate ,           r3stktrans.usercode ,           r3stktrans.trans_time ,           r3stktrans.personcode ,           r3stktrans.table_dumped ,           r3stktrans.storecode2 ,           r3stktrans.retqty ,           r3stktrans.item_partno ,r3stktrans.costcentercode ,           r3stktrans.rcostprice ,           r3stktrans.vf1 ,           r3stktrans.vf2 ,           r3stktrans.vf3 ,           r3stktrans.vf4 ,           r3stktrans.promsno ,           r3stktrans.promtype     FROM r3stktrans
+
+----- SPID 49 batch 763235  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3britems.branchcode ,           r3britems.itemcode ,           r3britems.trans_time ,           r3britems.itemsaleprice ,           r3britems.itemsalestax ,           r3britems.itemsalestaxp ,           r3britems.itemsaleprice_tax ,           r3britems.pharmacydiscp ,           r3britems.additionaldiscp ,           r3britems.specialdiscp ,           r3britems.itemcostprice ,           r3britems.unitcode ,           r3britems.packqty ,           r3britems.unitsaleprice     FROM r3britems
+
+----- SPID 49 batch 763236  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3piccrmorderstatus.crmbranchcode ,           r3piccrmorderstatus.crmorderno ,           r3piccrmorderstatus.branchcode ,           r3piccrmorderstatus.orderstatus ,           r3piccrmorderstatus.usercode ,           r3piccrmorderstatus.trans_timeFROM r3piccrmorderstatus
+
+----- SPID 49 batch 763237  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3piccrmordersnos.crmbranchcode ,           r3piccrmordersnos.crmorderno ,           r3piccrmordersnos.branchcode ,           r3piccrmordersnos.snoflag ,           r3piccrmordersnos.docnumber ,           r3piccrmordersnos.docdate ,           r3piccrmordersnos.trans_time     FROM r3piccrmordersnos
+
+----- SPID 49 batch 763238  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_custrating.partnercode ,           r3dm_custrating.tenantid ,           r3dm_custrating.branchcode ,           r3dm_custrating.doccode ,           r3dm_custrating.docnumber5 ,           r3dm_custrating.docdate5 ,           r3dm_custrating.dm_tripid ,           r3dm_custrating.rate_itemno ,           r3dm_custrating.rate_awarded ,           r3dm_custrating.rate_note ,           r3dm_custrating.trans_time ,           r3dm_custrating.nbs_updtstamp     FROM r3dm_custrating
+
+----- SPID 49 batch 763239  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_picsloctrans.phcode ,           r3dm_picsloctrans.latitude_x ,           r3dm_picsloctrans.longitude_y ,           r3dm_picsloctrans.usercode ,           r3dm_picsloctrans.trans_time     FROM r3dm_picsloctrans
+
+----- SPID 49 batch 763240  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_stktransm.partnercode ,           r3dm_stktransm.tenantid ,           r3dm_stktransm.cc_branchcode ,           r3dm_stktransm.cc_orderno ,           r3dm_stktransm.branchcode ,           r3dm_stktransm.doccode ,           r3dm_stktransm.docnumber5 ,           r3dm_stktransm.docdate5 ,           r3dm_stktransm.so_priority ,           r3dm_stktransm.no_items ,           r3dm_stktransm.no_services ,           r3dm_stktransm.phcode ,           r3dm_stktransm.phcode_name ,           r3dm_stktransm.phcode_contact ,           r3dm_stktransm.phcode_address ,           r3dm_stktransm.refurlemail ,           r3dm_stktransm.docvalue ,           r3dm_stktransm.docvaluepay ,           r3dm_stktransm.money_change ,           r3dm_stktransm.is_blocked ,r3dm_stktransm.order_notes ,           r3dm_stktransm.so_status ,           r3dm_stktransm.so_statustime ,           r3dm_stktransm.dm_tripid ,           r3dm_stktransm.startp_trans_time ,           r3dm_stktransm.refstoplocationx ,           r3dm_stktransm.refstoplocationy ,           r3dm_stktransm.stoplocationx ,           r3dm_stktransm.stoplocationy ,           r3dm_stktransm.travel_mins_actual ,           r3dm_stktransm.travel_mins_std ,           r3dm_stktransm.handle_mins_actual ,r3dm_stktransm.handle_mins_std ,           r3dm_stktransm.rating_customer ,           r3dm_stktransm.rating_system ,           r3dm_stktransm.money_customer ,           r3dm_stktransm.money_system ,           r3dm_stktransm.cusercode ,           r3dm_stktransm.ctrans_time ,           r3dm_stktransm.usercode ,           r3dm_stktransm.trans_time ,           r3dm_stktransm.dm_tripid_order ,           r3dm_stktransm.vf1     FROM r3dm_stktransm
+
+----- SPID 49 batch 763241  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_stktrans.partnercode ,           r3dm_stktrans.tenantid ,           r3dm_stktrans.branchcode ,           r3dm_stktrans.doccode ,           r3dm_stktrans.docnumber5 ,           r3dm_stktrans.docdate5 ,           r3dm_stktrans.item_sno ,r3dm_stktrans.itemcode ,           r3dm_stktrans.itemname ,           r3dm_stktrans.itemtrans ,           r3dm_stktrans.transqty ,           r3dm_stktrans.itemsaleprice ,           r3dm_stktrans.transprice ,           r3dm_stktrans.transprice_totalFROM r3dm_stktrans
+
+----- SPID 49 batch 763242  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_trips.partnercode ,           r3dm_trips.tenantid ,           r3dm_trips.branchcode ,           r3dm_trips.dm_tripid ,           r3dm_trips.tripdescr ,           r3dm_trips.tripcreatesource ,           r3dm_trips.tripnature ,           r3dm_trips.tripassigntype ,           r3dm_trips.tripstartplan ,           r3dm_trips.tripstartactual ,           r3dm_trips.drivercode ,           r3dm_trips.drivername ,           r3dm_trips.driverbonus ,           r3dm_trips.trip_notes ,           r3dm_trips.tripstatus ,           r3dm_trips.tripstatustime ,           r3dm_trips.startp_trans_time ,           r3dm_trips.cusercode ,           r3dm_trips.ctrans_time ,           r3dm_trips.usercode ,           r3dm_trips.trans_time ,           r3dm_trips.dm_updtstamp ,           r3dm_trips.nbs_updtstamp ,           r3dm_trips.vf1     FROM r3dm_trips
+
+----- SPID 49 batch 763243  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripsmissed.partnercode ,           r3dm_tripsmissed.tenantid ,           r3dm_tripsmissed.branchcode ,           r3dm_tripsmissed.dm_tripid ,           r3dm_tripsmissed.trans_time ,           r3dm_tripsmissed.drivercode ,           r3dm_tripsmissed.deduct_value ,           r3dm_tripsmissed.miss_type     FROM r3dm_tripsmissed
+
+----- SPID 49 batch 763244  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripstrans.partnercode ,           r3dm_tripstrans.tenantid ,           r3dm_tripstrans.branchcode ,           r3dm_tripstrans.doccode ,           r3dm_tripstrans.docnumber5 ,           r3dm_tripstrans.docdate5 ,           r3dm_tripstrans.dm_tripid ,           r3dm_tripstrans.trans_type ,           r3dm_tripstrans.trans_datetime ,           r3dm_tripstrans.trans_locationx ,           r3dm_tripstrans.trans_locationy ,           r3dm_tripstrans.drivercode ,           r3dm_tripstrans.travel_mins_actual ,           r3dm_tripstrans.travel_mins_std ,           r3dm_tripstrans.handle_mins_actual ,           r3dm_tripstrans.usercode ,           r3dm_tripstrans.nbs_updtstamp ,           r3dm_tripstrans.vf1 ,           r3dm_tripstrans.ref_tripid     FROM r3dm_tripstrans
+
+----- SPID 49 batch 763245  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3dm_tripstimes.partnercode ,           r3dm_tripstimes.tenantid ,           r3dm_tripstimes.branchcode ,           r3dm_tripstimes.doccode ,           r3dm_tripstimes.docnumber5 ,           r3dm_tripstimes.docdate5 ,           r3dm_tripstimes.dm_tripid ,           r3dm_tripstimes.trans_type ,           r3dm_tripstimes.trans_datetime ,           r3dm_tripstimes.drivercode ,           r3dm_tripstimes.exec_time_sec ,           r3dm_tripstimes.nbs_updtstamp     FROM r3dm_tripstimes
+
+----- SPID 49 batch 763246  [SSB-SB / SSB-SB / SofTech9] -----
+SELECT  r3pos_negsales.branchcode ,           r3pos_negsales.doccode ,           r3pos_negsales.docnumber ,           r3pos_negsales.docdate ,           r3pos_negsales.dblitemflag ,           r3pos_negsales.itemcode ,           r3pos_negsales.transqty ,r3pos_negsales.transprice ,           r3pos_negsales.transprice_total ,           r3pos_negsales.itemexpirydate ,           r3pos_negsales.item_partno ,           r3pos_negsales.usercode ,           r3pos_negsales.trans_time ,           r3pos_negsales.osbranchcode ,           r3pos_negsales.osdoccode ,           r3pos_negsales.osdocnumber ,           r3pos_negsales.osdocdate ,           r3pos_negsales.osdblitemflag ,           r3pos_negsales.ostransprice     FROM r3pos_negsales
+
+----- SPID 49 batch 763247  [SSB-SB / SSB-SB / SofTech9] -----
+commit tran
+
+----- SPID 49 batch 763248  [SSB-SB / SSB-SB / SofTech9] -----
+begin tran
+
+----- SPID 58 batch 167  [SSB / BASSEM / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 58 batch 168  [SSB / BASSEM / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 58 batch 169  [SSB / BASSEM / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 58 batch 170  [SSB / BASSEM / SofTech9] -----
+select picip from localcustomers where localcustomers.phcode =null
+
+----- SPID 58 batch 171  [SSB / BASSEM / SofTech9] -----
+select personname from personsdata where personcode ='4471'
+
+----- SPID 58 batch 172  [SSB / BASSEM / SofTech9] -----
+select bankaccountbalance , banktype from banks where banks.bankcode ='10'
+
+----- SPID 58 batch 173  [SSB / BASSEM / SofTech9] -----
+select max ( cheques.ourcheqsno ) + 1 from cheques where cheques.branchcode ='100' and cheques.bankcode ='10' and cheques.cheqtype ='20'
+
+----- SPID 58 batch 174  [SSB / BASSEM / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 58 batch 175  [SSB / BASSEM / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 58 batch 176  [SSB / BASSEM / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 58 batch 177  [SSB / BASSEM / SofTech9] -----
+select max ( cheques.cheqsno ) + 1 FROM cheques where cheques.branchcode ='100'
+
+----- SPID 58 batch 178  [SSB / BASSEM / SofTech9] -----
+INSERT INTO cheques ( cheqsno, financialdoccode, cheqtype, cheqdate, bankcode, cashtype, cheqcashdate, cheqregisterdate, cheqtobankdate, ourcheqsno, usercode, chequenote, wentto_bankstrans, cheqvalue, cheqvaluediscount, cheqvaluetax, cheqvaluedamgha, trans_time, payrefusesno, cheqcashfees, open_trans, cheqno, branchcode, ptcode, bcurrency, bcrate, cheqvalue_lc, banknewbal_lc, personnewbal, banknewbal, bcrate_std, personcode, origdoc, blockinv, cheqvalueother, origintaxp ) VALUES ( 31878, '10', '20', '9-20-2026 0:0:0.000', '10', 0, '9-20-2026 0:0:0.000', '9-20-2026 0:0:0.000', '9-20-2026 0:0:0.000', 11286, '1509', '12360', '0', 0.1000, 0.0000, 0.0000, 0.0000, '9-20-2026 10:46:44.410', 0, 0.00, 0, '12360', '100', '20', 1, 1.0000, 0.10, 0.00, 0.00, 0.00, 1.0000, '4471', 0, 0, 0.0000, 0.00 )
+
+----- SPID 58 batch 179  [SSB / BASSEM / SofTech9] -----
+insert into temp_r_mon ( cheqsno , branchcode , doctext ) values ( 31878 , '100' , '0071 00DA 0043 00AE 0042 0002 00E5 0075 0021 002B 00FC 00CB 0043 0092 00E9 0028 0046 000A 0093 0088 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000' )
+
+----- SPID 58 batch 180  [SSB / BASSEM / SofTech9] -----
+commit tran
+
+----- SPID 58 batch 181  [SSB / BASSEM / SofTech9] -----
+begin tran
+
+----- SPID 58 batch 182  [SSB / BASSEM / SofTech9] -----
+SELECT  stktransm.branchcode ,           stktransm.doccode ,           stktransm.docnumber ,           stktransm.docdate ,           stktransm.docvalue ,           stktransm.docvaluepay ,           stktransm.docnumber2 ,           stktransm.docwritedate ,stktransm.phcode ,           stktransm.supp_main_code     FROM stktransm      WHERE ( stktransm.cust_branch_code = '4471' ) and          ( stktransm.doccode in ('10','115','120','30') ) And          ( stktransm.docdate >= '9-1-2026 0:0:0.000' )and          ( stktransm.docdate <= '9-20-2026 0:0:0.000' ) and          ( stktransm.fatcurrentstatus = '15' )  ORDER BY stktransm.docdate          ASC
+
+----- SPID 58 batch 183  [SSB / BASSEM / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 58 batch 184  [SSB / BASSEM / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 58 batch 185  [SSB / BASSEM / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 58 batch 186  [SSB / BASSEM / SofTech9] -----
+select docvaluepay , docvalue , bcurrency , docvaluebc , docvaluepaybc , bcrate from stktransm where stktransm.branchcode ='130' and stktransm.doccode ='10' and stktransm.docnumber =12360 and stktransm.docdate ='9-16-2026 0:0:0.000'
+
+----- SPID 58 batch 187  [SSB / BASSEM / SofTech9] -----
+update stktransm set fatcurrentstatus ='15' , docvaluepay =2635.20 , docvaluepaybc =2635.20 where stktransm.branchcode ='130' and stktransm.doccode ='10' and stktransm.docnumber =12360 and stktransm.docdate ='9-16-2026 0:0:0.000'
+
+----- SPID 58 batch 188  [SSB / BASSEM / SofTech9] -----
+select branches.acciteml1 from branches where branches.branchcode ='130'
+
+----- SPID 58 batch 189  [SSB / BASSEM / SofTech9] -----
+update patientdata set patientdata.custtotalpay =patientdata.custtotalpay + 0.10 where patientdata.branchcode ='130' and patientdata.labno =12360
+
+----- SPID 58 batch 190  [SSB / BASSEM / SofTech9] -----
+INSERT INTO chequestrans ( cheqsno, branchcode, doccode, docnumber, docdate, usercode, docvaluepaid, docvaluepaynow, cheqbranchcode ) VALUES ( 31878, '130', '10', 12360, '9-16-2026 0:0:0.000', '1509', 500.2000, 0.1000, '100' )
+
+----- SPID 58 batch 191  [SSB / BASSEM / SofTech9] -----
+commit tran
+
+----- SPID 58 batch 192  [SSB / BASSEM / SofTech9] -----
+begin tran
+
+----- SPID 60 batch 291  [SSB / gerges shawky / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 60 batch 292  [SSB / gerges shawky / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 60 batch 293  [SSB / gerges shawky / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 60 batch 294  [SSB / gerges shawky / SofTech9] -----
+DECLARE_CURSOR   syccur7
+
+----- SPID 60 batch 295  [SSB / gerges shawky / SofTech9] -----
+select cfsetuphelp from cfarmasetup where cfarmasetup.cfsetupcode =519 and cfarmasetup.cfsetupvalue >= 1 and cfarmasetup.cfsetupvalue <= 20 order by cfarmasetup.cfsetupvalue
+
+----- SPID 60 batch 296  [SSB / gerges shawky / SofTech9] -----
+CURSOR_INFO      syccur7
+
+----- SPID 60 batch 297  [SSB / gerges shawky / SofTech9] -----
+OPEN_CURSOR      syccur7
+
+----- SPID 60 batch 298  [SSB / gerges shawky / SofTech9] -----
+FETCH_CURSOR     syccur7
+
+----- SPID 60 batch 299  [SSB / gerges shawky / SofTech9] -----
+FETCH_CURSOR     syccur7
+
+----- SPID 60 batch 300  [SSB / gerges shawky / SofTech9] -----
+CLOSE_CURSOR     syccur7
+
+----- SPID 60 batch 301  [SSB / gerges shawky / SofTech9] -----
+DECLARE_CURSOR   syccur8
+
+----- SPID 60 batch 302  [SSB / gerges shawky / SofTech9] -----
+select description from master..spt_ijdbc_mdb where master..spt_ijdbc_mdb.mdbid >= 1 and master..spt_ijdbc_mdb.mdbid <= 20 order by master..spt_ijdbc_mdb.mdbid
+
+----- SPID 60 batch 303  [SSB / gerges shawky / SofTech9] -----
+CURSOR_INFO      syccur8
+
+----- SPID 60 batch 304  [SSB / gerges shawky / SofTech9] -----
+OPEN_CURSOR      syccur8
+
+----- SPID 60 batch 305  [SSB / gerges shawky / SofTech9] -----
+FETCH_CURSOR     syccur8
+
+----- SPID 60 batch 306  [SSB / gerges shawky / SofTech9] -----
+FETCH_CURSOR     syccur8
+
+----- SPID 60 batch 307  [SSB / gerges shawky / SofTech9] -----
+CLOSE_CURSOR     syccur8
+
+----- SPID 60 batch 308  [SSB / gerges shawky / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 60 batch 309  [SSB / gerges shawky / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 60 batch 310  [SSB / gerges shawky / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 60 batch 311  [SSB / gerges shawky / SofTech9] -----
+select count ( * ) from branches
+
+----- SPID 60 batch 312  [SSB / gerges shawky / SofTech9] -----
+select count ( * ) from lastdocnumbers
+
+----- SPID 60 batch 313  [SSB / gerges shawky / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB'
+
+----- SPID 60 batch 314  [SSB / gerges shawky / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB-SB'
+
+----- SPID 60 batch 315  [SSB / gerges shawky / SofTech9] -----
+select branchcode from lastdocnumbers where lastdocnumbers.ver_branch ='1'
+
+----- SPID 60 batch 316  [SSB / gerges shawky / SofTech9] -----
+select count ( * ) from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 60 batch 317  [SSB / gerges shawky / SofTech9] -----
+select docdate , doctext from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 68 batch 286  [SSB / ehab zaki / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 68 batch 287  [SSB / ehab zaki / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 68 batch 288  [SSB / ehab zaki / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 68 batch 289  [SSB / ehab zaki / SofTech9] -----
+DECLARE_CURSOR   syccur9
+
+----- SPID 68 batch 290  [SSB / ehab zaki / SofTech9] -----
+select cfsetuphelp from cfarmasetup where cfarmasetup.cfsetupcode =519 and cfarmasetup.cfsetupvalue >= 1 and cfarmasetup.cfsetupvalue <= 20 order by cfarmasetup.cfsetupvalue
+
+----- SPID 68 batch 291  [SSB / ehab zaki / SofTech9] -----
+CURSOR_INFO      syccur9
+
+----- SPID 68 batch 292  [SSB / ehab zaki / SofTech9] -----
+OPEN_CURSOR      syccur9
+
+----- SPID 68 batch 293  [SSB / ehab zaki / SofTech9] -----
+FETCH_CURSOR     syccur9
+
+----- SPID 68 batch 294  [SSB / ehab zaki / SofTech9] -----
+FETCH_CURSOR     syccur9
+
+----- SPID 68 batch 295  [SSB / ehab zaki / SofTech9] -----
+CLOSE_CURSOR     syccur9
+
+----- SPID 68 batch 296  [SSB / ehab zaki / SofTech9] -----
+DECLARE_CURSOR   syccur10
+
+----- SPID 68 batch 297  [SSB / ehab zaki / SofTech9] -----
+select description from master..spt_ijdbc_mdb where master..spt_ijdbc_mdb.mdbid >= 1 and master..spt_ijdbc_mdb.mdbid <= 20 order by master..spt_ijdbc_mdb.mdbid
+
+----- SPID 68 batch 298  [SSB / ehab zaki / SofTech9] -----
+CURSOR_INFO      syccur10
+
+----- SPID 68 batch 299  [SSB / ehab zaki / SofTech9] -----
+OPEN_CURSOR      syccur10
+
+----- SPID 68 batch 300  [SSB / ehab zaki / SofTech9] -----
+FETCH_CURSOR     syccur10
+
+----- SPID 68 batch 301  [SSB / ehab zaki / SofTech9] -----
+FETCH_CURSOR     syccur10
+
+----- SPID 68 batch 302  [SSB / ehab zaki / SofTech9] -----
+CLOSE_CURSOR     syccur10
+
+----- SPID 68 batch 303  [SSB / ehab zaki / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 68 batch 304  [SSB / ehab zaki / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 68 batch 305  [SSB / ehab zaki / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 68 batch 306  [SSB / ehab zaki / SofTech9] -----
+select count ( * ) from branches
+
+----- SPID 68 batch 307  [SSB / ehab zaki / SofTech9] -----
+select count ( * ) from lastdocnumbers
+
+----- SPID 68 batch 308  [SSB / ehab zaki / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB'
+
+----- SPID 68 batch 309  [SSB / ehab zaki / SofTech9] -----
+select count ( * ) from master..sysprocesses where master..sysprocesses.hostname ='SSB-SB'
+
+----- SPID 68 batch 310  [SSB / ehab zaki / SofTech9] -----
+select branchcode from lastdocnumbers where lastdocnumbers.ver_branch ='1'
+
+----- SPID 68 batch 311  [SSB / ehab zaki / SofTech9] -----
+select count ( * ) from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 68 batch 312  [SSB / ehab zaki / SofTech9] -----
+select docdate , doctext from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0
+
+----- SPID 80 batch 133  [SSB / amira samir / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 80 batch 134  [SSB / amira samir / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 80 batch 135  [SSB / amira samir / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 107 batch 1093  [SSB / ebtsam ahmed / SofTech9] -----
+select object_id('sp_serverdate')
+
+----- SPID 107 batch 1094  [SSB / ebtsam ahmed / SofTech9] -----
+select type, length, prec, scale, name from syscolumns where id = 1729490259
+
+----- SPID 107 batch 1095  [SSB / ebtsam ahmed / SofTech9] -----
+DECLARE @P003 datetime SELECT @P003 = '1-1-1900 0:0:0.000' execute sp_serverdate 9347150 , @ok_date = @P003 output
+
+----- SPID 110 batch 1  [?] -----
+select @@langid
+
+----- SPID 110 batch 2  [?] -----
+select dateformat from master.dbo.syslanguages where langid = 0
+
+----- SPID 110 batch 3  [?] -----
+select @@version
+
+----- SPID 110 batch 4  [?] -----
+sp_server_info 1
+
+----- SPID 110 batch 5  [?] -----
+use SOFTECHDB9
+
+----- SPID 110 batch 6  [?] -----
+select USER_NAME()
+
+----- SPID 110 batch 7  [?] -----
+begin tran
+
+----- SPID 110 batch 8  [?] -----
+set quoted_identifier on
+
+----- SPID 110 batch 9  [?] -----
+select count ( * ) from backup_info where backup_info.backup_date ='9-20-2026 0:0:0.000'
+
+----- SPID 110 batch 10  [?] -----
+commit tran
+
+Complete: 2026-09-20T10:48:30.165803

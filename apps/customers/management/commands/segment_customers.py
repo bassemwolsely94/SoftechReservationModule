@@ -44,25 +44,33 @@ DORMANT_MAX_DAYS    = 365
 CHURNED_MIN_DAYS    = 365
 
 
-def _compute_segment(ltv, days, purchase_count_90d, age_days):
-    """Return segment string given computed metrics."""
+def _compute_segment(ltv, days, purchase_count_90d, age_days, cfg=None):
+    """Return segment string given computed metrics. `cfg` = SegmentationConfig
+    (or None → module defaults), so thresholds are tunable without a code change."""
+    vip_ltv   = float(cfg.vip_ltv_threshold) if cfg else VIP_LTV_THRESHOLD
+    loyal_min = cfg.loyal_min_purchases if cfg else LOYAL_MIN_PURCHASES
+    new_grace = cfg.new_grace_days if cfg else NEW_GRACE_DAYS
+    risk_min  = cfg.at_risk_min_days if cfg else AT_RISK_MIN_DAYS
+    risk_max  = cfg.at_risk_max_days if cfg else AT_RISK_MAX_DAYS
+    dorm_max  = cfg.dormant_max_days if cfg else DORMANT_MAX_DAYS
+
     if ltv is None:
         ltv = 0
     if days is None:
         # No purchase ever
-        if age_days <= NEW_GRACE_DAYS:
+        if age_days <= new_grace:
             return 'new'
         return 'churned'
 
-    if ltv >= VIP_LTV_THRESHOLD and days <= AT_RISK_MIN_DAYS:
+    if ltv >= vip_ltv and days <= risk_min:
         return 'vip'
-    if purchase_count_90d >= LOYAL_MIN_PURCHASES and days <= AT_RISK_MIN_DAYS:
+    if purchase_count_90d >= loyal_min and days <= risk_min:
         return 'loyal'
-    if days <= AT_RISK_MIN_DAYS:
+    if days <= risk_min:
         return 'regular'
-    if days <= AT_RISK_MAX_DAYS:
+    if days <= risk_max:
         return 'at_risk'
-    if days <= DORMANT_MAX_DAYS:
+    if days <= dorm_max:
         return 'dormant'
     return 'churned'
 
@@ -198,8 +206,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from apps.customers.models import Customer, PurchaseHistory
+        from apps.customers.models import Customer, PurchaseHistory, SegmentationConfig
 
+        self.cfg = SegmentationConfig.get_solo()   # tunable thresholds
         batch_size  = options['batch_size']
         dry_run     = options['dry_run']
         skip_health = options['skip_health']
@@ -352,7 +361,7 @@ class Command(BaseCommand):
             count_prev_90d = count_prev_90d_map.get(cid, 0)
             age_days       = (today - customer.created_at.date()).days
 
-            segment = _compute_segment(ltv_val, days, count_90d, age_days)
+            segment = _compute_segment(ltv_val, days, count_90d, age_days, cfg=getattr(self, 'cfg', None))
 
             risk = _compute_risk_score(
                 complaint_count    = complaint_map.get(cid, 0),

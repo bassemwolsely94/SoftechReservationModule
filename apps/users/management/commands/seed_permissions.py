@@ -23,10 +23,12 @@ from apps.users.models import RoleModuleAccess
 # ─────────────────────────────────────────────────────────────────────────────
 
 ALL_MODULES = [
+    'pos',
     'reservations', 'demand', 'transfers', 'followups', 'delivery',
     'customers', 'chronic', 'campaigns', 'vouchers',
     'catalog', 'stockcount', 'shortage',
     'purchasing', 'invoices', 'incentives', 'cheques', 'finance',
+    'insurance', 'commerce', 'replacement',
     'callcenter', 'hr', 'approvals', 'analytics', 'dashboard',
     'audit', 'sync', 'settings', 'users', 'admin',
 ]
@@ -60,6 +62,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'call_center': {
         'dashboard':    RO,
+        'pos':          {'view', 'create'},         # indirect-POS: build + push to cashier
         'reservations': {'view', 'create', 'edit', 'export', 'assign'},
         'demand':       {'view', 'create', 'edit', 'export', 'assign'},
         'transfers':    RO,
@@ -83,6 +86,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'pharmacist': {
         'dashboard':    RO,
+        'pos':          {'view', 'create'},         # indirect-POS operator
         'reservations': {'view', 'create', 'edit', 'approve', 'finalize'},
         # approve = mark stock available;  finalize = mark fulfilled
         'demand':       {'view', 'create', 'edit'},
@@ -104,6 +108,7 @@ PERMISSIONS = {
         'cheques':      RO,
         'hr':           {'view', 'create'},                 # self-service
         'approvals':    {'view', 'approve'},                # approves supplier_claim (pharmacist step)
+        'replacement':  {'view', 'create'},   # بدل الروشتة: open + calculate + submit cases (doc 25)
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -113,6 +118,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'salesperson': {
         'dashboard':    RO,
+        'pos':          {'view', 'create'},         # indirect-POS operator (floor)
         'reservations': {'view', 'create', 'edit'},
         'demand':       {'view', 'create', 'edit'},
         'transfers':    {'view', 'create'},
@@ -142,6 +148,9 @@ PERMISSIONS = {
         'incentives':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'cheques':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'finance':      {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
+        'insurance':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'finalize'},
+        'replacement':  RE,                  # بدل الروشتة — virtual-supplier purchases live here (doc 25)
+        'commerce':     {'view', 'create', 'edit', 'delete', 'approve', 'export', 'finalize'},
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
         'vouchers':     {'view', 'create', 'edit', 'assign', 'export'},
         'customers':    RE,
@@ -199,6 +208,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'supervisor': {
         'dashboard':    RO,
+        'pos':          {'view', 'create', 'edit'},
         'reservations': {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'demand':       {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'transfers':    {'view', 'approve', 'export'},
@@ -216,6 +226,7 @@ PERMISSIONS = {
         'audit':        RE,
         'hr':           {'view', 'create', 'approve', 'export'},   # branch-manager approval step + own requests
         'approvals':    {'view', 'approve'},
+        'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -245,6 +256,7 @@ PERMISSIONS = {
         'finance':      RO,
         'hr':           RE,                  # view + export; own requests
         'approvals':    {'view', 'approve'}, # batch_quarantine authorization
+        'replacement':  RE,                  # بدل الروشتة — audit/read (doc 25)
     },
 }
 

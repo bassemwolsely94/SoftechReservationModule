@@ -1,9 +1,16 @@
 import { useState } from 'react'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
+import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
+import PicHistoryModal from '../../components/PicHistoryModal'
+import CustomerMomentBar from '../../components/CustomerMomentBar'
+import OffersPanel from '../../components/OffersPanel'
+import PicSuggestions from '../../components/PicSuggestions'
+import BasketIntelPanel from '../../components/BasketIntelPanel'
 import CustomerTypePicker from '../../components/CustomerTypePicker'
 import SalespersonPicker from '../../components/SalespersonPicker'
 import POSCustomerModal from '../../components/POSCustomerModal'
-import { QueueIndicator } from '../POSOrderPage'
+import UnitsQtyModal from '../../components/UnitsQtyModal'
+import { QueueIndicator, numFieldHandlers, STEP_HINT } from '../POSOrderPage'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../../hooks/useGuidedFlow'
 
@@ -20,7 +27,11 @@ export default function MobilePOSOrderPage() {
   const [open, setOpen] = useState(-1)       // expanded line index
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
+  const [showOcr, setShowOcr] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [guided, setGuided] = useState(false)
+  const [unitsIdx, setUnitsIdx] = useState(-1)   // line index whose Q (units) sheet is open
+  const histCustomerId = P.picCustomer?.id || P.customer?.id
 
   // map a workflow step / advisory to the mobile surface that edits it
   const goStep = (tab) => {
@@ -70,13 +81,12 @@ export default function MobilePOSOrderPage() {
           <input value={P.returnInvoice} onChange={e => P.setReturnInvoice(e.target.value)}
                  placeholder="رقم فاتورة المرتجع" className="w-full border rounded px-2 py-2" />
         )}
-        {/* two-level customer: نوع العميل → إسم العميل */}
+        {/* three-level customer cascade: نوع العميل → إسم العميل → العميل الفعلي (PIC) */}
         <div className="flex gap-1 items-start">
-          <div className="flex-1"><CustomerTypePicker P={P} compact /></div>
+          <div className="flex-1"><CustomerTypePicker P={P} compact onOpenPic={() => setShowPic(true)} /></div>
           <button onClick={() => setShowCust(true)} title="دليل العملاء الأفراد"
                   className="px-3 py-2 border rounded bg-gray-50 shrink-0 self-start mt-4">…</button>
         </div>
-        <MPicCustomerRow P={P} onOpenPic={() => setShowPic(true)} />
         {P.loyalty?.points_balance != null &&
           <div className="text-xs text-emerald-700 bg-emerald-50 rounded px-2 py-1">نقاط الولاء: {P.loyalty.points_balance}</div>}
         <button onClick={() => setSheet('extra')} className="w-full text-xs border rounded py-1.5 text-gray-600">
@@ -92,14 +102,28 @@ export default function MobilePOSOrderPage() {
       {/* product search + barcode + favorites */}
       <div className="p-3 bg-white border-b space-y-2">
         <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
-        <input placeholder="مسح باركود ⏎" className="w-full border rounded px-2 py-2 text-sm"
-               onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
+        <div className="flex gap-2">
+          <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
+                 onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
+          <button onClick={() => setShowOcr(true)} title="روشتة / صوت"
+                  className="px-3 rounded text-white text-sm shrink-0" style={{ background: '#022871' }}>📷🎤</button>
+          {histCustomerId && (
+            <button onClick={() => setShowHistory(true)} title="سجل المعاملات"
+                    className="px-3 rounded border border-indigo-200 text-indigo-700 text-sm shrink-0 bg-white">📜</button>
+          )}
+        </div>
         {P.favorites.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {P.favorites.map(f => <button key={f.softech_id} onClick={() => P.addItem(f)}
               className="px-2 py-1 rounded bg-amber-50 border border-amber-200 text-[11px]">⭐ {f.name?.slice(0, 16)}</button>)}
           </div>
         )}
+        {/* intelligence layer — same as desktop (customer context · suggestions · offers · opportunities) */}
+        {histCustomerId && <CustomerMomentBar customerId={histCustomerId} />}
+        <PicSuggestions P={P} />
+        <OffersPanel P={P} />
+        <BasketIntelPanel itemCodes={P.lines.map(l => l.softech_itemcode).filter(Boolean)}
+                          customerId={P.customer?.id} branchId={P.branch} onAdd={P.addItem} />
         {Object.values(P.suggest.map || {}).some(v => v != null) &&
           <button onClick={P.applyAllSuggested} className="w-full py-1.5 rounded bg-emerald-600 text-white text-xs">تطبيق الخصم المقترح</button>}
       </div>
@@ -128,17 +152,26 @@ export default function MobilePOSOrderPage() {
               </div>
               {open === i && (
                 <div className="px-3 pb-3 grid grid-cols-3 gap-2 bg-gray-50">
-                  <Fld l="الكمية"><input type="number" step="0.001" value={l.qty} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp" /></Fld>
-                  <Fld l="Unit Price"><input type="number" step="0.01" value={l.item_sale_price} onChange={e => P.setLine(i, 'item_sale_price', e.target.value)} className="minp" /></Fld>
+                  <Fld l="الكمية">
+                    <div className="flex items-center gap-1">
+                      <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                      {l.pack_qty > 1 && (
+                        <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
+                                className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
+                      )}
+                    </div>
+                  </Fld>
+                  <Fld l="Pkg Price"><input type="number" step="any" value={l.item_sale_price} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'item_sale_price', step: 1 })} onChange={e => P.setLine(i, 'item_sale_price', e.target.value)} className="minp pos-num" /></Fld>
                   <Fld l="خصم %">
-                    <input type="number" step="0.01" value={l.cust_discp} onChange={e => P.setLine(i, 'cust_discp', e.target.value)} className="minp" />
+                    <input type="number" step="any" value={l.cust_discp} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'cust_discp', step: 1 })} onChange={e => P.setLine(i, 'cust_discp', e.target.value)} className="minp pos-num" />
                     {P.ref?.can_see_discount_cap && P.suggest.caps?.[l.softech_itemcode] != null && (
                       <span className="text-[10px] text-gray-400 block text-center">≤ {P.suggest.caps[l.softech_itemcode]}%</span>
                     )}
                   </Fld>
-                  <Fld l="Pkg Price"><input type="number" step="0.01" value={l.pkg_price} onChange={e => P.setLine(i, 'pkg_price', e.target.value)} className="minp" /></Fld>
-                  <Fld l="ض.ق %"><input type="number" step="0.01" value={l.sale_tax_pct} onChange={e => P.setLine(i, 'sale_tax_pct', e.target.value)} className="minp" /></Fld>
-                  <Fld l="العبوة (بونص)"><input type="number" value={l.bonus} onChange={e => P.setLine(i, 'bonus', e.target.value)} className="minp" /></Fld>
+                  <Fld l="ض.ق %"><input type="number" step="any" value={l.sale_tax_pct} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'sale_tax_pct', step: 1 })} onChange={e => P.setLine(i, 'sale_tax_pct', e.target.value)} className="minp pos-num" /></Fld>
+                  <Fld l="Unit Price"><input value={money(l.unit_price)} readOnly className="minp bg-gray-100" /></Fld>
+                  <Fld l="سعر العبوة"><input value={money(l.pkg_price)} readOnly className="minp bg-gray-100" /></Fld>
+                  <Fld l="العبوة"><input value={l.unit_name || 'علبة'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد متاح"><input value={l.available_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد صلاحية"><input value={l.available_expiry_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رقم الباتش"><input value={l.batchno || '—'} readOnly className="minp bg-gray-100" /></Fld>
@@ -330,8 +363,18 @@ export default function MobilePOSOrderPage() {
 
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
+      {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
+      {showHistory && histCustomerId && (
+        <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
+                         onAdd={P.addByBarcode} onClose={() => setShowHistory(false)} />
+      )}
+      {unitsIdx >= 0 && P.lines[unitsIdx] && (
+        <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />
+      )}
 
-      <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}`}</style>
+      <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}
+        .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+        .pos-num{-moz-appearance:textfield}`}</style>
     </div>
   )
 }
@@ -398,7 +441,9 @@ function MobileGuidedMode({ P, onClose, onOpenPic }) {
           ? <button onClick={goNext} className="px-4 py-2 rounded-lg text-white text-sm" style={{ background: '#022871' }}>التالى ›</button>
           : <button onClick={() => P.submit(true)} disabled={P.busy || !wf.ready} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-40">{P.busy ? '…' : 'إرسال ✓'}</button>}
       </div>
-      <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}`}</style>
+      <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}
+        .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+        .pos-num{-moz-appearance:textfield}`}</style>
     </div>
   )
 }
@@ -406,7 +451,6 @@ function MobileGuidedMode({ P, onClose, onOpenPic }) {
 function MGCustomer({ P, onOpenPic }) {
   return (
     <div className="space-y-3 max-w-md mx-auto">
-      <MPicCustomerRow P={P} onOpenPic={onOpenPic} />
       <select value={P.branch} onChange={e => P.setBranch(e.target.value)} className="w-full border rounded px-2 py-2">
         <option value="">— اختر الفرع —</option>
         {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
@@ -415,16 +459,20 @@ function MGCustomer({ P, onOpenPic }) {
         {!P.stores?.length && <option value={P.storeCode}>{P.storeCode || 'المخزن'}</option>}
         {(P.stores || []).map(s => <option key={s.storecode} value={s.storecode}>{s.storename || s.storecode}</option>)}
       </select>
-      <CustomerTypePicker P={P} compact />
+      <CustomerTypePicker P={P} compact onOpenPic={onOpenPic} />
       <SalespersonPicker P={P} className="w-full border rounded px-2 py-2" />
     </div>
   )
 }
 function MGItems({ P }) {
+  const [unitsIdx, setUnitsIdx] = useState(-1)
   return (
     <div className="space-y-2 max-w-md mx-auto">
       <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
       {!P.lines.length && <div className="text-center text-gray-400 text-sm py-6">أضف الأصناف بالبحث بالأعلى</div>}
+      {unitsIdx >= 0 && P.lines[unitsIdx] && (
+        <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />
+      )}
       {P.lines.map((l, i) => (
         <div key={i} className="border rounded p-2">
           <div className="flex justify-between items-center">
@@ -432,10 +480,18 @@ function MGItems({ P }) {
             <button onClick={() => P.removeLine(i)} className="text-red-500 px-1">✕</button>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-1">
-            <Fld l="كمية (عبوة)"><input type="number" step="0.001" value={l.qty} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp" /></Fld>
-            <Fld l="سعر العبوة"><input type="number" step="0.01" value={l.item_sale_price} onChange={e => P.setLine(i, 'item_sale_price', e.target.value)} className="minp" /></Fld>
+            <Fld l="كمية (عبوة)">
+              <div className="flex items-center gap-1">
+                <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                {l.pack_qty > 1 && (
+                  <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
+                          className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
+                )}
+              </div>
+            </Fld>
+            <Fld l="سعر العبوة"><input type="number" step="any" value={l.item_sale_price} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'item_sale_price', step: 1 })} onChange={e => P.setLine(i, 'item_sale_price', e.target.value)} className="minp pos-num" /></Fld>
             <Fld l="خصم %">
-              <input type="number" step="0.1" value={l.cust_discp} onChange={e => P.setLine(i, 'cust_discp', e.target.value)} className="minp" />
+              <input type="number" step="any" value={l.cust_discp} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'cust_discp', step: 1 })} onChange={e => P.setLine(i, 'cust_discp', e.target.value)} className="minp pos-num" />
               {P.ref?.can_see_discount_cap && P.suggest.caps?.[l.softech_itemcode] != null && (
                 <span className="text-[10px] text-gray-400 block text-center">≤ {P.suggest.caps[l.softech_itemcode]}%</span>
               )}
@@ -537,23 +593,7 @@ function MobileWorkflowBar({ P, onGo, onToggleGuided }) {
   )
 }
 
-function MPicCustomerRow({ P, onOpenPic }) {
-  if (!P.needsPicCustomer) return null
-  return (
-    <div>
-      <div className="text-[11px] text-gray-600 mb-0.5">عميل PIC (للتوصيل) — مطلوب</div>
-      {P.picCustomer ? (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-300 rounded px-2 py-2 text-sm">
-          <span className="font-medium flex-1">{P.picCustomer.name}</span>
-          {P.picCustomer.softech_pic && <span className="font-mono text-[11px] text-gray-500">{P.picCustomer.softech_pic}</span>}
-          <button onClick={() => P.setPicCustomer(null)} className="text-gray-400">✕</button>
-        </div>
-      ) : (
-        <button onClick={onOpenPic} className="w-full text-white rounded px-2 py-2 text-sm" style={{ background: '#022871' }}>🔍 بحث / اختيار / إضافة عميل PIC</button>
-      )}
-    </div>
-  )
-}
+/* (PIC picker moved INTO CustomerTypePicker as stage ③ of the three-level cascade.) */
 
 function MPointsBadge({ P }) {
   const pic = P.picCustomer?.softech_pic || P.customer?.softech_pic

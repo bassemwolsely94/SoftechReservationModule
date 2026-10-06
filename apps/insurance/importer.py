@@ -455,6 +455,7 @@ def _fetch_and_classify_lines(
             'origin_code':   _safe(lr[7]),
             'imported_flag': imported_origin == '1',
             'store_classif': store_classif,
+            'softech_net':   _to_decimal(lr[4]),   # transprice_total = SOFTECH's own line net
         })
 
     totals = aggregate_prescription_totals(
@@ -539,6 +540,7 @@ def _write_prescription_snapshot(
         softech_branchcode = branchcode,
         softech_personcode = personcode,
         patient_name       = patient_name,
+        softech_patient_name = patient_name,   # original — never touched by edits
         sequence           = seq,
         local_before       = totals['local_before'],
         imported_before    = totals['imported_before'],
@@ -576,6 +578,7 @@ def _write_prescription_snapshot(
             discount_pct          = disc_pct,
             discount_amt          = disc_amt,
             net_amount            = net_amt,
+            softech_line_net      = cl.get('softech_net'),
         ))
     if line_objs:
         InsuranceClaimLine.objects.bulk_create(line_objs)
@@ -1172,8 +1175,152 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
         'softech_ppersoncode':       tx_ppersoncode,
         'patient_name':              patient_name,
         'original_client_warning':   warning,
+        # Per-item detail — used by the "detailed" manual-addition mode to build a
+        # real prescription with lines (so it appears in أصناف/فروقات/فصل).
+        'lines':                     classified_lines,
         **totals,
     }
+
+
+def find_duplicate_receipt(claim: InsuranceClaim, docnumber: str,
+                           branchcode: str | None = None,
+                           include_excluded: bool = False) -> list:
+    """
+    Find OTHER claims that already contain receipt `docnumber` in the SAME billing
+    month — the double-billing risk.  A receipt legitimately re-appears when it was
+    rejected and re-submitted, or billed in a different month, so we only flag
+    claims whose period OVERLAPS this claim's period AND that are not
+    rejected/cancelled.
+
+    A receipt that is EXCLUDED (مُستثناة) in a peer claim is NOT actively billed
+    there, so by default it does NOT block re-adding it here — the whole point of
+    excluding it elsewhere is to free it to move to this motalba.  Pass
+    include_excluded=True to also surface those excluded peers (informational),
+    each tagged is_excluded=True.
+
+    Returns a list of {claim_id, claim_number, status, status_label, where, period,
+    is_excluded}.  Empty list = safe to add (no ACTIVE duplicate).
+    """
+    from .models import (
+        InsuranceClaim, InsuranceClaimPrescription, InsuranceClaimManualRx,
+    )
+    docnumber = str(docnumber).strip()
+    if not docnumber:
+        return []
+
+    dead = (InsuranceClaim.STATUS_REJECTED, InsuranceClaim.STATUS_CANCELLED)
+    # Overlapping-period claims (same monthly cycle), excluding THIS claim and
+    # rejected/cancelled ones.
+    peers = (InsuranceClaim.objects
+             .filter(period_from__lte=claim.period_to,
+                     period_to__gte=claim.period_from)
+             .exclude(pk=claim.pk)
+             .exclude(status__in=dead))
+    peer_ids = list(peers.values_list('pk', flat=True))
+    if not peer_ids:
+        return []
+
+    label = dict(InsuranceClaim.STATUS_CHOICES)
+    # claim_id -> (claim, where-set, active_present).  active_present is True as soon
+    # as ONE non-excluded occurrence is seen, so a claim that holds the receipt only
+    # as an excluded row stays non-blocking.
+    hits = {}
+
+    def _touch(claim_obj, where_label, excluded):
+        entry = hits.setdefault(claim_obj.pk, [claim_obj, set(), False])
+        entry[1].add(where_label + (' (مُستثناة)' if excluded else ''))
+        if not excluded:
+            entry[2] = True
+
+    rx_q = InsuranceClaimPrescription.objects.filter(
+        claim_id__in=peer_ids, softech_docnumber=docnumber)
+    if branchcode:
+        rx_q = rx_q.filter(softech_branchcode=branchcode)
+    for rx in rx_q.select_related('claim'):
+        excluded = hasattr(rx, 'exclusion')
+        _touch(rx.claim, 'روشتة يدوية تفصيلية' if rx.is_manual else 'روشتة مستوردة', excluded)
+
+    mrx_q = InsuranceClaimManualRx.objects.filter(
+        claim_id__in=peer_ids, softech_docnumber=docnumber)
+    if branchcode:
+        mrx_q = mrx_q.filter(softech_branchcode=branchcode)
+    for mrx in mrx_q.select_related('claim'):
+        _touch(mrx.claim, 'إضافة يدوية (إجمالى)', bool(mrx.is_excluded))
+
+    out = []
+    for cid, (c, where, active) in hits.items():
+        if not active and not include_excluded:
+            continue   # receipt is only excluded here → not a blocking duplicate
+        out.append({
+            'claim_id':     cid,
+            'claim_number': c.claim_number,
+            'status':       c.status,
+            'status_label': label.get(c.status, c.status),
+            'where':        ' / '.join(sorted(where)),
+            'period':       f'{c.period_from} → {c.period_to}',
+            'is_excluded':  not active,
+        })
+    out.sort(key=lambda d: d['claim_number'])
+    return out
+
+
+def create_manual_prescription(claim: InsuranceClaim, rx_data: dict,
+                               position: str = '', print_date=None,
+                               reason: str = '', user=None) -> InsuranceClaimPrescription:
+    """
+    Create a DETAILED manual addition as a REAL prescription (+ item lines) so it
+    appears in أصناف المطالبة / فحص الفروقات / فصل الأسماء and can be edited with
+    the existing per-line editor.  `rx_data` is a fetch_single_rx_from_softech()
+    result (must include 'lines').  Reuses _write_prescription_snapshot so the
+    line/discount maths is identical to a normal import.  Idempotent-guarded by
+    the (claim, docnumber) uniqueness.
+    """
+    from django.db.models import Max
+
+    docnumber = str(rx_data['softech_docnumber'])
+    if claim.prescriptions.filter(softech_docnumber=docnumber).exists():
+        raise InsuranceImportError(
+            f'الفاتورة رقم {docnumber} مضافة بالفعل في هذه المطالبة.')
+
+    local_disc    = Decimal(str(claim.applied_local_disc_pct    or 0))
+    imported_disc = Decimal(str(claim.applied_imported_disc_pct or 0))
+    tarsia_disc   = Decimal(str(claim.applied_tarsia_disc_pct   or 0))
+
+    totals = {
+        'local_before':      Decimal(str(rx_data.get('local_before', 0))),
+        'imported_before':   Decimal(str(rx_data.get('imported_before', 0))),
+        'tarsia_before':     Decimal(str(rx_data.get('tarsia_before', 0))),
+        'gross_before':      Decimal(str(rx_data.get('gross_before', 0))),
+        'local_discount':    Decimal(str(rx_data.get('local_discount', 0))),
+        'imported_discount': Decimal(str(rx_data.get('imported_discount', 0))),
+        'tarsia_discount':   Decimal(str(rx_data.get('tarsia_discount', 0))),
+        'total_discount':    Decimal(str(rx_data.get('total_discount', 0))),
+        'net_after':         Decimal(str(rx_data.get('net_after', 0))),
+        'softech_net':       rx_data.get('softech_net'),
+    }
+
+    next_seq = (claim.prescriptions.aggregate(m=Max('sequence'))['m'] or 0) + 1
+
+    with transaction.atomic():
+        rx = _write_prescription_snapshot(
+            claim, next_seq, docnumber,
+            rx_data.get('softech_docdate'),
+            rx_data.get('softech_branchcode', '') or '',
+            rx_data.get('softech_personcode', '') or '',
+            rx_data.get('patient_name', '') or '',
+            rx_data.get('lines', []),
+            totals, local_disc, imported_disc, tarsia_disc,
+        )
+        rx.is_manual         = True
+        rx.manual_position   = position or ''
+        rx.manual_print_date = print_date
+        rx.manual_reason     = reason or ''
+        rx.added_by          = user
+        rx.save(update_fields=['is_manual', 'manual_position',
+                               'manual_print_date', 'manual_reason', 'added_by'])
+        recalculate_claim_final_totals(claim)
+
+    return rx
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

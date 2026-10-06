@@ -98,6 +98,61 @@ export function applyTheme(theme) {
 export function cacheTheme(theme)  { try { localStorage.setItem(CACHE_KEY, JSON.stringify(theme)) } catch {} }
 export function loadCachedTheme()  { try { return JSON.parse(localStorage.getItem(CACHE_KEY)) } catch { return null } }
 
+// ── Light / dark mode ─────────────────────────────────────────────────────────
+// Mode is a PERSONAL, per-device preference (localStorage only) — deliberately
+// NOT part of the global server brand theme, so one cashier switching to dark
+// never recolors the whole company. It flips the semantic surface tokens in
+// index.css by toggling `data-theme` on <html>; brand colors are untouched.
+//   mode: 'light' | 'dark' | 'system'   (default 'system')
+const MODE_KEY = 'app_theme_mode'
+
+export const MODE_OPTIONS = [
+  { id: 'light',  label: 'Light',  label_ar: 'فاتح',  icon: '☀️' },
+  { id: 'dark',   label: 'Dark',   label_ar: 'داكن',  icon: '🌙' },
+  { id: 'system', label: 'System', label_ar: 'النظام', icon: '💻' },
+]
+
+function systemPrefersDark() {
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches } catch { return false }
+}
+
+/** Resolve 'system' to the concrete 'light' | 'dark' the OS currently wants. */
+export function resolveMode(mode) {
+  const m = mode || loadCachedMode()
+  if (m === 'dark')  return 'dark'
+  if (m === 'light') return 'light'
+  return systemPrefersDark() ? 'dark' : 'light'
+}
+
+/** Write the resolved mode to <html data-theme> (no attribute in light = default). */
+export function applyMode(mode) {
+  const resolved = resolveMode(mode)
+  const root = document.documentElement
+  if (resolved === 'dark') root.setAttribute('data-theme', 'dark')
+  else                     root.removeAttribute('data-theme')
+}
+
+export function cacheMode(mode) { try { localStorage.setItem(MODE_KEY, mode) } catch {} }
+export function loadCachedMode() {
+  try { return localStorage.getItem(MODE_KEY) || 'system' } catch { return 'system' }
+}
+
+/**
+ * Keep 'system' mode live: re-apply whenever the OS light/dark preference flips.
+ * Returns an unsubscribe fn. Only reacts while the stored mode is 'system'.
+ */
+export function watchSystemMode() {
+  let mql
+  try { mql = window.matchMedia('(prefers-color-scheme: dark)') } catch { return () => {} }
+  const onChange = () => { if (loadCachedMode() === 'system') applyMode('system') }
+  if (mql.addEventListener) mql.addEventListener('change', onChange)
+  else if (mql.addListener) mql.addListener(onChange)   // Safari < 14
+  return () => {
+    if (mql.removeEventListener) mql.removeEventListener('change', onChange)
+    else if (mql.removeListener) mql.removeListener(onChange)
+  }
+}
+
 /**
  * tint(color, alpha) — add translucency to any color value.
  * Works for both hex ("#022871") and CSS-var colors ("rgb(var(--c-brand-600))"),

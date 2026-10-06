@@ -70,7 +70,7 @@ class Branch(models.Model):
     db_host = models.CharField(
         max_length=50, blank=True,
         verbose_name='IP قاعدة البيانات',
-        help_text='عنوان IP لخادم Sybase الخاص بالفرع — مثال: 192.168.1.5',
+        help_text='عنوان IP لسيرفر Sybase الخاص بالفرع — مثال: 192.168.1.5',
     )
     db_port = models.PositiveIntegerField(
         default=5000,

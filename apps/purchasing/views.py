@@ -21,12 +21,15 @@ from decimal import Decimal
 from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models import Sum, Count, Q, F, DecimalField, ExpressionWrapper
 from rest_framework import generics, permissions, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import DemandCalculationRun, ItemDemandMetrics, ItemDemandAggregated, SalesTransactionLine
 from .serializers import RunSerializer, MetricsSerializer, AggregatedSerializer
+from apps.catalog.wildcard import wq
+from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
 
 
 # ── Shared item-level filter helper ───────────────────────────────────────────
@@ -315,7 +318,7 @@ class MetricsListView(generics.ListAPIView):
     """
     serializer_class   = MetricsSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['branch', 'abc_class']
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
@@ -357,7 +360,7 @@ class AggregatedListView(generics.ListAPIView):
     """
     serializer_class   = AggregatedSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class']
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
@@ -387,6 +390,90 @@ class AggregatedListView(generics.ListAPIView):
 # ── Export — Excel / CSV ──────────────────────────────────────────────────────
 
 # Column spec: (header_ar, field_getter, number_format or None)
+# ── Demand-fill horizon helpers (shared by pivot + flat exports) ──────────────
+# Regime-aware demand at a requested coverage:
+#   • coverage == 1.0 (or None): the frozen 1-month gap, EXACTLY (revert/identity).
+#   • coverage < 1.0: scale the WHOLE 1-month target (= frozen_gap + stock) by
+#     coverage, so a reduction actually bites — the safety floor scales down too
+#     (keeping the floor here would make sub-1 a no-op, since the floor dominates).
+#   • coverage > 1.0 WITH safety_stock + monthly_avg: keep the 1-month safety FLOOR
+#     and scale only throughput — max(safety_stock, monthly_avg×coverage) − stock,
+#     identical to the engine's calc_gap → slow/expensive floor-bound items are NOT
+#     inflated when buying deeper.
+#   • coverage > 1.0 WITHOUT floor/rate (network aggregated row can't supply the
+#     per-branch floor split): fall back to proportional whole-target scaling.
+def scale_demand_gap(frozen_gap, stock, coverage_months, *, safety_stock=None, monthly_avg=None):
+    if coverage_months is None or abs(coverage_months - 1.0) < 1e-9:
+        return frozen_gap
+    if coverage_months < 1.0 or safety_stock is None or monthly_avg is None:
+        return coverage_months * (frozen_gap + stock) - stock   # scale whole target
+    scaled = monthly_avg * coverage_months                       # keep floor, scale throughput
+    target = safety_stock if safety_stock > scaled else scaled
+    return target - stock
+
+
+def round_pack(x, round_dir='none'):
+    """Round a demand qty to whole packs: 'nearest' (half-up), 'up' (away from
+    zero), or 'none' (unchanged)."""
+    if x is None or round_dir == 'none':
+        return x
+    import math
+    from decimal import Decimal, ROUND_HALF_UP
+    if round_dir == 'up':
+        return float(math.ceil(x)) if x > 0 else float(math.floor(x))
+    return float(Decimal(str(x)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+
+
+def parse_demand_opts(request):
+    """(coverage_months|None, round_at, round_dir) from the export query params."""
+    try:
+        cov = float(request.GET.get('coverage_months'))
+        if cov <= 0:
+            cov = None
+    except (TypeError, ValueError):
+        cov = None
+    round_at  = (request.GET.get('round_at', 'total') or 'total').lower()
+    round_dir = (request.GET.get('round_dir', 'none') or 'none').lower()
+    return cov, round_at, round_dir
+
+
+def _apply_flat_coverage(columns, view, cov, round_dir):
+    """Return a copy of a flat column spec with the gap column (and, for the
+    per-branch metrics view, the priority column) rewritten to the scaled
+    Option-B demand at `cov`. Each flat row is one level (branch row or network
+    row), so rounding is applied per row via round_dir."""
+    def _metrics_gap(r):
+        stock = float(r.current_stock or 0) + float(r.in_transit_qty or 0)
+        return round_pack(scale_demand_gap(
+            float(r.gap or 0), stock, cov,
+            safety_stock=float(r.safety_stock or 0),
+            monthly_avg=float(r.monthly_avg or 0)), round_dir)
+
+    def _metrics_priority(r):
+        stock = float(r.current_stock or 0) + float(r.in_transit_qty or 0)
+        eff   = scale_demand_gap(float(r.gap or 0), stock, cov,           # unrounded
+                                 safety_stock=float(r.safety_stock or 0),
+                                 monthly_avg=float(r.monthly_avg or 0))
+        cs    = r.coverage_months
+        return (1.0 - float(cs)) * eff if cs is not None else float(r.priority or 0)
+
+    def _agg_gap(r):
+        return round_pack(scale_demand_gap(float(r.total_gap or 0),
+                                           float(r.total_current_stock or 0), cov), round_dir)
+
+    out = []
+    for header, getter, fmt in columns:
+        if view != 'aggregated' and header == 'الفجوة':
+            out.append((header, _metrics_gap, fmt))
+        elif view != 'aggregated' and header == 'الأولوية':
+            out.append((header, _metrics_priority, fmt))
+        elif view == 'aggregated' and header == 'إجمالي الفجوة':
+            out.append((header, _agg_gap, fmt))
+        else:
+            out.append((header, getter, fmt))
+    return out
+
+
 _METRICS_COLUMNS = [
     ('اسم الصنف',          lambda r: r.item.name,                          None),
     ('رمز الصنف',          lambda r: r.item.softech_id,                    None),
@@ -455,7 +542,7 @@ def _build_metrics_qs(request, run):
     if needs == '1':
         qs = qs.filter(gap__gt=0)
     if search:
-        qs = qs.filter(Q(item__name__icontains=search) | Q(item__softech_id__icontains=search))
+        qs = qs.filter(wq(search, 'item__name') | Q(item__softech_id__icontains=search))
     qs = _apply_item_filters(qs, request.GET)
     return qs
 
@@ -477,7 +564,7 @@ def _build_agg_qs(request, run):
     if needs == '1':
         qs = qs.filter(total_gap__gt=0)
     if search:
-        qs = qs.filter(Q(item__name__icontains=search) | Q(item__softech_id__icontains=search))
+        qs = qs.filter(wq(search, 'item__name') | Q(item__softech_id__icontains=search))
     qs = _apply_item_filters(qs, request.GET)
     return qs
 
@@ -829,8 +916,8 @@ def _export_xlsx_pivot(run, request, filename):
     for bi, branch in enumerate(branches):
         bfill = BRANCH_FILLS[bi % 2]
         bfont = BRANCH_FONTS[bi % 2]
-        code  = branch.softech_branch_id or branch.name
-        # Branch code repeated across all its columns (acts as group header)
+        code  = BL(branch.softech_branch_id) if branch.softech_branch_id else branch.name
+        # Branch code · name repeated across all its columns (acts as group header)
         for col_label, _, _ in _PIVOT_BRANCH_COLS:
             row1.append(_hdr(ws, code, bfill, bfont))
     ws.append(row1)
@@ -913,6 +1000,38 @@ def _export_xlsx_pivot(run, request, filename):
     resp['Content-Disposition'] = f'attachment; filename="{filename}"'
     logger.info('[PIVOT] exported %d items × %d branches', len(item_order), len(branches))
     return resp
+
+
+def shortage_overlay_label(item):
+    """(status_text, kind) for the نقص/بديل السوق export column.
+
+    Differentiates every dismissal CAUSE instead of a flat 'مستبعد':
+      • in_shortage             → 'ندره بالسوق / ناقص جدا'      (kind='shortage')
+      • dismissed 'variant'     → 'مقاس/شكل بديل لمنتج متاح'    (kind='variant')
+      • dismissed 'false_positive' → ''  (NO state — wrongly auto-detected, not a shortage)
+      • dismissed (other)       → 'مستبعد: <سبب>'              (kind='dismissed')
+        e.g. يُطلب عند الحاجة / غير متوفر بالسوق المصري / ليس ناقصًا (موقوف/موسمي).
+        For reason='other' the free-text note is appended in parentheses.
+    kind drives the cell fill in the export.
+    """
+    if getattr(item, 'in_shortage', False):
+        return 'ندره بالسوق / ناقص جدا', 'shortage'
+    if getattr(item, 'shortage_dismissed', False):
+        reason = item.shortage_dismiss_reason or ''
+        # 'false_positive' = wrongly auto-detected → carry NO state in the export (blank cell),
+        # even though the item stays recorded/suppressed in the dismissed list (retrievable).
+        if reason == 'false_positive':
+            return '', ''
+        label = item.get_shortage_dismiss_reason_display() if reason else ''
+        if reason == 'variant':
+            return (label or 'بديل متاح'), 'variant'
+        text = ('مستبعد: ' + label) if label else 'مستبعد'
+        if reason == 'other':
+            note = (item.shortage_dismiss_note or '').strip()
+            if note:
+                text += f' ({note})'
+        return text, 'dismissed'
+    return '', ''
 
 
 def _export_xlsx_pivot_v2(run, request, filename):
@@ -1071,11 +1190,11 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── 5. Row 1 — Group headers ──────────────────────────────────────────────
     row1 = (
-        [_hdr('بيانات الصنف', HDR_FILL)] * 18
-        + [_hdr('100',          B100_HFILL)] * 6
+        [_hdr('بيانات الصنف', HDR_FILL)] * 20
+        + [_hdr(BL('100'),      B100_HFILL)] * 6
     )
     for bi, b in enumerate(branches_no100):
-        row1 += [_hdr(b.softech_branch_id, BGRP_HFILLS[bi % len(BGRP_HFILLS)])] * 8
+        row1 += [_hdr(BL(b.softech_branch_id), BGRP_HFILLS[bi % len(BGRP_HFILLS)])] * 8
     row1 += (
         [_hdr('الإجمالى',      TOT_HFILL)] * 6
         + [_hdr('% المخزون',  PCT_HFILL)] * 6
@@ -1107,6 +1226,8 @@ def _export_xlsx_pivot_v2(run, request, filename):
         'Items_.سعر-تكلفة',
         'نقص/بديل السوق',            # market-shortage status: نقص سوق / بديل متاح
         'المنتج البديل (والتوفر)',    # matching product(s) + all-branch availability warning
+        'مبيعات وهمية (النسبة الموصى بطلبها)',  # phantom substitution → recommended order %
+        'ذروة طلب غير مؤكدة',        # demand-spike over-purchase (Jutoxib pattern)
     ]
     B100_HDRS = [
         '100.الرصيد-الحالى',
@@ -1170,6 +1291,32 @@ def _export_xlsx_pivot_v2(run, request, filename):
         v = getattr(m, attr, None)
         return float(v) if v is not None else None
 
+    # ── Demand-fill horizon override (opt-in; default = frozen 1-month gap) ────
+    # ?coverage_months=0.8 → "80% of the normal 1-month order" (KEEPS the safety
+    #   floor): 1-month target = max(safety_stock, monthly_avg); scaled target =
+    #   0.8 × that; gap = scaled target − (stock + in-transit). Fast movers behave
+    #   like a pure 0.8-month buy, while slow/rare items keep ~80% of their small
+    #   safety cushion instead of dropping to zero.
+    #   Why not the engine's calc_gap(cov)? It keeps the floor at FULL and scales
+    #   only throughput, so for cov<1 the floor dominates and 0.8 is a no-op
+    #   (measured: 0.1% of rows change). Scaling the whole target fixes that.
+    #   coverage_months = 1.0 reproduces the frozen 1-month sheet exactly.
+    # ?round_at=total|branch, ?round_dir=nearest|up|none control where/how the gap
+    #   is rounded to whole packs. Omitting coverage_months entirely = the frozen
+    #   1-month sheet unchanged (this is the revert).
+    _cov, _round_at, _round_dir = parse_demand_opts(request)
+
+    def _eff_gap(m):
+        """Branch gap via the shared regime-aware scaler (frozen at _cov=1.0/None;
+        <1 scales whole target; >1 keeps the safety floor, scales throughput)."""
+        stock = (_fv(m, 'current_stock') or 0.0) + (_fv(m, 'in_transit_qty') or 0.0)
+        return scale_demand_gap(_fv(m, 'gap') or 0.0, stock, _cov,
+                                safety_stock=_fv(m, 'safety_stock') or 0.0,
+                                monthly_avg=_fv(m, 'monthly_avg') or 0.0)
+
+    def _round_pack(x):
+        return round_pack(x, _round_dir)
+
     # ── Market-shortage overlay (نقص/بديل columns) ───────────────────────────
     from apps.catalog.models import Item as _Item
     from .shortage import branch_availability as _branch_avail
@@ -1178,13 +1325,25 @@ def _export_xlsx_pivot_v2(run, request, filename):
     for it in (_Item.objects.filter(id__in=item_order)
                .filter(Q(in_shortage=True) | Q(shortage_dismissed=True))
                .prefetch_related('shortage_matching_items')
-               .only('id', 'in_shortage', 'shortage_dismissed', 'shortage_dismiss_reason')):
+               .only('id', 'in_shortage', 'shortage_dismissed',
+                     'shortage_dismiss_reason', 'shortage_dismiss_note')):
         _short[it.id] = it
         for m in it.shortage_matching_items.all():
             _match_ids.add(m.id)
     _avail = _branch_avail(list(_match_ids))
-    SHORT_FILL = _f('FDE2E2')   # light red — market shortage
+    SHORT_FILL = _f('FDE2E2')   # light red   — market shortage
     VAR_FILL   = _f('FFF3D6')   # light amber — variant with a matching product
+    DISM_FILL  = _f('EDEDED')   # light grey  — dismissed (excluded), cause shown inline
+    # ── Phantom-substitution overlay (مبيعات وهمية column) ────────────────────
+    _phantom = {it.id: it for it in
+                _Item.objects.filter(id__in=item_order, is_phantom_substitution=True)
+                .only('id', 'phantom_ratio', 'phantom_order_pct', 'phantom_genuine_need')}
+    PHANTOM_FILL = _f('EDE9FE')   # light violet — phantom substitution (reduce order)
+    # ── Demand-spike overlay (ذروة column) ────────────────────────────────────
+    _spike = {it.id: it for it in
+              _Item.objects.filter(id__in=item_order, is_spike=True)
+              .only('id', 'spike_tier', 'spike_ratio', 'spike_confirmed')}
+    SPIKE_FILL = _f('FFE4CC')   # light orange — demand-spike over-purchase
 
     for iid in item_order:
         item        = item_obj[iid]
@@ -1204,21 +1363,27 @@ def _export_xlsx_pivot_v2(run, request, filename):
         stocks     = [_fv(m, 'current_stock') or 0 for m in branch_data.values()]
         intransits = [_fv(m, 'in_transit_qty') or 0 for m in branch_data.values()]
         rates      = [_fv(m, 'monthly_avg')   or 0 for m in branch_data.values()]
-        gaps       = [_fv(m, 'gap')           or 0 for m in branch_data.values()]
         priorities = [_fv(m, 'priority')      or 0 for m in branch_data.values()]
+
+        # Effective per-branch gap (frozen 1-month, or recomputed at _cov) keyed
+        # by branch id; gap_disp applies per-branch rounding only in 'branch' mode.
+        gap_raw  = {bid: (_eff_gap(mm) or 0.0) for bid, mm in branch_data.items()}
+        gap_disp = {bid: (_round_pack(g) if _round_at == 'branch' else g)
+                    for bid, g in gap_raw.items()}
+        gaps     = list(gap_disp.values())
 
         total_stock       = sum(stocks)
         total_in_transit  = sum(intransits)
         total_rate     = sum(rates)
-        total_gap      = sum(gaps)
+        # Total demand: round ONCE on the summed raw gaps in 'total' mode (fills
+        # the network to the target with minimal over-buy); else sum the per-branch
+        # rounded gaps.
+        total_gap = _round_pack(sum(gap_raw.values())) if _round_at == 'total' else sum(gaps)
         total_coverage = (total_stock / total_rate) if total_rate > 0 else None
-        # معامل أولوية الطلب at NETWORK level = (1 − coverage) × gap — the same
-        # definition as the per-branch priority and the manual sheet's Total.
-        # (Previously this was max() of the per-branch priorities, which is dominated
-        # by branches with a near-zero sales rate: coverage = stock/rate explodes, so
-        # (1 − coverage) × gap balloons into the hundreds of thousands and the network
-        # priority total came out ~3× the manual sheet.)
-        total_priority = ((1.0 - total_coverage) * total_gap) if total_coverage is not None else 0.0
+        # معامل أولوية الطلب at NETWORK level = (1 − coverage) × gap. Priority always
+        # uses the UNROUNDED effective demand, so pure rounding never shifts it and
+        # the 1-month sheet stays byte-identical when no coverage override is passed.
+        total_priority = ((1.0 - total_coverage) * sum(gap_raw.values())) if total_coverage is not None else 0.0
 
         # ── Summary calcs ─────────────────────────────────────────────────────
         deficit_qty  = sum(max(0,  g) for g in gaps)   # positive gaps only
@@ -1232,7 +1397,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
             m = branch_data.get(b.id)
             if m is None:
                 continue
-            g = _fv(m, 'gap') or 0
+            g = gap_disp.get(b.id, 0.0)
             if g > most_needed_gap:
                 most_needed_gap = g
                 most_needed_sid  = b.softech_branch_id
@@ -1243,7 +1408,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         # Qty / value to transfer TO branch 100 (main branch deficit)
         b100_gap = 0.0
         if branch_100 and branch_100.id in branch_data:
-            b100_gap = max(0.0, _fv(branch_data[branch_100.id], 'gap') or 0)
+            b100_gap = max(0.0, gap_disp.get(branch_100.id, 0.0))
         transfer_qty   = b100_gap
         transfer_value = b100_gap * pack_price
 
@@ -1258,7 +1423,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
             if b.id in branch_data:
                 m = branch_data[b.id]
                 cov_vals[b.id] = _fv(m, 'coverage_months')
-                def_vals[b.id] = _fv(m, 'gap')
+                def_vals[b.id] = gap_disp.get(b.id)
         cov_ranks = _build_rank_dict(cov_vals, ascending=True)    # ASC: low coverage = rank 1
         def_ranks = _build_rank_dict(def_vals, ascending=False)   # DESC: high gap = rank 1
 
@@ -1300,12 +1465,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
         _status, _match_str, _cellfill = '', '', item_fill
         if _si is not None:
             _matches = list(_si.shortage_matching_items.all())
-            if _si.in_shortage:
-                _status, _cellfill = 'نقص سوق', SHORT_FILL
-            elif _si.shortage_dismissed and _si.shortage_dismiss_reason == 'variant':
-                _status, _cellfill = 'بديل متاح', VAR_FILL
-            elif _si.shortage_dismissed:
-                _status = 'مستبعد'
+            _status, _kind = shortage_overlay_label(_si)
+            _cellfill = {'shortage': SHORT_FILL, 'variant': VAR_FILL,
+                         'dismissed': DISM_FILL}.get(_kind, item_fill)
             if _matches:
                 _codes = ' | '.join(m.softech_id for m in _matches)
                 _missing = sorted({c for m in _matches
@@ -1313,6 +1475,24 @@ def _export_xlsx_pivot_v2(run, request, filename):
                 _match_str = _codes + (f'  ⚠ ناقص بفروع: {",".join(_missing)}' if _missing else '  ✓ بكل الفروع')
         row.append(_cell(_status,    _cellfill))
         row.append(_cell(_match_str, _cellfill))
+        # مبيعات وهمية — recommended order % (blank when not a phantom item)
+        _ph = _phantom.get(iid)
+        if _ph is not None:
+            _order = round((_ph.phantom_order_pct if _ph.phantom_order_pct is not None else 1.0) * 100)
+            _tier = 'شديد' if (_ph.phantom_ratio or 0) >= 0.5 else 'مراقبة'
+            row.append(_cell(f'وهمية ({_tier}) — اطلب {_order}%', PHANTOM_FILL))
+        else:
+            row.append(_cell('', item_fill))
+        # ذروة طلب غير مؤكدة (demand-spike over-purchase)
+        _sp = _spike.get(iid)
+        if _sp is not None:
+            _r = _sp.spike_ratio or 0
+            _rt = 'جديد' if _r >= 999 else f'{round(_r)}×'
+            _lbl = 'ذروة قوية' if _sp.spike_tier == 'strong' else 'ذروة مراقبة'
+            _conf = ' — مؤكَّد (اطلب شهر)' if _sp.spike_confirmed else ' — راجِع'
+            row.append(_cell(f'{_lbl} {_rt}{_conf}', SPIKE_FILL))
+        else:
+            row.append(_cell('', item_fill))
 
         # [11-16] Branch 100 (6 cols — no coverage/priority)
         if branch_100 and branch_100.id in branch_data:
@@ -1321,7 +1501,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
             row.append(_cell(_fv(m100, 'in_transit_qty')   or 0, B100_DFILL, '#,##0.00'))
             row.append(_cell(_fv(m100, 'monthly_avg')      or 0, B100_DFILL, '#,##0.00'))
             row.append(_cell(_fv(m100, 'safety_stock')     or 0, B100_DFILL, '#,##0.00'))
-            row.append(_cell(_fv(m100, 'gap')              or 0, B100_DFILL, '#,##0.00'))
+            row.append(_cell(gap_disp.get(branch_100.id, 0.0), B100_DFILL, '#,##0.00'))
             row.append(_cell(_fv(m100, 'monthly_avg_trns') or 0, B100_DFILL, '#,##0.00'))
         else:
             row += [_cell(None, B100_DFILL)] * 6
@@ -1337,8 +1517,14 @@ def _export_xlsx_pivot_v2(run, request, filename):
                 row.append(_cell(_fv(m, 'monthly_avg')      or 0, dfill, '#,##0.00'))
                 row.append(_cell(_fv(m, 'safety_stock')     or 0, dfill, '#,##0.00'))
                 row.append(_cell(cov,                             dfill, '#,##0.0'))
-                row.append(_cell(_fv(m, 'gap')              or 0, dfill, '#,##0.00'))
-                row.append(_cell(_fv(m, 'priority')         or 0, dfill, '#,##0.000'))
+                row.append(_cell(gap_disp.get(b.id, 0.0),         dfill, '#,##0.00'))
+                # priority tracks the effective (0.8) demand when a coverage
+                # override is active; frozen otherwise. Uses UNROUNDED gap.
+                if _cov is not None and cov is not None:
+                    _prio = (1.0 - cov) * (gap_raw.get(b.id) or 0.0)
+                else:
+                    _prio = _fv(m, 'priority') or 0
+                row.append(_cell(_prio,                           dfill, '#,##0.000'))
                 row.append(_cell(_fv(m, 'monthly_avg_trns') or 0, dfill, '#,##0.00'))
             else:
                 row += [_cell(None, dfill)] * 8
@@ -1445,6 +1631,14 @@ def export_purchasing(request):
             sheet    = 'بالفرع'
             filename = f'purchasing_branch_{date}'
 
+        # Optional demand-fill horizon (same control as the pivot sheet): rewrite
+        # the gap (and metrics priority) column getters to the scaled Option-B
+        # demand. Omitting coverage_months = the frozen 1-month columns unchanged.
+        _cov, _round_at, _round_dir = parse_demand_opts(request)
+        if _cov is not None:
+            columns = _apply_flat_coverage(columns, view, _cov, _round_dir)
+            filename = f'{filename}_cov{_cov:g}'
+
         row_count = qs.count()
         logger.info('[EXPORT] row_count=%s', row_count)
 
@@ -1478,9 +1672,16 @@ def trigger_run(request):
 
     Returns the newly-created DemandCalculationRun (status='running').
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    # admin / pharmacist: everything. Purchasing role + SOFTECH supply groups
+    # (Administrator / مخزن / كارت صنف / Internal Auditor): QUICK run only — see access.py.
+    from .access import can_run_engine, is_engine_admin
+    if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
+    if not is_engine_admin(request.user) and (request.data.get('full') or request.data.get('params')):
+        return Response({'detail': 'المزامنة الكاملة وضبط معاملات المحرك للمدير أو الصيدلي فقط — '
+                                   'استخدم «▶ تشغيل» للتشغيل السريع.'}, status=403)
+    logger.info('[trigger_run] engine run requested by %s (full=%s)',
+                request.user.username, bool(request.data.get('full')))
 
     # Guard: don't start a second run if one is already running
     already_running = DemandCalculationRun.objects.filter(status='running').exists()
@@ -1495,11 +1696,39 @@ def trigger_run(request):
     param_overrides  = request.data.get('params', {})   # optional per-run overrides
 
     def _run_engine():
+        run = None
         try:
             from .engine import DemandEngine
-            DemandEngine(param_overrides=param_overrides).run(full_backfill=bool(full_backfill))
+            if bool(full_backfill):
+                # Full sync also refreshes the CATALOG first (new items + price /
+                # itemtrans / امر التوريد / tax updates) so the engine reads the
+                # freshest Item rows. Create the run up front (like catch-up) with a
+                # 'catalog' phase so the dashboard banner tracks it, then hand it to
+                # the engine as one continuous run.
+                from apps.purchasing.models import DemandCalculationRun
+                from django.utils import timezone as _tz
+                run = DemandCalculationRun.objects.create(
+                    status='running', calc_date=_tz.localdate(),
+                    progress={'phase': 'catalog', 'pct': 0,
+                              'message': 'تحديث كتالوج الأصناف من SOFTECH…'},
+                )
+                try:
+                    from apps.sync.tasks import run_items_sync
+                    run_items_sync()
+                except Exception:
+                    logger.exception('[trigger_run] catalog refresh failed (continuing to sales sync)')
+                DemandEngine(param_overrides=param_overrides).run(
+                    full_backfill=True, existing_run=run)
+            else:
+                DemandEngine(param_overrides=param_overrides).run(full_backfill=False)
         except Exception as exc:
             logger.exception('Background engine run failed: %s', exc)
+            if run is not None and run.status == 'running':
+                from django.utils import timezone as _tz
+                run.status = 'failed'
+                run.error_message = str(exc)[:500]
+                run.finished_at = _tz.now()
+                run.save(update_fields=['status', 'error_message', 'finished_at'])
         finally:
             # Background threads are NOT part of Django's request/response cycle,
             # so Django never auto-closes their DB connections.  Explicitly release
@@ -1519,6 +1748,46 @@ def trigger_run(request):
             return Response(RunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
 
     return Response({'detail': 'تم بدء التشغيل في الخلفية'}, status=status.HTTP_202_ACCEPTED)
+
+
+# ── Items / catalog sync (on-demand: new items + column updates) ─────────────
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_items_now(request):
+    """
+    Refresh the item catalog from SOFTECH on demand — new items plus column
+    updates (pack/unit/cost price, itemtrans validity, امر التوريد / no_more_use,
+    archive, tax rates). Runs categories + items + barcodes in a background thread
+    (read-only SELECT on SOFTECH). Poll /sync/status/ for progress.
+    """
+    profile = getattr(request.user, 'staff_profile', None)
+    if not profile or profile.role not in ('admin', 'pharmacist'):
+        return Response({'detail': 'غير مصرح'}, status=403)
+
+    from apps.sync.tasks import run_items_sync
+    from apps.sync.models import SyncRun
+
+    # Create the SyncRun up front so we can return its id for the toast to poll
+    # (/sync/logs/ → match by id — robust against concurrent scheduled sync lanes).
+    sync_run = SyncRun.objects.create(status='running')
+
+    def _worker(run_id):
+        from apps.sync.models import SyncRun as _SR
+        sr = _SR.objects.filter(pk=run_id).first()
+        try:
+            run_items_sync(sync_run=sr)
+        except Exception as exc:
+            logger.exception('[sync_items_now] items sync failed: %s', exc)
+        finally:
+            from django.db import connections as _conns
+            _conns.close_all()
+
+    threading.Thread(target=_worker, args=(sync_run.pk,), daemon=True,
+                     name='purchasing-items-sync').start()
+    return Response({'detail': 'بدأت مزامنة كتالوج الأصناف في الخلفية',
+                     'sync_run_id': sync_run.pk},
+                    status=status.HTTP_202_ACCEPTED)
 
 
 # ── Catch-up sync (manual override when scheduled 2 AM sync missed SOFTECH) ──
@@ -1857,7 +2126,7 @@ class TransferRecommendationListView(generics.ListAPIView):
     """
     serializer_class   = TransferRecommendationSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class', 'status', 'from_branch', 'to_branch']
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = ['priority_score', 'estimated_value', 'quantity', 'to_gap']

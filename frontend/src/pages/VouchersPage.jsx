@@ -248,7 +248,7 @@ function CreateVoucherModal({ onClose, onCreate }) {
           {/* Type-specific value */}
           {form.voucher_type === 'discount_pct' && (
             <Field label="نسبة الخصم %" required>
-              <Input type="number" value={form.discount_pct} onChange={f('discount_pct')} min="0.01" max="100" step="0.01" placeholder="10" />
+              <Input type="number" value={form.discount_pct} onChange={f('discount_pct')} min="0" max="100" step="0.5" placeholder="10" />
             </Field>
           )}
           {form.voucher_type === 'discount_fixed' && (
@@ -285,13 +285,13 @@ function CreateVoucherModal({ onClose, onCreate }) {
           {/* Usage limits */}
           <div className="grid grid-cols-3 gap-3">
             <Field label="الحد الكلي">
-              <Input type="number" value={form.max_uses} onChange={f('max_uses')} min="1" />
+              <Input type="number" value={form.max_uses} onChange={f('max_uses')} min="1" step="1" />
             </Field>
             <Field label="لكل عميل">
-              <Input type="number" value={form.usage_limit_per_customer} onChange={f('usage_limit_per_customer')} min="1" />
+              <Input type="number" value={form.usage_limit_per_customer} onChange={f('usage_limit_per_customer')} min="1" step="1" />
             </Field>
             <Field label="يومياً">
-              <Input type="number" value={form.usage_limit_per_day} onChange={f('usage_limit_per_day')} min="1" placeholder="∞" />
+              <Input type="number" value={form.usage_limit_per_day} onChange={f('usage_limit_per_day')} min="1" step="1" placeholder="∞" />
             </Field>
           </div>
 

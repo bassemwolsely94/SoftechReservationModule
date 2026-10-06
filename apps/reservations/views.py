@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
@@ -63,7 +64,7 @@ class ReservationFilter(django_filters.FilterSet):
 
 class ReservationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_class = ReservationFilter
     search_fields = [
         'contact_name', 'contact_phone',

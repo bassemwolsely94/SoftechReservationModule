@@ -65,6 +65,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'full_name', 'role', 'role_label',
             'branch', 'branch_name', 'is_active',
             'access_all_branches', 'softech_username', 'hr_code', 'phone',
+            'allowed_pos_channels',
             'can_see_all_customers', 'can_see_customer_phone',
         ]
 
@@ -80,6 +81,7 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'role', 'branch', 'access_all_branches',
             'allowed_branches', 'restricted_branches',
+            'allowed_pos_channels',
             'phone', 'is_active', 'hr_code',
             'first_name', 'last_name', 'email',
             'can_see_all_customers', 'can_see_customer_phone',

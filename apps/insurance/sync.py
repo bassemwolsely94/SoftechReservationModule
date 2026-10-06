@@ -94,26 +94,39 @@ MOTALBA_SELECT = """
 """
 
 
-def sync_motalba(conn=None) -> dict:
+def sync_motalba(conn=None, from_date=None, to_date=None) -> dict:
     """
     Sync motalba (invdel=1) rows into MotalbaCache.
     Returns stats dict: {fetched, upserted, from_date}.
+
+    from_date / to_date (datetime.date): explicit window override for one-off
+    back-fills (e.g. an older year).  When from_date is omitted the normal
+    incremental window is used (latest cached date − overlap, or 90 days on a
+    cold cache).  Read-only against SOFTECH; upserts are idempotent.
     """
     close_conn = conn is None
     if conn is None:
         conn = _get_sybase()
 
     # Determine sync window
-    latest = MotalbaCache.objects.aggregate(d=Max('docdate'))['d']
-    if latest:
-        from_date = latest - _dt.timedelta(days=OVERLAP_DAYS)
-    else:
-        from_date = _dt.date.today() - _dt.timedelta(days=SYNC_WINDOW_DAYS)
+    if from_date is None:
+        latest = MotalbaCache.objects.aggregate(d=Max('docdate'))['d']
+        if latest:
+            from_date = latest - _dt.timedelta(days=OVERLAP_DAYS)
+        else:
+            from_date = _dt.date.today() - _dt.timedelta(days=SYNC_WINDOW_DAYS)
 
-    logger.info('[motalba-sync] Fetching from %s', from_date)
+    logger.info('[motalba-sync] Fetching from %s%s', from_date,
+                f' to {to_date}' if to_date else '')
+
+    sql    = MOTALBA_SELECT
+    params = [from_date.strftime('%Y-%m-%d')]
+    if to_date is not None:
+        sql = MOTALBA_SELECT.replace('ORDER BY', 'AND m.docdate <= ?\n    ORDER BY')
+        params.append(to_date.strftime('%Y-%m-%d'))
 
     cursor = conn.cursor()
-    cursor.execute(MOTALBA_SELECT, [from_date.strftime('%Y-%m-%d')])
+    cursor.execute(sql, params)
     rows = cursor.fetchall()
 
     logger.info('[motalba-sync] Fetched %d rows from Sybase', len(rows))
@@ -189,25 +202,36 @@ COMPANIESITEMS_SELECT = """
 """
 
 
-def sync_companiesitems(conn=None) -> dict:
+def sync_companiesitems(conn=None, from_date=None, to_date=None) -> dict:
     """
     Sync companiesitems rows into CompaniesItemsCache.
     Returns stats dict.
+
+    from_date / to_date (datetime.date): explicit window override for one-off
+    back-fills; see sync_motalba.
     """
     close_conn = conn is None
     if conn is None:
         conn = _get_sybase()
 
-    latest = CompaniesItemsCache.objects.aggregate(d=Max('docdate'))['d']
-    if latest:
-        from_date = latest - _dt.timedelta(days=OVERLAP_DAYS)
-    else:
-        from_date = _dt.date.today() - _dt.timedelta(days=SYNC_WINDOW_DAYS)
+    if from_date is None:
+        latest = CompaniesItemsCache.objects.aggregate(d=Max('docdate'))['d']
+        if latest:
+            from_date = latest - _dt.timedelta(days=OVERLAP_DAYS)
+        else:
+            from_date = _dt.date.today() - _dt.timedelta(days=SYNC_WINDOW_DAYS)
 
-    logger.info('[ci-sync] Fetching companiesitems from %s', from_date)
+    logger.info('[ci-sync] Fetching companiesitems from %s%s', from_date,
+                f' to {to_date}' if to_date else '')
+
+    sql    = COMPANIESITEMS_SELECT
+    params = [from_date.strftime('%Y-%m-%d')]
+    if to_date is not None:
+        sql = COMPANIESITEMS_SELECT.replace('ORDER BY', 'AND ci.docdate <= ?\n    ORDER BY')
+        params.append(to_date.strftime('%Y-%m-%d'))
 
     cursor = conn.cursor()
-    cursor.execute(COMPANIESITEMS_SELECT, [from_date.strftime('%Y-%m-%d')])
+    cursor.execute(sql, params)
     rows = cursor.fetchall()
 
     logger.info('[ci-sync] Fetched %d rows', len(rows))
@@ -259,15 +283,18 @@ def sync_companiesitems(conn=None) -> dict:
 
 # ── combined entry point ──────────────────────────────────────────────────────
 
-def sync_insurance_cache() -> dict:
+def sync_insurance_cache(from_date=None, to_date=None) -> dict:
     """
     Sync both motalba and companiesitems caches in one Sybase connection.
     Called by APScheduler and the manual sync API endpoint.
+
+    from_date / to_date (datetime.date): optional explicit window for a one-off
+    historical back-fill (e.g. a prior year).  Omit for the normal incremental sync.
     """
     try:
         conn = _get_sybase()
-        motalba_stats = sync_motalba(conn)
-        ci_stats      = sync_companiesitems(conn)
+        motalba_stats = sync_motalba(conn, from_date=from_date, to_date=to_date)
+        ci_stats      = sync_companiesitems(conn, from_date=from_date, to_date=to_date)
         conn.close()
         return {
             'status':       'ok',

@@ -66,6 +66,43 @@
   --brand-navy: #022871;
   --brand-sky:  #3880bb;
   --brand-red:  #ea0000;
+
+  /* ── Semantic surface tokens (LIGHT — default) ───────────────────────────────
+     Personal light/dark mode (src/theme/theme.js → applyMode) flips these by
+     setting data-theme="dark" on <html>. Brand colors above are unaffected —
+     they read in both modes. New code should prefer these Tailwind aliases
+     (bg-surface / text-content / border-line …) over literal bg-white/gray-*
+     so it themes automatically. R G B triplets → `/<alpha>` modifiers work. */
+  --c-bg:          246 248 252;  /* page background (#f6f8fc) */
+  --c-surface:     255 255 255;  /* cards, header, inputs */
+  --c-surface-2:   249 250 251;  /* subtle fill — table head, gray-50 */
+  --c-surface-3:   243 244 246;  /* hover/active fill — gray-100 */
+  --c-content:      15  27  51;  /* primary text (#0f1b33) */
+  --c-muted:        75  85  99;  /* secondary text — gray-600 */
+  --c-faint:       156 163 175;  /* tertiary text — gray-400 */
+  --c-line:        229 231 235;  /* borders — gray-200 */
+  --c-line-soft:   243 244 246;  /* soft borders — gray-100 */
+  --c-line-strong: 209 213 219;  /* strong borders — gray-300 */
+  --c-scroll:      209 213 219;  /* scrollbar thumb */
+  color-scheme: light;
+}
+
+/* ── Semantic surface tokens (DARK) ─────────────────────────────────────────────
+   Navy-tinted dark neutrals so the palette stays on-brand. Only the surface
+   tokens are overridden; the brand scale is intentionally left as-is. */
+:root[data-theme='dark'] {
+  --c-bg:           15  20  32;  /* deep navy-black (#0f1420) */
+  --c-surface:      22  28  44;  /* raised surface (#161c2c) */
+  --c-surface-2:    28  35  54;  /* subtle fill (#1c2336) */
+  --c-surface-3:    38  48  72;  /* hover/active fill (#263048) */
+  --c-content:     226 232 240;  /* primary text — slate-200 */
+  --c-muted:       148 163 184;  /* secondary text — slate-400 */
+  --c-faint:       100 116 139;  /* tertiary text — slate-500 */
+  --c-line:         42  52  76;  /* borders (#2a344c) */
+  --c-line-soft:    33  41  62;  /* soft borders (#21293e) */
+  --c-line-strong:  58  71 102;  /* strong borders (#3a4766) */
+  --c-scroll:       58  71 102;  /* scrollbar thumb */
+  color-scheme: dark;
 }
 
 @tailwind base;
@@ -88,18 +125,19 @@
 
   body {
     font-family: var(--font-ui);
-    background-color: #f6f8fc;
-    color: #0f1b33;
+    background-color: rgb(var(--c-bg));
+    color: rgb(var(--c-content));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Custom scrollbar — webkit */
   ::-webkit-scrollbar          { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track    { background: transparent; }
-  ::-webkit-scrollbar-thumb    { background: #d1d5db; border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+  ::-webkit-scrollbar-thumb    { background: rgb(var(--c-scroll)); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-faint)); }
 
   /* Remove default number input spinners */
   input[type='number']::-webkit-inner-spin-button,
@@ -144,8 +182,8 @@
   }
 
   .btn-secondary {
-    @apply bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100
-           text-gray-700 font-medium px-4 py-2 rounded-lg
+    @apply bg-surface border border-line-strong hover:bg-surface-2 active:bg-surface-3
+           text-content font-medium px-4 py-2 rounded-lg
            transition-colors duration-150
            focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed
@@ -161,7 +199,7 @@
   }
 
   .btn-ghost {
-    @apply text-gray-500 hover:text-gray-800 hover:bg-gray-100
+    @apply text-muted hover:text-content hover:bg-surface-3
            font-medium px-3 py-1.5 rounded-lg
            transition-colors duration-150
            inline-flex items-center justify-center gap-1.5 whitespace-nowrap;
@@ -169,25 +207,25 @@
 
   /* ── Cards ──────────────────────────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+    @apply bg-surface rounded-2xl shadow-sm border border-line-soft p-5;
   }
 
   .card-hover {
     @apply card cursor-pointer
-           hover:shadow-md hover:border-gray-200
+           hover:shadow-md hover:border-line
            transition-all duration-150;
   }
 
   /* ── Form elements ──────────────────────────────────────────────────────── */
   .input-field {
-    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-           bg-white text-gray-800 placeholder-gray-400
+    @apply w-full border border-line rounded-xl px-3 py-2.5 text-sm
+           bg-surface text-content placeholder-faint
            focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent
            transition-colors duration-150;
   }
 
   .label {
-    @apply block text-xs font-semibold text-gray-600 mb-1;
+    @apply block text-xs font-semibold text-muted mb-1;
   }
 
   /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -201,20 +239,20 @@
 
   /* ── Skeleton loader ────────────────────────────────────────────────────── */
   .skeleton {
-    @apply bg-gray-100 rounded-xl animate-pulse;
+    @apply bg-surface-3 rounded-xl animate-pulse;
   }
 
   .skeleton-text {
-    @apply h-3 bg-gray-100 rounded-full animate-pulse;
+    @apply h-3 bg-surface-3 rounded-full animate-pulse;
   }
 
   .skeleton-avatar {
-    @apply rounded-full bg-gray-100 animate-pulse flex-shrink-0;
+    @apply rounded-full bg-surface-3 animate-pulse flex-shrink-0;
   }
 
   /* ── Page header — sticky top bar shared across all pages ───────────────── */
   .page-header {
-    @apply bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-20;
+    @apply bg-surface border-b border-line px-4 sm:px-6 py-4 sticky top-0 z-20;
   }
 
   .page-body {
@@ -223,7 +261,7 @@
 
   /* ── Section title ───────────────────────────────────────────────────────── */
   .section-title {
-    @apply text-sm font-bold text-gray-700 flex items-center gap-2 mb-4;
+    @apply text-sm font-bold text-content flex items-center gap-2 mb-4;
   }
 
   /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -232,25 +270,25 @@
   }
 
   .data-table thead tr {
-    @apply bg-gray-50 border-b border-gray-100;
+    @apply bg-surface-2 border-b border-line-soft;
   }
 
   .data-table thead th {
-    @apply text-right px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap;
+    @apply text-right px-4 py-3 text-xs font-semibold text-muted whitespace-nowrap;
   }
 
   .data-table tbody tr {
-    @apply border-b border-gray-50 last:border-0
-           hover:bg-brand-50 transition-colors duration-100;
+    @apply border-b border-line-soft last:border-0
+           hover:bg-surface-3 transition-colors duration-100;
   }
 
   .data-table tbody td {
-    @apply px-4 py-3 text-gray-700;
+    @apply px-4 py-3 text-content;
   }
 
   /* ── Divider ─────────────────────────────────────────────────────────────── */
   .divider {
-    @apply border-t border-gray-100 my-4;
+    @apply border-t border-line-soft my-4;
   }
 
   /* ── Empty state container ───────────────────────────────────────────────── */
@@ -269,7 +307,10 @@
 
   /* Shimmer variant of skeleton — more polished than pure pulse */
   .shimmer {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 37%, #f0f0f0 63%);
+    background: linear-gradient(90deg,
+      rgb(var(--c-surface-2)) 25%,
+      rgb(var(--c-surface-3)) 37%,
+      rgb(var(--c-surface-2)) 63%);
     background-size: 400% 100%;
     animation: shimmer 1.4s ease infinite;
   }
@@ -308,10 +349,10 @@
 
   /* Glass card */
   .glass {
-    background: rgba(255, 255, 255, 0.72);
+    background: rgb(var(--c-surface) / 0.72);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid rgb(var(--c-surface) / 0.5);
   }
 
   /* Gradient brand text */
@@ -414,7 +455,7 @@ thead {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #fff;
+  background: rgb(var(--c-surface));
 }
 thead th {
   position: sticky;

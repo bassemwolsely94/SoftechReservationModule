@@ -23,7 +23,8 @@ class SyncRunSerializer(serializers.ModelSerializer):
     class Meta:
         model = SyncRun
         fields = ['id', 'status', 'started_at', 'completed_at',
-                  'records_synced', 'error_message', 'duration_seconds', 'logs']
+                  'records_synced', 'error_message', 'duration_seconds',
+                  'progress', 'logs']
 
 
 @api_view(['GET'])

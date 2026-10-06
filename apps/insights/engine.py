@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from apps.insights.rules import RULES, Ctx, rule_domain
+from apps.insights.rules import RULES, Ctx, rule_domain, data_freshness
 
 
 def period_bounds(period_type, ref_date):
@@ -100,15 +100,62 @@ class InsightEngine:
     _SEV_ORDER = {'critical': 0, 'warning': 1, 'info': 2}
     _CAT_AR = {'coverage': '🧭 تغطية البيانات', 'volume': '📊 حجم المبيعات',
                'mix': '🧴 مزيج المنتجات', 'discount': '🏷️ الخصومات',
-               'comparison': '📈 مقارنات', 'highlight': '🏆 إنجازات'}
+               'comparison': '📈 مقارنات', 'highlight': '🏆 إنجازات', 'bottom': '🔻 الأدنى أداءً'}
     _CAT_EN = {'coverage': '🧭 Data coverage', 'volume': '📊 Sales volume',
                'mix': '🧴 Product mix', 'discount': '🏷️ Discounts',
-               'comparison': '📈 Comparisons', 'highlight': '🏆 Highlights'}
+               'comparison': '📈 Comparisons', 'highlight': '🏆 Highlights', 'bottom': '🔻 Bottom performers'}
     _PERIOD_AR = {'day': 'اليومي', 'week': 'الأسبوعي', 'month': 'الشهري', 'mtd': 'الشهر حتى تاريخه'}
     _PERIOD_EN = {'day': 'Daily', 'week': 'Weekly', 'month': 'Monthly', 'mtd': 'Month-to-date'}
     # phrase for the "vs previous" comparison, per period
     _PREV_AR = {'mtd': 'عن نفس الفترة من الشهر السابق'}
     _PREV_EN = {'mtd': 'vs same period last month'}
+
+    @classmethod
+    def freshness_header(cls, start, end, domain, lang, always=True):
+        """Data-freshness / COMPLETENESS line(s) for a report header. Beyond the purchasing
+        module's 'data through date', it also warns about INTERIOR gaps — days inside the period
+        that were never/partially synced (a max-date check misses these). Returns a list of lines
+        (empty if fully complete and always=False)."""
+        fr = data_freshness(start, end, domain)
+        ar = lang == 'ar'
+        src_ar = 'المشتريات' if domain == 'purchasing' else 'المبيعات'
+        src_en = 'purchasing' if domain == 'purchasing' else 'sales'
+        cmd = 'run_procurement_engine' if domain == 'purchasing' else 'sync_erp'
+        st = fr['src_through']
+        sync = fr['last_sync_at']
+        sync_ar = (f' · آخر مزامنة ناجحة {sync:%Y-%m-%d %H:%M}' if sync else '')
+        sync_en = (f' · last successful sync {sync:%Y-%m-%d %H:%M}' if sync else '')
+        lines = []
+        # (a) stale tail — the latest date doesn't reach the period end
+        if not fr['covered'] and fr['gap_days'] > 0:
+            if ar:
+                lines.append(f'⚠️ بيانات غير مكتملة: التقرير حتى {end} لكن بيانات {src_ar} محدّثة حتى '
+                             f'{st} فقط (ناقص {fr["gap_days"]} يوم). أعِد المزامنة ({cmd}) قبل اعتماد الأرقام.')
+            else:
+                lines.append(f'⚠️ Data incomplete: report runs to {end} but {src_en} data is only synced '
+                             f'through {st} ({fr["gap_days"]} day(s) short). Re-sync ({cmd}) before relying on the numbers.')
+        # (b) interior gaps — missing/partial days INSIDE the period (the real culprit)
+        gaps = (fr['empty_days'] or []) + (fr['low_days'] or [])
+        if gaps:
+            shown = ', '.join(gaps[:6]) + ('…' if len(gaps) > 6 else '')
+            ne, nl = len(fr['empty_days'] or []), len(fr['low_days'] or [])
+            if ar:
+                lines.append(f'⚠️ فجوات في بيانات الفترة: {ne} يوم مفقود و{nl} يوم ناقص داخل الفترة ({shown}) — '
+                             f'الأرقام أقل من الواقع. أعِد المزامنة/التعبئة (backfill_sales_history) لهذه الأيام.')
+            else:
+                lines.append(f'⚠️ Gaps inside the period: {ne} missing + {nl} partial day(s) ({shown}) — '
+                             f'the numbers are understated. Re-sync / backfill_sales_history these days.')
+        # (c) all good
+        if not lines and always:
+            through = st or '—'
+            if ar:
+                lines.append(f'🕒 البيانات مكتملة حتى {through} بلا فجوات داخل الفترة{sync_ar}.')
+            else:
+                lines.append(f'🕒 Data complete through {through}, no gaps in the period{sync_en}.')
+        if fr['last_sync_failed']:
+            lines.append('⚠️ آخر عملية مزامنة فشلت — قد تكون البيانات ناقصة.' if ar
+                         else '⚠️ The last sync attempt failed — data may be incomplete.')
+        return lines
 
     @classmethod
     def render_for_branch(cls, run, branch_id, lang):
@@ -130,11 +177,13 @@ class InsightEngine:
                 else f'📋 {nm} report — {run.period_start} to {run.period_end}')
         key = 'message_ar' if lang == 'ar' else 'message_en'
         cats = cls._CAT_AR if lang == 'ar' else cls._CAT_EN
-        lines = [head, '']
+        lines = [head]
+        lines += cls.freshness_header(run.period_start, run.period_end, run.domain, lang, always=False)  # warn only if incomplete
+        lines.append('')
         by_cat = {}
         for f in fs:
             by_cat.setdefault(f['category'], []).append(f)
-        for cat in ['coverage', 'volume', 'mix', 'discount', 'comparison', 'highlight']:
+        for cat in ['coverage', 'volume', 'mix', 'discount', 'comparison', 'bottom', 'highlight']:
             if cat in by_cat:
                 lines.append(cats.get(cat, cat))
                 for f in sorted(by_cat[cat], key=lambda x: cls._SEV_ORDER.get(x['severity'], 3)):
@@ -161,11 +210,13 @@ class InsightEngine:
                 else f'📋 Salesperson {name} report — {run.period_start} to {run.period_end}')
         key = 'message_ar' if lang == 'ar' else 'message_en'
         cats = cls._CAT_AR if lang == 'ar' else cls._CAT_EN
-        lines = [head, '']
+        lines = [head]
+        lines += cls.freshness_header(run.period_start, run.period_end, run.domain, lang, always=False)  # warn only if incomplete
+        lines.append('')
         by_cat = {}
         for f in fs:
             by_cat.setdefault(f['category'], []).append(f)
-        for cat in ['coverage', 'volume', 'mix', 'discount', 'comparison', 'highlight']:
+        for cat in ['coverage', 'volume', 'mix', 'discount', 'comparison', 'bottom', 'highlight']:
             if cat in by_cat:
                 lines.append(cats.get(cat, cat))
                 for f in sorted(by_cat[cat], key=lambda x: cls._SEV_ORDER.get(x['severity'], 3)):
@@ -203,8 +254,14 @@ class InsightEngine:
                 L.append(f'📋 {cls._PERIOD_EN.get(ctx.period_type,"")} board report — {ctx.start} to {ctx.end}')
                 L.append(f'Total net sales: {f2(cur)} EGP ({arrow} {abs(float(delta)):.0f}% {prev_en}).')
 
-        # ① Top-5 attention — most severe first, then largest magnitude
-        attention = [f for f in findings if f['severity'] in ('critical', 'warning')]
+        # Data-freshness / completeness header — is the period fully collected from SOFTECH?
+        for fl in cls.freshness_header(ctx.start, ctx.end, domain, lang, always=True):
+            L.append(fl)
+
+        # ① Top-5 attention — most severe first, then largest magnitude. Underperformer
+        #   ranking boards (category 'bottom') get their OWN section below, not this one.
+        attention = [f for f in findings if f['severity'] in ('critical', 'warning')
+                     and f['category'] != 'bottom']
         attention.sort(key=lambda x: (cls._SEV_ORDER.get(x['severity'], 3), -abs(float(x.get('value') or 0))))
         if attention:
             L.append('')
@@ -220,10 +277,18 @@ class InsightEngine:
             for f in highlights:
                 L.append('• ' + f[key])
 
+        # ②b Bottom / underperformer boards (ranked laggards, parallel to the leaderboards)
+        bottoms = [f for f in findings if f['category'] == 'bottom']
+        if bottoms:
+            L.append('')
+            L.append('🔻 الأدنى أداءً (تحتاج متابعة):' if ar else '🔻 Bottom performers (need attention):')
+            for f in bottoms:
+                L.append('• ' + f[key])
+
         # ③ Compact findings summary (counts per rule) — detail goes to branch reports.
-        #   Exclude pure per-branch info detail (e.g. branch standings, customer mix) — those
-        #   belong in each branch's own report, not the chain board summary.
-        nonhi = [f for f in findings if f['category'] != 'highlight'
+        #   Exclude pure per-branch info detail (e.g. branch standings, customer mix) and the
+        #   bottom boards (they have their own section above).
+        nonhi = [f for f in findings if f['category'] not in ('highlight', 'bottom')
                  and not (f.get('severity') == 'info' and f.get('scope_type') in ('branch', 'salesperson'))]
         if nonhi:
             labels = {code: (v[1] if ar else v[2]) for code, v in RULES.items()}

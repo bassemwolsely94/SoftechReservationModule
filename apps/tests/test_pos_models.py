@@ -106,6 +106,29 @@ class ReconcileTests(TestCase):
         o.refresh_from_db()
         self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSHED)
 
+    def test_gone_but_no_final_flags_needs_review(self):
+        # leakage signal: pending gone + no final doc → needs_review set (Exception Center bucket)
+        o = self._pushed()
+        reconcile.reconcile_order(o, self.FakeReader(exists=False, final=None))
+        o.refresh_from_db()
+        self.assertTrue(o.needs_review)
+        self.assertEqual(o.review_reason, 'pending_gone_no_final')
+
+    def test_settle_clears_needs_review(self):
+        o = self._pushed(); o.needs_review = True; o.review_reason = 'pending_gone_no_final'; o.save()
+        reconcile.reconcile_order(o, self.FakeReader(exists=False, final=Decimal('452724')))
+        o.refresh_from_db()
+        self.assertEqual(o.status, SoftechSalesOrder.STATUS_SETTLED)
+        self.assertFalse(o.needs_review)
+        self.assertEqual(o.review_reason, '')
+
+    def test_pending_reappears_clears_needs_review(self):
+        # a stale flag is cleared if the pending row is seen again on a later reconcile
+        o = self._pushed(); o.needs_review = True; o.review_reason = 'pending_gone_no_final'; o.save()
+        reconcile.reconcile_order(o, self.FakeReader(exists=True, final=None))
+        o.refresh_from_db()
+        self.assertFalse(o.needs_review)
+
     def test_non_pushed_ignored(self):
         o = _order()  # draft, no docnumber
         reconcile.reconcile_order(o, self.FakeReader(exists=False, final=Decimal('1')))

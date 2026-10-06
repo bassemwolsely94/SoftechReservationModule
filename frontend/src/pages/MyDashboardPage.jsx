@@ -370,7 +370,7 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
       const { data } = await personalApi.setRevision(body)
       const ok = data.ok
       toast[ok ? 'success' : 'error'](
-        ok ? (val ? 'تمت المراجعة' : 'أُلغيت المراجعة') : 'لم يكتمل — أحد الخوادم غير متصل',
+        ok ? (val ? 'تمت المراجعة' : 'أُلغيت المراجعة') : 'لم يكتمل — أحد السيرفرات غير متصل',
         ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`))
       onSaved?.()
     } catch (e) {
@@ -433,7 +433,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
       })
       const ok = data.ok
       toast[ok ? 'success' : 'error'](
-        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد الخوادم غير متصل',
+        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد السيرفرات غير متصل',
         ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`),
       )
       setEditing(false)
@@ -600,7 +600,7 @@ function PaymentsBody({ payload, widgetId, canEdit, onSaved, branches }) {
       })
       const ok = data.ok
       toast[ok ? 'success' : 'error'](
-        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد الخوادم غير متصل',
+        ok ? 'تم الحفظ في SOFTECH' : 'لم يكتمل الحفظ — أحد السيرفرات غير متصل',
         ok ? 'المركز والفرع: تم' : (data.warning || `المركز: ${data.hq_result} · الفرع: ${data.branch_result}`),
       )
       setEditing(false)

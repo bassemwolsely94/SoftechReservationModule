@@ -93,10 +93,53 @@ class MedicationTag(models.Model):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Layer 1b — Pharmacological Class (mirrors SOFTECH "Active Ingredient Class")
+# ─────────────────────────────────────────────────────────────────────────────
+
+class IngredientClass(models.Model):
+    """
+    Therapeutic / pharmacological class for an active ingredient — mirrors the
+    SOFTECH "Active Ingredient Class" taxonomy (the Classes screen), e.g.
+    CALCIUM CHANNEL BLOCKERS, SGLT2 INHIBITORS, BETA-BLOCKERS.
+
+    ``softech_code`` links a row back to SOFTECH's class table so the two stay
+    reconcilable; it is nullable because a pharmacist may curate a class here
+    before (or without) a matching SOFTECH row.
+    """
+    # Stable machine key (e.g. 'ace_inhibitors') — how the deterministic
+    # classifier and seed data refer to a class independent of display names.
+    key          = models.SlugField(max_length=60, unique=True, blank=True,
+                                     verbose_name='المفتاح')
+    name         = models.CharField(max_length=150, unique=True, verbose_name='اسم التصنيف')
+    name_ar      = models.CharField(max_length=150, blank=True, verbose_name='الاسم بالعربية')
+    # basic_data bdatacode under bdatasno=600 (blank = class not in SOFTECH yet).
+    softech_code = models.CharField(max_length=20, blank=True, db_index=True,
+                                    verbose_name='كود سوفتك')
+    is_active    = models.BooleanField(default=True, verbose_name='نشط')
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'تصنيف مادة فعّالة'
+        verbose_name_plural = 'تصنيفات المواد الفعّالة'
+        ordering            = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Layer 2 — Active Ingredient Master
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ActiveIngredient(models.Model):
+    # Provenance of this row — SOFTECH AI data is dirty (rules 5/11), so every
+    # molecule carries where it came from and whether a human has verified it.
+    SOURCE_CHOICES = [
+        ('softech', 'من سوفتك'),
+        ('parsed',  'مُستخرَج آلياً'),
+        ('manual',  'إدخال يدوي'),
+    ]
+
     # ── Identity ──────────────────────────────────────────────────────────────
     name            = models.CharField(max_length=200, db_index=True, verbose_name='الاسم (إنجليزي)')
     name_ar         = models.CharField(max_length=200, blank=True, verbose_name='الاسم (عربي)')
@@ -125,6 +168,29 @@ class ActiveIngredient(models.Model):
         choices=CHRONIC_CLASS_CHOICES,
         verbose_name='تصنيف المرض المزمن',
     )
+
+    # ── Pharmacological class (SOFTECH AI class taxonomy) ──────────────────────
+    ingredient_class = models.ForeignKey(
+        IngredientClass, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='ingredients',
+        verbose_name='التصنيف الدوائي',
+    )
+    # Salt / ester form parsed out of the SOFTECH name (e.g. "besylate", "HCl"),
+    # kept separate so AMLODIPINE and "AMLODIPINE BESYLATE" collapse to one
+    # canonical molecule.
+    salt_form = models.CharField(max_length=60, blank=True, verbose_name='صورة الملح')
+
+    # ── Provenance / verification (never auto-trust SOFTECH AI data) ───────────
+    source      = models.CharField(max_length=10, choices=SOURCE_CHOICES,
+                                   default='manual', db_index=True, verbose_name='المصدر')
+    is_verified = models.BooleanField(default=False, db_index=True,
+                                      verbose_name='مُراجَع ومعتمد')
+    verified_by = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='verified_ingredients',
+        verbose_name='اعتمده',
+    )
+    verified_at = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ الاعتماد')
 
     # ── Tags (via through model) ──────────────────────────────────────────────
     tags = models.ManyToManyField(
@@ -155,6 +221,53 @@ class ActiveIngredient(models.Model):
     @property
     def item_count(self):
         return self.item_maps.count()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Layer 2b — Ingredient Strength (the second search tier)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class IngredientStrength(models.Model):
+    """
+    A specific strength variant of a molecule — the SECOND search tier.
+
+    The molecule (ActiveIngredient) answers "all medicines containing
+    AMLODIPINE"; an IngredientStrength answers "all medicines containing
+    AMLODIPINE 5MG". Both tiers are kept so either search works — and so the
+    later SOFTECH cleanup phase can emit BOTH dropdown lines (the bare molecule
+    and the molecule-with-strength) as the owner requested.
+
+    ``strength_value`` + ``strength_unit`` are the normalized, comparable form;
+    ``display_name`` is the human label (e.g. "AMLODIPINE 5MG").
+    """
+    active_ingredient = models.ForeignKey(
+        ActiveIngredient, on_delete=models.CASCADE,
+        related_name='strengths', verbose_name='المادة الفعّالة',
+    )
+    strength_value = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        verbose_name='قيمة التركيز',
+    )
+    strength_unit = models.CharField(max_length=20, blank=True, verbose_name='وحدة التركيز')
+    display_name  = models.CharField(max_length=220, db_index=True, verbose_name='الاسم المعروض')
+
+    # SOFTECH activeingredients row for THIS strength line — populated only once
+    # the cleaned row exists in SOFTECH (Track B), so nullable for now.
+    softech_aicode = models.IntegerField(null=True, blank=True, db_index=True,
+                                         verbose_name='كود سوفتك')
+    source      = models.CharField(max_length=10, choices=ActiveIngredient.SOURCE_CHOICES,
+                                   default='manual', verbose_name='المصدر')
+    is_verified = models.BooleanField(default=False, db_index=True, verbose_name='مُراجَع')
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'تركيز مادة فعّالة'
+        verbose_name_plural = 'تراكيز المواد الفعّالة'
+        unique_together     = ('active_ingredient', 'strength_value', 'strength_unit')
+        ordering            = ['active_ingredient', 'strength_value']
+
+    def __str__(self):
+        return self.display_name
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,9 +319,18 @@ class ItemIngredientMap(models.Model):
         verbose_name='المادة الفعّالة',
     )
     concentration = models.CharField(max_length=50, blank=True,
-                                     verbose_name='التركيز')   # "500mg", "10mg/5ml"
+                                     verbose_name='التركيز')   # "500mg", "10mg/5ml" (raw text)
+    # Normalized strength tier for this item's use of the ingredient (optional —
+    # an item can be mapped at the molecule level only, or at a specific strength).
+    strength      = models.ForeignKey(
+        'IngredientStrength', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='item_maps',
+        verbose_name='التركيز المعياري',
+    )
     is_primary    = models.BooleanField(default=True,
                                         verbose_name='مادة رئيسية')
+    source        = models.CharField(max_length=10, choices=ActiveIngredient.SOURCE_CHOICES,
+                                     default='manual', verbose_name='المصدر')
     mapped_by     = models.ForeignKey(
         'users.StaffProfile', on_delete=models.SET_NULL,
         null=True, blank=True,

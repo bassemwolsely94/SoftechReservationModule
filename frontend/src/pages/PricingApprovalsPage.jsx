@@ -281,7 +281,7 @@ function FieldRow({ field, current, value, onChange }) {
         {fmt(current)} {field.unit}
       </span>
       <input
-        type="number" step="0.01" min="0"
+        type="number" step="any" min="0"
         placeholder={`جديد ${field.unit}`}
         value={value}
         onChange={e => onChange(e.target.value)}

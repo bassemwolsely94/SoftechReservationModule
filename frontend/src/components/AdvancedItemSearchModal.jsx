@@ -18,6 +18,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
+import Highlight from './Highlight'
 
 const PAGE_SIZE = 30
 
@@ -31,7 +32,7 @@ const INSURANCE_OPTS = [
 ]
 
 const EMPTY_CRITERIA = {
-  search:         '',   // name / scientific-name / code / barcode (wildcard * supported)
+  search:         '',   // name / scientific-name / code / barcode (* and % wildcards)
   category:       '',
   supplier_code:  '',
   producer_code:  '',
@@ -66,13 +67,9 @@ function buildParams(criteria) {
   const p = {}
 
   const q = (criteria.search || '').trim()
-  if (q) {
-    if (q.includes('*')) {
-      p.name = q
-    } else {
-      p.search = q
-    }
-  }
+  // one rule set server-side (apps/catalog/wildcard.py): * and % = any characters, parts in
+  // order, ranked exact text first — over name, scientific name, code and barcode
+  if (q) p.search = q
 
   if (criteria.category)       p.category        = criteria.category
   if (criteria.supplier_code)  p.supplier_code   = criteria.supplier_code
@@ -502,13 +499,13 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
 
                       {/* Name — full wrap, no truncation */}
                       <td className="px-3 py-2 font-semibold text-gray-900 min-w-[220px]">
-                        <div className="whitespace-normal leading-snug">{item.name}</div>
+                        <div className="whitespace-normal leading-snug"><Highlight text={item.name} query={activeParams?.search} /></div>
                       </td>
 
                       {/* Scientific name — full wrap, no truncation */}
                       <td className="px-3 py-2 text-gray-500 italic min-w-[160px]">
                         <div className="whitespace-normal leading-snug">
-                          {item.name_scientific || '—'}
+                          {item.name_scientific ? <Highlight text={item.name_scientific} query={activeParams?.search} /> : '—'}
                         </div>
                       </td>
 

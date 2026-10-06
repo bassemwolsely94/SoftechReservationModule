@@ -44,9 +44,21 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     branch_name = drf_serializers.CharField(read_only=True)
     branch_id  = drf_serializers.SerializerMethodField()
     role_label = drf_serializers.CharField(source='get_role_display', read_only=True)
+    # /supply + engine access also follows the SOFTECH user group (purchasing/access.py);
+    # the frontend only uses these to show menus/buttons — the views enforce them.
+    can_supply_write = drf_serializers.SerializerMethodField()
+    can_run_engine   = drf_serializers.SerializerMethodField()
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
+
+    def get_can_supply_write(self, obj):
+        from apps.purchasing.access import can_supply_write
+        return can_supply_write(obj.user)
+
+    def get_can_run_engine(self, obj):
+        from apps.purchasing.access import can_run_engine
+        return can_run_engine(obj.user)
 
     class Meta:
         model  = StaffProfile
@@ -57,7 +69,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine',
         ]
 
 
@@ -176,9 +188,12 @@ def me_view(request):
     profile = getattr(request.user, 'staff_profile', None)
     if profile:
         return Response(_MeSerializer(profile).data)
+    from apps.purchasing.access import can_supply_write, can_run_engine
     return Response({
         'username': request.user.username,
         'role': 'admin' if request.user.is_superuser else 'viewer',
+        'can_supply_write': can_supply_write(request.user),
+        'can_run_engine': can_run_engine(request.user),
     })
 
 

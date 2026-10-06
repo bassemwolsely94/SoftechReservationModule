@@ -3,9 +3,9 @@
  * Bilingual narrative audit reports (day/week/month): generate, read AR/EN,
  * copy for WhatsApp. Large, clean layout for non-technical directors.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { insightsApi } from '../api/client'
+import { insightsApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 
 const PERIODS = { day: 'يومي', week: 'أسبوعي', mtd: 'حتى تاريخه', month: 'شهري' }
@@ -23,6 +23,19 @@ const monthBounds = (ym) => {   // ym = 'yyyy-mm' → {start: 1st, end: last day
   const start = `${ym}-01`
   const last = new Date(y, m, 0).getDate()
   return { start, end: `${ym}-${String(last).padStart(2, '0')}` }
+}
+const shiftYm = (ym, n) => {   // step a 'yyyy-mm' by n months
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + n, 1))
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`
+}
+const mtdBounds = (ym) => {   // month-to-date: 1st of the month → min(yesterday, month-end);
+  const start = `${ym}-01`    // for the CURRENT month on day 1 that collapses to today.
+  const lastDay = monthBounds(ym).end
+  const y = addDays(isoToday(), -1)
+  let end = y < lastDay ? y : lastDay
+  if (end < start) end = start
+  return { start, end }
 }
 function defaultRange(p) {
   const y = addDays(isoToday(), -1)   // yesterday (last complete day)
@@ -124,6 +137,32 @@ export default function InsightsPage() {
     mutationFn: () => insightsApi.generate({ period, domain, start: range.start, end: range.end }),
     onSuccess: (r) => { setSelId(r.data.id); qc.invalidateQueries({ queryKey: ['insight-reports'] }) },
   })
+  // Live mirror freshness for the selected domain + period-end — is SOFTECH data fully collected?
+  const { data: fresh } = useQuery({
+    queryKey: ['insight-freshness', domain, range.start, range.end],
+    queryFn: () => insightsApi.freshness({ domain, start: range.start, end: range.end }).then(r => r.data),
+    enabled: view === 'reports',
+    refetchInterval: false,
+  })
+  // Backfill the gap days (re-sync SOFTECH) as a background job, then poll sync status.
+  const [backfilling, setBackfilling] = useState(false)
+  const { data: syncSt } = useQuery({
+    queryKey: ['insight-backfill-sync'],
+    queryFn: () => syncApi.status().then(r => r.data),
+    enabled: backfilling,
+    refetchInterval: backfilling ? 4000 : false,
+  })
+  useEffect(() => {
+    if (backfilling && syncSt && syncSt.status && syncSt.status !== 'running') {
+      setBackfilling(false)
+      qc.invalidateQueries({ queryKey: ['insight-freshness'] })
+      qc.invalidateQueries({ queryKey: ['insight-reports'] })
+    }
+  }, [backfilling, syncSt, qc])
+  const backfill = useMutation({
+    mutationFn: () => insightsApi.backfill({ domain, start: range.start, end: range.end }),
+    onSuccess: () => setBackfilling(true),
+  })
 
   return (
     <div className="p-6 max-w-[1200px] mx-auto" dir="rtl">
@@ -164,15 +203,23 @@ export default function InsightsPage() {
               className="input-field !w-auto !py-1 text-sm" />
           )}
 
-          {canRun && period === 'mtd' && (
-            <div className="flex items-center gap-1 text-sm text-gray-500">
-              <span className="text-xs">من {range.start} حتى</span>
-              <input type="date" value={range.end} max={yISO} min={range.end.slice(0, 8) + '01'}
-                onChange={e => setRange({ start: e.target.value.slice(0, 8) + '01', end: e.target.value })}
-                className="input-field !w-auto !py-1 text-sm" />
-              <span className="text-[11px] text-gray-400">({span} يوم)</span>
-            </div>
-          )}
+          {canRun && period === 'mtd' && (() => {
+            const curYm = range.start.slice(0, 7)
+            const thisYm = isoToday().slice(0, 7)
+            return (
+              <div className="flex items-center gap-1 text-sm text-gray-500">
+                <button type="button" onClick={() => setRange(mtdBounds(shiftYm(curYm, -1)))}
+                  className="px-2 py-1 rounded-md hover:bg-gray-100 text-gray-600" title="الشهر السابق">‹</button>
+                <input type="month" value={curYm} max={thisYm}
+                  onChange={e => e.target.value && setRange(mtdBounds(e.target.value))}
+                  className="input-field !w-auto !py-1 text-sm" title="اختر الشهر" />
+                <button type="button" onClick={() => setRange(mtdBounds(shiftYm(curYm, 1)))}
+                  disabled={curYm >= thisYm}
+                  className="px-2 py-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:opacity-30" title="الشهر التالي">›</button>
+                <span className="text-[11px] text-gray-400">({range.start} → {range.end} · {span} يوم)</span>
+              </div>
+            )
+          })()}
 
           {canRun && period === 'week' && (
             <div className="flex items-center gap-1 text-sm text-gray-500">
@@ -214,6 +261,41 @@ export default function InsightsPage() {
           </>)}
         </div>
       </div>
+
+      {/* Data-freshness / completeness bar — latest date AND interior gaps inside the period */}
+      {view === 'reports' && fresh && (
+        fresh.complete ? (
+          <div className="mb-4 text-xs rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100">
+            🕒 بيانات {domain === 'purchasing' ? 'المشتريات' : 'المبيعات'} مكتملة حتى <b>{fresh.src_through || '—'}</b> — بلا فجوات داخل الفترة.
+            {fresh.last_sync_at && <span className="text-emerald-500"> · آخر مزامنة {new Date(fresh.last_sync_at).toLocaleString('ar-EG')}</span>}
+          </div>
+        ) : (
+          <div className="mb-4 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 space-y-1">
+            {!fresh.covered && fresh.gap_days > 0 && (
+              <div>⚠️ بيانات {domain === 'purchasing' ? 'المشتريات' : 'المبيعات'} محدّثة حتى <b>{fresh.src_through || '—'}</b> فقط — ناقص <b>{fresh.gap_days}</b> يوم عن نهاية الفترة ({range.end}).</div>
+            )}
+            {(fresh.empty_days?.length > 0 || fresh.low_days?.length > 0) && (
+              <div>⚠️ فجوات داخل الفترة: <b>{fresh.empty_days?.length || 0}</b> يوم مفقود{fresh.low_days?.length ? <> و<b>{fresh.low_days.length}</b> يوم ناقص</> : null}
+                {' '}({[...(fresh.empty_days || []), ...(fresh.low_days || [])].slice(0, 6).join('، ')}) — الأرقام أقل من الواقع.</div>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <span>الأرقام أقل من الواقع لهذه الأيام.</span>
+              {canEditRules && (
+                <button onClick={() => backfill.mutate()} disabled={backfilling || backfill.isPending}
+                  className="px-2.5 py-1 rounded-md bg-amber-600 text-white text-[11px] font-bold disabled:opacity-50">
+                  {backfilling ? '⏳ جارٍ التعبئة…' : `🔄 تعبئة الأيام الناقصة (${domain === 'purchasing' ? 'المشتريات' : 'المبيعات'})`}
+                </button>
+              )}
+              {backfilling && <span className="text-[11px] text-amber-600">قد تستغرق دقائق — تُحدَّث تلقائياً عند الانتهاء</span>}
+            </div>
+          </div>
+        )
+      )}
+      {view === 'reports' && fresh?.last_sync_failed && (
+        <div className="mb-4 text-xs rounded-lg px-3 py-2 bg-red-50 text-red-700 border border-red-200">
+          ⚠️ آخر عملية مزامنة فشلت — قد تكون البيانات ناقصة.
+        </div>
+      )}
 
       {view === 'rules' ? <RulesEditor /> : (
       <div className="grid md:grid-cols-[260px_1fr] gap-4">

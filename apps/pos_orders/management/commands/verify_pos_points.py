@@ -61,8 +61,6 @@ class Command(BaseCommand):
             self.stdout.write("No positive picpoints rows found for this branch."); return
 
         reader = DiscountAuthorityReader(host, port, db)
-        # channel ptclassifcode → representative personglobalcode
-        REP_GC = {'91': 'CashCust', '90': 'HomeDlvry'}
 
         for pr in pts_rows:
             phcode = str(pr[0]).strip() if pr[0] else ''
@@ -82,58 +80,31 @@ class Command(BaseCommand):
             docvalue = Decimal(str(hdr[0][1] or 0))
             self.stdout.write(f"  sale: ptclassifcode={ptclassif} docvalue={docvalue}")
 
-            rep_gc = REP_GC.get(ptclassif)
-            if not rep_gc:
-                self.stdout.write(f"  channel ptclassif={ptclassif} is not cash/delivery — expected 0 points."); continue
-            rep_pc = None
-            row = q("SELECT personcode FROM personsdata WHERE personglobalcode=?", [rep_gc])
-            if row:
-                rep_pc = str(row[0][0]).strip()
-            self.stdout.write(f"  channel rep: {rep_gc} → personcode {rep_pc}")
+            # ptclassifcode → OUR channel key (cash / delivery); anything else earns no points
+            channel = {'91': 'cash', '90': 'delivery'}.get(ptclassif)
+            if not channel:
+                self.stdout.write(f"  ptclassif={ptclassif} is not cash/delivery — expected 0 points."); continue
 
-            # the PIC's OWN personcode (individuals may have their own schedule)
-            pic_pc = None
-            prow = q("SELECT personcode FROM personsdata WHERE personglobalcode=?", [phcode])
-            if prow:
-                pic_pc = str(prow[0][0]).strip()
-
-            # 3. the FINAL sale lines — dump everything + test both schedules
-            lines = q("SELECT s.itemcode, s.transqty, s.transprice, s.transprice_total, "
-                      "       i.itemstoreclassif, i.itempointsys "
-                      "FROM stktrans s LEFT JOIN items i ON i.itemcode = s.itemcode "
-                      "WHERE s.branchcode=? AND s.doccode=? AND s.docnumber=?",
+            # 3. the FINAL sale lines — WITH custdiscp so we apply the discount⊻points exclusion, and
+            #    feed them THROUGH the real points.py (item_alt3 rate + per-line floor + rep resolve),
+            #    so this command verifies the ACTUAL shipping formula, not a divergent copy.
+            lines = q("SELECT s.itemcode, s.transprice_total, s.custdiscp "
+                      "FROM stktrans s WHERE s.branchcode=? AND s.doccode=? AND s.docnumber=?",
                       [br.softech_branch_id, doccode, docnumber])
-            comp_rep = Decimal('0'); comp_pic = Decimal('0')
-            self.stdout.write(f"  PIC own personcode={pic_pc}")
-            self.stdout.write(f"  {'item':>8} {'qty':>6} {'net':>9} {'classif':>8} {'ipsys':>5} "
-                              f"{'rep%':>5} {'pic%':>5}  {'rep_pts':>8} {'pic_pts':>8}")
-            for ln in lines:
-                itemcode = str(ln[0]).strip() if ln[0] else ''
-                qty = Decimal(str(ln[1] or 0))
-                net = Decimal(str(ln[3] or 0))
-                classif = str(ln[4]).strip() if ln[4] is not None else ''
-                ipsys = str(ln[5]).strip() if ln[5] is not None else ''
+            line_values = [(str(l[0]).strip(),
+                            (Decimal('0') if float(l[2] or 0) > 0 else Decimal(str(l[1] or 0))))
+                           for l in lines]
 
-                def rate(pc):
-                    if not (pc and classif):
-                        c0 = reader.contracted(pc, '0') if pc else None
-                        return c0[0] if c0 else Decimal('0')
-                    c = reader.contracted(pc, classif)
-                    if c is not None:
-                        return c[0]
-                    c0 = reader.contracted(pc, '0')
-                    return c0[0] if c0 else Decimal('0')
-
-                rrep = rate(rep_pc); rpic = rate(pic_pc)
-                prep = net * rrep / Decimal('100'); ppic = net * rpic / Decimal('100')
-                comp_rep += prep; comp_pic += ppic
-                self.stdout.write(f"  {itemcode:>8} {qty:>6} {net:>9} {classif:>8} {ipsys:>5} "
-                                  f"{rrep:>5} {rpic:>5}  {prep:>8.2f} {ppic:>8.2f}")
-
-            self.stdout.write(f"  → actual={actual}  rep_formula={int(comp_rep)}  "
-                              f"pic_formula={int(comp_pic)}"
-                              + ("  ✅rep" if int(comp_rep) == actual else "")
-                              + ("  ✅pic" if int(comp_pic) == actual else ""))
+            from apps.pos_orders.points import compute_points
+            total, bd = compute_points(reader, channel, line_values)
+            self.stdout.write(f"  channel={channel}  rep→{reader.customer_personcode(channel)}  "
+                              f"lines={len(line_values)} (discounted lines earn 0)")
+            for b in bd:
+                self.stdout.write(f"    {b['itemcode']:>8}  alt3={b['alt3'] or '—':>4}  "
+                                  f"rate={b['rate']:>5}%  pts={b['points']}")
+            ok = (total == actual)
+            self.stdout.write(f"  → actual={actual}  points.py={total}  "
+                              + ("✅ MATCH" if ok else "❌ DRIFT"))
 
         reader.close()
         try: conn.close()

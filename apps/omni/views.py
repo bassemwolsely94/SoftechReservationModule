@@ -12,6 +12,7 @@ from rest_framework import generics, status
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.catalog.wildcard import wq
 
 from apps.omni.models import (
     AutomationRule, AutomationRun, ChannelAccount, Conversation, TimelineEvent,
@@ -64,7 +65,7 @@ class ConversationListView(generics.ListAPIView):
         if q:
             qs = qs.filter(
                 Q(contact_phone__icontains=q) |
-                Q(customer__name__icontains=q) |
+                wq(q, 'customer__name') |
                 Q(customer__phone__icontains=q) |
                 Q(subject__icontains=q)
             )

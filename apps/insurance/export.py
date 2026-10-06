@@ -21,10 +21,12 @@ Excel export for insurance claims — 4 sheets.
   Claim metadata + discount breakdown table + total in digits and Arabic words.
 """
 import io
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 
 from django.http import HttpResponse
+from django.utils import timezone
 
 try:
     import openpyxl
@@ -37,6 +39,9 @@ except ImportError:
 
 from .invoice_builder import build_invoice_dataset
 from .models import InsuranceClaim
+from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+
+logger = logging.getLogger('elrezeiky.insurance')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -159,8 +164,10 @@ H_COVER_HDR = 35.25
 H_COVER_DATA = 15.0
 H_COVER_TOT  = 17.1
 
-# Conservative A4 portrait usable height after header/footer/margins (pts)
-A4_USABLE = 620.0
+# A4 portrait usable body height (pts) after the print margins below.
+# A4 = 842pt tall; top 2.9cm (82pt) + bottom 1.9cm (54pt) → ~706pt usable.
+# We keep a small safety buffer so a day never spills by a stray row.
+A4_USABLE = 695.0
 
 # Column layouts are built dynamically: the ترسية (tarsia) column is inserted
 # between الإجمالى قبل الخصم and المستورد قبل الخصم ONLY when the claim actually
@@ -175,18 +182,22 @@ A4_USABLE = 620.0
 # previously reversed, which printed م on the wrong side.)
 
 def _yawmiyat_cols(has_tarsia: bool = False):
+    # Widths tuned so the whole table fills — but does not exceed — one A4-portrait
+    # page width (~748px at 0.6cm side margins).  اسم المريض takes the slack; the
+    # money columns hold up to "9,999,999.99".  fit-to-width in _margins is only a
+    # safety clamp, so at these widths the print stays at ~100 % scale.
     cols = [
-        ('م',                    'sequence',         6.5,  '0'),
-        ('تاريخ الصرف',          'date',            12.0,  'YYYY-MM-DD'),
-        ('اسم المريض',           'patient_name',    28.0,  None),
-        ('المحلى قبل الخصم',    'local_before',    13.0,  '#,##0.00'),
-        ('المستورد قبل الخصم',  'imported_before', 13.0,  '#,##0.00'),
+        ('م',                    'sequence',         5.5,  '0'),
+        ('تاريخ الصرف',          'date',            11.5,  'YYYY-MM-DD'),
+        ('اسم المريض',           'patient_name',    30.0,  None),
+        ('المحلى قبل الخصم',    'local_before',    12.0,  '#,##0.00'),
+        ('المستورد قبل الخصم',  'imported_before', 12.0,  '#,##0.00'),
     ]
     if has_tarsia:
-        cols.append(('الترسية قبل الخصم', 'tarsia_before', 13.0, '#,##0.00'))
+        cols.append(('الترسية قبل الخصم', 'tarsia_before', 12.0, '#,##0.00'))
     cols += [
-        ('الإجمالى قبل الخصم',  'gross_before',    15.0,  '#,##0.00'),
-        ('صافى الفاتورة',        'net_after',       13.0,  '#,##0.00'),
+        ('الإجمالى قبل الخصم',  'gross_before',    13.0,  '#,##0.00'),
+        ('صافى الفاتورة',        'net_after',       12.0,  '#,##0.00'),
     ]
     return cols
 
@@ -216,7 +227,10 @@ def _claim_has_tarsia(dataset: dict) -> bool:
             if abs(float(d.get('day_totals', {}).get('tarsia_before', 0) or 0)) > 0.005:
                 return True
     except Exception:
-        pass
+        # A failure here would silently drop the ترسية column from a claim that
+        # actually has tarsia — log it loudly instead of hiding it.
+        logger.warning('[export] _claim_has_tarsia check failed; defaulting to no-tarsia layout',
+                       exc_info=True)
     return False
 
 
@@ -307,15 +321,15 @@ def _placeholder_ctx(dataset: dict) -> dict:
     try:
         y, m, _ = pf.split('-')
         month = f'{AR_MONTHS[int(m)]} {y}'
-    except Exception:
-        pass
+    except (ValueError, KeyError, IndexError):
+        logger.debug('[export] month label parse failed for %r', pf)
     # Call-center numbers from the pharmacy profile (reuse)
     call_center = ''
     try:
         from apps.config.models import PharmacyProfile
         call_center = (PharmacyProfile.get().call_center_numbers or '').replace('\n', ' - ')
     except Exception:
-        pass
+        logger.debug('[export] call-center numbers unavailable', exc_info=True)
     return {
         'client':       claim.get('client_name', ''),
         'subclient':    claim.get('subclient_name', ''),
@@ -357,7 +371,7 @@ def _apply_watermark(ws, st: dict):
             img.height = int(img.height * ratio)
         ws.add_image(img, wm.get('anchor', 'C15'))
     except Exception:
-        pass
+        logger.debug('[export] watermark image could not be applied', exc_info=True)
 
 
 def _border_for(style_name: str) -> Border:
@@ -438,19 +452,79 @@ def resolve_style(claim, dataset: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _margins(ws, orientation='portrait'):
-    """Apply consistent A4 margins with minimal side margins and visible header/footer."""
+    """Apply the finance team's A4 print margins + fit-to-width scaling.
+
+    Margins (from the reviewed Page-Setup): narrow sides so the columns fill the
+    sheet, a tall 3 cm top for the multi-line print header, and 1.7 cm bottom.
+    All values are inches (openpyxl unit); cm equivalents noted.
+    """
     ws.page_setup.paperSize   = 9          # A4
     ws.page_setup.orientation = orientation
-    # Side margins: very narrow (0.2 in ≈ 0.5 cm)
-    ws.page_margins.left   = 0.20
-    ws.page_margins.right  = 0.20
-    # Top/bottom: must exceed header/footer gap to keep them fully visible.
-    # header gap 0.35" → content starts at 0.80" → 0.45" (≈32 pt) for header text.
-    # footer gap 0.30" → content ends at 0.65" → 0.35" (≈25 pt) for footer text.
-    ws.page_margins.top    = 0.80
-    ws.page_margins.bottom = 0.65
-    ws.page_margins.header = 0.35
-    ws.page_margins.footer = 0.30
+    ws.page_margins.left   = 0.2362        # 0.6 cm
+    ws.page_margins.right  = 0.2362        # 0.6 cm
+    ws.page_margins.top    = 1.1417        # 2.9 cm — roomy header block
+    ws.page_margins.bottom = 0.7480        # 1.9 cm
+    ws.page_margins.header = 0.3150        # 0.8 cm
+    ws.page_margins.footer = 0.3150        # 0.8 cm
+
+    # Fit ALL columns onto ONE page width (never spill horizontally onto a 2nd
+    # page), leaving the height unconstrained so days flow down as many pages as
+    # needed.  Columns are sized to ~fit already, so the scale stays near 100 %
+    # (font/row-height unchanged); this is only a safety clamp for the widest
+    # (tarsia) layout.
+    from openpyxl.worksheet.properties import PageSetupProperties
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.page_setup.fitToWidth  = 1
+    ws.page_setup.fitToHeight = 0
+
+
+# Excel rejects a print header/footer whose whole odd(Header|Footer) string —
+# ALL sections plus their &-format codes — exceeds 255 characters: it flags the
+# file as corrupt on open ("we found a problem…") and strips the header/footer on
+# repair.  We keep a safety margin below 255.
+_HF_MAX = 250
+
+
+def _dedup_client_sub(client: str, sub: str) -> str:
+    """One label for client/subclient — avoids printing an identical name twice
+    (a common data shape here that alone can blow the header past Excel's limit)."""
+    client = (client or '').strip()
+    sub    = (sub or '').strip()
+    if not sub or sub == client or sub in client:
+        return client
+    if client and client in sub:
+        return sub
+    return f'{client} — {sub}' if client else sub
+
+
+def _cap_hf_sections(sections: dict, font_code: str, limit: int = _HF_MAX) -> None:
+    """Trim section TEXTS in place so the assembled header/footer string
+    (font codes + &L/&C/&R markers + text) stays within Excel's limit.
+
+    `sections` maps 'left'/'center'/'right' → raw text (no font code).  When the
+    budget is exceeded the longest section is shortened with an ellipsis so the
+    header still renders instead of being dropped wholesale by Excel."""
+    def _assembled_len():
+        # openpyxl serialises each newline as the 7-char escape '_x000a_', so a
+        # line break costs 7 (not 1) in the stored oddHeader string.  Count it
+        # that way to stay under Excel's limit however Excel measures it.
+        total = 0
+        for txt in sections.values():
+            if txt:
+                total += 2 + len(font_code) + len(txt) + 6 * txt.count('\n')
+        return total
+    guard = 0
+    while _assembled_len() > limit and guard < 100:
+        over = _assembled_len() - limit
+        key  = max(sections, key=lambda k: len(sections[k] or ''))
+        txt  = sections[key] or ''
+        if len(txt) <= 1:
+            break
+        # Cut decisively: drop `over` chars (+1 for the ellipsis) in one step so
+        # very long text converges immediately instead of nibbling one char/loop.
+        cut  = min(len(txt) - 1, over + 1)
+        sections[key] = txt[:len(txt) - cut].rstrip() + '…'
+        guard += 1
 
 
 def _header_footer(ws, claim_meta: dict, sheet_title: str, repeat_header_row: bool = True,
@@ -464,12 +538,18 @@ def _header_footer(ws, claim_meta: dict, sheet_title: str, repeat_header_row: bo
     """
     hf = (st or {}).get('hf')
     if hf:
-        ws.oddHeader.left.text   = hf['left']
-        ws.oddHeader.center.text = hf['center']
-        ws.oddHeader.right.text  = hf['right']
-        ws.oddFooter.left.text   = hf['fleft']
-        ws.oddFooter.center.text = hf['fcenter']
-        ws.oddFooter.right.text  = hf['fright']
+        # Custom profiles already embed their own font codes, so cap the whole
+        # section text (font code counted as 0 extra) to stay under Excel's limit.
+        hsec = {'left': hf['left'], 'center': hf['center'], 'right': hf['right']}
+        fsec = {'left': hf['fleft'], 'center': hf['fcenter'], 'right': hf['fright']}
+        _cap_hf_sections(hsec, '', _HF_MAX)
+        _cap_hf_sections(fsec, '', _HF_MAX)
+        ws.oddHeader.left.text   = hsec['left']
+        ws.oddHeader.center.text = hsec['center']
+        ws.oddHeader.right.text  = hsec['right']
+        ws.oddFooter.left.text   = fsec['left']
+        ws.oddFooter.center.text = fsec['center']
+        ws.oddFooter.right.text  = fsec['right']
         if repeat_header_row and (st or {}).get('repeat_header', True):
             ws.print_title_rows = '1:1'
         return
@@ -487,9 +567,20 @@ def _header_footer(ws, claim_meta: dict, sheet_title: str, repeat_header_row: bo
     # swallows leading digits (e.g. a date's year) into the size token.
     cb = '&"Calibri,Bold"&12'
 
-    ws.oddHeader.right.text  = f'{cb}شركة الرزيقي لإدارة الصيدليات\n{client} — {sub}'
-    ws.oddHeader.center.text = f'{cb}{sheet_title}\n{p_from}  –  {p_to}'
-    ws.oddHeader.left.text   = f'{cb}رقم المطالبة:\n{claim_no}'
+    # Build raw section texts, then cap the TOTAL below Excel's 255-char limit
+    # (the client name can be long — and is sometimes duplicated — which alone
+    # pushes the header over the edge and makes Excel strip it entirely).
+    party = _dedup_client_sub(client, sub)
+    sections = {
+        'right':  f'شركة الرزيقي لإدارة الصيدليات\n{party}',
+        'center': f'{sheet_title}\n{p_from}  –  {p_to}',
+        'left':   f'رقم المطالبة:\n{claim_no}',
+    }
+    _cap_hf_sections(sections, cb, _HF_MAX)
+
+    ws.oddHeader.right.text  = f'{cb}{sections["right"]}'
+    ws.oddHeader.center.text = f'{cb}{sections["center"]}'
+    ws.oddHeader.left.text   = f'{cb}{sections["left"]}'
 
     ws.oddFooter.center.text = f'{cb}صفحة &P من &N'
 
@@ -544,22 +635,62 @@ def _to_float(val):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class _PageTracker:
+    """Tracks the used height of the current physical page to paginate day blocks
+    for BOTH paper efficiency and least page-spread per day:
+
+      • Days flow continuously — a day is written right after the previous one and
+        Excel breaks pages naturally, so every page fills up (no wasted bottom
+        band).  A day may cross a page boundary.
+      • BUT a manual break is inserted before a day ONLY when starting it fresh on
+        the next page makes it span FEWER pages than letting it flow from here.
+        So a day that fits on one page is never split across two; a day bigger
+        than a page flows from wherever we are (using the leftover space) and
+        still spans the minimum number of pages.
+      • The n_blanks reviser-comment rows after each day are counted in the
+        running position but NOT in the fit decision, so we never burn a break
+        just to keep blank rows together (they harmlessly top the next page).
+    """
     def __init__(self, usable=A4_USABLE, n_blanks=N_BLANKS):
         self._usable  = usable
         self._current = 0.0
         self._n_blanks = n_blanks
 
-    def day_block_height(self, n_rx: int) -> float:
-        return H_HEADER + n_rx * H_DATA + H_HEADER + self._n_blanks * H_BLANK
+    def _day_rows(self, n_rx: int) -> list:
+        # header + data rows + subtotal (the day's own content — NOT the trailing
+        # blank spacer rows, which may harmlessly top the next page).
+        return [H_HEADER] + [H_DATA] * n_rx + [H_HEADER]
 
-    def fits(self, block_h: float) -> bool:
-        if self._current == 0:
-            return True
-        if block_h > self._usable:
-            return True
-        return (self._current + block_h) <= self._usable
+    def _sim_pages(self, start: float, rows: list) -> int:
+        """Pages a sequence of rows spans starting at page offset `start`,
+        modelling Excel's ROW-boundary breaks (a row that would cross the page
+        edge moves whole to the next page) — so the estimate matches print exactly."""
+        cur, pages = start, 1
+        for h in rows:
+            if cur + h > self._usable + 1e-6:
+                pages += 1
+                cur = 0.0
+            cur += h
+        return pages
+
+    def should_break(self, n_rx: int) -> bool:
+        if self._current <= 0.5:
+            return False                       # already at the top of a page
+        rows = self._day_rows(n_rx)
+        # Break only if a fresh page makes the day span FEWER pages.
+        return self._sim_pages(0.0, rows) < self._sim_pages(self._current, rows)
+
+    def place_day(self, n_rx: int):
+        """Advance the tracked position by a whole day block (content + trailing
+        blank spacers), row by row, exactly as Excel will paginate it."""
+        rows = self._day_rows(n_rx) + [H_BLANK] * self._n_blanks
+        for h in rows:
+            if self._current + h > self._usable + 1e-6:
+                self._current = 0.0
+            self._current += h
 
     def add(self, h: float):
+        if self._current + h > self._usable + 1e-6:
+            self._current = 0.0
         self._current += h
 
     def new_page(self):
@@ -580,7 +711,9 @@ def _write_day_header(ws, row, st, cols):
 
 def _write_data_row(ws, row, rx, day_date, st, cols, seq_val=None):
     _set_row_height(ws, row, H_DATA)
-    date_val = _to_date(day_date)
+    # Each row prints its OWN dispensing date; the block label (e.g. "ملحق سابق")
+    # is only used on the subtotal, never in a data row's تاريخ الصرف cell.
+    date_val = _to_date(rx.get('date') or day_date)
     values = {
         'net_after':       _to_float(rx.get('net_after')),
         'gross_before':    _to_float(rx.get('gross_before')),
@@ -658,8 +791,28 @@ def _build_sheet_yawmiyat(wb, dataset: dict, st: dict = None):
         ws.column_dimensions[get_column_letter(col)].width = width
 
     row     = 1
-    tracker = _PageTracker(n_blanks=n_blanks)
     serial  = 0   # continuous 1..N serial for the م column (independent of day grouping)
+    tracker = _PageTracker(n_blanks=n_blanks)
+
+    # Days flow continuously so pages fill up (paper-efficient).  A manual break is
+    # inserted before a day ONLY when starting it fresh spans fewer pages than
+    # letting it flow from here — best effort to keep each day on the least number
+    # of pages without wasting paper.  Each day is trailed by n_blanks rows giving
+    # revisers room to note deductions between one day and the next.
+    def _write_day(rxs, dt, day_k, subtotal_label):
+        nonlocal row, serial
+        n_rx = len(rxs)
+        if tracker.should_break(n_rx):
+            ws.row_breaks.append(Break(id=row - 1))
+            tracker.new_page()
+        row = _write_day_header(ws, row, st, cols)
+        for rx in rxs:
+            serial += 1
+            row = _write_data_row(ws, row, rx, day_k, st, cols, seq_val=serial)
+        row = _write_subtotal(ws, row, dt, subtotal_label, n_rx if dt.get('rx_count') is None
+                              else dt.get('rx_count', n_rx), st, cols)
+        row = _write_blanks(ws, row, ncols, n_blanks)
+        tracker.place_day(n_rx)
 
     # 1. Global header row
     row = _write_global_header(ws, row, st, cols)
@@ -672,67 +825,23 @@ def _build_sheet_yawmiyat(wb, dataset: dict, st: dict = None):
                         if not (d.get('is_supplement')
                                 and d.get('supplement_type') in ('before_claim', None))]
 
-    # 2. Before-supplement blocks
+    # 2. Before-supplement blocks (ملحق سابق)
     for sup_day in before_supp_days:
-        rxs  = sup_day['prescriptions']
-        dt   = sup_day['day_totals']
-        n_rx = len(rxs)
-        day_k = sup_day['date']
-        for rx in rxs:
-            serial += 1
-            row = _write_data_row(ws, row, rx, day_k, st, cols, seq_val=serial)
-            tracker.add(H_DATA)
-        row = _write_subtotal(ws, row, dt, 'ملحق', n_rx, st, cols)
-        tracker.add(H_HEADER)
-        row = _write_blanks(ws, row, ncols, n_blanks)
-        tracker.add(n_blanks * H_BLANK)
+        _write_day(sup_day['prescriptions'], sup_day['day_totals'], sup_day['date'], 'ملحق')
 
     # 3. Main day blocks
     for day in main_days:
-        rxs  = day.get('prescriptions', [])
+        rxs = day.get('prescriptions', [])
         if not rxs:
             continue
-        dt    = day['day_totals']
-        n_rx  = dt.get('rx_count', len(rxs))
-        day_k = day['date']
-        block_h = tracker.day_block_height(len(rxs))
-        if not tracker.fits(block_h):
-            ws.row_breaks.append(Break(id=row - 1))
-            tracker.new_page()
-        row = _write_day_header(ws, row, st, cols)
-        tracker.add(H_HEADER)
-        for rx in rxs:
-            serial += 1
-            row = _write_data_row(ws, row, rx, day_k, st, cols, seq_val=serial)
-            tracker.add(H_DATA)
-        row = _write_subtotal(ws, row, dt, day_k, n_rx, st, cols)
-        tracker.add(H_HEADER)
-        row = _write_blanks(ws, row, ncols, n_blanks)
-        tracker.add(n_blanks * H_BLANK)
+        _write_day(rxs, day['day_totals'], day['date'], day['date'])
 
-    # 4. After-supplement blocks
+    # 4. After-supplement blocks (ملحق لاحق)
     after_supp_days = [d for d in dataset['days'] if d.get('is_supplement')
                        and d.get('supplement_type') == 'after_claim'
                        and d.get('prescriptions')]
     for sup_day in after_supp_days:
-        rxs  = sup_day['prescriptions']
-        dt   = sup_day['day_totals']
-        n_rx = len(rxs)
-        day_k = sup_day['date']
-        block_h = tracker.day_block_height(len(rxs))
-        if not tracker.fits(block_h):
-            ws.row_breaks.append(Break(id=row - 1))
-            tracker.new_page()
-        row = _write_day_header(ws, row, st, cols)
-        tracker.add(H_HEADER)
-        for rx in rxs:
-            serial += 1
-            row = _write_data_row(ws, row, rx, day_k, st, cols, seq_val=serial)
-            tracker.add(H_DATA)
-        row = _write_subtotal(ws, row, dt, 'ملحق', n_rx, st, cols)
-        tracker.add(H_HEADER)
-        row = _write_blanks(ws, row, ncols, n_blanks)
-        tracker.add(n_blanks * H_BLANK)
+        _write_day(sup_day['prescriptions'], sup_day['day_totals'], sup_day['date'], 'ملحق')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -805,6 +914,76 @@ def _build_sheet_flat(wb, dataset: dict, st: dict = None,
         use_fmt = fmt if key in _SUBTOTAL_NUMERIC_KEYS else None
         _w(ws, row, col, gvalues.get(key), font=st['font_subtotal'],
            fill=st['fill_subtotal'], fmt=use_fmt, border=st['border'])
+
+
+def _build_sheet_flat_paged(wb, dataset: dict, st: dict = None,
+                            sort_by: str = 'patient_name', sort_dir: str = 'asc'):
+    """
+    Flat, custom-sorted يوميات like _build_sheet_flat, but with a SUBTOTAL row at the
+    bottom of every printed page (إجمالى الصفحة) and one grand total at the very end.
+    Uses a fixed rows-per-page with manual page breaks so each subtotal sits exactly
+    at the page foot and the column header repeats atop each page — deterministic and
+    print-accurate (fit-to-width, natural row height, same as the day-grouped sheet).
+    """
+    st = st or resolve_style(None, dataset)
+    ws = wb.create_sheet('يوميات (إجماليات الصفحات)')
+    ws.sheet_view.rightToLeft = True
+    _margins(ws, 'portrait')
+    _header_footer(ws, dataset['claim'], 'يوميات المطالبة', repeat_header_row=False, st=st)
+
+    cols = _yawmiyat_cols(_claim_has_tarsia(dataset))
+    for col, (_, _, width, _) in enumerate(cols, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    rows = []
+    for d in dataset.get('days', []):
+        day_date = d.get('date')
+        for rx in d.get('prescriptions', []):
+            rx = dict(rx); rx['_date'] = day_date
+            rows.append(rx)
+    keyfn = _FLAT_SORT_KEYS.get(sort_by, _FLAT_SORT_KEYS['patient_name'])
+    try:
+        rows.sort(key=keyfn, reverse=(sort_dir == 'desc'))
+    except TypeError:
+        rows.sort(key=lambda r: str(keyfn(r)), reverse=(sort_dir == 'desc'))
+
+    # header (31.5) + N data (15.75) + page-subtotal (31.5) must fit A4_USABLE (695)
+    rows_per_page = max(1, int((A4_USABLE - H_HEADER - H_HEADER) / H_DATA))
+    _SUM_KEYS = ('net_after', 'gross_before', 'tarsia_before', 'imported_before', 'local_before')
+
+    def _write_subtotal(r, sums, n, label):
+        _set_row_height(ws, r, H_HEADER)
+        vals = {k: sums[k] for k in _SUM_KEYS}
+        vals.update({'patient_name': f'{label}: {n} روشتة', 'date': label, 'sequence': None})
+        for col, (_, key, _, fmt) in enumerate(cols, start=1):
+            use_fmt = fmt if key in _SUBTOTAL_NUMERIC_KEYS else None
+            _w(ws, r, col, vals.get(key), font=st['font_subtotal'],
+               fill=st['fill_subtotal'], fmt=use_fmt, border=st['border'])
+        return r + 1
+
+    row = 1
+    row = _write_global_header(ws, row, st, cols)
+    serial = 0
+    n_on_page = 0
+    page_sums = {k: 0.0 for k in _SUM_KEYS}
+    for rx in rows:
+        if n_on_page == rows_per_page:                       # page is full → foot it
+            row = _write_subtotal(row, page_sums, n_on_page, 'إجمالى الصفحة')
+            ws.row_breaks.append(Break(id=row - 1))          # break after the subtotal
+            page_sums = {k: 0.0 for k in _SUM_KEYS}; n_on_page = 0
+            row = _write_global_header(ws, row, st, cols)     # repeat header on new page
+        serial += 1
+        row = _write_data_row(ws, row, rx, rx.get('_date'), st, cols, seq_val=serial)
+        for k in _SUM_KEYS:
+            page_sums[k] += _to_float(rx.get(k))
+        n_on_page += 1
+    if n_on_page > 0:
+        row = _write_subtotal(row, page_sums, n_on_page, 'إجمالى الصفحة')
+
+    # Grand total (authoritative claim_totals) at the very end
+    gt = dataset['claim_totals']
+    grand = {k: _to_float(gt.get(k)) for k in _SUM_KEYS}
+    row = _write_subtotal(row, grand, serial, 'الإجمالى الكلى')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1096,6 +1275,9 @@ def generate_excel(claim: InsuranceClaim, template: str = 'all',
     if layout == 'flat':
         def _yawmiyat_builder(wb, ds, st):
             return _build_sheet_flat(wb, ds, st, sort_by=sort_by, sort_dir=sort_dir)
+    elif layout == 'flat_paged':
+        def _yawmiyat_builder(wb, ds, st):
+            return _build_sheet_flat_paged(wb, ds, st, sort_by=sort_by, sort_dir=sort_dir)
     else:
         _yawmiyat_builder = _build_sheet_yawmiyat
 
@@ -1370,4 +1552,297 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def generate_reprice_runs_excel(runs, claim_number: str = '') -> HttpResponse:
+    """
+    Export the SOFTECH re-price runs log (سجل تعديلات سوفتك) as a styled Excel sheet.
+    `runs` is an iterable of SoftechRepriceRun.  Includes applied, reverted AND FAILED
+    runs so the failed modifications are auditable/exportable; failed rows are tinted.
+    """
+    if not HAS_OPENPYXL:
+        return HttpResponse('openpyxl not installed', status=500)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'تعديلات سوفتك'
+    ws.sheet_view.rightToLeft = True
+    _margins(ws, 'landscape')
+
+    ws.row_dimensions[1].height = 22
+    _w(ws, 1, 1, 'سجل تعديلات أسعار سوفتك', font=FONT_GRAND, fill=FILL_GRAND, align=ALIGN_RIGHT)
+
+    headers = ['#', 'التاريخ', 'الإيصال', 'الفرع', 'الأسعار الجديدة',
+               'الحالة', 'فرق الصافى', 'العُقد', 'أُعيد الرصيد', 'المستخدم', 'الخطأ']
+    widths  = [7, 18, 12, 8, 26, 12, 12, 14, 10, 16, 40]
+    r = 3
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        _w(ws, r, col_idx, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    header_row = r
+    r += 1
+
+    status_label = {'preview': 'معاينة', 'applied': 'مُطبَّق',
+                    'reverted': 'مُتراجَع', 'failed': 'فشل'}
+    fail_fill = PatternFill('solid', fgColor='FCE4E4')
+    money = '#,##0.00'
+    for run in runs:
+        prices = ' · '.join(f'{k}={v}' for k, v in (run.new_prices or {}).items())
+        is_fail = run.status == 'failed'
+        fill = fail_fill if is_fail else None
+        try:
+            who = getattr(run.applied_by, 'full_name', None) or getattr(run.applied_by, 'username', '') or ''
+        except Exception:
+            who = ''
+        _w(ws, r, 1,  run.pk, align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 2,  timezone.localtime(run.applied_at).strftime('%Y-%m-%d %H:%M') if run.applied_at else '',
+           align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 3,  f'#{run.docnumber}', align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 4,  BL(run.branchcode), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 5,  prices, align=ALIGN_RIGHT, fill=fill)
+        _w(ws, r, 6,  status_label.get(run.status, run.status), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 7,  float(run.net_delta or 0), align=_a('left', 'center'), fmt=money, fill=fill)
+        _w(ws, r, 8,  ' / '.join(run.nodes or []), align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 9,  'نعم' if run.rebalanced else '—', align=ALIGN_CENTER, fill=fill)
+        _w(ws, r, 10, who, align=ALIGN_RIGHT, fill=fill)
+        _w(ws, r, 11, (run.error or '')[:300], align=ALIGN_RIGHT, fill=fill)
+        r += 1
+
+    ws.print_title_rows = f'{header_row}:{header_row}'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f'تعديلات_سوفتك_{claim_number or "مطالبة"}.xlsx'
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def generate_statistical_excel(claim: InsuranceClaim) -> HttpResponse:
+    """
+    Government monthly-statistics listing (الاحصائية الشهرية للصيدلية) for a motalba.
+    Columns: م · اسم المريض رباعى · التاريخ · اجمالى الروشتة · اسم الصيدلية · ملاحظات.
+    ملاحظات carries the motalba head-title (جهة التأمين) + sub-category (الفئة).
+    One row per non-excluded prescription, ordered by date; A4-paginated with the
+    column header repeated atop each page.
+    """
+    if not HAS_OPENPYXL:
+        return HttpResponse('openpyxl not installed', status=500)
+
+    from .models import InsuranceClaimExclusion
+    try:
+        from apps.branches.models import Branch
+        branch_names = {b.softech_branch_id: (b.name_ar or b.name)
+                        for b in Branch.objects.all()}
+    except Exception:
+        branch_names = {}
+
+    # head-title (جهة التأمين) + sub-category (الفئة) → remarks
+    try:
+        head_title = claim.subclient.client.name
+        sub_cat    = claim.subclient.name
+    except Exception:
+        head_title = sub_cat = ''
+    remark = ' — '.join([x for x in (head_title, sub_cat) if x])
+
+    excluded_ids = set(
+        InsuranceClaimExclusion.objects.filter(prescription__claim=claim)
+        .values_list('prescription_id', flat=True))
+    rows = [rx for rx in claim.prescriptions.all().order_by('softech_docdate', 'sequence')
+            if rx.id not in excluded_ids]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'الاحصائية الشهرية'
+    ws.sheet_view.rightToLeft = True
+    _margins(ws, 'portrait')
+
+    # Title band (motalba identity)
+    period = ''
+    try:
+        period = f'{claim.period_from} — {claim.period_to}'
+    except Exception:
+        pass
+    _w(ws, 1, 1, f'الاحصائية الشهرية — {remark}  ({period})',
+       font=FONT_GRAND, fill=FILL_GRAND, align=ALIGN_RIGHT)
+
+    headers = ['م', 'اسم المريض رباعى', 'التاريخ', 'اجمالى الروشتة', 'اسم الصيدلية', 'ملاحظات']
+    widths  = [5, 34, 13, 14, 22, 30]
+    for col, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    def _write_header(r):
+        _set_row_height(ws, r, H_HEADER)
+        for col, h in enumerate(headers, start=1):
+            _w(ws, r, col, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
+        return r + 1
+
+    # title(row1) + header + N data must fit A4
+    rows_per_page = max(1, int((A4_USABLE - H_HEADER - H_HEADER) / H_DATA))
+    money = '#,##0.00'
+    r = 2
+    r = _write_header(r)
+    header_row = r - 1
+    serial = 0
+    n_on_page = 0
+    for rx in rows:
+        if n_on_page == rows_per_page:
+            ws.row_breaks.append(Break(id=r - 1))
+            r = _write_header(r)
+            n_on_page = 0
+        serial += 1
+        _set_row_height(ws, r, H_DATA)
+        _w(ws, r, 1, serial, align=ALIGN_CENTER)
+        _w(ws, r, 2, rx.patient_name or '', align=ALIGN_RIGHT)
+        _w(ws, r, 3, rx.softech_docdate.strftime('%Y-%m-%d') if rx.softech_docdate else '',
+           align=ALIGN_CENTER)
+        _w(ws, r, 4, float(rx.gross_before or 0), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 5, branch_names.get(str(rx.softech_branchcode), rx.softech_branchcode or ''),
+           align=ALIGN_RIGHT)
+        _w(ws, r, 6, remark, align=ALIGN_RIGHT)
+        r += 1
+        n_on_page += 1
+
+    ws.print_title_rows = f'{header_row}:{header_row}'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f'احصائية_{claim.claim_number}.xlsx'
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def generate_reprice_reconciliation_excel(runs, save_path=None):
+    """
+    Accounting sign-off sheet for the SOFTECH price rewrites: one row per re-price
+    run with old→new السعر / الإجمالى / الصافى / الضريبة, run id, date, receipt, branch,
+    claim, net Δ, status.  Reconstructed from the recorded SoftechRepriceEdit rows
+    (HQ node).  `runs` = a SoftechRepriceRun queryset (bonusqty-backfill runs excluded
+    by the caller).  Returns an HttpResponse, or writes to `save_path` and returns it.
+    """
+    if not HAS_OPENPYXL:
+        return HttpResponse('openpyxl not installed', status=500)
+
+    def _num(s):
+        try:
+            return float(s)
+        except (TypeError, ValueError):
+            return None
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'تسوية تعديلات الأسعار'
+    ws.sheet_view.rightToLeft = True
+    _margins(ws, 'landscape')
+
+    ws.row_dimensions[1].height = 24
+    _w(ws, 1, 1, 'كشف تسوية تعديلات أسعار سوفتك — لاعتماد الحسابات',
+       font=FONT_GRAND, fill=FILL_GRAND, align=ALIGN_RIGHT)
+    _w(ws, 2, 1, f'تاريخ الإصدار: {timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")}',
+       font=_f(size=9, color='666666'), align=ALIGN_RIGHT)
+
+    headers = ['م', 'رقم العملية', 'التاريخ', 'الإيصال', 'الفرع', 'المطالبة', 'الصنف',
+               'السعر (قبل)', 'السعر (بعد)',
+               'الإجمالى (قبل)', 'الإجمالى (بعد)',
+               'الصافى (قبل)', 'الصافى (بعد)',
+               'الضريبة (قبل)', 'الضريبة (بعد)',
+               'فرق الصافى', 'الحالة', 'بواسطة']
+    widths  = [5, 9, 12, 10, 7, 13, 26, 11, 11, 12, 12, 12, 12, 11, 11, 11, 9, 16]
+    r = 4
+    for col, (h, w) in enumerate(zip(headers, widths), start=1):
+        _w(ws, r, col, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
+        ws.column_dimensions[get_column_letter(col)].width = w
+    header_row = r
+    r += 1
+
+    money = '#,##0.00'
+    status_lbl = {'applied': 'مُطبَّق', 'reverted': 'مُتراجَع', 'failed': 'فشل', 'preview': 'معاينة'}
+    serial = 0
+    tot_net_before = tot_net_after = tot_delta = 0.0
+    for run in runs.prefetch_related('edits'):
+        edits = [e for e in run.edits.all() if e.node == 'HQ']
+        # price(s): itemsaleprice on stktrans, by itemcode
+        price_pairs = {}
+        gross_b = gross_a = net_b = net_a = vat_b = vat_a = None
+        for e in edits:
+            if e.table == 'stktrans' and e.field == 'itemsaleprice':
+                code = str(e.row_key.get('itemcode', '')).strip()
+                price_pairs.setdefault(code, (e.before, e.after))
+            elif e.table == 'stktransm' and e.field == 'docvalue1':
+                gross_b, gross_a = e.before, e.after
+            elif e.table == 'stktransm' and e.field == 'docvalue':
+                net_b, net_a = e.before, e.after
+            elif e.table == 'stktransm' and e.field == 'docvalue3':
+                vat_b, vat_a = e.before, e.after
+        items = '، '.join(price_pairs.keys()) or ('؛'.join(run.new_prices.keys()) if run.new_prices else '')
+        pb = '، '.join(str(_num(v[0])) for v in price_pairs.values()) if price_pairs else ''
+        pa = '، '.join(str(_num(v[1])) for v in price_pairs.values()) if price_pairs else ''
+
+        serial += 1
+        ws.row_dimensions[r].height = 15
+        _w(ws, r, 1, serial, align=ALIGN_CENTER)
+        _w(ws, r, 2, run.pk, align=ALIGN_CENTER)
+        _w(ws, r, 3, timezone.localtime(run.applied_at).strftime('%Y-%m-%d %H:%M') if run.applied_at else '',
+           align=ALIGN_CENTER)
+        _w(ws, r, 4, f'#{run.docnumber}', align=ALIGN_CENTER)
+        _w(ws, r, 5, BL(run.branchcode), align=ALIGN_CENTER)
+        _w(ws, r, 6, run.claim.claim_number if run.claim else '', align=ALIGN_CENTER)
+        _w(ws, r, 7, items, align=ALIGN_RIGHT)
+        _w(ws, r, 8, _num(pb) if price_pairs and len(price_pairs) == 1 else pb, align=_a('left', 'center'), fmt=money if len(price_pairs) == 1 else None)
+        _w(ws, r, 9, _num(pa) if price_pairs and len(price_pairs) == 1 else pa, align=_a('left', 'center'), fmt=money if len(price_pairs) == 1 else None)
+        _w(ws, r, 10, _num(gross_b), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 11, _num(gross_a), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 12, _num(net_b), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 13, _num(net_a), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 14, _num(vat_b), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 15, _num(vat_a), align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 16, float(run.net_delta or 0), font=FONT_SUBTOTAL, fill=FILL_SUBTOTAL,
+           align=_a('left', 'center'), fmt=money)
+        _w(ws, r, 17, status_lbl.get(run.status, run.status), align=ALIGN_CENTER)
+        who = ''
+        try:
+            who = getattr(run.applied_by, 'full_name', None) or getattr(run.applied_by, 'username', '') or ''
+        except Exception:
+            who = ''
+        _w(ws, r, 18, who, align=ALIGN_RIGHT)
+        if _num(net_b) is not None:
+            tot_net_before += _num(net_b)
+        if _num(net_a) is not None:
+            tot_net_after += _num(net_a)
+        tot_delta += float(run.net_delta or 0)
+        r += 1
+
+    # totals row
+    _w(ws, r, 7, 'الإجمالى', font=FONT_GRAND, fill=FILL_GRAND, align=ALIGN_RIGHT)
+    _w(ws, r, 12, tot_net_before, font=FONT_GRAND, fill=FILL_GRAND, align=_a('left', 'center'), fmt=money)
+    _w(ws, r, 13, tot_net_after, font=FONT_GRAND, fill=FILL_GRAND, align=_a('left', 'center'), fmt=money)
+    _w(ws, r, 16, tot_delta, font=FONT_GRAND, fill=FILL_GRAND, align=_a('left', 'center'), fmt=money)
+    r += 3
+
+    # sign-off block
+    _w(ws, r, 1, 'أعدّه: ______________', align=ALIGN_RIGHT); _w(ws, r, 6, 'راجعه: ______________', align=ALIGN_RIGHT)
+    _w(ws, r, 12, 'اعتمده (الحسابات): ______________', align=ALIGN_RIGHT)
+
+    ws.print_title_rows = f'{header_row}:{header_row}'
+
+    if save_path:
+        wb.save(save_path)
+        return save_path
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="reprice_reconciliation.xlsx"'
     return response

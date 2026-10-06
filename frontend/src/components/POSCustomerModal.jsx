@@ -109,8 +109,8 @@ export default function POSCustomerModal({ onSelect, onClose }) {
             <L l="العنوان" wide3><input value={form.address} onChange={e => F('address', e.target.value)} className="cin" /></L>
 
             <Sec>نظام النقاط والخصم / التعاقد</Sec>
-            <L l="خصم خاص %"><input type="number" step="0.01" value={form.discount_percent} onChange={e => F('discount_percent', e.target.value)} className="cin" /></L>
-            <L l="أقصى مبلغ تحمّل (تعاقد)"><input type="number" step="0.01" value={form.contract_max} onChange={e => F('contract_max', e.target.value)} className="cin" /></L>
+            <L l="خصم خاص %"><input type="number" step="0.5" value={form.discount_percent} onChange={e => F('discount_percent', e.target.value)} className="cin" /></L>
+            <L l="أقصى مبلغ تحمّل (تعاقد)"><input type="number" step="any" value={form.contract_max} onChange={e => F('contract_max', e.target.value)} className="cin" /></L>
             <div className="flex items-end gap-3 text-xs">
               <label className="flex items-center gap-1"><input type="checkbox" checked={form.special_discount} onChange={e => F('special_discount', e.target.checked)} /> خصم خاص</label>
               <label className="flex items-center gap-1"><input type="checkbox" checked={form.point_system} onChange={e => F('point_system', e.target.checked)} /> نظام نقاط</label>

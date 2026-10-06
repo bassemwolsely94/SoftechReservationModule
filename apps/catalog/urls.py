@@ -8,6 +8,9 @@ from .views import (
     add_bundle_item, remove_bundle_item,
     item_full_intel, item_ingredients, item_ingredient_delete,
 )
+from .tag_views import (
+    tags_list_create, tag_detail, item_tag_assign, category_tree, quick_sell,
+)
 
 router = DefaultRouter()
 router.register(r'categories', CategoryViewSet, basename='category')
@@ -22,6 +25,14 @@ urlpatterns = [
     path('variant-groups/<int:pk>/',                VariantGroupDetailView.as_view(),     name='variant-group-detail'),
     path('variant-groups/<int:group_pk>/members/',  add_variant_member,                   name='variant-member-add'),
     path('variant-groups/<int:group_pk>/members/<int:member_pk>/', remove_variant_member, name='variant-member-remove'),
+
+    # Merchandising tags + subcategory tree (platform-native)
+    path('tags/',                     tags_list_create,  name='item-tags'),
+    path('tags/<int:tag_id>/',        tag_detail,        name='item-tag-detail'),
+    path('category-tree/',            category_tree,     name='category-tree'),
+    path('quick-sell/',               quick_sell,        name='quick-sell'),
+    path('<int:item_id>/tags/',                 item_tag_assign, name='item-tag-assign'),
+    path('<int:item_id>/tags/<int:tag_id>/',    item_tag_assign, name='item-tag-remove'),
 
     # Bundles
     path('bundles/',                          ProductBundleListCreateView.as_view(), name='bundle-list'),

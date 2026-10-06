@@ -21,6 +21,14 @@ FinanceSyncRun              — Phase 9 ETL audit log
 from django.db import models
 from django.utils import timezone
 
+# A/P–A/R reconciliation models (سداد فواتير) live in a sibling module for
+# separation of concerns but register under the `finance` app label. See
+# docs/architecture/23_SOFTECH_AP_RECONCILIATION.md.
+from .recon_models import (  # noqa: E402,F401  (re-exported for the app registry)
+    ReconParty, APInvoice, Payment, Allocation, ReconciliationRun,
+    MatchCandidate, MatchEvidence, ReconException, ReconAuditEvent, ReturnLink,
+)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PHASE 0 — SCHEMA DICTIONARY

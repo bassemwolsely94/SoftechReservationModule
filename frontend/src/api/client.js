@@ -128,6 +128,19 @@ export const reservationsApi = {
 export const customersApi = {
   list:       (params) => api.get('/customers/', { params }),
   get:        (id) => api.get(`/customers/${id}/`),
+
+  // Recognize-on-type for the POS customer field (+ duplicate surfacing)
+  recognize:  (q, opts = {}) => api.get('/customers/recognize/', { params: { q, ...opts } }),
+  // Compact Customer-360 for the POS side-drawer
+  posSummary: (id) => api.get(`/customers/${id}/pos-summary/`),
+  // Revalidated repeat-order proposal (never blind-copy). opts: { branch, invoice }
+  repeatOrder: (id, opts = {}) => api.get(`/customers/${id}/repeat-order/`, { params: opts }),
+  // Digital receipt payload + channel send (whatsapp/sms/email/print; honest stubs)
+  receipt:     (id, invoice) => api.get(`/customers/${id}/receipt/`, { params: invoice ? { invoice } : {} }),
+  sendReceipt: (id, channel, invoice) => api.post(`/customers/${id}/receipt/`, { channel, invoice }),
+  // Configurable CRM segmentation thresholds (admin PATCH)
+  segmentationConfig:      () => api.get('/customers/segmentation-config/'),
+  updateSegmentationConfig: (data) => api.patch('/customers/segmentation-config/', data),
   create:     (data) => api.post('/customers/', data),
   update:     (id, data) => api.patch(`/customers/${id}/`, data),
 
@@ -199,6 +212,73 @@ export const itemsApi = {
 
   // Variant groups
   listVariantGroups: (params) => api.get('/items/variant-groups/', { params }),
+
+  // Per-branch top-sellers for the POS Quick-Sell grid
+  quickSell: (branchId, opts = {}) => api.get('/items/quick-sell/', { params: { branch: branchId, ...opts } }),
+
+  // Merchandising tags
+  listTags:   (params) => api.get('/items/tags/', { params }),
+  createTag:  (data)   => api.post('/items/tags/', data),
+  updateTag:  (id, data) => api.patch(`/items/tags/${id}/`, data),
+  deleteTag:  (id)     => api.delete(`/items/tags/${id}/`),
+  assignTag:  (itemId, tagId) => api.post(`/items/${itemId}/tags/`, { tag_id: tagId }),
+  unassignTag:(itemId, tagId) => api.delete(`/items/${itemId}/tags/${tagId}/`),
+  categoryTree: () => api.get('/items/category-tree/'),
+}
+
+// ── Offers & promotions (Phase 3 — evaluation only; no SOFTECH write yet) ──────
+
+export const offersApi = {
+  // Offer CRUD (OfferViewSet) — write gated to admin/supervisor/purchasing server-side
+  list:   (params) => api.get('/offers/', { params }),
+  get:    (id) => api.get(`/offers/${id}/`),
+  create: (data) => api.post('/offers/', data),
+  update: (id, data) => api.patch(`/offers/${id}/`, data),
+  remove: (id) => api.delete(`/offers/${id}/`),
+  list:     (params) => api.get('/offers/', { params }),
+  get:      (id) => api.get(`/offers/${id}/`),
+  create:   (data) => api.post('/offers/', data),
+  update:   (id, data) => api.patch(`/offers/${id}/`, data),
+  remove:   (id) => api.delete(`/offers/${id}/`),
+  // Deterministic discount plan for a basket (read-only). body:
+  // { basket:[{softech_id,qty,unit_price}], customer, branch, channel }
+  evaluate: (body) => api.post('/offers/evaluate/', body),
+  // DRY-RUN attach preview: adds per-line cust_discp + SOFTECH-recompute reconcile.
+  // Writes nothing, no SOFTECH contact. Same body as evaluate.
+  attachPreview: (body) => api.post('/offers/evaluate/', { ...body, attach_preview: true }),
+  // Margin-protection floor (admin PATCH); cost/margin masked for other roles
+  marginConfig:       () => api.get('/offers/margin-config/'),
+  updateMarginConfig: (data) => api.patch('/offers/margin-config/', data),
+  // Historical manual-promo detection (read-only provenance; no SOFTECH writes)
+  manualMatches:  (params) => api.get('/offers/manual-matches/', { params }),
+  runDetection:   (data = {}) => api.post('/offers/detect-manual/', data),
+  // Attach offers onto a real POS order (PG-only; gated by POS_OFFERS_EXECUTION_ENABLED)
+  applyToOrder:   (orderId, commit = true) => api.post('/offers/apply-to-order/', { order: orderId, commit }),
+  // Flexible product selector (config UI): whitelisted fields + live preview of matches
+  targetFields:   () => api.get('/offers/target-fields/'),
+  targetPreview:  (body) => api.post('/offers/target-preview/', body),
+  // Distinct real values for a dropdown/code field (producers, suppliers, families…)
+  fieldValues:    (field, q) => api.get('/offers/field-values/', { params: { field, q } }),
+  // Contradiction checks for a SAVED offer (no items / loss / overlap / priority)
+  validate:       (id) => api.get(`/offers/${id}/validate/`),
+  // Channel A: flat-rate offer → item posdiscp. Plan = dry-run diff (no SOFTECH write).
+  posdiscpPlan:   (id) => api.get(`/offers/${id}/posdiscp-plan/`),
+  posdiscpApply:  (id, confirm = false) => api.post(`/offers/${id}/posdiscp-apply/`, { confirm }),
+  // Channel B: gift/spend/single-percent → SOFTECH native specialoffers table (dry-run plan).
+  promoPlan:      (id) => api.get(`/offers/${id}/promo-plan/`),
+  promoApply:     (id, confirm = false) => api.post(`/offers/${id}/promo-apply/`, { confirm }),
+}
+
+// ── Universal search (cross-domain: items + customers + orders + reservations) ──
+
+export const searchApi = {
+  /**
+   * One box across every domain. Backend enforces the safety rule: item identity
+   * (code/barcode) is matched EXACTLY (result.exact=true); names are fuzzy.
+   * opts: { branch, types: 'items,customers', limit }
+   * → { query, count, results: { items, customers, orders, reservations } }
+   */
+  universal: (q, opts = {}) => api.get('/search/universal', { params: { q, ...opts } }),
 }
 
 // ── Branches ──────────────────────────────────────────────────────────────────
@@ -231,6 +311,7 @@ export const dashboardApi = {
   summary:   (params) => api.get('/dashboard/summary/', { params }),
   followups: ()       => api.get('/dashboard/followups/'),
   purchasing:(days)   => api.get('/dashboard/purchasing/', { params: { days } }),
+  supply:    (days)   => api.get('/dashboard/supply/', { params: { days } }),   // doc 24 KPIs
 }
 
 
@@ -303,6 +384,8 @@ export const insightsApi = {
   generate: (data = {})   => api.post('/insights/reports/generate/', data),
   scopes:   (id)          => api.get(`/insights/reports/${id}/scopes/`),
   scoped:   (id, params)  => api.get(`/insights/reports/${id}/scoped/`, { params }),
+  freshness:(params = {}) => api.get('/insights/reports/freshness/', { params }),
+  backfill: (data = {})   => api.post('/insights/reports/backfill/', data),
   rules:    ()            => api.get('/insights/rules/'),
   updateRule: (id, data)  => api.patch(`/insights/rules/${id}/`, data),
 }
@@ -449,6 +532,7 @@ export const purchasingApi = {
   // Omit data (or pass {}) to use the current saved EngineConfig defaults.
   triggerRun:  (data = {}) => api.post('/purchasing/trigger/', data),
   catchupSync: ()          => api.post('/purchasing/catchup/'),
+  syncItems:   ()          => api.post('/purchasing/sync-items/'),
 
   // Pre-computed summary stats for dashboard header cards (server-side aggregation)
   // Returns: { total_items, count_A/B/C/X, items_with_gap, total_gap_value, total_monthly_value, ... }
@@ -487,6 +571,22 @@ export const purchasingApi = {
   shortageSuggestMatches: (itemId)  => api.get('/purchasing/shortage/suggest-matches/', { params: { item_id: itemId } }),
   shortageTrends:     ()            => api.get('/purchasing/shortage/trends/'),
 
+  // ── Phantom substitution (مبيعات وهمية) ──
+  phantomCandidates:  (params)      => api.get('/purchasing/phantom/candidates/', { params }),
+  phantomExcluded:    (params)      => api.get('/purchasing/phantom/excluded/', { params }),
+  phantomSummary:     ()            => api.get('/purchasing/phantom/summary/'),
+  phantomMedTypes:    ()            => api.get('/purchasing/phantom/med-types/'),
+  phantomConfirm:     (data)        => api.post('/purchasing/phantom/confirm/', data),
+  phantomExclude:     (data)        => api.post('/purchasing/phantom/exclude/', data),
+  phantomReset:       (itemId)      => api.post('/purchasing/phantom/reset/', { item_id: itemId }),
+
+  // ── Demand-spike over-purchase (📈 ذروة الطلب) ──
+  spikeCandidates:    (params)      => api.get('/purchasing/spike/candidates/', { params }),
+  spikeSummary:       ()            => api.get('/purchasing/spike/summary/'),
+  spikeMedTypes:      ()            => api.get('/purchasing/spike/med-types/'),
+  spikeConfirm:       (itemId)      => api.post('/purchasing/spike/confirm/', { item_id: itemId }),
+  spikeUnconfirm:     (itemId)      => api.post('/purchasing/spike/unconfirm/', { item_id: itemId }),
+
   // EngineConfig singleton — GET returns current weights/thresholds; PATCH updates them (admin only)
   config:       ()       => api.get('/purchasing/config/'),
   updateConfig: (data)   => api.patch('/purchasing/config/', data),
@@ -510,6 +610,95 @@ export const purchasingApi = {
   lostSalesRun:     ()       => api.get('/purchasing/lost-sales/run/'),
   // Summary KPIs: total_lost_revenue, top_items, root_cause_breakdown, avg_availability
   lostSalesSummary: ()       => api.get('/purchasing/lost-sales/summary/'),
+}
+
+
+// ── /supply workspace (التوريد والمعدلات) ──────────────────────────────────────
+// Feature 1: sales-rate (معدل الإستهلاك) writeback — proposed → approved → executed.
+export const supplyApi = {
+  ratePushes:  ()             => api.get('/purchasing/rates/pushes/'),
+  ratePush:    (id)           => api.get(`/purchasing/rates/pushes/${id}/`),
+  proposeRate: (data = {})    => api.post('/purchasing/rates/propose/', data),
+  approveRate: (id, data = {}) => api.post(`/purchasing/rates/pushes/${id}/approve/`, data),
+  executeRate: (id)           => api.post(`/purchasing/rates/pushes/${id}/execute/`),
+
+  // Feature 2: ISR (طلب توريد) — propose → approve → push (stockisrm israpp=1).
+  isrList:    ()             => api.get('/purchasing/isr/pushes/'),
+  isrGet:     (id)           => api.get(`/purchasing/isr/pushes/${id}/`),
+  isrPropose: (data = {})    => api.post('/purchasing/isr/propose/', data),
+  isrApprove: (id, data = {}) => api.post(`/purchasing/isr/pushes/${id}/approve/`, data),
+  isrPush:    (id)           => api.post(`/purchasing/isr/pushes/${id}/push/`),
+  isrTransferPreview: ()     => api.get('/purchasing/isr/transfer-preview/'),
+  isrTransfer: (data = {})   => api.post('/purchasing/isr/transfer/', data),
+  distPreview: (params = {}) => api.get('/purchasing/isr/distribution/', { params }),
+  distGenerate: (data = {})  => api.post('/purchasing/isr/distribution/generate/', data),
+  // تلبية طلبات الفروع — ISR fulfilment plan (READ-ONLY) + its Excel workbook
+  isrFulfilment:       (data) => api.post('/purchasing/isr/fulfilment/', data),
+  isrFulfilmentExport: (data) => api.post('/purchasing/isr/fulfilment/export/', data, { responseType: 'blob' }),
+  isrFulfilmentRecent: (days) => api.get('/purchasing/isr/fulfilment/recent/', { params: { days } }),
+  isrFulfilmentProposals: (data) => api.post('/purchasing/isr/fulfilment/proposals/', data),
+  // «طلبات واتساب» — branch requests pasted from WhatsApp groups
+  brList:        ()              => api.get('/purchasing/isr/branch-requests/'),
+  brCreate:      (data)          => api.post('/purchasing/isr/branch-requests/', data),
+  brGet:         (id)            => api.get(`/purchasing/isr/branch-requests/${id}/`),
+  brText:        (id, text)      => api.post(`/purchasing/isr/branch-requests/${id}/text/`, { text }),
+  brOcr:         (id, file)      => { const f = new FormData(); f.append('image', file)
+                                      return api.post(`/purchasing/isr/branch-requests/${id}/ocr/`, f) },
+  brLine:        (id, lid, data) => api.patch(`/purchasing/isr/branch-requests/${id}/lines/${lid}/`, data),
+  brSearch:      (id, lid, q)    => api.get(`/purchasing/isr/branch-requests/${id}/lines/${lid}/search/`, { params: { q } }),
+  brConfirmSafe: (id)            => api.post(`/purchasing/isr/branch-requests/${id}/confirm-safe/`),
+  brConfirm:     (id)            => api.post(`/purchasing/isr/branch-requests/${id}/confirm/`),
+  brCancel:      (id)            => api.post(`/purchasing/isr/branch-requests/${id}/cancel/`),
+  brAnalysis:    (id, data)      => api.post(`/purchasing/isr/branch-requests/${id}/analysis/`, data),
+  brExport:      (id, data)      => api.post(`/purchasing/isr/branch-requests/${id}/analysis/export/`, data, { responseType: 'blob' }),
+  brTransfers:   (id, data)      => api.post(`/purchasing/isr/branch-requests/${id}/transfers/`, data),
+
+  // Doc 24 — Demand/Supply orchestration (/api/supply/).
+  // Availability inbox (supplier PUSH)
+  availList:      (params = {})   => api.get('/supply/availability/', { params }),
+  availGet:       (id)            => api.get(`/supply/availability/${id}/`),
+  availCreate:    (data)          => api.post('/supply/availability/', data),
+  availAnalysis:  (id)            => api.get(`/supply/availability/${id}/analysis/`),
+  availOcr:       (id, file)      => { const f = new FormData(); f.append('image', file)
+                                       return api.post(`/supply/availability/${id}/ocr/`, f) },
+  // extra = { mapping: {col: role}, header_row } — the confirmed column layout (remembered
+  // per supplier; omitted → the server applies a remembered one or suggests columns)
+  availImport:    (id, file, extra = null) => { const f = new FormData(); f.append('file', file)
+                                       if (extra) { f.append('mapping', JSON.stringify(extra.mapping))
+                                                    if (extra.header_row != null) f.append('header_row', extra.header_row) }
+                                       return api.post(`/supply/availability/${id}/import-file/`, f) },
+  availForgetLayout: (lid)         => api.post(`/supply/availability/layouts/${lid}/forget/`),
+  availDelete:    (id)            => api.delete(`/supply/availability/${id}/`),
+  availAddLine:   (id, raw_text)  => api.post(`/supply/availability/${id}/add-line/`, { raw_text }),
+  availLine:      (id, lid, data) => api.patch(`/supply/availability/${id}/lines/${lid}/`, data),
+  availMatches:   (id, lid)       => api.get(`/supply/availability/${id}/lines/${lid}/matches/`),
+  // one supplier line → one or several items (several = the line is split into siblings)
+  availItems:     (id, lid, item_ids) => api.post(`/supply/availability/${id}/lines/${lid}/items/`, { item_ids }),
+  availScope:     (id, branch_ids) => api.post(`/supply/availability/${id}/scope/`, { branch_ids }),
+  availLock:      (id, note = '') => api.post(`/supply/availability/${id}/lock/`, { note }),
+  availUnlock:    (id, reason)    => api.post(`/supply/availability/${id}/unlock/`, { reason }),
+  availHistory:   (id)            => api.get(`/supply/availability/${id}/history/`),
+  freshness:      ()              => api.get('/supply/freshness/'),
+  syncStock:      ()              => api.post('/supply/freshness/sync-stock/'),
+  supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
+  supplierCodeReportExcel: (days) => api.get('/supply/reports/supplier-codes/',
+                                             { params: { days, format: 'xlsx' }, responseType: 'blob' }),
+  availConfirm:   (id, line_ids)  => api.post(`/supply/availability/${id}/confirm-matches/`,
+                                              line_ids ? { line_ids } : {}),
+  // Shortage cases (daily follow-up)
+  cases:          (params = {})   => api.get('/supply/cases/', { params }),
+  caseGet:        (id)            => api.get(`/supply/cases/${id}/`),
+  casesSummary:   (params = {})   => api.get('/supply/cases/summary/', { params }),
+  caseRec:        (id)            => api.get(`/supply/cases/${id}/recommendation/`),
+  caseTransition: (id, status, reason = '') => api.post(`/supply/cases/${id}/transition/`, { status, reason }),
+  caseEvaluate:   (id)            => api.post(`/supply/cases/${id}/evaluate/`),
+  caseApproveTransfer: (id, data) => api.post(`/supply/cases/${id}/approve-transfer/`, data),
+  casesSweep:     ()              => api.post('/supply/cases/sweep/'),
+  // Execution: order list + decision log
+  orderPreview:   (data)          => api.post('/supply/order-list/preview/', data),
+  orderCommit:    (data)          => api.post('/supply/order-list/commit/', data),
+  orderExcel:     (data)          => api.post('/supply/order-list/excel/', data, { responseType: 'blob' }),
+  decisions:      (params = {})   => api.get('/supply/decisions/', { params }),
 }
 
 
@@ -1128,6 +1317,26 @@ export const tasksApi = {
   runSchedule:     (id)     => api.post(`/tasks/schedules/${id}/run/`),
 }
 
+// ── Composition (active-ingredient reconciliation) ────────────────────────────
+export const compositionApi = {
+  summary:        ()            => api.get('/composition/candidates/summary/'),
+  candidates:     (params)      => api.get('/composition/candidates/', { params }),
+  moleculeGroups: (params)      => api.get('/composition/candidates/molecule_groups/', { params }),
+  classes:        ()            => api.get('/composition/classes/', { params: { active: 1 } }),
+  createClass:    (data)        => api.post('/composition/classes/', data),
+  approve:        (id, classId) => api.post(`/composition/candidates/${id}/approve/`, classId ? { class_id: classId } : {}),
+  reject:         (id, notes)   => api.post(`/composition/candidates/${id}/reject/`, { notes: notes || '' }),
+  nonDrug:        (id, classKey)=> api.post(`/composition/candidates/${id}/non-drug/`, { class_key: classKey }),
+  setClass:       (id, classId) => api.post(`/composition/candidates/${id}/set-class/`, { class_id: classId }),
+  candidateItems: (id)          => api.get(`/composition/candidates/${id}/items/`),
+  editCandidate:  (id, components) => api.post(`/composition/candidates/${id}/edit/`, { components }),
+  // Track A — structured search
+  search:          (params)     => api.get('/composition/search/', { params }),
+  searchMolecules: (q)          => api.get('/composition/search/molecules/', { params: { q } }),
+  searchFacets:    ()           => api.get('/composition/search/facets/'),
+  rebuildIndex:    ()           => api.post('/composition/search/rebuild/'),
+}
+
 export const chronicApi = {
   // Medication Tags
   listTags:    (params)       => api.get('/chronic/tags/', { params }),
@@ -1592,6 +1801,9 @@ export const recommendationsApi = {
     api.get('/recommendations/fbt/for-item/', { params: { item_id: itemId, limit } }),
   customerRecs: (customerId, limit=8) =>
     api.get('/recommendations/customer/', { params: { customer_id: customerId, limit } }),
+  // Ranked basket opportunities (FBT + personal + bundle), safety-filtered
+  basketIntel:  ({ items, customer, branch, limit = 6 }) =>
+    api.get('/recommendations/basket-intel/', { params: { items: (items || []).join(','), customer, branch, limit } }),
 }
 
 // ── Cheque Planning + Treasury API ───────────────────────────────────────────
@@ -1752,6 +1964,25 @@ export const imageApi = {
 }
 
 // ── Insurance Claims ───────────────────────────────────────────────────────────
+export const commerceApi = {
+  status:        ()               => api.get('/commerce/status/'),
+  types:         ()               => api.get('/commerce/types/'),
+  recipients:    (params={})      => api.get('/commerce/recipients/', { params }),
+  createRecipient:(data)          => api.post('/commerce/recipients/', data),
+  addLocation:   (rid, data)      => api.post(`/commerce/recipients/${rid}/locations/`, data),
+  documents:     (params={})      => api.get('/commerce/documents/', { params }),
+  document:      (id)             => api.get(`/commerce/documents/${id}/`),
+  createDocument:(data)           => api.post('/commerce/documents/', data),
+  updateDocument:(id, data)       => api.patch(`/commerce/documents/${id}/`, data),
+  deleteDocument:(id)             => api.delete(`/commerce/documents/${id}/`),
+  addLine:       (id, data)       => api.post(`/commerce/documents/${id}/lines/`, data),
+  editLine:      (id, lid, data)  => api.patch(`/commerce/documents/${id}/lines/${lid}/`, data),
+  deleteLine:    (id, lid)        => api.delete(`/commerce/documents/${id}/lines/${lid}/`),
+  setCell:       (id, lid, data)  => api.post(`/commerce/documents/${id}/lines/${lid}/cells/`, data),
+  grid:          (id)             => api.get(`/commerce/documents/${id}/grid/`),
+  exportDocument:(id)             => api.get(`/commerce/documents/${id}/export/`, { responseType: 'blob' }),
+}
+
 export const insuranceApi = {
   // Clients
   clients:            (params)       => api.get('/insurance/clients/', { params }),
@@ -1773,17 +2004,45 @@ export const insuranceApi = {
   // Claims
   claims:             (params)       => api.get('/insurance/claims/', { params }),
   claimDetail:        (id)           => api.get(`/insurance/claims/${id}/`),
+  deleteClaim:        (id)           => api.delete(`/insurance/claims/${id}/`),
   createAndImport:    (data)         => api.post('/insurance/claims/create-and-import/', data),
   listMotalbas:       (subclient_id) => api.get('/insurance/claims/list-motalbas/', { params: { subclient_id } }),
   discoverMotalbas:   (params)       => api.get('/insurance/claims/discover-motalbas/', { params }),
   bulkImport:         (items)        => api.post('/insurance/claims/bulk-import/', { items }),
   reimport:           (id, data)     => api.post(`/insurance/claims/${id}/import-from-softech/`, data),
+  resyncPreview:      (id, motalbaNo) => api.get(`/insurance/claims/${id}/resync/preview/`, { params: motalbaNo ? { motalba_no: motalbaNo } : {} }),
+  resyncApply:        (id, data)     => api.post(`/insurance/claims/${id}/resync/apply/`, data),
+  resyncRuns:         (id)           => api.get(`/insurance/claims/${id}/resync/runs/`),
+  resyncRevert:       (id, runId)    => api.post(`/insurance/claims/${id}/resync/runs/${runId}/revert/`),
   changeStatus:       (id, data)     => api.post(`/insurance/claims/${id}/change-status/`, data),
 
   // Prescriptions — lines (lazy) + adjustments & exclusions
   prescriptionLines:  (claimId, rxId)       => api.get(`/insurance/claims/${claimId}/prescriptions/${rxId}/lines/`),
+  updatePatientName:  (claimId, rxId, patient_name) => api.patch(`/insurance/claims/${claimId}/prescriptions/${rxId}/patient/`, { patient_name }),
+  revertPatientName:  (claimId, rxId) => api.patch(`/insurance/claims/${claimId}/prescriptions/${rxId}/patient/`, { revert: true }),
+  patientNameSuggest: (claimId, q) => api.get(`/insurance/claims/${claimId}/patient-name-suggest/`, { params: { q } }),
+  nameSuggestions:    (claimId) => api.get(`/insurance/claims/${claimId}/name-suggestions/`),
+  applyNameSuggestions: (claimId, choices) => api.post(`/insurance/claims/${claimId}/name-suggestions/apply/`, { choices }),
   editLine:           (claimId, rxId, lineId, data) => api.patch(`/insurance/claims/${claimId}/prescriptions/${rxId}/lines/${lineId}/`, data),
   resetLine:          (claimId, rxId, lineId) => api.post(`/insurance/claims/${claimId}/prescriptions/${rxId}/lines/${lineId}/reset/`),
+  reviewLine:         (claimId, rxId, lineId, data) => api.post(`/insurance/claims/${claimId}/prescriptions/${rxId}/lines/${lineId}/review/`, data || {}),
+  flaggedLines:       (claimId)             => api.get(`/insurance/claims/${claimId}/flagged-lines/`),
+  // SOFTECH re-price writeback (gated)
+  repricePreview:     (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/preview/`, data),
+  repriceReceiptLines:(claimId, docno, branch) => api.get(`/insurance/claims/${claimId}/softech-reprice/receipt-lines/`, { params: { docno, branch } }),
+  repriceItemReceipts:(claimId, itemcode)   => api.get(`/insurance/claims/${claimId}/softech-reprice/item-receipts/`, { params: { itemcode } }),
+  repriceApplyBatch:  (claimId, data)       => api.post(`/insurance/claims/${claimId}/softech-reprice/apply-batch/`, data),
+  repriceApply:       (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/apply/`, data),
+  repriceRebalance:   (claimId, runId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/runs/${runId}/rebalance/`, data),
+  dateEditPreview:    (claimId, params) => api.get(`/insurance/claims/${claimId}/softech-date/preview/`, { params }),
+  dateEditApply:      (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-date/apply/`, data),
+  dateEditRuns:       (claimId)       => api.get(`/insurance/claims/${claimId}/softech-date/runs/`),
+  dateEditRevert:     (claimId, runId) => api.post(`/insurance/claims/${claimId}/softech-date/runs/${runId}/revert/`),
+  repriceRuns:        (claimId)       => api.get(`/insurance/claims/${claimId}/softech-reprice/runs/`),
+  repriceRunsExport:  (claimId, status) => api.get(`/insurance/claims/${claimId}/softech-reprice/runs/export/`, {
+    responseType: 'blob', params: status ? { status } : {},
+  }),
+  repriceRevert:      (claimId, runId) => api.post(`/insurance/claims/${claimId}/softech-reprice/runs/${runId}/revert/`),
   adjustRx:           (claimId, rxId, data) => api.post(`/insurance/claims/${claimId}/prescriptions/${rxId}/adjust/`, data),
   removeAdjustment:   (claimId, rxId)       => api.delete(`/insurance/claims/${claimId}/prescriptions/${rxId}/adjust/`),
   excludeRx:          (claimId, rxId, data) => api.post(`/insurance/claims/${claimId}/prescriptions/${rxId}/exclude/`, data),
@@ -1843,6 +2102,7 @@ export const insuranceApi = {
   omissions:          (claimId)             => api.get(`/insurance/claims/${claimId}/omissions/`),
 
   // Official cover letter (Word) + submission package (ZIP)
+  exportStatistical:  (claimId)             => api.get(`/insurance/claims/${claimId}/export/statistical/`, { responseType: 'blob' }),
   coverLetter:        (claimId)             => api.get(`/insurance/claims/${claimId}/cover-letter/`, { responseType: 'blob' }),
   submissionPackage:  (claimId)             => api.get(`/insurance/claims/${claimId}/submission-package/`, { responseType: 'blob' }),
 
@@ -1871,6 +2131,22 @@ export const insuranceApi = {
   overridesPreview:    (claimId)            => api.get(`/insurance/claims/${claimId}/overrides-preview/`),
   applyOverrides:      (claimId)            => api.post(`/insurance/claims/${claimId}/apply-overrides/`),
   claimItems:          (claimId)            => api.get(`/insurance/claims/${claimId}/claim-items/`),
+  prescriptionsByItem: (claimId, q)         => api.get(`/insurance/claims/${claimId}/prescriptions-by-item/`, { params: { q } }),
+  auditLog:            (claimId, params={}) => api.get(`/insurance/claims/${claimId}/audit-log/`, { params }),
+  deleteManualPrescription: (claimId, rxId) => api.delete(`/insurance/claims/${claimId}/manual-prescription/${rxId}/`),
+  // Name separation lists (فصل الأسماء)
+  separationLists:     ()                   => api.get('/insurance/separation-lists/'),
+  createSeparationList:(data)               => api.post('/insurance/separation-lists/', data),
+  updateSeparationList:(id, data)           => api.patch(`/insurance/separation-lists/${id}/`, data),
+  deleteSeparationList:(id)                 => api.delete(`/insurance/separation-lists/${id}/`),
+  separationNames:     (id)                 => api.get(`/insurance/separation-lists/${id}/names/`),
+  addSeparationNames:  (id, names_text)     => api.post(`/insurance/separation-lists/${id}/names/`, { names_text }),
+  updateSeparationName:(id, nameId, data)   => api.patch(`/insurance/separation-lists/${id}/names/${nameId}/`, data),
+  deleteSeparationName:(id, nameId)         => api.delete(`/insurance/separation-lists/${id}/names/${nameId}/`),
+  moveSeparationNames: (id, name_ids, target_list_id) => api.post(`/insurance/separation-lists/${id}/move-names/`, { name_ids, target_list_id }),
+  separationMatches:   (claimId, listId)    => api.get(`/insurance/claims/${claimId}/separation-matches/`, { params: listId ? { list_id: listId } : {} }),
+  bulkExclude:         (claimId, ids, reason) => api.post(`/insurance/claims/${claimId}/bulk-exclude/`, { prescription_ids: ids, reason }),
+  markReviewed:        (claimId, ids, reviewed) => api.post(`/insurance/claims/${claimId}/mark-reviewed/`, { prescription_ids: ids, reviewed }),
   reviewItems:         (claimId)            => api.get(`/insurance/claims/${claimId}/review-items/`),
   applyReviewDecision: (claimId, item_code, category) => api.post(`/insurance/claims/${claimId}/apply-review-decision/`, { item_code, category }),
 
@@ -2206,4 +2482,70 @@ export const pickZonesApi = {
   createOverride: (data)        => api.post('/transits/item-overrides/', data),
   updateOverride: (id, data)    => api.patch(`/transits/item-overrides/${id}/`, data),
   deleteOverride: (id)          => api.delete(`/transits/item-overrides/${id}/`),
+}
+
+// ── A/P–A/R Reconciliation (سداد فواتير) — doc 23 ──────────────────────────────
+export const reconciliationApi = {
+  dashboard:      (params) => api.get('/finance/reconciliation/dashboard/', { params }),
+  parties:        (params) => api.get('/finance/reconciliation/parties/', { params }),
+  partyLedger:    (pc)     => api.get(`/finance/reconciliation/parties/${pc}/ledger/`),
+  partyTimeline:  (pc)     => api.get(`/finance/reconciliation/parties/${pc}/timeline/`),
+  invoices:       (params) => api.get('/finance/reconciliation/invoices/', { params }),
+  payments:       (params) => api.get('/finance/reconciliation/payments/', { params }),
+  candidates:     (params) => api.get('/finance/reconciliation/candidates/', { params }),
+  exceptions:     (params) => api.get('/finance/reconciliation/exceptions/', { params }),
+  runs:           (params) => api.get('/finance/reconciliation/runs/', { params }),
+  workbench:      (params) => api.get('/finance/reconciliation/workbench/', { params }),
+  approve:        (id, data) => api.post(`/finance/reconciliation/candidates/${id}/approve/`, data || {}),
+  reject:         (id, data) => api.post(`/finance/reconciliation/candidates/${id}/reject/`, data || {}),
+  bulkApprove:    (data)   => api.post('/finance/reconciliation/candidates/bulk-approve/', data || {}),
+  candidateGroups: (params) => api.get('/finance/reconciliation/candidates/groups/', { params }),
+  selectionAction: (data)  => api.post('/finance/reconciliation/candidates/selection-action/', data),
+  bulkReject:     (data)   => api.post('/finance/reconciliation/candidates/bulk-reject/', data || {}),
+  bulkWrite:      (data)   => api.post('/finance/reconciliation/allocations/bulk-write-softech/', data || {}),
+  reverseSoftech: (id, note) => api.post(`/finance/reconciliation/allocations/${id}/reverse-softech/`, { note: note || '' }),
+  supplierOptions: (params) => api.get('/finance/reconciliation/supplier-options/', { params }),
+  invoiceLines:   (id)     => api.get(`/finance/reconciliation/invoices/${id}/lines/`),
+  unpaid:         (params) => api.get('/finance/reconciliation/unpaid/', { params }),
+  partial:        (params) => api.get('/finance/reconciliation/partial/', { params }),
+  partialExport:  (params) => api.get('/finance/reconciliation/partial/export/', { params, responseType: 'blob' }),
+  unpaidExport:   (params) => api.get('/finance/reconciliation/unpaid/export/', { params, responseType: 'blob' }),
+  returnsChainsExport: (params) => api.get('/finance/reconciliation/returns-chains/export/', { params, responseType: 'blob' }),
+  reviewExport:   (params) => api.get('/finance/reconciliation/review/export/', { params, responseType: 'blob' }),
+  manualAllocate: (data)   => api.post('/finance/reconciliation/allocations/manual/', data),
+  undoAllocation: (id)     => api.post(`/finance/reconciliation/allocations/${id}/undo/`),
+  writeSoftech:   (id)     => api.post(`/finance/reconciliation/allocations/${id}/write-softech/`),
+}
+
+
+// ── بدل الروشتة / buy-back cases (doc 25 — Phase 0: read-only reconstruction) ──
+// Every figure is computed server-side from the SOFTECH mirrors; the UI only displays
+// and records link decisions (no SOFTECH writes, no money movement).
+export const replacementApi = {
+  list:            (params = {}) => api.get('/replacement/cases/', { params }),
+  summary:         (params = {}) => api.get('/replacement/cases/summary/', { params }),
+  get:             (id)          => api.get(`/replacement/cases/${id}/`),
+  rebuild:         (id)          => api.post(`/replacement/cases/${id}/rebuild/`),
+  decideLink:      (id, casedocId, data) => api.post(`/replacement/cases/${id}/links/${casedocId}/decide/`, data),
+  decideException: (id, excId, data)     => api.post(`/replacement/cases/${id}/exceptions/${excId}/decide/`, data),
+  exceptions:      (params = {}) => api.get('/replacement/exceptions/', { params }),
+  runs:            ()            => api.get('/replacement/runs/'),
+
+  // Phase 1 — live workflow. Every mutating call sends the case `version` (409 = stale screen).
+  create:          (data)        => api.post('/replacement/cases/', data),
+  patientSales:    (params)      => api.get('/replacement/cases/patient-sales/', { params }),
+  setItems:        (id, data)    => api.post(`/replacement/cases/${id}/items/`, data),
+  calculate:       (id, data)    => api.post(`/replacement/cases/${id}/calculate/`, data),
+  submit:          (id, data)    => api.post(`/replacement/cases/${id}/submit/`, data),
+  approve:         (id, data)    => api.post(`/replacement/cases/${id}/approve/`, data),
+  reject:          (id, data)    => api.post(`/replacement/cases/${id}/reject/`, data),
+  reopen:          (id, data)    => api.post(`/replacement/cases/${id}/reopen/`, data),
+  cancel:          (id, data)    => api.post(`/replacement/cases/${id}/cancel/`, data),
+  linkContract:    (id, data)    => api.post(`/replacement/cases/${id}/link-contract/`, data),
+  preparePurchase: (id, data)    => api.post(`/replacement/cases/${id}/prepare-purchase/`, data),
+  prepareContract: (id, data)    => api.post(`/replacement/cases/${id}/prepare-contract-sale/`, data),
+  prepareProducts: (id, data)    => api.post(`/replacement/cases/${id}/prepare-product-sale/`, data),
+  postOperation:   (id, opId, data) => api.post(`/replacement/cases/${id}/operations/${opId}/post/`, data),
+  rules:           ()            => api.get('/replacement/rules/'),
+  grants:          ()            => api.get('/replacement/grants/'),
 }

@@ -32,7 +32,7 @@ class ItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'softech_id', 'name', 'name_scientific', 'barcode',
             'category', 'category_name', 'pack_price', 'unit_price',
-            'medicine_type', 'requires_fridge', 'comment', 'is_active', 'is_stockable',
+            'medicine_type', 'requires_fridge', 'comment', 'is_active', 'is_stockable', 'batch_required',
             'is_fast_moving', 'insurance_type', 'item_level', 'has_points',
             'pack_qty', 'branch_trans', 'supplier_trans', 'customer_trans', 'nosale_classif',
             'store_classif', 'store_classif_name',
@@ -63,7 +63,7 @@ class ItemSearchSerializer(serializers.ModelSerializer):
             'all_barcodes',
             'pack_price', 'unit_price', 'cost_price',
             'category_name', 'requires_fridge',
-            'is_stockable', 'is_fast_moving', 'insurance_type', 'item_level',
+            'is_stockable', 'batch_required', 'is_fast_moving', 'insurance_type', 'item_level',
             'has_points', 'pack_qty', 'branch_trans', 'supplier_trans',
             'customer_trans', 'nosale_classif',
             'store_classif', 'store_classif_name',

@@ -36,10 +36,27 @@ export default {
           900: 'rgb(var(--c-brand-900) / <alpha-value>)',
         },
         'brand-navy': 'rgb(var(--c-brand-600) / <alpha-value>)',
+        // Generic accent used by /supply, composition and ingredient-search screens
+        // (bg-primary / text-primary / border-primary). Was never defined → those
+        // buttons rendered white-on-white. Alias of the brand navy, so it re-themes too.
+        primary:      'rgb(var(--c-brand-600) / <alpha-value>)',
         'brand-sky':  'rgb(var(--c-brand-sky) / <alpha-value>)',
         'brand-red':  'rgb(var(--c-brand-red) / <alpha-value>)',
         alert:  '#F5A623',
         danger: 'rgb(var(--c-danger) / <alpha-value>)',
+        // ── Semantic surface tokens (light/dark aware — see index.css) ─────────
+        // Prefer these over literal bg-white / text-gray-* / border-gray-* so new
+        // UI themes automatically. Values flip under html[data-theme="dark"].
+        bg:            'rgb(var(--c-bg) / <alpha-value>)',
+        surface:       'rgb(var(--c-surface) / <alpha-value>)',
+        'surface-2':   'rgb(var(--c-surface-2) / <alpha-value>)',
+        'surface-3':   'rgb(var(--c-surface-3) / <alpha-value>)',
+        content:       'rgb(var(--c-content) / <alpha-value>)',
+        muted:         'rgb(var(--c-muted) / <alpha-value>)',
+        faint:         'rgb(var(--c-faint) / <alpha-value>)',
+        line:          'rgb(var(--c-line) / <alpha-value>)',
+        'line-soft':   'rgb(var(--c-line-soft) / <alpha-value>)',
+        'line-strong': 'rgb(var(--c-line-strong) / <alpha-value>)',
       },
       borderRadius: {
         '2xl': '1rem',

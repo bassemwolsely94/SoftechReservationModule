@@ -4,8 +4,10 @@
  * SOFTECH-style wildcard item search with debounce.
  *
  * Features:
- *   • Supports * wildcard anywhere: "pan*500", "*cillin", "am*"
- *   • Falls back to PG catalog when SOFTECH is unavailable
+ *   • System search rules (apps/catalog/wildcard.py): * and % = any characters
+ *     ("vol*ren*50*tab*" = "vol%ren%50%tab"), parts in order, space literal; exact text
+ *     first, then the pattern, then the words in any order; typos / Arabic by sound when
+ *     nothing matches («تقريبي» / «بالنطق»). Matched parts are highlighted.
  *   • Shows: item name, scientific name, stock at branch (optional)
  *   • Keyboard navigation (↑↓ Enter Esc)
  *   • Renders as a fully controlled dropdown
@@ -21,6 +23,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { itemsApi } from '../api/client'
+import Highlight from './Highlight'
 
 const DEBOUNCE_MS = 300
 
@@ -38,7 +41,7 @@ export default function ItemSearchInput({
   onChange: onChangeProp,
   onSelect,
   branchId = null,
-  placeholder = 'ابحث عن صنف... (يدعم * مثل: pan*، *cillin)',
+  placeholder = 'ابحث عن صنف... (* أو % بين الأجزاء: vol*ren*50)',
   disabled = false,
   className = '',
 }) {
@@ -200,16 +203,31 @@ export default function ItemSearchInput({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 break-words">{item.name}</div>
+                  <div className="font-medium text-gray-900 break-words">
+                    <Highlight text={item.name} query={value} />
+                    {item.learned && (
+                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800"
+                        title="أكّد شخصٌ هذا الصنف لهذا الاسم من قبل">من الذاكرة</span>
+                    )}
+                    {item.sound && !item.learned && (
+                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800"
+                        title="الاسم العربي المكتوب يُنطق مثل اسم هذا الصنف">بالنطق</span>
+                    )}
+                    {item.approx && (
+                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                        title="لا يوجد صنف يطابق ما كُتب بالضبط — هذه أقرب الأصناف (خطأ إملائي محتمل)">تقريبي</span>
+                    )}
+                  </div>
                   {item.name_scientific && (
-                    <div className="text-xs text-gray-500 break-words italic">{item.name_scientific}</div>
+                    <div className="text-xs text-gray-500 break-words italic"><Highlight text={item.name_scientific} query={value} /></div>
                   )}
                   <div className="flex items-center gap-2 mt-0.5">
                     {item.softech_id && (
                       <span className="text-xs text-gray-400 font-mono">{item.softech_id}</span>
                     )}
-                    {item.source === 'pg_catalog' && (
-                      <span className="text-xs text-gray-300 bg-gray-100 px-1 rounded">قاعدة البيانات</span>
+                    {item.source === 'softech' && (
+                      <span className="text-xs text-gray-400 bg-gray-100 px-1 rounded"
+                        title="صنف موجود في SOFTECH ولم يُزامَن بعد">SOFTECH مباشرة</span>
                     )}
                   </div>
                 </div>

@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from apps.users.models import StaffProfile
 from .engine import preview_plan, compute_instalment_dates
 from .models import EgyptianHoliday, ChequePlan, ChequeInstalment
+from apps.catalog.wildcard import wq
 from .serializers import (
     HolidaySerializer,
     ChequePlanListSerializer,
@@ -101,7 +102,7 @@ class PlanListCreateView(generics.ListCreateAPIView):
         if payee_q:
             qs = qs.filter(
                 Q(title__icontains=payee_q) |
-                Q(payee_name__icontains=payee_q) |
+                wq(payee_q, 'payee_name') |
                 Q(reference_doc__icontains=payee_q)
             )
 

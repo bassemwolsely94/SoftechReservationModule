@@ -12,6 +12,7 @@
  *                nosale_classif_options, store_classif_options }
  */
 import { useState, useRef, useEffect } from 'react'
+import { wildcardMatch } from '../utils/wildcard'
 
 const SEL     = 'border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-brand-400 focus:outline-none'
 const CHK_LBL = 'flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none'
@@ -101,7 +102,7 @@ function SearchSelect({ options = [], selected = [], onChange, placeholder = 'ا
   }, [])
 
   const filtered = q.trim()
-    ? options.filter(o => (o.name || o.code).toLowerCase().includes(q.trim().toLowerCase()))
+    ? options.filter(o => wildcardMatch([o.name, o.code], q))
     : options
 
   const count = selected.length

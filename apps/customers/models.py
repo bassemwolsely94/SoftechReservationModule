@@ -184,6 +184,43 @@ class Customer(models.Model):
         return result['total'] or 0
 
 
+class SegmentationConfig(models.Model):
+    """
+    Singleton (pk=1) of tunable CRM segmentation thresholds, read by the
+    `segment_customers` command. Formalizes what used to be hard-coded constants
+    so the business can retune VIP/loyal/at-risk/dormant boundaries without a code
+    change. Deterministic — the command still computes segments the same way, just
+    with these values.
+    """
+    vip_ltv_threshold   = models.DecimalField(max_digits=12, decimal_places=2, default=5000,
+                                              verbose_name='حد LTV لكبار العملاء (VIP)')
+    loyal_min_purchases = models.PositiveSmallIntegerField(default=3,
+                                              verbose_name='أقل عدد فواتير (٩٠ يوم) للعميل المخلص')
+    new_grace_days      = models.PositiveSmallIntegerField(default=60,
+                                              verbose_name='مهلة اعتبار العميل "جديد" (أيام)')
+    at_risk_min_days    = models.PositiveSmallIntegerField(default=90,
+                                              verbose_name='بداية "في خطر" (أيام منذ آخر زيارة)')
+    at_risk_max_days    = models.PositiveSmallIntegerField(default=180,
+                                              verbose_name='نهاية "في خطر" (أيام)')
+    dormant_max_days    = models.PositiveSmallIntegerField(default=365,
+                                              verbose_name='نهاية "نائم" — بعدها "مفقود" (أيام)')
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        verbose_name = 'إعدادات تصنيف العملاء'
+        verbose_name_plural = 'إعدادات تصنيف العملاء'
+
+    def __str__(self):
+        return 'إعدادات تصنيف العملاء'
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class CustomerNote(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='notes')
     note = models.TextField()

@@ -42,6 +42,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
+from django.db.models import Q
+from apps.catalog.wildcard import wq
 from .serializers import (
     StockCountSessionListSerializer,
     StockCountSessionDetailSerializer,
@@ -527,11 +529,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
 
         search = request.query_params.get('search', '').strip()
         if search:
-            qs = qs.filter(
-                item_code__icontains=search
-            ) | qs.filter(
-                item_name__icontains=search
-            )
+            qs = qs.filter(Q(item_code__icontains=search) | wq(search, 'item_name'))
 
         paginator = SnapshotPagination()
         page      = paginator.paginate_queryset(qs, request)

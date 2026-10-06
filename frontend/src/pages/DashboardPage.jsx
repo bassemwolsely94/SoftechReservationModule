@@ -565,6 +565,99 @@ function IntelligenceAlertsRow({ customers, chronicFollowup, navigate }) {
 // Main Page
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 7. Demand & Supply control tower (doc 24) — every figure from the backend,
+//    each with its formula on hover. Hidden unless the server grants supply view.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const pctTxt = (v) => (v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`)
+const numTxt = (v, d = 0) => (v === null || v === undefined ? '—'
+  : Number(v).toLocaleString('en-US', { maximumFractionDigits: d }))
+
+function MiniStat({ label, value, hint }) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2" title={hint}>
+      <div className="text-lg font-black tabular-nums text-gray-800">{value}</div>
+      <div className="text-[11px] text-gray-500 truncate">{label}</div>
+    </div>
+  )
+}
+
+function SupplyKpiSection({ navigate }) {
+  const [days, setDays] = useState(30)
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['dashboardSupply', days],
+    queryFn: () => dashboardApi.supply(days).then(r => r.data),
+    retry: false,                    // 403 = no supply permission → section stays hidden
+    refetchInterval: 300_000,
+  })
+  if (isError) return null
+  const q = data?.queue || {}, rs = data?.resolution || {}, s = data?.sourcing || {}
+  const p = data?.procurement || {}, m = data?.matching || {}, d = data?.definitions || {}
+  const go = (bucket) => () => navigate(`/supply?tab=cases${bucket ? `&bucket=${bucket}` : ''}`)
+
+  return (
+    <div>
+      <SectionTitle icon="🔄" action={
+        <div className="flex items-center gap-2">
+          <select value={days} onChange={e => setDays(Number(e.target.value))}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600">
+            {[7, 30, 90].map(n => <option key={n} value={n}>آخر {n} يوماً</option>)}
+          </select>
+          <button onClick={() => navigate('/supply')} className="text-xs font-semibold" style={{ color: BRAND }}>
+            فتح التوريد ←
+          </button>
+        </div>
+      }>
+        التوريد والنواقص
+      </SectionTitle>
+
+      {isLoading ? <SkeletonStrip cols={6} /> : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <HeroKpi icon="🗂️" label="حالات نقص مفتوحة" value={numTxt(q.total)}
+              sub={`${numTxt(q.urgent)} عاجل · ${numTxt(q.overdue)} متأخر`}
+              color={BRAND} bg="rgb(var(--c-brand-50))" onClick={go('')} pulse={q.urgent > 0} />
+            <HeroKpi icon="⛔" label="رصيد صفر" value={numTxt(q.zero_stock)}
+              sub={`${numTxt(q.customer_waiting)} بها عملاء منتظرون`}
+              color={RED} bg="#fef2f2" onClick={go('zero_stock')} />
+            <div title={d.avg_days_to_resolve}>
+              <HeroKpi icon="⏱️" label="متوسط زمن الحل" value={rs.avg_days_to_resolve === null || rs.avg_days_to_resolve === undefined ? '—' : `${rs.avg_days_to_resolve} ي`}
+                sub={`الوسيط ${rs.median_days_to_resolve ?? '—'} ي · ${numTxt(rs.resolved_count)} حالة`}
+                color={BLUE} bg="#eff6ff" />
+            </div>
+            <div title={d.cash_avoided}>
+              <HeroKpi icon="💰" label="نقد وُفِّر بالتحويل الداخلي" value={numTxt(s.cash_avoided)}
+                sub={`${numTxt(s.internal_realized_qty, 1)} وحدة نُقلت بدل الشراء`}
+                color={GREEN} bg="#f0fdf4" />
+            </div>
+            <div title={d.internal_share}>
+              <HeroKpi icon="🔀" label="تغطية داخلية" value={pctTxt(s.internal_share)}
+                sub={`خارجي ${pctTxt(s.external_share)}`} color={INDIGO} bg="#f5f3ff" />
+            </div>
+            <div title={d.match_precision}>
+              <HeroKpi icon="🎯" label="دقة المطابقة" value={pctTxt(m.match_precision)}
+                sub={`${numTxt(m.lines)} سطر · تصحيح ${pctTxt(m.correction_rate)}`}
+                color={ORANGE} bg="#fffbeb" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            <MiniStat label="استلام طلبات الموردين" value={pctTxt(s.supplier_fill_rate)} hint={d.supplier_fill_rate} />
+            <MiniStat label="مطابقة تلقائية" value={pctTxt(m.auto_match_rate)} hint={d.auto_match_rate} />
+            <MiniStat label="مطابقة يدوية" value={pctTxt(m.manual_match_rate)} hint={d.manual_match_rate} />
+            <MiniStat label="قرارات خالفت التوصية" value={pctTxt(p.override_rate)} hint={d.override_rate} />
+            <MiniStat label="طلبات شراء" value={numTxt(p.orders)} hint="عدد قوائم الطلب المسجّلة (غير الملغاة)" />
+            <MiniStat label="قيمة الطلبات" value={numTxt(p.committed_value)} hint={d.committed_value} />
+            <MiniStat label="وفر البونص" value={numTxt(p.foc_savings)} hint={d.foc_savings} />
+            <MiniStat label="تحويلات قيد التنفيذ" value={numTxt(s.internal_in_progress_qty, 1)}
+              hint="كميات في مسودات تحويل لم يعتمدها فريق التحويلات بعد" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const navigate  = useNavigate()
   const { user }  = useAuthStore()
@@ -725,6 +818,11 @@ export default function DashboardPage() {
             </SectionTitle>
             <TransferStrip transfers={tr} navigate={navigate} />
           </div>
+        )}
+
+        {/* ── 7. Demand & supply control tower (server-gated) ──────── */}
+        {['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && (
+          <SupplyKpiSection navigate={navigate} />
         )}
 
         {/* ── Main two-column layout ──────────────────────────────── */}
