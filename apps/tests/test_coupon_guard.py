@@ -145,3 +145,28 @@ class CheckEndpointTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()['ok'])
         self.assertEqual(cs.call_args.kwargs['customer_pic'], '04HD731')
+
+
+class NegativePriceExceptionTests(TestCase):
+    def _neg_line_order(self, itemcode):
+        o = _order(softech_pic='04HD731')
+        SoftechSalesOrderLine.objects.create(order=o, softech_itemcode=itemcode, qty=D(1),
+                                             item_sale_price=D('-50'), cust_discp=D('0'),
+                                             batchno='27301-ABC123')
+        return o
+
+    def _price_errors(self, o):
+        try:
+            validate_order(o)
+        except ValidationError as e:
+            return [d for d in e.detail.get('lines_detail', []) if 'item_sale_price' in d]
+        return []
+
+    def test_rejected_while_guard_off(self):
+        self.assertTrue(self._price_errors(self._neg_line_order('118639')))
+
+    @override_settings(COUPON_POS_GUARD_ENABLED=True)
+    def test_allowed_for_coupon_only_with_guard_on(self):
+        with mock.patch.object(g, 'check_serial', return_value={'ok': True, 'errors': []}):
+            self.assertEqual(self._price_errors(self._neg_line_order('118639')), [])
+            self.assertTrue(self._price_errors(self._neg_line_order('12345')))

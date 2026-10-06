@@ -217,6 +217,7 @@ at branch 130 (570 coupons) and 150 (360), ~95 % by SOFTECH users 64/63/62 (call
    earliest-expiry serial, not the coupon's. For item 118639 it must take exactly the row whose
    `stkbalexpiry.batchno` = the line's serial (its expiry) — no FEFO, no reservation split.
 2. Screen: a serial field on coupon lines in `POSOrderPage.jsx` / mobile, calling the check endpoint.
-3. Validator: `item_sale_price < 0` currently rejects every coupon line (118639 sells at −50) — needs an
-   explicit, approved exception for the served coupon item (pricing rule → owner sign-off).
+3. ~~Validator negative price~~ — DONE (owner-approved 2026-10-06): `item_sale_price < 0` is allowed ONLY
+   for the served coupon item 118639 and ONLY while `COUPON_POS_GUARD_ENABLED` is on
+   (`validators._coupon_negative_price_ok`), so a −50 line can never pass without its serial verified.
 Daily `sync_coupon_lifecycle` + `coupon_report` remains the control for coupons redeemed directly in SOFTECH.

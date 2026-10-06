@@ -43,6 +43,15 @@ def _d(v):
     return v if isinstance(v, Decimal) else Decimal(str(v or 0))
 
 
+def _coupon_negative_price_ok(line):
+    """The ONLY negative-price exception (owner-approved 2026-10-06): the served gift coupon
+    (118639, sells at −50 EGP), and only while the coupon guard is ON — so such a line can
+    never pass without its serial being verified (apps/vouchers/coupon_guard.py)."""
+    from apps.vouchers import coupon_guard, coupons
+    return (coupon_guard.guard_enabled()
+            and (line.softech_itemcode or '').strip() == coupons.served_item())
+
+
 def validate_order(order, *, for_push=False):
     """
     Validate an order. Raises rest_framework ValidationError({field: msg, ...}) with
@@ -92,7 +101,7 @@ def validate_order(order, *, for_push=False):
             le['qty'] = 'الكمية يجب أن تكون أكبر من صفر.'
         elif _d(ln.qty) > MAX_QTY_LINE:
             le['qty'] = f'الكمية تتجاوز الحد الأقصى للسطر ({MAX_QTY_LINE:.0f}).'
-        if _d(ln.item_sale_price) < 0:
+        if _d(ln.item_sale_price) < 0 and not _coupon_negative_price_ok(ln):
             le['item_sale_price'] = 'سعر البيع غير صحيح.'
         if not (Decimal('0') <= _d(ln.cust_discp) <= MAX_DISCOUNT):
             le['cust_discp'] = 'نسبة الخصم يجب أن تكون بين 0 و 100.'
