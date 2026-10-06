@@ -124,7 +124,7 @@ class PlanTests(_Base):
         h, l = coupon_push.leg_extras('points', 3)
         plan = writer.build_plan(b.points_invoice, usercode='1509', header_extra=h, line_extra=l)
         self.assertEqual(plan['doc_value'], 1200.0)
-        self.assertEqual(plan['header']['usercode'], '1509')
+        self.assertEqual((plan['header']['usercode'], plan['header']['cashiercode']), ('1509', '1509'))
         first = plan['lines'][0]
         self.assertEqual(first['item_partno'], b.serials.order_by('number').first().serial)
         self.assertEqual((first['transprice'], first['itemsaleprice'], first['pharmacydiscp'],

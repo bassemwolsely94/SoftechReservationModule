@@ -122,7 +122,10 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
   dup-guard (supplier+doccode+docnumber2) blocks any repeat post.
 - Native extras (from reference docs): points line `custdiscp=1`; served line `custdiscp=1`,
   `bonusqty=−50`, `pharmacydiscp=100`; served header `fatstatuscode=30`, `fatcurrentstatus=90`,
-  `docvalue1=−50×n`. Usercode `COUPON_USERCODE` (default 1509).
+  `docvalue1=−50×n`; both headers `cashiercode`=usercode. Usercode `COUPON_USERCODE` (default 1509).
+- **First `--probe` on HQ (batch #1, 2026-10-06): both 200-line docs inserted (ok, 200/200, serials in
+  order) and rolled back; every line column matched 63944/63945; only header diff was `cashiercode`
+  (NULL vs 1509) — the native save sends it, now added.**
 - `--probe`: inserts both full documents on HQ, reads them back, ALWAYS rolls back, and diffs header + line 1
   against 63944/63945 (ignoring identity, dates, serial, expiry, running newqty). Run off-peak.
 - `--commit` (needs `INVOICE_WRITER_ENABLED=True`): points leg first; served is not pushed if points fails;

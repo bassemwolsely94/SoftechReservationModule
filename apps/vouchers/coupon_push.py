@@ -69,10 +69,13 @@ def reference_doc(leg):
 def leg_extras(leg, n_lines):
     """(header_extra, line_extra) — native values beyond the generic purchase template,
     as stored on the reference docs 63944 (points) / 63945 (served)."""
+    # cashiercode = the operator's usercode: the native save sends it (the insert trigger
+    # leaves it NULL — first --probe diff, 2026-10-06).
     if leg == 'points':
-        return {}, {'custdiscp': 1.0}
+        return {'cashiercode': usercode()}, {'custdiscp': 1.0}
     price = leg_price(leg)
-    header = {'fatstatuscode': '30', 'fatcurrentstatus': '90', 'docvalue1': round(price * n_lines, 4)}
+    header = {'cashiercode': usercode(), 'fatstatuscode': '30', 'fatcurrentstatus': '90',
+              'docvalue1': round(price * n_lines, 4)}
     line = {'custdiscp': 1.0, 'bonusqty': price, 'pharmacydiscp': 100.0}
     return header, line
 
