@@ -177,3 +177,22 @@ Original step-3 notes:
   branch stock such as 118639 @ 130 = −309.
 - `coupon_report` (overview) · `coupon_report --serial 27101-ZWU704` (timeline) ·
   `coupon_report --anomaly redeemed_twice` (list).
+
+### 7a. Rule corrections after the first full run (2026-10-06)
+First `--full` sync: 84,691 movement lines (28,035 with a serial), 10,202 lifecycles. Findings that changed
+the rules:
+- **All coupon doccodes named** (`transdoc`): 110/15 older HQ→branch pair, 130 branch→HQ, 20 transfer
+  cancelled, **180 reservation delivered = a redemption**, 81 its return, 80/181 reservation booked/cancelled
+  (no coupon used), 70 issue reversed, 150/50 stock-count shortage/surplus.
+- **Lot serials:** early-2025 purchases (e.g. doc 54100) stocked several coupons on one line with qty > 1, so
+  one serial (e.g. `20001-NXN518`) legitimately moves many times. `points_qty`/`served_qty` (migration
+  vouchers/0008, filled by `import_coupon_archive`) now cap the serial-level checks; such serials are flagged
+  `lot_serial` (info).
+- **Serial-level customer matching dropped:** SOFTECH staff pick a stock row by serial at issue (170), transfer
+  (125) and sale (115), and the timelines show the serial on a sale is often not the physical coupon's
+  (e.g. 20940-CDQ628 "issued" to three customers). The misuse check is now **per customer**: coupons
+  redeemed on a PIC's sales vs coupons ever issued to that PIC (`customer_balances`, redemptions since
+  `COUPON_CUSTOMER_CHECK_SINCE` = 2022-01-01), robust to wrong row picks and to serial-less lines.
+- **Actionable:** redemptions with no valid serial in the last 365 days — branch 130: 254 lines / 555 coupons,
+  150: 209 / 349 (`coupon_report --no-serial 130`, with the SOFTECH user per line) — against the item-card
+  rule «يجب ارفاق سيريال الكوبون والصرف من الكول سنتر».

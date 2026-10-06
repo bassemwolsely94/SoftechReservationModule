@@ -638,6 +638,10 @@ class CouponSerial(models.Model):
     served_docnumber = models.PositiveIntegerField(null=True, blank=True,
                                                    verbose_name='مستند شراء صنف الاستحقاق')
     served_docdate   = models.DateField(null=True, blank=True)
+    # Quantity purchased under this serial per leg. 1 for one-line-per-coupon stocking; >1 for
+    # the early-2025 "lot" lines where several coupons shared one serial (e.g. doc 54100).
+    points_qty       = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+    served_qty       = models.DecimalField(max_digits=10, decimal_places=3, default=0)
 
     conflict_note = models.TextField(blank=True, default='', verbose_name='تعارضات')
 
@@ -696,10 +700,14 @@ class CouponEvent(models.Model):
 
     KIND_CHOICES = [
         ('issue',           'صرف لعميل مقابل نقاط (170)'),
+        ('issue_return',    'إلغاء صرف لعميل (70)'),
         ('transfer_out',    'تحويل من فرع'),
         ('transfer_in',     'استلام في فرع'),
-        ('redeem',          'استخدام على فاتورة بيع (115)'),
-        ('redeem_return',   'مرتجع بيع (30)'),
+        ('transfer_cancel', 'إلغاء تحويل (20)'),
+        ('redeem',          'استخدام على فاتورة بيع (115/180)'),
+        ('redeem_return',   'مرتجع بيع (30/81)'),
+        ('reservation',     'حجز بضاعة (80/181)'),
+        ('stock_count',     'تسوية جرد (150/50)'),
         ('supplier_return', 'مرتجع للمورد (120)'),
         ('other',           'حركة أخرى'),
     ]

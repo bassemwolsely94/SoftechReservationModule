@@ -47,12 +47,21 @@ class ClassifyTests(TestCase):
         self.assertEqual(lc.classify('115', 'served'), ('redeem', 'out'))
         self.assertEqual(lc.classify('30', 'served'), ('redeem_return', 'in'))
 
+    def test_all_coupon_doccodes(self):
+        self.assertEqual(lc.classify('180', 'served')[0], 'redeem')
+        self.assertEqual(lc.classify('81', 'served')[0], 'redeem_return')
+        self.assertEqual(lc.classify('70', 'points')[0], 'issue_return')
+        self.assertEqual(lc.classify('20', 'served', 'إلغاء صرف - تبادل بين الفروع')[0], 'transfer_cancel')
+        self.assertEqual(lc.classify('130', 'served')[0], 'transfer_out')
+        self.assertEqual(lc.classify('80', 'served')[0], 'reservation')
+        self.assertEqual(lc.classify('150', 'served')[0], 'stock_count')
+
     def test_leg_guards_and_name_fallback(self):
         self.assertEqual(lc.classify('115', 'points')[0], 'other')
         self.assertEqual(lc.classify('170', 'served')[0], 'other')
         self.assertEqual(lc.classify('110', 'served', NAMES['110'])[0], 'transfer_out')
         self.assertEqual(lc.classify('15', 'served', NAMES['15'])[0], 'transfer_in')
-        self.assertEqual(lc.classify('150', 'served', 'تسوية')[0], 'other')
+        self.assertEqual(lc.classify('999', 'served', 'تسوية')[0], 'other')
 
 
 class LifecycleTests(TestCase):
@@ -112,11 +121,43 @@ class LifecycleTests(TestCase):
         c = CouponSerial.objects.get(serial=s)
         self.assertEqual((c.redeem_count, c.stage, c.anomalies), (0, 'issued', []))
 
-    def test_other_customer_flag(self):
+    def test_customer_balance_is_the_misuse_check(self):
         s = '27286-MFW296'
         self._sync([mv('102230', '170', '100', 1, '2026-10-01', s, pic='05HD759'),
-                    mv('118639', '115', '100', 2, '2026-10-02', s, pic='77HD1')])
-        self.assertEqual(CouponSerial.objects.get(serial=s).anomalies, ['redeemed_by_other_customer'])
+                    mv('118639', '115', '100', 2, '2026-10-02', s, pic='77HD1'),
+                    mv('118639', '115', '140', 3, '2026-10-03', '', pic='77HD1', line=2),
+                    mv('118639', '115', '140', 4, '2026-10-03', '', pic='05HD759', line=3)])
+        self.assertEqual(CouponSerial.objects.get(serial=s).anomalies, [])   # serial-level: fine
+        cb = lc.customer_balances(D(2026, 1, 1))
+        self.assertEqual(cb['customers_over'], 1)
+        self.assertEqual(cb['top'][0]['pic'], '77HD1')
+        self.assertEqual((cb['top'][0]['issued'], cb['top'][0]['redeemed']), (0.0, 2.0))
+
+    def test_lot_serial_compares_with_stocked_qty(self):
+        coupons.import_purchase_lines([
+            {'itemcode': '118639', 'item_partno': '20001-NXN518', 'itemexpirydate': '2027-01-01',
+             'docnumber': 54100, 'docdate': '2025-02-11', 'transqty': '20.0'}])
+        rows = [mv('118639', '115', '170', n, '2026-09-15', '20001-NXN518', line=n) for n in range(1, 4)]
+        self._sync(rows)
+        c = CouponSerial.objects.get(serial='20001-NXN518')
+        self.assertEqual((float(c.served_qty), c.redeem_count, c.anomalies), (20.0, 3, ['lot_serial']))
+        self._sync([mv('118639', '115', '170', n, '2026-09-15', '20001-NXN518', line=n) for n in range(1, 23)])
+        self.assertIn('redeemed_twice', CouponSerial.objects.get(serial='20001-NXN518').anomalies)
+
+    def test_reversals_and_reservations(self):
+        s = '27286-MFW296'
+        self._sync([
+            mv('102230', '170', '100', 1, '2026-10-01', s, pic='05HD759'),
+            mv('102230', '70', '100', 2, '2026-10-01', s, pic='05HD759'),          # issue reversed
+            mv('118639', '125', '100', 3, '2026-10-01', s, party='140'),
+            mv('118639', '20', '100', 4, '2026-10-02', s, party='140'),            # transfer cancelled
+            mv('118639', '80', '130', 5, '2026-10-02', s, pic='04HD731'),          # reservation booked
+        ])
+        c = CouponSerial.objects.get(serial=s)
+        self.assertEqual((c.issue_count, c.sent_branch, c.redeem_count, c.stage), (0, '', 0, 'stocked'))
+        self._sync([mv('118639', '180', '130', 6, '2026-10-03', s, pic='04HD731')])   # delivered = redeemed
+        c = CouponSerial.objects.get(serial=s)
+        self.assertEqual((c.redeem_count, c.stage, c.redeemed_branch), (1, 'redeemed', '130'))
 
     def test_blank_and_unknown_serials_are_kept_for_audit(self):
         stats = self._sync([

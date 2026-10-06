@@ -19,6 +19,7 @@ import math
 import re
 import secrets
 import string
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
@@ -165,6 +166,7 @@ def import_purchase_lines(rows):
               'skipped_serial': 0, 'conflicts': 0, 'bad_serial_samples': []}
     existing = {c.serial: c for c in CouponSerial.objects.all()}
     touched, created = {}, []
+    qty_acc = {}      # (serial, leg) → Σ transqty of this import (a full-history import sets it)
 
     for r in rows:
         report['lines'] += 1
@@ -183,6 +185,11 @@ def import_purchase_lines(rows):
         expiry = to_date(r.get('itemexpirydate'))
         docnumber = to_docnumber(r.get('docnumber'))
         docdate = to_date(r.get('docdate'))
+        try:
+            qty = Decimal(str(r.get('transqty') if r.get('transqty') not in (None, '') else 1))
+        except InvalidOperation:
+            qty = Decimal('1')
+        qty_acc[(serial, leg)] = qty_acc.get((serial, leg), Decimal('0')) + qty
 
         c = existing.get(serial)
         if c is None:
@@ -210,6 +217,8 @@ def import_purchase_lines(rows):
         c.status = _status_for(c)
         touched[serial] = c
 
+    for (serial, leg), qty in qty_acc.items():
+        setattr(existing[serial], f'{leg}_qty', qty)
     new_ids = {id(c) for c in created}
     for c in created:
         c.status = _status_for(c)
@@ -219,7 +228,8 @@ def import_purchase_lines(rows):
         CouponSerial.objects.bulk_update(
             to_update,
             ['points_docnumber', 'points_docdate', 'points_expiry', 'served_docnumber',
-             'served_docdate', 'served_expiry', 'status', 'source', 'conflict_note'],
+             'served_docdate', 'served_expiry', 'points_qty', 'served_qty', 'status', 'source',
+             'conflict_note'],
             batch_size=1000)
     report['created'] = len(created)
     report['updated'] = len(to_update)
@@ -436,12 +446,12 @@ def read_purchase_lines(conn, since='2015-01-01'):
     for dn in docs:
         c2 = conn.cursor()
         c2.execute(f"""
-            SELECT docnumber, docdate, itemcode, itemexpirydate, item_partno
+            SELECT docnumber, docdate, itemcode, itemexpirydate, item_partno, transqty
             FROM {_DB}.stktrans WHERE branchcode=? AND doccode='10' AND docnumber=?
         """, [hq_branch(), dn])
         for r in c2.fetchall():
             out.append({'docnumber': r[0], 'docdate': r[1], 'itemcode': str(r[2]).strip(),
-                        'itemexpirydate': r[3], 'item_partno': r[4]})
+                        'itemexpirydate': r[3], 'item_partno': r[4], 'transqty': r[5]})
     return out
 
 

@@ -304,8 +304,9 @@ def _mark_leg_stocked(batch, leg, inv):
     for c in rows:
         setattr(c, f'{leg}_docnumber', int(inv.softech_docnumber))
         setattr(c, f'{leg}_docdate', inv.softech_docdate)
+        setattr(c, f'{leg}_qty', 1)
         c.status = coupons._status_for(c)
-    CouponSerial.objects.bulk_update(rows, [f'{leg}_docnumber', f'{leg}_docdate', 'status'])
+    CouponSerial.objects.bulk_update(rows, [f'{leg}_docnumber', f'{leg}_docdate', f'{leg}_qty', 'status'])
     logger.info('[coupons] batch #%s %s leg stocked → SOFTECH 100/10/%s', batch.pk, leg,
                 inv.softech_docnumber)
 
