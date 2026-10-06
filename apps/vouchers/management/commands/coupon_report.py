@@ -45,8 +45,10 @@ class Command(BaseCommand):
             self.stdout.write(f'  {code}: {n}  — {coupon_lifecycle.ANOMALY_LABELS.get(code, "")}  [{ys}]')
         cu = r['customers']
         self.stdout.write(f'── Customers who redeemed MORE coupons than were issued to them (redemptions since {cu["since"]}) ──')
-        self.stdout.write(f'  {cu["customers_over"]} customers, {cu["excess_total"]:g} coupons in excess; '
+        self.stdout.write(f'  all: {cu["customers_over"]} customers, {cu["excess_total"]:g} coupons in excess; '
                           f'{cu["redeemed_without_customer"]:g} redeemed with no customer code')
+        self.stdout.write(f'  ACTIVE in the last 12 months: {cu["active_over"]} customers, '
+                          f'{cu["active_excess"]:g} coupons in excess — top:')
         for x in cu['top'][:15]:
             self.stdout.write(f'  {x["pic"]}: issued {x["issued"]:g}, redeemed {x["redeemed"]:g} '
                               f'(+{x["excess"]:g}), last {x["last"]}')

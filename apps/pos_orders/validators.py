@@ -108,6 +108,12 @@ def validate_order(order, *, for_push=False):
     if line_errs:
         errs['lines_detail'] = line_errs
 
+    # ── gift coupons (served coupon item 118639) ──────────────────────────────
+    # Real, issued, unused coupon held by this branch, on the owner's PIC — checked live
+    # against SOFTECH (read-only). No-op unless settings.COUPON_POS_GUARD_ENABLED.
+    from apps.vouchers.coupon_guard import validate_order_coupons
+    errs.update(validate_order_coupons(order))
+
     # ── payments ──────────────────────────────────────────────────────────────
     pays = list(order.payments.all())
     pay_errs = []

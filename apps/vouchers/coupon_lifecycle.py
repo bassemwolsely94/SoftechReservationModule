@@ -371,10 +371,14 @@ def customer_balances(redeemed_since=None, limit=20):
             over.append({'pic': r['customer_pic'], 'issued': float(got), 'redeemed': float(r['n']),
                          'excess': float(r['n'] - got), 'last': r['last']})
     over.sort(key=lambda x: -x['excess'])
+    recent_from = dt.date.today() - dt.timedelta(days=365)
+    active = [x for x in over if x['last'] and x['last'] >= recent_from]
     blank = CouponEvent.objects.filter(customer_pic='', kind='redeem', docdate__gte=since).aggregate(
         n=Sum('qty'))['n'] or 0
     return {'since': since, 'customers_over': len(over),
-            'excess_total': sum(x['excess'] for x in over), 'top': over[:limit],
+            'excess_total': sum(x['excess'] for x in over),
+            'active_over': len(active), 'active_excess': sum(x['excess'] for x in active),
+            'top': active[:limit],
             'redeemed_without_customer': float(blank)}
 
 

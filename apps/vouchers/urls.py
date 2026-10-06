@@ -1,12 +1,13 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path
-from .views import VoucherViewSet, DocumentViewSet
+from .views import VoucherViewSet, DocumentViewSet, coupon_check
 
 router = DefaultRouter()
 router.register('vouchers',  VoucherViewSet,  basename='vouchers')
 
 # Documents use reference_code as lookup key, not pk
 urlpatterns = router.urls + [
+    path('coupons/check/', coupon_check, name='coupon-check'),
     path(
         'documents/<str:reference_code>/',
         DocumentViewSet.as_view({'get': 'retrieve'}),

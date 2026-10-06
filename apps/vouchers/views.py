@@ -705,3 +705,37 @@ class DocumentViewSet(viewsets.GenericViewSet):
 
         message_text = '\n'.join(lines)
         return Response({'message_text': message_text})
+
+
+# ── Gift-coupon serial check (indirect POS) ───────────────────────────────────
+from rest_framework.decorators import api_view, permission_classes as _perm_classes  # noqa: E402
+
+
+def _pos_permission():
+    from apps.pos_orders.permissions import CanOperatePosOrders
+    return CanOperatePosOrders
+
+
+class _CanOperatePos(IsAuthenticated):
+    """Same audience as the POS screen (apps.pos_orders.permissions.CanOperatePosOrders)."""
+
+    def has_permission(self, request, view):
+        return _pos_permission()().has_permission(request, view)
+
+
+@api_view(['GET'])
+@_perm_classes([_CanOperatePos])
+def coupon_check(request):
+    """GET /api/vouchers/coupons/check/?serial=27301-ABC123&branch=<softech code>&pic=<PIC>
+
+    Live, read-only check of a paper gift coupon before it is used on a sale — the same rules
+    the POS enforces on push (apps/vouchers/coupon_guard.py)."""
+    from apps.branches.models import Branch
+    from .coupon_guard import check_serial
+
+    serial = (request.query_params.get('serial') or '').strip()
+    code = (request.query_params.get('branch') or '').strip()
+    branch = Branch.objects.filter(softech_branch_id=code).first() if code else None
+    res = check_serial(serial, branch=branch, store_code=(request.query_params.get('store') or code),
+                       customer_pic=(request.query_params.get('pic') or '').strip())
+    return Response(res, status=status.HTTP_200_OK)

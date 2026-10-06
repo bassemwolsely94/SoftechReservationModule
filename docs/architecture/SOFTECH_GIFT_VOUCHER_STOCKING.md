@@ -196,3 +196,27 @@ the rules:
 - **Actionable:** redemptions with no valid serial in the last 365 days — branch 130: 254 lines / 555 coupons,
   150: 209 / 349 (`coupon_report --no-serial 130`, with the SOFTECH user per line) — against the item-card
   rule «يجب ارفاق سيريال الكوبون والصرف من الكول سنتر».
+
+## 8. Redemption guard on the indirect POS — PART 1 BUILT (2026-10-06), switched OFF
+Owner's rules (2026-10-06): a coupon **may be used by a family member**, but the sale is entered on the
+**coupon owner's customer code**; call-center coupon orders go both through `/pos` and directly in SOFTECH.
+Findings that drove it: last-12-month redemptions with junk serials (`8452`, `Reservation`, `6589999889999`)
+at branch 130 (570 coupons) and 150 (360), ~95 % by SOFTECH users 64/63/62 (call center).
+- `apps/vouchers/coupon_guard.py` — a served-coupon line (118639) is accepted only if its serial (`batchno`) is
+  a stocked coupon serial, not yet redeemed (115+180 − 30+81 < stocked qty), not in another open POS order,
+  issued to a customer (170 − 70 > 0), the order's PIC is the issue PIC (owner), qty = 1 per line, and the
+  serial's stock row exists in the order's store. Reads SOFTECH live (history from HQ, stock row from the
+  branch node), **read-only, fail-closed**. Toggles: `COUPON_POS_GUARD_ENABLED` (default **False**),
+  `COUPON_GUARD_REQUIRE_ISSUED` / `_REQUIRE_OWNER` / `_REQUIRE_BRANCH_STOCK` (default True).
+- Hook: `apps/pos_orders/validators.validate_order` → `errs['coupons']` (no-op while the switch is off).
+- `GET /api/vouchers/coupons/check/?serial=&branch=&pic=` — same verdict for the screen (POS permission).
+- Tests: `apps/tests/test_coupon_guard.py`.
+
+**Part 2 — pending (needs the owner's local, uncommitted POS work pushed first):**
+1. Writer: `apps/pos_orders/writer._allocate_line` picks coupon stock FEFO, so the pushed line carries the
+   earliest-expiry serial, not the coupon's. For item 118639 it must take exactly the row whose
+   `stkbalexpiry.batchno` = the line's serial (its expiry) — no FEFO, no reservation split.
+2. Screen: a serial field on coupon lines in `POSOrderPage.jsx` / mobile, calling the check endpoint.
+3. Validator: `item_sale_price < 0` currently rejects every coupon line (118639 sells at −50) — needs an
+   explicit, approved exception for the served coupon item (pricing rule → owner sign-off).
+Daily `sync_coupon_lifecycle` + `coupon_report` remains the control for coupons redeemed directly in SOFTECH.
