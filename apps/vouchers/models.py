@@ -581,6 +581,13 @@ class CouponBatch(models.Model):
     created_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name='coupon_batches',
                                     verbose_name='أنشئت بواسطة')
+    # The two SOFTECH purchase documents that stock this batch (coupon_push.py).
+    points_invoice = models.ForeignKey('invoices.SupplierInvoice', null=True, blank=True,
+                                       on_delete=models.PROTECT, related_name='+',
+                                       verbose_name='فاتورة صنف النقاط')
+    served_invoice = models.ForeignKey('invoices.SupplierInvoice', null=True, blank=True,
+                                       on_delete=models.PROTECT, related_name='+',
+                                       verbose_name='فاتورة صنف الاستحقاق')
     notes       = models.TextField(blank=True, verbose_name='ملاحظات')
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)

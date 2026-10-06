@@ -69,7 +69,8 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
       118639 doc (63945) differs: header `30/90`, `docvalue1=-10000`, lines `bonusqty=-50`. Whether the
       native client or a trigger sets these is settled by the rollback clone diff (§6 step 3).
       Both docs also have a `temp_r_stk` on-screen cache row (the writer skips it, as proven for purchases).
-- [ ] Meaning of **doccode 170** (102230 issue against points). Is it the "deducted from PIC client" step?
+- [ ] Meaning of **doccode 170** (102230 issue against points): `investigate_gift_vouchers --doctypes 170,125,25,115`
+      looks up SOFTECH's document-type names and samples the latest coupon document of each type.
 - [ ] Whether the native save sends `item_partno` (yes: it is stored) plus any extra columns when a
       serial is typed. This will be proven by the rollback clone (§5 step 3), not by a new capture.
 
@@ -103,7 +104,31 @@ storecode2='0' retqty=0 promtype=1 suppliercode=personcode=1268 usercode=1509
 - Settings: `COUPON_POINTS_ITEM`, `COUPON_SERVED_ITEM`, `COUPON_SUPPLIER`, `COUPON_BRANCH`,
   `COUPON_BATCH_SIZE`, `COUPON_MIN_EXPIRY_DAYS`, `COUPON_PRINT_TITLE`.
 
-**Step 3 (SOFTECH push) — NOT built, awaiting approval:**
+**Step 3 (SOFTECH push) — BUILT (2026-10-06, approved by the owner), writer gate still OFF:**
+- `apps/vouchers/coupon_push.py` + `push_coupon_batch BATCH_ID [--probe | --commit]`, tests
+  `apps/tests/test_coupon_push.py`. Migration vouchers/0006 links a batch to its two SupplierInvoices.
+- `ensure_invoices`: one SupplierInvoice per leg (vendor 1268, branch 100, status confirmed), one line per
+  serial (qty 1, `batch_number`=serial, expiry, points 400/400, served −50/0).
+- `assign_docnumber2`: each document gets its own `ddmmyyyyNN` supplier invoice no, above every number used
+  that day in SOFTECH (read) and in our unpushed invoices; stored once, never renumbered → the writer's
+  dup-guard (supplier+doccode+docnumber2) blocks any repeat post.
+- Native extras (from reference docs): points line `custdiscp=1`; served line `custdiscp=1`,
+  `bonusqty=−50`, `pharmacydiscp=100`; served header `fatstatuscode=30`, `fatcurrentstatus=90`,
+  `docvalue1=−50×n`. Usercode `COUPON_USERCODE` (default 1509).
+- `--probe`: inserts both full documents on HQ, reads them back, ALWAYS rolls back, and diffs header + line 1
+  against 63944/63945 (ignoring identity, dates, serial, expiry, running newqty). Run off-peak.
+- `--commit` (needs `INVOICE_WRITER_ENABLED=True`): points leg first; served is not pushed if points fails;
+  a re-run resumes the missing leg and never re-posts a finalized one. Serials → `stocked` with doc numbers.
+- Writer changes (apps/invoices/writer.py): purchase lines send `item_partno` when the line has a
+  batch/serial; `push_final`/`probe_invoice` accept `usercode`, `header_extra`, `line_extra`; the probe now
+  captures the inserted rows before rollback (`full_header`/`full_lines`) — this also restores
+  `clone_purchase`'s column diff.
+- Validation exceptions (apps/invoices/validations.py): `INVOICE_ALLOW_DISCONTINUED_ITEMS` (default 102230)
+  and `INVOICE_ZERO_COST_ITEMS` (default 118639); every other item keeps the full rule set.
+- Optional settings (code defaults, not in settings.py): `COUPON_USERCODE`, `COUPON_POINTS_PRICE`,
+  `COUPON_SERVED_PRICE`, `COUPON_REF_POINTS_DOC`, `COUPON_REF_SERVED_DOC`.
+
+Original step-3 notes:
 1. **Archive** (`apps/vouchers`): `CouponSerial` (serial unique, number, code, item legs, expiry,
    purchase doc per leg, status, source), plus `CouponBatch` (200 serials, its two SupplierInvoices).
    Seeded from the SOFTECH lines CSV (authoritative) and reconciled with the Excel `Serial Database`;

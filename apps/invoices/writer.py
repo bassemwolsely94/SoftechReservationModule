@@ -123,7 +123,7 @@ def _docnumber2(invoice):
 
 
 # ── 2. BUILD PLAN — exact column→value maps + SQL (no SOFTECH contact) ──────────
-def build_plan(invoice: SupplierInvoice):
+def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, line_extra=None):
     computed, header = compute(invoice)
     if not computed:
         raise ValueError('لا توجد أسطر مطابقة (صنف + كمية) لترحيلها.')
@@ -147,11 +147,12 @@ def build_plan(invoice: SupplierInvoice):
         'docvaluepay': 0, 'fatstatuscode': '10', 'ptcode': '20',
         'ptclassifcode': '<from personsdata at push>', 'docvaluereturn': 0,
         'fatcurrentstatus': '15', 'cust_professional': '0', 'saleprice_extrap': 0,
-        'usercode': _default_usercode(invoice),
+        'usercode': usercode or _default_usercode(invoice),
         'patientpayment': 0, 'docvalue1': 0, 'docvalue2': 0, 'docvalue3': 0,
         'bcurrency': 1, 'docvaluebc': header['doc_value'], 'docvaluepaybc': 0, 'bcrate': 1,
         'origdoc': 0,
     }
+    hdr.update(header_extra or {})
     lines = []
     for idx, c in enumerate(computed, start=1):
         ln = c['_line']
@@ -167,11 +168,15 @@ def build_plan(invoice: SupplierInvoice):
             'additionaldiscp': c['additionaldiscp'], 'transprice_total': c['transprice_total'],
             'origintaxp': c['origintaxp'], 'custdiscp': 0, 'specialdiscp': 0,
             'bonusqty': 0, 'dblitemflag': idx, 'storecode2': '0', 'suppliercode': personcode,
-            'personcode': personcode, 'usercode': _default_usercode(invoice), 'retqty': 0, 'promtype': 1,
+            'personcode': personcode, 'usercode': usercode or _default_usercode(invoice),
+            'retqty': 0, 'promtype': 1,
         }
         if invoice.doc_kind == 'return':
             row['r_docnumber'] = int(invoice.return_of_docnumber or 0)
             row['r_doccode']   = '10'
+        elif (ln.batch_number or '').strip():
+            row['item_partno'] = ln.batch_number.strip()
+        row.update(line_extra or {})
         lines.append(row)
 
     counter = invoice.softech_counter_column
@@ -358,7 +363,7 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
             'itemcode': str(ln.item.softech_id), 'suppliercode': personcode, 'personcode': personcode,
             'itemsaleprice': float(c['itemsaleprice']), 'r_doccode': '10', 'promtype': 1,
         }
-    return {
+    row = {
         'branchcode': branch, 'doccode': invoice.softech_doccode, 'docnumber': _docnum(docnumber),
         'docdate': _TODAY_MIDNIGHT, 'storecode': store, 'itemcode': str(ln.item.softech_id),
         'itemsalestax': float(c['itemsalestax']), 'itemsaleprice_tax': float(c['itemsaleprice_tax']),
@@ -371,6 +376,12 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
         'retqty': 0.0, 'suppliercode': personcode, 'personcode': personcode,
         'itemsaleprice': float(c['itemsaleprice']), 'promtype': 1,
     }
+    # The batch / lot (or gift-coupon serial) typed in the screen's serial column lands in
+    # stktrans.item_partno (confirmed on coupon docs 100/10/63944–63945).
+    batch = (ln.batch_number or '').strip()
+    if batch:
+        row['item_partno'] = batch
+    return row
 
 
 def _read_original_purchase(conn, branch, docnumber):
@@ -434,10 +445,40 @@ def _run_batch_lastrow(jst, batch):
     return last
 
 
-def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, *, do_commit):
+def _run_batch_sets(jst, batch):
+    """Execute a multi-statement batch; return EVERY result set as {'cols', 'rows'}
+    (values via getString — used by the rollback probe to read back what it inserted)."""
+    sets = []
+    has_rs = jst.execute(batch)
+    while True:
+        if has_rs:
+            rs = jst.getResultSet()
+            if rs is not None:
+                meta = rs.getMetaData()
+                cnt = meta.getColumnCount()
+                cols = [str(meta.getColumnName(i)) for i in range(1, cnt + 1)]
+                rows = []
+                while rs.next():
+                    rows.append([None if rs.getString(i) is None else str(rs.getString(i)).strip()
+                                 for i in range(1, cnt + 1)])
+                rs.close()
+                sets.append({'cols': cols, 'rows': rows})
+        elif jst.getUpdateCount() == -1:
+            break
+        has_rs = jst.getMoreResults()
+    return sets
+
+
+def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, *, do_commit,
+                     header_extra=None, line_extra=None, capture=False):
     """One unchained batch: allocate docnumber (HOLDLOCK read+1), INSERT header +
     lines, UPDATE the supplier counter, verify (header present + all lines present),
-    then COMMIT (do_commit and verified) or ROLLBACK. Returns a result dict."""
+    then COMMIT (do_commit and verified) or ROLLBACK. Returns a result dict.
+
+    header_extra / line_extra: exact native values a specific document type needs on top
+    of the generic template (e.g. gift coupons — apps/vouchers/coupon_push.py).
+    capture: also SELECT the inserted header + lines BEFORE commit/rollback, returned as
+    full_header / full_lines (the rollback probe uses it to diff against a real doc)."""
     branch  = invoice.softech_branchcode
     counter = invoice.softech_counter_column
     doccode = invoice.softech_doccode
@@ -453,7 +494,9 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
             return {'ok': False, 'err': -1, 'docnumber': None, 'lines_found': 0,
                     'lines_expected': n, 'error': f'الفاتورة الأصلية {invoice.return_of_docnumber} غير موجودة في SOFTECH'}
 
-    stmts = [_insert_sql('stktransm', _header_row(invoice, header, _Raw('@dn'), ptclassifcode, usercode))]
+    hdr_row = _header_row(invoice, header, _Raw('@dn'), ptclassifcode, usercode)
+    hdr_row.update(header_extra or {})
+    stmts = [_insert_sql('stktransm', hdr_row)]
     newqtys = {}
     running = dict(nowqty)   # per-item running balance, accumulates across lines
     for idx, c in enumerate(computed, start=1):
@@ -463,11 +506,17 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
         nq = running[code]
         newqtys[code] = nq
         # dblitemflag = 1-based line number (unique-index component for repeated items)
-        stmts.append(_insert_sql('stktrans', _line_row(
-            invoice, c, _Raw('@dn'), usercode, nq, idx,
-            newcostprice=orig_cost.get(code), r_docdate=r_docdate)))
+        line_row = _line_row(invoice, c, _Raw('@dn'), usercode, nq, idx,
+                             newcostprice=orig_cost.get(code), r_docdate=r_docdate)
+        line_row.update(line_extra or {})
+        stmts.append(_insert_sql('stktrans', line_row))
     inserts = '\n'.join(stmts)
     final = 'commit tran' if do_commit else 'rollback tran'
+    capture_sql = ''
+    if capture:
+        capture_sql = (f"select * from stktransm where branchcode={bc} and doccode='{doccode}' and docnumber=@dn\n"
+                       f"select * from stktrans where branchcode={bc} and doccode='{doccode}' and docnumber=@dn "
+                       f"order by dblitemflag\n")
 
     batch = f"""
 set chained off
@@ -479,14 +528,23 @@ select @err = @@error
 update lastdocnumbers set {counter} = @dn where branchcode = {bc}
 select @hdr = count(*) from stktransm where branchcode={bc} and doccode='{doccode}' and docnumber=@dn
 select @lines = count(*) from stktrans where branchcode={bc} and doccode='{doccode}' and docnumber=@dn
-if @hdr = 1 and @lines = {n} {final}
+{capture_sql}if @hdr = 1 and @lines = {n} {final}
 else rollback tran
 select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
        case when @hdr=1 and @lines={n} then 1 else 0 end as verified
 """
     jst = conn._conn.createStatement()
+    full_header, full_lines = None, []
     try:
-        row = _run_batch_lastrow(jst, batch)
+        if capture:
+            sets = _run_batch_sets(jst, batch)
+            row = sets[-1]['rows'][0] if sets and sets[-1]['rows'] else None
+            if len(sets) >= 3:
+                h, ls = sets[-3], sets[-2]
+                full_header = dict(zip(h['cols'], h['rows'][0])) if h['rows'] else None
+                full_lines = [dict(zip(ls['cols'], r)) for r in ls['rows']]
+        else:
+            row = _run_batch_lastrow(jst, batch)
     finally:
         try:
             jst.close()
@@ -504,13 +562,18 @@ select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
     err = _i(row[3], -1) if row else -1
     verified = _i(row[4]) if row else 0
     ok = bool(verified == 1)
-    return {'ok': ok, 'docnumber': docnumber, 'counter_column': counter,
-            'hdr_found': hdr_found, 'lines_found': lines_found, 'lines_expected': n,
-            'err': err, 'committed': bool(do_commit and ok), 'newqtys': newqtys}
+    res = {'ok': ok, 'docnumber': docnumber, 'counter_column': counter,
+           'hdr_found': hdr_found, 'lines_found': lines_found, 'lines_expected': n,
+           'err': err, 'committed': bool(do_commit and ok), 'newqtys': newqtys}
+    if capture:
+        res['full_header'] = full_header
+        res['full_lines'] = full_lines
+    return res
 
 
 # ── 3. PUSH — guarded; dry-run plan unless gate on + dry_run=False ─────────────
-def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False):
+def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=None,
+               header_extra=None, line_extra=None):
     """
     Prepare + build the plan. With INVOICE_WRITER_ENABLED off (current state) this
     NEVER writes to SOFTECH — returns the dry-run plan only.
@@ -526,7 +589,7 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False):
     if invoice.status == 'pushing':
         raise ValueError('الفاتورة قيد الترحيل بالفعل.')
 
-    plan = build_plan(invoice)
+    plan = build_plan(invoice, usercode=usercode, header_extra=header_extra, line_extra=line_extra)
 
     if not writer_enabled() or dry_run:
         logger.info('[invoices] DRY-RUN push invoice=%s (writer_enabled=%s) — no SOFTECH write',
@@ -552,7 +615,7 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False):
     from config.sybase import get_branch_connection
 
     computed, header = compute(invoice)
-    usercode = _default_usercode(invoice)
+    usercode = usercode or _default_usercode(invoice)
     branch = invoice.softech_branchcode
     store  = invoice.store_code or branch
     if not invoice.client_token:
@@ -581,7 +644,8 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False):
         nowqty = read_stkbal(conn, branch, store, [c['_line'].item.softech_id for c in computed])
         ptclassifcode = read_supplier(conn, invoice.vendor.softech_personcode)['ptclassifcode']
         # UNCHAINED single-batch write: begin tran → inserts → verify → commit/rollback.
-        w = _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, do_commit=True)
+        w = _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, do_commit=True,
+                             header_extra=header_extra, line_extra=line_extra)
         if not (w['ok'] and w['committed']):
             invoice.status = 'push_failed'
             invoice.erp_error = f'verify/commit failed: {w}'
@@ -621,7 +685,8 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False):
 
 
 # ── 3b. ROLLBACK PROBE — real inserts on the target DB, then ALWAYS rollback ───
-def probe_invoice(invoice: SupplierInvoice, *, confirm=False):
+def probe_invoice(invoice: SupplierInvoice, *, confirm=False, usercode=None, header_extra=None,
+                  line_extra=None, capture=True):
     """
     Execute the real serial allocation + stktransm/stktrans INSERTs + verify-readback
     on the invoice's BRANCH DB, then ALWAYS roll back — zero residue. Reveals the
@@ -640,7 +705,7 @@ def probe_invoice(invoice: SupplierInvoice, *, confirm=False):
         raise ValueError('المورد غير مربوط بكود SOFTECH.')
 
     from config.sybase import get_branch_connection
-    usercode = _default_usercode(invoice)
+    usercode = usercode or _default_usercode(invoice)
     branch = invoice.softech_branchcode
     store  = invoice.store_code or branch
     res = {'mode': 'rollback_probe', 'committed': False, 'ok': False, 'branchcode': branch}
@@ -650,7 +715,8 @@ def probe_invoice(invoice: SupplierInvoice, *, confirm=False):
         nowqty = read_stkbal(conn, branch, store, [c['_line'].item.softech_id for c in computed])
         ptclassifcode = read_supplier(conn, invoice.vendor.softech_personcode)['ptclassifcode']
         # UNCHAINED single-batch write with do_commit=False → always rolls back.
-        w = _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, do_commit=False)
+        w = _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, nowqty, do_commit=False,
+                             header_extra=header_extra, line_extra=line_extra, capture=capture)
         res['readback'] = w
         res['ok'] = w['ok']
         res['allocated_docnumber'] = w.get('docnumber')

@@ -29,6 +29,29 @@ def _cfg(name, default):
     return getattr(settings, name, default)
 
 
+def _codes(name, default):
+    """A setting holding SOFTECH itemcodes (list/tuple or comma string) → set of str."""
+    v = getattr(settings, name, None)
+    if v is None:
+        v = default
+    if isinstance(v, str):
+        v = v.split(',')
+    return {str(x).strip() for x in v if str(x).strip()}
+
+
+def allowed_discontinued_items():
+    """Items purchasable although flagged itemnomoreuse=1. Default: the gift-coupon
+    POINTS item (102230), which is stocked deliberately from supplier 1268
+    (docs/architecture/SOFTECH_GIFT_VOUCHER_STOCKING.md)."""
+    return _codes('INVOICE_ALLOW_DISCONTINUED_ITEMS', [getattr(settings, 'COUPON_POINTS_ITEM', '102230')])
+
+
+def zero_cost_items():
+    """Items legitimately purchased at cost 0. Default: the gift-coupon SERVED item
+    (118639, sale price −50, cost 0)."""
+    return _codes('INVOICE_ZERO_COST_ITEMS', [getattr(settings, 'COUPON_SERVED_ITEM', '118639')])
+
+
 def _net(line):
     """Net purchase price/pack = explicit unit_price, else public × (1−disc)(1−extra)."""
     n = _f(line.unit_price)
@@ -56,13 +79,14 @@ def validate_invoice(invoice, *, live=True):
     matched = [l for l in lines if l.item_id]
     if not matched:
         err('item_unmatched', 'لا توجد أصناف مطابقة لترحيلها')
+    zero_ok = zero_cost_items()
     for l in lines:
         if not l.item_id:
             err('item_unmatched', f'صنف غير مطابق: {l.manual_name or l.raw_text or "—"}', l.id)
             continue
         if _f(l.quantity) <= 0:
             err('qty_invalid', f'كمية غير صحيحة (≤0): {l.item.name}', l.id)
-        if _net(l) <= 0:
+        if _net(l) <= 0 and str(l.item.softech_id).strip() not in zero_ok:
             err('price_invalid', f'سعر شراء غير صحيح (≤0): {l.item.name}', l.id)
 
     if not live or not matched:
@@ -121,6 +145,7 @@ def validate_invoice(invoice, *, live=True):
     hi_disc = _f(_cfg('INVOICE_HIGH_DISCOUNT_PCT', 50))
     doc_value = 0.0
 
+    discontinued_ok = allowed_discontinued_items()
     if is_return and not orig_present:
         err('original_missing', f'فاتورة الشراء الأصلية #{invoice.return_of_docnumber} غير موجودة في SOFTECH')
 
@@ -133,7 +158,7 @@ def validate_invoice(invoice, *, live=True):
             err('item_unmatched', f'الصنف {code} غير موجود في SOFTECH', l.id)
             continue
         # ── errors ──
-        if it['nomoreuse'] == '1':
+        if it['nomoreuse'] == '1' and code not in discontinued_ok:
             err('item_discontinued', f'صنف موقوف (غير مسموح بشرائه): {l.item.name}', l.id)
         if it['archive'] == 1:
             err('item_archived', f'صنف مؤرشف: {l.item.name}', l.id)

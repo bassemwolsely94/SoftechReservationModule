@@ -42,6 +42,7 @@ _DOCS = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'docs', 
 OUTPUT_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_investigation.txt')
 CSV_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_lines.csv')
 DOCS_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_docs.txt')
+DOCTYPES_FILE = os.path.join(_DOCS, 'softech_gift_vouchers_doctypes.txt')
 
 DB = 'SOFTECHDB9.dbo'
 
@@ -57,6 +58,9 @@ class Command(BaseCommand):
         parser.add_argument('--sample', type=int, default=40, help='rows shown per sample section')
         parser.add_argument('--serial', default='27101-ZWU704',
                             help='a known coupon serial from the RPA sheet, to locate its SOFTECH column')
+        parser.add_argument('--doctypes', default='',
+                            help='ONLY look up SOFTECH document-type names for these doccodes '
+                                 '(e.g. 170,125,25,115) + sample recent 170 coupon documents')
         parser.add_argument('--docs', default='',
                             help='ONLY dump these HQ purchase docnumbers in full (comma-separated), e.g. 63944,63945')
 
@@ -124,6 +128,74 @@ class Command(BaseCommand):
             for n, v in zip(cols, rows[0]):
                 log(f'    {n:<28} = {"NULL" if v is None else str(v).strip()}')
             return dict(zip(cols, rows[0]))
+
+        # ── --doctypes mode: what SOFTECH calls a doccode + sample coupon docs ───
+        if options['doctypes']:
+            codes = [x.strip() for x in options['doctypes'].split(',') if x.strip()]
+            section(f'DOCTYPES — tables with a doccode column + a name/description column')
+            try:
+                _, tables = fetch(f"""
+                    SELECT DISTINCT o.name FROM {DB}.sysobjects o, {DB}.syscolumns c
+                    WHERE o.id = c.id AND o.type = 'U' AND c.name = 'doccode'
+                """)
+            except Exception as e:
+                log(f'  [ERROR] {e}')
+                tables = []
+            skip = ('stktrans', 'branchesales', 'temp', 'dm_', 'r3', 'piccrm', 'cheques')
+            for (tname,) in tables:
+                tname = str(tname).strip()
+                if tname.lower().startswith(skip):
+                    continue
+                try:
+                    cols, _ = fetch(f"SELECT * FROM {DB}.{tname} WHERE 1 = 0")
+                except Exception as e:
+                    log(f'  [ERROR {tname}] {e}')
+                    continue
+                if not any(k in c.lower() for c in cols for k in ('name', 'desc', 'title', 'arab')):
+                    continue
+                try:
+                    _, cnt = fetch(f"SELECT count(*) FROM {DB}.{tname}")
+                    if int(cnt[0][0]) > 5000:
+                        log(f'  (skip {tname}: {cnt[0][0]} rows)')
+                        continue
+                except Exception:
+                    continue
+                ph = ','.join('?' for _ in codes)
+                run(f'{tname} — rows for doccode in {codes}',
+                    f"SELECT * FROM {DB}.{tname} WHERE doccode IN ({ph})", codes)
+
+            items = [x.strip() for x in (options['items'] or '102230,118639').split(',') if x.strip()]
+            for code in codes:
+                section(f'SAMPLE doccode {code} — most recent HQ coupon document')
+                cols, rows = [], []
+                try:
+                    ph = ','.join('?' for _ in items)
+                    cols, rows = fetch(f"""
+                        SELECT branchcode, docnumber FROM {DB}.stktrans
+                        WHERE doccode=? AND itemcode IN ({ph}) AND docdate >= DATEADD(day, -60, GETDATE())
+                        ORDER BY docdate DESC
+                    """, [code] + items)
+                except Exception as e:
+                    log(f'  [ERROR] {e}')
+                if not rows:
+                    log('  (no recent document moving the coupon items)')
+                    continue
+                bc, dn = str(rows[0][0]).strip(), rows[0][1]
+                hdr = vrow(f'stktransm {bc}/{code}/{dn}', f"""
+                    SELECT * FROM {DB}.stktransm WHERE branchcode=? AND doccode=? AND docnumber=?
+                """, [bc, code, dn])
+                run('its lines', f"""
+                    SELECT itemcode, transqty, transprice, itemsaleprice, itemexpirydate, item_partno,
+                           newqty, personcode, custdiscp
+                    FROM {DB}.stktrans WHERE branchcode=? AND doccode=? AND docnumber=?
+                """, [bc, code, dn], limit=sample)
+                party = str((hdr or {}).get('cust_branch_code') or '').strip()
+                if party:
+                    vrow(f'personsdata {party} (the document party)',
+                         f"SELECT personcode, personname, ptcode, ptclassifcode FROM {DB}.personsdata "
+                         f"WHERE personcode=?", [party])
+            self._save(lines, DOCTYPES_FILE)
+            return
 
         # ── --docs mode: full header + first lines of specific purchase docs ────
         if options['docs']:
