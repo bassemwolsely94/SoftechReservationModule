@@ -212,7 +212,26 @@ at branch 130 (570 coupons) and 150 (360), ~95 % by SOFTECH users 64/63/62 (call
 - `GET /api/vouchers/coupons/check/?serial=&branch=&pic=` — same verdict for the screen (POS permission).
 - Tests: `apps/tests/test_coupon_guard.py`.
 
-**Part 2 — pending (needs the owner's local, uncommitted POS work pushed first):**
+**Part 2 — BUILT (2026-10-06) on the owner's pushed POS code (commit fe2926f):**
+- Batches endpoint (`pos_orders.views.batch_availability_view`): for 118639 while the guard is on it returns
+  `batch_action='coupon_serial'` and NO batch list — the agent can no longer click some other coupon's row.
+- Screen (`usePosOrder.js` + `POSOrderPage.jsx` CouponModal + mobile sheet): the agent types the serial printed on
+  the coupon → `GET /api/vouchers/coupons/check/` → on success a qty-1 line bound to that serial (`batchno`) and its
+  expiry is added; on failure the reasons are shown (used, not issued, wrong owner PIC, not at this branch…).
+- Writer (`pos_orders.writer._coupon_serial_alloc`, called first in `_allocate_line`): a coupon line takes EXACTLY
+  its serial's `stkbalexpiry` row (unique expiry) — never FEFO, never a reservation split; the existing server-side
+  `item_partno` copy then writes that serial to `stktrans5`. Missing row → the push is refused (nothing written).
+
+### Switch-on guide
+1. Make sure the lifecycle archive is current: `python manage.py sync_coupon_lifecycle`.
+2. In `.env`: `COUPON_POS_GUARD_ENABLED=True` (restart the web server). Optional relaxations:
+   `COUPON_GUARD_REQUIRE_OWNER=False` · `COUPON_GUARD_REQUIRE_ISSUED=False` · `COUPON_GUARD_REQUIRE_BRANCH_STOCK=False`.
+3. Call-center brief: select the coupon OWNER's customer (PIC) first, then add item 118639 and type the printed serial.
+4. Test one real coupon end-to-end on `/pos` (check → push → settle at the cashier), then
+   `coupon_report --serial <serial>` should show it redeemed with the right serial and customer.
+5. Keep running `sync_coupon_lifecycle` + `coupon_report` daily for coupons redeemed directly in SOFTECH.
+
+Original part-2 notes:
 1. Writer: `apps/pos_orders/writer._allocate_line` picks coupon stock FEFO, so the pushed line carries the
    earliest-expiry serial, not the coupon's. For item 118639 it must take exactly the row whose
    `stkbalexpiry.batchno` = the line's serial (its expiry) — no FEFO, no reservation split.

@@ -903,6 +903,13 @@ def batch_availability_view(request):
     batch_required = Item.objects.filter(softech_id=item).values_list('batch_required', flat=True).first()
     # authoritative batch matrix (CASE 1-5) decided server-side; the POS enforces this verdict.
     verdict = batch_action(batches, batch_required=bool(batch_required), stockable=stockable)
+    # Served gift coupon (118639): never pick a row from a list — the agent types the serial PRINTED
+    # on the coupon and it is verified live (apps/vouchers/coupon_guard.py). Rows are not exposed.
+    from apps.vouchers import coupon_guard, coupons
+    if coupon_guard.guard_enabled() and item == coupons.served_item():
+        return Response({'item': item, 'store': store, 'stockable': stockable, 'batches': [],
+                         'batch_required': True, 'batch_action': 'coupon_serial',
+                         **summarize(batches)})
     # non-stockable (service/fee) items: NOT out-of-stock — a plain line, never a reservation.
     return Response({'item': item, 'store': store, 'stockable': stockable, 'batches': batches,
                      'batch_required': bool(batch_required),

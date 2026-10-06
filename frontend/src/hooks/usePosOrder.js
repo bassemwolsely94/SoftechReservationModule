@@ -189,6 +189,9 @@ export default function usePosOrder() {
   const [activeTab, setActiveTab] = useState('items')           // items | payment | contract
   // batch picker + status
   const [batchModal, setBatchModal] = useState(null)
+  // Gift coupon (server says batch_action='coupon_serial'): the agent types the serial PRINTED on the
+  // coupon; the backend verifies it live (issued, unused, owner's PIC, in this branch's stock).
+  const [couponModal, setCouponModal] = useState(null)
   const [busy, setBusy] = useState(false)
   const [plan, setPlan] = useState(null)
   const [offersPlan, setOffersPlan] = useState(null)   // read-only offers preview for the live basket
@@ -635,6 +638,10 @@ export default function usePosOrder() {
         : (data.out_of_stock || !data.batches?.length) ? 'reserve'
         : mustBatch ? (data.batches.length === 1 ? 'auto_select' : 'must_select')
         : 'optional')
+      if (action === 'coupon_serial') {
+        setCouponModal({ item: avail, serial: '', checking: false, errors: [] })
+        return
+      }
       if (action === 'plain') {
         // non-stockable (service/fee) → plain line, no batch, no حجز.
         setLines(prev => [...prev, _newLine(avail, { not_stockable: true })])
@@ -684,6 +691,35 @@ export default function usePosOrder() {
       return { ...m, picks, shortfall: need > 1e-9 ? need : 0 }
     })
   }, [])
+
+  const checkCoupon = useCallback(async () => {
+    const m = couponModal
+    if (!m) return
+    const serial = String(m.serial || '').trim()
+    if (!serial) { setCouponModal(x => ({ ...x, errors: ['أدخل سريال الكوبون المطبوع.'] })); return }
+    if (lines.some(l => l.softech_itemcode === m.item.softech_id
+                        && String(l.batchno || '').toUpperCase() === serial.toUpperCase())) {
+      setCouponModal(x => ({ ...x, errors: ['هذا الكوبون مضاف بالفعل في الأمر.'] })); return
+    }
+    const b = branches.find(x => String(x.id) === String(branch))
+    setCouponModal(x => ({ ...x, checking: true, errors: [] }))
+    try {
+      const { data } = await api.get('/vouchers/coupons/check/', {
+        params: { serial, branch: b?.softech_branch_id || '', store: storeCode || '',
+                  pic: picCustomer?.softech_pic || customer?.softech_pic || '' },
+      })
+      if (!data.ok) { setCouponModal(x => ({ ...x, checking: false, errors: data.errors || [] })); return }
+      setLines(prev => [...prev, _newLine(m.item, {
+        qty: 1, batchno: data.serial, item_expiry: data.info?.expiry || null,
+        available_expiry_qty: data.info?.branch_qty ?? 1,
+      })])
+      setMsg(`أُضيف الكوبون ${data.serial}.`)
+      setCouponModal(null)
+    } catch (e) {
+      setCouponModal(x => ({ ...x, checking: false,
+                              errors: [e?.response?.data?.detail || 'تعذّر التحقق من الكوبون — حاول مرة أخرى.'] }))
+    }
+  }, [couponModal, lines, branches, branch, storeCode, picCustomer, customer])
 
   const confirmBatchPick = useCallback(() => {
     setBatchModal(m => {
@@ -1172,6 +1208,7 @@ export default function usePosOrder() {
     empDataFields, contractFields,
     lines, setLine, lineDiscValue, lineSellPrice, removeLine, addItem, selected, setSelected, numMode, setNumMode, numpad,
     batchModal, setBatchModal, confirmBatchPick, setBatchNeed, fefoFill,
+    couponModal, setCouponModal, checkCoupon,
     suggest, applySuggested, applyAllSuggested,
     loyalty, pointsInfo, parked, parkOrder, recallOrder, deleteParked,
     favorites, isFavorite, toggleFavorite, addByBarcode,

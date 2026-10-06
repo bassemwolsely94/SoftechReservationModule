@@ -92,12 +92,13 @@ def read_serial_history(conn, serial):
 
 
 def read_branch_stock(conn, store_code, serial):
-    """Qty of this serial's stock row in the order's store (branch node)."""
+    """(qty, expiry) of this serial's stock row in the order's store (branch node)."""
     cur = conn.cursor()
-    cur.execute(f"SELECT sum(itemqty) FROM {_DB}.stkbalexpiry WHERE storecode = ? AND itemcode = ? AND batchno = ?",
+    cur.execute(f"SELECT sum(itemqty), max(itemexpirydate) FROM {_DB}.stkbalexpiry "
+                f"WHERE storecode = ? AND itemcode = ? AND batchno = ?",
                 [str(store_code), coupons.served_item(), serial])
     row = cur.fetchone()
-    return _dec(row[0] if row else 0)
+    return _dec(row[0] if row else 0), (coupons.to_date(row[1]) if row else None)
 
 
 def open_orders_holding(serial, exclude_order_id=None):
@@ -150,12 +151,14 @@ def check_serial(raw, *, branch=None, store_code='', customer_pic='', exclude_or
         if hq_conn is None:
             hq_conn, own_hq = get_sybase_connection(), True
         history = read_serial_history(hq_conn, serial)
-        branch_qty = None
-        if _flag('COUPON_GUARD_REQUIRE_BRANCH_STOCK') and store_code:
+        branch_qty, expiry = None, None
+        if store_code:
             if branch_conn is None and branch is not None and getattr(branch, 'effective_db_host', ''):
                 branch_conn, own_br = get_branch_connection(
                     branch.effective_db_host, branch.effective_db_port, branch.db_name or 'SOFTECHDB9'), True
-            branch_qty = read_branch_stock(branch_conn or hq_conn, store_code, serial)
+            branch_qty, expiry = read_branch_stock(branch_conn or hq_conn, store_code, serial)
+            if not _flag('COUPON_GUARD_REQUIRE_BRANCH_STOCK'):
+                branch_qty = None
     except Exception as exc:
         logger.warning('[coupon_guard] cannot verify %s: %s', serial, exc)
         return {'ok': False, 'serial': serial, 'info': {},
@@ -172,6 +175,7 @@ def check_serial(raw, *, branch=None, store_code='', customer_pic='', exclude_or
     info = {'stocked': float(history['stocked']), 'redeemed': float(history['redeemed']),
             'issued': float(history['issued']), 'issued_to': history['issued_pic'],
             'branch_qty': (float(branch_qty) if branch_qty is not None else None),
+            'expiry': (expiry.isoformat() if expiry else None),
             'held_by_orders': held_by}
     return {'ok': not errors, 'serial': serial, 'errors': errors, 'info': info}
 

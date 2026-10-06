@@ -1061,6 +1061,29 @@ def _fefo_batches(conn, store_code, itemcode):
     return out
 
 
+def _coupon_serial_alloc(conn, order, line, qty):
+    """Served gift coupon (118639) carrying the serial printed on the coupon (line.batchno): take
+    EXACTLY that serial's stock row (its unique expiry), never FEFO — FEFO pushed some other coupon's
+    serial to SOFTECH. The coupon guard has already verified the serial; if its row is not in this
+    store the push is refused rather than silently selling another coupon. None = not a coupon line."""
+    from apps.vouchers import coupons
+    if str(line.softech_itemcode or '').strip() != coupons.served_item():
+        return None
+    parsed = coupons.parse_serial(line.batchno)
+    if not parsed:
+        return None
+    serial = parsed[2]
+    cur = conn.cursor()
+    cur.execute("SELECT itemexpirydate, itemqty FROM stkbalexpiry "
+                "WHERE storecode=? AND itemcode=? AND batchno=? AND itemqty>0",
+                [str(order.store_code), str(line.softech_itemcode), serial])
+    row = cur.fetchone()
+    if not row or row[0] is None or float(row[1] or 0) < float(qty):
+        raise ValueError(f'الكوبون {serial} غير موجود في مخزون المخزن {order.store_code} — لم يُرسل.')
+    return {'qty': qty, 'expiry': str(row[0])[:10], 'batchno': serial, 's_doccode': '000',
+            'reservation': False}
+
+
 def _allocate_line(conn, order, line, stock_controlled):
     """Split ONE order line the way native's POS does at entry (verified against native pending 7818):
     throw the AVAILABLE qty onto dispensed line(s) — one per FEFO batch, carrying that batch's real
@@ -1074,6 +1097,9 @@ def _allocate_line(conn, order, line, stock_controlled):
         # zero-qty or SERVICE/non-stocked item (items.itemtrans='0'): a single plain line, no batch,
         # never reserved (no physical stock to dispense or reserve).
         return [{'qty': q, 'expiry': None, 'batchno': None, 's_doccode': None, 'reservation': False}]
+    coupon = _coupon_serial_alloc(conn, order, line, q)
+    if coupon is not None:
+        return [coupon]
     allocs, remaining = [], q
     for exp, bqty, bno in _fefo_batches(conn, order.store_code, line.softech_itemcode):
         if remaining <= 0:

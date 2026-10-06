@@ -273,6 +273,21 @@ export default function MobilePOSOrderPage() {
       )}
 
       {/* batch picker */}
+      {P.couponModal && (
+        <Sheet onClose={() => P.setCouponModal(null)} title={`كوبون هدية — ${P.couponModal.item.name}`}>
+          <div className="text-xs text-gray-500 mb-2">أدخل السريال المطبوع على الكوبون — الفاتورة على كود صاحب الكوبون.</div>
+          <input autoFocus dir="ltr" value={P.couponModal.serial} placeholder="27301-ABC123"
+                 onChange={e => P.setCouponModal(x => ({ ...x, serial: e.target.value.toUpperCase(), errors: [] }))}
+                 className="minp font-mono text-center" />
+          {P.couponModal.errors?.length > 0 && (
+            <div className="mt-2 text-sm text-red-700">{P.couponModal.errors.map((er, i) => <div key={i}>• {er}</div>)}</div>
+          )}
+          <button onClick={P.checkCoupon} disabled={P.couponModal.checking}
+                  className="w-full mt-3 py-2 rounded bg-blue-600 text-white disabled:bg-gray-300">
+            {P.couponModal.checking ? 'جارٍ التحقق…' : 'تحقق وأضف'}
+          </button>
+        </Sheet>
+      )}
       {P.batchModal && (
         <Sheet onClose={() => P.setBatchModal(null)} title={`التشغيلة — ${P.batchModal.item.name}`}>
           <div className="flex items-center gap-2 mb-2 bg-gray-50 rounded p-2">

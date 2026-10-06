@@ -44,7 +44,7 @@ export default function POSOrderPage() {
   const toggleMode = () => setModeOpen(o => { const n = !o; try { localStorage.setItem('pos_mode_open', n ? '1' : '0') } catch { /* private */ } return n })
   const togglePad = () => setPadOpen(o => { const n = !o; try { localStorage.setItem('pos_pad_open', n ? '1' : '0') } catch { /* private */ } return n })
   // keyboard shortcuts are muted while any modal/overlay owns the screen
-  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || !!P.batchModal || !!P.plan
+  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || !!P.batchModal || !!P.couponModal || !!P.plan
   const histCustomerId = P.picCustomer?.id || P.customer?.id
   // Q → open the units (strips) entry for the selected line
   const openUnits = () => { if (P.selected >= 0 && P.selected < P.lines.length) setShowUnits(true) }
@@ -79,6 +79,7 @@ export default function POSOrderPage() {
           : <Rail side="left" onClick={togglePad} icon="🔢" title="لوحة الأرقام" />}
       </div>
       {P.batchModal && <BatchModal P={P} />}
+      {P.couponModal && <CouponModal P={P} />}
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
@@ -1232,6 +1233,36 @@ export function posFlow(next, prev, tabOnly = false) {
 }
 function PInp({ t, i, k, P, step }) {
   return <Td><input type="number" step={step} value={t[k]} onChange={e => P.setTender(i, k, e.target.value)} className="w-24 border rounded px-1 text-center" /></Td>
+}
+
+function CouponModal({ P }) {
+  const m = P.couponModal
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => P.setCouponModal(null)}>
+      <div dir="rtl" className="bg-white rounded-lg p-4 w-[28rem]" onClick={e => e.stopPropagation()}>
+        <div className="font-bold mb-1">كوبون هدية — {m.item.name}</div>
+        <div className="text-xs text-gray-500 mb-3">
+          أدخل السريال المطبوع على الكوبون (مثال 27301-ABC123). يجب أن تكون الفاتورة على كود صاحب الكوبون.
+        </div>
+        <input autoFocus dir="ltr" value={m.serial} placeholder="27301-ABC123"
+               onChange={e => P.setCouponModal(x => ({ ...x, serial: e.target.value.toUpperCase(), errors: [] }))}
+               onKeyDown={e => { if (e.key === 'Enter') P.checkCoupon(); if (e.key === 'Escape') P.setCouponModal(null) }}
+               className="w-full border rounded px-2 py-2 font-mono text-lg text-center tracking-wider" />
+        {m.errors?.length > 0 && (
+          <ul className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2 list-disc pr-5">
+            {m.errors.map((er, i) => <li key={i}>{er}</li>)}
+          </ul>
+        )}
+        <div className="flex justify-end gap-2 mt-3">
+          <button onClick={() => P.setCouponModal(null)} className="px-4 py-1.5 rounded border">إلغاء (Esc)</button>
+          <button onClick={P.checkCoupon} disabled={m.checking}
+                  className={`px-4 py-1.5 rounded text-white ${m.checking ? 'bg-gray-300' : 'bg-blue-600'}`}>
+            {m.checking ? 'جارٍ التحقق…' : 'تحقق وأضف'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function BatchModal({ P }) {

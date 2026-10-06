@@ -77,13 +77,13 @@ class CheckSerialTests(TestCase):
     def test_reads_history_and_branch_stock(self):
         conn = mock.Mock()
         with mock.patch.object(g, 'read_serial_history', return_value=hist()) as rh, \
-                mock.patch.object(g, 'read_branch_stock', return_value=D(1)) as rb:
+                mock.patch.object(g, 'read_branch_stock', return_value=(D(1), dt.date(2030, 3, 11))) as rb:
             res = g.check_serial('27301-ABC123', store_code='130', customer_pic='04HD731',
                                  hq_conn=conn, branch_conn=conn)
         self.assertTrue(res['ok'], res)
         rh.assert_called_once_with(conn, '27301-ABC123')
         rb.assert_called_once_with(conn, '130', '27301-ABC123')
-        self.assertEqual(res['info']['issued_to'], '04HD731')
+        self.assertEqual((res['info']['issued_to'], res['info']['expiry']), ('04HD731', '2030-03-11'))
 
 
 def _order(**kw):
@@ -170,3 +170,65 @@ class NegativePriceExceptionTests(TestCase):
         with mock.patch.object(g, 'check_serial', return_value={'ok': True, 'errors': []}):
             self.assertEqual(self._price_errors(self._neg_line_order('118639')), [])
             self.assertTrue(self._price_errors(self._neg_line_order('12345')))
+
+
+class WriterSerialAllocationTests(TestCase):
+    """apps/pos_orders/writer._allocate_line: a coupon line takes EXACTLY its serial's row, not FEFO."""
+
+    def _conn(self, row):
+        cur = mock.Mock()
+        cur.fetchone.return_value = row
+        return mock.Mock(cursor=mock.Mock(return_value=cur)), cur
+
+    def test_coupon_line_uses_its_own_serial_row(self):
+        from apps.pos_orders import writer
+        o = _order(softech_pic='04HD731')
+        ln = _coupon_line(o, '27301-abc123')
+        conn, cur = self._conn((dt.datetime(2030, 3, 11), 1.0))
+        with mock.patch.object(writer, '_fefo_batches', side_effect=AssertionError('FEFO must not be used')):
+            allocs = writer._allocate_line(conn, o, ln, True)
+        self.assertEqual(allocs, [{'qty': D(1), 'expiry': '2030-03-11', 'batchno': '27301-ABC123',
+                                   's_doccode': '000', 'reservation': False}])
+        self.assertEqual(cur.execute.call_args.args[1], ['130', '118639', '27301-ABC123'])
+
+    def test_missing_serial_row_refuses_instead_of_selling_another_coupon(self):
+        from apps.pos_orders import writer
+        o = _order(softech_pic='04HD731')
+        ln = _coupon_line(o, '27301-ABC123')
+        conn, _ = self._conn(None)
+        with self.assertRaises(ValueError):
+            writer._allocate_line(conn, o, ln, True)
+
+    def test_other_items_keep_fefo(self):
+        from apps.pos_orders import writer
+        o = _order()
+        ln = SoftechSalesOrderLine.objects.create(order=o, softech_itemcode='12345', qty=D(2),
+                                                  item_sale_price=D('10'), cust_discp=D('0'))
+        with mock.patch.object(writer, '_fefo_batches', return_value=[('2027-01-01', 5.0, None)]):
+            allocs = writer._allocate_line(mock.Mock(), o, ln, True)
+        self.assertEqual(allocs[0]['expiry'], '2027-01-01')
+
+
+class BatchesEndpointCouponTests(TestCase):
+    URL = '/api/pos-orders/batches/'
+
+    def setUp(self):
+        from .factories import make_call_center, make_item
+        _, _, self.client = make_call_center()
+        self.branch = make_branch()
+        make_item('COUPON SERVED TO CUSTOMER', '118639')
+
+    def _get(self):
+        with mock.patch('apps.pos_orders.batch_availability.item_availability',
+                        return_value=([{'expiry': '2030-03-11', 'qty': 1.0, 'batchno': '27301-ABC123'}], True)):
+            return self.client.get(self.URL, {'branch': self.branch.pk, 'item': '118639', 'store': '130'})
+
+    def test_lists_batches_while_guard_off(self):
+        r = self._get()
+        self.assertEqual(r.status_code, 200)
+        self.assertNotEqual(r.json()['batch_action'], 'coupon_serial')
+
+    @override_settings(COUPON_POS_GUARD_ENABLED=True)
+    def test_asks_for_the_printed_serial_when_guard_on(self):
+        r = self._get().json()
+        self.assertEqual((r['batch_action'], r['batches']), ('coupon_serial', []))
