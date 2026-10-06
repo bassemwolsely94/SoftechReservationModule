@@ -1,11 +1,12 @@
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count
 
-from .models import Customer, CustomerNote, PurchaseHistory
+from .models import Customer, CustomerNote, CustomerHealthProfile, PurchaseHistory
 from .serializers import (
     CustomerSerializer, CustomerListSerializer,
     CustomerCreateSerializer, CustomerUpdateSerializer,
@@ -19,15 +20,18 @@ def _profile(request):
 
 class CustomerViewSet(viewsets.ModelViewSet):
     permission_classes  = [IsAuthenticated]
-    filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields    = ['softech_ptclassifcode', 'preferred_branch']
-    search_fields       = ['name', 'phone', 'phone_alt', 'softech_id']
-    ordering_fields     = ['name', 'created_at', 'updated_at']
+    # search after ordering: exact text first, the chosen sort within each rank
+    filter_backends     = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
+    filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']
+    search_fields       = ['name', 'phone', 'phone_alt', 'softech_id', 'softech_pic']
+    ordering_fields     = ['name', 'created_at', 'updated_at', 'churn_score', 'ltv',
+                           'days_since_last_visit', 'last_visit_date']
     ordering            = ['name']
 
     def get_queryset(self):
         return Customer.objects.select_related(
             'preferred_branch', 'created_by__user',
+            'health_profile',       # prevents N+1 on is_chronic / detected_conditions
         ).prefetch_related('notes__created_by__user')
 
     def get_serializer_class(self):
@@ -41,6 +45,42 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=_profile(self.request))
+
+    # ── GET|PATCH /api/customers/segmentation-config/ ─────────────────────────
+    # Tunable CRM segmentation thresholds (singleton). PATCH is admin-only.
+    @action(detail=False, methods=['get', 'patch'], url_path='segmentation-config')
+    def segmentation_config(self, request):
+        from .models import SegmentationConfig
+        cfg = SegmentationConfig.get_solo()
+        fields = ['vip_ltv_threshold', 'loyal_min_purchases', 'new_grace_days',
+                  'at_risk_min_days', 'at_risk_max_days', 'dormant_max_days']
+
+        if request.method == 'PATCH':
+            p = _profile(request)
+            if not (p and p.role == 'admin'):
+                return Response({'detail': 'يتطلب صلاحية مدير'}, status=status.HTTP_403_FORBIDDEN)
+            for f in fields:
+                if f in request.data:
+                    setattr(cfg, f, request.data[f])
+            cfg.updated_by = p
+            cfg.save()
+
+        data = {f: getattr(cfg, f) for f in fields}
+        data['vip_ltv_threshold'] = float(data['vip_ltv_threshold'])
+        data['updated_at'] = cfg.updated_at.isoformat() if cfg.updated_at else None
+        return Response(data)
+
+    # ── GET /api/customers/recognize/?q=<phone|name> ──────────────────────────
+    @action(detail=False, methods=['get'], url_path='recognize')
+    def recognize(self, request):
+        """Recognize-on-type for the POS customer field + duplicate surfacing."""
+        from .recognition import recognize as _recognize
+        try:
+            limit = min(int(request.query_params.get('limit', 6)), 15)
+        except (TypeError, ValueError):
+            limit = 6
+        data = _recognize(request.query_params.get('q', ''), limit=max(1, limit))
+        return Response(data)
 
     # ── GET /api/customers/{id}/purchases/ ────────────────────────────────────
 
@@ -80,6 +120,70 @@ class CustomerViewSet(viewsets.ModelViewSet):
         return Response(
             ReservationListSerializer(qs, many=True, context={'request': request}).data
         )
+
+    # ── GET /api/customers/{id}/unmet-demand/ ─────────────────────────────────
+    # Phase 4 — everything this customer asked for and didn't get (CRM context).
+
+    @action(detail=True, methods=['get'], url_path='unmet-demand')
+    def unmet_demand(self, request, pk=None):
+        customer = self.get_object()
+        from collections import Counter
+        from django.db.models import Q, F, Sum
+        from apps.demand.models import DemandItem
+
+        # Match by FK OR phcode OR phone — demands aren't always FK-linked.
+        match = Q(demand__customer=customer)
+        if customer.softech_pic:
+            match |= Q(demand__phcode=customer.softech_pic)
+        phones = [p for p in (customer.phone, customer.phone_alt) if p]
+        if phones:
+            match |= Q(demand__phone__in=phones)
+
+        base = (
+            DemandItem.objects.filter(match, item__isnull=False)
+            .select_related('demand', 'demand__branch', 'item')
+        )
+
+        UNMET = ('pending', 'sourcing', 'available_again', 'lost')
+        status_labels = dict(DemandItem.ITEM_STATUS_CHOICES)
+
+        items = []
+        for di in base.filter(item_status__in=UNMET).order_by('-demand__created_at')[:50]:
+            branch = di.demand.branch
+            items.append({
+                'id':            di.id,
+                'demand_id':     di.demand_id,
+                'demand_number': di.demand.demand_number,
+                'item_id':       di.item_id,
+                'item_name':     di.item.name,
+                'softech_id':    di.item.softech_id,
+                'quantity':      float(di.quantity),
+                'item_status':   di.item_status,
+                'status_label':  status_labels.get(di.item_status, di.item_status),
+                'line_value':    di.line_value,
+                'branch_name':   (branch.name_ar or branch.name) if branch else '',
+                'created_at':    di.demand.created_at.isoformat(),
+                'days_waiting':  di.days_waiting,
+            })
+
+        counts = Counter(base.values_list('item_status', flat=True))
+        total_unmet_value = float(
+            base.filter(item_status__in=UNMET, unit_price_snapshot__isnull=False)
+            .annotate(v=F('quantity') * F('unit_price_snapshot'))
+            .aggregate(s=Sum('v'))['s'] or 0
+        )
+
+        return Response({
+            'customer_id': customer.id,
+            'summary': {
+                'open':              counts.get('pending', 0) + counts.get('sourcing', 0),
+                'available_again':   counts.get('available_again', 0),
+                'lost':              counts.get('lost', 0),
+                'recovered':         counts.get('recovered', 0),
+                'total_unmet_value': total_unmet_value,
+            },
+            'items': items,
+        })
 
     # ── GET /api/customers/{id}/top_items/ ────────────────────────────────────
 
@@ -145,3 +249,212 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         note.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ── GET /api/customers/{id}/pos-summary/ ──────────────────────────────────
+    # Compact Customer-360 for the POS side-drawer (fast; not the full profile).
+    @action(detail=True, methods=['get'], url_path='pos-summary')
+    def pos_summary(self, request, pk=None):
+        from .pos_summary import build_pos_summary
+        return Response(build_pos_summary(self.get_object()))
+
+    # ── GET /api/customers/{id}/receipt/?invoice=  ·  POST .../receipt/ {channel}
+    # Unified digital receipt payload + channel delivery (honest stubs).
+    @action(detail=True, methods=['get', 'post'], url_path='receipt')
+    def receipt(self, request, pk=None):
+        from .receipt import build_receipt, send_receipt
+        customer = self.get_object()
+        invoice_id = request.query_params.get('invoice') or request.data.get('invoice')
+        if invoice_id:
+            purchase = PurchaseHistory.objects.filter(pk=invoice_id, customer=customer).first()
+        else:
+            from .repeat_order import last_sale_for
+            purchase = last_sale_for(customer)
+        if not purchase:
+            return Response({'detail': 'لا توجد فاتورة'}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == 'POST':
+            return Response(send_receipt(purchase, request.data.get('channel', 'print')))
+        return Response(build_receipt(purchase))
+
+    # ── GET /api/customers/{id}/repeat-order/?branch=&invoice= ────────────────
+    # Rebuild a past order into a REVALIDATED cart proposal (never blind-copy).
+    @action(detail=True, methods=['get'], url_path='repeat-order')
+    def repeat_order(self, request, pk=None):
+        from .repeat_order import build_repeat_order, last_sale_for
+        customer = self.get_object()
+        invoice_id = request.query_params.get('invoice')
+        if invoice_id:
+            purchase = PurchaseHistory.objects.filter(pk=invoice_id, customer=customer).first()
+        else:
+            purchase = last_sale_for(customer)
+        if not purchase:
+            return Response({'detail': 'لا توجد فاتورة سابقة'}, status=status.HTTP_404_NOT_FOUND)
+        branch_id = request.query_params.get('branch')
+        branch_id = int(branch_id) if branch_id and str(branch_id).isdigit() else None
+        return Response(build_repeat_order(purchase, branch_id=branch_id))
+
+    # ── GET /api/customers/{id}/patient-profile/ ──────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='patient-profile')
+    def patient_profile(self, request, pk=None):
+        """
+        GET /api/customers/{id}/patient-profile/
+        Returns a fully aggregated patient profile including:
+          - chronic medications + refill timeline
+          - purchase summary + ERP sales
+          - active follow-ups
+          - reservations history
+          - demand history
+          - tags + locations
+        """
+        customer = self.get_object()
+        from .patient_profile import build_patient_profile
+        return Response(build_patient_profile(customer, request_user=request.user))
+
+    # ── GET /api/customers/{id}/timeline/ ────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='timeline')
+    def timeline(self, request, pk=None):
+        """
+        GET /api/customers/{id}/timeline/?limit=50
+        Returns chronological event list for the customer.
+        """
+        customer = self.get_object()
+        limit = min(int(request.query_params.get('limit', 50)), 200)
+        from .patient_profile import build_timeline
+        return Response(build_timeline(customer, limit=limit))
+
+    # ── GET /api/customers/{id}/health-profile/ ───────────────────────────────
+
+    @action(detail=True, methods=['get', 'patch'], url_path='health-profile')
+    def health_profile_view(self, request, pk=None):
+        """
+        GET  /api/customers/{id}/health-profile/
+             Returns the structured CustomerHealthProfile.
+
+        PATCH /api/customers/{id}/health-profile/
+             Allows pharmacist to manually set pregnancy_flag, lactation_flag,
+             pediatric_patient, known_allergies, declared_allergies_text.
+             Sets manually_overridden=True so the nightly engine won't overwrite.
+        """
+        customer = self.get_object()
+
+        if request.method == 'PATCH':
+            hp, _ = CustomerHealthProfile.objects.get_or_create(customer=customer)
+            allowed = {
+                'pregnancy_flag', 'lactation_flag', 'pediatric_patient',
+                'known_allergies', 'declared_allergies_text',
+            }
+            update_fields = []
+            for field in allowed:
+                if field in request.data:
+                    setattr(hp, field, request.data[field])
+                    update_fields.append(field)
+
+            if update_fields:
+                hp.manually_overridden = True
+                hp.updated_by = _profile(request)
+                update_fields += ['manually_overridden', 'updated_by']
+                hp.save(update_fields=update_fields)
+
+            from .patient_profile import _structured_health_profile
+            return Response(_structured_health_profile(customer))
+
+        from .patient_profile import _structured_health_profile
+        return Response(_structured_health_profile(customer))
+
+    # ── POST /api/customers/{id}/refresh-health/ ──────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='refresh-health')
+    def refresh_health(self, request, pk=None):
+        """
+        POST /api/customers/{id}/refresh-health/
+        Triggers an immediate rebuild of the CustomerHealthProfile for this customer.
+        Useful after adding new item→ingredient mappings.
+        """
+        customer = self.get_object()
+        from apps.customers.health_engine import CustomerHealthEngine
+        try:
+            profile = CustomerHealthEngine(customer).build()
+            from .patient_profile import _structured_health_profile
+            return Response({
+                'rebuilt': True,
+                'health_profile': _structured_health_profile(customer),
+            })
+        except Exception as exc:
+            return Response({'rebuilt': False, 'error': str(exc)}, status=500)
+
+    # ── GET /api/customers/{id}/recommendations/ ──────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='recommendations')
+    def recommendations(self, request, pk=None):
+        """
+        GET /api/customers/{id}/recommendations/?limit=8&clinical_filter=true
+        Returns personalized FBT recommendations with optional clinical safety filter.
+        """
+        customer = self.get_object()
+        limit          = min(int(request.query_params.get('limit', 8)), 20)
+        clinical_filter = request.query_params.get('clinical_filter', 'true').lower() == 'true'
+        from apps.recommendations.engine import get_customer_recs
+        recs = get_customer_recs(
+            customer_id          = customer.pk,
+            limit                = limit,
+            apply_clinical_filter = clinical_filter,
+        )
+        return Response({'customer_id': customer.pk, 'recommendations': recs})
+
+    # ── GET /api/customers/churn-at-risk/ ────────────────────────────────────
+
+    @action(detail=False, methods=['get'], url_path='churn-at-risk')
+    def churn_at_risk(self, request):
+        """
+        GET /api/customers/churn-at-risk/?segment=high&limit=50&is_chronic=true
+        Returns customers sorted by churn_score descending.
+        """
+        p       = request.query_params
+        qs      = Customer.objects.filter(churn_score__gt=0).order_by('-churn_score')
+
+        segment = p.get('segment')
+        if segment:
+            qs = qs.filter(churn_segment=segment)
+
+        # is_chronic filter: look for customers who have at least one has_* = True
+        # on their health_profile (db-level boolean fields, not the is_chronic property)
+        if p.get('is_chronic') == 'true':
+            from django.db.models import Q as _Q
+            chronic_q = (
+                _Q(health_profile__has_diabetes=True) |
+                _Q(health_profile__has_hypertension=True) |
+                _Q(health_profile__has_cardiovascular=True) |
+                _Q(health_profile__has_thyroid=True) |
+                _Q(health_profile__has_cholesterol=True) |
+                _Q(health_profile__has_asthma=True) |
+                _Q(health_profile__has_psychiatric=True) |
+                _Q(health_profile__has_oncology=True) |
+                _Q(health_profile__has_anticoagulant=True)
+            )
+            qs = qs.filter(chronic_q)
+
+        # branch filter
+        if p.get('branch'):
+            qs = qs.filter(preferred_branch_id=p['branch'])
+
+        limit = min(int(p.get('limit', 50)), 200)
+
+        data = []
+        for c in qs.select_related('preferred_branch')[:limit]:
+            data.append({
+                'id':                 c.pk,
+                'name':               c.name,
+                'phone':              c.phone,
+                'whatsapp_phone':     c.whatsapp_phone or c.phone,
+                'segment':            c.segment,
+                'churn_score':        float(c.churn_score),
+                'churn_score_pct':    round(float(c.churn_score) * 100, 1),
+                'churn_segment':      c.churn_segment,
+                'days_since_visit':   c.days_since_last_visit,
+                'last_visit_date':    str(c.last_visit_date) if c.last_visit_date else None,
+                'ltv':                float(c.ltv or 0),
+                'preferred_branch':   c.preferred_branch.name_ar if c.preferred_branch else '',
+                'purchase_count_90d': c.purchase_count_90d,
+            })
+        return Response({'count': len(data), 'results': data})

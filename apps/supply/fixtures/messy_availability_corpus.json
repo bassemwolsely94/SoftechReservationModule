@@ -1,0 +1,56 @@
+{
+  "_about": "Messy supplier-availability lines with ground-truth SOFTECH item codes from the ElRezeiky catalog (2026-09). 'expect' = any acceptable code (several when the catalog has equivalent packs); 'expect_none' = the item is not in the catalog, so the ONLY safe outcome is no confident match. 'qty' = the quantity the parser must extract (null = unknown). Used by `manage.py validate_supply_matching` (read-only).",
+  "cases": [
+    {"line": "[20/09/2026, 10:15] Ibn Sina Sales: Recormon 4000 available 10", "expect": ["124018"], "qty": 10},
+    {"line": "ريكورمون ٤٠٠٠ متاح ٥", "expect": ["124018"], "qty": 5},
+    {"line": "Recormon 4000 IU x6", "expect": ["124018"], "qty": 6},
+    {"line": "Recormn 4000 available", "expect": ["124018"], "qty": null},
+    {"line": "recormon 2000 - 3 box", "expect": ["1462"], "qty": 3},
+    {"line": "Recormon 5000 10+1", "expect": ["1463"], "qty": 10},
+
+    {"line": "Kreon 25000 بونص 2 مجانا", "expect": ["126922"], "qty": null},
+    {"line": "كريون ٢٥٠٠٠ متاح ٢٠", "expect": ["126922"], "qty": 20},
+    {"line": "KREON 25000 CAPS 4 box", "expect": ["126922"], "qty": 4},
+
+    {"line": "Cellcept 500 — 5 boxes", "expect": ["1240"], "qty": 5},
+    {"line": "سيلسبت ٥٠٠ عدد ٥", "expect": ["1240"], "qty": 5},
+    {"line": "cellcept 250mg 2", "expect": ["1236"], "qty": 2},
+
+    {"line": "Ozempic 1 mg موجود", "expect": ["124421"], "qty": null},
+    {"line": "ozempic 0.5 mg 3 pens", "expect": ["124420"], "qty": 3},
+    {"line": "Ozempik 1mg x2", "expect": ["124421"], "qty": 2},
+    {"line": "اوزمبك ٠.٢٥ مجم ٤ اقلام", "expect": ["124419"], "qty": 4},
+
+    {"line": "• Xgeva 120mg x3", "expect": ["103404"], "qty": 3},
+
+    {"line": "Concor 5 - 20 box @ 45 LE", "expect": ["106903"], "qty": 20},
+    {"line": "concor 10mg 15", "expect": ["106488"], "qty": 15},
+    {"line": "كونكور ٥ مجم ١٠ علب", "expect": ["106903"], "qty": 10},
+    {"line": "Concor Plus 5/12.5 x5", "expect": ["106965"], "qty": 5},
+
+    {"line": "2) Nexium 40 mg tab 10 علب", "expect": ["103355"], "qty": 10},
+    {"line": "Nexium 20mg 28 tab x4", "expect": ["103356", "107923"], "qty": 4},
+
+    {"line": "Augmentin 1g qty: 15 price 90", "expect": ["3690"], "qty": 15},
+    {"line": "اوجمنتين ١ جم ٨ علب", "expect": ["3690"], "qty": 8},
+
+    {"line": "Lipitor 20mg 5 exp 2026-06", "expect": ["90101", "81354", "100314"], "qty": 5},
+    {"line": "Lipitur 40 mg 3", "expect": ["99588", "84854"], "qty": 3},
+
+    {"line": "Glucophage 1000 x10", "expect": ["85809"], "qty": 10},
+    {"line": "Glucofage XR 500 5 علب", "expect": ["112742"], "qty": 5},
+
+    {"line": "Januvia 100mg 6", "expect": ["96649"], "qty": 6},
+    {"line": "جانوفيا ٥٠ مجم عدد ٣", "expect": ["120116"], "qty": 3},
+
+    {"line": "Eliquis 5mg 10 box", "expect": ["115261"], "qty": 10},
+    {"line": "eliquis 2.5 mg x4", "expect": ["113122"], "qty": 4},
+
+    {"line": "Xarelto 20mg 28 tab 3", "expect": ["104818"], "qty": 3},
+    {"line": "زاريلتو ١٥ مجم ٢ علب", "expect": ["104817", "128132"], "qty": 2},
+
+    {"line": "Plavix 75 mg x5", "expect": ["33555"], "qty": 5},
+
+    {"line": "✅ Zinnat 250 10+2", "expect_none": true, "qty": 10}
+  ]
+}

@@ -1,0 +1,38 @@
+[Unit]
+Description=ElRezeiky Pharmacy Platform — Daphne ASGI Web Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=elrezeiky
+Group=elrezeiky
+WorkingDirectory=/opt/elrezeiky
+
+# Load environment from .env file
+EnvironmentFile=/opt/elrezeiky/.env
+
+# Daphne serves both HTTP and WebSocket (Django Channels)
+# Bind to 127.0.0.1 only — Nginx sits in front and handles public traffic
+ExecStart=/opt/elrezeiky/venv/bin/daphne \
+    -b 127.0.0.1 \
+    -p 8000 \
+    --proxy-headers \
+    config.asgi:application
+
+# Restart policy: always restart, but back off if it crashes in a tight loop
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Logging — goes to journald, readable with: journalctl -u elrezeiky-web -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elrezeiky-web
+
+# Give the process time to shut down cleanly before SIGKILL
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

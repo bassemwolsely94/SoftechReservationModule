@@ -32,10 +32,10 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='created_transfer_requests', to='users.staffprofile', verbose_name='أنشئ بواسطة')),
-                ('destination_branch', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='incoming_requests', to='branches.branch', verbose_name='الفرع المصدر')),
+                ('supplying_branch', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='incoming_requests', to='branches.branch', verbose_name='الفرع المصدر')),
                 ('reviewed_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='reviewed_transfer_requests', to='users.staffprofile', verbose_name='راجع بواسطة')),
                 ('sent_to_erp_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='erp_sent_requests', to='users.staffprofile', verbose_name='أُرسل للـ ERP بواسطة')),
-                ('source_branch', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='outgoing_requests', to='branches.branch', verbose_name='الفرع الطالب')),
+                ('requesting_branch', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='outgoing_requests', to='branches.branch', verbose_name='الفرع الطالب')),
             ],
             options={
                 'verbose_name': 'طلب تحويل',
@@ -76,11 +76,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='transferrequest',
-            index=models.Index(fields=['status', 'source_branch'], name='transfers_t_status_69e49b_idx'),
+            index=models.Index(fields=['status', 'requesting_branch'], name='transfers_t_status_1e0631_idx'),
         ),
         migrations.AddIndex(
             model_name='transferrequest',
-            index=models.Index(fields=['status', 'destination_branch'], name='transfers_t_status_2c00e7_idx'),
+            index=models.Index(fields=['status', 'supplying_branch'], name='transfers_t_status_e50678_idx'),
         ),
         migrations.AddIndex(
             model_name='transferrequest',

@@ -1,5 +1,109 @@
-/* ─── Google Fonts ─────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+/* ─── Arabic webfonts: Cairo (default/fallback) + Tajawal (optional choice) ─── */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;900&display=swap');
+
+/* ─── ElRezeiky brand fonts (self-hosted, files in frontend/public/fonts/) ─────
+     Jozoor              → Arabic
+     Harabara Mais Demo  → Latin / headings
+     Berlin Sans FB      → Numbers (Regular + Bold)
+   .woff2 preferred, original .otf/.ttf kept as fallback.
+   ---------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Jozoor';
+  src: url('/fonts/Jozoor.woff2') format('woff2'),
+       url('/fonts/Jozoor.otf')   format('opentype');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Harabara Mais Demo';
+  src: url('/fonts/HarabaraMaisDemo.woff2') format('woff2'),
+       url('/fonts/HarabaraMaisDemo.otf')   format('opentype');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Berlin Sans FB';
+  src: url('/fonts/BerlinSansFB.woff2') format('woff2'),
+       url('/fonts/BerlinSansFB.ttf')   format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Berlin Sans FB';
+  src: url('/fonts/BerlinSansFB-Bold.woff2') format('woff2'),
+       url('/fonts/BerlinSansFB-Bold.ttf')   format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* Fonts. --font-ar is swapped at runtime by the Appearance settings page
+     (Cairo default — clearest for dense Arabic UI; Jozoor/Tajawal optional).
+     --font-ui embeds --font-ar so changing the Arabic font updates the body too:
+     Latin → Harabara, Arabic → chosen font. */
+  --font-en:  'Harabara Mais Demo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ar:  'Cairo', 'Tajawal', sans-serif;
+  --font-ui:  'Harabara Mais Demo', var(--font-ar), system-ui, sans-serif;
+  --font-num: 'Berlin Sans FB', 'Harabara Mais Demo', 'Cairo', sans-serif;
+
+  /* ── Brand palette defaults (R G B triplets; overridden at runtime by
+     src/theme/theme.js). These match the navy scale in tailwind.config.js. ── */
+  --c-brand-50:  238 243 251;
+  --c-brand-100: 211 224 244;
+  --c-brand-200: 167 193 232;
+  --c-brand-300: 111 155 214;
+  --c-brand-400: 56 128 187;   /* sky  */
+  --c-brand-500: 28 86 149;
+  --c-brand-600: 2 40 113;     /* navy — primary */
+  --c-brand-700: 2 32 93;
+  --c-brand-800: 1 24 69;
+  --c-brand-900: 1 17 47;
+  --c-brand-sky: 56 128 187;
+  --c-brand-red: 234 0 0;
+  --c-danger:    234 0 0;
+
+  /* Convenience solid hexes for inline/canvas use */
+  --brand-navy: #022871;
+  --brand-sky:  #3880bb;
+  --brand-red:  #ea0000;
+
+  /* ── Semantic surface tokens (LIGHT — default) ───────────────────────────────
+     Personal light/dark mode (src/theme/theme.js → applyMode) flips these by
+     setting data-theme="dark" on <html>. Brand colors above are unaffected —
+     they read in both modes. New code should prefer these Tailwind aliases
+     (bg-surface / text-content / border-line …) over literal bg-white/gray-*
+     so it themes automatically. R G B triplets → `/<alpha>` modifiers work. */
+  --c-bg:          246 248 252;  /* page background (#f6f8fc) */
+  --c-surface:     255 255 255;  /* cards, header, inputs */
+  --c-surface-2:   249 250 251;  /* subtle fill — table head, gray-50 */
+  --c-surface-3:   243 244 246;  /* hover/active fill — gray-100 */
+  --c-content:      15  27  51;  /* primary text (#0f1b33) */
+  --c-muted:        75  85  99;  /* secondary text — gray-600 */
+  --c-faint:       156 163 175;  /* tertiary text — gray-400 */
+  --c-line:        229 231 235;  /* borders — gray-200 */
+  --c-line-soft:   243 244 246;  /* soft borders — gray-100 */
+  --c-line-strong: 209 213 219;  /* strong borders — gray-300 */
+  --c-scroll:      209 213 219;  /* scrollbar thumb */
+  color-scheme: light;
+}
+
+/* ── Semantic surface tokens (DARK) ─────────────────────────────────────────────
+   Navy-tinted dark neutrals so the palette stays on-brand. Only the surface
+   tokens are overridden; the brand scale is intentionally left as-is. */
+:root[data-theme='dark'] {
+  --c-bg:           15  20  32;  /* deep navy-black (#0f1420) */
+  --c-surface:      22  28  44;  /* raised surface (#161c2c) */
+  --c-surface-2:    28  35  54;  /* subtle fill (#1c2336) */
+  --c-surface-3:    38  48  72;  /* hover/active fill (#263048) */
+  --c-content:     226 232 240;  /* primary text — slate-200 */
+  --c-muted:       148 163 184;  /* secondary text — slate-400 */
+  --c-faint:       100 116 139;  /* tertiary text — slate-500 */
+  --c-line:         42  52  76;  /* borders (#2a344c) */
+  --c-line-soft:    33  41  62;  /* soft borders (#21293e) */
+  --c-line-strong:  58  71 102;  /* strong borders (#3a4766) */
+  --c-scroll:       58  71 102;  /* scrollbar thumb */
+  color-scheme: dark;
+}
 
 @tailwind base;
 @tailwind components;
@@ -20,19 +124,20 @@
   }
 
   body {
-    font-family: 'Cairo', sans-serif;
-    background-color: #f8faf9;
-    color: #1a2e24;
+    font-family: var(--font-ui);
+    background-color: rgb(var(--c-bg));
+    color: rgb(var(--c-content));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Custom scrollbar — webkit */
   ::-webkit-scrollbar          { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track    { background: transparent; }
-  ::-webkit-scrollbar-thumb    { background: #d1d5db; border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+  ::-webkit-scrollbar-thumb    { background: rgb(var(--c-scroll)); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-faint)); }
 
   /* Remove default number input spinners */
   input[type='number']::-webkit-inner-spin-button,
@@ -40,10 +145,27 @@
 
   /* Smooth focus rings */
   *:focus-visible {
-    outline: 2px solid #1B6B3A;
+    outline: 2px solid rgb(var(--c-brand-600));
     outline-offset: 2px;
     border-radius: 6px;
   }
+}
+
+/* ─── RefreshButton loading bar animation ───────────────────────────────────── */
+@keyframes refresh-sweep {
+  0%   { left: -55%; width: 45%; }
+  65%  { left: 85%;  width: 60%; }
+  100% { left: 110%; width: 45%; }
+}
+
+.refresh-btn-bar {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background-color: currentColor;
+  opacity: 0.45;
+  border-radius: 9999px;
+  animation: refresh-sweep 1.1s ease-in-out infinite;
 }
 
 /* ─── Component layer ───────────────────────────────────────────────────────── */
@@ -60,8 +182,8 @@
   }
 
   .btn-secondary {
-    @apply bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100
-           text-gray-700 font-medium px-4 py-2 rounded-lg
+    @apply bg-surface border border-line-strong hover:bg-surface-2 active:bg-surface-3
+           text-content font-medium px-4 py-2 rounded-lg
            transition-colors duration-150
            focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed
@@ -77,7 +199,7 @@
   }
 
   .btn-ghost {
-    @apply text-gray-500 hover:text-gray-800 hover:bg-gray-100
+    @apply text-muted hover:text-content hover:bg-surface-3
            font-medium px-3 py-1.5 rounded-lg
            transition-colors duration-150
            inline-flex items-center justify-center gap-1.5 whitespace-nowrap;
@@ -85,25 +207,25 @@
 
   /* ── Cards ──────────────────────────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+    @apply bg-surface rounded-2xl shadow-sm border border-line-soft p-5;
   }
 
   .card-hover {
     @apply card cursor-pointer
-           hover:shadow-md hover:border-gray-200
+           hover:shadow-md hover:border-line
            transition-all duration-150;
   }
 
   /* ── Form elements ──────────────────────────────────────────────────────── */
   .input-field {
-    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-           bg-white text-gray-800 placeholder-gray-400
+    @apply w-full border border-line rounded-xl px-3 py-2.5 text-sm
+           bg-surface text-content placeholder-faint
            focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent
            transition-colors duration-150;
   }
 
   .label {
-    @apply block text-xs font-semibold text-gray-600 mb-1;
+    @apply block text-xs font-semibold text-muted mb-1;
   }
 
   /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -117,20 +239,20 @@
 
   /* ── Skeleton loader ────────────────────────────────────────────────────── */
   .skeleton {
-    @apply bg-gray-100 rounded-xl animate-pulse;
+    @apply bg-surface-3 rounded-xl animate-pulse;
   }
 
   .skeleton-text {
-    @apply h-3 bg-gray-100 rounded-full animate-pulse;
+    @apply h-3 bg-surface-3 rounded-full animate-pulse;
   }
 
   .skeleton-avatar {
-    @apply rounded-full bg-gray-100 animate-pulse flex-shrink-0;
+    @apply rounded-full bg-surface-3 animate-pulse flex-shrink-0;
   }
 
   /* ── Page header — sticky top bar shared across all pages ───────────────── */
   .page-header {
-    @apply bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-20;
+    @apply bg-surface border-b border-line px-4 sm:px-6 py-4 sticky top-0 z-20;
   }
 
   .page-body {
@@ -139,7 +261,7 @@
 
   /* ── Section title ───────────────────────────────────────────────────────── */
   .section-title {
-    @apply text-sm font-bold text-gray-700 flex items-center gap-2 mb-4;
+    @apply text-sm font-bold text-content flex items-center gap-2 mb-4;
   }
 
   /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -148,25 +270,25 @@
   }
 
   .data-table thead tr {
-    @apply bg-gray-50 border-b border-gray-100;
+    @apply bg-surface-2 border-b border-line-soft;
   }
 
   .data-table thead th {
-    @apply text-right px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap;
+    @apply text-right px-4 py-3 text-xs font-semibold text-muted whitespace-nowrap;
   }
 
   .data-table tbody tr {
-    @apply border-b border-gray-50 last:border-0
-           hover:bg-brand-50 transition-colors duration-100;
+    @apply border-b border-line-soft last:border-0
+           hover:bg-surface-3 transition-colors duration-100;
   }
 
   .data-table tbody td {
-    @apply px-4 py-3 text-gray-700;
+    @apply px-4 py-3 text-content;
   }
 
   /* ── Divider ─────────────────────────────────────────────────────────────── */
   .divider {
-    @apply border-t border-gray-100 my-4;
+    @apply border-t border-line-soft my-4;
   }
 
   /* ── Empty state container ───────────────────────────────────────────────── */
@@ -185,7 +307,10 @@
 
   /* Shimmer variant of skeleton — more polished than pure pulse */
   .shimmer {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 37%, #f0f0f0 63%);
+    background: linear-gradient(90deg,
+      rgb(var(--c-surface-2)) 25%,
+      rgb(var(--c-surface-3)) 37%,
+      rgb(var(--c-surface-2)) 63%);
     background-size: 400% 100%;
     animation: shimmer 1.4s ease infinite;
   }
@@ -199,11 +324,15 @@
     text-align: right;
   }
 
-  /* Tabular numerals for KPIs */
+  /* Tabular numerals for KPIs — uses the brand Numbers font (Berlin Sans FB) */
   .tabnum {
+    font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
   }
+
+  /* Brand Numbers font without forcing tabular spacing */
+  .font-num { font-family: var(--font-num); }
 
   /* Readable line-height for Arabic prose */
   .prose-ar {
@@ -220,15 +349,15 @@
 
   /* Glass card */
   .glass {
-    background: rgba(255, 255, 255, 0.72);
+    background: rgb(var(--c-surface) / 0.72);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid rgb(var(--c-surface) / 0.5);
   }
 
   /* Gradient brand text */
   .text-brand-gradient {
-    background: linear-gradient(135deg, #1B6B3A 0%, #38916a 100%);
+    background: linear-gradient(135deg, rgb(var(--c-brand-600)) 0%, rgb(var(--c-brand-sky)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -313,9 +442,44 @@
   }
 }
 
+/* ─── Sticky table headers (global — every module) ───────────────────────────
+   Column titles stay pinned while scrolling long tables. Each table's horizontal-
+   scroll wrapper (overflow-x-auto) is also a vertical scroll container, so we bound
+   its height to the viewport — the header then sticks to the top of that scroll
+   area. Short tables never reach the cap, so they render exactly as before.
+   Works for both border-collapse 'separate' (sticky thead) and 'collapse' (sticky
+   th) tables. Each header keeps its OWN background (a bg-* class on thead/tr/th
+   wins by specificity); transparent headers fall back to white so rows can't bleed
+   through. Opt a single table out with the `.no-sticky-head` class on its wrapper. */
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgb(var(--c-surface));
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: inherit;
+}
+.overflow-x-auto:has(> table):not(.no-sticky-head),
+.overflow-auto:has(> table):not(.no-sticky-head),
+.overflow-y-auto:has(> table):not(.no-sticky-head) {
+  max-height: calc(100dvh - 12rem);
+}
+.no-sticky-head thead,
+.no-sticky-head thead th {
+  position: static;
+}
+
 /* ─── Print ──────────────────────────────────────────────────────────────────── */
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
   .card { box-shadow: none; border: 1px solid #e5e7eb; }
+  /* Never clip/scroll tables when printing */
+  thead, thead th { position: static; }
+  .overflow-x-auto:has(> table),
+  .overflow-auto:has(> table),
+  .overflow-y-auto:has(> table) { max-height: none; }
 }

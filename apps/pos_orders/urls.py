@@ -1,0 +1,32 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('',                  views.OrderListCreateView.as_view(), name='pos-order-list'),
+    path('reference/',        views.reference_data,                name='pos-order-reference'),
+    path('batches/',          views.batch_availability_view,       name='pos-order-batches'),
+    path('discount-suggest/', views.discount_suggest,              name='pos-order-discount-suggest'),
+    path('points-preview/',   views.points_preview_view,           name='pos-order-points-preview'),
+    path('customer-types/',   views.customer_types,                name='pos-order-customer-types'),
+    path('contract-fields/',  views.contract_fields_view,          name='pos-order-contract-fields'),
+    path('customer-entities/', views.customer_entities,            name='pos-order-customer-entities'),
+    path('branch-stores/',    views.branch_stores_view,            name='pos-order-branch-stores'),
+    path('salespeople/',      views.salespeople_view,              name='pos-order-salespeople'),
+    path('queue-status/',     views.queue_status,                  name='pos-order-queue-status'),
+    path('exceptions/',       views.exceptions_view,               name='pos-order-exceptions'),
+    path('lost-sales/',       views.lost_sales_view,               name='pos-order-lost-sales'),
+    path('lost-sales-trends/', views.lost_sales_trends_view,       name='pos-order-lost-sales-trends'),
+    path('selection-events/', views.selection_events_ingest,       name='pos-order-selection-events'),
+    path('return-lookup/',    views.return_lookup,                 name='pos-order-return-lookup'),
+    path('referral-stats/',   views.referral_stats,                name='pos-order-referral-stats'),
+    path('flush/',            views.flush_now,                     name='pos-order-flush'),
+    path('<int:pk>/',         views.OrderDetailView.as_view(),     name='pos-order-detail'),
+    path('<int:pk>/ready/',   views.ready_order,                   name='pos-order-ready'),
+    path('<int:pk>/prescription/', views.upload_prescription,      name='pos-order-prescription'),
+    path('prescription-ocr/',       views.prescription_ocr,        name='pos-order-prescription-ocr'),
+    path('prescription-ocr/teach/', views.prescription_ocr_teach,  name='pos-order-prescription-ocr-teach'),
+    path('voice-entry/',            views.voice_entry,             name='pos-order-voice-entry'),
+    path('<int:pk>/push/',    views.push_order,                    name='pos-order-push'),
+    path('<int:pk>/cancel/',  views.cancel_order,                  name='pos-order-cancel'),
+    path('<int:pk>/share-whatsapp/', views.share_whatsapp,         name='pos-order-share-whatsapp'),
+]

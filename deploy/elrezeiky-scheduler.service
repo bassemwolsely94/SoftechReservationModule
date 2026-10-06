@@ -1,0 +1,31 @@
+[Unit]
+Description=ElRezeiky Pharmacy Platform — Background Scheduler (APScheduler)
+After=network.target postgresql.service elrezeiky-web.service
+Wants=postgresql.service
+# Do NOT use BindsTo — the scheduler must survive a web restart and vice versa
+
+[Service]
+Type=simple
+User=elrezeiky
+Group=elrezeiky
+WorkingDirectory=/opt/elrezeiky
+
+EnvironmentFile=/opt/elrezeiky/.env
+
+ExecStart=/opt/elrezeiky/venv/bin/python manage.py run_scheduler
+
+# Restart aggressively — sync jobs must keep running even if there's a transient error
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elrezeiky-scheduler
+
+# Allow up to 90 seconds for in-flight sync jobs to complete before SIGKILL
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

@@ -7,6 +7,7 @@ NO stock mutations. NO ERP calls. Communication + approval only.
 from django.utils import timezone
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -23,6 +24,8 @@ from .serializers import (
     RejectSerializer,
     RevisionSerializer,
     SendToERPSerializer,
+    ApproveWithQuantitiesSerializer,
+    CompleteWithReceiptSerializer,
 )
 
 
@@ -30,40 +33,54 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
-def _can_review(profile):
-    """Who can approve/reject: admin, purchasing, call_center (HQ roles)."""
+def _is_hq(profile):
+    """HQ-wide oversight roles."""
     return profile and profile.role in ('admin', 'purchasing', 'call_center')
+
+def _can_supply_side(profile, tr):
+    """Supplying branch staff + admin/purchasing can approve/reject/send-to-ERP."""
+    if not profile:
+        return False
+    if profile.role in ('admin', 'purchasing'):
+        return True
+    return bool(profile.branch_id and profile.branch_id == tr.supplying_branch_id)
+
+def _can_request_side(profile, tr):
+    """Requesting branch staff + HQ can submit/edit/complete/cancel."""
+    if not profile:
+        return False
+    if _is_hq(profile):
+        return True
+    return bool(profile.branch_id and profile.branch_id == tr.requesting_branch_id)
 
 
 def _system_log(request_obj, message):
     TransferRequestMessage.log_system(request_obj, message)
 
 
-def _notify(transfer_request, title, body, notif_type):
-    """Fire in-app notification — non-fatal wrapper."""
+def _notify(transfer_request, title, body, notif_type, *, branch=None, include_admins=True):
+    """
+    Fire in-app notification — non-fatal wrapper.
+
+    branch: Branch instance to notify (defaults to supplying_branch).
+            Pass requesting_branch for response notifications (approve/reject/revision).
+    include_admins: also notifies admin/purchasing roles via send_to_branch's include_admins flag.
+
+    Uses Notification.send_to_branch() so WS push, dedup, and NotificationLog all work.
+    """
     try:
-        from apps.users.models import StaffProfile
         from apps.notifications.models import Notification
-
-        # Notify destination branch staff + admins
-        recipients = StaffProfile.objects.filter(
-            branch=transfer_request.destination_branch,
-            is_active=True,
-        ) | StaffProfile.objects.filter(
-            role__in=('admin', 'purchasing'),
-            is_active=True,
-        )
-
-        for staff in recipients.distinct():
-            try:
-                Notification.objects.create(
-                    recipient=staff,
-                    title=title,
-                    body=body or '',
-                    notification_type=notif_type,
-                )
-            except Exception:
-                pass
+        target_branch = branch or transfer_request.supplying_branch
+        if target_branch:
+            Notification.send_to_branch(
+                branch=target_branch,
+                notification_type=notif_type,
+                title=title,
+                body=body or '',
+                transfer_id=transfer_request.id,
+                dedup_key=f'{notif_type}_{transfer_request.id}',
+                include_admins=include_admins,
+            )
     except Exception:
         pass
 
@@ -94,7 +111,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     permission_classes  = [IsAuthenticated]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields    = ['status', 'source_branch', 'destination_branch']
+    filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
         'request_number', 'notes',
         'items__item__name', 'items__item__softech_id',
@@ -104,7 +121,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = TransferRequest.objects.select_related(
-            'source_branch', 'destination_branch',
+            'requesting_branch', 'supplying_branch',
             'created_by__user', 'reviewed_by__user',
         ).prefetch_related(
             'items__item',
@@ -117,17 +134,26 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
         # HQ roles see all
         if profile.role in ('admin', 'purchasing', 'call_center'):
-            return qs
+            pass
+        elif profile.branch:
+            # Branch staff see requests where they are source OR destination
+            qs = qs.filter(requesting_branch=profile.branch) | qs.filter(supplying_branch=profile.branch)
+        else:
+            return qs.none()
 
-        # Branch staff see requests where they are source OR destination
-        if profile.branch:
-            return qs.filter(
-                source_branch=profile.branch
-            ) | qs.filter(
-                destination_branch=profile.branch
-            )
+        # Date range filters — wrap in try/except so malformed input returns
+        # an empty queryset rather than a 500 from the DB driver
+        date_from = self.request.query_params.get('date_from')
+        date_to   = self.request.query_params.get('date_to')
+        try:
+            if date_from:
+                qs = qs.filter(created_at__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(created_at__date__lte=date_to)
+        except Exception:
+            pass  # silently ignore invalid date strings
 
-        return qs.none()
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -156,6 +182,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تقديم الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if not tr.can_submit:
             return Response(
                 {'detail': 'لا يمكن تقديم هذا الطلب — تأكد من إضافة أصناف وأن الحالة صحيحة'},
@@ -170,7 +202,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         _notify(
             tr,
             f'طلب تحويل جديد — {tr.request_number}',
-            f'فرع {tr.source_branch} يطلب تحويل {tr.items.count()} صنف. يرجى المراجعة.',
+            f'فرع {tr.requesting_branch} يطلب تحويل {tr.items.count()} صنف. يرجى المراجعة.',
             'transfer_request',
         )
 
@@ -185,9 +217,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية اعتماد الطلبات'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم اعتماد الطلب'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_approve:
@@ -196,10 +228,24 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        serializer = ApproveWithQuantitiesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items_data = {
+            i['item_id']: i['approved_quantity']
+            for i in serializer.validated_data.get('items', [])
+        }
+
         tr.status = 'approved'
         tr.reviewed_by = profile
         tr.reviewed_at = timezone.now()
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+
+        # Persist per-item approved quantities when supplied
+        if items_data:
+            for line in tr.items.all():
+                if line.item_id in items_data:
+                    line.approved_quantity = items_data[line.item_id]
+                    line.save(update_fields=['approved_quantity'])
 
         _system_log(tr, f'تم اعتماد الطلب بواسطة {profile.full_name}')
         _notify(
@@ -207,6 +253,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             f'تم اعتماد طلبك — {tr.request_number}',
             f'تمت الموافقة على طلب التحويل. يمكنك الآن إرساله للـ ERP.',
             'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch, not the supplying one
         )
 
         return Response(
@@ -220,9 +267,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية رفض الطلبات'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم رفض الطلب'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_reject:
@@ -246,6 +293,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             f'تم رفض طلبك — {tr.request_number}',
             f'سبب الرفض: {tr.rejection_reason}',
             'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch, not the supplying one
         )
 
         return Response(
@@ -259,9 +307,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
-        if not _can_review(profile):
+        if not _can_supply_side(profile, tr):
             return Response(
-                {'detail': 'ليس لديك صلاحية طلب التعديل'},
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم طلب التعديل'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not tr.can_request_revision:
@@ -280,6 +328,13 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'revision_notes', 'updated_at'])
 
         _system_log(tr, f'طُلب التعديل بواسطة {profile.full_name}: {tr.revision_notes}')
+        _notify(
+            tr,
+            f'يحتاج طلبك تعديلاً — {tr.request_number}',
+            tr.revision_notes,
+            'transfer_response',
+            branch=tr.requesting_branch,  # notify the requesting branch to make changes
+        )
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -292,6 +347,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
+        if not _can_supply_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع المصدر أو المشرفون يمكنهم الإرسال للـ ERP'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if not tr.can_send_to_erp:
             return Response(
                 {'detail': 'يجب اعتماد الطلب أولاً قبل الإرسال للـ ERP'},
@@ -301,19 +362,95 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         serializer = SendToERPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        erp_ref = serializer.validated_data.get('erp_reference', '').strip()
+
         tr.status = 'sent_to_erp'
         tr.sent_to_erp_at = timezone.now()
         tr.sent_to_erp_by = profile
-        tr.erp_reference = serializer.validated_data.get('erp_reference', '')
-        tr.save(update_fields=[
-            'status', 'sent_to_erp_at', 'sent_to_erp_by', 'erp_reference', 'updated_at'
-        ])
+        tr.erp_reference = erp_ref
 
-        erp_ref = f' (مرجع: {tr.erp_reference})' if tr.erp_reference else ''
+        update_fields = ['status', 'sent_to_erp_at', 'sent_to_erp_by', 'erp_reference', 'updated_at']
+
+        # If a doc number was provided, queue ERP match verification immediately
+        if erp_ref:
+            tr.erp_match_status   = 'pending'
+            tr.erp_check_attempts = 0
+            update_fields += ['erp_match_status', 'erp_check_attempts']
+
+        tr.save(update_fields=update_fields)
+
+        ref_label = f' (مرجع: {erp_ref})' if erp_ref else ''
         _system_log(
             tr,
-            f'تم الإرسال للـ ERP بواسطة {profile.full_name}{erp_ref}'
+            f'تم الإرسال للـ ERP بواسطة {profile.full_name}{ref_label}'
         )
+        if erp_ref:
+            _system_log(tr, f'🔍 جارٍ التحقق من المستند {erp_ref} في SOFTECH — قد يستغرق ذلك عدة ساعات حتى يتم استلام البيانات من الفرع المصدر.')
+
+        return Response(
+            TransferRequestDetailSerializer(tr, context={'request': request}).data
+        )
+
+    # ── Check ERP Match (manual trigger) ─────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='check-erp-match')
+    def check_erp_match(self, request, pk=None):
+        """
+        POST /{id}/check-erp-match/
+        Admin / purchasing only — manually trigger ERP match verification.
+        Runs ERPMatcher, persists result, logs to chatter, returns updated serializer.
+        """
+        tr = self.get_object()
+        profile = _profile(request)
+
+        if not profile or profile.role not in ('admin', 'purchasing'):
+            return Response(
+                {'detail': 'هذا الإجراء مخصص للمشرفين ومسؤولي المشتريات فقط'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if tr.status not in ('sent_to_erp', 'completed'):
+            return Response(
+                {'detail': 'يمكن التحقق من المطابقة فقط للطلبات المُرسَلة إلى ERP'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Rate limit: max one check per 20 seconds to protect the Sybase connection
+        if tr.erp_last_checked:
+            elapsed = (timezone.now() - tr.erp_last_checked).total_seconds()
+            if elapsed < 20:
+                remaining = int(20 - elapsed) + 1
+                return Response(
+                    {'detail': f'يرجى الانتظار {remaining} ثانية قبل إعادة الفحص.'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        from .erp_matcher import ERPMatcher, apply_match_result, ERP_MATCH_UPDATE_FIELDS
+
+        result = ERPMatcher(tr).run()
+        apply_match_result(tr, result)
+
+        # If auto-search discovered the docnumber, persist it to erp_reference
+        update_fields = list(ERP_MATCH_UPDATE_FIELDS)
+        if result.get('discovered_doc') and not tr.erp_reference:
+            tr.erp_reference = result['discovered_doc']
+            if 'erp_reference' not in update_fields:
+                update_fields.append('erp_reference')
+
+        tr.save(update_fields=update_fields)
+
+        # Log result to chatter
+        _system_log(tr, result['detail'])
+
+        # Notify both branches if matched
+        if result['status'] in ('matched', 'partial'):
+            _notify(
+                tr,
+                f'تم التحقق من مستند ERP — {tr.request_number}',
+                result['detail'],
+                'transfer_response',
+                branch=tr.requesting_branch,
+            )
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -321,9 +458,9 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     # ── Dispatch (delivery tracking) ──────────────────────────────────────────
 
-    @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
-        """POST /{id}/dispatch/ — record dispatch with delivery person."""
+    @action(detail=True, methods=['post'], url_path='record-dispatch', url_name='record_dispatch')
+    def record_dispatch(self, request, pk=None):
+        """POST /{id}/record-dispatch/ — record dispatch with delivery person."""
         tr = self.get_object()
         profile = _profile(request)
 
@@ -361,15 +498,35 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         tr = self.get_object()
         profile = _profile(request)
 
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تأكيد الاستلام وإغلاق الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if tr.status != 'sent_to_erp':
             return Response(
                 {'detail': 'يجب إرسال الطلب للـ ERP أولاً'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        serializer = CompleteWithReceiptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items_data = {
+            i['item_id']: i['received_quantity']
+            for i in serializer.validated_data.get('items', [])
+        }
+
         tr.status = 'completed'
         tr.completed_at = timezone.now()
         tr.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        # Persist per-item received quantities when supplied
+        if items_data:
+            for line in tr.items.all():
+                if line.item_id in items_data:
+                    line.received_quantity = items_data[line.item_id]
+                    line.save(update_fields=['received_quantity'])
 
         _system_log(tr, f'تم إغلاق الطلب كمكتمل بواسطة {profile.full_name}')
 
@@ -383,6 +540,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         tr = self.get_object()
         profile = _profile(request)
+
+        if not _can_request_side(profile, tr):
+            return Response(
+                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم إلغاء الطلب'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         if not tr.can_cancel:
             return Response(
@@ -461,21 +624,26 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         from .serializers import TransferRequestItemSerializer
         return Response(TransferRequestItemSerializer(line).data)
 
-    # ── Chatter / Messages ────────────────────────────────────────────────────
+    # ── Chatter / Messages (text / image / voice) ─────────────────────────────
 
-    @action(detail=True, methods=['get', 'post'], url_path='messages')
+    @action(
+        detail=True, methods=['get', 'post'], url_path='messages',
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def messages(self, request, pk=None):
         tr = self.get_object()
 
         if request.method == 'GET':
             msgs = tr.messages.select_related('created_by__user').order_by('created_at')
             return Response(
-                TransferRequestMessageSerializer(msgs, many=True).data
+                TransferRequestMessageSerializer(msgs, many=True, context={'request': request}).data
             )
 
-        # POST
+        # POST — text, image, or voice note
         profile = _profile(request)
-        serializer = TransferRequestMessageCreateSerializer(data=request.data)
+        serializer = TransferRequestMessageCreateSerializer(
+            data=request.data, context={'request': request}
+        )
         serializer.is_valid(raise_exception=True)
 
         msg = TransferRequestMessage.objects.create(
@@ -484,9 +652,79 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             **serializer.validated_data,
         )
 
+        # Notify the OTHER side that a message arrived
+        # (system log entries never trigger notifications)
+        if msg.message_type != 'system' and profile:
+            snippet = (msg.message or '📎 مرفق')[:60]
+            sender_name = profile.full_name
+            if profile.branch_id == tr.requesting_branch_id:
+                # Sender is requesting branch → notify supplying branch
+                _notify(
+                    tr,
+                    f'رسالة جديدة — {tr.request_number}',
+                    f'{sender_name}: {snippet}',
+                    'transfer_request',
+                    branch=tr.supplying_branch,
+                )
+            elif profile.branch_id == tr.supplying_branch_id:
+                # Sender is supplying branch → notify requesting branch
+                _notify(
+                    tr,
+                    f'رسالة جديدة — {tr.request_number}',
+                    f'{sender_name}: {snippet}',
+                    'transfer_response',
+                    branch=tr.requesting_branch,
+                )
+            # HQ/admin senders → no cross-branch notification to avoid noise
+
         return Response(
-            TransferRequestMessageSerializer(msg).data,
+            TransferRequestMessageSerializer(msg, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    # ── Chatter: delete a message (soft-delete) ──────────────────────────────
+
+    @action(
+        detail=True, methods=['delete'],
+        url_path=r'messages/(?P<message_id>[0-9]+)',
+        url_name='delete_message',
+    )
+    def delete_message(self, request, pk=None, message_id=None):
+        """
+        DELETE /api/transfers/{id}/messages/{message_id}/
+
+        Soft-deletes a message. Only the author or an admin may delete.
+        System messages (status logs) cannot be deleted.
+        """
+        tr = self.get_object()
+        profile = _profile(request)
+
+        try:
+            msg = tr.messages.get(pk=message_id)
+        except TransferRequestMessage.DoesNotExist:
+            return Response({'detail': 'الرسالة غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
+
+        if msg.is_deleted:
+            return Response({'detail': 'هذه الرسالة محذوفة مسبقاً'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if msg.message_type == 'system':
+            return Response({'detail': 'لا يمكن حذف رسائل النظام'}, status=status.HTTP_403_FORBIDDEN)
+
+        is_author = (msg.created_by_id and profile and msg.created_by_id == profile.id)
+        is_admin  = (profile and profile.role == 'admin')
+        if not is_author and not is_admin:
+            return Response(
+                {'detail': 'لا يمكنك حذف رسائل الآخرين'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        msg.is_deleted = True
+        msg.deleted_at  = timezone.now()
+        msg.deleted_by  = profile
+        msg.save(update_fields=['is_deleted', 'deleted_at', 'deleted_by'])
+
+        return Response(
+            TransferRequestMessageSerializer(msg, context={'request': request}).data
         )
 
     # ── SOFTECH stktrans reference validation ─────────────────────────────────
@@ -586,3 +824,287 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 for s in stocks
             ],
         })
+
+    # ── Print Receipt ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='print')
+    def print_receipt(self, request, pk=None):
+        """
+        GET /api/transfers/{id}/print/
+
+        Returns a clean data payload for printable receipt rendering.
+        Logs the print action to the chatter.
+        """
+        tr      = self.get_object()
+        profile = _profile(request)
+
+        # Only log the print event when the caller explicitly opts in (prevents
+        # chatter spam from automatic print previews / pre-renders)
+        if request.query_params.get('log') == '1':
+            _system_log(tr, f'تم طباعة الطلب بواسطة {profile.full_name if profile else "النظام"}')
+
+        items_data = [
+            {
+                'item_code':         line.item.softech_id,
+                'item_name':         line.item.name,
+                'item_scientific':   line.item.name_scientific,
+                'quantity':          float(line.quantity),
+                'approved_quantity': float(line.approved_quantity) if line.approved_quantity is not None else None,
+                'received_quantity': float(line.received_quantity) if line.received_quantity is not None else None,
+                'notes':             line.notes,
+            }
+            for line in tr.items.select_related('item').all()
+        ]
+
+        # QR code — encodes the transfer number for scanning on receipt
+        qr_b64 = None
+        try:
+            import base64, io, qrcode
+            qr = qrcode.QRCode(version=1, box_size=4, border=2,
+                               error_correction=qrcode.constants.ERROR_CORRECT_L)
+            qr.add_data(tr.request_number)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color='black', back_color='white')
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            qr_b64 = base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass  # qrcode not installed or error — omit QR silently
+
+        receipt = {
+            'doc_type':              'transfer',
+            'request_number':        tr.request_number,
+            'status':                tr.status,
+            'status_label':          tr.status_label_ar,
+            'requesting_branch':     (tr.requesting_branch.name_ar or tr.requesting_branch.name)
+                                      if tr.requesting_branch_id else '—',
+            'supplying_branch':      (tr.supplying_branch.name_ar or tr.supplying_branch.name)
+                                      if tr.supplying_branch_id else '—',
+            'created_by':            tr.created_by.full_name if tr.created_by_id else '—',
+            'reviewed_by':           tr.reviewed_by.full_name if tr.reviewed_by_id else None,
+            'erp_reference':         tr.erp_reference or None,
+            'delivery_person_name':  tr.delivery_person_name or None,
+            'notes':                 tr.notes,
+            'rejection_reason':      tr.rejection_reason or None,
+            'created_at':            tr.created_at.isoformat(),
+            'submitted_at':          tr.submitted_at.isoformat() if tr.submitted_at else None,
+            'reviewed_at':           tr.reviewed_at.isoformat() if tr.reviewed_at else None,
+            'sent_to_erp_at':        tr.sent_to_erp_at.isoformat() if tr.sent_to_erp_at else None,
+            'dispatched_at':         tr.dispatched_at.isoformat() if tr.dispatched_at else None,
+            'completed_at':          tr.completed_at.isoformat() if tr.completed_at else None,
+            'items':                 items_data,
+            'total_items':           len(items_data),
+            'printed_by':            profile.full_name if profile else '—',
+            'printed_at':            timezone.now().isoformat(),
+            'qr_code_base64':        qr_b64,
+        }
+        return Response(receipt)
+
+    # ── Transfer Analytics ────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'])
+    def analytics(self, request):
+        """
+        GET /api/transfers/analytics/?days=30
+        KPIs + top items + branch flow + rejection-by-branch.
+        """
+        from django.db.models import Count, Q, Sum
+        from datetime import timedelta
+
+        profile = _profile(request)
+        if not profile:
+            return Response({'detail': 'مطلوب تسجيل الدخول'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        days = max(1, min(int(request.query_params.get('days', 30)), 365))
+        since = timezone.now() - timedelta(days=days)
+
+        qs = TransferRequest.objects.filter(created_at__gte=since)
+
+        # Branch-scope the same way the list view does
+        if profile.role not in ('admin', 'purchasing', 'call_center'):
+            if profile.branch_id:
+                qs = qs.filter(
+                    Q(requesting_branch_id=profile.branch_id) |
+                    Q(supplying_branch_id=profile.branch_id)
+                )
+            else:
+                qs = qs.none()
+
+        total     = qs.count()
+        completed = qs.filter(status='completed').count()
+        rejected  = qs.filter(status='rejected').count()
+        pending   = qs.filter(status='pending').count()
+
+        # Average cycle time: submitted → completed (in hours)
+        avg_cycle = None
+        completed_timed = qs.filter(
+            status='completed',
+            submitted_at__isnull=False,
+            completed_at__isnull=False,
+        ).values_list('submitted_at', 'completed_at')
+        if completed_timed:
+            durations = [
+                (c - s).total_seconds() / 3600
+                for s, c in completed_timed
+                if s and c
+            ]
+            avg_cycle = round(sum(durations) / len(durations), 1) if durations else None
+
+        # Average response time: submitted → reviewed (in hours)
+        avg_response = None
+        reviewed_timed = qs.filter(
+            submitted_at__isnull=False,
+            reviewed_at__isnull=False,
+        ).values_list('submitted_at', 'reviewed_at')
+        if reviewed_timed:
+            durations = [
+                (r - s).total_seconds() / 3600
+                for s, r in reviewed_timed
+                if s and r
+            ]
+            avg_response = round(sum(durations) / len(durations), 1) if durations else None
+
+        # Top transferred items
+        top_items = list(
+            TransferRequestItem.objects
+            .filter(request__in=qs)
+            .values('item__name', 'item__softech_id')
+            .annotate(request_count=Count('id'), total_qty=Sum('quantity'))
+            .order_by('-request_count')[:20]
+        )
+
+        # Branch-to-branch flow
+        branch_flow = list(
+            qs.filter(supplying_branch__isnull=False)
+            .values('requesting_branch__name_ar', 'supplying_branch__name_ar')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
+
+        # Rejection rate by supplying branch
+        rejection_by_branch = list(
+            qs.filter(supplying_branch__isnull=False)
+            .values('supplying_branch__name_ar')
+            .annotate(
+                total=Count('id'),
+                rejected=Count('id', filter=Q(status='rejected')),
+            )
+            .order_by('-total')[:10]
+        )
+
+        return Response({
+            'period_days': days,
+            'kpis': {
+                'total':               total,
+                'completed':           completed,
+                'rejected':            rejected,
+                'pending':             pending,
+                'completion_rate':     round(completed / total * 100, 1) if total else 0,
+                'rejection_rate':      round(rejected  / total * 100, 1) if total else 0,
+                'avg_cycle_hours':     avg_cycle,
+                'avg_response_hours':  avg_response,
+            },
+            'top_items':           top_items,
+            'branch_flow':         branch_flow,
+            'rejection_by_branch': rejection_by_branch,
+        })
+
+    # ── Discrepancy Report ────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['get'], url_path='discrepancy-report')
+    def discrepancy_report(self, request):
+        """
+        GET /api/transfers/discrepancy-report/
+        Returns completed transfers where received_quantity differs from approved_quantity.
+        Requires admin or purchasing role.
+        """
+        from django.db.models import F
+
+        profile = _profile(request)
+        if not profile or profile.role not in ('admin', 'purchasing'):
+            return Response(
+                {'detail': 'هذا التقرير مخصص للمشرفين ومسؤولي المشتريات فقط'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        lines = (
+            TransferRequestItem.objects
+            .filter(
+                request__status='completed',
+                approved_quantity__isnull=False,
+                received_quantity__isnull=False,
+            )
+            .exclude(approved_quantity=F('received_quantity'))
+            .select_related(
+                'request__requesting_branch',
+                'request__supplying_branch',
+                'item',
+            )
+            .order_by('-request__completed_at')[:200]
+        )
+
+        data = []
+        for line in lines:
+            approved = float(line.approved_quantity)
+            received = float(line.received_quantity)
+            delta    = approved - received
+            pct      = round(delta / approved * 100, 1) if approved else 0
+            data.append({
+                'request_number':    line.request.request_number,
+                'request_id':        line.request_id,
+                'completed_at':      line.request.completed_at.isoformat() if line.request.completed_at else None,
+                'requesting_branch': (line.request.requesting_branch.name_ar or line.request.requesting_branch.name)
+                                     if line.request.requesting_branch_id else '—',
+                'supplying_branch':  (line.request.supplying_branch.name_ar or line.request.supplying_branch.name)
+                                     if line.request.supplying_branch_id else '—',
+                'item_name':         line.item.name,
+                'item_code':         line.item.softech_id,
+                'approved_quantity': approved,
+                'received_quantity': received,
+                'discrepancy':       round(delta, 3),
+                'discrepancy_pct':   pct,
+                'short':             delta > 0,
+            })
+
+        return Response({'discrepancies': data, 'total': len(data)})
+
+    # ── WhatsApp Share ─────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='share-whatsapp')
+    def share_whatsapp(self, request, pk=None):
+        """
+        POST /api/transfers/{id}/share-whatsapp/
+
+        Generates a WhatsApp-ready message and logs the share event.
+        """
+        tr      = self.get_object()
+        profile = _profile(request)
+
+        req_branch  = (tr.requesting_branch.name_ar or tr.requesting_branch.name) if tr.requesting_branch_id else '—'
+        sup_branch  = (tr.supplying_branch.name_ar  or tr.supplying_branch.name)  if tr.supplying_branch_id  else '—'
+        created_str = tr.created_at.strftime('%Y-%m-%d %H:%M')
+
+        lines = [
+            '🔀 *طلب تحويل مخزون — صيدليات الرزيقي*',
+            f'رقم الطلب: {tr.request_number}',
+            f'الحالة: {tr.status_label_ar}',
+            f'من فرع: {req_branch}',
+            f'إلى فرع: {sup_branch}',
+            '',
+            '*الأصناف:*',
+        ]
+        for line in tr.items.select_related('item').all():
+            item_code = f' [{line.item.softech_id}]' if line.item.softech_id else ''
+            lines.append(f'• {line.item.name}{item_code} × {line.quantity}' +
+                         (f' ({line.notes})' if line.notes else ''))
+        if tr.notes:
+            lines += ['', f'ملاحظات: {tr.notes}']
+        if tr.erp_reference:
+            lines += [f'مرجع ERP: {tr.erp_reference}']
+        lines += ['', f'التاريخ: {created_str}']
+
+        message_text = '\n'.join(lines)
+
+        _system_log(tr, f'تم مشاركة الطلب عبر واتساب بواسطة {profile.full_name if profile else "النظام"}')
+
+        return Response({'message_text': message_text})

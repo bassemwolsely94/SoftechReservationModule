@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
-const BRAND = '#1B6B3A'
+const BRAND = 'rgb(var(--c-brand-600))'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Skeleton loaders
@@ -121,8 +121,8 @@ const EMPTY_PRESETS = {
       <svg className="w-16 h-16 text-gray-200" fill="none" viewBox="0 0 64 64" stroke="currentColor">
         <rect x="8" y="12" width="48" height="40" rx="6" strokeWidth="2.5" />
         <path d="M20 26h24M20 34h16" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx="48" cy="44" r="8" fill="#f0fdf4" stroke="#1B6B3A" strokeWidth="2" />
-        <path d="M44 44l3 3 5-5" stroke="#1B6B3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="48" cy="44" r="8" fill="#eef3fb" stroke="rgb(var(--c-brand-600))" strokeWidth="2" />
+        <path d="M44 44l3 3 5-5" stroke="rgb(var(--c-brand-600))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
     title: 'لا توجد حجوزات',

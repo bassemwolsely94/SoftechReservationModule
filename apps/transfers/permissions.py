@@ -40,7 +40,7 @@ class CanRespondToTransfer(BasePermission):
         if profile.role == 'admin':
             return True
         return (
-            profile.branch_id == obj.source_branch_id
+            profile.branch_id == obj.supplying_branch_id
             and profile.role in ('pharmacist', 'salesperson', 'call_center')
         )
 
@@ -60,7 +60,7 @@ class CanViewTransfer(BasePermission):
             return True
         return (
             profile.branch_id == obj.requesting_branch_id
-            or profile.branch_id == obj.source_branch_id
+            or profile.branch_id == obj.supplying_branch_id
         )
 
 

@@ -1,0 +1,514 @@
+dbcc sqltext capture: 2026-07-02T18:29:05.679039 spid=0 profile=prod
+
+>>> Do ONE Save in SofTech now — recording ALL active SofTech clients for 180s <<<
+
+[poll 1 @ 18:29:07 spid 21] NEW:
+SQL Text: select docdate , doctext from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0 
+------------------------------------------------------------
+[poll 1 @ 18:29:07 spid 68] NEW:
+SQL Text: begin tran
+------------------------------------------------------------
+[poll 1 @ 18:29:07 spid 69] NEW:
+SQL Text: iary_amount,null as beneficiary_rate,null as seller_deviceSerialNumber,null as central_device_name,'1' as receipt_unit_price_include_vat,null as receipt_upload_status,null as buyer_mapping_id,itemcode as item_mapping_id,null as return_original_sell_device from stktrans where CONVERT(INT,doccode ) in (115,30) and (personcode = '1500' or  personcode = '1510')  and  branchcode = '160'  and   ( doccode  in ('115','30') )  and   (  trans_time  between '2026-07-02 00:00:00' a
+nd '2026-07-02 23:59:59')
+------------------------------------------------------------
+[poll 1 @ 18:29:07 spid 112] NEW:
+SQL Text:  select personcode as customer_id,null as customer_type,personname as customer_name,null as customer_tax_number,null as customer_country,null as customer_governate,null as customer_region_city,null as customer_street,null as customer_building_number,null as customer_mobile_number from personsdata 
+------------------------------------------------------------
+[poll 37 @ 18:29:21 spid 68] NEW:
+SQL Text: SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate ,           vcount=count(*),           vdocvalue_sum=sum(round(r3stktransm.docvalue,2))    FROM r3stktransm   GROUP BY r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate   
+------------------------------------------------------------
+[poll 63 @ 18:29:30 spid 31] NEW:
+SQL Text: SELECT  branchstores.branchcode ,           branchstores.storecode ,           stores.storename ,           stores.sort_order ,           stores.storecode     FROM branchstores ,           stores     WHERE ( branchstores.storecode = stores.storecode ) and          ( ( branchstores.branchcode = '100' ) )  ORDER BY stores.sort_order          ASC,           stores.storecode          ASC  
+------------------------------------------------------------
+[poll 93 @ 18:29:42 spid 31] NEW:
+SQL Text: SELECT origintaxp , custdiscp , ptcode , ptclassifcode , empftime , personmaxbal , ( personcredit + personcredit1-persondebit-persondebit1 ) , personnote , contractdisctype FROM personsdata WHERE personsdata.personcode ='30' 
+------------------------------------------------------------
+[poll 116 @ 18:29:49 spid 31] NEW:
+SQL Text: select count ( * ) from stktransm where stktransm.cust_branch_code ='30' and stktransm.doccode ='10' and stktransm.docwritedate ='7-2-2026 0:0:0.000' and stktransm.docnumber2 =2072026 
+------------------------------------------------------------
+[poll 119 @ 18:29:50 spid 117] NEW:
+SQL Text:      items.gpcclassifcode ,           items.etaxcodetype ,           items.taxcode ,           items.subtaxcode     FROM items      WHERE ( items.itemlastupdate >= '7-2-2026 18:15:56.000' ) and          ( items.itemlastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 120 @ 18:29:51 spid 31] NEW:
+SQL Text: select count ( * ) from stkbal where stkbal.storecode ='100' and stkbal.itemcode ='404' 
+------------------------------------------------------------
+[poll 120 @ 18:29:51 spid 117] NEW:
+SQL Text:       itemstrans.itemnosaleclassif ,           itemstrans.itemnew     FROM itemstrans      WHERE ( itemstrans.transdate >= '7-2-2026 18:15:56.000' ) and          ( itemstrans.transdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 121 @ 18:29:51 spid 31] NEW:
+SQL Text: select sum ( itemqty ) from stkbalexpiry where stkbalexpiry.storecode ='100' and stkbalexpiry.itemcode ='404' 
+------------------------------------------------------------
+[poll 121 @ 18:29:51 spid 117] NEW:
+SQL Text: SELECT  itemsfamily.familycode ,           itemsfamily.familyname ,           itemsfamily.familynamearabic ,           itemsfamily.classifapply ,           itemsfamily.modif_lastupdate     FROM itemsfamily      WHERE ( itemsfamily.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( itemsfamily.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 122 @ 18:29:52 spid 117] NEW:
+SQL Text: SELECT  returnsreasons.retreasoncode ,           returnsreasons.retreasondescr ,           returnsreasons.retclassifcode ,           returnsreasons.modif_lastupdate     FROM returnsreasons      WHERE ( returnsreasons.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( returnsreasons.modif_la
+------------------------------------------------------------
+[poll 123 @ 18:29:52 spid 44] NEW:
+SQL Text: select type, length, prec, scale, name from syscolumns where id = 1729490259 
+------------------------------------------------------------
+[poll 123 @ 18:29:52 spid 117] NEW:
+SQL Text: SELECT  expenses.expcode ,           expenses.expdescr ,           expenses.expclassifcode ,           expenses.modif_lastupdate ,           expenses.exptype ,           expenses.expaccitemcode ,           expenses.allmonths     FROM expenses      WHERE ( expenses.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( expenses.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 124 @ 18:29:52 spid 44] NEW:
+SQL Text: 
+------------------------------------------------------------
+[poll 124 @ 18:29:52 spid 117] NEW:
+SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 125 @ 18:29:53 spid 117] NEW:
+SQL Text: SELECT  costcenters.costcentercode ,           costcenters.costcenterdescr ,           costcenters.costcenterclassifcode ,           costcenters.modif_lastupdate ,           costcenters.ccclosed ,           costcenters.cccusercode ,           costcenters.ccctrans_time     FROM costcenters      WHERE ( costcenters.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( costcenters.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 126 @ 18:29:53 spid 54] NEW:
+SQL Text: rsonsdata      WHERE ( personsdata.personfdate >= '7-2-2026 18:15:51.000' ) and          ( personsdata.personfdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 126 @ 18:29:53 spid 117] NEW:
+SQL Text:  '7-2-2026 18:15:56.000' ) And          ( bankcurrencies.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 127 @ 18:29:53 spid 54] NEW:
+SQL Text:       itemstrans.itemnosaleclassif ,           itemstrans.itemnew     FROM itemstrans      WHERE ( itemstrans.transdate >= '7-2-2026 18:15:51.000' ) and          ( itemstrans.transdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 127 @ 18:29:53 spid 117] NEW:
+SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 128 @ 18:29:54 spid 54] NEW:
+SQL Text:  ( branches.branch_lastupdate <= '7-2-2026 18:30:52.000' ) 
+------------------------------------------------------------
+[poll 128 @ 18:29:54 spid 117] NEW:
+SQL Text:         ( personphones.ptcode in ('00','10','20') )   
+------------------------------------------------------------
+[poll 129 @ 18:29:54 spid 54] NEW:
+SQL Text: SELECT  returnsreasons.retreasoncode ,           returnsreasons.retreasondescr ,           returnsreasons.retclassifcode ,           returnsreasons.modif_lastupdate     FROM returnsreasons      WHERE ( returnsreasons.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( returnsreasons.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 129 @ 18:29:54 spid 117] NEW:
+SQL Text: SELECT  activeing_ddi.aicode ,           activeing_ddi.aicode2 ,           activeing_ddi.modif_lastupdate ,           activeing_ddi.usercode ,           activeing_ddi.ddi_descr ,           activeing_ddi.ddi_action ,           activeing_ddi.ddi_severity ,           activeing_ddi.ddi_evidence     FROM activeing_ddi      WHERE ( activeing_ddi.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( activeing_ddi.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 130 @ 18:29:55 spid 54] NEW:
+SQL Text: SELECT  intervals.intervalcode ,           intervals.intervalname ,           intervals.modif_lastupdate     FROM intervals      WHERE ( intervals.modif_lastupdate >= '7-2-2026 18:15:51.000' ) And          ( intervals.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 130 @ 18:29:55 spid 117] NEW:
+SQL Text: SELECT  activeingredients.aicode ,           activeingredients.ainame ,           activeingredients.modif_lastupdate ,           activeingredients.usercode ,           activeingredients.classcode     FROM activeingredients      WHERE ( activeingredients.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( activeingredients.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 131 @ 18:29:55 spid 54] NEW:
+SQL Text: SELECT  accsysitems.accitemsno ,           accsysitems.acciteml2_6 ,           accsysitems.accitemdescr ,           accsysitems.accitemtype ,           accsysitems.mitemsys ,           accsysitems.modif_lastupdate ,           accsysitems.accsysallow ,           accsysitems.usercode ,           accsysitems.accitemorder     FROM accsysitems      WHERE ( accsysitems.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( accsysitems.modif_lastupdate <= '7-2-2026 18:30
+:52.000' )   
+------------------------------------------------------------
+[poll 131 @ 18:29:55 spid 117] NEW:
+SQL Text: SELECT  banksusers.bankcode ,           banksusers.personcode ,           banksusers.personblocked ,           banksusers.usercode ,           banksusers.modif_lastupdate ,           banksusers.bankcomment     FROM banksusers      WHERE ( banksusers.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( banksusers.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 132 @ 18:29:56 spid 54] NEW:
+SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 132 @ 18:29:56 spid 117] NEW:
+SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+------------------------------------------------------------
+[poll 133 @ 18:29:56 spid 31] NEW:
+SQL Text: insert into temp_r_stk ( branchcode , doccode , docnumber , docdate , doctext ) values ( '100' , '10' , 63666 , '7-2-2026 0:0:0.000' , '006C 00BC 00EE 00C6 003F 00BE 0047 00DE 0086 00B7 0006 0043 0092 00F9 00F0 0001 0060 007D 00D5 0075 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000' ) 
+------------------------------------------------------------
+[poll 133 @ 18:29:56 spid 117] NEW:
+SQL Text: commit tran
+------------------------------------------------------------
+[poll 134 @ 18:29:56 spid 54] NEW:
+SQL Text: SELECT  activeing_ae.aicode ,           activeing_ae.aiaedescr ,           activeing_ae.modif_lastupdate ,           activeing_ae.usercode     FROM activeing_ae      WHERE ( activeing_ae.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( activeing_ae.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 135 @ 18:29:57 spid 54] NEW:
+SQL Text: SELECT  activeing_others.aicode ,           activeing_others.aipregnancy ,           activeing_others.aiabuse ,           activeing_others.modif_lastupdate ,           activeing_others.usercode ,           activeing_others.ailactation     FROM activeing_others      WHERE ( activeing_others.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( activeing_others.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 136 @ 18:29:57 spid 54] NEW:
+SQL Text: SELECT  itemsai.itemcode ,           itemsai.aicode ,           itemsai.usercode ,           itemsai.modif_lastupdate ,           itemsai.aiblock     FROM itemsai      WHERE ( itemsai.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( itemsai.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 137 @ 18:29:58 spid 54] NEW:
+SQL Text: SELECT  itembarcode.itemcode ,           itembarcode.itembarcode ,           itembarcode.usercode ,           itembarcode.modif_lastupdate ,           itembarcode.mainbarcode ,           itembarcode.blockbarcode ,           itembarcode.delusercode ,           itembarcode.deltrans_time     FROM itembarcode      WHERE ( itembarcode.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( itembarcode.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 138 @ 18:29:58 spid 54] NEW:
+SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+------------------------------------------------------------
+[poll 139 @ 18:29:58 spid 54] NEW:
+SQL Text: update costcenterstrans set costcenterstrans.table_dumped ='7-2-2026 18:30:52.000' where costcenterstrans.ver_branchcode ='100' and costcenterstrans.branchcode ='170' and costcenterstrans.table_dumped is null 
+------------------------------------------------------------
+[poll 143 @ 18:30:00 spid 41] NEW:
+SQL Text:           specialoffers.offer_lastupdate ,           specialoffers.storecode ,           specialoffers.producercode     FROM specialoffers      WHERE ( specialoffers.offer_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( specialoffers.offer_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 144 @ 18:30:00 spid 41] NEW:
+SQL Text:  ( branches.branch_lastupdate <= '7-2-2026 18:30:29.000' ) 
+------------------------------------------------------------
+[poll 145 @ 18:30:01 spid 41] NEW:
+SQL Text: SELECT  itemstores.itemstoreclassif ,           itemstores.itemstoreclassifdescr ,           itemstores.modif_lastupdate     FROM itemstores      WHERE ( itemstores.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( itemstores.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 146 @ 18:30:01 spid 41] NEW:
+SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 147 @ 18:30:02 spid 41] NEW:
+SQL Text: mitemscanedit ,           mglevels.mitemshortcut     FROM mglevels      WHERE ( mglevels.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( mglevels.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 148 @ 18:30:02 spid 41] NEW:
+SQL Text: SELECT  activeing_prec.aicode ,           activeing_prec.aiprec ,           activeing_prec.modif_lastupdate ,           activeing_prec.usercode     FROM activeing_prec      WHERE ( activeing_prec.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( activeing_prec.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 149 @ 18:30:03 spid 41] NEW:
+SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+------------------------------------------------------------
+[poll 178 @ 18:30:16 spid 1] NEW:
+SQL Text:      motalba_fields.te7 ,           motalba_fields.te8 ,           motalba_fields.te9 ,           motalba_fields.te10 ,           motalba_fields.te11 ,           motalba_fields.te12     FROM motalba_fields      WHERE ( motalba_fields.fields_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( motalba_fields.fields_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 179 @ 18:30:17 spid 1] NEW:
+SQL Text: sic_data.bdata_vchar2 ,           basic_data.bdata_vchar3 ,           basic_data.bdblock     FROM basic_data      WHERE ( basic_data.bdata_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( basic_data.bdata_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 180 @ 18:30:17 spid 1] NEW:
+SQL Text: ( branches.branch_lastupdate <= '7-2-2026 18:30:9.000' ) 
+------------------------------------------------------------
+[poll 181 @ 18:30:18 spid 1] NEW:
+SQL Text: SELECT  itemsfamily.familycode ,           itemsfamily.familyname ,           itemsfamily.familynamearabic ,           itemsfamily.classifapply ,           itemsfamily.modif_lastupdate     FROM itemsfamily      WHERE ( itemsfamily.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemsfamily.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 182 @ 18:30:18 spid 1] NEW:
+SQL Text: SELECT  itemsorigin.itemorigincode ,           itemsorigin.itemoriginname ,           itemsorigin.originnamearabic ,           itemsorigin.classifapply ,           itemsorigin.modif_lastupdate ,           itemsorigin.importedorigin     FROM itemsorigin      WHERE ( itemsorigin.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemsorigin.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 183 @ 18:30:18 spid 1] NEW:
+SQL Text: SELECT  returnsclassif.retclassifcode ,           returnsclassif.retclassifdescr ,           returnsclassif.modif_lastupdate     FROM returnsclassif      WHERE ( returnsclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( returnsclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 184 @ 18:30:19 spid 1] NEW:
+SQL Text: SELECT  itemstores.itemstoreclassif ,           itemstores.itemstoreclassifdescr ,           itemstores.modif_lastupdate     FROM itemstores      WHERE ( itemstores.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemstores.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 185 @ 18:30:19 spid 1] NEW:
+SQL Text: SELECT  expensesclassif.expclassifcode ,           expensesclassif.expclassifdescr ,           expensesclassif.exptype ,           expensesclassif.modif_lastupdate     FROM expensesclassif      WHERE ( expensesclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( expensesclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 186 @ 18:30:19 spid 1] NEW:
+SQL Text: SELECT  branchstores.branchcode ,           branchstores.storecode ,           branchstores.modif_lastupdate ,           branchstores.defpos     FROM branchstores      WHERE ( branchstores.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( branchstores.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 187 @ 18:30:20 spid 1] NEW:
+SQL Text: SELECT  intervals.intervalcode ,           intervals.intervalname ,           intervals.modif_lastupdate     FROM intervals      WHERE ( intervals.modif_lastupdate >= '7-2-2026 18:15:9.000' ) And          ( intervals.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 188 @ 18:30:20 spid 1] NEW:
+SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 189 @ 18:30:21 spid 1] NEW:
+SQL Text: SELECT  custdiscpclassif.custdiscpcode ,           custdiscpclassif.custdiscpdescr ,           custdiscpclassif.modif_lastupdate     FROM custdiscpclassif      WHERE ( custdiscpclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) And          ( custdiscpclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 190 @ 18:30:21 spid 1] NEW:
+SQL Text: SELECT  costcenters.costcentercode ,           costcenters.costcenterdescr ,           costcenters.costcenterclassifcode ,           costcenters.modif_lastupdate ,           costcenters.ccclosed ,           costcenters.cccusercode ,           costcenters.ccctrans_time     FROM costcenters      WHERE ( costcenters.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( costcenters.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 191 @ 18:30:21 spid 1] NEW:
+SQL Text: SELECT  accsysitems.accitemsno ,           accsysitems.acciteml2_6 ,           accsysitems.accitemdescr ,           accsysitems.accitemtype ,           accsysitems.mitemsys ,           accsysitems.modif_lastupdate ,           accsysitems.accsysallow ,           accsysitems.usercode ,           accsysitems.accitemorder     FROM accsysitems      WHERE ( accsysitems.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( accsysitems.modif_lastupdate <= '7-2-2026 18:30:
+9.000' )   
+------------------------------------------------------------
+[poll 192 @ 18:30:22 spid 1] NEW:
+SQL Text: SELECT  banks2.bankcode2 ,           banks2.bankname ,           banks2.modif_lastupdate     FROM banks2      WHERE ( banks2.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( banks2.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 193 @ 18:30:22 spid 1] NEW:
+SQL Text: a2.last_updated <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 194 @ 18:30:22 spid 1] NEW:
+SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 195 @ 18:30:23 spid 1] NEW:
+SQL Text: itemsalestaxp     FROM itemssuppliers      WHERE ( itemssuppliers.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemssuppliers.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 196 @ 18:30:23 spid 1] NEW:
+SQL Text:       ( personphones.ptcode in ('00','10','20') )   
+------------------------------------------------------------
+[poll 197 @ 18:30:24 spid 1] NEW:
+SQL Text: SELECT  patienttitles.ptitle ,           patienttitles.ptitledescr ,           patienttitles.ptitleorder ,           patienttitles.sex ,           patienttitles.modif_lastupdate ,           patienttitles.petitledescr     FROM patienttitles      WHERE ( patienttitles.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( patienttitles.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 198 @ 18:30:24 spid 1] NEW:
+SQL Text: SELECT  bankcurrenciestrans.bcurrency ,           bankcurrenciestrans.trans_time ,           bankcurrenciestrans.usercode ,           bankcurrenciestrans.bcrate ,           bankcurrenciestrans.bcrate_maxpay ,           bankcurrenciestrans.bcrate_minreceive     FROM bankcurrenciestrans      WHERE ( bankcurrenciestrans.trans_time >= '7-2-2026 18:15:9.000' ) and          ( bankcurrenciestrans.trans_time <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 199 @ 18:30:24 spid 1] NEW:
+SQL Text: SELECT  activeing_alt.aicode ,           activeing_alt.aisno ,           activeing_alt.altdescr ,           activeing_alt.modif_lastupdate ,           activeing_alt.usercode     FROM activeing_alt      WHERE ( activeing_alt.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_alt.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 200 @ 18:30:25 spid 1] NEW:
+SQL Text: SELECT  activeing_dose.aicode ,           activeing_dose.aidose ,           activeing_dose.modif_lastupdate ,           activeing_dose.usercode     FROM activeing_dose      WHERE ( activeing_dose.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_dose.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 201 @ 18:30:25 spid 1] NEW:
+SQL Text: SELECT  activeing_others.aicode ,           activeing_others.aipregnancy ,           activeing_others.aiabuse ,           activeing_others.modif_lastupdate ,           activeing_others.usercode ,           activeing_others.ailactation     FROM activeing_others      WHERE ( activeing_others.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_others.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 202 @ 18:30:26 spid 1] NEW:
+SQL Text: SELECT  activeing_uses.aicode ,           activeing_uses.aiuses ,           activeing_uses.modif_lastupdate ,           activeing_uses.usercode     FROM activeing_uses      WHERE ( activeing_uses.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_uses.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 203 @ 18:30:26 spid 1] NEW:
+SQL Text: SELECT  provinces.provincecode ,           provinces.provincename ,           provinces.modif_lastupdate ,           provinces.districtcode     FROM provinces      WHERE ( provinces.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( provinces.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 204 @ 18:30:26 spid 1] NEW:
+SQL Text: SELECT  itemstext.itemcode ,           itemstext.itemtextlineno ,           itemstext.itemtext ,           itemstext.linebold ,           itemstext.lineunderline ,           itemstext.linestrikeout ,           itemstext.usercode ,           itemstext.modif_lastupdate     FROM itemstext      WHERE ( itemstext.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemstext.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 205 @ 18:30:27 spid 1] NEW:
+SQL Text: SELECT  empdepts.deptcode ,           empdepts.deptdescr ,           empdepts.sort_order ,           empdepts.modif_lastupdate ,           empdepts.jhccode ,           empdepts.jhcl1 ,           empdepts.jhcl2 ,           empdepts.usercode ,           empdepts.salmin ,           empdepts.salmax ,           empdepts.ismanager     FROM empdepts      WHERE ( empdepts.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( empdepts.modif_lastupdate <= '7-2-2026 18:30:9.
+000' )   
+------------------------------------------------------------
+[poll 206 @ 18:30:27 spid 1] NEW:
+SQL Text: SELECT  banksusers.bankcode ,           banksusers.personcode ,           banksusers.personblocked ,           banksusers.usercode ,           banksusers.modif_lastupdate ,           banksusers.bankcomment     FROM banksusers      WHERE ( banksusers.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( banksusers.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 207 @ 18:30:27 spid 1] NEW:
+SQL Text: ls      WHERE ( chequeslevels.trans_time >= '7-2-2026 18:15:9.000' ) and          ( chequeslevels.trans_time <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 208 @ 18:30:28 spid 1] NEW:
+SQL Text: SELECT  branchesgeography.branchcode ,           branchesgeography.personcode ,           branchesgeography.personorder ,           branchesgeography.personsal ,           branchesgeography.usercode ,           branchesgeography.modif_lastupdate ,           branchesgeography.branchlocked     FROM branchesgeography      WHERE ( branchesgeography.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( branchesgeography.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 209 @ 18:30:28 spid 1] NEW:
+SQL Text: SELECT  postext.branchcode ,           postext.poslinetype ,           postext.poslineno ,           postext.poslinetext ,           postext.usercode ,           postext.modif_lastupdate     FROM postext      WHERE ( postext.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( postext.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 210 @ 18:30:29 spid 1] NEW:
+SQL Text: ems.vf2 ,           saccitems.vf3 ,           saccitems.consolidateacc     FROM saccitems      WHERE ( saccitems.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( saccitems.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+------------------------------------------------------------
+[poll 214 @ 18:30:30 spid 1] NEW:
+SQL Text: ', 1.00000, 26.0000, 7.00000, 17.1351, '1-1-2028 0:0:0.000', 26.000, 0.0000, 26.0000, 0.0000, 0.00, 26.0000, 0.00, 0.00, 0.00, 26.00000, 5, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1388', '7-2-2026 18:29:1.963', '1510', 0.00000, 10 )
+------------------------------------------------------------
+[poll 352 @ 18:31:21 spid 68] NEW:
+SQL Text: S ( '160', '115', 907323, '7-2-2026 0:0:0.000', '', 0, 2.5000, '1510', 0.00, 0.00, 0.00, '160', 2.5000, '30', '10', '91', '1', 0.0000, '90', '2', 0.00, '1388', '7-2-2026 18:28:56.580', 0.0000, '7-2-2026 18:28:56.580', 2.5000, 1.6000, 0.0000, 0.00, 1, 2.5000, 2.5000, 1.0000, 'AR', '1607', 5, '' )
+------------------------------------------------------------
+
+=== SUMMARY: 83 distinct batch(es) captured over 484 polls ===
+
+----- batch 1 -----
+[spid 21] SQL Text: select docdate , doctext from temp_r_stk where temp_r_stk.branchcode ='100' and temp_r_stk.doccode ='10' and temp_r_stk.docnumber =0 
+
+----- batch 2 -----
+[spid 68] SQL Text: begin tran
+
+----- batch 3 -----
+[spid 69] SQL Text: iary_amount,null as beneficiary_rate,null as seller_deviceSerialNumber,null as central_device_name,'1' as receipt_unit_price_include_vat,null as receipt_upload_status,null as buyer_mapping_id,itemcode as item_mapping_id,null as return_original_sell_device from stktrans where CONVERT(INT,doccode ) in (115,30) and (personcode = '1500' or  personcode = '1510')  and  branchcode = '160'  and   ( doccode  in ('115','30') )  and   (  trans_time  between '2026-07-02 00:00:00' a
+nd '2026-07-02 23:59:59')
+
+----- batch 4 -----
+[spid 112] SQL Text:  select personcode as customer_id,null as customer_type,personname as customer_name,null as customer_tax_number,null as customer_country,null as customer_governate,null as customer_region_city,null as customer_street,null as customer_building_number,null as customer_mobile_number from personsdata 
+
+----- batch 5 -----
+[spid 68] SQL Text: SELECT  r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate ,           vcount=count(*),           vdocvalue_sum=sum(round(r3stktransm.docvalue,2))    FROM r3stktransm   GROUP BY r3stktransm.branchcode ,           r3stktransm.doccode ,           r3stktransm.docdate   
+
+----- batch 6 -----
+[spid 31] SQL Text: SELECT  branchstores.branchcode ,           branchstores.storecode ,           stores.storename ,           stores.sort_order ,           stores.storecode     FROM branchstores ,           stores     WHERE ( branchstores.storecode = stores.storecode ) and          ( ( branchstores.branchcode = '100' ) )  ORDER BY stores.sort_order          ASC,           stores.storecode          ASC  
+
+----- batch 7 -----
+[spid 31] SQL Text: SELECT origintaxp , custdiscp , ptcode , ptclassifcode , empftime , personmaxbal , ( personcredit + personcredit1-persondebit-persondebit1 ) , personnote , contractdisctype FROM personsdata WHERE personsdata.personcode ='30' 
+
+----- batch 8 -----
+[spid 31] SQL Text: select count ( * ) from stktransm where stktransm.cust_branch_code ='30' and stktransm.doccode ='10' and stktransm.docwritedate ='7-2-2026 0:0:0.000' and stktransm.docnumber2 =2072026 
+
+----- batch 9 -----
+[spid 117] SQL Text:      items.gpcclassifcode ,           items.etaxcodetype ,           items.taxcode ,           items.subtaxcode     FROM items      WHERE ( items.itemlastupdate >= '7-2-2026 18:15:56.000' ) and          ( items.itemlastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 10 -----
+[spid 31] SQL Text: select count ( * ) from stkbal where stkbal.storecode ='100' and stkbal.itemcode ='404' 
+
+----- batch 11 -----
+[spid 117] SQL Text:       itemstrans.itemnosaleclassif ,           itemstrans.itemnew     FROM itemstrans      WHERE ( itemstrans.transdate >= '7-2-2026 18:15:56.000' ) and          ( itemstrans.transdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 12 -----
+[spid 31] SQL Text: select sum ( itemqty ) from stkbalexpiry where stkbalexpiry.storecode ='100' and stkbalexpiry.itemcode ='404' 
+
+----- batch 13 -----
+[spid 117] SQL Text: SELECT  itemsfamily.familycode ,           itemsfamily.familyname ,           itemsfamily.familynamearabic ,           itemsfamily.classifapply ,           itemsfamily.modif_lastupdate     FROM itemsfamily      WHERE ( itemsfamily.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( itemsfamily.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 14 -----
+[spid 117] SQL Text: SELECT  returnsreasons.retreasoncode ,           returnsreasons.retreasondescr ,           returnsreasons.retclassifcode ,           returnsreasons.modif_lastupdate     FROM returnsreasons      WHERE ( returnsreasons.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( returnsreasons.modif_la
+
+----- batch 15 -----
+[spid 44] SQL Text: select type, length, prec, scale, name from syscolumns where id = 1729490259 
+
+----- batch 16 -----
+[spid 117] SQL Text: SELECT  expenses.expcode ,           expenses.expdescr ,           expenses.expclassifcode ,           expenses.modif_lastupdate ,           expenses.exptype ,           expenses.expaccitemcode ,           expenses.allmonths     FROM expenses      WHERE ( expenses.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( expenses.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 17 -----
+[spid 44] SQL Text: 
+
+----- batch 18 -----
+[spid 117] SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 19 -----
+[spid 117] SQL Text: SELECT  costcenters.costcentercode ,           costcenters.costcenterdescr ,           costcenters.costcenterclassifcode ,           costcenters.modif_lastupdate ,           costcenters.ccclosed ,           costcenters.cccusercode ,           costcenters.ccctrans_time     FROM costcenters      WHERE ( costcenters.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( costcenters.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 20 -----
+[spid 54] SQL Text: rsonsdata      WHERE ( personsdata.personfdate >= '7-2-2026 18:15:51.000' ) and          ( personsdata.personfdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 21 -----
+[spid 117] SQL Text:  '7-2-2026 18:15:56.000' ) And          ( bankcurrencies.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 22 -----
+[spid 54] SQL Text:       itemstrans.itemnosaleclassif ,           itemstrans.itemnew     FROM itemstrans      WHERE ( itemstrans.transdate >= '7-2-2026 18:15:51.000' ) and          ( itemstrans.transdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 23 -----
+[spid 117] SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 24 -----
+[spid 54] SQL Text:  ( branches.branch_lastupdate <= '7-2-2026 18:30:52.000' ) 
+
+----- batch 25 -----
+[spid 117] SQL Text:         ( personphones.ptcode in ('00','10','20') )   
+
+----- batch 26 -----
+[spid 54] SQL Text: SELECT  returnsreasons.retreasoncode ,           returnsreasons.retreasondescr ,           returnsreasons.retclassifcode ,           returnsreasons.modif_lastupdate     FROM returnsreasons      WHERE ( returnsreasons.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( returnsreasons.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 27 -----
+[spid 117] SQL Text: SELECT  activeing_ddi.aicode ,           activeing_ddi.aicode2 ,           activeing_ddi.modif_lastupdate ,           activeing_ddi.usercode ,           activeing_ddi.ddi_descr ,           activeing_ddi.ddi_action ,           activeing_ddi.ddi_severity ,           activeing_ddi.ddi_evidence     FROM activeing_ddi      WHERE ( activeing_ddi.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( activeing_ddi.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 28 -----
+[spid 54] SQL Text: SELECT  intervals.intervalcode ,           intervals.intervalname ,           intervals.modif_lastupdate     FROM intervals      WHERE ( intervals.modif_lastupdate >= '7-2-2026 18:15:51.000' ) And          ( intervals.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 29 -----
+[spid 117] SQL Text: SELECT  activeingredients.aicode ,           activeingredients.ainame ,           activeingredients.modif_lastupdate ,           activeingredients.usercode ,           activeingredients.classcode     FROM activeingredients      WHERE ( activeingredients.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( activeingredients.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 30 -----
+[spid 54] SQL Text: SELECT  accsysitems.accitemsno ,           accsysitems.acciteml2_6 ,           accsysitems.accitemdescr ,           accsysitems.accitemtype ,           accsysitems.mitemsys ,           accsysitems.modif_lastupdate ,           accsysitems.accsysallow ,           accsysitems.usercode ,           accsysitems.accitemorder     FROM accsysitems      WHERE ( accsysitems.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( accsysitems.modif_lastupdate <= '7-2-2026 18:30
+:52.000' )   
+
+----- batch 31 -----
+[spid 117] SQL Text: SELECT  banksusers.bankcode ,           banksusers.personcode ,           banksusers.personblocked ,           banksusers.usercode ,           banksusers.modif_lastupdate ,           banksusers.bankcomment     FROM banksusers      WHERE ( banksusers.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( banksusers.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 32 -----
+[spid 54] SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 33 -----
+[spid 117] SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:56.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:56.000' )   
+
+----- batch 34 -----
+[spid 31] SQL Text: insert into temp_r_stk ( branchcode , doccode , docnumber , docdate , doctext ) values ( '100' , '10' , 63666 , '7-2-2026 0:0:0.000' , '006C 00BC 00EE 00C6 003F 00BE 0047 00DE 0086 00B7 0006 0043 0092 00F9 00F0 0001 0060 007D 00D5 0075 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000 0020 0000' ) 
+
+----- batch 35 -----
+[spid 117] SQL Text: commit tran
+
+----- batch 36 -----
+[spid 54] SQL Text: SELECT  activeing_ae.aicode ,           activeing_ae.aiaedescr ,           activeing_ae.modif_lastupdate ,           activeing_ae.usercode     FROM activeing_ae      WHERE ( activeing_ae.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( activeing_ae.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 37 -----
+[spid 54] SQL Text: SELECT  activeing_others.aicode ,           activeing_others.aipregnancy ,           activeing_others.aiabuse ,           activeing_others.modif_lastupdate ,           activeing_others.usercode ,           activeing_others.ailactation     FROM activeing_others      WHERE ( activeing_others.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( activeing_others.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 38 -----
+[spid 54] SQL Text: SELECT  itemsai.itemcode ,           itemsai.aicode ,           itemsai.usercode ,           itemsai.modif_lastupdate ,           itemsai.aiblock     FROM itemsai      WHERE ( itemsai.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( itemsai.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 39 -----
+[spid 54] SQL Text: SELECT  itembarcode.itemcode ,           itembarcode.itembarcode ,           itembarcode.usercode ,           itembarcode.modif_lastupdate ,           itembarcode.mainbarcode ,           itembarcode.blockbarcode ,           itembarcode.delusercode ,           itembarcode.deltrans_time     FROM itembarcode      WHERE ( itembarcode.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( itembarcode.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 40 -----
+[spid 54] SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:51.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:52.000' )   
+
+----- batch 41 -----
+[spid 54] SQL Text: update costcenterstrans set costcenterstrans.table_dumped ='7-2-2026 18:30:52.000' where costcenterstrans.ver_branchcode ='100' and costcenterstrans.branchcode ='170' and costcenterstrans.table_dumped is null 
+
+----- batch 42 -----
+[spid 41] SQL Text:           specialoffers.offer_lastupdate ,           specialoffers.storecode ,           specialoffers.producercode     FROM specialoffers      WHERE ( specialoffers.offer_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( specialoffers.offer_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 43 -----
+[spid 41] SQL Text:  ( branches.branch_lastupdate <= '7-2-2026 18:30:29.000' ) 
+
+----- batch 44 -----
+[spid 41] SQL Text: SELECT  itemstores.itemstoreclassif ,           itemstores.itemstoreclassifdescr ,           itemstores.modif_lastupdate     FROM itemstores      WHERE ( itemstores.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( itemstores.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 45 -----
+[spid 41] SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 46 -----
+[spid 41] SQL Text: mitemscanedit ,           mglevels.mitemshortcut     FROM mglevels      WHERE ( mglevels.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( mglevels.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 47 -----
+[spid 41] SQL Text: SELECT  activeing_prec.aicode ,           activeing_prec.aiprec ,           activeing_prec.modif_lastupdate ,           activeing_prec.usercode     FROM activeing_prec      WHERE ( activeing_prec.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( activeing_prec.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 48 -----
+[spid 41] SQL Text: SELECT  storesusers.storecode ,           storesusers.personcode ,           storesusers.personblocked ,           storesusers.usercode ,           storesusers.modif_lastupdate ,           storesusers.storecomment     FROM storesusers      WHERE ( storesusers.modif_lastupdate >= '7-2-2026 18:15:29.000' ) and          ( storesusers.modif_lastupdate <= '7-2-2026 18:30:29.000' )   
+
+----- batch 49 -----
+[spid 1] SQL Text:      motalba_fields.te7 ,           motalba_fields.te8 ,           motalba_fields.te9 ,           motalba_fields.te10 ,           motalba_fields.te11 ,           motalba_fields.te12     FROM motalba_fields      WHERE ( motalba_fields.fields_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( motalba_fields.fields_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 50 -----
+[spid 1] SQL Text: sic_data.bdata_vchar2 ,           basic_data.bdata_vchar3 ,           basic_data.bdblock     FROM basic_data      WHERE ( basic_data.bdata_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( basic_data.bdata_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 51 -----
+[spid 1] SQL Text: ( branches.branch_lastupdate <= '7-2-2026 18:30:9.000' ) 
+
+----- batch 52 -----
+[spid 1] SQL Text: SELECT  itemsfamily.familycode ,           itemsfamily.familyname ,           itemsfamily.familynamearabic ,           itemsfamily.classifapply ,           itemsfamily.modif_lastupdate     FROM itemsfamily      WHERE ( itemsfamily.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemsfamily.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 53 -----
+[spid 1] SQL Text: SELECT  itemsorigin.itemorigincode ,           itemsorigin.itemoriginname ,           itemsorigin.originnamearabic ,           itemsorigin.classifapply ,           itemsorigin.modif_lastupdate ,           itemsorigin.importedorigin     FROM itemsorigin      WHERE ( itemsorigin.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemsorigin.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 54 -----
+[spid 1] SQL Text: SELECT  returnsclassif.retclassifcode ,           returnsclassif.retclassifdescr ,           returnsclassif.modif_lastupdate     FROM returnsclassif      WHERE ( returnsclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( returnsclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 55 -----
+[spid 1] SQL Text: SELECT  itemstores.itemstoreclassif ,           itemstores.itemstoreclassifdescr ,           itemstores.modif_lastupdate     FROM itemstores      WHERE ( itemstores.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemstores.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 56 -----
+[spid 1] SQL Text: SELECT  expensesclassif.expclassifcode ,           expensesclassif.expclassifdescr ,           expensesclassif.exptype ,           expensesclassif.modif_lastupdate     FROM expensesclassif      WHERE ( expensesclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( expensesclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 57 -----
+[spid 1] SQL Text: SELECT  branchstores.branchcode ,           branchstores.storecode ,           branchstores.modif_lastupdate ,           branchstores.defpos     FROM branchstores      WHERE ( branchstores.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( branchstores.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 58 -----
+[spid 1] SQL Text: SELECT  intervals.intervalcode ,           intervals.intervalname ,           intervals.modif_lastupdate     FROM intervals      WHERE ( intervals.modif_lastupdate >= '7-2-2026 18:15:9.000' ) And          ( intervals.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 59 -----
+[spid 1] SQL Text: SELECT  persontypes.ptcode ,           persontypes.ptdescr ,           persontypes.lastpersoncode ,           persontypes.modif_lastupdate ,           persontypes.ptcodeblocked     FROM persontypes      WHERE ( persontypes.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( persontypes.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 60 -----
+[spid 1] SQL Text: SELECT  custdiscpclassif.custdiscpcode ,           custdiscpclassif.custdiscpdescr ,           custdiscpclassif.modif_lastupdate     FROM custdiscpclassif      WHERE ( custdiscpclassif.modif_lastupdate >= '7-2-2026 18:15:9.000' ) And          ( custdiscpclassif.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 61 -----
+[spid 1] SQL Text: SELECT  costcenters.costcentercode ,           costcenters.costcenterdescr ,           costcenters.costcenterclassifcode ,           costcenters.modif_lastupdate ,           costcenters.ccclosed ,           costcenters.cccusercode ,           costcenters.ccctrans_time     FROM costcenters      WHERE ( costcenters.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( costcenters.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 62 -----
+[spid 1] SQL Text: SELECT  accsysitems.accitemsno ,           accsysitems.acciteml2_6 ,           accsysitems.accitemdescr ,           accsysitems.accitemtype ,           accsysitems.mitemsys ,           accsysitems.modif_lastupdate ,           accsysitems.accsysallow ,           accsysitems.usercode ,           accsysitems.accitemorder     FROM accsysitems      WHERE ( accsysitems.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( accsysitems.modif_lastupdate <= '7-2-2026 18:30:
+9.000' )   
+
+----- batch 63 -----
+[spid 1] SQL Text: SELECT  banks2.bankcode2 ,           banks2.bankname ,           banks2.modif_lastupdate     FROM banks2      WHERE ( banks2.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( banks2.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 64 -----
+[spid 1] SQL Text: a2.last_updated <= '7-2-2026 18:30:9.000' )   
+
+----- batch 65 -----
+[spid 1] SQL Text: SELECT  usergroups.usergroup ,           usergroups.groupdescr ,           usergroups.modif_lastupdate ,           usergroups.groupblocked     FROM usergroups      WHERE ( usergroups.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( usergroups.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 66 -----
+[spid 1] SQL Text: itemsalestaxp     FROM itemssuppliers      WHERE ( itemssuppliers.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemssuppliers.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 67 -----
+[spid 1] SQL Text:       ( personphones.ptcode in ('00','10','20') )   
+
+----- batch 68 -----
+[spid 1] SQL Text: SELECT  patienttitles.ptitle ,           patienttitles.ptitledescr ,           patienttitles.ptitleorder ,           patienttitles.sex ,           patienttitles.modif_lastupdate ,           patienttitles.petitledescr     FROM patienttitles      WHERE ( patienttitles.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( patienttitles.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 69 -----
+[spid 1] SQL Text: SELECT  bankcurrenciestrans.bcurrency ,           bankcurrenciestrans.trans_time ,           bankcurrenciestrans.usercode ,           bankcurrenciestrans.bcrate ,           bankcurrenciestrans.bcrate_maxpay ,           bankcurrenciestrans.bcrate_minreceive     FROM bankcurrenciestrans      WHERE ( bankcurrenciestrans.trans_time >= '7-2-2026 18:15:9.000' ) and          ( bankcurrenciestrans.trans_time <= '7-2-2026 18:30:9.000' )   
+
+----- batch 70 -----
+[spid 1] SQL Text: SELECT  activeing_alt.aicode ,           activeing_alt.aisno ,           activeing_alt.altdescr ,           activeing_alt.modif_lastupdate ,           activeing_alt.usercode     FROM activeing_alt      WHERE ( activeing_alt.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_alt.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 71 -----
+[spid 1] SQL Text: SELECT  activeing_dose.aicode ,           activeing_dose.aidose ,           activeing_dose.modif_lastupdate ,           activeing_dose.usercode     FROM activeing_dose      WHERE ( activeing_dose.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_dose.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 72 -----
+[spid 1] SQL Text: SELECT  activeing_others.aicode ,           activeing_others.aipregnancy ,           activeing_others.aiabuse ,           activeing_others.modif_lastupdate ,           activeing_others.usercode ,           activeing_others.ailactation     FROM activeing_others      WHERE ( activeing_others.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_others.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 73 -----
+[spid 1] SQL Text: SELECT  activeing_uses.aicode ,           activeing_uses.aiuses ,           activeing_uses.modif_lastupdate ,           activeing_uses.usercode     FROM activeing_uses      WHERE ( activeing_uses.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( activeing_uses.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 74 -----
+[spid 1] SQL Text: SELECT  provinces.provincecode ,           provinces.provincename ,           provinces.modif_lastupdate ,           provinces.districtcode     FROM provinces      WHERE ( provinces.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( provinces.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 75 -----
+[spid 1] SQL Text: SELECT  itemstext.itemcode ,           itemstext.itemtextlineno ,           itemstext.itemtext ,           itemstext.linebold ,           itemstext.lineunderline ,           itemstext.linestrikeout ,           itemstext.usercode ,           itemstext.modif_lastupdate     FROM itemstext      WHERE ( itemstext.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( itemstext.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 76 -----
+[spid 1] SQL Text: SELECT  empdepts.deptcode ,           empdepts.deptdescr ,           empdepts.sort_order ,           empdepts.modif_lastupdate ,           empdepts.jhccode ,           empdepts.jhcl1 ,           empdepts.jhcl2 ,           empdepts.usercode ,           empdepts.salmin ,           empdepts.salmax ,           empdepts.ismanager     FROM empdepts      WHERE ( empdepts.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( empdepts.modif_lastupdate <= '7-2-2026 18:30:9.
+000' )   
+
+----- batch 77 -----
+[spid 1] SQL Text: SELECT  banksusers.bankcode ,           banksusers.personcode ,           banksusers.personblocked ,           banksusers.usercode ,           banksusers.modif_lastupdate ,           banksusers.bankcomment     FROM banksusers      WHERE ( banksusers.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( banksusers.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 78 -----
+[spid 1] SQL Text: ls      WHERE ( chequeslevels.trans_time >= '7-2-2026 18:15:9.000' ) and          ( chequeslevels.trans_time <= '7-2-2026 18:30:9.000' )   
+
+----- batch 79 -----
+[spid 1] SQL Text: SELECT  branchesgeography.branchcode ,           branchesgeography.personcode ,           branchesgeography.personorder ,           branchesgeography.personsal ,           branchesgeography.usercode ,           branchesgeography.modif_lastupdate ,           branchesgeography.branchlocked     FROM branchesgeography      WHERE ( branchesgeography.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( branchesgeography.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 80 -----
+[spid 1] SQL Text: SELECT  postext.branchcode ,           postext.poslinetype ,           postext.poslineno ,           postext.poslinetext ,           postext.usercode ,           postext.modif_lastupdate     FROM postext      WHERE ( postext.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( postext.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 81 -----
+[spid 1] SQL Text: ems.vf2 ,           saccitems.vf3 ,           saccitems.consolidateacc     FROM saccitems      WHERE ( saccitems.modif_lastupdate >= '7-2-2026 18:15:9.000' ) and          ( saccitems.modif_lastupdate <= '7-2-2026 18:30:9.000' )   
+
+----- batch 82 -----
+[spid 1] SQL Text: ', 1.00000, 26.0000, 7.00000, 17.1351, '1-1-2028 0:0:0.000', 26.000, 0.0000, 26.0000, 0.0000, 0.00, 26.0000, 0.00, 0.00, 0.00, 26.00000, 5, 0, '1-1-1900 0:0:0.000', 0.00, '0', '0', '000', '1388', '7-2-2026 18:29:1.963', '1510', 0.00000, 10 )
+
+----- batch 83 -----
+[spid 68] SQL Text: S ( '160', '115', 907323, '7-2-2026 0:0:0.000', '', 0, 2.5000, '1510', 0.00, 0.00, 0.00, '160', 2.5000, '30', '10', '91', '1', 0.0000, '90', '2', 0.00, '1388', '7-2-2026 18:28:56.580', 0.0000, '7-2-2026 18:28:56.580', 2.5000, 1.6000, 0.0000, 0.00, 1, 2.5000, 2.5000, 1.0000, 'AR', '1607', 5, '' )
+
+Complete: 2026-07-02T18:32:07.482235

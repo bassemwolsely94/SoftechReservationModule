@@ -1,26 +1,62 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  safelist: [
+    'w-[220px]', 'w-0',
+  ],
   theme: {
     extend: {
       fontFamily: {
-        cairo: ['Cairo', 'sans-serif'],
+        // ── ElRezeiky brand fonts (see index.css @font-face + CSS vars) ──
+        // Default UI stack: Latin picks Harabara, Arabic falls through to Jozoor.
+        sans:  ['var(--font-ui)', 'system-ui', 'sans-serif'],
+        ar:    ['var(--font-ar)', 'sans-serif'],   // Arabic  → Jozoor
+        en:    ['var(--font-en)', 'sans-serif'],   // Latin   → Harabara Mais Demo
+        num:   ['var(--font-num)', 'sans-serif'],  // Numbers → Berlin Sans FB
+        // Legacy alias: `font-cairo` is used in ~29 places as "the Arabic font".
+        // Repointed to the brand Arabic stack (Jozoor → Cairo) so those adopt the
+        // brand font automatically without touching every file.
+        cairo: ['var(--font-ar)', 'sans-serif'],
       },
       colors: {
+        // ── ElRezeiky brand palette (runtime-themeable) ──────────────────
+        // Values come from CSS vars set by src/theme/theme.js so the admin
+        // Appearance page can recolor the whole UI live. Defaults live in
+        // index.css :root. `<alpha-value>` keeps `/opacity` modifiers working.
         brand: {
-          50:  '#f0f9f4',
-          100: '#dcf0e5',
-          200: '#bce1ce',
-          300: '#8dcaad',
-          400: '#5aad87',
-          500: '#38916a',
-          600: '#1B6B3A',   // PRIMARY
-          700: '#175a31',
-          800: '#154928',
-          900: '#123c21',
+          50:  'rgb(var(--c-brand-50) / <alpha-value>)',
+          100: 'rgb(var(--c-brand-100) / <alpha-value>)',
+          200: 'rgb(var(--c-brand-200) / <alpha-value>)',
+          300: 'rgb(var(--c-brand-300) / <alpha-value>)',
+          400: 'rgb(var(--c-brand-400) / <alpha-value>)',
+          500: 'rgb(var(--c-brand-500) / <alpha-value>)',
+          600: 'rgb(var(--c-brand-600) / <alpha-value>)',
+          700: 'rgb(var(--c-brand-700) / <alpha-value>)',
+          800: 'rgb(var(--c-brand-800) / <alpha-value>)',
+          900: 'rgb(var(--c-brand-900) / <alpha-value>)',
         },
+        'brand-navy': 'rgb(var(--c-brand-600) / <alpha-value>)',
+        // Generic accent used by /supply, composition and ingredient-search screens
+        // (bg-primary / text-primary / border-primary). Was never defined → those
+        // buttons rendered white-on-white. Alias of the brand navy, so it re-themes too.
+        primary:      'rgb(var(--c-brand-600) / <alpha-value>)',
+        'brand-sky':  'rgb(var(--c-brand-sky) / <alpha-value>)',
+        'brand-red':  'rgb(var(--c-brand-red) / <alpha-value>)',
         alert:  '#F5A623',
-        danger: '#D93025',
+        danger: 'rgb(var(--c-danger) / <alpha-value>)',
+        // ── Semantic surface tokens (light/dark aware — see index.css) ─────────
+        // Prefer these over literal bg-white / text-gray-* / border-gray-* so new
+        // UI themes automatically. Values flip under html[data-theme="dark"].
+        bg:            'rgb(var(--c-bg) / <alpha-value>)',
+        surface:       'rgb(var(--c-surface) / <alpha-value>)',
+        'surface-2':   'rgb(var(--c-surface-2) / <alpha-value>)',
+        'surface-3':   'rgb(var(--c-surface-3) / <alpha-value>)',
+        content:       'rgb(var(--c-content) / <alpha-value>)',
+        muted:         'rgb(var(--c-muted) / <alpha-value>)',
+        faint:         'rgb(var(--c-faint) / <alpha-value>)',
+        line:          'rgb(var(--c-line) / <alpha-value>)',
+        'line-soft':   'rgb(var(--c-line-soft) / <alpha-value>)',
+        'line-strong': 'rgb(var(--c-line-strong) / <alpha-value>)',
       },
       borderRadius: {
         '2xl': '1rem',
@@ -73,5 +109,15 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        },
+      })
+    },
+  ],
 }
