@@ -158,3 +158,22 @@ Original step-3 notes:
    - a scoped validator allowance for `itemnomoreuse=1` on 102230 (it is stocked deliberately);
    - verify-readback of 200 lines; **rollback clone of doc 63943/63944 first, then diff every column**
      (existing `clone_purchase` pattern); then ONE real batch, gated by `INVOICE_WRITER_ENABLED`.
+
+
+## 7. Lifecycle tracking — BUILT (2026-10-06), read-only
+- `apps/vouchers/coupon_lifecycle.py`, model `CouponEvent` (migration vouchers/0007) + lifecycle fields on
+  `CouponSerial` (`stage`, issued/sent/redeemed date·doc·branch·customer PIC, `issue_count`, net
+  `redeem_count`, `anomalies`). Tests: `apps/tests/test_coupon_lifecycle.py`.
+- `sync_coupon_lifecycle [--full | --since/--until]`: mirrors every non-purchase `stktrans` line of both coupon
+  items (joined to its header for party + `phcode`) in 31-day windows; each window is replaced, so re-runs are
+  idempotent. Incremental default = 7 days before the latest mirrored movement; `--full` from
+  `COUPON_LIFECYCLE_SINCE` (2021-01-01). Customer PIC (`phcode`) links to `customers.Customer.softech_pic`.
+- Classification: 170 issue (points leg only), 125/25 transfer out/in (other codes named «تبادل» likewise),
+  115 redeem / 30 redeem return (served leg only), 120 supplier return, else `other` (with the `transdoc` name).
+- Stage: `redeemed` (net redeem > 0) › `at_branch` (sent to a non-HQ branch) › `issued` › `stocked`.
+- Anomaly flags (deterministic): `redeemed_twice`, `issued_twice`, `redeemed_not_issued`,
+  `redeemed_not_stocked`, `redeemed_at_unsent_branch`, `redeemed_by_other_customer`. Lines whose serial is blank
+  or unknown are kept (`serial=NULL`, `raw_serial`) and reported per branch — the audit trail behind negative
+  branch stock such as 118639 @ 130 = −309.
+- `coupon_report` (overview) · `coupon_report --serial 27101-ZWU704` (timeline) ·
+  `coupon_report --anomaly redeemed_twice` (list).

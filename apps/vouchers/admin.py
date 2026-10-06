@@ -45,8 +45,20 @@ class CouponBatchAdmin(admin.ModelAdmin):
 
 @admin.register(CouponSerial)
 class CouponSerialAdmin(admin.ModelAdmin):
-    list_display  = ('serial', 'number', 'source', 'status', 'points_docnumber', 'points_expiry',
-                     'served_docnumber', 'served_expiry', 'batch')
-    list_filter   = ('source', 'status')
+    list_display  = ('serial', 'number', 'source', 'status', 'stage', 'points_docnumber', 'served_docnumber',
+                     'issued_pic', 'redeemed_branch', 'redeemed_at', 'batch')
+    list_filter   = ('source', 'status', 'stage', 'redeemed_branch')
     search_fields = ('serial', 'code', '=number')
     readonly_fields = [f.name for f in CouponSerial._meta.fields]
+
+
+from .models import CouponEvent  # noqa: E402
+
+
+@admin.register(CouponEvent)
+class CouponEventAdmin(admin.ModelAdmin):
+    list_display  = ('docdate', 'raw_serial', 'kind', 'leg', 'branchcode', 'doccode', 'docnumber',
+                     'customer_pic', 'qty')
+    list_filter   = ('kind', 'leg', 'branchcode')
+    search_fields = ('raw_serial', 'customer_pic', '=docnumber')
+    readonly_fields = [f.name for f in CouponEvent._meta.fields]

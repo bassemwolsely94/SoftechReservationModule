@@ -640,6 +640,34 @@ class CouponSerial(models.Model):
     served_docdate   = models.DateField(null=True, blank=True)
 
     conflict_note = models.TextField(blank=True, default='', verbose_name='تعارضات')
+
+    # ── Lifecycle summary (rebuilt from CouponEvent by coupon_lifecycle.py) ──────
+    STAGE_CHOICES = [
+        ('',          '—'),
+        ('stocked',   'في المخزن الرئيسي'),
+        ('issued',    'صُرف لعميل'),
+        ('at_branch', 'في فرع'),
+        ('redeemed',  'استُخدم'),
+    ]
+    stage           = models.CharField(max_length=10, choices=STAGE_CHOICES, blank=True, default='',
+                                       db_index=True, verbose_name='المرحلة')
+    issued_at       = models.DateField(null=True, blank=True, verbose_name='تاريخ الصرف للعميل')
+    issued_doc      = models.PositiveIntegerField(null=True, blank=True)
+    issued_branch   = models.CharField(max_length=5, blank=True, default='')
+    issued_pic      = models.CharField(max_length=30, blank=True, default='', db_index=True,
+                                       verbose_name='كود العميل (صرف)')
+    sent_branch     = models.CharField(max_length=5, blank=True, default='', verbose_name='أُرسل إلى فرع')
+    sent_at         = models.DateField(null=True, blank=True)
+    redeemed_at     = models.DateField(null=True, blank=True, verbose_name='تاريخ الاستخدام')
+    redeemed_doc    = models.PositiveIntegerField(null=True, blank=True)
+    redeemed_branch = models.CharField(max_length=5, blank=True, default='', db_index=True,
+                                       verbose_name='فرع الاستخدام')
+    redeemed_pic    = models.CharField(max_length=30, blank=True, default='', db_index=True,
+                                       verbose_name='كود العميل (استخدام)')
+    issue_count     = models.SmallIntegerField(default=0)
+    redeem_count    = models.SmallIntegerField(default=0, verbose_name='صافي مرات الاستخدام')
+    anomalies       = models.JSONField(default=list, blank=True, verbose_name='ملاحظات رقابية')
+
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
@@ -659,3 +687,54 @@ class CouponSerial(models.Model):
 
     def __str__(self):
         return self.serial
+
+
+class CouponEvent(models.Model):
+    """One SOFTECH stktrans line moving a coupon item (read-only mirror, rebuilt by
+    sync_coupon_lifecycle). The serial is the line's item_partno; lines whose serial is
+    blank or unknown are kept with serial=NULL so they can be audited."""
+
+    KIND_CHOICES = [
+        ('issue',           'صرف لعميل مقابل نقاط (170)'),
+        ('transfer_out',    'تحويل من فرع'),
+        ('transfer_in',     'استلام في فرع'),
+        ('redeem',          'استخدام على فاتورة بيع (115)'),
+        ('redeem_return',   'مرتجع بيع (30)'),
+        ('supplier_return', 'مرتجع للمورد (120)'),
+        ('other',           'حركة أخرى'),
+    ]
+
+    serial       = models.ForeignKey(CouponSerial, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='events')
+    raw_serial   = models.CharField(max_length=40, blank=True, default='', verbose_name='السريال كما في SOFTECH')
+    leg          = models.CharField(max_length=6)                    # points | served
+    itemcode     = models.CharField(max_length=10)
+    kind         = models.CharField(max_length=16, choices=KIND_CHOICES, db_index=True)
+    doccode      = models.CharField(max_length=4)
+    doc_name     = models.CharField(max_length=100, blank=True, default='')
+    branchcode   = models.CharField(max_length=5, db_index=True)
+    storecode    = models.CharField(max_length=5, blank=True, default='')
+    docnumber    = models.PositiveIntegerField()
+    docdate      = models.DateField(db_index=True)
+    line_no      = models.IntegerField(default=0)
+    qty          = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+    price        = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    party_code   = models.CharField(max_length=10, blank=True, default='')   # header cust_branch_code
+    customer_pic = models.CharField(max_length=30, blank=True, default='', db_index=True)  # header phcode
+    customer     = models.ForeignKey('customers.Customer', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='coupon_events')
+    usercode     = models.CharField(max_length=10, blank=True, default='')
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'حركة كوبون'
+        verbose_name_plural = 'حركات الكوبونات'
+        ordering            = ['docdate', 'branchcode', 'docnumber', 'line_no']
+        constraints = [
+            models.UniqueConstraint(fields=['branchcode', 'doccode', 'docnumber', 'itemcode', 'line_no'],
+                                    name='uniq_coupon_event_line'),
+        ]
+        indexes = [models.Index(fields=['kind', 'branchcode', 'docdate'])]
+
+    def __str__(self):
+        return f'{self.raw_serial or "—"} {self.kind} {self.branchcode}/{self.doccode}/{self.docnumber}'
