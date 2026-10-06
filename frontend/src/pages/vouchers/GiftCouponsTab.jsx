@@ -346,7 +346,7 @@ function BatchRow({ b, canManage, writerEnabled, onChanged }) {
         <span className="text-gray-500">صلاحية {b.expiry_from} → {b.expiry_to}</span>
         <span className={`px-2 py-0.5 rounded text-xs ${BATCH_TONE[b.status] || ''}`}>{b.status_label}</span>
         <span className="text-gray-500">مستندات SOFTECH: نقاط {leg(b.points)} · استحقاق {leg(b.served)}</span>
-        <span className="text-gray-400 text-xs">{b.created_by} · {b.created_at?.slice(0, 10)}</span>
+        <span className="text-gray-400 text-xs">{b.created_by} · {b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : ''}</span>
       </div>
       {(b.points?.error || b.served?.error) && (
         <div className="text-xs text-red-600 mt-1">{b.points?.error || b.served?.error}</div>
@@ -494,7 +494,7 @@ export default function GiftCouponsTab() {
           tone={ov.guard_enabled ? 'text-emerald-700' : 'text-amber-700'} />
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-        <span>آخر تحديث: {ov.last_sync_at ? ov.last_sync_at.slice(0, 16).replace('T', ' ') : '—'} · آخر حركة {ov.latest_movement || '—'}</span>
+        <span>آخر تحديث: {ov.last_sync_at ? new Date(ov.last_sync_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'} · آخر حركة {ov.latest_movement || '—'}</span>
         {ov.can_manage && <Btn onClick={sync} disabled={syncing}>{syncing ? 'جارٍ التحديث…' : 'تحديث من SOFTECH'}</Btn>}
         {syncMsg && <span>{syncMsg}</span>}
       </div>
