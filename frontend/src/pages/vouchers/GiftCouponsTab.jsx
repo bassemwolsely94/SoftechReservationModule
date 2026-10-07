@@ -157,6 +157,58 @@ function SerialSearch() {
   )
 }
 
+// ── POS guard rehearsal — the exact check /pos runs on push (works while the guard is off) ──
+function GuardTest() {
+  const [f, setF] = useState({ serial: '', branch: '', pic: '' })
+  const [res, setRes] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const set = k => e => setF(v => ({ ...v, [k]: e.target.value.toUpperCase() }))
+
+  const run = async () => {
+    if (!f.serial.trim()) return
+    setLoading(true); setError(null); setRes(null)
+    try {
+      setRes((await couponsApi.check({ serial: f.serial.trim(), branch: f.branch.trim(), pic: f.pic.trim() })).data)
+    } catch (e) { setError(errMsg(e)) } finally { setLoading(false) }
+  }
+  const input = 'border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-brand-500'
+
+  return (
+    <details className="bg-white rounded-2xl border border-gray-200 p-4">
+      <summary className="cursor-pointer text-sm font-medium text-gray-700">
+        اختبار فحص الكوبون في POS — نفس القواعد التي ستطبق عند التفعيل
+      </summary>
+      <div className="flex flex-wrap gap-2 items-center mt-3" onKeyDown={e => e.key === 'Enter' && run()}>
+        <input value={f.serial} onChange={set('serial')} dir="ltr" placeholder="السريال 27301-ABC123" className={`${input} flex-1 min-w-[12rem]`} />
+        <input value={f.branch} onChange={set('branch')} dir="ltr" placeholder="كود الفرع 130" className={`${input} w-32`} />
+        <input value={f.pic} onChange={set('pic')} dir="ltr" placeholder="كود العميل PIC" className={`${input} w-40`} />
+        <Btn variant="primary" onClick={run} disabled={loading}>{loading ? '...' : 'فحص'}</Btn>
+      </div>
+      <div className="text-xs text-gray-400 mt-1">
+        اترك الفرع فارغًا لتجاهل شرط «موجود في مخزون الفرع»، واترك العميل فارغًا لترى لمن صُرف الكوبون.
+      </div>
+      <ErrorLine msg={error} />
+      {res && (
+        <div className={`mt-3 rounded-lg p-3 text-sm ${res.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+          <div className="font-bold">{res.ok ? `✓ سيُقبل الكوبون ${res.serial}` : `✗ سيُرفض الكوبون ${res.serial || ''}`}</div>
+          {res.errors.map((m, i) => <div key={i}>• {m}</div>)}
+          {res.info && Object.keys(res.info).length > 0 && (
+            <div className="text-xs text-gray-600 mt-2 flex flex-wrap gap-x-4">
+              <span>مُدخل: {n(res.info.stocked)}</span>
+              <span>صُرف: {n(res.info.issued)}{res.info.issued_to ? ` إلى ${res.info.issued_to}` : ''}</span>
+              <span>استُخدم: {n(res.info.redeemed)}</span>
+              {res.info.branch_qty !== null && <span>رصيد الفرع: {n(res.info.branch_qty)}</span>}
+              {res.info.expiry && <span>الصلاحية: {res.info.expiry}</span>}
+              {res.info.held_by_orders?.length > 0 && <span>في أوامر مفتوحة: #{res.info.held_by_orders.join(', #')}</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </details>
+  )
+}
+
 // ── Customers over their issued coupons ──────────────────────────────────────
 function CustomersView() {
   const [data, setData] = useState(null)
@@ -500,6 +552,7 @@ export default function GiftCouponsTab() {
       </div>
 
       <SerialSearch />
+      <GuardTest />
 
       <div className="flex gap-1">
         {views.map(v => (

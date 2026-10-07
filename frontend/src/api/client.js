@@ -870,6 +870,7 @@ export const vouchersApi = {
 // ── Gift coupons (paper coupons, SOFTECH supplier 1268) — apps/vouchers/coupon_views.py ──
 export const couponsApi = {
   overview:     ()            => api.get('/vouchers/coupons/overview/'),
+  check:        (params)      => api.get('/vouchers/coupons/check/', { params }),   // same rules as the POS guard
   serial:       (q)           => api.get('/vouchers/coupons/serial/', { params: { q } }),
   customers:    (params)      => api.get('/vouchers/coupons/customers/', { params }),
   noSerial:     (params)      => api.get('/vouchers/coupons/no-serial/', { params }),
