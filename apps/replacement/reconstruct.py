@@ -259,6 +259,10 @@ def _own_receipts(case) -> dict:
                                             docnumber=str(int(so.softech_final_docnumber))).order_by('-invoice_date').first()
         if ph is not None:
             out[ph.pk] = op
+    # parallel entry: product sales made natively at the POS and linked to the case by hand
+    for op in case.operations.filter(kind=Op.KIND_PRODUCT_SALE, result__has_key='native_receipt') \
+            .exclude(status=Op.ST_CANCELLED):
+        out[op.result['native_receipt']] = op
     return out
 
 
@@ -766,6 +770,14 @@ def run(date_from=None, date_to=None, suppliers=None, branch=None, limit=None, t
     r = ReconstructionRun.objects.create(params=params, rules_version=C.RULES_VERSION,
                                          triggered_by=triggered_by[:100])
     counts = {'invoices': 0, 'created': 0, 'updated': 0, 'errors': 0}
+    # natively-posted purchases linked to live cases attach FIRST, so this run never builds a
+    # duplicate case from them
+    from .legs import resolve_pending_native_links
+    try:
+        counts['native_links'] = resolve_pending_native_links()
+    except Exception as exc:
+        log.exception('replacement: resolving native purchase links failed')
+        r.notes += f'native links: {exc}\n'
     tabdeel = tabdeel_pics()
     qs = candidate_invoices(date_from, date_to, suppliers, branch)
     if limit:

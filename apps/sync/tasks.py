@@ -2028,6 +2028,24 @@ def _run_stock_expiry_sync():
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
 
 
+def _run_replacement_check():
+    """Daily بدل الروشتة check (READ-ONLY vs SOFTECH), after the A/P mirror refresh: attach the
+    purchases staff posted natively and linked to live cases, then rebuild the recent window so
+    vouchers, product receipts and amounts are verified against SOFTECH. Off with
+    REPLACEMENT_DAILY_CHECK_ENABLED=False; window REPLACEMENT_DAILY_CHECK_DAYS (default 60)."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'REPLACEMENT_DAILY_CHECK_ENABLED', True):
+        return
+    try:
+        import datetime as _d
+        from apps.replacement import reconstruct as R
+        days = int(getattr(_s, 'REPLACEMENT_DAILY_CHECK_DAYS', 60))
+        r = R.run(date_from=_d.date.today() - _d.timedelta(days=days), triggered_by='scheduler')
+        logger.info('[APScheduler] replacement check done: %s', r.counts)
+    except Exception as exc:
+        logger.error('[APScheduler] replacement check failed: %s', exc)
+
+
 def _run_coupon_lifecycle_sync():
     """Daily gift-coupon mirror (READ-ONLY from SOFTECH) + yesterday's misuse digest
     (lines without a serial, reused serials, customers over their issued coupons) as an
@@ -3009,6 +3027,11 @@ def start_scheduler():
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
     _scheduler.add_job(
         _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # بدل الروشتة daily check — 08:40, after the 07:30 A/P mirror sync.
+    _scheduler.add_job(
+        _run_replacement_check, 'cron', hour=8, minute=40, id='replacement_daily_check',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.

@@ -31,6 +31,22 @@ function Btn({ children, onClick, disabled, kind = 'primary' }) {
                  className={`text-sm px-3 py-1.5 rounded-lg disabled:opacity-40 ${cls}`}>{children}</button>
 }
 
+// Parallel entry: a document the staff already posted natively in SOFTECH (branch / number / date).
+function NativeDocLink({ label, branchcode, busy, onLink }) {
+  const [d, setD] = useState({ branchcode, docnumber: '', docdate: '' })
+  return (
+    <div className="flex gap-2 flex-wrap items-center">
+      <span className="text-xs text-gray-500">{label}</span>
+      <input value={d.branchcode} onChange={(e) => setD({ ...d, branchcode: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-16" />
+      <input value={d.docnumber} onChange={(e) => setD({ ...d, docnumber: e.target.value })} placeholder="رقم المستند" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32 font-mono" />
+      <input type="date" value={d.docdate} onChange={(e) => setD({ ...d, docdate: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
+      <Btn kind="ghost" disabled={busy || !d.docnumber || !d.docdate} onClick={() => onLink(d)}>ربط</Btn>
+    </div>
+  )
+}
+
+const nativeStatus = (o) => (o.kind === 'purchase' ? 'بانتظار ظهورها في المرآة' : 'بانتظار سند الكاشير')
+
 export default function WorkflowPanel({ c }) {
   const qc = useQueryClient()
   const [msg, setMsg] = useState('')
@@ -143,6 +159,9 @@ export default function WorkflowPanel({ c }) {
             <div className="text-xs text-gray-500">١ — فاتورة الشراء من المورد الافتراضي (تُنشئ الرصيد)</div>
             {!opOf('purchase').length && can.post &&
               <Btn disabled={busy} onClick={() => run(replacementApi.preparePurchase, c.id, v)}>تجهيز فاتورة الشراء</Btn>}
+            {!opOf('purchase').some((o) => !o.result?.native || o.status === 'posted_verified') && can.create &&
+              <NativeDocLink label="أو اربط فاتورة الشراء المُدخلة في SOFTECH:" branchcode={c.branchcode} busy={busy}
+                             onLink={(d) => run(replacementApi.linkPurchase, c.id, { ...v, ...d })} />}
           </div>
           {/* contract */}
           {c.source_type === 'insurance_rx' && !hasContract && (
@@ -186,6 +205,10 @@ export default function WorkflowPanel({ c }) {
                 { ...v, channel, items: basket.map((b) => ({ item_id: b.item_id, qty: b.qty })) })}>تجهيز فاتورة المنتجات</Btn>}
             </div>
           )}
+          {c.settlement_mode !== 'cash' && can.create && (
+            <NativeDocLink label="اربط فاتورة منتجات بيعت في SOFTECH (نقدي/توصيل):" branchcode={c.branchcode} busy={busy}
+                           onLink={(d) => run(replacementApi.linkProductSale, c.id, { ...v, ...d })} />
+          )}
           {/* operations */}
           {!!ops.length && (
             <table className="w-full text-sm">
@@ -198,11 +221,13 @@ export default function WorkflowPanel({ c }) {
                     <td className="px-2 py-1">{o.kind_label}{o.target?.channel && ` · ${o.target.channel}`}
                       {o.result?.customer_topup && Number(o.result.customer_topup) > 0 && <span className="text-[11px] text-teal-700"> · يدفع المريض {money(o.result.customer_topup)}</span>}</td>
                     <td className="px-2 py-1 tabular-nums">{money(o.expected_value)}</td>
-                    <td className="px-2 py-1"><Chip tone={OP_TONE[o.status]}>{o.status_label}</Chip>
+                    <td className="px-2 py-1">
+                      {o.result?.native && <Chip tone="teal">يدوي في SOFTECH</Chip>}{' '}
+                      <Chip tone={OP_TONE[o.status]}>{o.result?.native && o.status === 'posted' ? nativeStatus(o) : o.status_label}</Chip>
                       {o.error && <div className="text-[11px] text-rose-700">{o.error}</div>}</td>
                     <td className="px-2 py-1 font-mono text-xs">{o.result_docnumber || o.target?.softech_docnumber || '—'}</td>
                     <td className="px-2 py-1">
-                      {can.post && ['planned', 'dry_run', 'failed'].includes(o.status) &&
+                      {can.post && !o.result?.native && ['planned', 'dry_run', 'failed'].includes(o.status) &&
                         <Btn disabled={busy} onClick={() => run(replacementApi.postOperation, c.id, o.op_id, v)}>
                           {wf.posting_enabled ? 'ترحيل' : 'عرض خطة الترحيل'}</Btn>}
                     </td>

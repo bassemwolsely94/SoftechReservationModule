@@ -240,6 +240,26 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         return self._step(request, pk, LG.link_contract_sale, branchcode=str(d.get('branchcode', '')),
                           docnumber=str(d.get('docnumber', '')), docdate=dd)
 
+    def _native_link(self, request, pk, fn):
+        from datetime import date
+        d = request.data
+        try:
+            dd = date.fromisoformat(str(d.get('docdate')))
+        except ValueError:
+            return Response({'detail': 'تاريخ غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+        return self._step(request, pk, fn, branchcode=str(d.get('branchcode', '')),
+                          docnumber=str(d.get('docnumber', '')), docdate=dd)
+
+    @action(detail=True, methods=['post'], url_path='link-purchase')
+    def link_purchase(self, request, pk=None):
+        """Parallel entry: the virtual-supplier purchase posted natively in SOFTECH."""
+        return self._native_link(request, pk, LG.link_native_purchase)
+
+    @action(detail=True, methods=['post'], url_path='link-product-sale')
+    def link_product_sale(self, request, pk=None):
+        """Parallel entry: a cash / delivery product sale made natively at the POS."""
+        return self._native_link(request, pk, LG.link_native_product_sale)
+
     @action(detail=True, methods=['post'], url_path='prepare-purchase')
     def prepare_purchase(self, request, pk=None):
         return self._step(request, pk, LG.prepare_purchase)

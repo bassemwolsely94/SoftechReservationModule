@@ -19,6 +19,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.lineage.models import DocumentRef as Ref
@@ -302,6 +303,8 @@ def post(case_id, op_id, *, user, version, force=False, request=None) -> Op:
     authz.require(user, 'post', case=case)
     _require_executable(case)
     op = Op.objects.select_for_update().get(op_id=op_id, case=case)
+    if (op.result or {}).get('native'):
+        raise ValidationError('هذا المستند مُدخل يدوياً في SOFTECH — لا يُرحّل من المنصة (أعد ربطه إن كان الرقم خطأ).')
     if op.status in (Op.ST_POSTED, Op.ST_VERIFIED):
         return op
     if op.status in (Op.ST_CANCELLED, Op.ST_POSTING):
@@ -375,3 +378,181 @@ def voucher_instruction(case) -> dict | None:
             'invoice': case.purchase_ref.docnumber, 'branch': case.purchase_ref.branchcode,
             'amount_for_products': str(amount), 'balance': str(L.balance(case)),
             'note': f'سداد جزء من فاتورة رقم {case.purchase_ref.docnumber}'}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parallel entry (owner 2026-10-07): staff post the purchase / product sales NATIVELY in SOFTECH
+# and type the document number here. We only LINK and VERIFY — nothing is written to SOFTECH.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _native_key(branchcode, docnumber, docdate) -> dict:
+    from .reconstruct import _docno
+    return {'branchcode': str(branchcode).strip(), 'docnumber': _docno(docnumber),
+            'docdate': docdate.isoformat()}
+
+
+def _case_touched_by_people(case) -> bool:
+    """A reconstructed case someone worked on is history — never retired automatically."""
+    from apps.lineage.models import DocumentEdge as Edge
+    refs = list(case.documents.values_list('document_id', flat=True))
+    return (case.origin != RC.ORIGIN_RECONSTRUCTED or case.operations.exists()
+            or case.documents.filter(origin='manual').exists()
+            or case.exceptions.filter(status__in=[X.STATUS_ACK, X.STATUS_RESOLVED]).exists()
+            or Edge.objects.filter(decided_by__isnull=False)
+                .filter(Q(from_ref_id__in=refs) | Q(to_ref_id__in=refs)).exists())
+
+
+def _retire_duplicate(dup, live_case, user):
+    """The nightly run built a case from a purchase that belongs to a live case. Retire it: reverse
+    its ledger (append-only — compensating entries), drop its derived links/items/exceptions, free
+    the purchase for the live case and mark it cancelled. Audited."""
+    for e in L.active_entries(dup):
+        L.reverse(e, note=f'حالة مكررة — الفاتورة تخص الحالة {live_case.number}', user=user)
+    dup.documents.all().delete()
+    dup.items.all().delete()
+    dup.exceptions.all().delete()
+    old_ref = dup.purchase_ref_id
+    dup.purchase_ref = dup.purchase_invoice = None
+    dup.status, dup.outstanding = RC.STATUS_CANCELLED, Decimal('0')
+    dup.notes = (dup.notes + f'\nأُلغيت: فاتورة الشراء مربوطة يدوياً بالحالة {live_case.number}').strip()
+    dup.save(update_fields=['purchase_ref', 'purchase_invoice', 'status', 'outstanding', 'notes', 'updated_at'])
+    _audit('replacement_case_cancelled', dup, user, new={'superseded_by': live_case.number,
+                                                          'purchase_ref': str(old_ref)})
+
+
+def resolve_native_purchase(op, *, user=None) -> bool:
+    """Attach the natively-posted purchase once the A/P mirror has it, then let reconstruction
+    book the entitlement, vouchers and returns exactly as for any case. True when attached."""
+    from apps.finance.recon_models import APInvoice
+    from . import reconstruct as R
+    from datetime import date
+    nk = (op.result or {}).get('native') or {}
+    case = RC.objects.select_for_update().get(pk=op.case_id)
+    inv = (APInvoice.objects.select_related('party')
+           .filter(branchcode=nk.get('branchcode'), doccode='10', docnumber=nk.get('docnumber'),
+                   docdate=date.fromisoformat(nk['docdate'])).first())
+    if inv is None:
+        if not op.error:
+            op.error = 'لم تظهر الفاتورة في مرآة الموردين بعد — ستُربط تلقائياً بعد المزامنة.'
+            op.save(update_fields=['error', 'updated_at'])
+        return False
+    calc = case.current_calc
+    want = calc.rule.supplier_personcode if calc else case.supplier_personcode
+    if want and inv.party.softech_personcode != want:
+        _fail(op, case, user, f'فاتورة SOFTECH على المورد {inv.party.softech_personcode} '
+                              f'وقاعدة الحالة على المورد {want} — راجع الرقم.')
+        return False
+    p_ref = R.ref_for_apinvoice(inv)
+    other = RC.objects.select_for_update().filter(purchase_ref=p_ref).exclude(pk=case.pk).first() \
+        or RC.objects.select_for_update().filter(purchase_invoice=inv).exclude(pk=case.pk).first()
+    if other is not None:
+        if _case_touched_by_people(other):
+            _fail(op, case, user, f'فاتورة الشراء مرتبطة بالحالة {other.number} — راجعها قبل الربط.')
+            return False
+        _retire_duplicate(other, case, user)
+    case.purchase_ref, case.purchase_date = p_ref, inv.docdate
+    case.supplier_personcode = case.supplier_personcode or inv.party.softech_personcode
+    case.save(update_fields=['purchase_ref', 'purchase_date', 'supplier_personcode', 'updated_at'])
+    R.reconstruct_invoice(inv, tabdeel=R.tabdeel_pics(), user=user)    # live → attaches, never duplicates
+    op.status, op.error = Op.ST_VERIFIED, ''
+    op.result = {**op.result, 'native': {**nk, 'doc_value': str(inv.doc_value),
+                                         'verified_at': timezone.now().isoformat()}}
+    op.save(update_fields=['status', 'error', 'result', 'updated_at'])
+    return True
+
+
+@transaction.atomic
+def link_native_purchase(case_id, *, user, version, branchcode, docnumber, docdate, request=None) -> RC:
+    """Record the purchase the staff posted natively in SOFTECH (parallel entry). Attached now if the
+    mirror already has it, otherwise by the scheduled check after the next A/P sync."""
+    case = _lock(case_id, version)
+    authz.require(user, 'create', case=case)
+    _require_executable(case)
+    nk = _native_key(branchcode, docnumber, docdate)
+    if not nk['branchcode'] or not nk['docnumber']:
+        raise ValidationError('أدخل الفرع ورقم فاتورة الشراء.')
+    key = f'{case.pk}:purchase'
+    op = Op.objects.filter(idempotency_key=key).first()
+    if op and op.status != Op.ST_CANCELLED:
+        if op.supplier_invoice_id:
+            raise ValidationError('فاتورة الشراء مُجهّزة للترحيل من المنصة — لا يمكن ربط فاتورة يدوية معها.')
+        if (op.result or {}).get('native', {}).get('docnumber') == nk['docnumber'] and op.status != Op.ST_FAILED:
+            return case                                   # same link again → idempotent
+        if op.status == Op.ST_VERIFIED:
+            raise ValidationError('الحالة مرتبطة بالفعل بفاتورة شراء أخرى.')
+        op.idempotency_key = f'{key}:void:{op.pk}'        # replace a pending / failed link
+        op.status = Op.ST_CANCELLED
+        op.save(update_fields=['idempotency_key', 'status', 'updated_at'])
+    clash = (Op.objects.filter(kind=Op.KIND_PURCHASE, result_docnumber=nk['docnumber'],
+                               result__native__branchcode=nk['branchcode'], result__native__docdate=nk['docdate'])
+             .exclude(case=case).exclude(status__in=[Op.ST_CANCELLED, Op.ST_FAILED]).select_related('case').first())
+    if clash:
+        raise ValidationError(f'هذه الفاتورة مربوطة بالحالة {clash.case.number}.')
+    calc = case.current_calc
+    op = Op.objects.create(case=case, kind=Op.KIND_PURCHASE, idempotency_key=key, status=Op.ST_POSTED,
+                           result_docnumber=nk['docnumber'], expected_value=calc.entitlement if calc else 0,
+                           requested_by=user, result={'native': nk, 'linked_by': user.full_name})
+    case.status = RC.STATUS_EXECUTING
+    _bump(case, 'status')
+    _audit('replacement_leg_posted', case, user, request=request,
+           new={'op': str(op.op_id), 'kind': op.kind, 'mode': 'native_link', **nk})
+    resolve_native_purchase(op, user=user)
+    return RC.objects.get(pk=case.pk)
+
+
+def resolve_pending_native_links(user=None) -> dict:
+    """Scheduled: attach every pending natively-posted purchase the mirror now has."""
+    out = {'pending': 0, 'attached': 0}
+    for op_id in Op.objects.filter(kind=Op.KIND_PURCHASE, status=Op.ST_POSTED, supplier_invoice__isnull=True,
+                                   result__has_key='native').values_list('pk', flat=True):
+        out['pending'] += 1
+        with transaction.atomic():
+            op = Op.objects.select_for_update().get(pk=op_id)
+            if op.status == Op.ST_POSTED and resolve_native_purchase(op, user=user):
+                out['attached'] += 1
+    return out
+
+
+@transaction.atomic
+def link_native_product_sale(case_id, *, user, version, branchcode, docnumber, docdate, request=None) -> RC:
+    """Record a cash / delivery sale of replacement products made natively at the POS. The case then
+    owns that receipt, so the cashier's سداد voucher is matched to it and the leg is verified."""
+    from apps.customers.models import PurchaseHistory
+    from .reconstruct import ref_for_sale, tabdeel_pics
+    case = _lock(case_id, version)
+    authz.require(user, 'create', case=case)
+    _require_executable(case)
+    if case.settlement_mode == RC.MODE_CASH:
+        raise ValidationError('هذه حالة صرف نقدي — لا يوجد صرف منتجات.')
+    nk = _native_key(branchcode, docnumber, docdate)
+    ph = (PurchaseHistory.objects.filter(branch__softech_branch_id=nk['branchcode'], doc_code='115',
+                                         docnumber=nk['docnumber'], invoice_date__date=docdate)
+          .select_related('branch').first())
+    if ph is None:
+        raise ValidationError('لم يتم العثور على فاتورة المنتجات في المرآة (قد تحتاج مزامنة).')
+    if ph.sales_channel in C.CONTRACT_CHANNELS:
+        raise ValidationError('هذه فاتورة تعاقد — اربطها كفاتورة التعاقد.')
+    pic = (ph.softech_phcode or '').strip()
+    if case.softech_pic and pic and pic != case.softech_pic and pic not in tabdeel_pics():
+        raise ValidationError('فاتورة المنتجات على عميل آخر (المسموح: كود المريض أو حساب «عميل تبديل»).')
+    ref = ref_for_sale(ph)
+    elsewhere = (CD.objects.filter(document=ref, role=CD.ROLE_PRODUCT_SALE, status=CD.STATUS_CONFIRMED)
+                 .exclude(case=case).select_related('case').first()) or \
+        (Op.objects.filter(kind=Op.KIND_PRODUCT_SALE, result__native_receipt=ph.pk)
+         .exclude(case=case).exclude(status=Op.ST_CANCELLED).select_related('case').first())
+    if elsewhere:
+        raise ValidationError(f'فاتورة المنتجات مربوطة بالحالة {elsewhere.case.number}.')
+    key = f'{case.pk}:native:{ref.pk}'
+    op = Op.objects.filter(idempotency_key=key).first()
+    if op:
+        return case
+    total = Decimal(str(ph.total_amount or 0)).quantize(CENT)
+    funded = min(total, available(case)['available']) if case.purchase_ref_id else total
+    op = Op.objects.create(case=case, kind=Op.KIND_PRODUCT_SALE, idempotency_key=key, status=Op.ST_POSTED,
+                           result_docnumber=nk['docnumber'], expected_value=funded, requested_by=user,
+                           result={'native': nk, 'native_receipt': ph.pk, 'linked_by': user.full_name,
+                                   'estimated_total': str(total), 'customer_topup': str(total - funded)})
+    _bump(case, 'status')
+    _audit('replacement_leg_posted', case, user, request=request,
+           new={'op': str(op.op_id), 'kind': op.kind, 'mode': 'native_link', **nk, 'total': str(total)})
+    return case

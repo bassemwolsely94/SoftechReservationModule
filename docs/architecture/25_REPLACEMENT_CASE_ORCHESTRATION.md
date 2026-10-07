@@ -541,6 +541,34 @@ on-screen instruction → nightly reconstruction links + verifies it.
 rates; one supervised pilot case per leg on a branch (rollback-probe already proven for both writers);
 the A/P virtual-supplier misallocation decisions (session 2026-10-02).
 
+## 19. Parallel entry — link the NATIVE SOFTECH documents (built 2026-10-07)
+
+**Owner 2026-10-07:** staff keep posting the purchase, the contract sale and the product sales natively in
+SOFTECH and ALSO record the case here; the platform only links + verifies. Nothing is written to SOFTECH.
+
+| Leg | How it is linked | Verification |
+|---|---|---|
+| Purchase (virtual supplier) | Case workspace → «اربط فاتورة الشراء المُدخلة في SOFTECH» (branch / number / date) → `legs.link_native_purchase`. A `PostingOperation` (`{case}:purchase`, `result.native`) is recorded at once; attached immediately when the A/P mirror has the invoice, otherwise by the daily check after the next A/P sync (`resolve_pending_native_links`). | Supplier must equal the rule's supplier (else `posting_failed`); the native value books the entitlement and a difference vs the approved calculation raises `purchase_value_mismatch` (HIGH); vouchers/returns then book exactly as for any case. |
+| Contract sale | unchanged — «ربط» (`link_contract_sale`). | patient + contract channel. |
+| Product sales (cash / delivery) | «اربط فاتورة منتجات بيعت في SOFTECH» → `legs.link_native_product_sale` → op `{case}:native:{ref}` with `result.native_receipt`. | Not contract, not another patient (patient PIC, «عميل تبديل» or blank allowed), not linked to another case. The case OWNS the receipt (`reconstruct._own_receipts`), so the cashier's سداد voucher is matched to it and the op becomes verified (`voucher_linked`). |
+
+Guards: a native op is never sent to a writer (`legs.post` refuses it); a platform-prepared purchase and a
+native link are mutually exclusive; the same native document cannot be linked to two cases; re-linking the
+same number is idempotent and a corrected number replaces a pending / failed link.
+
+**Duplicate handling:** if the reconstruction already built a case from that purchase before the link, and no
+person touched it (no manual link, no human edge decision, no handled exception, no operation), it is
+**retired** — its ledger is reversed with compensating entries (append-only history kept), its derived
+links/items/exceptions dropped, the purchase freed and the case cancelled «superseded by …» (audited).
+A duplicate someone worked on is never retired; the link fails with the case number to review.
+
+**Daily check (new scheduler job `replacement_daily_check`, 08:40, after the 07:30 A/P sync):** resolves the
+pending native links first, then rebuilds the last `REPLACEMENT_DAILY_CHECK_DAYS` (60) days, so amounts,
+vouchers and receipts are verified against SOFTECH every day. Off with `REPLACEMENT_DAILY_CHECK_ENABLED=False`.
+(Before this, reconstruction only ran when started by hand.)
+
+Tests: `apps/tests/test_replacement_native_links.py` (17).
+
 ## 16. Owner decisions (2026-09-28)
 
 | # | Decision |
