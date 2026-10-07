@@ -92,9 +92,15 @@ SOFTECH is keyboard-driven; **our module is mouse-driven** (the biggest data-ent
 | `Ctrl+M` | override discount cap via user OFFERS/123456 → stamps `stktransm5.supp_main_code=89` | confirmed (documented + implemented) |
 | `Ctrl+F1` | advanced item-search modal (wildcards + column filters) | confirmed |
 
-**Our current state:** audit of `usePosOrder.js`/`POSOrderPage.jsx` — `Ctrl+F2`, `Ctrl+2`, `Ctrl+F1`
-and the numpad are rendered **as text labels only**; there is **no global `keydown` handler**, no
-`F2` add-line / `F4` delete-line, no managed `TAB` order. Entry relies on the search widget + mouse.
+**Our current state (re-audited 2026-10-07):** keyboard parity is BUILT — `hooks/usePosHotkeys.js`
+(wired in `POSOrderPage.jsx`, muted while any modal is open): `Ctrl+F2/F3/F4` channel (only channels the
+seller may use), `Ctrl+2/3/4` tabs, `F2` focus item search (add line), `F4`/`Delete` remove the selected
+line, `↑/↓` line navigation, `Q` quantity in units, `F9` preview / `F10` live send; `Ctrl+F1` advanced
+search inside `ItemSearchWidget`. Entry flow: header `posFlow` (Enter/Tab: نوع العميل → إسم العميل →
+PIC → المخزن → ملاحظات → الأصناف → الطابعة), grid Enter qty → discount → search, number fields step
+only with Shift+↑/↓. On-screen cheat-sheet `POS_SHORTCUTS`. (Earlier "labels only" note was stale.)
+Browser caveat: Chrome/Edge reserve some combos (e.g. Ctrl+F4 = close tab, Ctrl+1…8 = switch tab) —
+verify on the cashier PCs; an installed-app window keeps more keys.
 
 ## 5. End-to-end sales process
 - **SOFTECH:** ① branch/store → ② channel via `Ctrl+Fn` → ③ type→name→PIC → ④ `F2` add items,
@@ -112,8 +118,9 @@ and the numpad are rendered **as text labels only**; there is **no global `keydo
   override), offers + PIC-suggestions + basket-intel panels (preview only).
 - **Partial:** PIC as a unified level-3 (exists as a separate row); referral-doctor (fields in the
   payload, no image upload / stats).
-- **Missing:** full keyboard nav (TAB/F2/F4/Fn are labels only); TAB order matching the legacy
-  screen (needs-video); OCR-Rx / voice entry in the POS; per-employee channel RBAC.
+- **Built since (re-audit 2026-10-07):** keyboard nav + managed Enter/Tab order (`usePosHotkeys`,
+  `posFlow`), OCR-Rx (`PrescriptionOcrModal`), per-employee allowed channels (`allowed_pos_channels`).
+- **Missing:** voice item entry in the POS; PIC folded into the customer selector as level 3.
 
 ## 7. Modernization roadmap
 - **Phase A — Keyboard-speed parity (start here, "not a tremendous change"):** a global `keydown`
