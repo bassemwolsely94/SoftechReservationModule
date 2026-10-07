@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import TransferRequest, TransferRequestItem, TransferRequestMessage
+from core.errors import public_error
 from .serializers import (
     TransferRequestListSerializer,
     TransferRequestDetailSerializer,
@@ -756,7 +757,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             conn.close()
         except Exception as e:
             return Response(
-                {'detail': f'خطأ في الاتصال بـ SOFTECH: {str(e)}'},
+                {'detail': f'خطأ في الاتصال بـ SOFTECH: {public_error(request, e)}'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 

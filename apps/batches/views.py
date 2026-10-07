@@ -14,6 +14,7 @@ from .serializers import (
     PurchaseExpiryAuditRunSerializer,
 )
 from .service import BatchService
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.batches')
 
@@ -96,7 +97,7 @@ def purchase_expiry_candidates(request):
         )
     except Exception as e:
         logger.exception('purchase_expiry_candidates failed')
-        return Response({'detail': f'خطأ أثناء توليد التقرير: {e}'},
+        return Response({'detail': f'خطأ أثناء توليد التقرير: {public_error(request, e)}'},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     from apps.config.models import SystemSetting
@@ -310,7 +311,7 @@ def purchase_expiry_rebalance_suggest(request):
         result = rebalance_suggest(item_code, from_branch, days_to_expiry)
     except Exception as e:
         logger.exception('rebalance_suggest failed for %s', item_code)
-        return Response({'detail': f'خطأ أثناء حساب الاقتراح: {e}'},
+        return Response({'detail': f'خطأ أثناء حساب الاقتراح: {public_error(request, e)}'},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
     return Response(result)
 
@@ -468,7 +469,7 @@ def spawn_expiry_count_session(request):
             )
         except Exception as e:
             logger.exception('spawn_expiry_count_session candidate lookup failed')
-            return Response({'detail': f'خطأ أثناء جلب الأصناف: {e}'},
+            return Response({'detail': f'خطأ أثناء جلب الأصناف: {public_error(request, e)}'},
                             status=status.HTTP_503_SERVICE_UNAVAILABLE)
         codes = [c['item_code'] for c in cands]
 
@@ -496,7 +497,7 @@ def spawn_expiry_count_session(request):
     except Exception as e:
         session.delete()
         logger.exception('spawn_expiry_count_session snapshot failed')
-        return Response({'detail': f'خطأ في الاتصال بـ SOFTECH: {e}'},
+        return Response({'detail': f'خطأ في الاتصال بـ SOFTECH: {public_error(request, e)}'},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     # Backfill the entered-expiry hint (earliest keyed expiry within the window)
@@ -730,7 +731,7 @@ def spawn_stock_expiry_count(request):
     except Exception as e:
         session.delete()
         logger.exception('spawn_stock_expiry_count snapshot failed')
-        return Response({'detail': f'خطأ في الاتصال بـ SOFTECH: {e}'},
+        return Response({'detail': f'خطأ في الاتصال بـ SOFTECH: {public_error(request, e)}'},
                         status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     # Hint = earliest on-hand expiry for this item at this branch (from the mirror).

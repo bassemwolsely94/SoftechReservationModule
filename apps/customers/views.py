@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count
 
 from .models import Customer, CustomerNote, CustomerHealthProfile, PurchaseHistory
+from core.errors import public_error
 from .serializers import (
     CustomerSerializer, CustomerListSerializer,
     CustomerCreateSerializer, CustomerUpdateSerializer,
@@ -381,7 +382,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 'health_profile': _structured_health_profile(customer),
             })
         except Exception as exc:
-            return Response({'rebuilt': False, 'error': str(exc)}, status=500)
+            return Response({'rebuilt': False, 'error': public_error(request, exc)}, status=500)
 
     # ── GET /api/customers/{id}/recommendations/ ──────────────────────────────
 

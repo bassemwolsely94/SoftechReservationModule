@@ -29,6 +29,7 @@ from .serializers import (
 )
 from .anomalies import check_invoice_anomalies
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.invoices')
 
@@ -605,7 +606,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'detail': f'فشل الترحيل: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'detail': f'فشل الترحيل: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
 
     @action(detail=True, methods=['post'], url_path='create-return')
@@ -649,7 +650,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'detail': f'تعذّر التحقق: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'detail': f'تعذّر التحقق: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
 
     @action(detail=True, methods=['post'])
@@ -666,7 +667,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'detail': f'فشل الاختبار: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'detail': f'فشل الاختبار: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
 
     # ── Update invoice header ─────────────────────────────────────────────────

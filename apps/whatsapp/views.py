@@ -24,6 +24,7 @@ from apps.whatsapp.serializers import (
 from apps.whatsapp.webhook import process_webhook
 from apps.whatsapp.sender import WhatsAppSender
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.whatsapp')
 
@@ -169,7 +170,7 @@ class SendTextView(APIView):
             return Response({'wamid': result.get('messages', [{}])[0].get('id', '')})
         except Exception as exc:
             logger.error('SendTextView error: %s', exc)
-            return Response({'detail': str(exc)}, status=500)
+            return Response({'detail': public_error(request, exc)}, status=500)
 
 
 class SendTemplateView(APIView):
@@ -195,7 +196,7 @@ class SendTemplateView(APIView):
             return Response({'wamid': result.get('messages', [{}])[0].get('id', '')})
         except Exception as exc:
             logger.error('SendTemplateView error: %s', exc)
-            return Response({'detail': str(exc)}, status=500)
+            return Response({'detail': public_error(request, exc)}, status=500)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

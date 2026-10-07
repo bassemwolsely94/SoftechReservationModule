@@ -30,6 +30,7 @@ from .recon_serializers import (
 )
 from . import recon_actions
 from .views import _is_admin_or_pharmacist
+from core.errors import public_error
 
 
 def _scope(request, qs, party_path='party'):
@@ -520,7 +521,7 @@ def _reverse_selection(request, ids, note):
     try:
         conn = get_sybase_connection()
     except Exception as e:
-        return Response({'detail': f'تعذّر الاتصال بـ SOFTECH الرئيسي: {str(e)[:120]}'}, status=503)
+        return Response({'detail': f'تعذّر الاتصال بـ SOFTECH الرئيسي: {public_error(request, e)}'}, status=503)
     done, errors = 0, {}
     try:
         for a in allocs:
@@ -711,7 +712,7 @@ def bulk_write_softech(request):
     try:
         conn = get_sybase_connection()
     except Exception as e:
-        return Response({'detail': f'تعذّر الاتصال بـ SOFTECH الرئيسي: {str(e)[:120]}'}, status=503)
+        return Response({'detail': f'تعذّر الاتصال بـ SOFTECH الرئيسي: {public_error(request, e)}'}, status=503)
     stats, reasons, skipped = Counter(), Counter(), []
     written_value = Decimal('0')
     touched = set()
@@ -890,4 +891,4 @@ def invoice_lines_view(request, pk):
     try:
         return Response(recon_lines.invoice_lines(inv))
     except Exception as e:
-        return Response({'detail': f'تعذّر قراءة الأصناف من SOFTECH: {str(e)[:120]}'}, status=503)
+        return Response({'detail': f'تعذّر قراءة الأصناف من SOFTECH: {public_error(request, e)}'}, status=503)

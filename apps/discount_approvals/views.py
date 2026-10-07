@@ -11,6 +11,7 @@ from .services import execute_price_change, compute_derived_preview
 import logging
 
 from django.conf import settings
+from core.errors import public_error
 
 logger = logging.getLogger("elrezeiky.discount_approvals")
 
@@ -732,7 +733,7 @@ def who_changed_what(request):
             by_user.append({'usercode': uc, 'name': names.get(uc, '') or uc, 'edits': n})
         by_user.sort(key=lambda x: -x['edits'])
     except Exception as exc:
-        return Response({'detail': f'تعذّر قراءة Softech: {exc}'}, status=502)
+        return Response({'detail': f'تعذّر قراءة Softech: {public_error(request, exc)}'}, status=502)
 
     from django.db.models import Count
     mod = (ItemPriceChangeRequest.objects

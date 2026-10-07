@@ -7,6 +7,7 @@ from django.db import models
 from .models import Category, Item, ItemStock, EXCLUDED_STORE_CODES
 from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
 from .wildcard import WildcardSearchFilter
+from core.errors import public_error
 
 # ── Static filter option lists (reused by both ItemViewSet and purchasing.filter_options) ──
 
@@ -1089,7 +1090,7 @@ def item_ingredients(request, softech_id):
                 for m in maps
             ])
         except Exception as e:
-            return DRFResponse({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return DRFResponse({'detail': public_error(request, e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # POST
     try:
@@ -1126,7 +1127,7 @@ def item_ingredients(request, softech_id):
             'concentration': m.concentration,
         }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
     except Exception as e:
-        return DRFResponse({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return DRFResponse({'detail': public_error(request, e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['DELETE'])

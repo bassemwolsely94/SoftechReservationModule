@@ -25,6 +25,7 @@ from rest_framework.response import Response
 
 from . import coupon_dashboard as dash
 from . import coupons
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.vouchers')
 
@@ -159,7 +160,7 @@ def batches(request):
         finally:
             conn.close()
     except Exception as e:
-        return Response({'detail': f'تعذّر قراءة تواريخ الصلاحية من SOFTECH: {e}'},
+        return Response({'detail': f'تعذّر قراءة تواريخ الصلاحية من SOFTECH: {public_error(request, e)}'},
                         status=status.HTTP_502_BAD_GATEWAY)
     try:
         batch = coupons.generate_batch(size=size, created_by=_profile(request), blocked_dates=blocked,
@@ -216,7 +217,7 @@ def batch_probe(request, pk):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.exception('[coupons] probe batch %s failed', batch.pk)
-            return Response({'detail': f'فشل الاختبار: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'detail': f'فشل الاختبار: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
     clean = all(r.get('ok') and r.get('rolled_back') and not r.get('header_diff')
                 and not r.get('line_diff') and r.get('serials_ok') for r in report.values())
     return Response({'clean': clean, 'legs': _json_safe(report)})
@@ -253,7 +254,7 @@ def batch_push(request, pk):
         except Exception as e:
             logger.exception('[coupons] push batch %s failed', batch.pk)
             _audit(request, 'coupon_batch_stocked', batch, note=f'FAILED: {e}'[:255])
-            return Response({'detail': f'فشل الإدخال: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'detail': f'فشل الإدخال: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
     batch = _batch(pk)
     legs = {leg: {k: r.get(k) for k in ('mode', 'wrote_to_softech', 'docnumber', 'already_finalized',
                                         'ok', 'blocked', 'error')}
@@ -275,7 +276,7 @@ def batch_verify(request, pk):
     try:
         return Response(_json_safe(verify_batch(batch)))
     except Exception as e:
-        return Response({'detail': f'تعذّر التحقق من SOFTECH: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'detail': f'تعذّر التحقق من SOFTECH: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 @api_view(['POST'])
@@ -285,7 +286,7 @@ def sync_now(request):
     try:
         res = dash.locked_sync()
     except Exception as e:
-        return Response({'detail': f'فشل التحديث من SOFTECH: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'detail': f'فشل التحديث من SOFTECH: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
     if res is None:
         return Response({'detail': 'التحديث يعمل الآن — حاول بعد قليل.'}, status=status.HTTP_409_CONFLICT)
     return Response(res)

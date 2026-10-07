@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.pbx.models import AgentExtension, PBXQueue, CallSession, PBXEvent
+from core.errors import public_error
 from apps.pbx.serializers import (
     AgentExtensionSerializer, PBXQueueSerializer,
     CallSessionSerializer, PBXEventSerializer,
@@ -122,7 +123,7 @@ class SpyView(APIView):
         except AMIActionError as exc:
             return Response({'detail': str(exc)}, status=502)
         except Exception as exc:
-            return Response({'detail': f'خطأ AMI غير متوقع: {exc}'}, status=502)
+            return Response({'detail': f'خطأ AMI غير متوقع: {public_error(request, exc)}'}, status=502)
 
         return Response({
             'detail': 'سيرن هاتفك الآن — عند الرد ستدخل المكالمة',

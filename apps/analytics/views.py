@@ -42,6 +42,7 @@ from apps.branches.models import Branch
 from apps.catalog.models import Item
 from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.analytics')
 
@@ -1619,7 +1620,7 @@ def inventory_analytics(request):
     except Exception as exc:
         logger.error(f"[inventory_analytics] Unexpected error: {exc}", exc_info=True)
         return Response(
-            {'error': f'خطأ في تحليل المخزون: {str(exc)}'},
+            {'error': f'خطأ في تحليل المخزون: {public_error(request, exc)}'},
             status=500,
         )
 
