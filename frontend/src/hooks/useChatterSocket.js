@@ -2,7 +2,7 @@
  * frontend/src/hooks/useChatterSocket.js
  *
  * WebSocket hook for a single record's chatter thread.
- * URL: ws[s]://<host>/ws/chatter/{modelName}/{recordId}/?token=<jwt>
+ * URL: ws[s]://<host>/ws/chatter/{modelName}/{recordId}/  (auth: httpOnly session cookie)
  *
  * Features:
  *   - Real-time delivery of new_chatter events
@@ -16,6 +16,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { notificationsApi } from '../api/client'
+import useAuthStore from '../store/authStore'
 
 const WS_RECONNECT_BASE = 2000
 const WS_RECONNECT_MAX  = 32000
@@ -23,10 +24,9 @@ const PING_INTERVAL     = 25000
 const POLL_INTERVAL     = 10000   // 10s poll (only when WS unavailable)
 
 function buildWsUrl(modelName, recordId) {
-  const token    = localStorage.getItem('access_token')
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const host     = window.location.host
-  return `${protocol}://${host}/ws/chatter/${modelName}/${recordId}/?token=${token}`
+  return `${protocol}://${host}/ws/chatter/${modelName}/${recordId}/`
 }
 
 export function useChatterSocket(modelName, recordId) {
@@ -82,8 +82,7 @@ export function useChatterSocket(modelName, recordId) {
   // ── WebSocket connect ─────────────────────────────────────────────────────
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) { _startPolling(); return }
+    if (!useAuthStore.getState().isAuthenticated) { _startPolling(); return }
 
     const url = buildWsUrl(modelName, recordId)
     const ws  = new WebSocket(url)

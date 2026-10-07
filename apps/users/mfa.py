@@ -132,6 +132,13 @@ def _qr_png_data_url(uri: str) -> str:
 
 # ── Shared login-response builder (lazy import to avoid an import cycle) ──────────
 
+def session_response(payload: dict, status_code=200):
+    """Response for a completed login: body as before + httpOnly JWT cookies."""
+    from core.auth_cookies import set_auth_cookies
+    resp = Response(payload, status=status_code)
+    return set_auth_cookies(resp, payload.get('access'), payload.get('refresh'))
+
+
 def build_login_response(user) -> dict:
     from rest_framework_simplejwt.tokens import RefreshToken
     from .views import _MeSerializer
@@ -191,7 +198,7 @@ def verify_2fa_view(request):
     resp = build_login_response(user)
     if request.data.get('remember_device'):
         resp['device_token'] = make_device_token(user)
-    return Response(resp)
+    return session_response(resp)
 
 
 @api_view(['POST'])
@@ -241,7 +248,7 @@ def enable_2fa_view(request):
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
         resp.update(build_login_response(user))
-    return Response(resp)
+    return session_response(resp)
 
 
 @api_view(['POST'])

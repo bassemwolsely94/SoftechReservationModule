@@ -139,16 +139,10 @@ def required(path, method):
 def _staff_profile(request):
     user = getattr(request, 'user', None)
     if user is None or not user.is_authenticated:
-        if 'HTTP_AUTHORIZATION' not in request.META:
-            return None
-        try:
-            from rest_framework_simplejwt.authentication import JWTAuthentication
-            result = JWTAuthentication().authenticate(request)
-        except Exception:
-            return None   # bad/expired token — the view answers 401
-        if not result:
-            return None
-        user = result[0]
+        from core.auth_cookies import user_from_request
+        user = user_from_request(request)   # Bearer header or httpOnly cookie
+        if user is None:
+            return None   # anonymous / bad token — the view answers 401
     return getattr(user, 'staff_profile', None)
 
 

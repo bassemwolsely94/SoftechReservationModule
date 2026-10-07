@@ -77,6 +77,9 @@ if BEHIND_HTTPS_PROXY:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+# Secure flag on the JWT cookies (core/auth_cookies.py). On by default whenever the
+# site is served over HTTPS; off only for plain-HTTP LAN deployments.
+AUTH_COOKIE_SECURE = config('AUTH_COOKIE_SECURE', default=BEHIND_HTTPS_PROXY or SECURE_SSL_REDIRECT, cast=bool)
 SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
@@ -244,7 +247,8 @@ DATABASES = {
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Bearer header OR the httpOnly access cookie (core/auth_cookies.py)
+        'core.auth_cookies.CookieJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',

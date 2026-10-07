@@ -1,15 +1,14 @@
 import { create } from 'zustand'
-import { authApi } from '../api/client'
+import { authApi, migrateLegacyTokens } from '../api/client'
 
 const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
 
-  // Store tokens + user from a successful (post-2FA) auth response.
+  // The server has already set the httpOnly session cookies; keep only the user.
+  // (data.access / data.refresh are deliberately NOT stored anywhere.)
   setSession: (data) => {
-    localStorage.setItem('access_token', data.access)
-    localStorage.setItem('refresh_token', data.refresh)
     if (data.device_token) localStorage.setItem('mfa_device_token', data.device_token)
     set({ user: data.user, isAuthenticated: true })
     return data.user
@@ -27,6 +26,8 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: () => {
+    // Server side: blacklist the refresh token and clear the cookies.
+    authApi.logout().catch(() => {})
     // Preserve the trusted-device token across logout so 2FA can be skipped on
     // this device until it expires (30 days). Everything else is cleared.
     const device = localStorage.getItem('mfa_device_token')
@@ -36,13 +37,13 @@ const useAuthStore = create((set, get) => ({
   },
 
   loadMe: async () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) { set({ isLoading: false }); return }
+    await migrateLegacyTokens()
     try {
       const { data } = await authApi.me()
       set({ user: data, isAuthenticated: true, isLoading: false })
     } catch {
-      localStorage.clear()
+      // Not logged in (or session expired): no tokens are kept client-side, so
+      // there is nothing to wipe — keep the trusted-device token and UI prefs.
       set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },

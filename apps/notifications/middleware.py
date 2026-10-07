@@ -45,10 +45,19 @@ class JWTAuthMiddleware(BaseMiddleware):
             query_string = query_string.decode('utf-8', errors='replace')
         params = parse_qs(query_string)
         token_list = params.get('token', [])
-        if not token_list:
-            return AnonymousUser()
-        token = token_list[0]
-        return await self._get_user_from_token(token)
+        if token_list:                       # legacy clients: ?token=<jwt>
+            return await self._get_user_from_token(token_list[0])
+        # SPA: the httpOnly access cookie travels with the same-origin handshake,
+        # so the token never appears in a URL (proxy / access logs).
+        from http.cookies import SimpleCookie
+        from core.auth_cookies import ACCESS_COOKIE
+        for name, value in scope.get('headers', []):
+            if name == b'cookie':
+                jar = SimpleCookie()
+                jar.load(value.decode('latin-1'))
+                if ACCESS_COOKIE in jar:
+                    return await self._get_user_from_token(jar[ACCESS_COOKIE].value)
+        return AnonymousUser()
 
     @database_sync_to_async
     def _get_user_from_token(self, token: str):

@@ -58,6 +58,7 @@ BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Prot
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
 MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file
+# Login cookies get the Secure flag automatically because BEHIND_HTTPS_PROXY=True.
 ```
 
 > ⚠️ **Rotating an old/placeholder SECRET_KEY:** stored omni channel credentials

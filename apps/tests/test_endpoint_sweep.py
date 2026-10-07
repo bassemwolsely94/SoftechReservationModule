@@ -33,6 +33,7 @@ from .factories import make_branch, make_user
 KNOWN_PUBLIC_VIEWS = {
     # staff auth + 2FA login steps
     'apps.users.views.login_view', 'apps.users.views.refresh_view',
+    'apps.users.views.logout_view',   # only revokes the token the caller presents
     # customer self-service portal (own magic-link auth inside the views)
     'apps.portal.views',
     # inbound webhooks (signature / secret-token checked inside the views)

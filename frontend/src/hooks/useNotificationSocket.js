@@ -4,7 +4,7 @@
  * Manages the personal notification WebSocket connection.
  *
  * Features:
- *   - Connects to  ws[s]://<host>/ws/notifications/?token=<jwt>
+ *   - Connects to  ws[s]://<host>/ws/notifications/  (auth: httpOnly session cookie)
  *   - Handles new_notification + pending_notification events
  *   - Sends ping every 25s to keep connection alive
  *   - Auto-reconnects with exponential back-off (max 32s)
@@ -17,6 +17,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { notificationsApi } from '../api/client'
+import useAuthStore from '../store/authStore'
 import useNotificationStore from '../store/notificationStore'
 
 // Categories kept OUT of the main bell — routed to their own quiet feeds:
@@ -111,10 +112,9 @@ const MAX_NOTIFICATIONS = 100    // cap the in-memory list
 // ── Helper: build WebSocket URL ───────────────────────────────────────────────
 
 function buildWsUrl() {
-  const token    = localStorage.getItem('access_token')
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const host     = window.location.host
-  return `${protocol}://${host}/ws/notifications/?token=${token}`
+  return `${protocol}://${host}/ws/notifications/`
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -156,9 +156,8 @@ export function useNotificationSocket() {
   // ── WebSocket connect / reconnect ─────────────────────────────────────────
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) {
-      // No token — start polling instead
+    if (!useAuthStore.getState().isAuthenticated) {
+      // Not logged in — start polling instead
       _startPolling()
       return
     }
