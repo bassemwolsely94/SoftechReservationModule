@@ -1658,6 +1658,13 @@ export const auditApi = {
 
 // ── Follow-Up Tasks (Chronic Medications) ─────────────────────────────────────
 
+// WhatsApp refill reminders (B1) — apps/followups/reminder_views.py
+export const refillRemindersApi = {
+  overview: () => api.get('/followups/refill-reminders/'),
+  preview:  () => api.get('/followups/refill-reminders/preview/'),
+  run:      () => api.post('/followups/refill-reminders/run/'),
+}
+
 export const followupsApi = {
   // Dashboard KPIs
   dashboard:    ()         => api.get('/followups/tasks/dashboard/'),

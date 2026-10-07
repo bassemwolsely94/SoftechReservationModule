@@ -108,6 +108,7 @@ const NAV_GROUPS = [
       { to: '/transits',      icon: '🚛', label: 'التحويلات قيد النقل', roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/demand',        icon: '🔍', label: 'الطلب الضائع',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
       { to: '/followups',     icon: '💊', label: 'متابعة المزمن',    roles: ['admin','call_center','pharmacist','salesperson','supervisor','quality_manager'] },
+      { to: '/followups/reminders', icon: '💬', label: 'تذكيرات الصرف واتساب', roles: ['admin','call_center','supervisor','quality_manager'] },
       { to: '/delivery',      icon: '🚚', label: 'توصيل الطلبات',    roles: ['admin','pharmacist','delivery','call_center','supervisor','quality_manager'] },
       { to: '/delivery/dispatch', icon: '🧭', label: 'لوحة التوزيع',  roles: ['admin','call_center','supervisor','quality_manager'] },
       { to: '/rider',         icon: '🛵', label: 'مهام السائق',       roles: ['admin','delivery','supervisor'] },

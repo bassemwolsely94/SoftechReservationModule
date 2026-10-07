@@ -148,6 +148,11 @@ def _handle_inbound_message(msg: dict, value: dict, phone_number_id: str, accoun
         body = f'[{msg_type}]'
     elif msg_type == 'reaction':
         body = msg.get('reaction', {}).get('emoji', '👍')
+    elif msg_type == 'button':                         # quick-reply tap on a template
+        body = msg.get('button', {}).get('text', '')
+    elif msg_type == 'interactive':
+        it = msg.get('interactive', {})
+        body = (it.get('button_reply') or it.get('list_reply') or {}).get('title', '')
 
     # Handle media
     media_obj = None
@@ -185,6 +190,15 @@ def _handle_inbound_message(msg: dict, value: dict, phone_number_id: str, accoun
     )
 
     logger.debug('Inbound WhatsApp message from %s: %s', wa_id, preview[:50])
+
+    # Quick-reply taps routed to their feature (refill reminders). Never breaks the inbox.
+    if msg_type == 'button':
+        try:
+            from apps.followups.refill_reminders import handle_button_reply
+            handle_button_reply(wa_id=wa_id, payload=msg.get('button', {}).get('payload', ''),
+                                context_wamid=(msg.get('context') or {}).get('id', ''), account=account)
+        except Exception as exc:
+            logger.error('WhatsApp button reply handling failed: %s', exc, exc_info=True)
     return wa_msg
 
 

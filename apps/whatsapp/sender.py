@@ -75,12 +75,19 @@ class WhatsAppSender:
         return result
 
     def send_template(self, wa_id: str, template_name: str, language: str = 'ar',
-                      variables: list | None = None) -> dict:
+                      variables: list | None = None, quick_reply_payloads: list | None = None) -> dict:
+        """quick_reply_payloads: one payload string per QUICK_REPLY button, in template order —
+        returned to us on the tap (inbound message type 'button', button.payload)."""
         components = []
         if variables:
             components.append({
                 'type': 'body',
                 'parameters': variables,
+            })
+        for i, p in enumerate(quick_reply_payloads or []):
+            components.append({
+                'type': 'button', 'sub_type': 'quick_reply', 'index': str(i),
+                'parameters': [{'type': 'payload', 'payload': p}],
             })
         payload = {
             **self._base(wa_id),

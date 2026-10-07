@@ -605,3 +605,59 @@ class FollowUpTaskAssignment(models.Model):
 
     def __str__(self):
         return f'{self.task_id} → {self.staff.full_name}'
+
+
+# ── WhatsApp refill reminders (B1, owner 2026-10-07) ───────────────────────────
+# One template message per due refill task (template `refill_reminder`, quick replies:
+# branch pickup / home delivery / stop). Logic in refill_reminders.py.
+
+class RefillReminder(models.Model):
+    STATUS_SENT, STATUS_FAILED, STATUS_REPLIED = 'sent', 'failed', 'replied'
+    STATUS_CHOICES = [(STATUS_SENT, 'أُرسل'), (STATUS_FAILED, 'فشل الإرسال'), (STATUS_REPLIED, 'ردّ العميل')]
+    CHOICE_BRANCH, CHOICE_DELIVERY, CHOICE_STOP = 'branch', 'delivery', 'stop'
+    CHOICE_CHOICES = [('', '—'), (CHOICE_BRANCH, 'تجهيز في الفرع'), (CHOICE_DELIVERY, 'توصيل للمنزل'),
+                      (CHOICE_STOP, 'إيقاف التذكيرات')]
+
+    task = models.OneToOneField(FollowUpTask, on_delete=models.CASCADE, related_name='refill_reminder',
+                                verbose_name='مهمة المتابعة')
+    customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE, related_name='refill_reminders')
+    branch = models.ForeignKey('branches.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    phone = models.CharField(max_length=20)
+    due_date = models.DateField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    error = models.TextField(blank=True)
+    wamid = models.CharField(max_length=120, blank=True, db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=1)
+    reply_choice = models.CharField(max_length=10, choices=CHOICE_CHOICES, blank=True, default='')
+    replied_at = models.DateTimeField(null=True, blank=True)
+    reservation = models.ForeignKey('reservations.Reservation', null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='+')
+    sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'تذكير صرف واتساب'
+        verbose_name_plural = 'تذكيرات الصرف واتساب'
+        indexes = [models.Index(fields=['customer', 'sent_at'])]
+
+    def __str__(self):
+        return f'تذكير #{self.pk} — مهمة {self.task_id} ({self.status})'
+
+
+class RefillReminderOptOut(models.Model):
+    """Customer asked to stop refill reminders (WhatsApp button or staff on request)."""
+    customer = models.OneToOneField('customers.Customer', on_delete=models.CASCADE,
+                                    related_name='refill_reminder_opt_out')
+    source = models.CharField(max_length=20, default='whatsapp_button')   # whatsapp_button | staff
+    note = models.CharField(max_length=200, blank=True)
+    created_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'إيقاف تذكيرات الصرف'
+        verbose_name_plural = 'إيقاف تذكيرات الصرف'
+
+    def __str__(self):
+        return f'{self.customer_id} — {self.source}'

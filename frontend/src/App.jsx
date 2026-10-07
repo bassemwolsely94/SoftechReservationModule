@@ -40,6 +40,7 @@ import ShortagePage from './pages/ShortagePage'
 import POSOrderPage from './pages/POSOrderPage'
 import ExceptionCenterPage from './pages/ExceptionCenterPage'
 import VouchersPage from './pages/VouchersPage'
+import RefillRemindersPage from './pages/RefillRemindersPage'
 import OffersPage from './pages/OffersPage'
 import InvoicePage from './pages/InvoicePage'
 import IncentivesPage from './pages/IncentivesPage'
@@ -342,6 +343,7 @@ export default function App() {
             <Route path="callcenter/cases"      element={<CasesPage />} />
             <Route path="callcenter/analytics"  element={<CallCenterAnalyticsPage />} />
             <Route path="followups"             element={<FollowUpsPage />} />
+            <Route path="followups/reminders"   element={<RefillRemindersPage />} />
 
             {/* ── WhatsApp ─────────────────────────────────────────────── */}
             <Route path="campaigns"          element={<WhatsAppCampaignPage />} />

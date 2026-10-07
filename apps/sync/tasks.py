@@ -2028,6 +2028,16 @@ def _run_stock_expiry_sync():
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
 
 
+def _run_refill_reminders():
+    """Daily WhatsApp refill reminders (template `refill_reminder`). Sends only when
+    REFILL_REMINDER_SEND_ENABLED is on; otherwise counts what it would send."""
+    try:
+        from apps.followups.refill_reminders import run
+        logger.info('[APScheduler] refill reminders: %s', run())
+    except Exception as exc:
+        logger.error('[APScheduler] refill reminders failed: %s', exc)
+
+
 def _run_replacement_check():
     """Daily بدل الروشتة check (READ-ONLY vs SOFTECH), after the A/P mirror refresh: attach the
     purchases staff posted natively and linked to live cases, then rebuild the recent window so
@@ -3027,6 +3037,11 @@ def start_scheduler():
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
     _scheduler.add_job(
         _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # WhatsApp refill reminders — 10:10 Cairo (customers awake, branches open).
+    _scheduler.add_job(
+        _run_refill_reminders, 'cron', hour=10, minute=10, id='refill_reminders',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # بدل الروشتة daily check — 08:40, after the 07:30 A/P mirror sync.
