@@ -387,6 +387,15 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
     for _k in ('SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST'):
         os.environ.pop(_k, None)
 
+# Per-feature switches for the SOFTECH writes that had none (default ON = today's
+# behaviour). Set one to False to stop that single write in production without
+# the all-or-nothing SOFTECH_READ_ONLY. Checked in the view AND in the writer, so
+# scheduled jobs and management commands obey them too.
+PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # approved price/discount + classification UPDATE items
+REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=True, cast=bool)       # restamp/push items to branches (manual + scheduled)
+LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # manual purchase-points INSERT picpoints
+PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=True, cast=bool)   # stktransm.comments / cheques.chequenote
+
 # Roles allowed to manually add/deduct customer loyalty points (POST
 # /api/loyalty/customers/<id>/adjust/ — purchase points write SOFTECH picpoints).
 LOYALTY_ADJUST_ROLES = frozenset(

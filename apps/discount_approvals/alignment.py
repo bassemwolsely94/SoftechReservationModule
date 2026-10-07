@@ -224,9 +224,12 @@ def apply_classification_changes(plan, usercode):
     Returns (error_or_None, [ {softech_id, ok, error?}, ... ]).
     ADMIN-only + a valid SOFTECH usercode must be enforced by the caller.
     """
+    from django.conf import settings
     from config.sybase import get_sybase_connection
     from apps.catalog.models import Item
 
+    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+        return 'كتابة الأصناف إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)', []
     if not plan:
         return 'لا توجد تغييرات', []
     items = {i.id: i for i in Item.objects.filter(id__in=[p.get('item_id') for p in plan])}

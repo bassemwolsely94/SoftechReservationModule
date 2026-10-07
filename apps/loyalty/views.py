@@ -148,6 +148,9 @@ class AdjustPointsView(APIView):
             })
 
         # ── Lane B: purchase points — must go through SOFTECH ─────────────────
+        if not settings.LOYALTY_SOFTECH_WRITE_ENABLED:
+            return Response({'detail': 'تعديل نقاط الشراء في SOFTECH معطّل حالياً من إعدادات النظام',
+                             'error_code': 'loyalty_softech_writes_disabled'}, status=503)
         softech_pic = customer.softech_pic
         if not softech_pic:
             return Response(

@@ -79,6 +79,11 @@ def execute_price_change(
     """
     from config.sybase import get_sybase_connection
 
+    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+        _fail(request, erp_usercode, erp_username,
+              'كتابة الأسعار إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)')
+        return False
+
     softech_id = request.item.softech_id
     values     = _build_values(request)
 
