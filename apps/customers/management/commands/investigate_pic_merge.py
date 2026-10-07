@@ -31,6 +31,14 @@ DB = 'SOFTECHDB9.dbo'
 TABLES = ('localcustomers', 'personsdata', 'personphones', 'picpoints', 'localcustomerspoints')
 FLAG_HINT = re.compile(r'(stop|activ|block|cancel|status|valid|del|susp|flag|close|lock|allow|use|merg|old|new|repl)',
                        re.I)
+PLACEHOLDER_GROUP = 10        # > this many codes on one number = shared/junk number, not a duplicate
+
+
+def _placeholder(n):
+    """01000000000 / 01111111111 style numbers (few distinct digits in the last 8)."""
+    return len(set(n[-8:])) <= 2
+
+
 PIC_COLS = ('phcode', 'personcode', 'ppersoncode', 'custcode', 'branchcustcode', 'personglobalcode')
 
 
@@ -57,7 +65,9 @@ class Command(BaseCommand):
                             help='also write the report here (scratch/ is git-ignored)')
         parser.add_argument('--samples', type=int, default=10)
         parser.add_argument('--suggest', action='store_true',
-                            help='find likely duplicate pairs where one code was stopped (needs our customer mirror)')
+                            help='list non-active / locked codes + phone-mates and propose a pair (uses our sales mirror)')
+        parser.add_argument('--points-log', action='store_true',
+                            help='also scan the last 60 days of the (huge) picpoints log by doc code')
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def _emit(self, line=''):
@@ -181,29 +191,41 @@ class Command(BaseCommand):
             k = _norm_phone(p)
             if k and pic:
                 groups[k].add(str(pic).strip())
-        dup = {k: v for k, v in groups.items() if len(v) > 1}
+        self.phones_of = defaultdict(set)
+        for k, v in groups.items():
+            for pic in v:
+                self.phones_of[pic].add(k)
+        self.groups = groups
+        shared = {k: v for k, v in groups.items() if len(v) > 1}
+        placeholder = {k: v for k, v in shared.items() if _placeholder(k) or len(v) > PLACEHOLDER_GROUP}
+        dup = {k: v for k, v in shared.items() if k not in placeholder}
         self.dup_groups = dup
         sizes = Counter(len(v) for v in dup.values())
         pics = set().union(*dup.values()) if dup else set()
-        self._emit(f'  phone numbers shared by >1 PIC: {len(dup)} numbers · {len(pics)} PICs involved')
+        self._emit(f'  placeholder / junk numbers excluded: {len(placeholder)} numbers · '
+                   f'{len(set().union(*placeholder.values())) if placeholder else 0} PICs '
+                   f'(repeated digits or > {PLACEHOLDER_GROUP} codes on one number)')
+        self._emit(f'  REAL shared numbers: {len(dup)} numbers · {len(pics)} PICs involved')
         self._emit('  group size → count: ' + ', '.join(f'{s}→{n}' for s, n in sorted(sizes.items())))
         for k, v in sorted(dup.items(), key=lambda kv: -len(kv[1]))[:self.samples]:
             self._emit(f'    {_mask(k)}: {", ".join(sorted(v))}')
 
     def s_points(self):
-        _, rows = self._q(f'SELECT doccode, count(*), sum(points) FROM {DB}.picpoints GROUP BY doccode ORDER BY 2 DESC',
-                          limit=20)
-        self._emit('  picpoints by doccode (rows, Σpoints): ' + ', '.join(f'{d!r}:{n}/{s}' for d, n, s in rows))
-        _, rows = self._q(f"SELECT vf1, vf2, count(*) FROM {DB}.picpoints WHERE doccode = 'ADJ' "
-                          'GROUP BY vf1, vf2 ORDER BY 3 DESC', limit=self.samples)
-        self._emit('  ADJ adjustments (reason vf1 / operator vf2 → rows): '
-                   + (', '.join(f'{a!r}/{b!r}→{n}' for a, b, n in rows) or 'none'))
-        _, rows = self._q(f'SELECT picpoints, count(*) FROM {DB}.localcustomers GROUP BY picpoints ORDER BY 2 DESC',
-                          limit=10)
-        self._emit('  localcustomers.picpoints values (enrollment flag or balance?): '
-                   + ', '.join(f'{v!r}={n}' for v, n in rows))
-        cols, rows = self._q(f'SELECT * FROM {DB}.localcustomerspoints', limit=3)
-        self._emit(f'  localcustomerspoints sample columns: {cols}')
+        """Light by default (the picpoints log is huge — a full GROUP BY timed out)."""
+        _, rows = self._q(f'SELECT count(*), count(distinct phcode), sum(totpoints), sum(conpoints) '
+                          f'FROM {DB}.localcustomerspoints')
+        n, pics, tot, con = rows[0]
+        self._emit(f'  localcustomerspoints (balance table): {n} rows · {pics} PICs · earned {tot} · consumed {con}')
+        _, rows = self._q(f'SELECT n, count(*) FROM (SELECT phcode, count(*) n FROM {DB}.localcustomerspoints '
+                          'GROUP BY phcode) x GROUP BY n ORDER BY n')
+        self._emit('  balance rows per PIC: ' + ', '.join(f'{a}→{b}' for a, b in rows[:8]))
+        if not self.points_log:
+            self._emit('  (picpoints log by doc code skipped — add --points-log to scan the last 60 days)')
+            return
+        _, rows = self._q(f'SELECT doccode, count(*), sum(points) FROM {DB}.picpoints '
+                          'WHERE transdate >= dateadd(day, -60, getdate()) GROUP BY doccode ORDER BY 2 DESC', limit=20)
+        self._emit('  picpoints last 60 days by doccode (rows, Σpoints): '
+                   + ', '.join(f'{d!r}:{c}/{t}' for d, c, t in rows))
 
     def s_pics(self):
         for pic in self.pics:
@@ -223,96 +245,76 @@ class Command(BaseCommand):
             _, rows = self._q(f'SELECT count(*), max(docdate) FROM {DB}.stktransm WHERE phcode = ?', [pic])
             self._emit(f'    stktransm docs: {rows[0][0]} · last {rows[0][1]}')
 
-    def _flag_cols(self, table):
-        skip = {'phcode', 'personcode', 'branchcode', 'branchcustcode', 'orderbranchcode', 'personglobalcode'}
-        out = []
-        for name, ty, ln in self.schema.get(table, []):
-            if name in skip:
+    def s_status(self):
+        """The real SOFTECH deactivation field is localcustomers.phcodestatus ('1' = active; '0' / '5' /
+        blank seen on ~20 codes) with phcodestatususercode / phcodestatustime, plus piclock. List every
+        non-active or locked code, who shares its phone, and each code's last sale in our mirror, then
+        propose the pair to review. Also profiles pphcode (possible parent/main-PIC link)."""
+        from django.db.models import Max
+        from apps.customers.models import PurchaseHistory
+        cols = 'phcode, phcodestatus, piclock, picdied, phcodestatususercode, phcodestatustime, ' \
+               'custdateactive, usercode, trans_time, pphcode, relativecode, branchcode, picpoints'
+        cnames, rows = self._q(f"SELECT {cols} FROM {DB}.localcustomers WHERE isnull(phcodestatus, '') <> '1' "
+                               'OR piclock = 1')
+        recs = [dict(zip(cnames, r)) for r in rows]
+        mates = {}
+        for r in recs:
+            pic = str(r['phcode']).strip()
+            mates[pic] = sorted({m for k in self.phones_of.get(pic, ()) for m in self.groups.get(k, ()) if m != pic})
+        allpics = {str(r['phcode']).strip() for r in recs} | {m for v in mates.values() for m in v}
+        status = {}
+        for i, chunk in enumerate([sorted(allpics)[j:j + 200] for j in range(0, len(allpics), 200)]):
+            if not chunk:
                 continue
-            small = ty in ('bit', 'tinyint', 'smallint', 'int') or (ty in ('char', 'varchar', 'nchar') and ln <= 3)
-            if small or FLAG_HINT.search(name):
-                out.append(name)
-        return out
+            marks = ','.join('?' * len(chunk))
+            _, st = self._q(f'SELECT phcode, phcodestatus, piclock FROM {DB}.localcustomers WHERE phcode IN ({marks})', chunk)
+            status.update({str(a).strip(): (b, c) for a, b, c in st})
+        last = dict(PurchaseHistory.objects.filter(softech_phcode__in=allpics).values('softech_phcode')
+                    .annotate(m=Max('invoice_date')).values_list('softech_phcode', 'm'))
 
-    def s_suggest(self):
-        """Find the column SOFTECH flips on a stopped duplicate: inside every group of PICs sharing a
-        phone, a column where exactly ONE PIC differs from the others ('odd one out'). The most
-        frequent pattern is the likely deactivation flag; example pairs are printed for review."""
-        import datetime as dt
-        from apps.customers.models import Customer
-        dup = getattr(self, 'dup_groups', {})
-        if not dup:
-            self._emit('  (no duplicate-phone groups — run without --host first, or none exist)')
-            return
-        pics = sorted(set().union(*dup.values()))
-        last = dict(Customer.objects.filter(softech_pic__in=pics).values_list('softech_pic', 'last_visit_date'))
-        patterns, examples = Counter(), defaultdict(list)
-        for table, key in (('localcustomers', 'phcode'), ('personsdata', 'personcode')):
-            cols = self._flag_cols(table)
-            if not cols:
-                continue
-            vals = defaultdict(lambda: defaultdict(set))          # pic → col → {values across branch rows}
-            for i in range(0, len(pics), 200):
-                chunk = pics[i:i + 200]
-                marks = ','.join('?' * len(chunk))
-                cnames, rows = self._q(f'SELECT {key}, {", ".join(cols)} FROM {DB}.{table} WHERE {key} IN ({marks})', chunk)
-                for r in rows:
-                    for c, v in zip(cnames[1:], r[1:]):
-                        vals[str(r[0]).strip()][c].add(str(v).strip() if v is not None else 'NULL')
-            for phone, group in dup.items():
-                g = [p for p in group if p in vals]
-                if len(g) < 2:
-                    continue
-                for c in cols:
-                    one = {p: '|'.join(sorted(vals[p][c])) for p in g}
-                    counts = Counter(one.values())
-                    if len(counts) != 2:
-                        continue
-                    (common, n_common), (odd, n_odd) = counts.most_common()
-                    if n_odd != 1:
-                        continue
-                    if n_common == 1:            # a pair: orient by activity — the staler code is the odd one
-                        odd_pic = min(g, key=lambda p: (last.get(p) or dt.date.min, p))
-                        odd = one[odd_pic]
-                        common = next(v for v in one.values() if v != odd)
-                    else:
-                        odd_pic = next(p for p in g if one[p] == odd)
-                    other = next(p for p in g if p != odd_pic)
-                    pat = (f'{table}.{c}', odd, common)
-                    patterns[pat] += 1
-                    if len(examples[pat]) < self.samples:
-                        examples[pat].append((phone, odd_pic, other))
-        if not patterns:
-            self._emit('  no column differs on exactly one PIC per group — the stop flag may live elsewhere')
-        self._emit('  likely flag patterns (column: odd-one-out value vs the rest → groups):')
-        for (col, odd, common), n in patterns.most_common(8):
-            self._emit(f'    {col}: {odd!r} vs {common!r} → {n}')
-
-        def lv(p):
-            d = last.get(p)
-            return d.isoformat() if d else 'no visit on record'
-        if patterns:
-            best = patterns.most_common(1)[0][0]
-            self._emit(f'  example pairs for the top pattern {best[0]} ({best[1]!r} = the odd code):')
-            for phone, odd_pic, other in examples[best]:
-                self._emit(f'    phone {_mask(phone)}: ODD {odd_pic} (last visit {lv(odd_pic)})  vs  {other} (last visit {lv(other)})')
-        # activity-only view: one code dormant > 1 year while another is active in the last 90 days
-        today = dt.date.today()
-        dormant = []
-        for phone, group in dup.items():
-            dated = {p: last.get(p) for p in group}
-            act = [p for p, d in dated.items() if d and (today - d).days <= 90]
-            old = [p for p, d in dated.items() if not d or (today - d).days > 365]
-            if act and old:
-                dormant.append((phone, old[0], act[0]))
-        self._emit(f'  groups with one active code (≤ 90 days) and one dormant (> 1 year / never): {len(dormant)}')
-        for phone, o, a in dormant[:self.samples]:
-            self._emit(f'    phone {_mask(phone)}: dormant {o} ({lv(o)})  vs  active {a} ({lv(a)})')
+        def ls(pic):
+            d = last.get(pic)
+            return d.date().isoformat() if d else 'no sale in mirror'
+        self._emit(f'  {len(recs)} codes are not active ("1") or are locked:')
+        suggested = []
+        for r in recs:
+            pic = str(r['phcode']).strip()
+            self._emit(f'    {pic}: status={r["phcodestatus"]!r} lock={r["piclock"]} died={r["picdied"]} '
+                       f'changed_by={r["phcodestatususercode"]} at={r["phcodestatustime"]} '
+                       f'active_since={r["custdateactive"]} created_by={r["usercode"]} pphcode={r["pphcode"]!r} '
+                       f'last_sale={ls(pic)}')
+            for m in mates[pic][:8]:
+                ms = status.get(m, (None, None))
+                self._emit(f'        shares a phone with {m}: status={ms[0]!r} lock={ms[1]} last_sale={ls(m)}')
+                if str(ms[0] or '').strip() == '1' and not ms[1]:
+                    suggested.append((pic, m))
+        if suggested:
+            a, b = max(suggested, key=lambda x: (last.get(x[1]) is not None, last.get(x[1]) or 0))
+            self._emit(f'  ▶ SUGGESTED PAIR to review in SOFTECH: {a} (not active) ↔ {b} (active, same phone)')
+            self._emit(f'      then run: python manage.py investigate_pic_merge --pic {a} --pic {b}')
+        else:
+            self._emit('  ▶ no non-active code shares a phone with an active one — duplicates are NOT being '
+                       'deactivated in SOFTECH today (they stay active side by side)')
+        # pphcode — possible parent / main-PIC link
+        _, r = self._q(f"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> ''")
+        _, r2 = self._q(f"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode")
+        _, r3 = self._q(f"SELECT count(*) FROM {DB}.localcustomers l WHERE isnull(l.pphcode, '') <> '' "
+                        f"AND l.pphcode <> l.phcode AND EXISTS (SELECT 1 FROM {DB}.localcustomers p WHERE p.phcode = l.pphcode)")
+        self._emit(f'  pphcode filled on {r[0][0]} codes · pointing to ANOTHER code on {r2[0][0]} · '
+                   f'of which the target exists as a customer: {r3[0][0]}')
+        _, ex = self._q(f"SELECT phcode, pphcode, relativecode FROM {DB}.localcustomers "
+                        "WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode", limit=self.samples)
+        for a, b, c in ex:
+            self._emit(f'    {a} → pphcode {b} (relativecode {c})')
+        _, rc = self._q(f'SELECT relativecode, count(*) FROM {DB}.localcustomers GROUP BY relativecode ORDER BY 2 DESC',
+                        limit=10)
+        self._emit('  relativecode values: ' + ', '.join(f'{v!r}={n}' for v, n in rc))
 
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
         self._buf, self.samples, self.pics = [], o['samples'], [p.strip() for p in o['pic'] if p.strip()]
+        self.points_log, self.phones_of, self.groups = o['points_log'], {}, {}
         self.conn = get_branch_connection(o['host'], o['port'], 'SOFTECHDB9') if o['host'] else get_sybase_connection()
         self.schema = {}
         self._emit('=' * 72)
@@ -329,7 +331,7 @@ class Command(BaseCommand):
             self._safe('[8] duplicate-phone PIC groups', self.s_duplicates)
             self._safe('[9] points', self.s_points)
             if o['suggest']:
-                self._safe('[11] suggested duplicate pairs (one stopped)', self.s_suggest)
+                self._safe('[11] non-active / locked codes, their phone-mates and the suggested pair', self.s_status)
             if self.pics:
                 self._safe('[10] PIC side-by-side', self.s_pics)
         finally:

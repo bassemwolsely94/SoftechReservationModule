@@ -20,14 +20,12 @@ SOFTECH uses a 3-table architecture:
        vf2          VARCHAR(50)   -- free-use field (we store: CRM operator label)
        vf3          VARCHAR(50)   -- free-use field (unused by CRM)
 
-  2. localcustomers.picpoints  (running balance column)
-       Updated AUTOMATICALLY by trigger tr_picpoints when a row is
-       inserted into the picpoints table above.
-       We NEVER UPDATE this column directly.
+  2. localcustomers.picpoints  (tinyint ENROLLMENT flag 1/0 — NOT a balance;
+       confirmed by investigate_pic_merge 2026-10-08: 1=195,173 / 0=2,606)
 
-  3. localcustomerspoints  (branch-level aggregated summary)
-       totpoints = cumulative earned, conpoints = cumulative consumed.
-       Also maintained by trigger tr_picpoints / lcpointstrans.
+  3. localcustomerspoints  (the BALANCE: totpoints = earned, conpoints = consumed)
+       Maintained AUTOMATICALLY by trigger tr_picpoints on every INSERT into
+       picpoints (creates the row if missing). We NEVER UPDATE it directly.
 
 CORRECT WRITE PATTERN:
   INSERT INTO picpoints (phcode, transdate, points, branchcode,
