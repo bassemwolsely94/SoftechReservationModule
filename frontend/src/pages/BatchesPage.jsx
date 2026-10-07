@@ -186,6 +186,96 @@ function RebalanceModal({ row, fromBranch, onClose }) {
   )
 }
 
+// ── Near-expiry rebalancing worklist (B3) — whole network, batch-level, advisory ──────────
+function RebalanceWorklistTab() {
+  const qc = useQueryClient()
+  const [branch, setBranch] = useState('')
+  const [created, setCreated] = useState({})   // row key → request number
+  const [err, setErr] = useState(null)
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['stock-expiry-rebalance', branch],
+    queryFn: () => batchesApi.stockExpiryRebalance(branch ? { branch } : {}).then(r => r.data),
+  })
+  const key = r => `${r.item_code}|${r.from_branch}|${r.to_branch}|${r.batch_no}`
+  const create = useMutation({
+    mutationFn: (r) => transfersApi.create({
+      requesting_branch: r.to_branch_id, supplying_branch: r.from_branch_id,
+      notes: `إنقاذ قبل انتهاء الصلاحية — ${r.item_name} تشغيلة ${r.batch_no || '—'} تنتهي ${r.expiry}`,
+      items: [{ item: r.item_id, quantity: r.qty }],
+    }).then(res => ({ r, res })),
+    onSuccess: ({ r, res }) => {
+      setCreated(c => ({ ...c, [key(r)]: res.data?.request_number || '✓' }))
+      qc.invalidateQueries({ queryKey: ['stock-expiry-rebalance'] })
+    },
+    onError: (e) => setErr(e.response?.data?.detail || 'تعذّر إنشاء طلب التحويل'),
+  })
+  const fmt = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  const branches = useMemo(() => {
+    const m = new Map()
+    ;(data?.rows || []).forEach(r => { m.set(r.from_branch, r.from_branch_name); m.set(r.to_branch, r.to_branch_name) })
+    return [...m.entries()]
+  }, [data])
+
+  if (isLoading) return <div className="text-center py-10 text-gray-400">جاري حساب الاقتراحات…</div>
+  if (error) return <div className="text-red-600 text-sm">{error.response?.data?.detail || 'تعذّر التحميل'}</div>
+  const t = data.totals
+  return (
+    <div className="space-y-3" dir="rtl">
+      <p className="text-sm text-gray-500">
+        تشغيلات لن تُباع قبل انتهاء صلاحيتها في فرعها، والفروع التي تبيع الصنف بسرعة تكفي لتصريفها
+        (الأقدم صلاحية أولاً). اقتراح فقط — الزر يُنشئ <b>مسودة</b> طلب تحويل تُقدَّم وتُعتمد في مسار التحويلات المعتاد.
+        <span className="text-gray-400"> (من {data.settings.min_days} إلى {data.settings.horizon_days} يوماً للصلاحية · {data.settings.transit_days} أيام للنقل)</span>
+      </p>
+      {!data.have_rates && (
+        <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">معدلات البيع غير متاحة — شغّل محرك الطلب أولاً.</div>
+      )}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">قابل للإنقاذ بالنقل</div><div className="font-bold text-emerald-700">{fmt(t.rescuable_value)} ج.م · {t.lines} سطر</div></div>
+        <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">لا يوجد فرع يستوعبه</div><div className="font-bold text-amber-700">{fmt(t.no_target_value)} ج.م</div></div>
+        <div className="bg-white border rounded-xl px-4 py-2"><div className="text-xs text-gray-500">متأخر للنقل (خصم/مرتجع)</div><div className="font-bold text-red-700">{fmt(t.too_late_value)} ج.م</div></div>
+        <select value={branch} onChange={e => setBranch(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
+          <option value="">كل الفروع</option>
+          {branches.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+        </select>
+      </div>
+      {err && <p className="text-red-600 text-sm">{err}</p>}
+      <div className="bg-white rounded-xl border overflow-x-auto">
+        <table className="w-full text-sm text-right">
+          <thead className="text-xs text-gray-500 bg-gray-50 border-b">
+            <tr><th className="px-2 py-2">الصنف</th><th>التشغيلة</th><th>الصلاحية</th><th>من فرع</th><th>إلى فرع</th>
+              <th>الكمية</th><th>القيمة (تكلفة)</th><th>البيع/شهر (من → إلى)</th><th></th></tr>
+          </thead>
+          <tbody>
+            {data.rows.map(r => {
+              const done = created[key(r)] || r.open_transfer
+              return (
+                <tr key={key(r)} className="border-b border-gray-50">
+                  <td className="px-2 py-1.5">{r.item_name}<div className="text-[11px] text-gray-400">{r.item_code}</div></td>
+                  <td className="font-mono text-xs">{r.batch_no || '—'}</td>
+                  <td>{r.expiry}<div className={`text-[11px] ${r.days_to_expiry < 60 ? 'text-red-600' : 'text-gray-400'}`}>{r.days_to_expiry} يوم</div></td>
+                  <td>{r.from_branch_name}</td>
+                  <td>{r.to_branch_name}</td>
+                  <td className="font-semibold">{r.qty}</td>
+                  <td>{fmt(r.value)}</td>
+                  <td className="text-xs text-gray-500">{r.source_rate_month} → {r.target_rate_month}</td>
+                  <td>
+                    {done ? <span className="text-xs text-emerald-700">✓ {done}</span>
+                      : data.can_create && r.item_id && r.from_branch_id && r.to_branch_id
+                        ? <button onClick={() => create.mutate(r)} disabled={create.isPending}
+                                  className="px-2 py-1 text-xs bg-brand-600 text-white rounded-lg disabled:opacity-50">مسودة تحويل</button>
+                        : null}
+                  </td>
+                </tr>
+              )
+            })}
+            {!data.rows.length && <tr><td colSpan={9} className="py-8 text-center text-gray-400">لا توجد تشغيلات تحتاج نقلاً الآن.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Purchase-Expiry Physical Audit tab ────────────────────────────────────────
 function PurchaseExpiryAuditTab() {
   const navigate = useNavigate()
@@ -1325,6 +1415,7 @@ export default function BatchesPage() {
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
           { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
           { key: 'reorder', label: '♻️ مراجعة الشراء' },
+          { key: 'rebalance', label: '🔁 إنقاذ قبل الانتهاء' },
           { key: 'disposal', label: '🗑️ إتلاف/مرتجع' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -1345,6 +1436,7 @@ export default function BatchesPage() {
       {tab === 'suppliers' && <SupplierScorecardTab />}
       {tab === 'reorder' && <ProcurementReviewTab />}
       {tab === 'disposal' && <DisposalTab />}
+      {tab === 'rebalance' && <RebalanceWorklistTab />}
     </div>
   )
 }

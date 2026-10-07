@@ -123,7 +123,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Insurance | `/api/insurance/` | insurance |
 | Pricing Approvals (discount writeback) | `/api/pricing-approvals/` | discount_approvals |
 | Approvals (operational + HR) | `/api/approvals/` | approvals |
-| Batches / Near-Expiry | `/api/batches/` | batches — list/detail + `fefo/` + `near-expiry/` + `alerts/` + `{id}/quarantine/` + **`purchase-expiry/`** (`candidates/` report · `runs/` · `sync/` admin-backfill · `spawn-count/` → stockcount) |
+| Batches / Near-Expiry | `/api/batches/` | batches — list/detail + `fefo/` + `near-expiry/` + `alerts/` + `{id}/quarantine/` + **`purchase-expiry/`** (`candidates/` report · `runs/` · `sync/` admin-backfill · `spawn-count/` → stockcount) + **`stock-expiry/rebalance/`** (B3, 2026-10-07: network-wide near-expiry rebalancing worklist — batch-level oldest-expiry-first from the StockExpiryBalance mirror × engine 90-day rates; advisory, a line → DRAFT transfer via `/transfers/`; open transfers flagged; tab «🔁 إنقاذ قبل الانتهاء» on `/batches`; `apps/batches/rebalance.py`) |
 | Forecasting | `/api/forecasting/` | forecasting — seasonality/runs/accuracy + `kpi-board/` (doc 16 branch KPI matrix) |
 | Loyalty | `/api/loyalty/` | loyalty |
 | Referral | `/api/referral/` | referral |

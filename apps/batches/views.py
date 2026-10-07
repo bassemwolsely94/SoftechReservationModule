@@ -1007,3 +1007,17 @@ class StockBatchViewSet(
 
         BatchService.quarantine(batch=batch, reason=reason, performed_by=profile)
         return Response({'detail': 'تم عزل الدفعة.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def stock_expiry_rebalance(request):
+    """B3 — network-wide near-expiry rebalancing worklist (advisory, read-only).
+    Query: ?branch=<softech code>&item=<item code>. A line becomes a DRAFT transfer through
+    the existing /transfers/ API, which enforces its own permission (`can_create` mirrors it)."""
+    from apps.transfers.permissions import CanCreateTransfer
+    from .rebalance import worklist
+    data = worklist(branch=(request.query_params.get('branch') or '').strip() or None,
+                    item=(request.query_params.get('item') or '').strip() or None)
+    data['can_create'] = CanCreateTransfer().has_permission(request, None)
+    return Response(data)

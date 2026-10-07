@@ -2357,6 +2357,7 @@ export const batchesApi = {
   purchaseExpiryRequestMarkdown: (body) => api.post('/batches/purchase-expiry/request-markdown/', body),
   // Live stock-expiry (stkbalexpiry mirror across all nodes)
   stockExpirySummary: (params) => api.get('/batches/stock-expiry/summary/', { params }),
+  stockExpiryRebalance: (params) => api.get('/batches/stock-expiry/rebalance/', { params }),   // B3 network worklist
   stockExpiryReport:  (params) => api.get('/batches/stock-expiry/report/', { params }),
   stockExpiryStores:  (params) => api.get('/batches/stock-expiry/stores/', { params }),
   stockExpiryRuns:    ()       => api.get('/batches/stock-expiry/runs/'),
