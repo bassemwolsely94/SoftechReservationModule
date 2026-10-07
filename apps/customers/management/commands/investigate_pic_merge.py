@@ -10,6 +10,7 @@ masked and customer names are NOT printed in the summary sections, so the report
     python manage.py investigate_pic_merge --pic 130HD123 --pic 04HD731     # compare specific PICs
     python manage.py investigate_pic_merge --host 192.168.30.12             # a branch node
     python manage.py investigate_pic_merge --out scratch/pic_merge_probe.txt
+    python manage.py investigate_pic_merge --suggest                       # propose duplicate pairs to review
 
 Best use: pass one PIC you KNOW staff already stopped / deactivated in SOFTECH and one normal
 active PIC — the side-by-side dump shows which column the SOFTECH screen changes.
@@ -55,6 +56,8 @@ class Command(BaseCommand):
         parser.add_argument('--out', default='scratch/pic_merge_probe.txt',
                             help='also write the report here (scratch/ is git-ignored)')
         parser.add_argument('--samples', type=int, default=10)
+        parser.add_argument('--suggest', action='store_true',
+                            help='find likely duplicate pairs where one code was stopped (needs our customer mirror)')
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def _emit(self, line=''):
@@ -179,6 +182,7 @@ class Command(BaseCommand):
             if k and pic:
                 groups[k].add(str(pic).strip())
         dup = {k: v for k, v in groups.items() if len(v) > 1}
+        self.dup_groups = dup
         sizes = Counter(len(v) for v in dup.values())
         pics = set().union(*dup.values()) if dup else set()
         self._emit(f'  phone numbers shared by >1 PIC: {len(dup)} numbers · {len(pics)} PICs involved')
@@ -219,6 +223,92 @@ class Command(BaseCommand):
             _, rows = self._q(f'SELECT count(*), max(docdate) FROM {DB}.stktransm WHERE phcode = ?', [pic])
             self._emit(f'    stktransm docs: {rows[0][0]} · last {rows[0][1]}')
 
+    def _flag_cols(self, table):
+        skip = {'phcode', 'personcode', 'branchcode', 'branchcustcode', 'orderbranchcode', 'personglobalcode'}
+        out = []
+        for name, ty, ln in self.schema.get(table, []):
+            if name in skip:
+                continue
+            small = ty in ('bit', 'tinyint', 'smallint', 'int') or (ty in ('char', 'varchar', 'nchar') and ln <= 3)
+            if small or FLAG_HINT.search(name):
+                out.append(name)
+        return out
+
+    def s_suggest(self):
+        """Find the column SOFTECH flips on a stopped duplicate: inside every group of PICs sharing a
+        phone, a column where exactly ONE PIC differs from the others ('odd one out'). The most
+        frequent pattern is the likely deactivation flag; example pairs are printed for review."""
+        import datetime as dt
+        from apps.customers.models import Customer
+        dup = getattr(self, 'dup_groups', {})
+        if not dup:
+            self._emit('  (no duplicate-phone groups — run without --host first, or none exist)')
+            return
+        pics = sorted(set().union(*dup.values()))
+        last = dict(Customer.objects.filter(softech_pic__in=pics).values_list('softech_pic', 'last_visit_date'))
+        patterns, examples = Counter(), defaultdict(list)
+        for table, key in (('localcustomers', 'phcode'), ('personsdata', 'personcode')):
+            cols = self._flag_cols(table)
+            if not cols:
+                continue
+            vals = defaultdict(lambda: defaultdict(set))          # pic → col → {values across branch rows}
+            for i in range(0, len(pics), 200):
+                chunk = pics[i:i + 200]
+                marks = ','.join('?' * len(chunk))
+                cnames, rows = self._q(f'SELECT {key}, {", ".join(cols)} FROM {DB}.{table} WHERE {key} IN ({marks})', chunk)
+                for r in rows:
+                    for c, v in zip(cnames[1:], r[1:]):
+                        vals[str(r[0]).strip()][c].add(str(v).strip() if v is not None else 'NULL')
+            for phone, group in dup.items():
+                g = [p for p in group if p in vals]
+                if len(g) < 2:
+                    continue
+                for c in cols:
+                    one = {p: '|'.join(sorted(vals[p][c])) for p in g}
+                    counts = Counter(one.values())
+                    if len(counts) != 2:
+                        continue
+                    (common, n_common), (odd, n_odd) = counts.most_common()
+                    if n_odd != 1:
+                        continue
+                    if n_common == 1:            # a pair: orient by activity — the staler code is the odd one
+                        odd_pic = min(g, key=lambda p: (last.get(p) or dt.date.min, p))
+                        odd = one[odd_pic]
+                        common = next(v for v in one.values() if v != odd)
+                    else:
+                        odd_pic = next(p for p in g if one[p] == odd)
+                    other = next(p for p in g if p != odd_pic)
+                    pat = (f'{table}.{c}', odd, common)
+                    patterns[pat] += 1
+                    if len(examples[pat]) < self.samples:
+                        examples[pat].append((phone, odd_pic, other))
+        if not patterns:
+            self._emit('  no column differs on exactly one PIC per group — the stop flag may live elsewhere')
+        self._emit('  likely flag patterns (column: odd-one-out value vs the rest → groups):')
+        for (col, odd, common), n in patterns.most_common(8):
+            self._emit(f'    {col}: {odd!r} vs {common!r} → {n}')
+
+        def lv(p):
+            d = last.get(p)
+            return d.isoformat() if d else 'no visit on record'
+        if patterns:
+            best = patterns.most_common(1)[0][0]
+            self._emit(f'  example pairs for the top pattern {best[0]} ({best[1]!r} = the odd code):')
+            for phone, odd_pic, other in examples[best]:
+                self._emit(f'    phone {_mask(phone)}: ODD {odd_pic} (last visit {lv(odd_pic)})  vs  {other} (last visit {lv(other)})')
+        # activity-only view: one code dormant > 1 year while another is active in the last 90 days
+        today = dt.date.today()
+        dormant = []
+        for phone, group in dup.items():
+            dated = {p: last.get(p) for p in group}
+            act = [p for p, d in dated.items() if d and (today - d).days <= 90]
+            old = [p for p, d in dated.items() if not d or (today - d).days > 365]
+            if act and old:
+                dormant.append((phone, old[0], act[0]))
+        self._emit(f'  groups with one active code (≤ 90 days) and one dormant (> 1 year / never): {len(dormant)}')
+        for phone, o, a in dormant[:self.samples]:
+            self._emit(f'    phone {_mask(phone)}: dormant {o} ({lv(o)})  vs  active {a} ({lv(a)})')
+
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
@@ -238,6 +328,8 @@ class Command(BaseCommand):
             self._safe('[7] tables carrying a customer code', self.s_footprint)
             self._safe('[8] duplicate-phone PIC groups', self.s_duplicates)
             self._safe('[9] points', self.s_points)
+            if o['suggest']:
+                self._safe('[11] suggested duplicate pairs (one stopped)', self.s_suggest)
             if self.pics:
                 self._safe('[10] PIC side-by-side', self.s_pics)
         finally:
