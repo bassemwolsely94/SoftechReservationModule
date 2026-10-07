@@ -628,7 +628,7 @@ function ModeColumn({ P, onCollapse }) {
       </div>
       {chanOk('cash') && <Mode ch={{ value: 'cash', label: 'مبيعات نقدى' }} hot="Ctrl+F2" />}
       {chanOk('delivery') && <Mode ch={{ value: 'delivery', label: 'توصيل منزلى' }} hot="Ctrl+F3" />}
-      {chanOk('contract') && <Mode ch={{ value: 'contract', label: 'مبيعات تعاقد' }} hot="Ctrl+F4" />}
+      {chanOk('contract') && <Mode ch={{ value: 'contract', label: 'مبيعات تعاقد' }} />}
       <select value={P.custType} onChange={e => P.setCustType(e.target.value)} className="inp mb-3">
         {(P.custTypes || []).map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
       </select>
@@ -657,9 +657,9 @@ function Tabs({ P }) {
   )
   return (
     <div className="flex border-b bg-gray-50">
-      <T id="items" label="🛒 الأصناف [Ctrl+2]" />
-      <T id="payment" label={`💳 السداد [Ctrl+3] (${P.tenders.length})`} />
-      <T id="contract" label="📋 بيانات التعاقد [Ctrl+4]" />
+      <T id="items" label="🛒 الأصناف" />
+      <T id="payment" label={`💳 السداد (${P.tenders.length})`} />
+      <T id="contract" label="📋 بيانات التعاقد" />
     </div>
   )
 }
@@ -1103,8 +1103,7 @@ const POS_SHORTCUTS = [
   ['Q', 'إدخال الكمية بالوحدات/الشرائط'],
   ['Shift+↑/↓', 'زيادة/إنقاص قيمة الحقل (كمية ±1 · نسبة ±1 · سعر ±1)'],
   ['↑ ↓', 'تنقّل بين الأصناف'],
-  ['Ctrl+F2/3/4', 'نقدى / توصيل / تعاقد'],
-  ['Ctrl+2/3/4', 'الأصناف / السداد / التعاقد'],
+  ['Ctrl+F2/3', 'نقدى / توصيل'],
   ['Ctrl+F1', 'بحث متقدم'],
   ['Ctrl+K', 'بحث شامل'],
   ['F9', 'معاينة الإرسال'],

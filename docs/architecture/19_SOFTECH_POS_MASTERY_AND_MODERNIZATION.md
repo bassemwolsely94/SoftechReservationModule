@@ -93,14 +93,15 @@ SOFTECH is keyboard-driven; **our module is mouse-driven** (the biggest data-ent
 | `Ctrl+F1` | advanced item-search modal (wildcards + column filters) | confirmed |
 
 **Our current state (re-audited 2026-10-07):** keyboard parity is BUILT — `hooks/usePosHotkeys.js`
-(wired in `POSOrderPage.jsx`, muted while any modal is open): `Ctrl+F2/F3/F4` channel (only channels the
-seller may use), `Ctrl+2/3/4` tabs, `F2` focus item search (add line), `F4`/`Delete` remove the selected
+(wired in `POSOrderPage.jsx`, muted while any modal is open): `Ctrl+F2/F3` channel (only channels the
+seller may use), `F2` focus item search (add line), `F4`/`Delete` remove the selected
 line, `↑/↓` line navigation, `Q` quantity in units, `F9` preview / `F10` live send; `Ctrl+F1` advanced
 search inside `ItemSearchWidget`. Entry flow: header `posFlow` (Enter/Tab: نوع العميل → إسم العميل →
 PIC → المخزن → ملاحظات → الأصناف → الطابعة), grid Enter qty → discount → search, number fields step
 only with Shift+↑/↓. On-screen cheat-sheet `POS_SHORTCUTS`. (Earlier "labels only" note was stale.)
-Browser caveat: Chrome/Edge reserve some combos (e.g. Ctrl+F4 = close tab, Ctrl+1…8 = switch tab) —
-verify on the cashier PCs; an installed-app window keeps more keys.
+**Dropped 2026-10-07 (owner confirmed clashing on the cashier PCs):** `Ctrl+F4` (Chrome/Edge close the
+tab) and `Ctrl+2/3/4` (switch browser tab) — removed from the handler, the channel buttons, the tab labels
+and the cheat-sheet; contract channel + tabs are by mouse until an alternative key is chosen.
 
 ## 5. End-to-end sales process
 - **SOFTECH:** ① branch/store → ② channel via `Ctrl+Fn` → ③ type→name→PIC → ④ `F2` add items,

@@ -16,7 +16,7 @@ const _genToken = () => (globalThis.crypto?.randomUUID?.()
 export const CHANNELS = [
   { value: 'cash',      label: 'مبيعات نقدى',  code: '91', hot: 'Ctrl+F2' },   // عميل نقدى
   { value: 'delivery',  label: 'توصيل منزلى',  code: '90', hot: 'Ctrl+F3' },   // Home Delivery
-  { value: 'contract',  label: 'مبيعات تعاقد', code: '10', hot: 'Ctrl+F4' },   // Contract Sales
+  { value: 'contract',  label: 'مبيعات تعاقد', code: '10' },   // Contract Sales (Ctrl+F4 dropped: browser closes the tab)
   { value: 'insurance', label: 'تأمين',        code: '15' },
   { value: 'employee',  label: 'موظفين',       code: '11' },
   { value: 'vip',       label: 'VIP',          code: '99' },

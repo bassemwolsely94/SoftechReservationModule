@@ -4,8 +4,10 @@ import { useEffect } from 'react'
  * usePosHotkeys — SOFTECH-parity keyboard control for the Indirect-POS screen.
  * Makes the on-screen shortcut labels REAL so a cashier trained on SOFTECH keeps their
  * muscle memory:
- *   Ctrl+F2/F3/F4 → channel (نقدى / توصيل / تعاقد)
- *   Ctrl+2/3/4    → tab (الأصناف / السداد / بيانات التعاقد)
+ *   Ctrl+F2/F3    → channel (نقدى / توصيل)
+ *   (Ctrl+F4 contract channel and Ctrl+2/3/4 tabs are NOT handled: Chrome/Edge reserve them —
+ *    Ctrl+F4 closes the tab, Ctrl+1…8 switch tabs — confirmed clashing on the cashier PCs
+ *    2026-10-07. Contract channel and tabs are by mouse until an alternative is chosen.)
  *   F2            → focus the item-search box (add a line — SOFTECH types in the empty row)
  *   F4 / Delete   → delete the selected line
  *   F9            → preview the send (dry-run — never writes to SOFTECH)
@@ -43,10 +45,6 @@ export default function usePosHotkeys(P, { enabled = true, onOpenUnits } = {}) {
         // channel = نوع العميل (custType); setCustType cascades to channel + entity reset
         if (k === 'F2') { e.preventDefault(); if (okChan('cash')) P.setCustType('cash'); return }
         if (k === 'F3') { e.preventDefault(); if (okChan('delivery')) P.setCustType('delivery'); return }
-        if (k === 'F4') { e.preventDefault(); if (okChan('contract')) P.setCustType('contract'); return }
-        if (k === '2')  { e.preventDefault(); P.setActiveTab('items'); return }
-        if (k === '3')  { e.preventDefault(); P.setActiveTab('payment'); return }
-        if (k === '4')  { e.preventDefault(); P.setActiveTab('contract'); return }
         return
       }
 
