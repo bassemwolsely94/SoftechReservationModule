@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
+
+from core.media import serve_media
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -65,4 +65,7 @@ urlpatterns = [
     path('api/personal/',   include('apps.personal.urls')),
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
     path('api/portal/',     include('apps.portal.urls')),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Uploads: signature-checked (core/storage.py, core/media.py) in every mode,
+    # not just DEBUG — protected files need a signed, unexpired URL.
+    path('media/<path:path>', serve_media, name='media'),
+]

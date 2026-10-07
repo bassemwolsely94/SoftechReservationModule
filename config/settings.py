@@ -303,6 +303,16 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
+# core.media.serve_media, which checks the signature. Product images stay public.
+STORAGES = {
+    'default':     {'BACKEND': 'core.storage.SignedMediaStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+MEDIA_URL_TTL = config('MEDIA_URL_TTL', default=6 * 3600, cast=int)   # seconds, minimum link lifetime
+# True behind Nginx: Django checks the signature, Nginx sends the bytes via the
+# internal /protected-media/ location (deploy/nginx.conf).
+MEDIA_ACCEL_REDIRECT = config('MEDIA_ACCEL_REDIRECT', default=False, cast=bool)
 
 # ── INTERNATIONALISATION ──────────────────────────────────────────────────────
 LANGUAGE_CODE = 'ar'

@@ -23,6 +23,7 @@ sweep, and documents the risks that still need a decision.
 | 11 | **Crash bugs found by the sweep** | call-centre *add note* crashed on every request (`parser_classes=None`); voucher report (`full_name` is a property); procurement branches (annotation shadowing a field); finance sync-runs (re-ordering a sliced queryset); near-expiry stock + replication item check → 503 instead of 500 (and no driver text sent to the browser); loyalty account / referral code → 404 for unknown customers. | `apps/callcenter`, `apps/vouchers`, `apps/procurement`, `apps/finance`, `apps/incentives`, `apps/discount_approvals`, `apps/loyalty`, `apps/referral` views |
 | 12 | **Comment write-back** | Personal document/cheque comments validated before opening a SOFTECH connection. | `apps/personal/writeback.py` |
 | 13 | **Packaging / CI** | `python-dateutil` and `JPype1` added to both requirement files (CI had been red since `apps/cheques` started importing dateutil; `JPype1` is now imported at module load via `pos_orders.discount_authority`). `DEPLOY.md` installs a JRE, fixes the build path, documents key rotation and backups. | `requirements*.txt`, `deploy/DEPLOY.md` |
+| 15 | **Signed upload links** (batch 2) | Every FileField/ImageField URL is now signed with an expiry (`core/storage.py` `SignedMediaStorage`, default 6 h, rounded to the hour); `/media/` is served by `core/media.py`, which refuses protected files without a valid signature, blocks path traversal and sends HTML/SVG/XML/JS as sandboxed downloads. Product imagery (`products/`, `image_candidates/`) and print watermarks stay public. Behind Nginx (`MEDIA_ACCEL_REDIRECT=True`) Django only checks the signature and Nginx streams the file from the internal `/protected-media/` location. No serializer or UI change was needed. Covers `media/reports/` exports too. | `core/storage.py`, `core/media.py`, `config/settings.py`, `config/urls.py`, `deploy/nginx.conf` |
 | 14 | **Config templates** | `.env.example` lists the variables the code really reads (`SYBASE_HOST/PORT`, new security switches); `deploy/staging.env.example` is a complete safe UAT profile. | `.env.example`, `deploy/staging.env.example` |
 
 ## 2. New tests
@@ -30,6 +31,7 @@ sweep, and documents the risks that still need a decision.
 | File | Covers |
 |------|--------|
 | `apps/tests/test_security_hardening.py` (41) | SQL read/write classifier (literals, comments, identifiers containing "update", `SELECT INTO`, batches, procs); java.sql proxy incl. raw-statement writers; guard wiring through `_connect_with_retry`; branch override; loyalty role gate (SOFTECH write never reached); webhook fail-closed + signatures + handshake; RBAC mapping/log/enforce/empty-matrix/admin; production settings guards (real settings import in a subprocess). |
+| `apps/tests/test_media_security.py` (12) | Signed vs public prefixes, signature/expiry/tamper checks, serving with and without signature, traversal, sandboxed script-capable uploads, X-Accel mode, method restriction. |
 | `apps/tests/test_endpoint_sweep.py` (5) | **Every** URL in the project: (1) the anonymous-access surface must equal a reviewed allow-list — a new public endpoint fails CI until reviewed; (2) every other route answers 401/403/404/405 to anonymous GET and POST; (3) every GET route, called as an admin with SOFTECH, the JVM and the internet unreachable, must not return 500. |
 
 ## 3. Running staging / UAT safely
@@ -49,7 +51,7 @@ sweep, and documents the risks that still need a decision.
 
 | Risk | Why not fixed now | Recommended mitigation |
 |------|-------------------|------------------------|
-| `/media/` uploads (prescriptions, insurance docs, payment proofs) served without login | Needs signed URLs in ~29 serializers + every `<img>`/link in the UI | Never expose the server publicly without an identity-aware access layer (VPN / Zero-Trust tunnel). Next batch: short-lived signed media URLs + `X-Accel-Redirect`. |
+| Signed upload links are bearer links | Anyone holding a link can open it until it expires (≤ ~7 h) | Keep `MEDIA_URL_TTL` short; don't paste upload links into WhatsApp/email — share the record instead. |
 | RBAC is in **log** mode | Enforcing blind could lock staff out of screens they use daily | Run `log` in production 1–2 weeks, fix grants (`/permissions`) until `elrezeiky.rbac` is quiet, then `enforce`. Staging can enforce now. |
 | JWT stored in `localStorage`; WebSocket token in query string | Moving to httpOnly cookies changes login, refresh and WS auth end-to-end | Media sandboxing (done) removes the main XSS vector; plan cookie auth as its own batch. |
 | 148 API responses return raw exception text (`str(exc)`) | Many are deliberate user-facing validation messages | Review per module; a DRF exception handler + `logger.exception` for unexpected errors only. |

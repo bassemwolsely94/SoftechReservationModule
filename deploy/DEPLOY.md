@@ -57,6 +57,7 @@ SECRET_KEY=<generate a long random key>     # REQUIRED — the app refuses to st
 BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Proto)
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
+MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file
 ```
 
 > ⚠️ **Rotating an old/placeholder SECRET_KEY:** stored omni channel credentials
