@@ -498,11 +498,18 @@ class VoucherViewSet(viewsets.ModelViewSet):
         )
 
         # By employee
-        by_employee = (
-            reds.values('redeemed_by__full_name')
+        # full_name is a StaffProfile property (not a column): group by the profile,
+        # then resolve the display name; the response key stays as the UI expects.
+        by_employee = list(
+            reds.values('redeemed_by')
             .annotate(count=Count('id'), total=Sum('discount_applied'))
             .order_by('-count')[:10]
         )
+        from apps.users.models import StaffProfile
+        names = {p.pk: p.full_name for p in StaffProfile.objects.select_related('user')
+                 .filter(pk__in=[r['redeemed_by'] for r in by_employee if r['redeemed_by']])}
+        for row in by_employee:
+            row['redeemed_by__full_name'] = names.get(row.pop('redeemed_by'))
 
         # Expired / unused vouchers
         expired_unused = Voucher.objects.filter(

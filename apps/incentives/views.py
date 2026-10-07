@@ -1609,10 +1609,12 @@ class NearExpiryStockView(viewsets.ViewSet):
                 include_quarantine=include_quarantine,
             )
         except Exception as exc:
+            # Upstream (SOFTECH) unavailable → 503; the driver error (hosts, SQL)
+            # goes to the log, not to the browser.
             logger.exception('near_expiry_stock: SOFTECH query failed')
             return Response(
-                {'detail': f'فشل الاستعلام من قاعدة بيانات ERP: {exc}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {'detail': 'تعذر الاستعلام من قاعدة بيانات ERP حالياً'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # ── Aggregations ──────────────────────────────────────────────────────

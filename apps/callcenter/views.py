@@ -13,6 +13,7 @@ from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Count, Q, Avg
@@ -1021,7 +1022,8 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         case.set_csat(score=score, note=note)
         return Response({'csat_score': case.csat_score, 'csat_note': case.csat_note})
 
-    @action(detail=True, methods=['post'], url_path='add-note', parser_classes=None)
+    @action(detail=True, methods=['post'], url_path='add-note',
+            parser_classes=[JSONParser, MultiPartParser, FormParser])
     def add_note(self, request, pk=None):
         """
         POST /api/callcenter/cases/{id}/add-note/

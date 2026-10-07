@@ -3,7 +3,8 @@ apps/loyalty/views.py
 """
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from django.conf import settings
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -29,7 +30,9 @@ class AccountDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        customer_id = self.kwargs['customer_id']
+        from django.shortcuts import get_object_or_404
+        from apps.customers.models import Customer
+        customer_id = get_object_or_404(Customer, pk=self.kwargs['customer_id']).pk
         account, _ = LoyaltyAccount.objects.get_or_create(
             customer_id=customer_id,
         )
@@ -44,6 +47,22 @@ class TransactionListView(generics.ListAPIView):
         return PointTransaction.objects.filter(
             account__customer_id=self.kwargs['customer_id']
         ).order_by('-created_at')[:100]
+
+
+class CanAdjustLoyaltyPoints(BasePermission):
+    """
+    Manual point grants/deductions are money-equivalent (purchase points are written
+    straight into SOFTECH picpoints; referral points redeem as vouchers), so only the
+    roles in settings.LOYALTY_ADJUST_ROLES may make them.
+    """
+    message = 'تعديل النقاط مسموح لأدوار محددة فقط'
+
+    def has_permission(self, request, view):
+        profile = getattr(request.user, 'staff_profile', None)
+        return bool(
+            profile and profile.is_active
+            and profile.role in settings.LOYALTY_ADJUST_ROLES
+        )
 
 
 class AdjustPointsView(APIView):
@@ -70,7 +89,7 @@ class AdjustPointsView(APIView):
         adjust_type:  'purchase' | 'referral'   (default: 'purchase')
     }
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAdjustLoyaltyPoints]
 
     def post(self, request, customer_id):
         from apps.loyalty.pic_bridge import (

@@ -114,6 +114,8 @@ def write_document_comment(*, branchcode, doccode, docnumber, comment=None,
     docnum = _docnum_param(docnumber)
     _key = [('branchcode', branchcode), ('doccode', doccode), ('docnumber', docnum)]
     old_comment, final = '', ''
+    if transform is None:
+        _validate_text(comment, MAX_LEN)   # reject bad input before touching SOFTECH
 
     # 1) HQ read — the ownership + existence gate. No write happens unless the
     #    document's counterparty is exactly the caller's approved personcode.
@@ -185,6 +187,8 @@ def write_cheque_note(*, branchcode, financialdoccode, cheqsno, note=None,
     sno = _docnum_param(cheqsno)
     key = [('branchcode', branchcode), ('financialdoccode', fdc), ('cheqsno', sno)]
     old_note, final = '', ''
+    if transform is None:
+        _validate_text(note, CHEQ_MAX_LEN)   # reject bad input before touching SOFTECH
 
     hq = get_sybase_connection()
     try:

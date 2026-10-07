@@ -8,6 +8,9 @@ from apps.catalog.models import Item
 from .models import ItemPriceChangeRequest, USER_EDITABLE_FIELDS, FIELD_LABELS
 from .serializers import ItemPriceChangeRequestSerializer, ReviewSerializer
 from .services import execute_price_change, compute_derived_preview
+import logging
+
+logger = logging.getLogger("elrezeiky.discount_approvals")
 
 
 def _is_admin(user):
@@ -574,7 +577,11 @@ def repair_gaps(request):
 def item_replication_status(request, softech_id):
     """Ad-hoc replication check for ANY item (not tied to a request)."""
     from .replication import check_item
-    return Response(check_item(softech_id))
+    try:
+        return Response(check_item(softech_id))
+    except Exception:
+        logger.exception('item_replication_status: SOFTECH check failed for %s', softech_id)
+        return Response({'detail': 'تعذر الاتصال بقاعدة بيانات ERP حالياً'}, status=503)
 
 
 # ════════════════════════════════════════════════════════════════════════════

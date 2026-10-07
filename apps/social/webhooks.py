@@ -14,6 +14,7 @@ webhook_secret credential.
 
 NEVER raises — errors land in SocialWebhookLog.processing_error.
 """
+import hmac
 import logging
 
 from django.utils import timezone
@@ -132,7 +133,7 @@ def resolve_telegram_account(secret_header: str):
     accounts = ChannelAccount.objects.filter(channel='telegram', is_active=True)
     for account in accounts:
         secret = account.get_credentials().get('webhook_secret', '')
-        if secret and secret == secret_header:
+        if secret and hmac.compare_digest(secret.encode(), (secret_header or "").encode()):
             return account
     return None
 
