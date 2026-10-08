@@ -424,12 +424,14 @@ class Command(BaseCommand):
         out = ['customer ' + ' · '.join(f'{c}={v}' for c, v in zip(cn, r[0]))]
         _, b = self._q(conn, f'SELECT totpoints, conpoints, table_dumped FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])
         out.append('balance ' + (f'{b[0][0]}−{b[0][1]}={(b[0][0] or 0) - (b[0][1] or 0)} shipped={b[0][2]}' if b else 'none'))
-        for t, cols in (('picstrans', 'trans_time, usercode, branchcode, phcodestatus, picpoints, picdiscounts, piclock, '
+        for t, cols in (('picpoints', 'transdate, points, doccode, docnumber, branchcode, vf1, vf2, table_dumped'),
+                        ('picstrans', 'trans_time, usercode, branchcode, phcodestatus, picpoints, picdiscounts, piclock, '
                                       'pphcode, pphcode2, table_dumped'),
                         ('lcpointstrans', 'trans_time, usercode, branchcode, totpointsold, conpointsold, totpoints, '
                                           'conpoints, phcodestatus, table_dumped')):
             try:
-                cn2, rows = self._q(conn, f'SELECT {cols} FROM {DB}.{t} WHERE phcode = ? ORDER BY trans_time DESC', [pic], limit=3)
+                order = 'transdate' if t == 'picpoints' else 'trans_time'
+                cn2, rows = self._q(conn, f'SELECT {cols} FROM {DB}.{t} WHERE phcode = ? ORDER BY {order} DESC', [pic], limit=3)
                 for row in rows:
                     out.append(f'{t}: ' + ' · '.join(f'{c}={v}' for c, v in zip(cn2, row)))
             except Exception as exc:

@@ -37,6 +37,9 @@ class Cur:
             self.r = [] if self.node else [(D(2026, 10, 8), '1509', 0)]
         elif s.startswith('SELECT trans_time, usercode, branchcode, totpointsold'):
             self.r = []
+        elif s.startswith('SELECT transdate, points, doccode'):
+            self.description = [('transdate',), ('points',), ('doccode',)]
+            self.r = [] if self.node else [(D(2026, 10, 8, 6, 19), -79, '0')]
         elif s.startswith('SELECT phcode, phcodestatus'):
             self.r = NODE if self.node else HQ
         elif s.startswith('SELECT phcode, totpoints'):
@@ -174,4 +177,5 @@ class ReplicationProbeTests(TestCase):
         self.assertIn('HQ: customer phcodestatus=1 · piclock=0 · picpoints=0 · picdiscounts=1', t)
         self.assertIn('10.0.0.1: customer phcodestatus=1 · piclock=0 · picpoints=1 · picdiscounts=0', t)
         self.assertIn('picstrans: trans_time=2026-10-08 00:00:00 · usercode=1509 · picpoints=0', t)
+        self.assertIn('picpoints: transdate=2026-10-08 06:19:00 · points=-79 · doccode=0', t)
         self.assertNotIn('[R1]', t)
