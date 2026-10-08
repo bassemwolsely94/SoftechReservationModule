@@ -110,7 +110,7 @@ class ReplicationProbeTests(TestCase):
         with mock.patch('config.sybase.get_sybase_connection', return_value=Conn()), \
                 mock.patch('config.sybase.get_branch_connection', return_value=Conn(node=True)):
             call_command('investigate_pic_replication', host=['10.0.0.1'], explain=True, out='', stdout=out,
-                         reset_csv='')
+                         reset_csv=self.csv)
         t = out.getvalue()
         self.assertIn('HQ: localcustomers2 (merge) 0', t)
         self.assertIn('10.0.0.1: localcustomers2 (merge) 1', t)
