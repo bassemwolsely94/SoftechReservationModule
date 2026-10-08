@@ -1,6 +1,6 @@
 # 27 — Customer-code (PIC) duplicates & merge (B7)
 
-**Status:** 🔍 INVESTIGATION (HQ + one node; replication probe pending) · 📝 DESIGN PROPOSED, owner decisions recorded (2026-10-08) — build waits on replication + native code-change findings. No SOFTECH write exists.
+**Status:** 🔍 INVESTIGATION (HQ + all 5 nodes; points-balance source open) · 📝 DESIGN PROPOSED, owner decisions recorded (2026-10-08) — build waits on replication + native code-change findings. No SOFTECH write exists.
 Probes: `python manage.py investigate_pic_merge [--suggest] [--pic A --pic B …]` · `python manage.py investigate_pic_replication [--host …] [--pic …]` (apps/customers).
 
 ## Confirmed facts (live probe 2026-10-08, HQ)
@@ -33,27 +33,31 @@ Probes: `python manage.py investigate_pic_merge [--suggest] [--pic A --pic B …
 | Deactivated code | 03HD3059 (`'0'` at HQ) is **not on this node**. The node has no `'0'` code at all (`'1'` 47,357 · blank 3 · `'5'` 1). So this node cannot tell us whether HQ's status changes reach the branches. |
 | Points | 06HD8958 has the **same balance 490** (4450 − 3960) as HQ, so the balance row is in sync. Its `picpoints` log differs: Σ 3,371 over 107 rows on the node vs Σ 448 over 114 rows at HQ. The log is per node and is not the source of the balance anywhere, so the merge must move the balance, never re-sum logs. |
 
-**Owner (2026-10-08):** "a deactivated PIC should be deactivated on both branch and HQ and it should be
-replicated, maybe this is a replication error." Two facts point that way:
-* other `03HD` codes ARE on the branch-150 node (03HD3141, 03HD3475), but the deactivated 03HD3059 is not;
-* `localcustomers` has no UPDATE trigger, and SOFTECH's replication ships rows by the `table_dumped` stamp
-  (HQ triggers on `personphones` reset it to `1900-01-01` to force a re-ship). A status change that does
-  not reset the stamp is never shipped.
+## All-node replication probe (2026-10-08, `investigate_pic_replication`, HQ + nodes 130/140/150/160/170)
 
-→ `python manage.py investigate_pic_replication` (READ-ONLY) compares HQ with EVERY node: each node's own
-branch code, where HQ's non-active codes exist and with what status, status / lock / balance mismatches
-on codes held by both, HQ codes a node created but no longer has, codes whose status changed after their
-last ship, and SOFTECH's own code-change / parent / points-edit tables (`localcustomers_main`,
-`localcustomers2`, `localcustomers_n`, `lcpointstrans`, `picstrans`, `temppic`).
+| Topic | Finding |
+|---|---|
+| Who holds a customer | Each node holds **its own branch's customers** (95–97 %) plus a few hundred from HQ (100) and other branches. Closed branch 120 (`03HD…`) lives on node **130** (5,966 codes). No node holds everybody. Prefixes: 03=120 · 04/11/130=130 · 05/140=140 · 06/150=150 · 07/13/160=160 · 08/170=170 · 100=HQ. |
+| 03HD3059 | `'0'` with balance 9 on node **130** too, which is the only node that holds it. **Not a replication error**: branch 150 simply never had the code. |
+| Status mismatches | Rare, in both directions: 100HD6038 `'0'` at HQ / `'1'` on node 140; 07HD11624 + 07HD11663 `'0'` on node 160 / `'1'` at HQ; 06HD24310 `'5'` at HQ / `'1'` on node 150. Locks: 07HD2044, 07HD2057, 08HD1367 are locked at HQ, not on their node. So a deactivation **does not reliably reach the other side**. A branch can still sell on a code HQ closed (100HD6038 at 140). |
+| `phcodestatustime` | Never set on any deactivated code (all None), and `trans_time` is not touched by a status change. SOFTECH's screen does **not** stamp who or when, nor does it reset `table_dumped`. |
+| **Points balances** | Balances are **per node, not replicated**: 2,186–4,550 customers per node differ from HQ (130: 3,828 · 140: 2,237 · 150: 4,550 · 160: 2,984 · 170: 2,186). Gaps are mostly round hundreds (+400, +500, +1,000 …), and the node is usually higher. 187,222 of HQ's 197,813 balance rows were never shipped. **The 490/490 match on 06HD8958 was a coincidence.** |
+| Native merge | `localcustomers2` (phcode, **sourcepic, sourcepicpoints**, usercode, trans_time, table_dumped, **mgmdate**) = a SOFTECH **merge** table: 0 rows at HQ. |
+| Native PIC edit log | `picstrans` (66 rows at HQ): phcode → **phcode2**, pphcode → **pphcode2**, plus status / points / lock flags, user, time. Likely SOFTECH's "change customer code" / edit-PIC screen. |
+| Manual points edits | `lcpointstrans` (12,242 rows at HQ): old → new totpoints / conpoints, status, user, time (e.g. 4,000-point grants by user 1509 on 2026-09-04). |
+| Our loyalty bridge | `apps/loyalty/pic_bridge` reads and writes points at **HQ only**. Given per-node balances, what our screens show (and any CRM adjustment) can differ from what the branch POS shows. **Open: which balance does the branch POS redeem against?** |
 
-**Consequences for the design (pending that probe)**
-* The merge writes at **HQ**, the same way SOFTECH's own screen does, including whatever stamp makes the
-  replication agent ship it. If the native screen does not re-ship, we follow the item-discount pattern of
-  `discount_approvals/replication.force_replication`: re-stamp at HQ, and push to a stale node only as a
-  reviewed repair.
-* After the write, a **read-back on every node that holds the old or main code** (status + balance). A node
-  that has not caught up is flagged on the merge record ("pending replication") and retried.
-* Until replication is proven, our /pos (step 5) blocks the old code from our mirror, whatever the node says.
+`--explain` (R6/R7) reads the native merge / PIC-edit tables on every node and, for the largest balance gaps,
+the points log + manual edits on both sides.
+
+**Consequences for the design**
+* There is no single place to write. A merge must act **on the node that holds each code (its home branch)
+  AND at HQ**, then read both back. That is the item-discount pattern (`discount_approvals/replication`),
+  where a stale node is pushed directly as a reviewed repair.
+* Points must move on the side the POS redeems from. Until the owner confirms which balance that is, no points
+  write is designed.
+* If SOFTECH's own merge screen (`localcustomers2`) exists in the client, the merge should **replay its DML**
+  (captured with `capture_save_sql`) instead of our own status + points pair.
 
 ## Owner decisions (2026-10-08)
 
@@ -93,7 +97,10 @@ last ship, and SOFTECH's own code-change / parent / points-edit tables (`localcu
 6. **Rollout:** dry-run list → rollback probe on one pair → pilot 10 strong pairs (owner review) → wider.
 
 ## Open before build
-* **Replication of a status change** → `investigate_pic_replication` (all nodes).
-* **SOFTECH's native code change** → R5 of the same probe, then a `capture_save_sql` capture if needed.
+* **Which balance the POS uses** (node or HQ) — owner check on one mismatched code at the branch POS.
+* **SOFTECH's native merge / code change** (`localcustomers2`, `picstrans`) → `--explain` on all nodes, then
+  `capture_save_sql` while staff run ONE merge or code change in SOFTECH.
+* Existing status mismatches (100HD6038, 07HD11624, 07HD11663, 06HD24310, 3 locks) — the owner decides which
+  side is right; a repair only after that.
 * Meaning of `phcodestatus='5'` (2 codes) — not used by the merge.
 * 34 balance rows without a customer row (orphans) — reported, untouched.

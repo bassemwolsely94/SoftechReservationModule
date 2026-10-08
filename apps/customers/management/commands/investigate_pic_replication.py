@@ -19,6 +19,9 @@ Sections
   [R4] HQ replication stamps: table_dumped NULL / 1900 / stamped, and status changed AFTER the last ship
   [R5] SOFTECH's own code-change / parent / points-edit tables (localcustomers_main, _2, _n,
        lcpointstrans, picstrans, temppic) + procs that rewrite phcode / pphcode
+  --explain:
+  [R6] SOFTECH's native merge (localcustomers2) and PIC-edit log (picstrans) on HQ and every node
+  [R7] the largest balance gaps per node: points log + manual points edits (lcpointstrans) on both sides
 """
 import os
 from collections import Counter, defaultdict
@@ -46,6 +49,9 @@ class Command(BaseCommand):
         parser.add_argument('--port', type=int, default=5000)
         parser.add_argument('--pic', action='append', default=[], help='extra PIC to trace on every node')
         parser.add_argument('--samples', type=int, default=8)
+        parser.add_argument('--explain', action='store_true',
+                            help='also explain balance mismatches (points log + manual edits, both sides) and read '
+                                 "SOFTECH's own merge / PIC-edit tables on every node")
         parser.add_argument('--out', default='scratch/pic_replication_probe.txt',
                             help='also write the report here (scratch/ is git-ignored)')
 
@@ -133,20 +139,23 @@ class Command(BaseCommand):
                 continue
             both = set(hq) & set(n['cust'])
             only_node = len(set(n['cust']) - set(hq))
-            st, lk, bal, ex = Counter(), 0, Counter(), defaultdict(list)
+            st, lk, bal, ex, diff_sizes = Counter(), 0, Counter(), defaultdict(list), Counter()
             for pic in both:
                 a, b = hq[pic], n['cust'][pic]
                 if a['status'] != b['status']:
                     k = f"HQ {a['status']!r} / node {b['status']!r}"
                     st[k] += 1
                     if len(ex[k]) < self.samples:
-                        newer = 'HQ' if a['trans'] and (not b['trans'] or a['trans'] > b['trans']) else 'node'
+                        newer = ('same time' if a['trans'] == b['trans'] else
+                                 'HQ' if a['trans'] and (not b['trans'] or a['trans'] > b['trans']) else 'node')
                         ex[k].append(f'{pic} (changed last: {newer})')
                 if bool(a['lock']) != bool(b['lock']):
                     lk += 1
                 ba, bb = self._bal(hp, pic), self._bal(n['pts'], pic)
                 if ba is not None and bb is not None and ba != bb:
                     bal['different'] += 1
+                    n.setdefault('bal_diff', []).append((pic, ba, bb))
+                    diff_sizes[bb - ba] += 1
                     if len(ex['balance']) < self.samples:
                         ex['balance'].append(f'{pic} HQ {ba} / node {bb}')
                 elif (ba is None) != (bb is None):
@@ -162,6 +171,9 @@ class Command(BaseCommand):
             self._emit(f'      lock mismatches: {lk} · balance: ' + (', '.join(f'{k}={v}' for k, v in bal.items()) or 'all equal'))
             if ex['balance']:
                 self._emit('        e.g. ' + ', '.join(ex['balance']))
+                self._emit('      most common (node − HQ): ' + ', '.join(f'{d:+}×{k}' for d, k in diff_sizes.most_common(10)))
+                higher = sum(k for d, k in diff_sizes.items() if d > 0)
+                self._emit(f'      node higher than HQ: {higher} · HQ higher than node: {sum(diff_sizes.values()) - higher}')
 
     def s_stamps(self):
         hq = self.hq_cust
@@ -204,6 +216,82 @@ class Command(BaseCommand):
                    + (', '.join(f'{_s(a)}({_s(b)})' for a, b in rows) or 'none readable → the code change lives in the '
                       'SOFTECH client (capture it with capture_save_sql while staff change one code)'))
 
+    # ── --explain ─────────────────────────────────────────────────────────────
+    def _points_profile(self, conn, pic):
+        _, r = self._q(conn, f'SELECT count(*), sum(case when points > 0 then points else 0 end), '
+                             f'sum(case when points < 0 then -points else 0 end), max(transdate) '
+                             f'FROM {DB}.picpoints WHERE phcode = ?', [pic])
+        n, plus, minus, last = r[0]
+        _, d = self._q(conn, f'SELECT doccode, count(*), sum(points) FROM {DB}.picpoints WHERE phcode = ? '
+                             'GROUP BY doccode ORDER BY 2 DESC', [pic], limit=6)
+        _, e = self._q(conn, f'SELECT totpointsold, conpointsold, totpoints, conpoints, branchcode, usercode, trans_time '
+                             f'FROM {DB}.lcpointstrans WHERE phcode = ? ORDER BY trans_time DESC', [pic], limit=2)
+        _, b = self._q(conn, f'SELECT totpoints, conpoints FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])
+        bal = f'{b[0][0]}−{b[0][1]}' if b else 'none'
+        return (f'balance {bal} · log {n} rows earned {plus or 0} used {minus or 0} last {last} · by doc '
+                + ', '.join(f'{_s(x)}:{c}/{t}' for x, c, t in d)
+                + ' · manual edits ' + ('; '.join(f'{a}/{c}→{t}/{u} at {br} by {us} {tt}' for a, c, t, u, br, us, tt in e)
+                                         or 'none'))
+
+    def s_explain(self):
+        """Why do balances differ? For a few mismatched codes per node: the points log and the manual
+        points edits (lcpointstrans) on BOTH sides."""
+        from config.sybase import get_branch_connection
+        for n in self.nodes:
+            rows = n.get('bal_diff') or []
+            if not rows:
+                continue
+            rows = sorted(rows, key=lambda r: -abs(r[2] - r[1]))[:self.samples]
+            self._emit(f'  {n["label"]}:')
+            conn = get_branch_connection(n['host'], n['port'], 'SOFTECHDB9')
+            try:
+                for pic, ba, bb in rows:
+                    self._emit(f'    {pic} (HQ {ba} / node {bb}, created at {self.hq_cust[pic]["branch"]})')
+                    for side, c in (('HQ  ', self.hq), ('node', conn)):
+                        try:
+                            self._emit(f'      {side}: {self._points_profile(c, pic)}')
+                        except Exception as exc:
+                            self._emit(f'      {side}: (skipped — {str(exc)[:80]})')
+            finally:
+                conn.close()
+
+    def s_native(self):
+        """SOFTECH's own merge (localcustomers2: phcode ← sourcepic + sourcepicpoints, mgmdate) and
+        PIC-edit log (picstrans: phcode→phcode2, pphcode→pphcode2) on HQ and every node."""
+        from config.sybase import get_branch_connection
+        sides = [('HQ', None)] + [(n['label'], n) for n in self.nodes if not n.get('error')]
+        for label, n in sides:
+            conn = self.hq if n is None else get_branch_connection(n['host'], n['port'], 'SOFTECHDB9')
+            try:
+                out = []
+                for t, sql in (
+                        ('localcustomers2 (merge)', f'SELECT count(*), max(mgmdate) FROM {DB}.localcustomers2'),
+                        ('picstrans (PIC edits)', f'SELECT count(*), max(trans_time) FROM {DB}.picstrans'),
+                        ('picstrans code changes', f"SELECT count(*), max(trans_time) FROM {DB}.picstrans "
+                                                   "WHERE phcode <> phcode2 OR isnull(pphcode,'') <> isnull(pphcode2,'')"),
+                        ('lcpointstrans (points edits)', f'SELECT count(*), max(trans_time) FROM {DB}.lcpointstrans')):
+                    try:
+                        _, r = self._q(conn, sql)
+                        out.append(f'{t} {r[0][0]} (last {r[0][1]})')
+                    except Exception as exc:
+                        out.append(f'{t} ? ({str(exc)[:50]})')
+                self._emit(f'  {label}: ' + ' · '.join(out))
+                for t, sql in (
+                        ('merge', f'SELECT phcode, sourcepic, sourcepicpoints, usercode, trans_time, mgmdate '
+                                  f'FROM {DB}.localcustomers2 ORDER BY trans_time DESC'),
+                        ('code change', f'SELECT phcode, phcode2, pphcode, pphcode2, phcodestatus, piclock, picpoints, '
+                                        f'usercode, trans_time, branchcode FROM {DB}.picstrans WHERE phcode <> phcode2 '
+                                        "OR isnull(pphcode,'') <> isnull(pphcode2,'') ORDER BY trans_time DESC")):
+                    try:
+                        cn, rows = self._q(conn, sql, limit=self.samples)
+                    except Exception:
+                        continue
+                    for r in rows:
+                        self._emit(f'      {t}: ' + str({c: v for c, v in zip(cn, r)}))
+            finally:
+                if n is not None:
+                    conn.close()
+
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
@@ -225,7 +313,7 @@ class Command(BaseCommand):
             self._emit(f'  HQ: {len(self.hq_cust)} customers · {len(self.hq_pts)} balance rows')
             self.nodes = []
             for host, port, label in targets:
-                n = {'label': label}
+                n = {'label': label, 'host': host, 'port': port}
                 try:
                     conn = get_branch_connection(host, port, 'SOFTECHDB9')
                     try:
@@ -242,6 +330,9 @@ class Command(BaseCommand):
             self._safe('[R3] HQ vs node mismatches', self.s_diff)
             self._safe('[R4] HQ replication stamps (table_dumped)', self.s_stamps)
             self._safe('[R5] SOFTECH code-change / parent / points-edit tables', self.s_side)
+            if o['explain']:
+                self._safe('[R6] SOFTECH native merge / PIC edits on every node', self.s_native)
+                self._safe('[R7] why balances differ (largest gaps, both sides)', self.s_explain)
         finally:
             self.hq.close()
         if o['out']:
