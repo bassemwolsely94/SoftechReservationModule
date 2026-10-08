@@ -240,10 +240,17 @@ class Command(BaseCommand):
                     self._emit(f'    {t}: (none)')
             _, rows = self._q(f'SELECT phoneno, phoneblock, stckorderallow FROM {DB}.personphones WHERE personcode = ?', [pic])
             self._emit('    personphones: ' + (', '.join(f'{_mask(p)} block={b} order={o}' for p, b, o in rows) or '(none)'))
-            _, rows = self._q(f'SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints WHERE phcode = ?', [pic])
-            self._emit(f'    picpoints: rows={rows[0][0]} Σ={rows[0][1]} last={rows[0][2]}')
-            _, rows = self._q(f'SELECT count(*), max(docdate) FROM {DB}.stktransm WHERE phcode = ?', [pic])
-            self._emit(f'    stktransm docs: {rows[0][0]} · last {rows[0][1]}')
+            _, rows = self._q(f'SELECT totpoints, conpoints, branchcode FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])
+            self._emit('    points balance: ' + (', '.join(f'earned {t} − consumed {c} = {(t or 0) - (c or 0)} (branch {b})'
+                                                     for t, c, b in rows) or '(no balance row)'))
+            for label, sql in (('picpoints log', f'SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints WHERE phcode = ?'),
+                               ('stktransm docs', f'SELECT count(*), max(docdate), 0 FROM {DB}.stktransm WHERE phcode = ?')):
+                try:                                  # big tables — a timeout must not lose the rest
+                    _, rows = self._q(sql, [pic])
+                    self._emit(f'    {label}: rows={rows[0][0]} last={rows[0][2] if label == "picpoints log" else rows[0][1]}'
+                               + (f' Σ={rows[0][1]}' if label == 'picpoints log' else ''))
+                except Exception as exc:
+                    self._emit(f'    {label}: (skipped — {str(exc)[:80]})')
 
     def s_status(self):
         """The real SOFTECH deactivation field is localcustomers.phcodestatus ('1' = active; '0' / '5' /
