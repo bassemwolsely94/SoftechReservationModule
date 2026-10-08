@@ -534,6 +534,25 @@ INVOICE_SUPPLIER_ITEM_WRITE_ENABLED = config('INVOICE_SUPPLIER_ITEM_WRITE_ENABLE
 # node is unreachable. See docs/architecture/21_SOFTECH_INSURANCE_REPRICE_WRITEBACK.md.
 INSURANCE_SOFTECH_WRITE_ENABLED = config('INSURANCE_SOFTECH_WRITE_ENABLED', default=False, cast=bool)
 
+# ── Switches read from .env (same defaults as the code's getattr fallbacks) ─────
+# Gift-coupon POS guard (apps/vouchers/coupon_guard.py) — off until verified with the guard-test panel.
+COUPON_POS_GUARD_ENABLED          = config('COUPON_POS_GUARD_ENABLED', default=False, cast=bool)
+COUPON_GUARD_REQUIRE_ISSUED       = config('COUPON_GUARD_REQUIRE_ISSUED', default=True, cast=bool)
+COUPON_GUARD_REQUIRE_OWNER        = config('COUPON_GUARD_REQUIRE_OWNER', default=True, cast=bool)
+COUPON_GUARD_REQUIRE_BRANCH_STOCK = config('COUPON_GUARD_REQUIRE_BRANCH_STOCK', default=True, cast=bool)
+# WhatsApp refill reminders (apps/followups/refill_reminders.py, doc 26) — sending off by default.
+REFILL_REMINDER_SEND_ENABLED = config('REFILL_REMINDER_SEND_ENABLED', default=False, cast=bool)
+REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refill_reminder')
+REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
+REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
+# بدل الروشتة daily read-only check (apps/sync/tasks._run_replacement_check).
+REPLACEMENT_DAILY_CHECK_ENABLED = config('REPLACEMENT_DAILY_CHECK_ENABLED', default=True, cast=bool)
+REPLACEMENT_DAILY_CHECK_DAYS    = config('REPLACEMENT_DAILY_CHECK_DAYS', default=60, cast=int)
+# B7 customer account state (doc 27): daily HQ vs branch check (read-only) and the branch-copy writer.
+CUSTOMER_STATUS_DRIFT_CHECK_ENABLED = config('CUSTOMER_STATUS_DRIFT_CHECK_ENABLED', default=True, cast=bool)
+CUSTOMER_BRANCH_COPY_WRITE_ENABLED  = config('CUSTOMER_BRANCH_COPY_WRITE_ENABLED', default=False, cast=bool)
+CUSTOMER_BRANCH_COPY_MAX_PER_RUN    = config('CUSTOMER_BRANCH_COPY_MAX_PER_RUN', default=1, cast=int)
+
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike
 INVOICE_MAX_COST_DECREASE_PCT = config('INVOICE_MAX_COST_DECREASE_PCT', default=40, cast=float)  # W3 price drop
