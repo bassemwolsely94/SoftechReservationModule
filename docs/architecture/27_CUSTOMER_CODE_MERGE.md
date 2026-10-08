@@ -81,8 +81,8 @@ For the largest gaps on every node, the points log on both sides shows one patte
 | Code | HQ / node | Owner |
 |---|---|---|
 | 100HD6038 | `'0'` / node 140 `'1'` | **blocked: drug-addicted patient** → still sellable at branch 140 (pharmacy-safety gap) |
-| 07HD11624 | `'1'` / node 160 `'0'` | former ElRezeiky employee, must **not collect points** |
-| 07HD11663 | `'1'` / node 160 `'0'` | unknown |
+| 07HD11624 | `'1'` / node 160 `'0'` | former ElRezeiky employee, must **not collect points**. **Decision: points-off** (`picpoints=0`), stays an active customer (`'1'`) on HQ and node 160 |
+| 07HD11663 | `'1'` / node 160 `'0'` | unknown — owner investigates later; untouched until then |
 | 06HD24310 | `'5'` / node 150 `'1'` | **client passed away** → `phcodestatus='5'` = deceased (06HD4420 is `'5'` too) |
 | 07HD2044, 07HD2057, 08HD1367 | locked / node unlocked | **entities, not persons** → `piclock=1` used to mark a non-person account; node balances 4,524 / 7,898 / 1,102 |
 | user 19 resets (2022-04 → 2024-05) | HQ only | Bassem Halim (stock count + points reset). **Deliberate:** customers who abused discounts and flooded the reports are **removed from the points system** (no vouchers / coupons). The resets never reached the branch nodes. |
@@ -147,6 +147,6 @@ deceased or removed customer.
 * **SOFTECH's native merge / code change** (`localcustomers2`, `picstrans`) → `--explain` on all nodes, then
   `capture_save_sql` while staff run ONE merge or code change in SOFTECH.
 * Status repair for the 7 mismatched codes (owner reasons above) — a SOFTECH write on branch nodes; awaiting approval.
-* 07HD11663 — owner to check why node 160 has it blocked.
+* 07HD11663 — owner investigates later; no change until then.
 * `phcodestatus='5'` = deceased (owner, 06HD24310).
 * 34 balance rows without a customer row (orphans) — reported, untouched.
