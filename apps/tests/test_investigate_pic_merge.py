@@ -13,8 +13,10 @@ SCHEMA = [('phcode', 'varchar', 13), ('mobileno', 'varchar', 20), ('branchcustph
           ('phcodestatus', 'varchar', 1), ('piclock', 'tinyint', 1)]
 # phcode, mobile, status, lock, pphcode
 LC = [('P1', '01001234567', '1', 0, ''), ('P2', '+201001234567', '0', 0, 'P1'),      # P2 deactivated twin of P1
-      ('P3', '01112223334', '1', 0, ''), ('P4', '01112223334', '1', 0, ''),          # plain duplicate, both active
+      ('P3', '01112223334', '1', 0, ''), ('P4', '01112223334', '1', 0, ''),          # family sharing a phone
       ] + [(f'J{i}', '01000000000', '1', 0, '') for i in range(12)]                  # placeholder number
+NAMES = {'P1': ('أحمد محمد علي', 'شارع النزهة 5'), 'P2': ('احمد محمد على', 'شارع النزهه 5'),
+         'P3': ('سارة محمود', ''), 'P4': ('محمود حسن', '')}
 
 
 class Cur:
@@ -25,7 +27,7 @@ class Cur:
         if 'syscolumns c, ' in s and 'systypes' in s:
             self.r = SCHEMA if p and p[0] == 'localcustomers' else []
         elif s.startswith('SELECT phcode, mobileno, branchcustphone'):
-            self.r = [(r[0], r[1], '') for r in LC]
+            self.r = [(r[0], r[1], '', *NAMES.get(r[0], ('', '')), r[2]) for r in LC]
         elif "<> '1' OR piclock = 1" in s:
             cols = s.split('SELECT ')[1].split(' FROM')[0].split(', ')
             self.description = [(c,) for c in cols]
@@ -71,4 +73,7 @@ class SuggestTests(TestCase):
         self.assertIn('shares a phone with P1', text)
         self.assertIn('SUGGESTED PAIR to review in SOFTECH: P2 (not active) ↔ P1 (active, same phone)', text)
         self.assertIn('P2 → pphcode P1 (relativecode 2)', text)
+        self.assertIn('same name + same address: 1 pairs   e.g. P1 ↔ P2', text)    # Arabic variants normalised
+        self.assertIn('different names (family / shared phone?): 1 pairs', text)
+        self.assertNotIn('أحمد', text)                                               # names never printed
         self.assertNotIn('01001234567', text)                   # phones masked

@@ -31,6 +31,25 @@ DB = 'SOFTECHDB9.dbo'
 TABLES = ('localcustomers', 'personsdata', 'personphones', 'picpoints', 'localcustomerspoints')
 FLAG_HINT = re.compile(r'(stop|activ|block|cancel|status|valid|del|susp|flag|close|lock|allow|use|merg|old|new|repl)',
                        re.I)
+_AR = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي', 'ـ': ''})
+
+
+def _norm_text(t):
+    """Arabic-tolerant compare key: unify alef/ya/ta-marbuta, drop diacritics, punctuation, spaces."""
+    t = re.sub(r'[\u064B-\u0652]', '', str(t or '')).translate(_AR).lower()
+    return re.sub(r'[^0-9a-z\u0621-\u064a]+', ' ', t).strip()
+
+
+def _name_match(a, b):
+    """'same' (identical), 'similar' (first two words equal), '' (different/empty)."""
+    a, b = _norm_text(a), _norm_text(b)
+    if not a or not b:
+        return ''
+    if a == b:
+        return 'same'
+    return 'similar' if a.split()[:2] == b.split()[:2] and len(a.split()) > 1 else ''
+
+
 PLACEHOLDER_GROUP = 10        # > this many codes on one number = shared/junk number, not a duplicate
 
 
@@ -176,13 +195,15 @@ class Command(BaseCommand):
             self._emit(f'    {t}: {", ".join(by[t])}')
 
     def s_duplicates(self):
-        _, lc = self._q(f'SELECT phcode, mobileno, branchcustphone FROM {DB}.localcustomers')
+        _, lc = self._q(f'SELECT phcode, mobileno, branchcustphone, branchcustname, branchcustaddress1, '
+                        f'phcodestatus FROM {DB}.localcustomers')
+        self.info = {str(r[0]).strip(): {'name': r[3], 'addr': r[4], 'status': str(r[5] or '').strip()} for r in lc}
         try:
             _, pp = self._q(f'SELECT personcode, phoneno FROM {DB}.personphones WHERE phoneblock = 0')
         except Exception:
             pp = []
         groups = defaultdict(set)
-        for pic, m1, m2 in lc:
+        for pic, m1, m2, *_ in lc:
             for p in (m1, m2):
                 k = _norm_phone(p)
                 if k and pic:
@@ -317,11 +338,80 @@ class Command(BaseCommand):
                         limit=10)
         self._emit('  relativecode values: ' + ', '.join(f'{v!r}={n}' for v, n in rc))
 
+    def s_strength(self):
+        """How many shared-phone pairs are TRUE duplicates (same person) vs a family sharing a phone.
+        Names / addresses are compared, never printed."""
+        cls, samples = Counter(), defaultdict(list)
+        for phone, group in getattr(self, 'dup_groups', {}).items():
+            g = sorted(group)
+            for i in range(len(g)):
+                for j in range(i + 1, len(g)):
+                    a, b = self.info.get(g[i], {}), self.info.get(g[j], {})
+                    nm = _name_match(a.get('name'), b.get('name'))
+                    ad = bool(_norm_text(a.get('addr'))) and _norm_text(a.get('addr')) == _norm_text(b.get('addr'))
+                    k = ('same name + same address' if nm == 'same' and ad else 'same name' if nm == 'same'
+                         else 'similar name' if nm == 'similar' else 'different names (family / shared phone?)')
+                    cls[k] += 1
+                    if len(samples[k]) < 5:
+                        samples[k].append(f'{g[i]} ↔ {g[j]}')
+        for k in ('same name + same address', 'same name', 'similar name', 'different names (family / shared phone?)'):
+            self._emit(f'  {k}: {cls[k]} pairs   e.g. {", ".join(samples[k])}')
+        self._emit('  (same name ± address on one phone = strong duplicate → merge queue; different names = '
+                   'likely family members → NOT merged, possibly linked)')
+
+    def s_links(self):
+        """Forensics on codes whose pphcode points to ANOTHER code (owner: looks like concurrent-save
+        accidents). Compares creation/modification times, users and data — names never printed."""
+        cols = 'phcode, pphcode, branchcode, branchcustcode, usercode, custdate, custdateactive, trans_time, ' \
+               'branchcustname, mobileno, branchcustaddress1, phcodestatus'
+        cn, rows = self._q(f"SELECT {cols} FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode")
+        links = [dict(zip(cn, r)) for r in rows]
+        targets = sorted({str(l['pphcode']).strip() for l in links})
+        tgt = {}
+        for i in range(0, len(targets), 200):
+            chunk = targets[i:i + 200]
+            marks = ','.join('?' * len(chunk))
+            cn2, rows2 = self._q(f'SELECT {cols} FROM {DB}.localcustomers WHERE phcode IN ({marks})', chunk)
+            tgt.update({str(r[0]).strip(): dict(zip(cn2, r)) for r in rows2})
+
+        def secs(a, b):
+            try:
+                return int(abs((a - b).total_seconds()))
+            except Exception:
+                return None
+        quick = 0
+        for l in links:
+            t = tgt.get(str(l['pphcode']).strip(), {})
+            d_create, d_mod = secs(l['custdate'], t.get('custdate')), secs(l['trans_time'], t.get('trans_time'))
+            if d_create is not None and d_create <= 120:
+                quick += 1
+            self._emit(f"    {l['phcode']} → {l['pphcode']}: branch {l['branchcode']}/{t.get('branchcode')} · "
+                       f"custno {l['branchcustcode']}/{t.get('branchcustcode')} · users {l['usercode']}/{t.get('usercode')} · "
+                       f"created Δ{d_create}s ({l['custdate']}) · modified Δ{d_mod}s · "
+                       f"name {_name_match(l['branchcustname'], t.get('branchcustname')) or 'DIFFERENT'} · "
+                       f"phone {'same' if _norm_phone(l['mobileno']) and _norm_phone(l['mobileno']) == _norm_phone(t.get('mobileno')) else 'different'} · "
+                       f"status {l['phcodestatus']!r}/{t.get('phcodestatus')!r}")
+        self._emit(f'  {len(links)} links · created within 2 minutes of their target: {quick}')
+
+    def s_relatives(self):
+        """SOFTECH's family tables — the proper place for 'same phone, different person'."""
+        for t in ('localcustomersrelatives', 'custpatientrelatives', 'custrelativespercent'):
+            cols = self._columns(t)
+            if not cols:
+                self._emit(f'  {t}: (not found)')
+                continue
+            _, n = self._q(f'SELECT count(*) FROM {DB}.{t}')
+            self._emit(f'  {t}: {n[0][0]} rows · ' + ', '.join(f'{c}:{ty}' for c, ty, _ in cols))
+            if n[0][0]:
+                cn, rows = self._q(f'SELECT * FROM {DB}.{t}', limit=3)
+                for r in rows:
+                    self._emit('    ' + str({c: v for c, v in zip(cn, r) if not re.search(r'name|address|phone|mobile', c, re.I)}))
+
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
         self._buf, self.samples, self.pics = [], o['samples'], [p.strip() for p in o['pic'] if p.strip()]
-        self.points_log, self.phones_of, self.groups = o['points_log'], {}, {}
+        self.points_log, self.phones_of, self.groups, self.info = o['points_log'], {}, {}, {}
         self.conn = get_branch_connection(o['host'], o['port'], 'SOFTECHDB9') if o['host'] else get_sybase_connection()
         self.schema = {}
         self._emit('=' * 72)
@@ -337,8 +427,11 @@ class Command(BaseCommand):
             self._safe('[7] tables carrying a customer code', self.s_footprint)
             self._safe('[8] duplicate-phone PIC groups', self.s_duplicates)
             self._safe('[9] points', self.s_points)
+            self._safe('[12] duplicate strength (same person vs family)', self.s_strength)
             if o['suggest']:
                 self._safe('[11] non-active / locked codes, their phone-mates and the suggested pair', self.s_status)
+                self._safe('[13] pphcode links — forensics', self.s_links)
+                self._safe('[14] SOFTECH relatives tables', self.s_relatives)
             if self.pics:
                 self._safe('[10] PIC side-by-side', self.s_pics)
         finally:
