@@ -561,3 +561,33 @@ class CustomerStatusDrift(models.Model):
 
     def __str__(self):
         return f'{self.pic}@{self.node_branch} {self.field}: HQ {self.hq_value!r} / node {self.node_value!r}'
+
+
+class BranchCopyWrite(models.Model):
+    """
+    One attempt to copy a customer's HQ account flags onto a branch node's own copy of the customer
+    (B7 step 3 / Option B, owner approved 2026-10-08: "our system writes them, audited and read back,
+    starting with 05HD999 on branch 140 only"). Written by apps/customers/branch_copy.py.
+    """
+    STATUS_DRY_RUN, STATUS_NO_CHANGE, STATUS_VERIFIED = 'dry_run', 'no_change', 'verified'
+    STATUS_CONFLICT, STATUS_FAILED = 'conflict', 'failed'
+    STATUS_CHOICES = [(STATUS_DRY_RUN, 'تجربة بدون كتابة'), (STATUS_NO_CHANGE, 'مطابق بالفعل'),
+                      (STATUS_VERIFIED, 'كُتب وتم التحقق'), (STATUS_CONFLICT, 'تغيّر في الفرع أثناء التنفيذ'),
+                      (STATUS_FAILED, 'فشل')]
+
+    pic = models.CharField(max_length=13, db_index=True)
+    node_branch = models.CharField(max_length=5, db_index=True)
+    before = models.JSONField(default=dict, help_text='branch copy before')
+    target = models.JSONField(default=dict, help_text='HQ values written')
+    after = models.JSONField(default=dict, help_text='branch copy read back')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    error = models.TextField(blank=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.pic}@{self.node_branch} {self.status}'

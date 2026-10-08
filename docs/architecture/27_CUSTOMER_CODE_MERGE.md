@@ -140,13 +140,31 @@ offline node keeps its rows). `hq_stricter` = HQ restricts but the branch copy d
 still serves the customer. While any are open, admin + supervisor get one notification a day
 (`customer_status_drift`). Rows are visible read-only in Django admin.
 
-## Step 3 — fixing the branch copies (NOT built; needs a separate approval)
+## Step 3 — fixing the branch copies (BUILT, gated off; owner chose (b) 2026-10-08)
 
-The branch till reads its **own** copy of the customer (status, lock, points flag). For the 7 codes HQ has
-already decided (100HD6038, 06HD24310, 07HD2044, 07HD2057, 08HD1367, plus 07HD11624 points-off), step 3 would
-write HQ's decision onto that branch's copy: one row per code, audited, read back, behind a switch. Today
-nothing in SOFTECH copies it, so the step-2 check will keep reporting them until someone changes them in
-SOFTECH at that branch, or step 3 is approved.
+Owner: "(b) our system writes them, audited and read back, starting with 05HD999 on branch 140 only".
+
+`apps/customers/branch_copy.py` + `push_customer_branch_copy --pic X --branch N --user <admin> [--commit]`:
+* reads HQ and the branch copy, and writes **only the flags that differ** (`phcodestatus, piclock, picdied,
+  picpoints, picdiscounts`), plus HQ's `usercode` / `trans_time`. A repair re-delivers HQ's edit and keeps the
+  original editor, as in `discount_approvals.replication`. `table_dumped` is untouched, and nodes have no
+  UPDATE trigger on the table;
+* one UPDATE whose WHERE matches the values just read → a concurrent change is never overwritten;
+* read back field by field → `verified` / `conflict` / `failed`. A copy already equal to HQ is `no_change`
+  (idempotent);
+* every attempt is a `BranchCopyWrite` row (before / HQ target / read-back) + an AuditLog entry
+  `customer_branch_copy_written`; a verified copy closes its open `CustomerStatusDrift` rows;
+* gate `CUSTOMER_BRANCH_COPY_WRITE_ENABLED` (default **False** → dry run), pilot cap
+  `CUSTOMER_BRANCH_COPY_MAX_PER_RUN` (default 1), runner must be an active admin / supervisor;
+* points **balances** are not touched (that is the reset, pending its method).
+
+Pilot: 05HD999 → branch 140 (points off, special discount on). Then the 7 decided codes, then the Option B
+batch, each on approval.
+
+**Reset method (from the 05HD999 trace, 2026-10-08):** Bassem's 2022 reset = an `lcpointstrans` edit-log
+row (old/new earned and consumed, user 19, branch 100) + a `picpoints` row of −(earned − consumed), doc `0`,
+docnumber 0, branch 100, ten seconds later. `tr_picpoints` applies it to the balance. Both rows stayed at HQ
+(branch 140's balance is still 125,031). The SQL capture caught nothing (no reset was done in the window).
 
 ## Option B — points off for the reset customers (owner approved the direction 2026-10-08; NOT built)
 

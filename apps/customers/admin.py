@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift
+from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift
 
 
 @admin.register(CustomerHealthProfile)
@@ -61,6 +61,21 @@ class CustomerStatusDriftAdmin(admin.ModelAdmin):
                     'first_seen', 'last_seen', 'resolved_at')
     list_filter = ('direction', 'field', 'node_branch', ('resolved_at', admin.EmptyFieldListFilter))
     search_fields = ('pic',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(BranchCopyWrite)
+class BranchCopyWriteAdmin(admin.ModelAdmin):
+    """B7 step 3 — every attempt to copy HQ flags onto a branch copy (read-only record)."""
+    list_display = ('pic', 'node_branch', 'status', 'requested_by', 'created_at')
+    list_filter = ('status', 'node_branch')
+    search_fields = ('pic',)
+    readonly_fields = ('pic', 'node_branch', 'before', 'target', 'after', 'status', 'error', 'requested_by', 'created_at')
 
     def has_add_permission(self, request):
         return False
