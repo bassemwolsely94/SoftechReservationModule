@@ -161,6 +161,21 @@ Owner: "(b) our system writes them, audited and read back, starting with 05HD999
 Pilot: 05HD999 → branch 140 (points off, special discount on). Then the 7 decided codes, then the Option B
 batch, each on approval.
 
+**Pilot done (2026-10-08 06:59): 05HD999 → branch 140 `verified`.** Dry run first showed only
+`picpoints 1→0` and `picdiscounts 0→1`. After the write, the independent trace shows branch 140 =
+`picpoints=0 · picdiscounts=1 · usercode=1509 · trans_time=2026-10-08 06:05:31` (identical to HQ),
+`table_dumped` unchanged (2018), balance unchanged (125,031).
+
+Next, one run each (HQ is the source, so HQ must already hold the decision):
+| Code | Branch | Expected change on the branch copy |
+|---|---|---|
+| 100HD6038 | 140 | `phcodestatus 1 → 0` (closed file) |
+| 06HD24310 | 150 | `phcodestatus 1 → 5` (deceased) |
+| 07HD2044, 07HD2057 | 160 | `piclock 0 → 1` (entity) |
+| 08HD1367 | 170 | `piclock 0 → 1` (entity) |
+| 07HD11624 | 160 | owner: points off, stays active → first turn points off **at HQ** in SOFTECH's screen; then the run sets the branch to `phcodestatus 0 → 1`, `picpoints 1 → 0` |
+| 07HD11663 | 160 | **do not run** — the run would re-open it at branch 160 (HQ `'1'`); owner investigates first |
+
 **Reset method (from the 05HD999 trace, 2026-10-08):** Bassem's 2022 reset = an `lcpointstrans` edit-log
 row (old/new earned and consumed, user 19, branch 100) + a `picpoints` row of −(earned − consumed), doc `0`,
 docnumber 0, branch 100, ten seconds later. `tr_picpoints` applies it to the balance. Both rows stayed at HQ
