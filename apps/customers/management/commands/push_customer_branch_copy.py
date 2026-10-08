@@ -19,9 +19,14 @@ class Command(BaseCommand):
     def handle(self, *a, **o):
         from apps.customers import branch_copy as BC
         from apps.users.models import StaffProfile
-        user = StaffProfile.objects.filter(user__username=o['user']).first()
-        if user is None or not user.is_active or user.role not in ('admin', 'supervisor'):
-            raise CommandError('--user must be an active admin or supervisor')
+        user = (StaffProfile.objects.select_related('user').filter(user__username__iexact=o['user']).first()
+                or StaffProfile.objects.select_related('user').filter(softech_user_id=o['user']).first())
+        if user is None:
+            raise CommandError(f"no staff profile for username / SOFTECH user id {o['user']!r} — "
+                               'use your login name in our system')
+        if not (user.is_active and user.user.is_active) or user.role not in ('admin', 'supervisor'):
+            raise CommandError(f"{user.user.username}: role={user.role!r} active={user.is_active and user.user.is_active}"
+                               ' — must be an active admin or supervisor')
         try:
             recs = BC.run(o['pic'], o['branch'], user=user, commit=o['commit'])
         except ValueError as exc:
