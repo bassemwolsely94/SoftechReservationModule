@@ -47,15 +47,43 @@ Probes: `python manage.py investigate_pic_merge [--suggest] [--pic A --pic B …
 | Manual points edits | `lcpointstrans` (12,242 rows at HQ): old → new totpoints / conpoints, status, user, time (e.g. 4,000-point grants by user 1509 on 2026-09-04). |
 | Our loyalty bridge | `apps/loyalty/pic_bridge` reads and writes points at **HQ only**. Given per-node balances, what our screens show (and any CRM adjustment) can differ from what the branch POS shows. **Open: which balance does the branch POS redeem against?** |
 
-`--explain` (R6/R7) reads the native merge / PIC-edit tables on every node and, for the largest balance gaps,
-the points log + manual edits on both sides.
+### `--explain` findings (2026-10-08) — why balances differ
+
+For the largest gaps on every node, the points log on both sides shows one pattern:
+
+| Movement (`picpoints.doccode`) | HQ | Home node |
+|---|---|---|
+| **115** sale earnings | all branches | only its own sales (another branch's sales reach HQ, not the home node) |
+| **30** POS redemption / return | all branches | only its own |
+| **170** points → gift coupon (issued at HQ / call center, see SOFTECH_GIFT_VOUCHER_STOCKING) | ✅ | ❌ **never arrives** |
+| **0** + `lcpointstrans` manual edits at HQ (mostly user 19, 2022-04 → 2024-05, setting consumed = earned, i.e. zeroing the balance) | ✅ | ❌ **never arrives** |
+
+* **HQ is the consolidated ledger. A node only knows its own sales and redemptions.**
+* The common gaps (+400, +500, +800, +1,000 …) are coupon conversions that the branch never received.
+  Example: 05HD999 = 79 at HQ but 125,031 on node 140 (110,500 converted to coupons + a 14,452 HQ reset);
+  06HD3333 = 27,421 at HQ / 149,565 on node 150.
+* The reverse also happens. A customer who buys at another branch has a *lower* balance on the home node
+  (06HD13141: HQ 40,964 / node 1,016).
+* **Risk (pre-existing, not caused by us):** if the branch till redeems against the node balance, points
+  already converted to coupons at HQ (or zeroed there) can be redeemed again at the branch.
+  → owner check at a till (04HD1550: HQ 111 / node 130 3,611).
+* SOFTECH's native merge table `localcustomers2` is **empty on HQ and every node**, so the merge feature was
+  never used.
+* `picstrans` (HQ 66, node 150 12) is the HQ **edit-customer screen's log**. `phcode` never changes
+  (phcode = phcode2 on every row). The only "code changes" (3, 2019–2020) are **`pphcode` edits**:
+  06HD19541 → 09HD19541 and back; 04HD1549 → 04HD549, which looks like correcting a mistyped code. So
+  "changing a customer's code in SOFTECH" = editing `pphcode` on that screen; the real code never changes.
+* `lcpointstrans` is used almost only at HQ (12,242 rows) and node 150 (5,653, up to 2023); the other nodes
+  have < 80 rows, all from 2017–2018.
 
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)
   AND at HQ**, then read both back. That is the item-discount pattern (`discount_approvals/replication`),
   where a stale node is pushed directly as a reviewed repair.
-* Points must move on the side the POS redeems from. Until the owner confirms which balance that is, no points
-  write is designed.
+* Points: HQ's balance is the complete one. Writing an ADJ row on a node is **forbidden** in the design: node
+  `picpoints` rows travel to HQ (that is how branch sales reach HQ), so the row would be applied twice there,
+  a double post. The points write stays at HQ only, and how a branch till sees it depends on the till check
+  above.
 * If SOFTECH's own merge screen (`localcustomers2`) exists in the client, the merge should **replay its DML**
   (captured with `capture_save_sql`) instead of our own status + points pair.
 

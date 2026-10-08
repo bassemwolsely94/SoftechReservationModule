@@ -173,7 +173,10 @@ class Command(BaseCommand):
                 self._emit('        e.g. ' + ', '.join(ex['balance']))
                 self._emit('      most common (node − HQ): ' + ', '.join(f'{d:+}×{k}' for d, k in diff_sizes.most_common(10)))
                 higher = sum(k for d, k in diff_sizes.items() if d > 0)
-                self._emit(f'      node higher than HQ: {higher} · HQ higher than node: {sum(diff_sizes.values()) - higher}')
+                over = sum(d * k for d, k in diff_sizes.items() if d > 0)
+                under = sum(-d * k for d, k in diff_sizes.items() if d < 0)
+                self._emit(f'      node higher than HQ: {higher} codes (+{over} points) · HQ higher than node: '
+                           f'{sum(diff_sizes.values()) - higher} codes (−{under} points)')
 
     def s_stamps(self):
         hq = self.hq_cust

@@ -90,7 +90,7 @@ class ReplicationProbeTests(TestCase):
         self.assertIn("HQ '0' / node '1'=1", t)
         self.assertIn('03HD1 (changed last: HQ)', t)
         self.assertIn('most common (node − HQ): +10×1', t)
-        self.assertIn('node higher than HQ: 1', t)
+        self.assertIn('node higher than HQ: 1 codes (+10 points) · HQ higher than node: 0 codes (−0 points)', t)
         self.assertIn('HQ codes created at 150 missing on the node 1', t)
         self.assertIn('balance: different=1', t)
         self.assertIn('06HD3 HQ 10 / node 20', t)
