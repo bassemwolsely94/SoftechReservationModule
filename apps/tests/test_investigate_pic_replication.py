@@ -39,6 +39,8 @@ class Cur:
             self.r = [('115', 3, 20)]
         elif s.startswith('SELECT phcode, usercode, trans_time, totpoints - conpointsold'):
             self.r = [('06HD3', '19', D(2024, 5, 14), 500)]
+        elif "p.doccode = '170'" in s:
+            self.r = [(3, 1, -1500, D(2025, 1, 1))]
         elif "doccode = '30' AND transdate >" in s:
             self.r = [(2, -15, D(2026, 3, 1))]
         elif s.startswith('SELECT totpointsold'):
@@ -120,7 +122,7 @@ class ReplicationProbeTests(TestCase):
         self.assertIn('1 customers reset at HQ (consumed set = earned) · by user: 19=1', t)
         self.assertIn('10.0.0.1: holds 1 reset customers · 1 still show a balance here (20 points; 1 of them still enrolled', t)
         self.assertIn('06HD3 on 10.0.0.1: balance 20 · reset 2024-05-14 00:00:00 by 19 (500 points)', t)
-        self.assertIn('used at the till after the reset: 2 times, 15 points', t)
+        self.assertIn('reversed by customer returns (doc 30) after the reset: 2 times, 15 points', t)
 
     def test_reset_only_runs_just_the_reset_section(self):
         out = io.StringIO()
@@ -129,5 +131,6 @@ class ReplicationProbeTests(TestCase):
             call_command('investigate_pic_replication', host=['10.0.0.1'], reset_only=True, out='', stdout=out)
         t = out.getvalue()
         self.assertIn('[R8]', t)
+        self.assertIn('converted to gift coupons at HQ AFTER their reset (doc 170): 3 conversions · 1 customers · 1500 points', t)
         self.assertNotIn('[R1]', t)
-        self.assertIn('used at the till after the reset: 2 times, 15 points', t)
+        self.assertIn('reversed by customer returns (doc 30) after the reset: 2 times, 15 points', t)

@@ -45,7 +45,7 @@ Probes: `python manage.py investigate_pic_merge [--suggest] [--pic A --pic B …
 | Native merge | `localcustomers2` (phcode, **sourcepic, sourcepicpoints**, usercode, trans_time, table_dumped, **mgmdate**) = a SOFTECH **merge** table: 0 rows at HQ. |
 | Native PIC edit log | `picstrans` (66 rows at HQ): phcode → **phcode2**, pphcode → **pphcode2**, plus status / points / lock flags, user, time. Likely SOFTECH's "change customer code" / edit-PIC screen. |
 | Manual points edits | `lcpointstrans` (12,242 rows at HQ): old → new totpoints / conpoints, status, user, time (e.g. 4,000-point grants by user 1509 on 2026-09-04). |
-| Our loyalty bridge | `apps/loyalty/pic_bridge` reads and writes points at **HQ only**. Given per-node balances, what our screens show (and any CRM adjustment) can differ from what the branch POS shows. **Open: which balance does the branch POS redeem against?** |
+| Our loyalty bridge | `apps/loyalty/pic_bridge` reads and writes points at **HQ only**. Given per-node balances, what our screens show (and any CRM adjustment) can differ from what the branch POS shows. Branch logs contain only 115 (earn) and 30 (return), so points are not spent at the branch: they are spent by converting them to coupons (doc 170) at HQ / the call center, against HQ's balance. **HQ is the right balance to read.** Owner till check (04HD1550) to confirm. |
 
 ### `--explain` findings (2026-10-08) — why balances differ
 
@@ -54,7 +54,7 @@ For the largest gaps on every node, the points log on both sides shows one patte
 | Movement (`picpoints.doccode`) | HQ | Home node |
 |---|---|---|
 | **115** sale earnings | all branches | only its own sales (another branch's sales reach HQ, not the home node) |
-| **30** POS redemption / return | all branches | only its own |
+| **30** customer **return** (مرتجع من عميل): reverses points earned on the returned sale | all branches | only its own |
 | **170** points → gift coupon (issued at HQ / call center, see SOFTECH_GIFT_VOUCHER_STOCKING) | ✅ | ❌ **never arrives** |
 | **0** + `lcpointstrans` manual edits at HQ (mostly user 19, 2022-04 → 2024-05, setting consumed = earned, i.e. zeroing the balance) | ✅ | ❌ **never arrives** |
 
@@ -64,9 +64,10 @@ For the largest gaps on every node, the points log on both sides shows one patte
   06HD3333 = 27,421 at HQ / 149,565 on node 150.
 * The reverse also happens. A customer who buys at another branch has a *lower* balance on the home node
   (06HD13141: HQ 40,964 / node 1,016).
-* **Risk (pre-existing, not caused by us):** if the branch till redeems against the node balance, points
-  already converted to coupons at HQ (or zeroed there) can be redeemed again at the branch.
-  → owner check at a till (04HD1550: HQ 111 / node 130 3,611).
+* **Correction (2026-10-08):** doc 30 is a customer **return**, not a redemption. No node log shows a
+  redemption document, so the inflated node balances look like a **stale local view that is never spent**.
+  Points are spent only through doc 170 at HQ, against HQ's balance. Owner till check (04HD1550: HQ 111 /
+  node 130 3,611) to confirm the branch till cannot spend points.
 * SOFTECH's native merge table `localcustomers2` is **empty on HQ and every node**, so the merge feature was
   never used.
 * `picstrans` (HQ 66, node 150 12) is the HQ **edit-customer screen's log**. `phcode` never changes
@@ -88,7 +89,7 @@ For the largest gaps on every node, the points log on both sides shows one patte
 | user 19 resets (2022-04 → 2024-05) | HQ only | Bassem Halim (stock count + points reset). **Deliberate:** customers who abused discounts and flooded the reports are **removed from the points system** (no vouchers / coupons). The resets never reached the branch nodes. |
 
 `--explain` [R8] measures those removed customers: how many still show a balance on a node, whether they are still
-enrolled (`localcustomers.picpoints`), and points they used at a branch till (doc 30) after the reset.
+enrolled (`localcustomers.picpoints`), coupon conversions (doc 170) at HQ after the reset, and points reversed by returns (doc 30).
 
 ### `--explain` [R8] — customers reset at HQ (2026-10-08)
 
@@ -104,9 +105,10 @@ All nodes together show **≈ 11.7 M points more than HQ** (130 +3.29 M · 140 +
 160 +1.11 M · 170 +1.86 M) and ≈ 0.36 M less. 160HD33215 has earned 1,514,189 points from 8,499 sales,
 which looks like an entity / company account (to check).
 
-Not yet known: the points these customers **used at a branch till after their reset**. The first run failed
-on a date parameter; it is fixed, and `--reset-only` reruns just this section. That figure, plus the till
-check (04HD1550), shows whether the overstated balances are actually being spent.
+`--reset-only` run: of the 8 largest node balances, 5 had **no** activity after the reset; 3 (branch 160) only
+had returns (1.3–3.5 k points, last in 2023). No sign of the node balances being spent.
+**The real leak is at HQ:** 2,600 reset customers are still enrolled and have earned 1.71 M points again, which
+they can convert to coupons (doc 170). The probe now counts those conversions after each customer's reset.
 
 **Our side has the same gap.** Our customer mirror carries no status / lock / deceased / points-enrolled flag,
 so /pos, call-center reservations, WhatsApp refill reminders (B1) and coupon features can serve a blocked,
@@ -118,8 +120,8 @@ deceased or removed customer.
   where a stale node is pushed directly as a reviewed repair.
 * Points: HQ's balance is the complete one. Writing an ADJ row on a node is **forbidden** in the design: node
   `picpoints` rows travel to HQ (that is how branch sales reach HQ), so the row would be applied twice there,
-  a double post. The points write stays at HQ only, and how a branch till sees it depends on the till check
-  above.
+  a double post. The points write stays at HQ only. Since points are spent at HQ (doc 170), that is enough;
+  node balances are a stale local view (pending the till check).
 * If SOFTECH's own merge screen (`localcustomers2`) exists in the client, the merge should **replay its DML**
   (captured with `capture_save_sql`) instead of our own status + points pair.
 

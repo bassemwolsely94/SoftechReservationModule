@@ -22,7 +22,8 @@ Sections
   --explain:
   [R6] SOFTECH's native merge (localcustomers2) and PIC-edit log (picstrans) on HQ and every node
   [R7] the largest balance gaps per node: points log + manual points edits (lcpointstrans) on both sides
-  [R8] customers reset at HQ (lcpointstrans consumed = earned): points flag, balance per node, till use after
+  [R8] customers reset at HQ (lcpointstrans consumed = earned): points flag, coupon conversions (doc 170) after
+       the reset, balance per node, points reversed by returns (doc 30) after the reset
 """
 import os
 from collections import Counter, defaultdict
@@ -266,7 +267,10 @@ class Command(BaseCommand):
         """Owner 2026-10-08: the HQ resets (mostly user 19, 2022-2024) removed customers who abused discounts
         from the points system. A reset = an lcpointstrans edit at HQ that sets consumed = earned. Where are
         those customers now: points flag, balance at HQ and on each node, and points used at a branch till
-        (doccode 30) AFTER the reset?"""
+        (doccode 30) AFTER the reset?
+
+        NB doccode 30 = customer RETURN (مرتجع من عميل): its negative points reverse points earned on a returned sale.
+        Points are spent only by converting them to gift coupons (doc 170) at HQ / the call center."""
         _, rows = self._q(self.hq, f'SELECT phcode, usercode, trans_time, totpoints - conpointsold FROM {DB}.lcpointstrans '
                                    'WHERE conpoints = totpoints AND conpointsold < conpoints AND totpoints > 0')
         last = {}
@@ -280,6 +284,16 @@ class Command(BaseCommand):
         hq_bal = [self._bal(self.hq_pts, p) or 0 for p in last]
         self._emit(f'  at HQ: points flag {dict(hq_flag)} · earned again since the reset: '
                    f'{sum(1 for b in hq_bal if b > 0)} customers, {sum(b for b in hq_bal if b > 0)} points')
+        try:     # the real spend: points converted to gift coupons (doc 170, HQ / call center) after the reset
+            _, r = self._q(self.hq,
+                           f"SELECT count(*), count(distinct p.phcode), sum(p.points), max(p.transdate) FROM {DB}.picpoints p, "
+                           f"(SELECT phcode, max(trans_time) t FROM {DB}.lcpointstrans WHERE conpoints = totpoints "
+                           "AND conpointsold < conpoints AND totpoints > 0 GROUP BY phcode) x "
+                           "WHERE p.phcode = x.phcode AND p.doccode = '170' AND p.transdate > x.t")
+            self._emit(f'  converted to gift coupons at HQ AFTER their reset (doc 170): {r[0][0]} conversions · '
+                       f'{r[0][1]} customers · {-(r[0][2] or 0)} points · last {r[0][3]}')
+        except Exception as exc:
+            self._emit(f'  coupon conversions after the reset: (skipped — {str(exc)[:80]})')
         leaks = []
         for n in self.nodes:
             if n.get('error'):
@@ -306,9 +320,9 @@ class Command(BaseCommand):
                         _, r = self._q(conn, f"SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints "
                                              "WHERE phcode = ? AND doccode = '30' AND transdate > convert(datetime, ?)",
                                        [p, when.strftime('%Y-%m-%d %H:%M:%S')])   # jConnect rejects a Python datetime
-                        used = f'used at the till after the reset: {r[0][0]} times, {-(r[0][1] or 0)} points, last {r[0][2]}'
+                        used = f'reversed by customer returns (doc 30) after the reset: {r[0][0]} times, {-(r[0][1] or 0)} points, last {r[0][2]}'
                     except Exception as exc:
-                        used = f'(till usage skipped — {str(exc)[:60]})'
+                        used = f'(returns skipped — {str(exc)[:60]})'
                     self._emit(f'    {p} on {label}: balance {b} · reset {when} by {user} ({wiped} points) · '
                                f'enrolled here={n["cust"][p].get("enrolled")} · {used}')
             finally:
