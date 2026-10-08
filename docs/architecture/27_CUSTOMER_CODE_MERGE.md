@@ -76,6 +76,24 @@ For the largest gaps on every node, the points log on both sides shows one patte
 * `lcpointstrans` is used almost only at HQ (12,242 rows) and node 150 (5,653, up to 2023); the other nodes
   have < 80 rows, all from 2017–2018.
 
+### Owner answers (2026-10-08) — what the flags mean
+
+| Code | HQ / node | Owner |
+|---|---|---|
+| 100HD6038 | `'0'` / node 140 `'1'` | **blocked: drug-addicted patient** → still sellable at branch 140 (pharmacy-safety gap) |
+| 07HD11624 | `'1'` / node 160 `'0'` | former ElRezeiky employee, must **not collect points** |
+| 07HD11663 | `'1'` / node 160 `'0'` | unknown |
+| 06HD24310 | `'5'` / node 150 `'1'` | **client passed away** → `phcodestatus='5'` = deceased (06HD4420 is `'5'` too) |
+| 07HD2044, 07HD2057, 08HD1367 | locked / node unlocked | **entities, not persons** → `piclock=1` used to mark a non-person account; node balances 4,524 / 7,898 / 1,102 |
+| user 19 resets (2022-04 → 2024-05) | HQ only | Bassem Halim (stock count + points reset). **Deliberate:** customers who abused discounts and flooded the reports are **removed from the points system** (no vouchers / coupons). The resets never reached the branch nodes. |
+
+`--explain` [R8] measures those removed customers: how many still show a balance on a node, whether they are still
+enrolled (`localcustomers.picpoints`), and points they used at a branch till (doc 30) after the reset.
+
+**Our side has the same gap.** Our customer mirror carries no status / lock / deceased / points-enrolled flag,
+so /pos, call-center reservations, WhatsApp refill reminders (B1) and coupon features can serve a blocked,
+deceased or removed customer.
+
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)
   AND at HQ**, then read both back. That is the item-discount pattern (`discount_approvals/replication`),
@@ -128,7 +146,7 @@ For the largest gaps on every node, the points log on both sides shows one patte
 * **Which balance the POS uses** (node or HQ) — owner check on one mismatched code at the branch POS.
 * **SOFTECH's native merge / code change** (`localcustomers2`, `picstrans`) → `--explain` on all nodes, then
   `capture_save_sql` while staff run ONE merge or code change in SOFTECH.
-* Existing status mismatches (100HD6038, 07HD11624, 07HD11663, 06HD24310, 3 locks) — the owner decides which
-  side is right; a repair only after that.
-* Meaning of `phcodestatus='5'` (2 codes) — not used by the merge.
+* Status repair for the 7 mismatched codes (owner reasons above) — a SOFTECH write on branch nodes; awaiting approval.
+* 07HD11663 — owner to check why node 160 has it blocked.
+* `phcodestatus='5'` = deceased (owner, 06HD24310).
 * 34 balance rows without a customer row (orphans) — reported, untouched.

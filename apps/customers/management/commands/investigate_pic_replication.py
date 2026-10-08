@@ -22,6 +22,7 @@ Sections
   --explain:
   [R6] SOFTECH's native merge (localcustomers2) and PIC-edit log (picstrans) on HQ and every node
   [R7] the largest balance gaps per node: points log + manual points edits (lcpointstrans) on both sides
+  [R8] customers reset at HQ (lcpointstrans consumed = earned): points flag, balance per node, till use after
 """
 import os
 from collections import Counter, defaultdict
@@ -85,9 +86,10 @@ class Command(BaseCommand):
     def _load(self, conn):
         """{phcode: {...}} customers + points of one database (no names, no phones)."""
         _, rows = self._q(conn, f'SELECT phcode, phcodestatus, piclock, branchcode, trans_time, table_dumped, '
-                                f'phcodestatustime, pphcode FROM {DB}.localcustomers')
+                                f'phcodestatustime, pphcode, picpoints, picdied FROM {DB}.localcustomers')
         cust = {_s(r[0]): {'status': _s(r[1]), 'lock': r[2] or 0, 'branch': _s(r[3]), 'trans': r[4],
-                           'dumped': r[5], 'st_time': r[6], 'pph': _s(r[7])} for r in rows}
+                           'dumped': r[5], 'st_time': r[6], 'pph': _s(r[7]),
+                           'enrolled': r[8], 'died': r[9]} for r in rows}
         _, rows = self._q(conn, f'SELECT phcode, totpoints, conpoints, table_dumped FROM {DB}.localcustomerspoints')
         pts = {_s(r[0]): ((r[1] or 0), (r[2] or 0), r[3]) for r in rows}
         return cust, pts
@@ -258,6 +260,57 @@ class Command(BaseCommand):
             finally:
                 conn.close()
 
+    def s_eliminated(self):
+        """Owner 2026-10-08: the HQ resets (mostly user 19, 2022-2024) removed customers who abused discounts
+        from the points system. A reset = an lcpointstrans edit at HQ that sets consumed = earned. Where are
+        those customers now: points flag, balance at HQ and on each node, and points used at a branch till
+        (doccode 30) AFTER the reset?"""
+        _, rows = self._q(self.hq, f'SELECT phcode, usercode, trans_time, totpoints - conpointsold FROM {DB}.lcpointstrans '
+                                   'WHERE conpoints = totpoints AND conpointsold < conpoints AND totpoints > 0')
+        last = {}
+        for pic, user, when, wiped in rows:
+            pic = _s(pic)
+            if pic not in last or when > last[pic][1]:
+                last[pic] = (_s(user), when, wiped or 0)
+        self._emit(f'  {len(last)} customers reset at HQ (consumed set = earned) · by user: '
+                   + ', '.join(f'{u}={k}' for u, k in Counter(v[0] for v in last.values()).most_common(6)))
+        hq_flag = Counter('enrolled' if self.hq_cust.get(p, {}).get('enrolled') else 'NOT enrolled' for p in last)
+        hq_bal = [self._bal(self.hq_pts, p) or 0 for p in last]
+        self._emit(f'  at HQ: points flag {dict(hq_flag)} · earned again since the reset: '
+                   f'{sum(1 for b in hq_bal if b > 0)} customers, {sum(b for b in hq_bal if b > 0)} points')
+        leaks = []
+        for n in self.nodes:
+            if n.get('error'):
+                continue
+            held = [p for p in last if p in n['cust']]
+            bal = {p: self._bal(n['pts'], p) or 0 for p in held}
+            pos = [p for p in held if bal[p] > 0]
+            enrolled = sum(1 for p in pos if n['cust'][p].get('enrolled'))
+            self._emit(f'  {n["label"]}: holds {len(held)} reset customers · {len(pos)} still show a balance here '
+                       f'({sum(bal[p] for p in pos)} points; {enrolled} of them still enrolled on this node)')
+            leaks += [(bal[p], p, n) for p in pos]
+        from config.sybase import get_branch_connection
+        top = sorted(leaks, key=lambda x: -x[0])[:self.samples]
+        by_node = defaultdict(list)
+        for b, p, n in top:
+            by_node[n['label']].append((b, p, n))
+        for label, items in by_node.items():
+            n = items[0][2]
+            conn = get_branch_connection(n['host'], n['port'], 'SOFTECHDB9')
+            try:
+                for b, p, _ in items:
+                    user, when, wiped = last[p]
+                    try:
+                        _, r = self._q(conn, f"SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints "
+                                             "WHERE phcode = ? AND doccode = '30' AND transdate > ?", [p, when])
+                        used = f'used at the till after the reset: {r[0][0]} times, {-(r[0][1] or 0)} points, last {r[0][2]}'
+                    except Exception as exc:
+                        used = f'(till usage skipped — {str(exc)[:60]})'
+                    self._emit(f'    {p} on {label}: balance {b} · reset {when} by {user} ({wiped} points) · '
+                               f'enrolled here={n["cust"][p].get("enrolled")} · {used}')
+            finally:
+                conn.close()
+
     def s_native(self):
         """SOFTECH's own merge (localcustomers2: phcode ← sourcepic + sourcepicpoints, mgmdate) and
         PIC-edit log (picstrans: phcode→phcode2, pphcode→pphcode2) on HQ and every node."""
@@ -336,6 +389,7 @@ class Command(BaseCommand):
             if o['explain']:
                 self._safe('[R6] SOFTECH native merge / PIC edits on every node', self.s_native)
                 self._safe('[R7] why balances differ (largest gaps, both sides)', self.s_explain)
+                self._safe('[R8] customers reset at HQ — still holding / spending points at a branch?', self.s_eliminated)
         finally:
             self.hq.close()
         if o['out']:
