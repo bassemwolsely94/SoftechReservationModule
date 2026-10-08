@@ -121,3 +121,13 @@ class ReplicationProbeTests(TestCase):
         self.assertIn('10.0.0.1: holds 1 reset customers · 1 still show a balance here (20 points; 1 of them still enrolled', t)
         self.assertIn('06HD3 on 10.0.0.1: balance 20 · reset 2024-05-14 00:00:00 by 19 (500 points)', t)
         self.assertIn('used at the till after the reset: 2 times, 15 points', t)
+
+    def test_reset_only_runs_just_the_reset_section(self):
+        out = io.StringIO()
+        with mock.patch('config.sybase.get_sybase_connection', return_value=Conn()), \
+                mock.patch('config.sybase.get_branch_connection', return_value=Conn(node=True)):
+            call_command('investigate_pic_replication', host=['10.0.0.1'], reset_only=True, out='', stdout=out)
+        t = out.getvalue()
+        self.assertIn('[R8]', t)
+        self.assertNotIn('[R1]', t)
+        self.assertIn('used at the till after the reset: 2 times, 15 points', t)

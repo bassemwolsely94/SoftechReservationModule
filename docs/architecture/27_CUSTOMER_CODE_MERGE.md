@@ -90,6 +90,24 @@ For the largest gaps on every node, the points log on both sides shows one patte
 `--explain` [R8] measures those removed customers: how many still show a balance on a node, whether they are still
 enrolled (`localcustomers.picpoints`), and points they used at a branch till (doc 30) after the reset.
 
+### `--explain` [R8] — customers reset at HQ (2026-10-08)
+
+| | |
+|---|---|
+| Reset at HQ (lcpointstrans consumed = earned) | **3,146 customers** (user 19 = 3,090) |
+| Still enrolled at HQ (`picpoints` = 1) | **2,600** (546 un-enrolled). The reset zeroed the balance but did **not** remove them from the points system |
+| Earned again at HQ since the reset | 2,110 customers, **1,709,583 points** |
+| Still showing a balance on a branch node | 130: 831 (1,290,241) · 140: 196 (618,056) · 150: 1,323 (1,788,449) · 160: 426 (1,575,241) · 170: 360 (616,801) = **≈ 3,136 customers, 5.89 M points**, almost all still enrolled there |
+| Largest | 07HD1000 556,386 (node 160) · 07HD7977 217,846 · 06HD3333 149,565 · 07HD5788 147,249 · 05HD999 125,031 |
+
+All nodes together show **≈ 11.7 M points more than HQ** (130 +3.29 M · 140 +1.78 M · 150 +3.65 M ·
+160 +1.11 M · 170 +1.86 M) and ≈ 0.36 M less. 160HD33215 has earned 1,514,189 points from 8,499 sales,
+which looks like an entity / company account (to check).
+
+Not yet known: the points these customers **used at a branch till after their reset**. The first run failed
+on a date parameter; it is fixed, and `--reset-only` reruns just this section. That figure, plus the till
+check (04HD1550), shows whether the overstated balances are actually being spent.
+
 **Our side has the same gap.** Our customer mirror carries no status / lock / deceased / points-enrolled flag,
 so /pos, call-center reservations, WhatsApp refill reminders (B1) and coupon features can serve a blocked,
 deceased or removed customer.

@@ -50,6 +50,8 @@ class Command(BaseCommand):
         parser.add_argument('--port', type=int, default=5000)
         parser.add_argument('--pic', action='append', default=[], help='extra PIC to trace on every node')
         parser.add_argument('--samples', type=int, default=8)
+        parser.add_argument('--reset-only', action='store_true',
+                            help='only [R8]: customers reset at HQ, their branch balances and till use after the reset')
         parser.add_argument('--explain', action='store_true',
                             help='also explain balance mismatches (points log + manual edits, both sides) and read '
                                  "SOFTECH's own merge / PIC-edit tables on every node")
@@ -302,7 +304,8 @@ class Command(BaseCommand):
                     user, when, wiped = last[p]
                     try:
                         _, r = self._q(conn, f"SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints "
-                                             "WHERE phcode = ? AND doccode = '30' AND transdate > ?", [p, when])
+                                             "WHERE phcode = ? AND doccode = '30' AND transdate > convert(datetime, ?)",
+                                       [p, when.strftime('%Y-%m-%d %H:%M:%S')])   # jConnect rejects a Python datetime
                         used = f'used at the till after the reset: {r[0][0]} times, {-(r[0][1] or 0)} points, last {r[0][2]}'
                     except Exception as exc:
                         used = f'(till usage skipped — {str(exc)[:60]})'
@@ -381,15 +384,18 @@ class Command(BaseCommand):
                 except Exception as exc:
                     n['error'] = str(exc)[:160]
                 self.nodes.append(n)
-            self._safe('[R1] nodes', self.s_nodes)
-            self._safe('[R2] non-active / locked codes on every node', self.s_trace)
-            self._safe('[R3] HQ vs node mismatches', self.s_diff)
-            self._safe('[R4] HQ replication stamps (table_dumped)', self.s_stamps)
-            self._safe('[R5] SOFTECH code-change / parent / points-edit tables', self.s_side)
-            if o['explain']:
-                self._safe('[R6] SOFTECH native merge / PIC edits on every node', self.s_native)
-                self._safe('[R7] why balances differ (largest gaps, both sides)', self.s_explain)
+            if o['reset_only']:
                 self._safe('[R8] customers reset at HQ — still holding / spending points at a branch?', self.s_eliminated)
+            else:
+                self._safe('[R1] nodes', self.s_nodes)
+                self._safe('[R2] non-active / locked codes on every node', self.s_trace)
+                self._safe('[R3] HQ vs node mismatches', self.s_diff)
+                self._safe('[R4] HQ replication stamps (table_dumped)', self.s_stamps)
+                self._safe('[R5] SOFTECH code-change / parent / points-edit tables', self.s_side)
+                if o['explain']:
+                    self._safe('[R6] SOFTECH native merge / PIC edits on every node', self.s_native)
+                    self._safe('[R7] why balances differ (largest gaps, both sides)', self.s_explain)
+                    self._safe('[R8] customers reset at HQ — still holding / spending points at a branch?', self.s_eliminated)
         finally:
             self.hq.close()
         if o['out']:
