@@ -168,6 +168,15 @@ class ReservationViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import ValidationError
             raise ValidationError(serializer.errors)
 
+        # SOFTECH account state (HQ mirror, B7): no reservation for a closed file / deceased customer.
+        # Not bypassable by ?force — pharmacy safety beats sales.
+        from apps.customers import account_state
+        acct = account_state.state(serializer.validated_data.get('customer')) \
+            if serializer.validated_data.get('customer') else None
+        if acct and acct['blocked']:
+            return Response({'detail': acct['message'], 'account_state': acct['code']},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         # Duplicate detection — skip if force=true
         force = request.query_params.get('force', '').lower() in ('1', 'true', 'yes')
         if not force:

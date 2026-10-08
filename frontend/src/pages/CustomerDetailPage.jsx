@@ -1521,6 +1521,16 @@ export default function CustomerDetailPage() {
             ))}
           </div>
 
+          {/* SOFTECH account state (HQ mirror) — decided server-side, shown here */}
+          {customer.account_state && (customer.account_state.code !== 'active' || !customer.account_state.points) && (
+            <div className={`rounded-xl px-3 py-2 text-sm border ${customer.account_state.blocked
+              ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              <span className="font-bold">حالة الحساب في SOFTECH: {customer.account_state.label}</span>
+              {!customer.account_state.points && <span> · خارج نظام النقاط والكوبونات</span>}
+              {customer.account_state.blocked && <span> · لا يمكن البيع أو الحجز أو التذكير</span>}
+            </div>
+          )}
+
           {/* SOFTECH Points balance chip */}
           {customer.softech_pic && (
             <PointsChip customerId={id} onDetails={() => setTab('loyalty')} />

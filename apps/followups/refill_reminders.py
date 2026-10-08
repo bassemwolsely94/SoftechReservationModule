@@ -43,6 +43,7 @@ SKIP_LABELS = {
     'no_branch': 'لا يوجد فرع متاح', 'out_of_stock': 'الصنف غير متوفر بالفرع',
     'same_customer': 'تذكير واحد لكل عميل', 'already_sent': 'أُرسل له تذكير لهذه المهمة',
     'over_cap': 'تجاوز الحد اليومي',
+    'account_state': 'حساب العميل في SOFTECH مغلق / متوفى / جهة',
 }
 REPLY_TEXT = {
     'branch': 'تم استلام طلبك ✅ سيتواصل معك الصيدلي لتأكيد الأصناف ثم نجهّزها لك في الفرع.',
@@ -105,6 +106,7 @@ def _out_of_stock(task, branch) -> bool:
 # ── who would be messaged ─────────────────────────────────────────────────────
 def candidates(today=None, cap=None):
     """Returns (to_send: [dict], skipped: Counter, skipped_rows: [dict]) — pure read."""
+    from apps.customers import account_state
     from .models import FollowUpTask, RefillReminder, RefillReminderOptOut
     today = today or timezone.localdate()
     cap = int(cap or _cfg('DAILY_CAP', 300))
@@ -137,6 +139,9 @@ def candidates(today=None, cap=None):
         prev = existing.get(t.pk)
         if prev and (prev['status'] != 'failed' or prev['attempts'] >= max_attempts):
             skip(t, 'already_sent')
+            continue
+        if not account_state.state(t.customer)['reminders']:     # closed / deceased / entity (B7)
+            skip(t, 'account_state')
             continue
         if t.customer_id in opted:
             skip(t, 'opted_out')
@@ -295,19 +300,22 @@ def handle_button_reply(*, wa_id, payload, context_wamid='', account=None) -> st
             return 'wrong_sender'
         if rem.reply_choice:
             return 'duplicate'
+        from apps.customers import account_state
+        blocked = account_state.state(rem.customer)['blocked']    # closed / deceased since the send (B7)
         if choice == RR.CHOICE_STOP:
             RefillReminderOptOut.objects.get_or_create(customer=rem.customer,
                                                        defaults={'source': 'whatsapp_button'})
-        else:
+        elif not blocked:
             rem.reservation = _create_reservation(rem, choice)
         rem.reply_choice, rem.replied_at, rem.status = choice, timezone.now(), RR.STATUS_REPLIED
         rem.save(update_fields=['reply_choice', 'replied_at', 'status', 'reservation'])
         task = rem.task
         task.notes = (task.notes + f'\n[{timezone.localdate()}] رد واتساب: '
                       + dict(RR.CHOICE_CHOICES)[choice]
-                      + (f' — حجز #{rem.reservation_id}' if rem.reservation_id else '')).strip()
+                      + (f' — حجز #{rem.reservation_id}' if rem.reservation_id else '')
+                      + (' — لم يُنشأ حجز: حساب العميل مغلق/متوفى في SOFTECH' if blocked else '')).strip()
         task.save(update_fields=['notes', 'updated_at'])
-    if send_enabled():                       # inside the 24-h window the customer just opened
+    if send_enabled() and not blocked:       # inside the 24-h window the customer just opened
         try:
             from apps.whatsapp.sender import WhatsAppSender
             WhatsAppSender(account=account).send_text(wa_id=wa_id, body=REPLY_TEXT[choice])

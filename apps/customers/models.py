@@ -69,6 +69,17 @@ class Customer(models.Model):
         default=False,
         help_text='زبون مؤقت — سيتم دمجه تلقائياً عند مزامنة رقم هاتفه من SOFTECH',
     )
+    # ── SOFTECH account state (HQ localcustomers, refreshed by sync_customers; B7 2026-10-08) ──
+    # Read by apps/customers/account_state.py — the ONE place that turns these into decisions.
+    softech_status = models.CharField(
+        max_length=2, blank=True, default='',
+        help_text="phcodestatus: '1' active · '0' file closed (blocked) · '5' deceased · '' unset",
+    )
+    softech_locked = models.BooleanField(
+        default=False, help_text='piclock — owner: marks an entity account, not a person')
+    softech_deceased = models.BooleanField(default=False, help_text='picdied')
+    points_enrolled = models.BooleanField(
+        default=True, help_text='localcustomers.picpoints — registered in the points system')
     created_by = models.ForeignKey(
         'users.StaffProfile', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='created_customers'
@@ -517,3 +528,36 @@ class PurchaseHistoryLine(models.Model):
     # list_price·qty − line_total (discount applies to the full tax-inclusive price).
     # pharmacydiscp/additionaldiscp are NOT customer discounts (don't reduce the paid price).
     # bonusqty was removed — it is a PURCHASING column, never set on sales (115) / returns (30).
+
+
+class CustomerStatusDrift(models.Model):
+    """
+    A difference between HQ and a branch node in one customer's SOFTECH account flag (B7 step 2,
+    owner 2026-10-08). Filled by apps/customers/status_drift.py (READ-ONLY vs SOFTECH, daily).
+    One open row per (PIC, node, field); resolved when a later scan no longer sees it.
+    `hq_stricter` = HQ blocks / locks / removes points but the branch copy does not → the branch
+    till can still serve the customer. That is the risk the daily notification reports.
+    """
+    FIELD_STATUS, FIELD_LOCK, FIELD_POINTS = 'status', 'lock', 'points'
+    FIELD_CHOICES = [(FIELD_STATUS, 'حالة الملف'), (FIELD_LOCK, 'قفل (جهة)'), (FIELD_POINTS, 'نظام النقاط')]
+    HQ_STRICTER, NODE_STRICTER, OTHER = 'hq_stricter', 'node_stricter', 'other'
+    DIRECTION_CHOICES = [(HQ_STRICTER, 'الرئيسي أشد — الفرع ما زال يخدم العميل'),
+                         (NODE_STRICTER, 'الفرع أشد من الرئيسي'), (OTHER, 'اختلاف آخر')]
+
+    pic = models.CharField(max_length=13, db_index=True)
+    node_branch = models.CharField(max_length=5, db_index=True)
+    field = models.CharField(max_length=10, choices=FIELD_CHOICES)
+    hq_value = models.CharField(max_length=5, blank=True)
+    node_value = models.CharField(max_length=5, blank=True)
+    direction = models.CharField(max_length=15, choices=DIRECTION_CHOICES, db_index=True)
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField()
+    resolved_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['pic', 'node_branch', 'field'],
+                                               name='uniq_customer_status_drift')]
+        ordering = ['-last_seen']
+
+    def __str__(self):
+        return f'{self.pic}@{self.node_branch} {self.field}: HQ {self.hq_value!r} / node {self.node_value!r}'

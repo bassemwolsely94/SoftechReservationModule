@@ -93,6 +93,10 @@ def is_enrolled(softech_pic: str) -> bool:
     pic = (softech_pic or '').strip()
     if not pic:
         return False
+    from apps.customers import account_state
+    acct = account_state.for_pic(pic)
+    if acct and not acct['points']:      # closed / deceased / entity / removed from points (HQ mirror, B7)
+        return False
     try:
         from apps.loyalty.pic_bridge import is_softech_points_enrolled
         return bool(is_softech_points_enrolled(pic))

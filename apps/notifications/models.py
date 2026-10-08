@@ -39,6 +39,7 @@ class Notification(models.Model):
         ('weekly_summary',            '📊 ملخص أسبوعي'),
         ('monthly_report',            '📈 تقرير شهري'),
         ('coupon_digest',             '🎟️ رقابة كوبونات الهدايا'),
+        ('customer_status_drift',     '⚠️ اختلاف حالة العملاء بين الرئيسي والفروع'),
         # ── Transfer ─────────────────────────────────────────────────────────
         ('transfer_request',          '🔀 طلب تحويل جديد'),
         ('transfer_response',         '↩️ رد على طلب تحويل'),
@@ -173,6 +174,7 @@ class Notification(models.Model):
         'weekly_summary':       CATEGORY_REPORTS,
         'monthly_report':       CATEGORY_REPORTS,
         'coupon_digest':        CATEGORY_REPORTS,
+        'customer_status_drift': CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
         'chatter_mention':      CATEGORY_MENTIONS,

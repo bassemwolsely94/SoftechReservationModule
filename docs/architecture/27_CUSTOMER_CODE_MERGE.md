@@ -110,9 +110,53 @@ had returns (1.3–3.5 k points, last in 2023). No sign of the node balances bei
 **The real leak is at HQ:** 2,600 reset customers are still enrolled and have earned 1.71 M points again, which
 they can convert to coupons (doc 170). The probe now counts those conversions after each customer's reset.
 
-**Our side has the same gap.** Our customer mirror carries no status / lock / deceased / points-enrolled flag,
-so /pos, call-center reservations, WhatsApp refill reminders (B1) and coupon features can serve a blocked,
-deceased or removed customer.
+**Our side had the same gap → step 1 BUILT (owner approved 2026-10-08).**
+
+## Step 1 — HQ account state mirrored and enforced (BUILT, no SOFTECH write)
+
+* `Customer.softech_status / softech_locked / softech_deceased / points_enrolled`, filled by the existing
+  `sync_customers` from HQ `localcustomers.phcodestatus / piclock / picdied / picpoints` (migration
+  customers 0020).
+* `apps/customers/account_state.py` is the single decision point:
+
+| HQ flags | State | Sale on /pos | Reservation | Refill reminder | Points / coupons |
+|---|---|---|---|---|---|
+| `'0'` | closed file | ❌ SOFTECH's own message | ❌ (not bypassable by `?force`) | ❌ | ❌ |
+| `'5'` or `picdied` | deceased | ❌ | ❌ | ❌ | ❌ |
+| `piclock=1` | entity | ✅ | ✅ | ❌ | ❌ |
+| `picpoints=0` | removed from points | ✅ | ✅ | ✅ | ❌ |
+| `''` / `'1'` | active | ✅ | ✅ | ✅ | ✅ |
+
+* Returns of an earlier sale stay allowed. A reminder already sent whose customer is blocked later creates
+  no reservation when tapped. `/pos` points enrollment (`pos_orders/points.is_enrolled`) also honours the
+  mirror. The customer API returns `account_state`, and the customer page shows a badge.
+
+## Step 2 — daily HQ vs branch check (BUILT, read-only)
+
+`apps/customers/status_drift.py` + `check_customer_status_drift [--notify]`, scheduled 06:40
+(`CUSTOMER_STATUS_DRIFT_CHECK_ENABLED`, default on). For every operational node it compares status, lock and
+points flag with HQ and keeps one open `CustomerStatusDrift` row per difference (resolved when gone; an
+offline node keeps its rows). `hq_stricter` = HQ restricts but the branch copy does not, so the branch till
+still serves the customer. While any are open, admin + supervisor get one notification a day
+(`customer_status_drift`). Rows are visible read-only in Django admin.
+
+## Step 3 — fixing the branch copies (NOT built; needs a separate approval)
+
+The branch till reads its **own** copy of the customer (status, lock, points flag). For the 7 codes HQ has
+already decided (100HD6038, 06HD24310, 07HD2044, 07HD2057, 08HD1367, plus 07HD11624 points-off), step 3 would
+write HQ's decision onto that branch's copy: one row per code, audited, read back, behind a switch. Today
+nothing in SOFTECH copies it, so the step-2 check will keep reporting them until someone changes them in
+SOFTECH at that branch, or step 3 is approved.
+
+## Option B — points off for the reset customers (owner approved the direction 2026-10-08; NOT built)
+
+`investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes
+only): reset date and user, HQ status / points flag / balance, coupon conversions after the reset, and each
+branch copy's balance and flag. Before any write:
+1. capture SOFTECH's own DML (`capture_save_sql`) while staff turn points off for ONE customer at HQ, so the
+   batch replays exactly what SOFTECH does;
+2. the probe shows whether the HQ flag alone stops earning and couponing (the 546 already "NOT enrolled" at HQ:
+   do they still earn or get coupons?). If not, the branch copies need the same change (step-3 channel).
 
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)

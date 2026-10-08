@@ -416,6 +416,7 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `sync_coupon_lifecycle --notify` | vouchers | Coupon movement mirror (READ-ONLY) + yesterday's misuse digest notification; scheduled daily 06:20 (`coupon_lifecycle_sync`) | Daily (scheduler) |
 | `investigate_pic_merge` | customers | B7 — READ-ONLY probe of how SOFTECH deactivates a customer code (PIC) and stores points: schema, flag-column distributions, triggers, tables carrying a PIC, duplicate-phone PIC groups, `--pic A --pic B` side-by-side (phones masked, no names) → `scratch/pic_merge_probe.txt` | Once, before the merge design |
 | `investigate_pic_replication` | customers | B7 — READ-ONLY HQ vs every branch node: where HQ's non-active codes exist and with what status, status/lock/balance mismatches, `table_dumped` replication stamps, SOFTECH code-change/parent tables (no names, no phones) → `scratch/pic_replication_probe.txt` | Before the merge build |
+| `check_customer_status_drift` | customers | B7 step 2 — READ-ONLY daily HQ vs branch-node check of customers' status / lock / points flags → `CustomerStatusDrift` rows; `--notify` alerts admin + supervisor (scheduled 06:40) | Daily (scheduler) |
 | `investigate_gift_vouchers` | sync | READ-ONLY probe of coupon stocking (supplier 1268); `--docs N,M` dumps docs in full | Manual |
 | `run_procurement_engine` | procurement | Recompute procurement/supplier metrics | Daily |
 | `sync_insurance_cache` / `sync_motalbas` / `reimport_all_claims` | insurance | Sync SOFTECH motalba claims into PG mirror | Configurable |

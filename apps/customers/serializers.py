@@ -63,6 +63,11 @@ class CustomerSerializer(serializers.ModelSerializer):
     # Health profile summary (avoids a second request in most cases)
     is_chronic           = serializers.SerializerMethodField()
     detected_conditions  = serializers.SerializerMethodField()
+    account_state        = serializers.SerializerMethodField()      # SOFTECH HQ flags → decision (B7)
+
+    def get_account_state(self, obj):
+        from .account_state import state
+        return state(obj)
 
     def get_preferred_branch_name(self, obj):
         if obj.preferred_branch:
@@ -114,7 +119,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             'churn_segment_label', 'churn_updated_at',
             # Health summary
             'is_chronic', 'detected_conditions',
-            'notes',
+            'notes', 'account_state',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
@@ -142,6 +147,11 @@ class CustomerListSerializer(serializers.ModelSerializer):
     customer_type_color   = serializers.CharField(read_only=True)
     preferred_branch_name = serializers.SerializerMethodField()
     churn_score_pct       = serializers.SerializerMethodField()
+    account_state         = serializers.SerializerMethodField()
+
+    def get_account_state(self, obj):
+        from .account_state import state
+        return state(obj)
 
     def get_preferred_branch_name(self, obj):
         if obj.preferred_branch:
@@ -160,7 +170,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
             'preferred_branch_name',
             'discount_percent', 'address',
             'segment', 'churn_score', 'churn_score_pct', 'churn_segment',
-            'days_since_last_visit', 'last_visit_date',
+            'days_since_last_visit', 'last_visit_date', 'account_state',
         ]
 
 

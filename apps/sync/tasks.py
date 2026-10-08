@@ -984,6 +984,7 @@ def sync_customers(conn, sync_run):
       [12] pd.ptcode                  (person type — from personsdata; NULL if no PIC)
       [13] pd.ptclassifcode           (channel code — AUTHORITATIVE; falls back to row[8])
       [14] pd.personglobalcode        (global person code from personsdata)
+      [15..18] lc.phcodestatus, piclock, picdied, picpoints → account state (customers/account_state.py)
 
     Person-type lookups:
       persontypes       ptcode → ptdescr (Arabic label, e.g. '01' → 'عميل')
@@ -1147,6 +1148,11 @@ def sync_customers(conn, sync_run):
             )
             if hasattr(Customer, 'is_chronic_softech'):
                 customer.is_chronic_softech = bool(row[9])
+            if len(row) > 18:            # account state (B7) — absent on an old query layout
+                customer.softech_status = str(row[15] or '').strip()[:2]
+                customer.softech_locked = bool(row[16])
+                customer.softech_deceased = bool(row[17])
+                customer.points_enrolled = bool(row[18])
 
             objs.append(customer)
             for p in (phone, phone2):
@@ -1178,6 +1184,7 @@ def sync_customers(conn, sync_run):
         'person_type_label', 'person_classif_label',
         'softech_global_code', 'order_branch_code',
         'is_guest',
+        'softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled',
     ]
     if hasattr(Customer, 'is_chronic_softech'):
         update_fields.append('is_chronic_softech')
@@ -2054,6 +2061,23 @@ def _run_replacement_check():
         logger.info('[APScheduler] replacement check done: %s', r.counts)
     except Exception as exc:
         logger.error('[APScheduler] replacement check failed: %s', exc)
+
+
+def _run_customer_status_drift():
+    """Daily READ-ONLY HQ vs branch-node check of customers' SOFTECH status / lock / points flags
+    (B7). Notifies admin + supervisor while HQ-restricted customers are still active on a branch.
+    Off with CUSTOMER_STATUS_DRIFT_CHECK_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'CUSTOMER_STATUS_DRIFT_CHECK_ENABLED', True):
+        return
+    try:
+        from apps.customers import status_drift as SD
+        r = SD.scan_locked()
+        if r is not None:
+            logger.info('[APScheduler] customer status drift: open=%s risk=%s notified=%s',
+                        r['open'], r['open_risk'], SD.notify(r))
+    except Exception as exc:
+        logger.error('[APScheduler] customer status drift failed: %s', exc)
 
 
 def _run_coupon_lifecycle_sync():
@@ -3047,6 +3071,11 @@ def start_scheduler():
     # بدل الروشتة daily check — 08:40, after the 07:30 A/P mirror sync.
     _scheduler.add_job(
         _run_replacement_check, 'cron', hour=8, minute=40, id='replacement_daily_check',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Customer status HQ vs branch nodes (B7, read-only) — 06:40.
+    _scheduler.add_job(
+        _run_customer_status_drift, 'cron', hour=6, minute=40, id='customer_status_drift',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.

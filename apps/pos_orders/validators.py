@@ -84,6 +84,13 @@ def validate_order(order, *, for_push=False):
     if for_push and order.channel in PIC_REQUIRED_CHANNELS and not (order.softech_pic or '').strip():
         errs['softech_pic'] = 'التوصيل المنزلى يتطلب تحديد العميل (PIC) قبل الحفظ.'
 
+    # SOFTECH account state (HQ mirror, B7): a closed file / deceased code cannot be sold to — SOFTECH's
+    # POS refuses it too. Returns of an earlier sale stay allowed.
+    from apps.customers import account_state
+    acct = account_state.for_pic(order.softech_pic)
+    if acct and acct['blocked'] and order.doc_kind == 'sale':
+        errs['softech_pic'] = acct['message']
+
     # ── change/rounding discount (خصم فكة) cap ────────────────────────────────
     if _d(order.change_discount) > MAX_FAKKA:
         errs['change_discount'] = f'خصم الفكة يتجاوز الحد المسموح ({MAX_FAKKA} جنيه).'
@@ -122,6 +129,12 @@ def validate_order(order, *, for_push=False):
     # against SOFTECH (read-only). No-op unless settings.COUPON_POS_GUARD_ENABLED.
     from apps.vouchers.coupon_guard import validate_order_coupons
     errs.update(validate_order_coupons(order))
+    # owner 2026-10-08: customers removed from the points system (or entity accounts) get no coupons —
+    # independent of the coupon guard switch.
+    if acct and not acct['points'] and order.doc_kind == 'sale':
+        from apps.vouchers import coupons as _coupons
+        if any((ln.softech_itemcode or '').strip() == _coupons.served_item() for ln in lines):
+            errs.setdefault('coupons', []).append(account_state.NO_POINTS_MSG)
 
     # ── payments ──────────────────────────────────────────────────────────────
     pays = list(order.payments.all())

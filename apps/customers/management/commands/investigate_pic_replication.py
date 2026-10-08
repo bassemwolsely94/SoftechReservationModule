@@ -51,6 +51,8 @@ class Command(BaseCommand):
         parser.add_argument('--port', type=int, default=5000)
         parser.add_argument('--pic', action='append', default=[], help='extra PIC to trace on every node')
         parser.add_argument('--samples', type=int, default=8)
+        parser.add_argument('--reset-csv', default='scratch/pic_reset_customers.csv',
+                            help='[R8] also write the reset customers as a review list (scratch/ is git-ignored)')
         parser.add_argument('--reset-only', action='store_true',
                             help='only [R8]: customers reset at HQ, their branch balances and till use after the reset')
         parser.add_argument('--explain', action='store_true',
@@ -281,19 +283,29 @@ class Command(BaseCommand):
         self._emit(f'  {len(last)} customers reset at HQ (consumed set = earned) · by user: '
                    + ', '.join(f'{u}={k}' for u, k in Counter(v[0] for v in last.values()).most_common(6)))
         hq_flag = Counter('enrolled' if self.hq_cust.get(p, {}).get('enrolled') else 'NOT enrolled' for p in last)
-        hq_bal = [self._bal(self.hq_pts, p) or 0 for p in last]
+        hq_bal = {p: self._bal(self.hq_pts, p) or 0 for p in last}
         self._emit(f'  at HQ: points flag {dict(hq_flag)} · earned again since the reset: '
-                   f'{sum(1 for b in hq_bal if b > 0)} customers, {sum(b for b in hq_bal if b > 0)} points')
+                   f'{sum(1 for b in hq_bal.values() if b > 0)} customers, {sum(b for b in hq_bal.values() if b > 0)} points')
+        off = [p for p in last if not self.hq_cust.get(p, {}).get('enrolled')]
+        self._emit(f'  of the {len(off)} NOT enrolled at HQ: {sum(1 for p in off if hq_bal[p] > 0)} still earned points '
+                   'again at HQ (if > 0, turning the flag off at HQ alone does not stop earning)')
+        conv = {}
         try:     # the real spend: points converted to gift coupons (doc 170, HQ / call center) after the reset
             _, r = self._q(self.hq,
-                           f"SELECT count(*), count(distinct p.phcode), sum(p.points), max(p.transdate) FROM {DB}.picpoints p, "
+                           f"SELECT p.phcode, count(*), sum(p.points), max(p.transdate) FROM {DB}.picpoints p, "
                            f"(SELECT phcode, max(trans_time) t FROM {DB}.lcpointstrans WHERE conpoints = totpoints "
                            "AND conpointsold < conpoints AND totpoints > 0 GROUP BY phcode) x "
-                           "WHERE p.phcode = x.phcode AND p.doccode = '170' AND p.transdate > x.t")
-            self._emit(f'  converted to gift coupons at HQ AFTER their reset (doc 170): {r[0][0]} conversions · '
-                       f'{r[0][1]} customers · {-(r[0][2] or 0)} points · last {r[0][3]}')
+                           "WHERE p.phcode = x.phcode AND p.doccode = '170' AND p.transdate > x.t GROUP BY p.phcode")
+            conv = {_s(a): (c, -(t or 0), m) for a, c, t, m in r}
+            self._emit(f'  converted to gift coupons at HQ AFTER their reset (doc 170): '
+                       f'{sum(v[0] for v in conv.values())} conversions · {len(conv)} customers · '
+                       f'{sum(v[1] for v in conv.values())} points · last {max((v[2] for v in conv.values()), default=None)}')
+            by_flag = Counter('enrolled' if self.hq_cust.get(p, {}).get('enrolled') else 'NOT enrolled' for p in conv)
+            self._emit(f'      of those customers, HQ points flag: {dict(by_flag)} '
+                       '(NOT enrolled > 0 → the coupon screen does not check the flag)')
         except Exception as exc:
             self._emit(f'  coupon conversions after the reset: (skipped — {str(exc)[:80]})')
+        self._reset_rows = [(p, last[p], hq_bal[p], conv.get(p)) for p in sorted(last)]
         leaks = []
         for n in self.nodes:
             if n.get('error'):
@@ -327,6 +339,27 @@ class Command(BaseCommand):
                                f'enrolled here={n["cust"][p].get("enrolled")} · {used}')
             finally:
                 conn.close()
+        if self.reset_csv:
+            import csv
+            home = {}
+            for n in self.nodes:
+                for p in last:
+                    if not n.get('error') and p in n['cust']:
+                        home.setdefault(p, []).append(
+                            f"{n['label'].split()[0]}:{self._bal(n['pts'], p) or 0}"
+                            f"/{'on' if n['cust'][p].get('enrolled') else 'off'}")
+            os.makedirs(os.path.dirname(self.reset_csv) or '.', exist_ok=True)
+            with open(self.reset_csv, 'w', newline='', encoding='utf-8-sig') as f:
+                w = csv.writer(f)
+                w.writerow(['pic', 'reset_at', 'reset_by', 'points_wiped', 'hq_status', 'hq_points_flag',
+                            'hq_balance_now', 'coupon_conversions_after_reset', 'coupon_points_after_reset',
+                            'last_conversion', 'branch_copies (branch:balance/flag)'])
+                for p, (user, when, wiped), bal, cv in self._reset_rows:
+                    c = self.hq_cust.get(p, {})
+                    w.writerow([p, when, user, wiped, c.get('status', ''), 1 if c.get('enrolled') else 0, bal,
+                                cv[0] if cv else 0, cv[1] if cv else 0, cv[2] if cv else '',
+                                ' '.join(home.get(p, []))])
+            self._emit(f'  review list (codes only, no names): {self.reset_csv} — {len(self._reset_rows)} customers')
 
     def s_native(self):
         """SOFTECH's own merge (localcustomers2: phcode ← sourcepic + sourcepicpoints, mgmdate) and
@@ -368,7 +401,7 @@ class Command(BaseCommand):
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
-        self._buf, self.samples = [], o['samples']
+        self._buf, self.samples, self.reset_csv = [], o['samples'], o.get('reset_csv') or ''
         self.pics = [p.strip() for p in o['pic'] if p.strip()]
         if o['host']:
             targets = [(h, o['port'], h) for h in o['host']]

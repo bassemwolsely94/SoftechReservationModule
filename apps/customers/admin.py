@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Customer, CustomerHealthProfile, CustomerNote
+from .models import Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift
 
 
 @admin.register(CustomerHealthProfile)
@@ -52,3 +52,18 @@ class CustomerHealthProfileAdmin(admin.ModelAdmin):
     @admin.display(description='مزمن', boolean=True)
     def is_chronic_display(self, obj):
         return obj.is_chronic
+
+
+@admin.register(CustomerStatusDrift)
+class CustomerStatusDriftAdmin(admin.ModelAdmin):
+    """B7 step 2 — read-only view of HQ vs branch-node differences (filled by the daily check)."""
+    list_display = ('pic', 'node_branch', 'field', 'hq_value', 'node_value', 'direction',
+                    'first_seen', 'last_seen', 'resolved_at')
+    list_filter = ('direction', 'field', 'node_branch', ('resolved_at', admin.EmptyFieldListFilter))
+    search_fields = ('pic',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
