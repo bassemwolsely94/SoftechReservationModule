@@ -259,6 +259,16 @@ def daily_digest(day=None):
                   .select_related('serial').order_by('branchcode', 'docnumber'))
     pics = set(red.exclude(customer_pic='').values_list('customer_pic', flat=True))
     over = [r for r in coupon_lifecycle.customer_balances(limit=None)['all'] if r['pic'] in pics]
+    # coupons ISSUED that day to a customer who may not have them (B7, owner 2026-10-08): removed from points,
+    # entity, closed file or deceased — from the HQ account-state mirror (apps/customers/account_state).
+    from apps.customers import account_state
+    from apps.customers.models import Customer
+    issued = list(CouponEvent.objects.filter(kind='issue', docdate=day).exclude(customer_pic='')
+                  .order_by('docnumber'))
+    states = {c.softech_pic: account_state.state(c) for c in Customer.objects.filter(
+        softech_pic__in={e.customer_pic for e in issued})}
+    ineligible = [(e, states[e.customer_pic]) for e in issued
+                  if e.customer_pic in states and not states[e.customer_pic]['points']]
     by_branch = defaultdict(float)
     by_user = defaultdict(float)
     for e in no_serial:
@@ -270,11 +280,12 @@ def daily_digest(day=None):
         'no_serial_by_branch': dict(by_branch), 'no_serial_by_user': dict(by_user),
         'reused': reused,
         'customers_over': over,
+        'ineligible_issues': ineligible,
     }
 
 
 def digest_is_empty(d):
-    return not (d['no_serial'] or d['reused'] or d['customers_over'])
+    return not (d['no_serial'] or d['reused'] or d['customers_over'] or d.get('ineligible_issues'))
 
 
 def digest_text(d, max_lines=10):
@@ -298,6 +309,13 @@ def digest_text(d, max_lines=10):
         for r in d['customers_over'][:max_lines]:
             parts.append(f"   {r['pic']}: صُرف {r['issued']:g} / استُخدم {r['redeemed']:g} "
                          f"(زيادة {r['excess']:g})")
+    if d.get('ineligible_issues'):
+        parts.append(f"• {len(d['ineligible_issues'])} كوبون صُرف لعميل غير مستحق (خارج نظام النقاط / جهة / "
+                     f"ملف مغلق / متوفى):")
+        for e, st in d['ineligible_issues'][:max_lines]:
+            why = 'خارج نظام النقاط' if st['code'] == 'active' else st['label']
+            parts.append(f"   {e.customer_pic} ({why}) — {e.branchcode}/{e.doccode}/{e.docnumber} "
+                         f"سريال {e.raw_serial or '—'} مستخدم {e.usercode}")
     parts.append('التفاصيل: القسائم ← كوبونات الهدايا')
     return '\n'.join(parts)
 
@@ -315,7 +333,8 @@ def notify_digest(d):
     from apps.users.models import StaffProfile
 
     dedup = f"coupon_digest_{d['day'].isoformat()}"
-    n_issues = len(d['no_serial']) + len(d['reused']) + len(d['customers_over'])
+    n_issues = (len(d['no_serial']) + len(d['reused']) + len(d['customers_over'])
+                + len(d.get('ineligible_issues') or []))
     title = f"🎟️ رقابة كوبونات الهدايا — {d['day'].isoformat()} ({n_issues} ملاحظة)"
     body = digest_text(d)
     sent = 0

@@ -167,6 +167,14 @@ branch copy's balance and flag. Before any write:
    timed out, so this is a minimum). **11 of them were already "NOT enrolled" at HQ** → the HQ coupon
    screen does not check the points flag. A flag change alone will not stop coupons; the
    re-earned balance (1.71 M points at HQ) has to go too, or coupon issue must be checked elsewhere.
+4. **Owner decisions (2026-10-08):** clear the re-earned balance → **yes** (method still to be captured, see
+   below). Flag coupons issued to ineligible customers → **yes, BUILT**: the daily coupon digest
+   (`coupon_dashboard.daily_digest`) now lists every coupon issued (doc 170) that day to a customer who is
+   removed from points, an entity, a closed file or deceased.
+5. **First native change:** the owner turned 05HD999 to "special discount" (`picdiscounts=1`) with points
+   off (`picpoints=0`) in SOFTECH's customer screen at HQ, without the SQL capture running.
+   `investigate_pic_replication --trace --pic 05HD999` shows what the screen wrote (flags, user, time,
+   `table_dumped`, the `picstrans` log row) and whether branch 140's copy received it.
 
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)

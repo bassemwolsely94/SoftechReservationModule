@@ -11,6 +11,7 @@ never read and names are never printed.
     python manage.py investigate_pic_replication                         # HQ vs all operational nodes
     python manage.py investigate_pic_replication --host 192.168.3.10     # one node (repeatable)
     python manage.py investigate_pic_replication --pic 03HD3059 --pic 06HD8958
+    python manage.py investigate_pic_replication --trace --pic 05HD999     # one code on HQ + every node, fast
 
 Sections
   [R1] each node: own branch code (lastdocnumbers.ver_branch='1'), row counts, which branch codes it holds
@@ -53,6 +54,8 @@ class Command(BaseCommand):
         parser.add_argument('--samples', type=int, default=8)
         parser.add_argument('--reset-csv', default='scratch/pic_reset_customers.csv',
                             help='[R8] also write the reset customers as a review list (scratch/ is git-ignored)')
+        parser.add_argument('--trace', action='store_true',
+                            help='only trace the --pic codes on HQ and every node (fast; after a SOFTECH screen change)')
         parser.add_argument('--reset-only', action='store_true',
                             help='only [R8]: customers reset at HQ, their branch balances and till use after the reset')
         parser.add_argument('--explain', action='store_true',
@@ -411,6 +414,55 @@ class Command(BaseCommand):
                 if n is not None:
                     conn.close()
 
+    TRACE_COLS = ('phcodestatus', 'piclock', 'picpoints', 'picdiscounts', 'picdied', 'usercode', 'trans_time',
+                  'table_dumped', 'phcodestatususercode', 'phcodestatustime')
+
+    def _trace_one(self, conn, pic):
+        cn, r = self._q(conn, f'SELECT {", ".join(self.TRACE_COLS)} FROM {DB}.localcustomers WHERE phcode = ?', [pic])
+        if not r:
+            return ['absent']
+        out = ['customer ' + ' · '.join(f'{c}={v}' for c, v in zip(cn, r[0]))]
+        _, b = self._q(conn, f'SELECT totpoints, conpoints, table_dumped FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])
+        out.append('balance ' + (f'{b[0][0]}−{b[0][1]}={(b[0][0] or 0) - (b[0][1] or 0)} shipped={b[0][2]}' if b else 'none'))
+        for t, cols in (('picstrans', 'trans_time, usercode, branchcode, phcodestatus, picpoints, picdiscounts, piclock, '
+                                      'pphcode, pphcode2, table_dumped'),
+                        ('lcpointstrans', 'trans_time, usercode, branchcode, totpointsold, conpointsold, totpoints, '
+                                          'conpoints, phcodestatus, table_dumped')):
+            try:
+                cn2, rows = self._q(conn, f'SELECT {cols} FROM {DB}.{t} WHERE phcode = ? ORDER BY trans_time DESC', [pic], limit=3)
+                for row in rows:
+                    out.append(f'{t}: ' + ' · '.join(f'{c}={v}' for c, v in zip(cn2, row)))
+            except Exception as exc:
+                out.append(f'{t}: ({str(exc)[:60]})')
+        return out
+
+    def s_trace_pics(self, targets):
+        """For each --pic: the customer row (flags, who/when, replication stamp), balance, and the last
+        PIC-edit (picstrans) and points-edit (lcpointstrans) log rows — on HQ and every node. Run it
+        right after a change in SOFTECH's customer screen to see what the screen wrote and where it reached."""
+        from config.sybase import get_branch_connection
+        sides = [('HQ', self.hq)]
+        conns = []
+        for host, port, label in targets:
+            try:
+                c = get_branch_connection(host, port, 'SOFTECHDB9')
+                conns.append(c)
+                sides.append((label, c))
+            except Exception as exc:
+                sides.append((label, exc))
+        try:
+            for pic in self.pics:
+                self._emit(f'  ═ {pic}')
+                for label, c in sides:
+                    if isinstance(c, Exception):
+                        self._emit(f'    {label}: ! not reachable — {str(c)[:80]}')
+                        continue
+                    for i, line in enumerate(self._trace_one(c, pic)):
+                        self._emit(f'    {label + ":" if i == 0 else " " * (len(label) + 1)} {line}')
+        finally:
+            for c in conns:
+                c.close()
+
     # ── run ───────────────────────────────────────────────────────────────────
     def handle(self, *args, **o):
         from config.sybase import get_branch_connection, get_sybase_connection
@@ -427,6 +479,12 @@ class Command(BaseCommand):
         self._emit(f'SOFTECH PIC REPLICATION PROBE (read-only) — HQ vs {len(targets)} node(s)')
         self._emit('=' * 72)
         self.hq = get_sybase_connection()
+        if o.get('trace'):
+            try:
+                self._safe('[T] trace — what one customer looks like on HQ and every node', lambda: self.s_trace_pics(targets))
+            finally:
+                self.hq.close()
+            return self._write(o)
         try:
             self.hq_cust, self.hq_pts = self._load(self.hq)
             self._emit(f'  HQ: {len(self.hq_cust)} customers · {len(self.hq_pts)} balance rows')
@@ -458,6 +516,9 @@ class Command(BaseCommand):
                     self._safe('[R8] customers reset at HQ — still holding / spending points at a branch?', self.s_eliminated)
         finally:
             self.hq.close()
+        self._write(o)
+
+    def _write(self, o):
         if o['out']:
             os.makedirs(os.path.dirname(o['out']) or '.', exist_ok=True)
             with open(o['out'], 'w', encoding='utf-8') as f:

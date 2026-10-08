@@ -137,6 +137,20 @@ class DigestTests(TestCase):
         n = Notification.objects.get(recipient__role='admin', notification_type='coupon_digest')
         self.assertEqual(n.category, Notification.CATEGORY_REPORTS)
 
+    def test_coupon_issued_to_customer_outside_points_is_flagged(self):
+        from apps.customers.models import Customer
+        Customer.objects.create(name='x', phone='01001112223', softech_pic='05HD999', points_enrolled=False)
+        Customer.objects.create(name='y', phone='01001112224', softech_pic='05HD1', points_enrolled=True)
+        stocked('27290-ZZZ111', doc_p=65700, doc_s=65701)
+        stocked('27291-ZZZ112', doc_p=65702, doc_s=65703)
+        lc.store_events([
+            mv('102230', '170', '100', 9, YDAY.isoformat(), '27290-ZZZ111', party='100', pic='05HD999'),
+            mv('102230', '170', '100', 10, YDAY.isoformat(), '27291-ZZZ112', party='100', pic='05HD1'),
+        ], TODAY - dt.timedelta(days=40), TODAY + dt.timedelta(days=1), NAMES)
+        d = dash.daily_digest()
+        self.assertEqual([e.customer_pic for e, _ in d['ineligible_issues']], ['05HD999'])
+        self.assertIn('05HD999 (خارج نظام النقاط)', dash.digest_text(d))
+
     def test_quiet_day_sends_nothing(self):
         d = dash.daily_digest(D(2020, 1, 1))
         self.assertTrue(dash.digest_is_empty(d))

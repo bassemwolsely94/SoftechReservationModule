@@ -25,7 +25,19 @@ class Cur:
 
     def execute(self, sql, p=None):
         s, self.r, self.description = ' '.join(sql.split()), [], [('a',)]
-        if s.startswith('SELECT phcode, phcodestatus'):
+        if s.startswith('SELECT phcodestatus, piclock, picpoints, picdiscounts'):
+            self.description = [(c,) for c in ('phcodestatus', 'piclock', 'picpoints', 'picdiscounts', 'picdied',
+                                               'usercode', 'trans_time', 'table_dumped', 'phcodestatususercode',
+                                               'phcodestatustime')]
+            self.r = [('1', 0, 1 if self.node else 0, 0 if self.node else 1, 0, '1509', D(2026, 10, 8), None, None, None)]
+        elif s.startswith('SELECT totpoints, conpoints, table_dumped'):
+            self.r = [(20, 0, None)]
+        elif s.startswith('SELECT trans_time, usercode, branchcode, phcodestatus, picpoints'):
+            self.description = [('trans_time',), ('usercode',), ('picpoints',)]
+            self.r = [] if self.node else [(D(2026, 10, 8), '1509', 0)]
+        elif s.startswith('SELECT trans_time, usercode, branchcode, totpointsold'):
+            self.r = []
+        elif s.startswith('SELECT phcode, phcodestatus'):
             self.r = NODE if self.node else HQ
         elif s.startswith('SELECT phcode, totpoints'):
             self.r = PTS_NODE if self.node else PTS_HQ
@@ -150,3 +162,16 @@ class ReplicationProbeTests(TestCase):
         rows = open(self.csv, encoding='utf-8-sig').read().splitlines()
         self.assertEqual(rows[1].split(',')[:4], ['06HD3', '2024-05-14 00:00:00', '19', '500'])
         self.assertIn('1500', rows[1])
+
+    def test_trace_shows_hq_and_node_copy(self):
+        out = io.StringIO()
+        with mock.patch('config.sybase.get_sybase_connection', return_value=Conn()), \
+                mock.patch('config.sybase.get_branch_connection', return_value=Conn(node=True)):
+            call_command('investigate_pic_replication', host=['10.0.0.1'], pic=['05HD999'], trace=True, out='',
+                         stdout=out)
+        t = out.getvalue()
+        self.assertIn('═ 05HD999', t)
+        self.assertIn('HQ: customer phcodestatus=1 · piclock=0 · picpoints=0 · picdiscounts=1', t)
+        self.assertIn('10.0.0.1: customer phcodestatus=1 · piclock=0 · picpoints=1 · picdiscounts=0', t)
+        self.assertIn('picstrans: trans_time=2026-10-08 00:00:00 · usercode=1509 · picpoints=0', t)
+        self.assertNotIn('[R1]', t)
