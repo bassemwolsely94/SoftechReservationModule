@@ -175,6 +175,14 @@ branch copy's balance and flag. Before any write:
    off (`picpoints=0`) in SOFTECH's customer screen at HQ, without the SQL capture running.
    `investigate_pic_replication --trace --pic 05HD999` shows what the screen wrote (flags, user, time,
    `table_dumped`, the `picstrans` log row) and whether branch 140's copy received it.
+   **Trace result (06:12, 7 min after the save):**
+   * HQ: `picpoints=0 · picdiscounts=1`, `usercode=1509`, `trans_time=06:05:31`, **`table_dumped` NULL**.
+     The screen overwrote the "last edited by / at" columns and wrote **no `picstrans` row** (that log is not
+     the customer screen's). The HQ balance (79) is untouched: the flag does not clear points.
+   * Branch 140 (the customer's home branch): still `picpoints=1 · picdiscounts=0`, last edited 2018,
+     balance 125,031. **The change did not reach the branch.** HQ rows with `table_dumped` NULL look like
+     rows the replication never ships down (13,024 such rows at HQ). Rerunning the trace the next morning
+     shows whether an overnight cycle copies it.
 
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)
