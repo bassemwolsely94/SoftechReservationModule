@@ -155,8 +155,11 @@ only): reset date and user, HQ status / points flag / balance, coupon conversion
 branch copy's balance and flag. Before any write:
 1. capture SOFTECH's own DML (`capture_save_sql`) while staff turn points off for ONE customer at HQ, so the
    batch replays exactly what SOFTECH does;
-2. the probe shows whether the HQ flag alone stops earning and couponing (the 546 already "NOT enrolled" at HQ:
-   do they still earn or get coupons?). If not, the branch copies need the same change (step-3 channel).
+2. **Answered (2026-10-08 run): the HQ flag alone does NOT stop earning.** Of the 546 reset customers already
+   "NOT enrolled" at HQ, 379 have earned points again since. Points are earned at the branch till from the
+   branch's own copy, and shipped to HQ. So Option B must turn points off on **HQ and every branch copy**
+   of the code; the branch part uses the same channel as step 3. The probe now also shows those 379 by branch-copy
+   flag, and counts coupon conversions in small batches (the single join timed out).
 
 **Consequences for the design**
 * There is no single place to write. A merge must act **on the node that holds each code (its home branch)

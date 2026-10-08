@@ -39,8 +39,8 @@ class Cur:
             self.r = [('115', 3, 20)]
         elif s.startswith('SELECT phcode, usercode, trans_time, totpoints - conpointsold'):
             self.r = [('06HD3', '19', D(2024, 5, 14), 500)]
-        elif "p.doccode = '170'" in s:
-            self.r = [('06HD3', 3, -1500, D(2025, 1, 1))]
+        elif "doccode = '170' AND phcode IN" in s:
+            self.r = [('06HD3', D(2025, 1, 1), -500), ('06HD3', D(2025, 2, 1), -1000), ('06HD3', D(2020, 1, 1), -9)]
         elif "doccode = '30' AND transdate >" in s:
             self.r = [(2, -15, D(2026, 3, 1))]
         elif s.startswith('SELECT totpointsold'):
@@ -142,7 +142,7 @@ class ReplicationProbeTests(TestCase):
                          reset_csv=self.csv)
         t = out.getvalue()
         self.assertIn('[R8]', t)
-        self.assertIn('converted to gift coupons at HQ AFTER their reset (doc 170): 3 conversions · 1 customers · 1500 points', t)
+        self.assertIn('converted to gift coupons at HQ AFTER their reset (doc 170): 2 conversions · 1 customers · 1500 points', t)
         self.assertNotIn('[R1]', t)
         self.assertIn('reversed by customer returns (doc 30) after the reset: 2 times, 15 points', t)
         self.assertIn("of those customers, HQ points flag: {'enrolled': 1}", t)

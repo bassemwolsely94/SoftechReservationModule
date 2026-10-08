@@ -287,24 +287,37 @@ class Command(BaseCommand):
         self._emit(f'  at HQ: points flag {dict(hq_flag)} · earned again since the reset: '
                    f'{sum(1 for b in hq_bal.values() if b > 0)} customers, {sum(b for b in hq_bal.values() if b > 0)} points')
         off = [p for p in last if not self.hq_cust.get(p, {}).get('enrolled')]
-        self._emit(f'  of the {len(off)} NOT enrolled at HQ: {sum(1 for p in off if hq_bal[p] > 0)} still earned points '
-                   'again at HQ (if > 0, turning the flag off at HQ alone does not stop earning)')
-        conv = {}
-        try:     # the real spend: points converted to gift coupons (doc 170, HQ / call center) after the reset
-            _, r = self._q(self.hq,
-                           f"SELECT p.phcode, count(*), sum(p.points), max(p.transdate) FROM {DB}.picpoints p, "
-                           f"(SELECT phcode, max(trans_time) t FROM {DB}.lcpointstrans WHERE conpoints = totpoints "
-                           "AND conpointsold < conpoints AND totpoints > 0 GROUP BY phcode) x "
-                           "WHERE p.phcode = x.phcode AND p.doccode = '170' AND p.transdate > x.t GROUP BY p.phcode")
-            conv = {_s(a): (c, -(t or 0), m) for a, c, t, m in r}
-            self._emit(f'  converted to gift coupons at HQ AFTER their reset (doc 170): '
-                       f'{sum(v[0] for v in conv.values())} conversions · {len(conv)} customers · '
-                       f'{sum(v[1] for v in conv.values())} points · last {max((v[2] for v in conv.values()), default=None)}')
-            by_flag = Counter('enrolled' if self.hq_cust.get(p, {}).get('enrolled') else 'NOT enrolled' for p in conv)
-            self._emit(f'      of those customers, HQ points flag: {dict(by_flag)} '
-                       '(NOT enrolled > 0 → the coupon screen does not check the flag)')
-        except Exception as exc:
-            self._emit(f'  coupon conversions after the reset: (skipped — {str(exc)[:80]})')
+        earning = [p for p in off if hq_bal[p] > 0]
+        self._emit(f'  of the {len(off)} NOT enrolled at HQ: {len(earning)} still earned points again at HQ (if > 0, '
+                   'turning the flag off at HQ alone does not stop earning)')
+        node_flag = Counter()
+        for p in earning:
+            copies = [n['cust'][p].get('enrolled') for n in self.nodes if not n.get('error') and p in n['cust']]
+            node_flag['no branch copy' if not copies else 'branch copy ON' if any(copies) else 'branch copy OFF'] += 1
+        if earning:
+            self._emit(f'      their branch copies: {dict(node_flag)} (ON = the branch till still awards points)')
+        conv, failed = {}, 0
+        codes = sorted(last)
+        for i in range(0, len(codes), 150):   # small IN-lists use the phcode index; one big join timed out
+            chunk = codes[i:i + 150]
+            try:
+                _, r = self._q(self.hq, f"SELECT phcode, transdate, points FROM {DB}.picpoints WHERE doccode = '170' "
+                                        f"AND phcode IN ({','.join('?' * len(chunk))})", chunk)
+            except Exception:
+                failed += 1
+                continue
+            for pic, when, pts in r:
+                pic = _s(pic)
+                if when and when > last[pic][1]:          # after this customer's own reset
+                    c, t, m = conv.get(pic, (0, 0, None))
+                    conv[pic] = (c + 1, t - (pts or 0), max(m, when) if m else when)
+        self._emit(f'  converted to gift coupons at HQ AFTER their reset (doc 170): '
+                   f'{sum(v[0] for v in conv.values())} conversions · {len(conv)} customers · '
+                   f'{sum(v[1] for v in conv.values())} points · last {max((v[2] for v in conv.values()), default=None)}'
+                   + (f' · ⚠ {failed} batches timed out (partial)' if failed else ''))
+        by_flag = Counter('enrolled' if self.hq_cust.get(p, {}).get('enrolled') else 'NOT enrolled' for p in conv)
+        self._emit(f'      of those customers, HQ points flag: {dict(by_flag)} '
+                   '(NOT enrolled > 0 → the coupon screen does not check the flag)')
         self._reset_rows = [(p, last[p], hq_bal[p], conv.get(p)) for p in sorted(last)]
         leaks = []
         for n in self.nodes:
