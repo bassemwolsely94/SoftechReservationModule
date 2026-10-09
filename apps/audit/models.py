@@ -98,6 +98,7 @@ class AuditLog(models.Model):
         ('coupon_batch_stocked',       'كوبونات — إدخال دفعة في SOFTECH'),
         # Customer account flags → branch copy (B7)
         ('customer_branch_copy_written', 'عميل — نسخ حالة الرئيسي لنسخة الفرع'),
+        ('customer_points_removed',      'عميل — استبعاد من نظام النقاط وتصفير الرصيد'),
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift
+from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, PointsRemoval
 
 
 @admin.register(CustomerHealthProfile)
@@ -76,6 +76,22 @@ class BranchCopyWriteAdmin(admin.ModelAdmin):
     list_filter = ('status', 'node_branch')
     search_fields = ('pic',)
     readonly_fields = ('pic', 'node_branch', 'before', 'target', 'after', 'status', 'error', 'requested_by', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PointsRemoval)
+class PointsRemovalAdmin(admin.ModelAdmin):
+    """B7 Option B — every removal from the points system at HQ (read-only record)."""
+    list_display = ('pic', 'status', 'flag_before', 'balance_before', 'points_cleared', 'balance_after',
+                    'requested_by', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('pic',)
+    readonly_fields = [f.name for f in PointsRemoval._meta.fields]
 
     def has_add_permission(self, request):
         return False

@@ -591,3 +591,34 @@ class BranchCopyWrite(models.Model):
 
     def __str__(self):
         return f'{self.pic}@{self.node_branch} {self.status}'
+
+
+class PointsRemoval(models.Model):
+    """
+    Removing one customer from the points system at HQ (B7 Option B, owner 2026-10-08/09): points flag off
+    (localcustomers.picpoints = 0) and the balance earned since the reset cleared (one picpoints row of
+    −balance, doc '0', branch 100 — the method of the 2022–2024 resets). apps/customers/points_removal.py.
+    """
+    STATUS_DRY_RUN, STATUS_NO_CHANGE, STATUS_VERIFIED = 'dry_run', 'no_change', 'verified'
+    STATUS_CONFLICT, STATUS_FAILED = 'conflict', 'failed'
+    STATUS_CHOICES = [(STATUS_DRY_RUN, 'تجربة بدون كتابة'), (STATUS_NO_CHANGE, 'مستبعد بالفعل'),
+                      (STATUS_VERIFIED, 'تم الاستبعاد والتحقق'), (STATUS_CONFLICT, 'تغيّر أثناء التنفيذ'),
+                      (STATUS_FAILED, 'فشل')]
+
+    pic = models.CharField(max_length=13, db_index=True)
+    flag_before = models.PositiveSmallIntegerField(null=True)
+    balance_before = models.IntegerField(null=True)
+    flag_after = models.PositiveSmallIntegerField(null=True)
+    balance_after = models.IntegerField(null=True)
+    points_cleared = models.IntegerField(default=0)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    error = models.TextField(blank=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.pic} {self.status} (−{self.points_cleared})'

@@ -199,8 +199,26 @@ row (old/new earned and consumed, user 19, branch 100) + a `picpoints` row of �
 docnumber 0, branch 100, ten seconds later. `tr_picpoints` applies it to the balance. Both rows stayed at HQ
 (branch 140's balance is still 125,031). The SQL capture caught nothing (no reset was done in the window).
 
-## Option B — points off for the reset customers (owner approved the direction 2026-10-08; NOT built)
+## Option B — removing the reset customers from points at HQ (BUILT, gated off)
 
+**Branch copies done (2026-10-10):** all 892 HQ-stricter differences copied in batches; the daily check
+shows `HQ stricter: 0`, with 22 branch-stricter differences left for review (130: 5 · 160: 14 · 170: 3).
+
+`apps/customers/points_removal.py` + `remove_from_points --user <admin> [--limit 50] [--pic X] [--reset-by 19] [--commit]`:
+* candidates = customers fully reset at HQ (`lcpointstrans` consumed = earned) by SOFTECH user 19 (owner:
+  Bassem Halim; `--reset-by` adds others), still enrolled **or** holding a positive balance at HQ;
+* per customer at HQ: (1) `UPDATE localcustomers SET picpoints = 0, usercode = <operator>, trans_time =
+  getdate() WHERE phcode = ? AND picpoints = 1` — what the customer screen writes; (2) balance re-read, then
+  `INSERT picpoints (−balance, branch '100', doc '0', docnumber 0, vf1 reason, vf2 operator)` — the reset
+  method from the 05HD999 trace; `tr_picpoints` applies it. No `lcpointstrans` row is written (its
+  `transsno` rule is unknown); the record is our `PointsRemoval` + AuditLog `customer_points_removed`;
+* read back: flag 0 and balance 0 → `verified`; balance moved → `conflict`; stops at the first problem;
+  gate `POINTS_REMOVAL_WRITE_ENABLED` (default off), `POINTS_REMOVAL_BATCH_MAX` 50; the operator must have a
+  SOFTECH user id; special discount is not touched;
+* afterwards the branch copies' points flag: `check_customer_status_drift` → `push_customer_branch_copy
+  --from-drift` per branch.
+
+### Earlier findings that led here
 `investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes
 only): reset date and user, HQ status / points flag / balance, coupon conversions after the reset, and each
 branch copy's balance and flag. Before any write:
