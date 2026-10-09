@@ -118,5 +118,5 @@ class RemovalTests(TestCase):
         with mock.patch('config.sybase.get_sybase_connection', return_value=hq()):
             call_command('remove_from_points', user='adm', limit=10, stdout=out)
         t = out.getvalue()
-        self.assertIn('2 codes · dry_run=2 · points to clear: 800', t)
+        self.assertIn('2 codes · dry_run=2 · points cleared: 0 · points to clear (dry run): 800', t)
         self.assertIn('review list: scratch', t)

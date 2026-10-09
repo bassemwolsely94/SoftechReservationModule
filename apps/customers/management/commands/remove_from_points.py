@@ -32,15 +32,18 @@ class Command(BaseCommand):
             raise CommandError('--user must be an active admin or supervisor (your login name in our system)')
         recs = PR.run(pics=o['pic'] or None, user=user, commit=o['commit'], limit=o['limit'] or None,
                       users=tuple(o['reset_by'] or ['19']))
-        counts, cleared = {}, 0
+        counts, cleared, planned = {}, 0, 0
         for r in recs:
             counts[r.status] = counts.get(r.status, 0) + 1
-            cleared += r.points_cleared if r.status in ('verified', 'dry_run') else 0
+            if r.status == 'verified':
+                cleared += r.points_cleared
+            elif r.status == 'dry_run':
+                planned += r.points_cleared
             self.stdout.write(f'{r.pic}: {r.status} · flag {r.flag_before}→{r.flag_after if r.flag_after is not None else "-"}'
                               f' · balance {r.balance_before}→{r.balance_after if r.balance_after is not None else "-"}'
                               + (f' — {r.error}' if r.error else ''))
         self.stdout.write(f'{len(recs)} codes · ' + ', '.join(f'{k}={v}' for k, v in sorted(counts.items()))
-                          + f' · points {"cleared" if o["commit"] else "to clear"}: {cleared}')
+                          + f' · points cleared: {cleared}' + (f' · points to clear (dry run): {planned}' if planned else ''))
         if recs:
             os.makedirs('scratch', exist_ok=True)
             path = os.path.join('scratch', f'points_removal_{timezone.localtime():%Y%m%d_%H%M%S}.csv')
