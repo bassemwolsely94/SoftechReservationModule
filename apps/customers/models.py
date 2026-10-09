@@ -610,6 +610,8 @@ class PointsRemoval(models.Model):
     balance_before = models.IntegerField(null=True)
     flag_after = models.PositiveSmallIntegerField(null=True)
     balance_after = models.IntegerField(null=True)
+    discount_before = models.PositiveSmallIntegerField(null=True)
+    discount_after = models.PositiveSmallIntegerField(null=True)
     points_cleared = models.IntegerField(default=0)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
     error = models.TextField(blank=True)

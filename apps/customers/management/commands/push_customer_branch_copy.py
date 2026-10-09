@@ -6,7 +6,10 @@ One code (all differing flags):
 Batch from the daily status check (only flags that make the branch STRICTER; special discount only with
 --include-discount; codes whose copy would relax the branch are skipped; stops at the first conflict):
     python manage.py push_customer_branch_copy --from-drift --branch 140 --user <username> [--limit 50] [--commit]
-Every run writes a review list to scratch/ (codes only).
+Customers removed from points at HQ (remove_from_points) → points off + special discount on this branch's copy:
+    python manage.py push_customer_branch_copy --from-removals --branch 140 --user <username> --batches 60 --quiet --commit
+--batches N repeats the batch until nothing is left or a problem stops it. Every batch writes a review list
+to scratch/ (codes only).
 """
 import csv
 import os
@@ -22,6 +25,10 @@ class Command(BaseCommand):
         parser.add_argument('--pic', action='append', default=[])
         parser.add_argument('--from-drift', action='store_true',
                             help='batch: codes with an open HQ-stricter difference on --branch')
+        parser.add_argument('--from-removals', action='store_true',
+                            help='batch: customers removed from points at HQ → points off + special discount here')
+        parser.add_argument('--batches', type=int, default=1, help='repeat the batch up to N times (stops at a problem)')
+        parser.add_argument('--quiet', action='store_true', help='only the summary line per batch')
         parser.add_argument('--branch', required=True)
         parser.add_argument('--user', required=True, help='our username of the person running it (audit)')
         parser.add_argument('--limit', type=int, default=0, help='batch size (≤ CUSTOMER_BRANCH_COPY_BATCH_MAX)')
@@ -40,20 +47,34 @@ class Command(BaseCommand):
         if not (user.is_active and user.user.is_active) or user.role not in ('admin', 'supervisor'):
             raise CommandError(f"{user.user.username}: role={user.role!r} active={user.is_active and user.user.is_active}"
                                ' — must be an active admin or supervisor')
-        if bool(o['pic']) == bool(o['from_drift']):
-            raise CommandError('give either --pic (one code) or --from-drift (batch)')
-        try:
-            if o['from_drift']:
-                recs = BC.run_batch(o['branch'], user=user, commit=o['commit'], limit=o['limit'] or None,
-                                    include_discount=o['include_discount'])
-            else:
-                recs = BC.run(o['pic'], o['branch'], user=user, commit=o['commit'])
-        except ValueError as exc:
-            raise CommandError(str(exc))
+        modes = [bool(o['pic']), o['from_drift'], o['from_removals']]
+        if sum(modes) != 1:
+            raise CommandError('give exactly one of --pic, --from-drift, --from-removals')
+        batches = max(1, o['batches']) if not o['pic'] else 1
+        for n in range(1, batches + 1):
+            try:
+                if o['from_drift']:
+                    recs = BC.run_batch(o['branch'], user=user, commit=o['commit'], limit=o['limit'] or None,
+                                        include_discount=o['include_discount'])
+                elif o['from_removals']:
+                    recs = BC.run_removals_batch(o['branch'], user=user, commit=o['commit'], limit=o['limit'] or None)
+                else:
+                    recs = BC.run(o['pic'], o['branch'], user=user, commit=o['commit'])
+            except ValueError as exc:
+                raise CommandError(str(exc))
+            problem = self._report(recs, o, BC, n if batches > 1 else 0)
+            if not recs or problem or not o['commit']:
+                break
+        if not o['commit']:
+            self.stdout.write(self.style.WARNING('dry run — add --commit (and CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True) to write'))
+
+    def _report(self, recs, o, BC, batch_no):
 
         for r in recs:
+            if o['quiet'] and r.status not in ('conflict', 'failed'):
+                continue
             self.stdout.write(f'{r.pic} @ branch {r.node_branch}: {r.status}' + (f' — {r.error}' if r.error else ''))
-            if not o['from_drift'] or len(recs) <= 5:
+            if o['pic'] or len(recs) <= 5:
                 for c in BC.FLAGS:
                     b, t, af = r.before.get(c), r.target.get(c), r.after.get(c, '')
                     mark = '  ← change' if b != t else ''
@@ -62,17 +83,17 @@ class Command(BaseCommand):
         counts = {}
         for r in recs:
             counts[r.status] = counts.get(r.status, 0) + 1
-        self.stdout.write(f'{len(recs)} codes · ' + ', '.join(f'{k}={v}' for k, v in sorted(counts.items())))
+        prefix = f'batch {batch_no}: ' if batch_no else ''
+        self.stdout.write(prefix + f'{len(recs)} codes - ' + ', '.join(f'{k}={v}' for k, v in sorted(counts.items())))
         path = self._write_list(recs, o, BC)
         if path:
             self.stdout.write(f'review list: {path}')
-        if not o['commit']:
-            self.stdout.write(self.style.WARNING('dry run — add --commit (and CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True) to write'))
+        return bool(counts.get('conflict') or counts.get('failed'))
 
     def _write_list(self, recs, o, BC):
         if not recs:
             return ''
-        path = os.path.join('scratch', f"branch_copy_{o['branch']}_{timezone.localtime():%Y%m%d_%H%M%S}.csv")
+        path = os.path.join('scratch', f"branch_copy_{o['branch']}_{timezone.localtime():%Y%m%d_%H%M%S_%f}.csv")
         os.makedirs('scratch', exist_ok=True)
         with open(path, 'w', newline='', encoding='utf-8-sig') as f:
             w = csv.writer(f)

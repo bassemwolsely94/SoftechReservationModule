@@ -193,7 +193,7 @@ class BatchTests(TestCase):
         call_command('push_customer_branch_copy', from_drift=True, branch='140', user='adm2', limit=2, stdout=out)
         t = out.getvalue()
         self.assertIn('P1 @ branch 140: dry_run', t)
-        self.assertIn('2 codes · dry_run=2', t)
+        self.assertIn('2 codes - dry_run=2', t)
         self.assertIn('review list: scratch', t)
         self.assertEqual(self.node.rows['P1']['picpoints'], 1)
 
@@ -203,3 +203,41 @@ class BatchTests(TestCase):
         self.node.race = ('P1', {'picdiscounts': 1})
         recs = BC.run_batch('140', user=self.admin, commit=True)
         self.assertEqual([r.status for r in recs], ['failed'])            # stopped at the first problem
+
+
+class RemovalCopyTests(TestCase):
+    def setUp(self):
+        from unittest import mock
+        from apps.customers.models import PointsRemoval as R
+        from apps.tests.factories import make_branch, make_user
+        b = make_branch('B', '140')
+        b.db_host = '10.0.0.4'
+        b.save()
+        _, self.admin, _ = make_user('adm3', role='admin')
+        for pic in ('R1', 'R2', 'R3', 'R4'):
+            R.objects.create(pic=pic, status='verified', flag_after=0, balance_after=0, discount_after=1)
+        R.objects.create(pic='R5', status='failed')
+        self.hq = hq_db({p: {'picpoints': 0, 'picdiscounts': 1} for p in ('R1', 'R2', 'R3', 'R4')})
+        self.node = node_db({'R1': {}, 'R2': {'picpoints': 0, 'picdiscounts': 1}, 'R3': {'picpoints': 0}})
+        for p in (mock.patch('config.sybase.get_sybase_connection', return_value=self.hq),
+                  mock.patch('config.sybase.get_branch_connection', return_value=self.node)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    @override_settings(CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True)
+    def test_points_off_and_discount_on_branch_copies(self):
+        recs = BC.run_removals_batch('140', user=self.admin, commit=True)
+        got = {r.pic: r.status for r in recs}
+        self.assertEqual(got, {'R1': 'verified', 'R2': 'no_change', 'R3': 'verified', 'R4': 'skipped'})
+        self.assertEqual((self.node.rows['R1']['picpoints'], self.node.rows['R1']['picdiscounts']), (0, 1))
+        self.assertEqual(self.node.rows['R3']['picdiscounts'], 1)
+        self.assertEqual(BC.removal_candidates('140', 50), [])          # all settled → next run is empty
+
+    @override_settings(CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True, CUSTOMER_BRANCH_COPY_BATCH_MAX=2)
+    def test_command_batches(self):
+        out = io.StringIO()
+        call_command('push_customer_branch_copy', from_removals=True, branch='140', user='adm3', batches=5,
+                     quiet=True, commit=True, stdout=out)
+        t = out.getvalue()
+        self.assertIn('batch 1: 2 codes - verified=1, no_change=1', t.replace('no_change=1, verified=1', 'verified=1, no_change=1'))
+        self.assertIn('batch 3: 0 codes', t)

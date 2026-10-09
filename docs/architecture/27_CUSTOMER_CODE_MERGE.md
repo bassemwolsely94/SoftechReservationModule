@@ -223,6 +223,16 @@ shows `HQ stricter: 0`, with 22 branch-stricter differences left for review (130
 in `vf1` arrived as `?` (the jConnect link does not carry Arabic into that column) → the reason is now ASCII
 (`B7 removed from points`).
 
+**Owner 2026-10-10: "removed customers should get special discount".** The removal now sets
+`picpoints = 0, picdiscounts = 1` in the same HQ UPDATE (verified = points 0, balance 0, discount 1).
+Customers removed before this decision (the first 100 + 05HD999) are candidates again and only get the
+discount. Branch copies: `push_customer_branch_copy --from-removals --branch N` copies `picpoints` +
+`picdiscounts` for every removed customer the branch holds (a code the branch does not hold is `skipped`; a
+copy that would re-enroll points is `skipped`); each copy is settled once (verified / no_change / skipped
+after the latest removal). Both commands take `--batches N --quiet` (repeat 50-code batches, stop at the first
+conflict / failure), because the PowerShell loop broke on the `·` character and hid one batch's output.
+Candidates are now read in bulk (one query per 150 codes).
+
 ### Earlier findings that led here
 `investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes
 only): reset date and user, HQ status / points flag / balance, coupon conversions after the reset, and each

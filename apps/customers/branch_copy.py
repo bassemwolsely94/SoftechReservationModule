@@ -109,7 +109,7 @@ def _branch(code):
 
 
 def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_conn=None,
-             fields=FLAGS, only_tighten=False):
+             fields=FLAGS, only_tighten=False, absent_ok=False):
     """Plan (and with commit=True + the gate on, write) one code on one branch. Returns the
     BranchCopyWrite row. `fields` limits which flags are copied; only_tighten skips the code when a
     copy would relax the branch (batch mode)."""
@@ -128,6 +128,11 @@ def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_co
             b = _branch(branch_code)
             node_conn = get_branch_connection(b.db_host, b.db_port or 5000, 'SOFTECHDB9')
         node = read_row(node_conn, pic)
+        if node is None and absent_ok:              # the branch never held this customer → nothing to fix
+            rec.status, rec.error = W.STATUS_SKIPPED, 'not held on this branch'
+            rec.target = _json(hq)
+            rec.save()
+            return rec
         if node is None:
             raise ValueError(f'{pic} has no copy on branch {branch_code}')
         rec.before, rec.target = _json(node), _json(hq)
@@ -251,6 +256,53 @@ def run_batch(branch_code, *, user=None, commit=False, limit=None, include_disco
         for pic in pics:
             r = copy_one(pic, branch_code, user=user, commit=commit, hq_conn=hq_conn, node_conn=node_conn,
                          fields=fields, only_tighten=True)
+            recs.append(r)
+            if commit and r.status in (W.STATUS_CONFLICT, W.STATUS_FAILED):
+                break
+    finally:
+        node_conn.close()
+        hq_conn.close()
+    return recs
+
+
+# ── removed customers → branch copies (owner 2026-10-10: removed customers get special discount) ────────
+REMOVAL_FIELDS = ('picpoints', 'picdiscounts')
+
+
+def removal_candidates(branch_code, limit):
+    """Customers removed from points at HQ (PointsRemoval verified / no_change with discount 1) that have no
+    settled copy on this branch since their latest removal."""
+    from django.db.models import Max
+    from .models import BranchCopyWrite as W, PointsRemoval as R
+    latest = dict(R.objects.filter(status__in=(R.STATUS_VERIFIED, R.STATUS_NO_CHANGE), discount_after=1)
+                  .values('pic').annotate(t=Max('created_at')).values_list('pic', 't'))
+    settled = {}
+    for pic, t in (W.objects.filter(node_branch=str(branch_code), pic__in=list(latest),
+                                    status__in=(W.STATUS_VERIFIED, W.STATUS_NO_CHANGE, W.STATUS_SKIPPED))
+                   .values_list('pic', 'created_at')):
+        settled[pic] = max(settled.get(pic, t), t)
+    out = [p for p in sorted(latest) if p not in held_codes() and not (p in settled and settled[p] >= latest[p])]
+    return out[:limit]
+
+
+def run_removals_batch(branch_code, *, user=None, commit=False, limit=None):
+    """Copy points-off + special discount from HQ onto this branch's copy for removed customers. A code the
+    branch does not hold is 'skipped' (not a failure); a code whose copy would re-enroll points is skipped
+    for review; stops at the first conflict / failure."""
+    from config.sybase import get_branch_connection, get_sybase_connection
+    from .models import BranchCopyWrite as W
+    limit = min(int(limit or batch_max()), batch_max())
+    pics = removal_candidates(branch_code, limit)
+    recs = []
+    if not pics:
+        return recs
+    b = _branch(branch_code)
+    hq_conn = get_sybase_connection()
+    node_conn = get_branch_connection(b.db_host, b.db_port or 5000, 'SOFTECHDB9')
+    try:
+        for pic in pics:
+            r = copy_one(pic, branch_code, user=user, commit=commit, hq_conn=hq_conn, node_conn=node_conn,
+                         fields=REMOVAL_FIELDS, only_tighten=True, absent_ok=True)
             recs.append(r)
             if commit and r.status in (W.STATUS_CONFLICT, W.STATUS_FAILED):
                 break

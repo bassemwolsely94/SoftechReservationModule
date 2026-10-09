@@ -7,19 +7,22 @@ re-earned balance → yes". Probe findings (doc 27): 2,600 of 3,146 are still en
 earned 1.71 M points again, and coupons are still issued against that HQ balance.
 
 Per customer, at HQ only (two statements, then read back):
-  1. points flag off:  UPDATE localcustomers SET picpoints = 0, usercode = <operator's SOFTECH user>,
-                       trans_time = getdate()  WHERE phcode = ? AND picpoints = 1
-     — what SOFTECH's customer screen writes (trace of 05HD999: picpoints, usercode, trans_time).
+  1. points flag off + special discount on (owner 2026-10-10: "removed customers should get special
+     discount", as done by hand on 05HD999):
+                       UPDATE localcustomers SET picpoints = 0, picdiscounts = 1, usercode = <operator's SOFTECH
+                       user>, trans_time = getdate()  WHERE phcode = ? AND (picpoints = 1 OR picdiscounts = 0)
+     — what SOFTECH's customer screen writes (trace of 05HD999: picpoints, picdiscounts, usercode, trans_time).
   2. balance cleared:  INSERT picpoints (phcode, transdate, points = −balance, branchcode '100', doccode '0',
                        docnumber 0, docdate, vf1 reason, vf2 operator)
      — the reset method found in the 05HD999 trace (2022: −14,452, doc '0', branch 100); tr_picpoints applies
        it to localcustomerspoints. The same INSERT pattern as apps/loyalty/pic_bridge.adjust_softech_points.
-  The branch copies' points flag is then fixed by the existing channel: check_customer_status_drift +
-  push_customer_branch_copy --from-drift (only tightening flags).
+  The branch copies (points flag + special discount) follow with push_customer_branch_copy --from-removals.
 Safety: gate POINTS_REMOVAL_WRITE_ENABLED (default False → dry run); ≤ POINTS_REMOVAL_BATCH_MAX (50) per run;
 the balance is re-read just before the INSERT and the INSERT is skipped when it is ≤ 0; read back after
-(flag 0 and balance 0 → verified, else conflict / failed); stops at the first problem; every attempt is a
-PointsRemoval row + AuditLog entry. Special discount is NOT changed (pricing — separate decision).
+(points 0, balance 0, special discount 1 → verified, else conflict / failed); stops at the first problem;
+every attempt is a PointsRemoval row + AuditLog entry. Customers removed before the discount decision are
+picked up again (discount 0) and only get the discount. Branch copies: push_customer_branch_copy
+--from-removals (points flag + special discount).
 """
 import logging
 
@@ -54,24 +57,40 @@ def reset_customers(conn, users=('19',)):
 
 
 def read_state(conn, pic):
-    """(points flag, balance) at HQ, or None when the code does not exist."""
-    r = _q(conn, f'SELECT picpoints FROM {DB}.localcustomers WHERE phcode = ?', [pic])
+    """(points flag, balance, special-discount flag) at HQ, or None when the code does not exist."""
+    r = _q(conn, f'SELECT picpoints, picdiscounts FROM {DB}.localcustomers WHERE phcode = ?', [pic])
     if not r:
         return None
     b = _q(conn, f'SELECT totpoints, conpoints FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])
     bal = int((b[0][0] or 0) - (b[0][1] or 0)) if b else 0
-    return int(r[0][0] or 0), bal
+    return int(r[0][0] or 0), bal, int(r[0][1] or 0)
+
+
+def _done(st):
+    """Removed = points off, nothing left to spend, special discount on (owner 2026-10-10)."""
+    flag, bal, disc = st
+    return flag == 0 and bal <= 0 and disc == 1
 
 
 def candidates(conn, users=('19',), limit=None):
-    """Reset customers still enrolled OR still holding a positive balance at HQ."""
+    """Reset customers not yet fully removed (still enrolled, holding points, or without special discount).
+    Bulk reads in chunks — one query per 150 codes instead of two per code."""
+    pics = reset_customers(conn, users)
     out = []
-    for pic in reset_customers(conn, users):
-        st = read_state(conn, pic)
-        if st and (st[0] == 1 or st[1] > 0):
-            out.append(pic)
-            if limit and len(out) >= limit:
-                break
+    for i in range(0, len(pics), 150):
+        chunk = pics[i:i + 150]
+        marks = ','.join('?' * len(chunk))
+        flags = {str(a).strip(): (int(f or 0), int(d or 0)) for a, f, d in _q(
+            conn, f'SELECT phcode, picpoints, picdiscounts FROM {DB}.localcustomers WHERE phcode IN ({marks})', chunk)}
+        bals = {str(a).strip(): int((t or 0) - (c or 0)) for a, t, c in _q(
+            conn, f'SELECT phcode, totpoints, conpoints FROM {DB}.localcustomerspoints WHERE phcode IN ({marks})', chunk)}
+        for pic in chunk:
+            if pic not in flags:
+                continue
+            if not _done((flags[pic][0], bals.get(pic, 0), flags[pic][1])):
+                out.append(pic)
+                if limit and len(out) >= limit:
+                    return out
     return out
 
 
@@ -82,9 +101,10 @@ def remove_one(pic, *, user=None, commit=False, conn=None):
         st = read_state(conn, pic)
         if st is None:
             raise ValueError(f'{pic} not found at HQ')
-        rec.flag_before, rec.balance_before = st
-        if st[0] == 0 and st[1] <= 0:
-            rec.status, rec.flag_after, rec.balance_after = R.STATUS_NO_CHANGE, st[0], st[1]
+        rec.flag_before, rec.balance_before, rec.discount_before = st
+        if _done(st):
+            rec.status = R.STATUS_NO_CHANGE
+            rec.flag_after, rec.balance_after, rec.discount_after = st
         elif not (commit and write_enabled()):
             rec.status = R.STATUS_DRY_RUN
             rec.points_cleared = max(st[1], 0)
@@ -95,24 +115,26 @@ def remove_one(pic, *, user=None, commit=False, conn=None):
             if not op:
                 raise ValueError('the operator has no SOFTECH user id (StaffProfile.softech_user_id)')
             cur = conn.cursor()
-            if st[0] == 1:
-                cur.execute(f'UPDATE {DB}.localcustomers SET picpoints = 0, usercode = ?, trans_time = getdate() '
-                            'WHERE phcode = ? AND picpoints = 1', [op, pic])
-            flag, bal = read_state(conn, pic)               # re-read right before touching the balance
+            if st[0] == 1 or st[2] == 0:
+                cur.execute(f'UPDATE {DB}.localcustomers SET picpoints = 0, picdiscounts = 1, usercode = ?, '
+                            'trans_time = getdate() WHERE phcode = ? AND (picpoints = 1 OR isnull(picdiscounts, 0) = 0)',
+                            [op, pic])
+            flag, bal, disc = read_state(conn, pic)          # re-read right before touching the balance
             if bal > 0:
                 cur.execute(f'INSERT INTO {DB}.picpoints (phcode, transdate, points, branchcode, doccode, docnumber, '
                             "docdate, vf1, vf2) VALUES (?, getdate(), ?, '100', '0', 0, getdate(), ?, ?)",
                             [pic, -bal, REASON, op])
                 rec.points_cleared = bal
-            rec.flag_after, rec.balance_after = read_state(conn, pic)
-            if rec.flag_after == 0 and rec.balance_after == 0:
+            after = read_state(conn, pic)
+            rec.flag_after, rec.balance_after, rec.discount_after = after
+            if _done(after):
                 rec.status = R.STATUS_VERIFIED
-            elif rec.flag_after == 0:
+            elif after[0] == 0 and after[2] == 1:
                 rec.status = R.STATUS_CONFLICT
-                rec.error = f'balance moved during the run (now {rec.balance_after}) — rerun the code'
+                rec.error = f'balance moved during the run (now {after[1]}) — rerun the code'
             else:
                 rec.status = R.STATUS_FAILED
-                rec.error = 'points flag still on after the update'
+                rec.error = f'read back points={after[0]} discount={after[2]} (expected 0 / 1)'
     except Exception as exc:
         rec.status, rec.error = R.STATUS_FAILED, str(exc)[:500]
         logger.warning('[points_removal] %s failed: %s', pic, exc)
@@ -126,8 +148,10 @@ def _audit(rec, user):
     try:
         from apps.audit.models import AuditLog
         AuditLog.log('customer_points_removed', user=user, obj=rec,
-                     old_data={'picpoints': rec.flag_before, 'balance': rec.balance_before},
-                     new_data={'picpoints': rec.flag_after, 'balance': rec.balance_after},
+                     old_data={'picpoints': rec.flag_before, 'balance': rec.balance_before,
+                               'picdiscounts': rec.discount_before},
+                     new_data={'picpoints': rec.flag_after, 'balance': rec.balance_after,
+                               'picdiscounts': rec.discount_after},
                      note=f'{rec.pic}: −{rec.points_cleared} نقطة · {rec.get_status_display()}'[:255],
                      extra={'error': rec.error})
     except Exception:
