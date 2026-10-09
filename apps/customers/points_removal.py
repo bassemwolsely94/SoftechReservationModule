@@ -28,7 +28,7 @@ from django.conf import settings
 logger = logging.getLogger('elrezeiky.customers')
 
 DB = 'SOFTECHDB9.dbo'
-REASON = 'B7 استبعاد من نظام النقاط'
+REASON = 'B7 removed from points'   # ASCII: the jConnect link writes Arabic into vf1 as '?'
 
 
 def write_enabled():

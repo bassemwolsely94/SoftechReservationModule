@@ -218,6 +218,11 @@ shows `HQ stricter: 0`, with 22 branch-stricter differences left for review (130
 * afterwards the branch copies' points flag: `check_customer_status_drift` → `push_customer_branch_copy
   --from-drift` per branch.
 
+**Pilot 2026-10-10 02:03: 05HD999 `verified`.** The HQ balance went 79 → 0 (135,001 − 135,001); new HQ row
+`points −79 · doc 0 · docnumber 0 · branch 100 · vf2 1509`; branch 140 untouched. The Arabic reason
+in `vf1` arrived as `?` (the jConnect link does not carry Arabic into that column) → the reason is now ASCII
+(`B7 removed from points`).
+
 ### Earlier findings that led here
 `investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes
 only): reset date and user, HQ status / points flag / balance, coupon conversions after the reset, and each
