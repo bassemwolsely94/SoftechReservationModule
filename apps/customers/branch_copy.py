@@ -71,9 +71,31 @@ def _json(row):
     return {k: (v.isoformat(sep=' ') if hasattr(v, 'isoformat') else v) for k, v in (row or {}).items()}
 
 
-def diff(hq, node):
-    """Flags whose node value differs from HQ."""
-    return [c for c in FLAGS if hq[c] != node[c]]
+def diff(hq, node, fields=FLAGS):
+    """Flags (of `fields`) whose node value differs from HQ."""
+    return [c for c in fields if hq[c] != node[c]]
+
+
+# Batch mode copies only flags that make the branch STRICTER (owner 2026-10-09: "build it and run it in
+# batches"). Special discount is a pricing change → only with include_discount.
+TIGHTEN_FIELDS = ('phcodestatus', 'piclock', 'picdied', 'picpoints')
+_BLOCKED = {'0', '5'}
+
+
+def loosening(hq, node, fields):
+    """Fields where copying HQ would RELAX the branch copy (unblock, unlock, re-enroll in points)."""
+    out = []
+    for c in fields:
+        h, n = hq[c], node[c]
+        if h == n:
+            continue
+        if c == 'phcodestatus' and n in _BLOCKED and h not in _BLOCKED:
+            out.append(c)
+        elif c in ('piclock', 'picdied') and n and not h:
+            out.append(c)
+        elif c == 'picpoints' and not n and h:
+            out.append(c)
+    return out
 
 
 def _branch(code):
@@ -86,9 +108,11 @@ def _branch(code):
     return b
 
 
-def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_conn=None):
+def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_conn=None,
+             fields=FLAGS, only_tighten=False):
     """Plan (and with commit=True + the gate on, write) one code on one branch. Returns the
-    BranchCopyWrite row."""
+    BranchCopyWrite row. `fields` limits which flags are copied; only_tighten skips the code when a
+    copy would relax the branch (batch mode)."""
     from config.sybase import get_branch_connection, get_sybase_connection
     from .models import BranchCopyWrite as W
 
@@ -107,8 +131,12 @@ def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_co
         if node is None:
             raise ValueError(f'{pic} has no copy on branch {branch_code}')
         rec.before, rec.target = _json(node), _json(hq)
-        changed = diff(hq, node)
-        if not changed:
+        changed = diff(hq, node, fields)
+        loose = loosening(hq, node, fields) if only_tighten else []
+        if loose:
+            rec.status = W.STATUS_SKIPPED
+            rec.error = 'copy would relax the branch (' + ', '.join(loose) + ') — review, not batch'
+        elif not changed:
             rec.status, rec.after = W.STATUS_NO_CHANGE, _json(node)
         elif not (commit and write_enabled()):
             rec.status = W.STATUS_DRY_RUN
@@ -124,14 +152,14 @@ def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_co
                         [_param(c, hq[c]) for c in sets] + [pic] + [node[c] for c in FLAGS])
             after = read_row(node_conn, pic)
             rec.after = _json(after)
-            if after and not diff(hq, after):
+            if after and not diff(hq, after, fields):
                 rec.status = W.STATUS_VERIFIED
             elif after and not diff(node, after):
                 rec.status = W.STATUS_CONFLICT
                 rec.error = 'branch copy changed between read and write — not overwritten'
             else:
                 rec.status = W.STATUS_FAILED
-                rec.error = 'read-back does not match HQ: ' + ', '.join(diff(hq, after or node))
+                rec.error = 'read-back does not match HQ: ' + ', '.join(diff(hq, after or node, fields))
     except Exception as exc:
         rec.status, rec.error = W.STATUS_FAILED, str(exc)[:500]
         logger.warning('[branch_copy] %s@%s failed: %s', pic, branch_code, exc)
@@ -144,7 +172,7 @@ def copy_one(pic, branch_code, *, user=None, commit=False, hq_conn=None, node_co
     if rec.status in (W.STATUS_VERIFIED, W.STATUS_CONFLICT, W.STATUS_FAILED) and commit:
         _audit(rec, user)
     if rec.status == W.STATUS_VERIFIED:
-        _resolve_drift(rec)
+        _resolve_drift(rec, fields)
     return rec
 
 
@@ -158,10 +186,15 @@ def _audit(rec, user):
         logger.exception('[branch_copy] audit failed')
 
 
-def _resolve_drift(rec):
+_DRIFT_COLUMNS = {'status': ('phcodestatus', 'picdied'), 'lock': ('piclock',), 'points': ('picpoints',)}
+
+
+def _resolve_drift(rec, fields=FLAGS):
+    """Close the open drift rows whose flags were copied (a partial copy leaves the others open)."""
     from django.utils import timezone
     from .models import CustomerStatusDrift
-    CustomerStatusDrift.objects.filter(pic=rec.pic, node_branch=rec.node_branch,
+    done = [f for f, cols in _DRIFT_COLUMNS.items() if all(c in fields for c in cols)]
+    CustomerStatusDrift.objects.filter(pic=rec.pic, node_branch=rec.node_branch, field__in=done,
                                        resolved_at__isnull=True).update(resolved_at=timezone.now())
 
 
@@ -170,3 +203,58 @@ def run(pics, branch_code, *, user=None, commit=False):
     if commit and len(pics) > max_per_run():
         raise ValueError(f'{len(pics)} codes > CUSTOMER_BRANCH_COPY_MAX_PER_RUN ({max_per_run()})')
     return [copy_one(p, branch_code, user=user, commit=commit) for p in pics]
+
+
+# ── batch mode (owner 2026-10-09) ───────────────────────────────────────────────────────────────
+def batch_max():
+    return int(getattr(settings, 'CUSTOMER_BRANCH_COPY_BATCH_MAX', 50))
+
+
+def held_codes():
+    """Codes never copied in batch (owner decision pending), e.g. 07HD11663."""
+    raw = getattr(settings, 'CUSTOMER_BRANCH_COPY_HOLD', '07HD11663')
+    return {c.strip() for c in str(raw).split(',') if c.strip()}
+
+
+def batch_candidates(branch_code, limit):
+    """Codes with an open HQ-stricter difference on this branch, and NO open branch-stricter / other
+    difference there (copying those could relax the branch). Oldest difference first."""
+    from .models import CustomerStatusDrift as D
+    open_rows = D.objects.filter(node_branch=str(branch_code), resolved_at__isnull=True)
+    risky = set(open_rows.exclude(direction=D.HQ_STRICTER).values_list('pic', flat=True)) | held_codes()
+    pics, seen = [], set()
+    for pic in open_rows.filter(direction=D.HQ_STRICTER).order_by('first_seen', 'pic').values_list('pic', flat=True):
+        if pic in seen or pic in risky:
+            continue
+        seen.add(pic)
+        pics.append(pic)
+        if len(pics) >= limit:
+            break
+    return pics
+
+
+def run_batch(branch_code, *, user=None, commit=False, limit=None, include_discount=False):
+    """Copy the tightening flags for up to `limit` drift candidates on one branch, over one HQ and one
+    branch connection. Stops at the first conflict / failure when writing."""
+    from config.sybase import get_branch_connection, get_sybase_connection
+    from .models import BranchCopyWrite as W
+    limit = min(int(limit or batch_max()), batch_max())
+    pics = batch_candidates(branch_code, limit)
+    fields = TIGHTEN_FIELDS + (('picdiscounts',) if include_discount else ())
+    recs = []
+    if not pics:
+        return recs
+    b = _branch(branch_code)
+    hq_conn = get_sybase_connection()
+    node_conn = get_branch_connection(b.db_host, b.db_port or 5000, 'SOFTECHDB9')
+    try:
+        for pic in pics:
+            r = copy_one(pic, branch_code, user=user, commit=commit, hq_conn=hq_conn, node_conn=node_conn,
+                         fields=fields, only_tighten=True)
+            recs.append(r)
+            if commit and r.status in (W.STATUS_CONFLICT, W.STATUS_FAILED):
+                break
+    finally:
+        node_conn.close()
+        hq_conn.close()
+    return recs

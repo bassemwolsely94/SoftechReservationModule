@@ -176,6 +176,24 @@ Next, one run each (HQ is the source, so HQ must already hold the decision):
 | 07HD11624 | 160 | owner: points off, stays active → first turn points off **at HQ** in SOFTECH's screen; then the run sets the branch to `phcodestatus 0 → 1`, `picpoints 1 → 0` |
 | 07HD11663 | 160 | **do not run** — the run would re-open it at branch 160 (HQ `'1'`); owner investigates first |
 
+**2026-10-10:** 100HD6038 (140), 06HD24310 (150), 07HD2044 + 07HD2057 (160), 08HD1367 (170) all `verified`.
+The first full daily check then showed **892 HQ-stricter differences**: 130: 436 · 140: 87 · 150: 195 ·
+160: 83 · 170: 113. They are mostly `picpoints` (points off at HQ, still on at the branch), plus 22
+branch-stricter differences.
+
+### Batch mode (owner 2026-10-09: "build it and run it in batches")
+
+`push_customer_branch_copy --from-drift --branch N --user <admin> [--limit 50] [--include-discount] [--commit]`
+* candidates = open `hq_stricter` drift rows on that branch, oldest first. A code is excluded if it also has a
+  branch-stricter / other difference there, or is on hold (`CUSTOMER_BRANCH_COPY_HOLD`, default `07HD11663`);
+* copies only the flags that make the branch **stricter** (`phcodestatus, piclock, picdied, picpoints`).
+  A code whose copy would relax the branch (unblock / unlock / re-enroll) is `skipped` for review;
+* **special discount is never batch-copied** unless `--include-discount` (it is a pricing change);
+* one HQ + one branch connection for the whole batch, at most `CUSTOMER_BRANCH_COPY_BATCH_MAX` (50) codes,
+  **stops at the first conflict / failure**, and writes a review list `scratch/branch_copy_<branch>_<time>.csv`;
+* the per-code guarantees are unchanged: optimistic WHERE, read-back, `BranchCopyWrite` + AuditLog, and the
+  copied flags' drift rows are closed.
+
 **Reset method (from the 05HD999 trace, 2026-10-08):** Bassem's 2022 reset = an `lcpointstrans` edit-log
 row (old/new earned and consumed, user 19, branch 100) + a `picpoints` row of −(earned − consumed), doc `0`,
 docnumber 0, branch 100, ten seconds later. `tr_picpoints` applies it to the balance. Both rows stayed at HQ

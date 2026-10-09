@@ -570,10 +570,10 @@ class BranchCopyWrite(models.Model):
     starting with 05HD999 on branch 140 only"). Written by apps/customers/branch_copy.py.
     """
     STATUS_DRY_RUN, STATUS_NO_CHANGE, STATUS_VERIFIED = 'dry_run', 'no_change', 'verified'
-    STATUS_CONFLICT, STATUS_FAILED = 'conflict', 'failed'
+    STATUS_CONFLICT, STATUS_FAILED, STATUS_SKIPPED = 'conflict', 'failed', 'skipped'
     STATUS_CHOICES = [(STATUS_DRY_RUN, 'تجربة بدون كتابة'), (STATUS_NO_CHANGE, 'مطابق بالفعل'),
                       (STATUS_VERIFIED, 'كُتب وتم التحقق'), (STATUS_CONFLICT, 'تغيّر في الفرع أثناء التنفيذ'),
-                      (STATUS_FAILED, 'فشل')]
+                      (STATUS_FAILED, 'فشل'), (STATUS_SKIPPED, 'تُرك للمراجعة (النسخ يخفف القيود)')]
 
     pic = models.CharField(max_length=13, db_index=True)
     node_branch = models.CharField(max_length=5, db_index=True)

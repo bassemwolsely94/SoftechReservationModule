@@ -128,3 +128,78 @@ class CopyTests(TestCase):
         make_user('ph', role='pharmacist')
         with self.assertRaises(CommandError):
             call_command('push_customer_branch_copy', pic=['05HD999'], branch='140', user='ph', stdout=io.StringIO())
+
+
+def node_db(rows):
+    base = dict(phcodestatus='1', piclock=0, picdied=0, picpoints=1, picdiscounts=0, usercode='11',
+                trans_time=dt.datetime(2018, 3, 10, 14, 20, 47))
+    return DB({p: {**base, **kw} for p, kw in rows.items()})
+
+
+def hq_db(rows):
+    base = dict(phcodestatus='1', piclock=0, picdied=0, picpoints=1, picdiscounts=0, usercode='1509', trans_time=T)
+    return DB({p: {**base, **kw} for p, kw in rows.items()})
+
+
+class BatchTests(TestCase):
+    def setUp(self):
+        from unittest import mock
+        from apps.tests.factories import make_branch, make_user
+        b = make_branch('B', '140')
+        b.db_host = '10.0.0.4'
+        b.save()
+        _, self.admin, _ = make_user('adm2', role='admin')
+        D = CustomerStatusDrift
+        for pic, field, direction in (('P1', 'points', D.HQ_STRICTER), ('P2', 'points', D.HQ_STRICTER),
+                                      ('P3', 'points', D.HQ_STRICTER), ('P3', 'status', D.NODE_STRICTER),
+                                      ('07HD11663', 'points', D.HQ_STRICTER), ('P4', 'lock', D.HQ_STRICTER),
+                                      ('P5', 'points', D.HQ_STRICTER)):
+            D.objects.create(pic=pic, node_branch='140', field=field, hq_value='0', node_value='1',
+                             direction=direction, last_seen=T)
+        self.hq = hq_db({'P1': {'picpoints': 0, 'picdiscounts': 1}, 'P2': {'picpoints': 0},
+                         'P3': {'picpoints': 0}, 'P4': {'piclock': 1}, '07HD11663': {'picpoints': 0},
+                         'P5': {'picpoints': 0}})
+        self.node = node_db({'P1': {}, 'P2': {}, 'P3': {'phcodestatus': '0'}, 'P4': {}, '07HD11663': {},
+                             'P5': {'phcodestatus': '0'}})       # P5: node blocked, HQ active → would relax
+        self.patch = [mock.patch('config.sybase.get_sybase_connection', return_value=self.hq),
+                      mock.patch('config.sybase.get_branch_connection', return_value=self.node)]
+        for p in self.patch:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_candidates_exclude_branch_stricter_and_held(self):
+        self.assertEqual(BC.batch_candidates('140', 50), ['P1', 'P2', 'P4', 'P5'])
+        self.assertEqual(BC.batch_candidates('140', 2), ['P1', 'P2'])
+
+    @override_settings(CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True)
+    def test_batch_tightens_only_and_never_grants_discount(self):
+        recs = BC.run_batch('140', user=self.admin, commit=True)
+        got = {r.pic: r.status for r in recs}
+        self.assertEqual(got, {'P1': 'verified', 'P2': 'verified', 'P4': 'verified', 'P5': 'skipped'})
+        self.assertEqual(self.node.rows['P1']['picpoints'], 0)
+        self.assertEqual(self.node.rows['P1']['picdiscounts'], 0)          # discount NOT copied
+        self.assertEqual(self.node.rows['P4']['piclock'], 1)
+        self.assertEqual(self.node.rows['P5']['phcodestatus'], '0')        # not relaxed
+        self.assertEqual(self.node.rows['07HD11663']['picpoints'], 1)      # held
+        self.assertIsNotNone(CustomerStatusDrift.objects.get(pic='P1', field='points').resolved_at)
+
+    @override_settings(CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True)
+    def test_include_discount_copies_it(self):
+        BC.run_batch('140', user=self.admin, commit=True, include_discount=True, limit=1)
+        self.assertEqual(self.node.rows['P1']['picdiscounts'], 1)
+
+    def test_batch_dry_run_and_command(self):
+        out = io.StringIO()
+        call_command('push_customer_branch_copy', from_drift=True, branch='140', user='adm2', limit=2, stdout=out)
+        t = out.getvalue()
+        self.assertIn('P1 @ branch 140: dry_run', t)
+        self.assertIn('2 codes · dry_run=2', t)
+        self.assertIn('review list: scratch', t)
+        self.assertEqual(self.node.rows['P1']['picpoints'], 1)
+
+    @override_settings(CUSTOMER_BRANCH_COPY_WRITE_ENABLED=True, CUSTOMER_BRANCH_COPY_BATCH_MAX=2)
+    def test_batch_max_caps_limit_and_stops_on_conflict(self):
+        self.assertEqual(len(BC.run_batch('140', user=self.admin, commit=False, limit=50)), 2)
+        self.node.race = ('P1', {'picdiscounts': 1})
+        recs = BC.run_batch('140', user=self.admin, commit=True)
+        self.assertEqual([r.status for r in recs], ['failed'])            # stopped at the first problem

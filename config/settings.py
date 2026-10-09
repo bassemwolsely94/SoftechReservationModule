@@ -552,6 +552,8 @@ REPLACEMENT_DAILY_CHECK_DAYS    = config('REPLACEMENT_DAILY_CHECK_DAYS', default
 CUSTOMER_STATUS_DRIFT_CHECK_ENABLED = config('CUSTOMER_STATUS_DRIFT_CHECK_ENABLED', default=True, cast=bool)
 CUSTOMER_BRANCH_COPY_WRITE_ENABLED  = config('CUSTOMER_BRANCH_COPY_WRITE_ENABLED', default=False, cast=bool)
 CUSTOMER_BRANCH_COPY_MAX_PER_RUN    = config('CUSTOMER_BRANCH_COPY_MAX_PER_RUN', default=1, cast=int)
+CUSTOMER_BRANCH_COPY_BATCH_MAX      = config('CUSTOMER_BRANCH_COPY_BATCH_MAX', default=50, cast=int)
+CUSTOMER_BRANCH_COPY_HOLD           = config('CUSTOMER_BRANCH_COPY_HOLD', default='07HD11663')  # never batch-copied
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike
