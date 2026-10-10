@@ -39,10 +39,13 @@ _AR_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567
 _NUM = r'\d+(?:[.,]\d+)?'
 
 # "[20/09/2026, 10:15] Name: …" · "20/09/2026, 10:15 - Name: …" · "[20/9/2026 10:17 ص] Name: …"
-# · "9/20/26, 10:15 PM - Name: …". Group `sender` is the chat participant (supplier hint).
-_WA_TS = (r'^\s*\[?\s*\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*'
-          r'(?:[AaPp]\.?\s?[Mm]\.?|ص|م)?\s*\]?\s*(?:[-–—]\s*)?')
-_WA_HEADER_RE = re.compile(_WA_TS + r'(?P<sender>[^:\n]{1,40}):\s*')
+# · "9/20/26, 10:15 PM - Name: …" · WhatsApp Desktop copy, time first: "[12:44 pm, 07/10/2026] Name: …".
+# Group `sender` is the chat participant (supplier hint).
+_WA_TIME = r'\d{1,2}:\d{2}(?::\d{2})?\s*(?:[AaPp]\.?\s?[Mm]\.?|ص|م)?'
+_WA_DATE = r'\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}'
+_WA_TS = (r'^\s*\[?\s*(?:' + _WA_DATE + r',?\s+' + _WA_TIME + r'|' + _WA_TIME + r',?\s+' + _WA_DATE + r')'
+          r'\s*\]?\s*(?:[-–—]\s*)?')
+_WA_HEADER_RE = re.compile(_WA_TS + r'(?P<sender>[^:\n]{1,60}):\s*')
 _WA_SYSTEM_RE = re.compile(_WA_TS + r'[^:]*$')          # timestamp but no "Name:" → system line
 
 _NOISE_RE = re.compile(
@@ -69,10 +72,46 @@ _DISC_KW = r'(?:خصم|disc(?:ount)?)'
 _EXP_KW  = r'(?:exp(?:iry)?\.?|ex\.|صلاحية|صلاحيه|تنتهي|انتهاء)'
 _CODE_KW = r'(?:code|كود)'
 # Residual label words removed from the name once their numbers were taken.
+# Count units only — a FORM word that is also a unit («امبول», amp, vial, pen) stays in the
+# name: «Depovita amp» without "amp" matched the lozenges.
+_COUNT_UNIT_W = (r'(?:boxes|box|bx|pcs|pc|pieces|piece|units|unit|packs|pack|علب|علبة|علبه|عبوة|عبوه|'
+                 r'عبوات|قطعة|قطعه|قطع)')
 _STRIP_WORDS_RE = re.compile(
-    r'(?<!\w)(?:' + '|'.join([_QTY_KW, _FOC_W, _PRICE_KW, _DISC_KW, _EXP_KW, _UNIT_W,
+    r'(?<!\w)(?:' + '|'.join([_QTY_KW, _FOC_W, _PRICE_KW, _DISC_KW, _EXP_KW, _COUNT_UNIT_W,
                               r'stock', r'only', r'فقط']) + r')(?!\w)', re.I)
 _CUR_RESIDUE_RE = re.compile(r'(?<!\w)(?:جنيه|جنية|egp|l\.?e\.?|ج\.\s?م\.?)(?!\w)', re.I)
+
+# ── Distributor «الوارد» terms (owner 2026-10-07, real lists from EGY DRUG / PO / AKHNATON) ──
+# Quota «كوته علبه / اثنين / خمسه / كوته 30» = the most one pharmacy may order.
+_QUOTA_WORDS = {'علبه': 1, 'علبة': 1, 'علبع': 1, 'واحده': 1, 'واحدة': 1, 'علبتين': 2,
+                'اثنين': 2, 'اتنين': 2, 'اثنيت': 2, 'إثنين': 2, 'اثنان': 2,
+                'تلاته': 3, 'ثلاثه': 3, 'ثلاثة': 3, 'تلاتة': 3, 'تلات': 3,
+                'اربعه': 4, 'أربعه': 4, 'اربعة': 4, 'أربعة': 4, 'خمسه': 5, 'خمسة': 5,
+                'سته': 6, 'ستة': 6, 'عشره': 10, 'عشرة': 10}
+_QUOTA_RE = re.compile(
+    r'(?P<half>نصف|نص)?\s*(?<![؀-ۿ])كو[تط](?:ه|ة|ا)(?![؀-ۿ])(?:\s*(?:(?P<n>\d+)(?![\d.,/])|(?P<w>'
+    + '|'.join(sorted(_QUOTA_WORDS, key=len, reverse=True)) + r')(?![؀-ۿ])))?')
+# Bonus «25+1», tiers «18+2 …… 36+4 …… 106+14» — buy N get M free on the ORDER.
+_BONUS_RE = re.compile(r'(?<![\w/])(?<!\d\.)(\d+)\s*\+\s*(\d+)(?!\d)(?![./]\d)')
+# Promo pack «30t +7free» — extra units INSIDE the pack (not a bonus on the order).
+_PROMO_RE = re.compile(r'(?<![\d.])(\d+)\s*(?:t|tab|tabs|caps?|c|ق|ك)?\s*\+\s*(\d+)\s*'
+                       r'(?:free|مجان[اىي]?|هدي[هة])', re.I)
+# Availability signals written in words (kept, and removed from the product name).
+_SIGNAL_PHRASES = [
+    ('last_qty', re.compile(r'(?:ا|آ|أ)خر\s+(?:ال)?كمي(?:ه|ة|ات)')),
+    ('limited', re.compile(r'(?:ال)?كمي(?:ه|ة|ات)\s+محدود(?:ه|ة)?(?:\s+جد[اً]+)?')),
+    ('back_in_stock', re.compile(r'بقا(?:له|لها|لو)\s+فتر(?:ه|ة)\s+(?:م|ما\s*)?(?:كنش|كانش)\s+موجود(?:ه|ة)?'
+                                 r'|(?:رجع|عاد)\s+(?:تاني|للتوفر|متوفر)')),
+    ('scarce_variant', re.compile(r'(?:ال)?تركيز\s+(?:ده|دا|دي)\s+قليل(?:ه|ة)?|(?:ال)?كمي(?:ه|ة)\s+قليل(?:ه|ة)')),
+]
+_SIGNAL_EMOJI = {'🔥': 'hot', '🚩': 'flag'}
+# «اخر 30 علبه» / «فاضل فقط 100 علبه» — what is left at the supplier.
+_LEFT_RE = re.compile(r'(?:(?:ا|آ|أ)خر|فاضل|باقي|متبقي)\s*(?:فقط\s*)?(\d+)\s*' + _UNIT_W + r'?(?![\w.])')
+# «بتركيزاته / بأنواعه / كل الانواع» — the whole product family (a person confirms which).
+_FAMILY_RE = re.compile(
+    r'(?<![\w])(?:ب\s*(?:تركيزات|تراكيز|تركيز|تراكيزات|انواع|أنواع|اشكال|أشكال|احجام|أحجام|نكهات)(?:ه|ها)?'
+    r'|(?:كل|جميع)\s+(?:ال)?(?:انواع|أنواع|تركيزات|اصناف|أصناف|نكهات)|all\s+(?:types|kinds|strengths))(?![\w])',
+    re.I)
 
 
 @dataclass
@@ -86,10 +125,33 @@ class ParsedAvailability:
     supplier_item_code: str = ''
     extracted: dict = field(default_factory=dict)   # what was pulled + removed (audit)
     noise: bool = False                             # greeting / media / system line
+    bonus_buy: float | None = None                  # «25+1» → buy 25 (foc_qty = 1)
+    bonus_tiers: list = field(default_factory=list)  # [[18, 2], [36, 4], [106, 14]]
+    quota: float | None = None                      # «كوته خمسه» → 5
+    promo: str = ''                                 # «30t +7free» → '30+7 free'
+    signals: list = field(default_factory=list)     # last_qty / limited / hot / …
+    all_variants: bool = False                      # «بتركيزاته» → the whole family
+
+    def terms(self) -> dict:
+        """The economics as AvailabilityLine field values."""
+        return {'supplier_qty': self.supplier_qty, 'price': self.price, 'foc_qty': self.foc_qty,
+                'discount_pct': self.discount_pct, 'expiry': self.expiry,
+                'supplier_item_code': self.supplier_item_code, 'bonus_buy': self.bonus_buy,
+                'bonus_tiers': self.bonus_tiers, 'quota': self.quota, 'promo': self.promo,
+                'signals': self.signals}
+
+
+TERM_FIELDS = ('supplier_qty', 'price', 'foc_qty', 'discount_pct', 'expiry', 'supplier_item_code',
+               'bonus_buy', 'bonus_tiers', 'quota', 'promo', 'signals')
+
+
+def line_terms(line) -> dict:
+    """A saved line's economics — copied onto the sibling lines of a split."""
+    return {f: getattr(line, f) for f in TERM_FIELDS}
 
 
 def _fold_digits(s: str) -> str:
-    return (s or '').translate(_AR_DIGITS)
+    return (s or '').translate(_AR_DIGITS).replace('٪', '%')
 
 
 def _to_float(s):
@@ -165,25 +227,61 @@ def _norm_expiry(a: str, b: str) -> str:
 def parse_availability_line(raw: str) -> ParsedAvailability:
     """Extract supplier economics from one availability line, deterministically.
     Every field is optional; nothing found = None/blank (a valid availability signal)."""
+    signals = [s for e, s in _SIGNAL_EMOJI.items() if e in str(raw or '')]
     text = clean_line(raw)
     if text is None:
         return ParsedAvailability(name_part='', noise=True, extracted={'noise': True})
     extracted: dict = {}
-    foc = price = discount = qty = None
-    expiry = code = ''
+    foc = price = discount = qty = bonus_buy = quota = None
+    expiry = code = promo = ''
+    tiers: list = []
 
     def take(pattern, flags=re.I):
         nonlocal text
-        m = re.search(pattern, text, flags)
+        m = re.search(pattern, text, flags) if isinstance(pattern, str) else pattern.search(text)
         if m:
             text = (text[:m.start()] + ' ' + text[m.end():]).strip()
         return m
 
-    # 1. FOC — "10+2" (qty + free) first, then "بونص 2" / "+2 foc" / "2 بونص".
-    m = take(r'(?<![\d.])(\d+)\s*\+\s*(\d+)(?![\d.])')
+    # 0. Distributor wording: whole family, availability phrases, what is left, quota.
+    all_variants = bool(take(_FAMILY_RE))
+    for name, rx in _SIGNAL_PHRASES:
+        m = take(rx)
+        if m:
+            signals.append(name)
+            extracted.setdefault('signals', []).append(m.group(0))
+    m = take(_LEFT_RE)
     if m:
-        qty, foc = float(m.group(1)), float(m.group(2))
-        extracted['foc_pattern'] = m.group(0)
+        qty = float(m.group(1))
+        signals.append('last_qty')
+        extracted['left'] = m.group(0)
+    m = take(_QUOTA_RE)
+    if m:
+        extracted['quota'] = m.group(0).strip()
+        if m.group('half'):
+            signals.append('half_quota')
+        elif m.group('n') or m.group('w'):
+            quota = float(m.group('n')) if m.group('n') else float(_QUOTA_WORDS[m.group('w')])
+        else:
+            signals.append('quota')               # «كوته» with no number: limited per pharmacy
+    m = _PROMO_RE.search(text)
+    if m:
+        promo = f'{m.group(1)}+{m.group(2)} free'
+        extracted['promo'] = m.group(0)
+        # the pack size stays in the name ("Limitless man 30 tab"), the free units go
+        text = (text[:m.start()] + f' {m.group(1)} tab ' + text[m.end():]).strip()
+
+    # 1. Bonus — «25+1» buy 25 get 1; several tiers «18+2 …… 36+4 …… 106+14» are all kept
+    #    (the first = the smallest order that earns a bonus). Then «بونص 2» / «+2 foc».
+    for m in list(_BONUS_RE.finditer(text)):
+        buy, free = float(m.group(1)), float(m.group(2))
+        if buy > 0 and 0 < free <= buy:
+            tiers.append([buy, free])
+    if tiers:
+        text = _BONUS_RE.sub(lambda m: ' ' if 0 < float(m.group(2)) <= float(m.group(1)) else m.group(0), text)
+        bonus_buy, foc = tiers[0]
+        extracted['bonus'] = ' / '.join(f'{int(b) if b == int(b) else b}+{int(f) if f == int(f) else f}'
+                                        for b, f in tiers)
     if foc is None:
         m = (take(_FOC_W + r'\s*[:=]?\s*(\d+)')                      # keyword → number
              or take(r'\+\s*(\d+)\s*' + _FOC_W + r'?')                 # +2 (foc)
@@ -200,8 +298,8 @@ def parse_availability_line(raw: str) -> ParsedAvailability:
         price = _to_float(m.group(1))
         extracted['price'] = m.group(0)
 
-    # 3. Discount — "خصم 5%", "5% خصم", "15%", "%15".
-    m = (take(_DISC_KW + r'\s*[:=]?\s*(' + _NUM + r')\s*%?')
+    # 3. Discount — "خصم 5%", "خصم اضافي 2%", "5% خصم", "15%", "%15".
+    m = (take(_DISC_KW + r'\s*(?:اضافي|اضافى|إضافي|إضافى|extra)?\s*[:=]?\s*(' + _NUM + r')\s*%?')
          or take(r'(?<![\d.])(' + _NUM + r')\s*%\s*' + _DISC_KW + r'?')
          or take(r'%\s*(' + _NUM + r')'))
     if m:
@@ -226,20 +324,27 @@ def parse_availability_line(raw: str) -> ParsedAvailability:
     if qty is None:
         m = (take(_QTY_KW + r'\s*[:=]?\s*(\d+)(?!\s*' + _UNIT_W + r')(?![\d.])')
              or take(r'(?<!\w)[x×*]\s*(\d+)(?![\d.])')
-             or take(r'(?<![\d.])(\d+)\s*' + _UNIT_W + r'(?!\w)'))
+             or take(r'(?<![\d.])(\d+)\s*' + _UNIT_W + r'(?!\w)(?=[^A-Za-z؀-ۿ]*$)'))
         if m:
             qty = float(m.group(1))
             extracted['qty'] = m.group(0)
 
-    # 7. Tidy: residual label words, currency, separators.
+    # 7. Tidy: residual label words, currency, separators; distributor shorthand for forms.
+    text = re.sub(r'(?<=\d)-(?=\d)', '/', text)      # «فيموستون 10-2» is a strength, not "qty 2"
     text = _STRIP_WORDS_RE.sub(' ', text)
     text = _CUR_RESIDUE_RE.sub(' ', text)
     text = re.sub(r'[—–\-:•·|،,;=%@\[\]()]+', ' ', text)
+    text = _expand_forms(text)
+    # list separators left behind by what was taken out («محلول ملح 18+2……36+4» → «محلول ملح»)
+    _sep = r'(?:\s*(?:&|\.{2,}|…+)\s*)'
+    text = re.sub(_sep + r'{2,}', ' ... ', text)
+    text = re.sub(r'^' + _sep + r'+|' + _sep + r'+$', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
 
     # 8. Trailing-number fallback — only when another number already sits in the name
-    #    ("Xgeva 120mg 3", "Concor 5 10"). A single bare number is the strength.
-    if qty is None:
+    #    ("Xgeva 120mg 3", "Concor 5 10"). A single bare number is the strength; a list of
+    #    strengths («بليتال 100....50», «كليكسان 20 & 40») is never a quantity.
+    if qty is None and not _VARIANT_SPLIT_RE.search(text):
         tokens = text.split()
         if len(tokens) >= 2 and re.fullmatch(r'\d+', tokens[-1]) and \
                 any(re.search(r'\d', t) for t in tokens[:-1]):
@@ -247,11 +352,78 @@ def parse_availability_line(raw: str) -> ParsedAvailability:
             extracted['qty'] = f'trailing {tokens[-1]}'
             text = ' '.join(tokens[:-1])
 
+    if all_variants:
+        extracted['all_variants'] = True
     return ParsedAvailability(
         name_part=text.strip(),
         supplier_qty=qty, price=price, foc_qty=foc, discount_pct=discount,
         expiry=expiry, supplier_item_code=code, extracted=extracted,
+        bonus_buy=bonus_buy, bonus_tiers=tiers, quota=quota, promo=promo,
+        signals=list(dict.fromkeys(signals)), all_variants=all_variants,
     )
+
+
+# Distributor shorthand → the words the matcher knows: «Lamictal 50ml t» (= 50 mg tablets —
+# "ml t" is how one distributor types it), «Trental 400t», «Plavix t», «تلفاست ش», «100ق».
+_FORM_FIXES = [
+    (re.compile(r'(\d+(?:\.\d+)?)\s*ml\s*t(?![a-z])', re.I), r'\1 tab'),
+    (re.compile(r'(\d)t(?![a-z])', re.I), r'\1 tab'),
+    (re.compile(r'(?<=[a-z\d])\s+t(?![a-z\d])', re.I), ' tab'),
+    (re.compile(r'(?:(?<=\d)|(?<=\s))ق(?![؀-ۿ])'), ' اقراص'),
+    (re.compile(r'(?:(?<=\d)|(?<=\s))ش(?![؀-ۿ])'), ' شراب'),
+    (re.compile(r'(?:(?<=\d)|(?<=\s))ك(?![؀-ۿ])'), ' كبسول'),
+    (re.compile(r'(\d)([؀-ۿ]{2,})'), r'\1 \2'),            # «4بليون» → «4 بليون»
+    (re.compile(r'([؀-ۿ]{2,})(\d)'), r'\1 \2'),            # «ساندوز1جم» → «ساندوز 1 جم»
+]
+
+
+def _expand_forms(text: str) -> str:
+    for rx, rep in _FORM_FIXES:
+        text = rx.sub(rep, text)
+    return text
+
+
+# ── Variant lines: one distributor line, several products ─────────────────────────────
+# «كليكسان 20 & 40 & 60 & 80», «بليتال 100....50», «سيالس ٢و٤», «فولتارين لبوس واقراص وامبول»,
+# «بانادول اكيوت..ادفانس...اكسترا», «تارج...كو تارج... كو ديوفان» → one row per product.
+_FORM_WORDS = (r'(?:اقراص|أقراص|قرص|امبول|أمبول|جيل|چيل|كريم|مرهم|شراب|نقط|نقط|لبوس|اكياس|أكياس|فوار|'
+               r'بخاخ|اسبراي|سبراي|كبسول|فيال|حقن|فيلم|tab|tabs|caps?|syr|amp|gel|cream|oint|drops?|sach|film)')
+_VARIANT_SPLIT_RE = re.compile(
+    r'\s*(?:&|\.{2,}|…+)\s*'
+    r'|(?<=\d)\s*و\s*(?=\d)'
+    r'|\s+و\s+'
+    r'|\s+و(?=' + _FORM_WORDS + r'(?![\w]))', re.I)
+MAX_VARIANTS = 8
+
+
+def split_variants(name: str) -> list:
+    """A distributor line naming several products → one name per product. The first part
+    gives the brand; a part starting with a number replaces the first part's strength, a word
+    part replaces its last word(s); a part repeating the brand stands alone. A form word on
+    the LAST numeric part («نوفونورم 0.5 & 1 & 2 اقراص») applies to every strength."""
+    parts = [p.strip(' .') for p in _VARIANT_SPLIT_RE.split(name or '')]
+    parts = [p for p in parts if re.search(r'[A-Za-z؀-ۿ\d]', p)]
+    if len(parts) <= 1:
+        return [parts[0]] if parts else [str(name or '').strip()]
+    first = parts[0].split()
+    last = parts[-1].split()
+    suffix = last[1:] if (re.match(r'\d', last[0]) and len(last) > 1
+                          and all(re.fullmatch(_FORM_WORDS, w, re.I) for w in last[1:])) else []
+    num_at = max((i for i, w in enumerate(first) if re.match(r'\d', w)), default=None)
+    out = []
+    for i, p in enumerate(parts):
+        w = p.split()
+        if i == 0 or w[0].lower() == first[0].lower():
+            words = w
+        elif re.match(r'\d', w[0]):
+            words = (first[:num_at] if num_at is not None else first) + w
+        else:
+            keep = max(len(first) - len(w), 1) if len(first) > 1 else 0
+            words = first[:keep] + w
+        if suffix and re.match(r'\d', words[-1]):
+            words = words + suffix
+        out.append(' '.join(words))
+    return list(dict.fromkeys(out))[:MAX_VARIANTS]
 
 
 def compute_fingerprint(raw_content: str) -> str:
@@ -284,11 +456,107 @@ def _split_lines(raw_content: str) -> list[str]:
     return split_availability_lines(raw_content)
 
 
+# Chat remarks inside a «الوارد» list ("ده كل الوارد", "فتحه شهر جديد", "رجاء كل الي عايز
+# ديبوفيت امبول يبعتلي") — kept as the list's notes, never matched as products.
+_LIST_REMARK_WORDS = {'وارد', 'الوارد', 'فتحه', 'فتحة', 'شهر', 'جديد', 'كذا', 'رجاء', 'برجاء', 'يبعتلي',
+                      'يبعت', 'ابعتلي', 'فعلا', 'بتتسحب', 'عايز', 'عاوز', 'محتاج', 'شركه', 'شركة'}
+
+
+def _is_list_remark(text: str) -> bool:
+    """Judged on the product name LEFT after quota / signals / bonus were read
+    («ليفاجول كبسول كوته كميه محدوده جدا» is an item). A function word counts only after the
+    first word («دي ديب نقط» is D-Deep drops); a long Arabic line counts only without a
+    variant separator («فولتارين لبوس واقراص وامبول وجيل» is four products)."""
+    from .branch_requests import _AR_FUNCTION
+    if re.search(r'[A-Za-z\d]', text):
+        return False
+    seq = [w for w in re.findall(r'[؀-ۿ]+', text) if len(w) > 1]
+    if not seq:
+        return False
+    if _LIST_REMARK_WORDS & set(seq) or _AR_FUNCTION & set(seq[1:]):
+        return True
+    return len(seq) >= 5 and not _VARIANT_SPLIT_RE.search(text)
+
+
+def read_list(raw_content: str):
+    """A pasted supplier list → (entries, remarks). Each entry is {'raw', 'parsed', 'barcode'}.
+    A line holding only a stock note («اخر 30 علبه», «كميات محدوده») belongs to the item just
+    above it; chat remarks are returned separately (they become the list's notes)."""
+    entries, remarks, prev = [], [], None
+    for raw in str(raw_content or '').splitlines():
+        cleaned = clean_line(raw)
+        if cleaned is None:
+            continue                        # blank / header-only / media — keeps `prev`
+        emoji = [s for e, s in _SIGNAL_EMOJI.items() if e in raw]
+        for part in _split_multi(cleaned):
+            m = _BARCODE_RE.search(part)
+            tok = m.group(1) if m else ''
+            p = parse_availability_line(part.replace(tok, ' ') if tok else part)
+            p.signals = list(dict.fromkeys(p.signals + emoji))
+            if not p.noise and _is_list_remark(p.name_part):
+                remarks.append(part)
+                prev = None
+                continue
+            if not re.search(r'[A-Za-z؀-ۿ]{2,}', p.name_part or ''):
+                if prev is not None and (p.supplier_qty is not None or p.signals or p.quota is not None):
+                    pp = prev['parsed']
+                    if p.supplier_qty is not None:
+                        pp.supplier_qty = p.supplier_qty
+                    if p.quota is not None:
+                        pp.quota = p.quota
+                    pp.signals = list(dict.fromkeys(pp.signals + p.signals))
+                    pp.extracted.setdefault('notes', []).append(part)
+                    prev['raw'] = f"{prev['raw']} / {part}"
+                elif not p.noise:
+                    remarks.append(cleaned)
+                continue
+            prev = {'raw': part, 'parsed': p, 'barcode': tok}
+            entries.append(prev)
+    return entries, remarks
+
+
+FAMILY_CAP = 15          # «بتركيزاته»: at most this many family members are proposed
+
+
+def _new_line(batch, raw_text, source, terms, **kw):
+    from .models import AvailabilityLine
+    return AvailabilityLine(batch=batch, raw_text=raw_text[:300], source=source,
+                            **{k: v for k, v in terms.items()}, **kw)
+
+
+def _resolve_into(line, name, vendor_code):
+    """Match one product name and record provenance on an (unsaved) line."""
+    resolved = resolve_line(name, vendor_code=vendor_code)
+    # The machine's ORIGINAL suggestion is preserved here even if an operator later corrects
+    # the item — that is what makes match accuracy / correction rate measurable (KPIs).
+    # Match-safety guard: a fuzzy match with a strength / form / name conflict, or a close
+    # rival product, is held for human review however high its score (§5). Human-confirmed
+    # aliases and explicit picks are trusted as-is.
+    flags = []
+    if resolved.item is not None and not resolved.picked and not resolved.learned:
+        flags = review_flags(name, resolved.item.name,
+                             runner_up_name=resolved.runner_up_name,
+                             score=resolved.score, runner_up_score=resolved.runner_up_score)
+    line.match_reason.update({'name_part': name, 'suggested_item_id': resolved.item_id,
+                              'suggested_score': resolved.score, 'learned': resolved.learned,
+                              'review_flags': flags})
+    if resolved.item is not None:
+        line.item, line.match_score, line.is_unmatched = resolved.item, resolved.score, False
+    else:
+        line.is_unmatched = True
+    return line
+
+
 def build_line(batch, raw_text: str, *, source: str = 'bulk', vendor_code: str = '',
                parsed: ParsedAvailability | None = None, barcode: str = ''):
-    """Create ONE AvailabilityLine from a raw supplier line: extract economics, resolve
+    """Create the AvailabilityLine(s) for one raw supplier line: extract economics, resolve
     the catalog item (auto-match, unconfirmed), and record match provenance. Returns the
-    unsaved-then-saved AvailabilityLine."""
+    saved line — the HEAD when the line names several products:
+      • «كليكسان 20 & 40 & 60 & 80», «بليتال 100....50» → one row per product (text input);
+      • «اوتريفين بانواعه» → the matched product + its family (flagged for review);
+      • a remembered one-to-many spelling → that group again.
+    Every further product is a sibling row (split_from → head) with the same economics, so a
+    person confirms / edits the group as one supplier line."""
     from .models import AvailabilityLine
 
     # A barcode in the line (Excel exports often carry one) identifies the product exactly —
@@ -297,89 +565,109 @@ def build_line(batch, raw_text: str, *, source: str = 'bulk', vendor_code: str =
         by_barcode, barcode = barcode_item(raw_text)
         parsed = parse_availability_line(raw_text.replace(barcode, ' ') if barcode else raw_text)
     else:
-        # a spreadsheet row: economics already read from their own columns (file_layouts)
+        # a spreadsheet row / a list entry: economics already read
         by_barcode, barcode = barcode_item(barcode) if barcode else (None, '')
     if parsed.noise or not parsed.name_part:
         return None                     # greeting / media / system line — not a product
+    terms = parsed.terms()
     vendor = batch.supplier if batch.supplier_id else None
     by_code = vendor_code_item(vendor, parsed.supplier_item_code)
     direct = by_barcode or by_code
     if direct is not None:
-        line = AvailabilityLine(
-            batch=batch, raw_text=raw_text[:300], source=source,
-            supplier_qty=parsed.supplier_qty, price=parsed.price,
-            foc_qty=parsed.foc_qty, discount_pct=parsed.discount_pct,
-            expiry=parsed.expiry, supplier_item_code=parsed.supplier_item_code,
-            item=direct, match_score=1.0, is_unmatched=False)
         flags = []
         if by_barcode and by_code and by_code.id != by_barcode.id:
             flags.append('vendor_code_conflict')      # the supplier's code says another item
-        line.match_reason = {'name_part': parsed.name_part, 'economics': parsed.extracted,
-                             'suggested_item_id': direct.id, 'suggested_score': 1.0,
-                             'learned': False, 'review_flags': flags,
-                             'via': 'barcode' if by_barcode else 'vendor_code',
-                             'barcode': barcode}
+        line = _new_line(batch, raw_text, source, terms, item=direct, match_score=1.0, is_unmatched=False,
+                         match_reason={'name_part': parsed.name_part, 'economics': parsed.extracted,
+                                       'suggested_item_id': direct.id, 'suggested_score': 1.0,
+                                       'learned': False, 'review_flags': flags,
+                                       'via': 'barcode' if by_barcode else 'vendor_code',
+                                       'barcode': barcode})
         line.save()
         return line
-    resolved = resolve_line(parsed.name_part, vendor_code=vendor_code)
 
-    line = AvailabilityLine(
-        batch=batch, raw_text=raw_text[:300], source=source,
-        supplier_qty=parsed.supplier_qty, price=parsed.price,
-        foc_qty=parsed.foc_qty, discount_pct=parsed.discount_pct,
-        expiry=parsed.expiry, supplier_item_code=parsed.supplier_item_code,
-    )
-    # The machine's ORIGINAL suggestion is preserved here even if an operator later corrects
-    # the item — that is what makes match accuracy / correction rate measurable (KPIs).
-    # Match-safety guard: a fuzzy match with a strength / form / name conflict, or a close
-    # rival product, is held for human review however high its score (§5). Human-confirmed
-    # aliases and explicit picks are trusted as-is.
-    flags = []
-    if resolved.item is not None and not resolved.picked and not resolved.learned:
-        flags = review_flags(parsed.name_part, resolved.item.name,
-                             runner_up_name=resolved.runner_up_name,
-                             score=resolved.score, runner_up_score=resolved.runner_up_score)
-    line.match_reason = {'name_part': parsed.name_part, 'economics': parsed.extracted,
-                         'suggested_item_id': resolved.item_id,
-                         'suggested_score': resolved.score,
-                         'learned': resolved.learned,
-                         'review_flags': flags}
+    # What a person's decision is remembered under: the whole written line (a family line
+    # keeps its «all kinds» meaning, so plain «اوتريفين» never expands by itself).
+    learn = f'{parsed.name_part} كل الانواع' if parsed.all_variants else parsed.name_part
+    base_reason = {'economics': parsed.extracted}
+    if learn != parsed.name_part:
+        base_reason['learn_name'] = learn
+
     # A remembered ONE-TO-MANY spelling for this supplier ("بيبيلاك 1....2....3" →
     # BEBELAC 1/2/3, learned when a person split this line before) — split it again now,
     # as an unconfirmed suggestion (apps/shortage/learning.lookup_alias_group).
     from apps.shortage.learning import lookup_alias_group
-    group = lookup_alias_group(parsed.name_part, vendor_code=vendor_code)
+    group = lookup_alias_group(learn, vendor_code=vendor_code)
     if group:
         from apps.catalog.models import Item
         items = {i.id: i for i in Item.objects.filter(id__in=group['item_ids'])}
         ids = [i for i in group['item_ids'] if i in items]
-        line.item, line.match_score, line.is_unmatched = items[ids[0]], group['score'], False
-        line.match_reason.update(suggested_item_id=ids[0], suggested_score=group['score'], learned=True,
-                                 review_flags=[], learned_group_ids=ids,
-                                 learned_from=group.get('learned_from', ''))
-        line.save()
-        for iid in ids[1:]:
-            AvailabilityLine.objects.create(
-                batch=batch, split_from=line, raw_text=line.raw_text, source=source,
-                supplier_qty=line.supplier_qty, price=line.price, foc_qty=line.foc_qty,
-                discount_pct=line.discount_pct, expiry=line.expiry,
-                supplier_item_code=line.supplier_item_code, item=items[iid], match_score=group['score'],
-                match_reason={**line.match_reason, 'suggested_item_id': iid, 'split_from_line': line.pk})
-        return line
-    if resolved.item is not None:
-        line.item = resolved.item
-        line.match_score = resolved.score
-        line.is_unmatched = False
-    else:
-        line.is_unmatched = True
-    line.save()
-    return line
+        if ids:
+            reason = {**base_reason, 'name_part': parsed.name_part, 'suggested_item_id': ids[0],
+                      'suggested_score': group['score'], 'learned': True, 'review_flags': [],
+                      'learned_group_ids': ids, 'learned_from': group.get('learned_from', '')}
+            line = _new_line(batch, raw_text, source, terms, item=items[ids[0]],
+                             match_score=group['score'], is_unmatched=False, match_reason=reason)
+            line.save()
+            for iid in ids[1:]:
+                _new_line(batch, raw_text, source, terms, split_from=line, item=items[iid],
+                          match_score=group['score'],
+                          match_reason={**reason, 'suggested_item_id': iid, 'split_from_line': line.pk}).save()
+            return line
+
+    # Several products on one written line → one row each (typed / pasted text only — an
+    # Excel product name like "Johnson & Johnson …" is one product).
+    names = split_variants(parsed.name_part) if source != 'file' else [parsed.name_part]
+    if len(names) > 1:
+        base_reason.update(variant_of=parsed.name_part, learn_name=learn)
+    head = _resolve_into(_new_line(batch, raw_text, source, terms, match_reason=dict(base_reason)),
+                         names[0], vendor_code)
+    head.save()
+    for name in names[1:]:
+        sib = _new_line(batch, raw_text, source, terms, split_from=head,
+                        match_reason={**base_reason, 'split_from_line': head.pk})
+        _resolve_into(sib, name, vendor_code).save()
+
+    # «بتركيزاته / بأنواعه» → propose the matched product's whole family for review.
+    if parsed.all_variants and len(names) == 1 and head.item_id:
+        from .branch_requests import _family
+        fam = [i for i in _family(head.item.name, limit=FAMILY_CAP + 1) if i.id != head.item_id][:FAMILY_CAP - 1]
+        if fam:
+            mr = head.match_reason
+            mr['review_flags'] = list(dict.fromkeys((mr.get('review_flags') or []) + ['family']))
+            mr['family_ids'] = [head.item_id] + [i.id for i in fam]
+            head.save(update_fields=['match_reason'])
+            for it in fam:
+                _new_line(batch, raw_text, source, terms, split_from=head, item=it,
+                          match_score=head.match_score, is_unmatched=False,
+                          match_reason={**mr, 'suggested_item_id': it.id, 'split_from_line': head.pk,
+                                        'review_flags': ['family']}).save()
+    return head
+
+
+def ingest_batch(batch, raw_content: str, *, source: str = 'bulk', vendor_code: str = '') -> list:
+    """Read a pasted/OCR'd list and build the line(s) per product. Returns the created
+    head lines; the supplier's chat remarks are appended to the batch notes."""
+    entries, remarks = read_list(raw_content)
+    out = []
+    for e in entries:
+        line = build_line(batch, e['raw'], source=source, vendor_code=vendor_code,
+                          parsed=e['parsed'], barcode=e['barcode'])
+        if line is not None:
+            out.append(line)
+    if remarks:
+        note = ('ملاحظات المورد: ' + ' · '.join(remarks))[:2000]
+        batch.notes = f'{batch.notes}\n{note}' if batch.notes else note
+        batch.save(update_fields=['notes', 'updated_at'])
+    return out
 
 
 def _learn_name(line) -> str:
     """What the matcher looks up for this line (the parsed product name, without price /
-    qty / bonus) — so a learned spelling is found again next time."""
-    return (line.match_reason or {}).get('name_part') or line.raw_text
+    qty / bonus) — so a learned spelling is found again next time. A line split into several
+    products is remembered under the whole written line."""
+    mr = line.match_reason or {}
+    return mr.get('learn_name') or mr.get('name_part') or line.raw_text
 
 
 _BARCODE_RE = re.compile(r'(?<![\d.])(\d{8,14})(?![\d.])')
@@ -478,13 +766,6 @@ def learn_vendor_mapping(line, item, *, staff=None) -> dict | None:
     return conflict
 
 
-def ingest_batch(batch, raw_content: str, *, source: str = 'bulk', vendor_code: str = '') -> list:
-    """Split a pasted/OCR'd blob and build a line per product. Returns the created lines."""
-    lines = (build_line(batch, ln, source=source, vendor_code=vendor_code)
-             for ln in _split_lines(raw_content))
-    return [ln for ln in lines if ln is not None]
-
-
 def set_line_items(line, item_ids, *, staff=None, vendor_code: str = '') -> list:
     """Match one supplier line to ONE OR SEVERAL catalog items ("بيبيلاك 1....2....3").
     The original line keeps the first item; each further item becomes a sibling line
@@ -527,9 +808,7 @@ def set_line_items(line, item_ids, *, staff=None, vendor_code: str = '') -> list
         for k, iid in enumerate(ids[1:]):
             sib = siblings[k] if k < len(siblings) else AvailabilityLine(
                 batch=head.batch, split_from=head, raw_text=head.raw_text, source=head.source,
-                supplier_qty=head.supplier_qty, price=head.price, discount_pct=head.discount_pct,
-                foc_qty=head.foc_qty, expiry=head.expiry, supplier_item_code=head.supplier_item_code,
-                notes=head.notes, match_reason={**(head.match_reason or {}), 'split_from_line': head.pk,
+                **line_terms(head), notes=head.notes, match_reason={**(head.match_reason or {}), 'split_from_line': head.pk,
                                                 'review_flags': []})
             if sib.pk is None:
                 sib.save()
@@ -606,7 +885,7 @@ def analyze_rows(batch, line_ids) -> list:
 # code 95, else the matcher's score; each safety flag costs points (a different strength is
 # the most dangerous); past approvals of this same spelling → this item add confidence.
 TRUST_PENALTY = {'strength_mismatch': 30, 'head_mismatch': 25, 'form_mismatch': 20,
-                 'ambiguous': 10, 'vendor_code_conflict': 40}
+                 'ambiguous': 10, 'vendor_code_conflict': 40, 'family': 15}
 
 
 def trust_score(ln, approvals: int = 0, carried: bool = False) -> int:
@@ -701,8 +980,7 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
     vendor = batch.supplier if batch.supplier_id else None
     vendor_code = (vendor.softech_personcode if vendor else '') or ''
     approvals = approvals_for(lines, vendor_code=vendor_code, vendor=vendor)
-    from apps.catalog.supplier_links import carried_item_ids
-    carried = carried_item_ids(vendor_code, [ln.item_id for ln in lines])
+    carried = carried_or_offered(vendor_code, [ln.item_id for ln in lines], exclude_batch=batch.pk)
     cases = {r['item_id']: r for r in
              SupplyCase.objects.filter(item_id__in=list(by_item), status__in=list(SupplyCase.OPEN_STATUSES))
              .values('item_id').annotate(n=Count('id'), waiting=Sum('customer_demand'))}
@@ -721,13 +999,17 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
                'supplier_qty': _num(ln.supplier_qty), 'price': _num(ln.price),
                'foc_qty': _num(ln.foc_qty), 'discount_pct': _num(ln.discount_pct),
                'expiry': ln.expiry, 'flags': [],
+               # distributor terms: bonus tiers, quota (max per pharmacy), promo pack, signals
+               'bonus_buy': _num(ln.bonus_buy), 'bonus_tiers': ln.bonus_tiers or [],
+               'quota': _num(ln.quota), 'promo': ln.promo, 'signals': ln.signals or [],
+               'name_part': (ln.match_reason or {}).get('name_part', ''),
                'supplier_item_code': ln.supplier_item_code,
                # how the item was found: barcode / the supplier's own code / memory / name
                'via': (ln.match_reason or {}).get('via') or (
                    'memory' if (ln.match_reason or {}).get('learned') else 'name'),
                'approvals': approvals.get(ln.id, 0),
                'trust': trust_score(ln, approvals.get(ln.id, 0), ln.item_id in carried),
-               # SOFTECH itemssuppliers lists this item under this supplier
+               # this supplier sells the item: SOFTECH itemssuppliers, or confirmed in its earlier lists
                'carried': ln.item_id in carried,
                # this supplier is the item's main supplier in SOFTECH (itemssuppliers)
                'main_supplier': bool(ln.item_id and vendor_code and
@@ -764,7 +1046,9 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
                 'overstock_elsewhere': L['transferable_surplus'],
                 'residual_gap': residual, 'customer_demand': L['customer_demand'],
                 'pending_orders': L['pending_orders'],
-                'suggested_buy': whole_units(residual, cap=supplier_qty),
+                # never more than offered, nor above the distributor's quota per pharmacy
+                'suggested_buy': whole_units(residual, cap=min((c for c in (supplier_qty, _num(ln.quota)) if c),
+                                                               default=None)),
                 'offer_effective_cost': offer_eff,
                 'best_effective_cost': (src['best'] or {}).get('effective_cost'),
                 'historical_best': hist,
@@ -790,6 +1074,23 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
     return {'batch_id': batch.id, 'lines': rows, 'scope': scope,
             'locked': batch.is_locked,
             'summary': {'total': len(rows), **dict(summary)}}
+
+
+def carried_or_offered(vendor_code: str, item_ids, *, exclude_batch=None) -> set:
+    """Items this supplier sells: SOFTECH lists it under the supplier (itemssuppliers), OR a
+    person confirmed it in one of the supplier's earlier «وارد» lists — what a list is
+    remembered for (owner 2026-10-08)."""
+    from apps.catalog.supplier_links import carried_item_ids
+    from .models import AvailabilityLine
+    ids = [i for i in item_ids if i]
+    out = set(carried_item_ids(vendor_code, ids)) if vendor_code else set()
+    if vendor_code and ids:
+        qs = AvailabilityLine.objects.filter(item_id__in=ids, is_confirmed=True,
+                                             batch__supplier__softech_personcode=vendor_code)
+        if exclude_batch:
+            qs = qs.exclude(batch_id=exclude_batch)
+        out |= set(qs.values_list('item_id', flat=True))
+    return out
 
 
 def _num(v):

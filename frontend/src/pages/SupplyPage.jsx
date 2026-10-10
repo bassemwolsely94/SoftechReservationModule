@@ -17,10 +17,12 @@ import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import AvailabilityInboxTab from './supply/AvailabilityInboxTab'
 import SupplyCasesTab from './supply/SupplyCasesTab'
 import IsrFulfilmentTab from './supply/IsrFulfilmentTab'
 import BranchRequestsTab from './supply/BranchRequestsTab'
+import SupplierComparisonTab from './supply/SupplierComparisonTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
 import useHelpTab from '../help/useHelpTab'
@@ -47,7 +49,7 @@ function fmtDate(d) {
 const n = (v, d = 1) => (v === null || v === undefined || v === '' ? '—' : Number(v).toFixed(d))
 
 const SUPPLY_TABS = [
-  ['inbox', 'صندوق الإتاحة'], ['cases', 'متابعة النواقص'],
+  ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['cases', 'متابعة النواقص'],
   ['rates', 'معدلات البيع'], ['isr', 'طلبات التوريد / ISR'], ['isrfill', 'تلبية طلبات الفروع'],
   ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'],
 ]
@@ -77,6 +79,9 @@ export default function SupplyPage() {
         <span className="text-xs text-content/50">الإتاحة والنواقص والتحويلات ومعدلات الإستهلاك وطلبات التوريد</span>
       </div>
 
+      {/* Supply decisions span stock availability, consumption (sales) + incoming (purchases) */}
+      <DataFreshnessBar domains={['stock', 'sales', 'purchases']} />
+
       <div className="flex gap-1 border-b border-line overflow-x-auto" data-tour="purchasing-supply-tabs">
         {SUPPLY_TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
@@ -88,6 +93,7 @@ export default function SupplyPage() {
       </div>
 
       {tab === 'inbox' ? <AvailabilityInboxTab />
+        : tab === 'compare' ? <SupplierComparisonTab />
         : tab === 'cases' ? <SupplyCasesTab />
         : tab === 'rates' ? <RatesTab />
         : tab === 'isr' ? <IsrTab />

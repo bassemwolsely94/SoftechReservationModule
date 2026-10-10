@@ -1937,6 +1937,26 @@ def _insights_monthly():
     _run_insights('month')
 
 
+def _run_inflation_reminder():
+    """Monthly nudge (~11th, after CAPMAS publishes) to refresh the external Egypt urban
+    inflation figure that grounds the forecast references. Deduped per month."""
+    try:
+        from datetime import date
+        from apps.notifications.models import Notification
+        from apps.forecasting import references as R
+        refs = R.get() or {}
+        asof = refs.get('as_of', '—')
+        infl = float(refs.get('inflation_annual', 0)) * 100
+        Notification.send_to_admins(
+            'system', 'حدّث معدل التضخم للتنبؤ',
+            body=(f'راجع أحدث معدل تضخم حضري من CAPMAS وأدخله في القيم المرجعية للتنبؤ '
+                  f'(صفحة سيناريوهات التنبؤ). القيمة الحالية {infl:.1f}% محدّثة {asof}.'),
+            dedup_key=f'inflation_reminder_{date.today():%Y-%m}')
+        logger.info('[APScheduler] inflation reminder sent')
+    except Exception as exc:
+        logger.error('[APScheduler] inflation reminder failed: %s', exc)
+
+
 def _run_procurement_refresh():
     """Keep procurement.PurchaseLine current so the purchasing insight rules aren't stale.
     Short lookback (the engine upserts) — runs just before the daily insight report."""
@@ -1946,6 +1966,24 @@ def _run_procurement_refresh():
         logger.info('[APScheduler] procurement refresh done')
     except Exception as exc:
         logger.error('[APScheduler] procurement refresh failed: %s', exc)
+
+
+def _run_kpi_refresh():
+    """Rebuild the CURRENT month's branch + call-center KPI rollups so the KPI board,
+    forecast scenarios and sales targets stay fresh. The call-center step also pulls the
+    live Issabel CDR call-count automatically (once DB access is granted). Idempotent."""
+    try:
+        from django.core.management import call_command
+        from datetime import date
+        today = date.today()
+        call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
+        try:
+            call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
+        except Exception as cc:
+            logger.warning('[APScheduler] CC rollup step skipped: %s', cc)
+        logger.info('[APScheduler] KPI rollups refreshed for %s-%02d', today.year, today.month)
+    except Exception as exc:
+        logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
 
 def _run_purchase_expiry_sync():
@@ -3074,6 +3112,19 @@ def start_scheduler():
     _scheduler.add_job(
         _reconcile_pos_orders, 'interval', minutes=5, id='pos_reconcile',
         replace_existing=True, max_instances=1, misfire_grace_time=120,
+    )
+    # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
+    # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
+    # from the live Issabel CDR automatically once DB access is granted.
+    _scheduler.add_job(
+        _run_kpi_refresh, 'cron', hour=6, minute=30, id='kpi_refresh',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Monthly reminder (~11th) to refresh the external Egypt inflation figure that
+    # grounds the forecast references (CAPMAS publishes around the 10th).
+    _scheduler.add_job(
+        _run_inflation_reminder, 'cron', day=11, hour=9, minute=0, id='inflation_reminder',
+        replace_existing=True, max_instances=1, misfire_grace_time=86400,
     )
     # Refresh procurement.PurchaseLine before the insight reports so the purchasing
     # rules (price-creep, supplier concentration, etc.) run on current data.

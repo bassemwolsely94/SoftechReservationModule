@@ -130,7 +130,8 @@ def resolve_line(raw_name: str, *, override_id=None, override_sid: str = '',
     learned = False
     runner_name, runner_score = '', None
     if item_obj is None:
-        matches = find_best_matches(raw_name, top_n=2, min_score=threshold, vendor_code=vendor_code)
+        matches = find_best_matches(raw_name, top_n=8, min_score=threshold, vendor_code=vendor_code)
+        matches = _prefer_written(raw_name, matches)
         if matches:
             best = matches[0]
             try:
@@ -153,6 +154,85 @@ def resolve_line(raw_name: str, *, override_id=None, override_sid: str = '',
         runner_up_name=runner_name,
         runner_up_score=runner_score,
     )
+
+
+# ── Written form / strength as a tie-break ─────────────────────────────────────────
+# Close candidates (within FORM_TIE_MARGIN of the top score) are re-ordered so the one whose
+# dosage form and strength agree with what the supplier wrote comes first: «Depovita amp» →
+# DEPOVIT-B12 AMP (not the lozenges), «لانتوس كارتلج» → LANTUS PENFILL (not SoloStar pens),
+# «Telfast syr» → the suspension. Deterministic; a remembered (learned) match is never moved.
+FORM_TIE_MARGIN = 0.10
+
+# Catalog / distributor form words the shared synonym table lacks (pens vs cartridges,
+# lozenges, syringes, sachets …). Catalog names glue them to numbers: «20TAB», «5PENFILL».
+_EXTRA_FORMS = {
+    'lozenge': 'lozenge', 'lozenges': 'lozenge', 'loz': 'lozenge', 'loze': 'lozenge', 'استحلاب': 'lozenge',
+    'pen': 'pen', 'pens': 'pen', 'flexpen': 'pen', 'solostar': 'pen', 'kwikpen': 'pen', 'flextouch': 'pen',
+    'قلم': 'pen', 'اقلام': 'pen', 'أقلام': 'pen',
+    'penfill': 'cartridge', 'cartridge': 'cartridge', 'cartridges': 'cartridge', 'cartidige': 'cartridge',
+    'كارتلج': 'cartridge', 'كارتريدج': 'cartridge', 'خراطيش': 'cartridge', 'خرطوشة': 'cartridge',
+    'خرطوشه': 'cartridge',
+    'vial': 'ampoule', 'vials': 'ampoule', 'amps': 'ampoule', 'ampoules': 'ampoule', 'syringe': 'ampoule',
+    'syringes': 'ampoule', 'فيال': 'ampoule',
+    'sach': 'sachet', 'sachets': 'sachet', 'sac': 'sachet', 'sticks': 'sachet', 'اكياس': 'sachet', 'أكياس': 'sachet',
+    'emulgel': 'cream', 'lotion': 'cream', 'divitab': 'tablet', 'chewable': 'tablet',
+    'shampoo': 'shampoo', 'شامبو': 'shampoo', 'soap': 'soap', 'صابون': 'soap', 'صابونه': 'soap',
+    'mouthwash': 'mouthwash', 'film': 'film', 'فيلم': 'film',
+}
+
+
+def forms_of(text: str) -> list:
+    """Every dosage form named in a supplier text or a catalog name, in order
+    («MELACRYST 3MG 20FILM ORAL FILM TAB» → film, tablet)."""
+    import re
+    from apps.shortage.matching import _FORM_LOOKUP
+    out = []
+    for tok in re.findall(r'[A-Za-z؀-ۿ]+', str(text or '')):
+        t = tok.lower()
+        f = _EXTRA_FORMS.get(t) or _FORM_LOOKUP.get(t)
+        if f and f not in out:
+            out.append(f)
+    return out
+
+
+def form_of(text: str):
+    """The first dosage form named in a text (None if none)."""
+    f = forms_of(text)
+    return f[0] if f else None
+
+
+def _words(text: str) -> set:
+    """Latin name words (no numbers / forms) — guards the tie-break to the same product."""
+    import re
+    from apps.shortage.matching import _FORM_LOOKUP
+    return {w for w in re.findall(r'[a-z]{3,}', str(text or '').lower())
+            if w not in _EXTRA_FORMS and w not in _FORM_LOOKUP}
+
+
+def _prefer_written(raw_name: str, matches: list) -> list:
+    """Re-order close candidates by agreement with the written form + strength."""
+    if len(matches) < 2 or matches[0].get('learned') or matches[0].get('learned_fuzzy'):
+        return matches
+    want_form, want_nums = form_of(raw_name), _name_numbers(raw_name)
+    if not want_form and not want_nums:
+        return matches
+    top = matches[0]['score']
+    words = _words(raw_name)
+    top_overlap = len(words & _words(matches[0]['item_name']))
+
+    def agree(m):
+        return (int(bool(want_nums) and want_nums <= _name_numbers(m['item_name'])) * 2
+                + int(bool(want_form) and want_form in forms_of(m['item_name'])))
+
+    # only candidates naming the written words as well as the top one does (never jump
+    # from «Limitless power max» to «Limitless woman max» because the form fits)
+    close = [m for m in matches if m['score'] >= top - FORM_TIE_MARGIN
+             and (m is matches[0] or len(words & _words(m['item_name'])) >= top_overlap)]
+    rest = [m for m in matches if m not in close]
+    best = max(close, key=lambda m: (agree(m), m['score']))
+    if best is matches[0]:
+        return matches
+    return [dict(best, written_preferred=True)] + [m for m in close if m is not best] + rest
 
 
 # ── Match-safety guard (§5: never silently trust a dangerous false match) ──────────
@@ -191,8 +271,10 @@ def review_flags(read_text: str, item_name: str, *, runner_up_name: str = '',
     raw_nums, item_nums = _name_numbers(read_text), _name_numbers(item_name)
     if raw_nums and item_nums and not raw_nums <= item_nums:
         flags.append('strength_mismatch')
-    rf, itf = extract_components(read_text).form, extract_components(item_name).form
-    if rf and itf and rf != itf:
+    rf = extract_components(read_text).form or form_of(read_text)
+    itf = {extract_components(item_name).form} | set(forms_of(item_name))
+    itf.discard(None)
+    if rf and itf and rf not in itf:
         flags.append('form_mismatch')
     if head_mismatch(read_text, item_name):
         flags.append('head_mismatch')

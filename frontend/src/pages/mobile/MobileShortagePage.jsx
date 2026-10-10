@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import api, { shortageApi } from '../../api/client'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import DataFreshnessBar from '../../components/DataFreshnessBar'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -67,6 +68,7 @@ export default function MobileShortagePage() {
 
   return (
     <div className="p-3 space-y-3">
+      <div className="flex justify-end"><DataFreshnessBar compact domains={['stock']} /></div>
       <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
         {FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}

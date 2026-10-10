@@ -99,6 +99,14 @@ class AuditLog(models.Model):
         # Customer account flags → branch copy (B7)
         ('customer_branch_copy_written', 'عميل — نسخ حالة الرئيسي لنسخة الفرع'),
         ('customer_points_removed',      'عميل — استبعاد من نظام النقاط وتصفير الرصيد'),
+
+
+        # Sales targets / KPI forecasting (doc 16) — assigned & approved figures
+        ('sales_target_changed',       'هدف بيعي — تعديل القيمة'),
+        ('sales_target_created',       'هدف بيعي — إضافة هدف'),
+        ('sales_target_deleted',       'هدف بيعي — حذف هدف'),
+        ('sales_target_committed',     'هدف بيعي — اعتماد الأهداف من سيناريو'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

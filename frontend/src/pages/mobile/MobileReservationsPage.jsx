@@ -11,6 +11,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import api, { reservationsApi } from '../../api/client'
 import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import DataFreshnessBar from '../../components/DataFreshnessBar'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -92,6 +93,8 @@ export default function MobileReservationsPage() {
 
   return (
     <div className="p-3 space-y-3">
+
+      <div className="flex justify-end"><DataFreshnessBar compact domains={['stock']} /></div>
 
       {/* Filter chips */}
       <div data-tour="reservations-mobile-list-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">

@@ -6,6 +6,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi, itemsApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import AnalyticsFilterPanel, { filtersToParams, defaultFilters } from '../components/AnalyticsFilterPanel'
 import ItemOperationalFiltersBar, { emptyItemFilters, buildItemParams } from '../components/ItemOperationalFiltersBar'
 import DataTable from '../components/DataTable'
@@ -181,6 +183,7 @@ export default function SalesDashboard() {
   const [itemFilters, setItemFilters] = useState(emptyItemFilters())
   const [activeTab,   setActiveTab]   = useState('overview')
   useHelpTab(activeTab)
+  const { user } = useAuthStore()
 
   const { data: opts } = useQuery({
     queryKey: ['analytics-filter-options'],
@@ -243,6 +246,9 @@ export default function SalesDashboard() {
           تحديث
         </RefreshButton>
       </div>
+
+      {/* Sales data freshness */}
+      <DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
 
       <AnalyticsFilterPanel
         filters={filters} onChange={setFilters} options={opts || {}}

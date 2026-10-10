@@ -77,6 +77,11 @@ class KpiResolver:
         self.unit_excluded_items = set(
             UnitCountExclusion.objects.filter(active=True).values_list('item_id', flat=True)
         )
+        from apps.forecasting.models import ProfitExclusion
+        # Items removed from معامل الربحية only (e.g. DLV delivery fee) — not from sales.
+        self.profit_excluded_items = set(
+            ProfitExclusion.objects.filter(active=True).values_list('item_id', flat=True)
+        )
 
     @staticmethod
     def month_bounds(year: int, month: int):
@@ -138,6 +143,8 @@ class KpiResolver:
         if not channels:
             return Decimal('0')
         base = self._line_qs(branch_ids, start, end, softech_user).filter(purchase__sales_channel__in=channels)
+        if self.profit_excluded_items:
+            base = base.exclude(item_id__in=self.profit_excluded_items)   # DLV delivery fee etc.
         sale = base.filter(purchase__doc_code='115').aggregate(s=Sum(_PROFIT_EXPR))['s'] or 0
         ret  = base.filter(purchase__doc_code='30').aggregate(s=Sum(_PROFIT_EXPR))['s'] or 0
         return Decimal(str(sale)) - Decimal(str(ret))
@@ -356,6 +363,8 @@ class KpiResolver:
                 base = base.filter(purchase__sales_channel__in=channels)
             else:
                 base = base.filter(purchase__sales_channel__in=self.nonexclude_channels)
+            if profit and self.profit_excluded_items:
+                base = base.exclude(item_id__in=self.profit_excluded_items)
             expr = _PROFIT_EXPR if profit else 'line_total'
             agg = (lambda qs: qs.aggregate(s=Sum(expr))['s'] or 0)
             sale = agg(base.filter(purchase__doc_code='115'))
@@ -403,6 +412,8 @@ class KpiResolver:
             return Decimal(str(sale)) - Decimal(str(ret))
 
         def net_profit():
+            # NB: the legacy CC workbook INCLUDES the DLV delivery fee in profit
+            # (unlike the branch sheet), so profit_excluded_items is NOT applied here.
             base = self._line_qs(None, start, end, softech_user=agents)
             sale = base.filter(purchase__doc_code='115').aggregate(s=Sum(_PROFIT_EXPR))['s'] or 0
             ret  = base.filter(purchase__doc_code='30').aggregate(s=Sum(_PROFIT_EXPR))['s'] or 0

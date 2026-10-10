@@ -16,12 +16,12 @@ from rest_framework.views import APIView
 
 from .models import (
     SeasonalityIndex, ForecastRun, ForecastAccuracy, KpiActualRollup,
-    ForecastScenario, ForecastFactor, ForecastResult, BacktestRun,
+    ForecastScenario, ForecastFactor, ForecastResult, BacktestRun, ProfitExclusion,
 )
 from .serializers import (
     SeasonalityIndexSerializer, ForecastRunSerializer, ForecastAccuracySerializer,
     ForecastScenarioSerializer, ForecastFactorSerializer, ForecastResultSerializer,
-    BacktestRunSerializer,
+    BacktestRunSerializer, ProfitExclusionSerializer,
 )
 from .service import ForecastService
 from .engine import ForecastEngine
@@ -151,69 +151,91 @@ BOARD_METRICS = [
 ]
 
 
-def _pace(actual, target, year, month):
-    """met/missed (past), ahead/behind (current), pending (future), none (no target)."""
-    if not target:
-        return None
+def _latest_complete_date(year, month):
+    """Last day of the month with COMPLETE sales data, for correct to-date pacing:
+      • month fully over → its last day;  • future month → None;
+      • in-progress → the latest synced sales day strictly before today (today is partial)."""
     from calendar import monthrange
-    today = date.today()
-    m_start = date(year, month, 1)
-    m_end = date(year, month, monthrange(year, month)[1])
-    if today > m_end:
-        return 'met' if actual >= target else 'missed'
-    if today < m_start:
-        return 'pending'
-    elapsed = (today - m_start).days + 1
-    total = (m_end - m_start).days + 1
-    expected = target * elapsed / total
-    return 'ahead' if actual >= expected else 'behind'
+    from django.db.models import Max
+    from apps.customers.models import PurchaseHistory
+    today  = date.today()
+    mstart = date(year, month, 1)
+    mend   = date(year, month, monthrange(year, month)[1])
+    if mend < today:
+        return mend
+    if mstart > today:
+        return None
+    return (PurchaseHistory.objects.filter(
+        invoice_date__date__gte=mstart, invoice_date__date__lt=today)
+        .aggregate(m=Max('invoice_date__date'))['m'])
 
 
 class KpiBoardView(APIView):
-    """GET /api/forecasting/kpi-board/?year=&month= — branch KPI grid + chain totals."""
+    """GET /api/forecasting/kpi-board/?year=&month= — branch KPI grid + chain totals.
+    Targets come from the editable SalesTargets; % is achievement vs the target PRO-RATED
+    to the latest complete data day (owner convention, == legacy sheet H/I)."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from apps.branches.models import Branch
         from apps.incentives.models import SalesTarget
+        from calendar import monthrange
 
         today = date.today()
         year  = int(request.query_params.get('year',  today.year))
         month = int(request.query_params.get('month', today.month))
 
-        # actuals from rollups (fast) → {(branch_id, metric): value}
+        m_start = date(year, month, 1)
+        m_end   = date(year, month, monthrange(year, month)[1])
+        data_through = _latest_complete_date(year, month)
+        total = (m_end - m_start).days + 1
+        elapsed = ((data_through - m_start).days + 1) if data_through else 0
+        frac = (elapsed / total) if total else 0
+
+        # actuals from rollups (rebuilt daily) → {(branch_id, metric): value}
         rollups = KpiActualRollup.objects.filter(
             year=year, month=month, metric__in=BOARD_METRICS,
         ).values('branch_id', 'metric', 'value')
         actual = {(r['branch_id'], r['metric']): float(r['value']) for r in rollups}
         branch_ids_with_data = {r['branch_id'] for r in rollups}
 
-        # targets overlapping the month (branch + chain scope)
-        from calendar import monthrange
-        m_start = date(year, month, 1)
-        m_end   = date(year, month, monthrange(year, month)[1])
+        # editable targets overlapping the month (branch + chain scope) → value + id
         tqs = SalesTarget.objects.filter(
             metric__in=BOARD_METRICS, period_start__lte=m_end, period_end__gte=m_start,
             scope_type__in=[SalesTarget.SCOPE_BRANCH, SalesTarget.SCOPE_CHAIN],
-        ).values('scope_type', 'branch_id', 'metric', 'target_value')
+        ).values('id', 'scope_type', 'branch_id', 'metric', 'target_value')
         branch_target = {}
         chain_target  = {}
         for t in tqs:
             tv = float(t['target_value'] or 0)
             if t['scope_type'] == SalesTarget.SCOPE_BRANCH and t['branch_id']:
-                branch_target[(t['branch_id'], t['metric'])] = tv
+                branch_target[(t['branch_id'], t['metric'])] = (tv, t['id'])
             elif t['scope_type'] == SalesTarget.SCOPE_CHAIN:
-                chain_target[t['metric']] = tv
+                chain_target[t['metric']] = (tv, t['id'])
 
-        # Retail branches only (operational, excluding HQ/admin — see analytics_branches).
         from apps.forecasting.kpi import analytics_branches
         branches = (analytics_branches().filter(id__in=branch_ids_with_data)
                     .order_by('code', 'softech_branch_id')) if branch_ids_with_data else []
 
-        def cell(a, t):
-            pct = round(a / t * 100, 1) if t else None
-            return {'actual': round(a, 2), 'target': (round(t, 2) if t else None),
-                    'pct': pct, 'pace': _pace(a, t, year, month)}
+        def pace(a, t):
+            if not t:
+                return None
+            if data_through is None:
+                return 'pending'
+            if data_through >= m_end:
+                return 'met' if a >= t else 'missed'
+            return 'ahead' if a >= (t * frac) else 'behind'
+
+        def cell(a, t, tid=None):
+            exp = (t * frac) if t else 0                       # target pro-rated to data_through
+            return {
+                'actual': round(a, 2),
+                'target': (round(t, 2) if t else None),        # full-month target
+                'target_todate': (round(exp, 2) if t else None),
+                'pct': (round(a / exp * 100, 1) if exp else None),      # vs to-date (legacy %)
+                'pct_full': (round(a / t * 100, 1) if t else None),     # progress vs full month
+                'pace': pace(a, t), 'target_id': tid,
+            }
 
         rows = []
         totals_actual = {m: 0.0 for m in BOARD_METRICS}
@@ -222,8 +244,8 @@ class KpiBoardView(APIView):
             cells = {}
             for m in BOARD_METRICS:
                 a = actual.get((b.id, m), 0.0)
-                t = branch_target.get((b.id, m), 0.0)
-                cells[m] = cell(a, t)
+                t, tid = branch_target.get((b.id, m), (0.0, None))
+                cells[m] = cell(a, t, tid)
                 totals_actual[m] += a
                 totals_target[m] += t
             rows.append({
@@ -233,15 +255,17 @@ class KpiBoardView(APIView):
 
         totals = {}
         for m in BOARD_METRICS:
-            t = chain_target.get(m) or totals_target[m]  # chain target overrides sum
-            totals[m] = cell(totals_actual[m], t)
+            ct = chain_target.get(m)
+            t = ct[0] if ct else totals_target[m]
+            totals[m] = cell(totals_actual[m], t, ct[1] if ct else None)
 
-        # ── Call Center overlay (doc 16, Phase 5) — separate from branch totals ──
         call_center = self._call_center_block(year, month, cell, m_start, m_end)
 
         return Response({
             'year': year, 'month': month,
             'has_data': bool(branch_ids_with_data),
+            'data_through': data_through.isoformat() if data_through else None,
+            'days_elapsed': elapsed, 'days_total': total,
             'metrics': [{'key': m, 'label': KpiActualRollup.METRIC_LABELS.get(m, m),
                          'is_count': m == KpiActualRollup.M_CUSTOMERS} for m in BOARD_METRICS],
             'branches': rows,
@@ -265,18 +289,113 @@ class KpiBoardView(APIView):
             branch=cc, year=year, month=month, metric__in=self.CC_METRICS).values('metric', 'value')}
         if not actual:
             return None
-        tgt = {t['metric']: float(t['target_value'] or 0) for t in SalesTarget.objects.filter(
+        tgt = {t['metric']: (float(t['target_value'] or 0), t['id']) for t in SalesTarget.objects.filter(
             scope_type=SalesTarget.SCOPE_BRANCH, branch=cc, metric__in=self.CC_METRICS,
-            period_start__lte=m_end, period_end__gte=m_start).values('metric', 'target_value')}
+            period_start__lte=m_end, period_end__gte=m_start).values('id', 'metric', 'target_value')}
         # CC labels: "customers" here means order count; keep generic labels + is_count.
         cc_labels = dict(KpiActualRollup.METRIC_LABELS)
         cc_labels[KpiActualRollup.M_CUSTOMERS] = 'عدد الطلبات'
         return {
+            'branch_id': cc.id,
             'metrics': [{'key': m, 'label': cc_labels.get(m, m),
                          'is_count': m in (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_CALL_COUNT)}
                         for m in self.CC_METRICS],
-            'cells': {m: cell(actual.get(m, 0.0), tgt.get(m, 0.0)) for m in self.CC_METRICS},
+            'cells': {m: cell(actual.get(m, 0.0), *tgt.get(m, (0.0, None))) for m in self.CC_METRICS},
         }
+
+
+class KpiRefreshView(APIView):
+    """POST — rebuild the CURRENT month's branch + call-center rollups in the background
+    so the KPI board reflects the latest synced SOFTECH data on demand."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sp = getattr(request.user, 'staff_profile', None)
+        if not (sp and sp.role in ANALYST_ROLES):
+            return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+        import threading
+        from datetime import date
+
+        def _job():
+            from django.db import connections
+            connections.close_all()
+            try:
+                from django.core.management import call_command
+                today = date.today()
+                call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
+                try:
+                    call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
+                except Exception:
+                    logger.exception('CC rollup refresh skipped')
+            except Exception:
+                logger.exception('KPI board refresh job failed')
+            finally:
+                connections.close_all()
+
+        threading.Thread(target=_job, daemon=True).start()
+        return Response({'started': True})
+
+
+class KpiSheetExportView(APIView):
+    """
+    GET /api/forecasting/kpi-board/export/?year=&month=&models=a,b,avg
+        &threshold=&benchmark=&days_elapsed=
+    Streams the legacy-format KPI target workbook (one sheet per model) built from
+    the forecast engine (targets) + KpiActualRollup (achieved). Read-only.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import io
+        from decimal import Decimal, InvalidOperation
+        from django.http import HttpResponse
+        from apps.forecasting.kpi_export import build_target_workbook
+
+        today = date.today()
+        try:
+            year = int(request.query_params.get('year', today.year))
+            month = int(request.query_params.get('month', today.month))
+        except (TypeError, ValueError):
+            return Response({'detail': 'سنة/شهر غير صالحين'}, status=status.HTTP_400_BAD_REQUEST)
+        if not (1 <= month <= 12):
+            return Response({'detail': 'الشهر يجب أن يكون 1–12'}, status=status.HTTP_400_BAD_REQUEST)
+
+        raw = (request.query_params.get('models') or 'a,b,avg')
+        models = tuple(m.strip() for m in raw.split(',') if m.strip() in ('a', 'b', 'avg'))
+        if not models:
+            return Response({'detail': 'نماذج غير صالحة (a,b,avg)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        def _dec(key, default):
+            v = request.query_params.get(key)
+            if v in (None, ''):
+                return Decimal(default)
+            try:
+                return Decimal(str(v))
+            except (InvalidOperation, ValueError):
+                return Decimal(default)
+
+        days_elapsed = request.query_params.get('days_elapsed')
+        days_elapsed = int(days_elapsed) if (days_elapsed or '').isdigit() else None
+
+        try:
+            wb = build_target_workbook(
+                year, month, models=models, days_elapsed=days_elapsed,
+                incentive_threshold=_dec('threshold', '0.90'),
+                benchmark_growth=_dec('benchmark', '0.30'))
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+        except Exception:
+            logger.exception('KPI sheet export failed for %s-%s', year, month)
+            return Response({'detail': 'فشل إنشاء ملف الإكسل'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        fname = f'kpi_target_{year}_{month:02d}.xlsx'
+        resp = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        return resp
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -328,6 +447,8 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
             for field in ['growth_goal', 'w_lm', 'w_pm', 'w_yoy', 'seasonality_index']:
                 if field in row and row[field] is not None:
                     setattr(f, field, row[field])
+            if 'benchmark' in row:          # nullable → allow clearing back to the global default
+                f.benchmark = row['benchmark'] if row['benchmark'] not in ('', None) else None
             f.save()
         return Response(ForecastScenarioSerializer(scenario).data)
 
@@ -351,6 +472,42 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
             qs = qs.filter(metric=metric)
         return Response(ForecastResultSerializer(qs, many=True).data)
 
+    @action(detail=True, methods=['post'], url_path='apply-references')
+    def apply_references(self, request, pk=None):
+        """Manually apply the stored grounded references (seasonality/benchmark/growth/
+        inflation) to this scenario's factors. Does NOT generate — call generate next."""
+        self._guard()
+        scenario = self.get_object()
+        from apps.forecasting import references as R
+        try:
+            res = R.apply_to_scenario(scenario)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({**res, 'scenario': ForecastScenarioSerializer(scenario).data})
+
+    @action(detail=True, methods=['get'])
+    def export(self, request, pk=None):
+        """Stream an Excel of the full scenario forecast (per-KPI branch rows + totals + factors)."""
+        scenario = self.get_object()
+        if scenario.status == ForecastScenario.STATUS_DRAFT:
+            return Response({'detail': 'احسب السيناريو أولاً قبل التصدير'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        import io
+        from django.http import HttpResponse
+        from .kpi_export import build_scenario_workbook
+        try:
+            wb = build_scenario_workbook(scenario)
+            buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        except Exception:
+            logger.exception('Scenario export failed for %s', scenario.pk)
+            return Response({'detail': 'فشل تصدير الملف'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        fname = f'forecast_{scenario.year}_{scenario.month:02d}_{scenario.pk}.xlsx'
+        resp = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        return resp
+
     @action(detail=True, methods=['post'])
     def commit(self, request, pk=None):
         sp = self._guard()
@@ -360,6 +517,35 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST)
         summary = ForecastEngine().commit(scenario, created_by=sp)
         return Response({**summary, 'scenario': ForecastScenarioSerializer(scenario).data})
+
+
+class ForecastReferenceView(APIView):
+    """GET grounded reference values; POST (analyst) recomputes them / sets fresh inflation.
+    Body: {real_growth?, inflation?, inflation_source?}."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.forecasting import references as R
+        return Response(R.get() or {})
+
+    def post(self, request):
+        sp = getattr(request.user, 'staff_profile', None)
+        if not (sp and sp.role in ANALYST_ROLES):
+            return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+        from apps.forecasting import references as R
+        d = request.data or {}
+        prev = R.get() or {}
+        rg = d.get('real_growth')
+        rg = float(rg) if rg not in (None, '') else float(prev.get('real_growth', 0.15))
+        infl = d.get('inflation')
+        infl = float(infl) if infl not in (None, '') else None
+        try:
+            refs = R.compute(real_growth=rg, inflation_annual=infl,
+                             inflation_source=d.get('inflation_source', ''))
+        except Exception:
+            logger.exception('reference compute failed')
+            return Response({'detail': 'فشل حساب القيم المرجعية'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(refs)
 
 
 class GrowthView(APIView):
@@ -428,3 +614,31 @@ class BacktestViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'فشل تشغيل الاختبار الرجعي'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(BacktestRunSerializer(run).data, status=status.HTTP_201_CREATED)
+
+
+class ProfitExclusionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for items excluded from معامل الربحية (e.g. DLV delivery fee). Analyst roles
+    mutate; everyone authenticated can read. Create by `code` (SOFTECH itemcode).
+    NOTE: changes take effect for on-demand resolves immediately, and for the KPI
+    board / engine after the next rollup rebuild (build_kpi_rollups).
+    """
+    serializer_class   = ProfitExclusionSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = ProfitExclusion.objects.select_related('item').order_by('item__softech_id')
+
+    def _guard(self):
+        sp = getattr(self.request.user, 'staff_profile', None)
+        if not (sp and sp.role in ANALYST_ROLES):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('لا تملك صلاحية تعديل استثناءات الربحية')
+        return sp
+
+    def perform_create(self, serializer):
+        self._guard(); serializer.save()
+
+    def perform_update(self, serializer):
+        self._guard(); serializer.save()
+
+    def perform_destroy(self, instance):
+        self._guard(); instance.delete()

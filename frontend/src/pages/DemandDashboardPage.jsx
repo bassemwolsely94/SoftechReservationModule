@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { demandApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import { tint } from '../theme/theme'
 
 const BRAND  = 'rgb(var(--c-brand-600))'
@@ -78,6 +80,7 @@ function Section({ icon, title, children }) {
 
 export default function DemandDashboardPage() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [days, setDays] = useState(30)
 
   const { data, isLoading } = useQuery({
@@ -189,6 +192,9 @@ export default function DemandDashboardPage() {
 
       {/* Body */}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
+
+        {/* Demand is derived from sales vs current stock availability */}
+        <DataFreshnessBar domains={['stock', 'sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
 
         {/* KPI strip */}
         {isLoading ? (
