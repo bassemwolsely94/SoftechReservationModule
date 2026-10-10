@@ -80,7 +80,7 @@ export default function CustomersPage() {
       <div className="page-body">
         {/* Search + filter bar */}
         <div className="mb-4 flex gap-2 items-center flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+          <div className="relative flex-1 min-w-[200px] max-w-md" data-tour="customers-list-search">
             <input
               type="text"
               placeholder="ابحث بالاسم أو رقم الهاتف أو كود SOFTECH..."
@@ -96,6 +96,7 @@ export default function CustomersPage() {
 
           {/* Churn filter */}
           <select
+            data-tour="customers-list-churn"
             value={churnFilter}
             onChange={e => { setChurnFilter(e.target.value); setPage(1) }}
             className="input-field text-xs py-2 w-36"
@@ -109,6 +110,7 @@ export default function CustomersPage() {
 
           {/* Sort */}
           <select
+            data-tour="customers-list-sort"
             value={ordering}
             onChange={e => { setOrdering(e.target.value); setPage(1) }}
             className="input-field text-xs py-2 w-40"
@@ -134,7 +136,7 @@ export default function CustomersPage() {
         </div>
 
         {/* Table card */}
-        <div className={`card p-0 overflow-hidden transition-opacity duration-200 ${isFetching && !isLoading ? 'opacity-70' : ''}`}>
+        <div data-tour="customers-list-table" className={`card p-0 overflow-hidden transition-opacity duration-200 ${isFetching && !isLoading ? 'opacity-70' : ''}`}>
           {isLoading ? (
             <div className="p-2">
               <SkeletonTable rows={10} cols={5} />
@@ -307,7 +309,7 @@ export default function CustomersPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100" data-tour="customers-list-pages">
               <span className="text-xs text-gray-500">
                 صفحة {page} من {totalPages} · {totalCount.toLocaleString('en-US')} نتيجة
               </span>

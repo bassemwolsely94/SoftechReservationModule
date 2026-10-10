@@ -604,6 +604,7 @@ function ShareButton({ productId }) {
 
   return (
     <button
+      data-tour="catalog-product-share"
       onClick={handleShare}
       className="flex items-center gap-2 text-sm px-4 py-2 border border-gray-200 rounded-xl
                  hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors"
@@ -692,7 +693,7 @@ export default function ProductDetailPage() {
             <ImageGallery media={product.all_media} />
 
             {/* Quick info card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3" data-tour="catalog-product-summary">
               <div className="flex items-center justify-between">
                 <AvailBadge status={overall} size="lg" />
                 {product.prescription_required === true && (
@@ -738,7 +739,7 @@ export default function ProductDetailPage() {
 
               {/* Pricing */}
               {product.pack_price && (
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-50">
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-50" data-tour="catalog-product-price">
                   <div className="bg-gray-50 rounded-lg p-2 text-center">
                     <p className="text-xs text-gray-400">سعر العبوة</p>
                     <p className="text-sm font-bold text-gray-800">{Number(product.pack_price).toFixed(2)} ج</p>
@@ -799,6 +800,7 @@ export default function ProductDetailPage() {
             {/* Admin links */}
             <div className="flex gap-2">
               <Link
+                data-tour="catalog-product-intel"
                 to={`/products/${id}/intel`}
                 className="flex-1 flex items-center justify-center gap-2 text-xs text-brand-600 hover:text-brand-700
                            border border-brand-200 bg-brand-50 hover:bg-brand-100 rounded-xl py-2 transition-colors font-medium"
@@ -818,7 +820,7 @@ export default function ProductDetailPage() {
           {/* RIGHT — Tabs */}
           <div className="md:col-span-3">
             {/* Tab bar */}
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 overflow-x-auto">
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 overflow-x-auto" data-tour="catalog-product-tabs">
               {TABS.map(tab => (
                 <button
                   key={tab.key}
@@ -834,7 +836,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Tab content */}
-            <div className="bg-white rounded-xl border border-gray-100 p-5 min-h-[300px]">
+            <div className="bg-white rounded-xl border border-gray-100 p-5 min-h-[300px]" data-tour="catalog-product-content">
               {activeTab === 'info'         && <OverviewTab product={product} />}
               {activeTab === 'instructions' && <InstructionsTab product={product} />}
               {activeTab === 'attributes'   && <AttributesTab product={product} />}

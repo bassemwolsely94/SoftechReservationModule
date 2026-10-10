@@ -56,7 +56,7 @@ export default function DispatchBoard() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">🧭 لوحة التوزيع</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1" data-tour="delivery-dispatch-header">🧭 لوحة التوزيع</h1>
       <p className="text-sm text-gray-500 mb-5">جمّع الطلبات الجاهزة في مسار لسائق ثم أطلق المسار دفعة واحدة</p>
 
       <div className="grid md:grid-cols-2 gap-5">
@@ -66,7 +66,7 @@ export default function DispatchBoard() {
             <h2 className="font-bold text-gray-800 text-sm">📦 جاهزة للتكليف ({orders.length})</h2>
             <span className="text-xs text-gray-400">{selected.size} محدد</span>
           </div>
-          <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-50">
+          <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-50" data-tour="delivery-dispatch-ready">
             {orders.length === 0 ? <div className="py-10 text-center text-gray-400 text-sm">لا توجد طلبات جاهزة</div>
               : orders.map(o => (
               <label key={o.id} className="flex items-center gap-2 py-2 cursor-pointer">
@@ -79,11 +79,11 @@ export default function DispatchBoard() {
             ))}
           </div>
           <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-            <select className="input-field flex-1" value={driverId} onChange={e => setDriverId(e.target.value)}>
+            <select className="input-field flex-1" data-tour="delivery-dispatch-driver" value={driverId} onChange={e => setDriverId(e.target.value)}>
               <option value="">اختر السائق…</option>
               {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name} ({d.today_order_count})</option>)}
             </select>
-            <button onClick={() => createRoute.mutate()} disabled={!driverId || !selected.size || createRoute.isPending}
+            <button data-tour="delivery-dispatch-create" onClick={() => createRoute.mutate()} disabled={!driverId || !selected.size || createRoute.isPending}
               className="btn-primary text-sm disabled:opacity-40">إنشاء مسار</button>
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function DispatchBoard() {
         {/* Today's routes — live status */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <h2 className="font-bold text-gray-800 text-sm mb-2">🚚 مسارات اليوم ({routes.length})</h2>
-          <div className="max-h-[62vh] overflow-y-auto space-y-2">
+          <div className="max-h-[62vh] overflow-y-auto space-y-2" data-tour="delivery-dispatch-routes">
             {routes.length === 0 ? <div className="py-10 text-center text-gray-400 text-sm">لا توجد مسارات بعد</div>
               : routes.map(r => {
               const st = RSTATUS[r.status] || {}
@@ -105,7 +105,7 @@ export default function DispatchBoard() {
                   <div className="text-[11px] text-gray-400 mt-0.5">نقدي متوقّع {fmt(r.expected_cash)} ج.م · تم {r.delivered_count}/{r.stop_count}</div>
                   <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
                   {r.status === 'planned' && (
-                    <button onClick={() => dispatchRoute.mutate(r.id)} disabled={dispatchRoute.isPending}
+                    <button data-tour="delivery-dispatch-launch" onClick={() => dispatchRoute.mutate(r.id)} disabled={dispatchRoute.isPending}
                       className="w-full mt-2 text-xs bg-brand-600 text-white rounded-lg py-1.5 font-medium disabled:opacity-50">🚚 إطلاق المسار</button>
                   )}
                 </div>

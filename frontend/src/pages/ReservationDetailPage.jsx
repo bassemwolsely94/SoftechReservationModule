@@ -1156,7 +1156,7 @@ function AllItemsPanel({ r, onRefresh }) {
   const isLocked = r.status !== 'pending'
 
   return (
-    <div className="card">
+    <div className="card" data-tour="reservations-detail-items">
       <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
         <span>📦</span> أصناف الحجز
         <span className="text-xs font-normal text-gray-400">({allItems.length} صنف)</span>
@@ -1582,7 +1582,7 @@ export default function ReservationDetailPage() {
           </button>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap" data-tour="reservations-detail-header">
               <h1 className="text-xl font-black text-gray-900">حجز #{r.id}</h1>
               <span className={`badge ${sc.bg} ${sc.text}`}>{r.status_label}</span>
               <PriorityBadge priority={r.priority} />
@@ -1600,7 +1600,7 @@ export default function ReservationDetailPage() {
           </div>
 
           {/* Role-based quick action buttons */}
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-2 flex-wrap items-center" data-tour="reservations-detail-actions">
 
             {/* ── Internal-use tools ── clearly labelled for staff only */}
             <div className="flex items-center gap-1.5 border border-dashed border-gray-300 rounded-xl px-2.5 py-1.5 bg-gray-50">
@@ -1663,7 +1663,7 @@ export default function ReservationDetailPage() {
             </CanDo>
             <CanDo module="reservations" action="approve">
               {canChange && (
-                <button onClick={() => setShowStatusModal(true)} className="btn-primary text-sm">
+                <button onClick={() => setShowStatusModal(true)} className="btn-primary text-sm" data-tour="reservations-detail-status">
                   تغيير الحالة
                 </button>
               )}
@@ -1679,7 +1679,7 @@ export default function ReservationDetailPage() {
         <div className="lg:col-span-2 flex flex-col gap-5">
 
           {/* Chatter card */}
-          <div className="card">
+          <div className="card" data-tour="reservations-detail-chatter">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-800 text-sm">
                 سجل الأنشطة
@@ -1766,7 +1766,7 @@ export default function ReservationDetailPage() {
         <div className="flex flex-col gap-4">
 
           {/* Customer */}
-          <div className="card">
+          <div className="card" data-tour="reservations-detail-customer">
             <h3 className="font-bold mb-3 text-xs uppercase tracking-wide text-gray-400">العميل</h3>
             <div className="text-base font-bold text-gray-900">{r.contact_name}</div>
             <div className="text-brand-600 font-mono text-sm mt-0.5" dir="ltr">{r.contact_phone}</div>

@@ -764,6 +764,7 @@ export default function ProductCatalogPage() {
             <div className="flex-1 relative max-w-2xl">
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
               <input
+                data-tour="catalog-products-search"
                 ref={inputRef}
                 type="text"
                 value={query}
@@ -784,6 +785,7 @@ export default function ProductCatalogPage() {
             <div className="flex items-center gap-2 shrink-0">
               {/* Barcode scanner */}
               <button
+                data-tour="catalog-products-scan"
                 onClick={() => setShowScanner(true)}
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200
                            bg-white text-gray-600 hover:bg-gray-50 transition-colors"
@@ -805,6 +807,7 @@ export default function ProductCatalogPage() {
 
               {/* Ordering */}
               <select
+                data-tour="catalog-products-sort"
                 value={ordering}
                 onChange={e => { setOrdering(e.target.value); setPage(1) }}
                 className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white text-gray-600"
@@ -816,6 +819,7 @@ export default function ProductCatalogPage() {
 
               {/* Filter toggle */}
               <button
+                data-tour="catalog-products-filters"
                 onClick={() => setShowFilters(v => !v)}
                 className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors
                   ${showFilters
@@ -847,7 +851,7 @@ export default function ProductCatalogPage() {
           </div>
 
           {/* View tabs */}
-          <div className="flex gap-1">
+          <div className="flex gap-1" data-tour="catalog-products-tabs">
             {VIEW_TABS.map(tab => (
               <button
                 key={tab.key}
@@ -880,7 +884,7 @@ export default function ProductCatalogPage() {
           )}
 
           {/* Main content */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" data-tour="catalog-products-results">
 
             {/* Bundles tab */}
             {viewTab === 'bundles' && (

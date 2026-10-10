@@ -72,7 +72,7 @@ export default function DriverDeliveryApp() {
 
   return (
     <div className="p-4 max-w-md mx-auto" dir="rtl">
-      <div className="mb-3">
+      <div className="mb-3" data-tour="delivery-driver-header">
         <h1 className="text-xl font-bold text-gray-900">🚚 مهامي اليوم</h1>
         {route && <p className="text-xs text-gray-500">المسار ROUTE-{route.id} · {route.delivered_count}/{route.stop_count} تم · متوقّع نقدي {fmt(route.expected_cash)} ج.م</p>}
       </div>
@@ -87,7 +87,7 @@ export default function DriverDeliveryApp() {
       {isLoading ? <div className="text-center py-16 text-gray-400">جارٍ التحميل…</div>
         : stops.length === 0 ? <div className="text-center py-16 text-gray-400">لا توجد مهام حالياً</div>
         : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5" data-tour="delivery-driver-stops">
           {stops.map((s, i) => {
             const cfg = STATUS[s.status] || { label: s.status_label || s.status, next: null, color: 'bg-gray-50' }
             return (
@@ -104,11 +104,11 @@ export default function DriverDeliveryApp() {
                   <span className="text-[10px] font-bold text-gray-500 shrink-0">{cfg.label}</span>
                 </div>
                 <div className="flex gap-1.5 mt-2.5">
-                  {s.customer_phone && <a href={`tel:${s.customer_phone}`} className="flex-1 text-center text-xs bg-white border border-gray-200 rounded-lg py-1.5">📞 اتصال</a>}
-                  {s.google_maps && <a href={s.google_maps} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs bg-white border border-gray-200 rounded-lg py-1.5">🗺️ خريطة</a>}
+                  {s.customer_phone && <a data-tour="delivery-driver-call" href={`tel:${s.customer_phone}`} className="flex-1 text-center text-xs bg-white border border-gray-200 rounded-lg py-1.5">📞 اتصال</a>}
+                  {s.google_maps && <a data-tour="delivery-driver-map" href={s.google_maps} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs bg-white border border-gray-200 rounded-lg py-1.5">🗺️ خريطة</a>}
                   {cfg.next === 'deliver'
-                    ? <button onClick={() => setPodFor(s)} className="flex-[2] text-xs bg-emerald-600 text-white rounded-lg py-1.5 font-medium">تم التسليم ✅</button>
-                    : cfg.next && <button onClick={() => doAction(s)} disabled={busyId === s.id} className="flex-[2] text-xs bg-brand-600 text-white rounded-lg py-1.5 font-medium disabled:opacity-50">{busyId === s.id ? '…' : cfg.nextLabel}</button>}
+                    ? <button data-tour="delivery-driver-deliver" onClick={() => setPodFor(s)} className="flex-[2] text-xs bg-emerald-600 text-white rounded-lg py-1.5 font-medium">تم التسليم ✅</button>
+                    : cfg.next && <button data-tour="delivery-driver-next" onClick={() => doAction(s)} disabled={busyId === s.id} className="flex-[2] text-xs bg-brand-600 text-white rounded-lg py-1.5 font-medium disabled:opacity-50">{busyId === s.id ? '…' : cfg.nextLabel}</button>}
                 </div>
               </div>
             )

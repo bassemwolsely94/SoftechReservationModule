@@ -78,7 +78,7 @@ must not get wrong → add a quiz question.
 - Calm: the dimmed mask ignores clicks (the highlighted button can be pressed for real); leaving the
   screen ends the tour; a step whose element is not visible (other tab, role, nothing selected)
   still shows its text with a note. Runner: `frontend/src/help/Tour.jsx` (mounted by `HelpPanel`).
-- Built for 32 screens — desktop: sales analytics, KPI board, finance dashboard, expenses, insurance
+- Built for 44 screens — desktop: reservation / demand / transfer detail, transits, customers list, product catalog + product, omni inbox, dispatch board, rider app, POS exceptions, HR approvals; sales analytics, KPI board, finance dashboard, expenses, insurance
   claims + claim, purchasing engine, supply, users, permissions matrix, sync; POS, reservations board + new, demand list, transfers list + new,
   stock count, follow-ups, delivery dashboard, customer detail, shortages, call-center operator, HR
   requests, tasks, vouchers; mobile: POS, reservations, new demand, transfers, stock count,
@@ -174,4 +174,4 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (only ~32 of 176 have one; the panel shows the button only where one exists).
+- Tours for the remaining screens (only ~44 of 176 have one; the panel shows the button only where one exists).

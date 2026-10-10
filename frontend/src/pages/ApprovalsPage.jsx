@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6" data-tour="hr-approvals-header">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">صندوق الموافقات</h1>
           <p className="text-sm text-gray-500 mt-1">إدارة طلبات الموافقة لجميع سير العمل</p>
@@ -108,7 +108,7 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6" data-tour="hr-approvals-tabs">
         {[
           { key: 'pending', label: 'بانتظار القرار' },
           { key: 'history', label: 'السجل' },
@@ -130,7 +130,7 @@ export default function ApprovalsPage() {
           <p>{tab === 'pending' ? 'لا توجد طلبات بانتظار القرار' : 'لا يوجد سجل'}</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="hr-approvals-table">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -155,6 +155,7 @@ export default function ApprovalsPage() {
                   <td className="px-4 py-3">
                     {tab === 'pending' && (
                       <button
+                        data-tour="hr-approvals-decide"
                         onClick={() => setSelected(req)}
                         className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700"
                       >

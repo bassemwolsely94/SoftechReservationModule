@@ -235,7 +235,7 @@ function TimelinePane({ conv }) {
       <AIAssistBar conv={conv} onUseReply={setText} />
 
       {/* Reply — routes to WhatsApp or social channel (Phases 0/3) */}
-      <div className="border-t border-gray-200 bg-white p-3">
+      <div className="border-t border-gray-200 bg-white p-3" data-tour="omni-inbox-reply">
         {!replyChannel ? (
           <p className="text-xs text-gray-400 text-center py-1">
             لا توجد قناة رسائل لهذه المحادثة — للاتصال استخدم{' '}
@@ -364,7 +364,7 @@ function Customer360Panel({ conv, onUpdate }) {
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4" dir="rtl">
       {/* Conversation controls */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2" data-tour="omni-inbox-manage">
         <p className="text-xs font-bold text-gray-500">إدارة المحادثة</p>
         <select
           value={conv.status}
@@ -454,12 +454,13 @@ export default function OmniInboxPage() {
         <div className="px-3 py-3 border-b border-gray-100">
           <h1 className="font-bold text-gray-800 mb-2 text-lg">📥 الصندوق الموحد</h1>
           <input
+            data-tour="omni-inbox-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="بحث باسم أو رقم..."
             className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
           />
-          <div className="flex items-center gap-1 mt-2 text-xs">
+          <div className="flex items-center gap-1 mt-2 text-xs" data-tour="omni-inbox-filters">
             {FILTERS.map(f => (
               <button key={f.key}
                 onClick={() => setStatusFilter(f.key)}
@@ -476,7 +477,7 @@ export default function OmniInboxPage() {
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" data-tour="omni-inbox-list">
           {isLoading ? (
             <p className="text-center text-gray-400 py-10 text-sm">جاري التحميل...</p>
           ) : conversations.length === 0 ? (
@@ -491,7 +492,7 @@ export default function OmniInboxPage() {
       </div>
 
       {/* Middle: unified timeline */}
-      <div className="flex-1 min-w-0 border-l border-gray-200">
+      <div className="flex-1 min-w-0 border-l border-gray-200" data-tour="omni-inbox-timeline">
         {current ? (
           <TimelinePane conv={current} />
         ) : (
