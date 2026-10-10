@@ -185,6 +185,8 @@ SCREENS = [
               'If the screen has tabs, the help opens on the tab you are on, marked "You are here".'),
             T('في هذه الصفحة تتصفح كل الموديولات أو تبحث بكلمة (عربي أو إنجليزي). يمكنك أيضاً البحث من Ctrl+K.',
               'On this page you can browse every module or search by a word (Arabic or English). You can also search from Ctrl+K.'),
+            T('موظف جديد؟ افتح تبويب «مساري التدريبي» واتبع الترتيب: اقرأ الشاشة، جرّبها، اضغط «فهمت هذه الشاشة ✓»، وبعدين اختبار الموديول.',
+              'New here? Open the "My training path" tab and follow the order: read the screen, try it, press "I understand this screen ✓", then take the module quiz.'),
             T('في آخر كل شرح اضغط «مفيد» أو «غير مفيد» واكتب ما ليس واضحاً — يصل للمدرب ليحسّن الشرح.',
               'At the end of any article press "Helpful" or "Not helpful" and write what is unclear — it reaches the trainer, who improves the text.'),
             {'text': T('للمدربين: افتح أي شرح واضغط «تعديل الشرح». التعديل يظهر للجميع فوراً ويُحفظ في السجل، ويمكن الرجوع للنسخة الأصلية في أي وقت.',
@@ -195,12 +197,19 @@ SCREENS = [
             {'key': 'browse', 'title': T('تصفح الموديولات', 'Browse modules'),
              'body': T('كل موديولات النظام مقسّمة مثل القائمة الجانبية. اضغط موديول لترى دوره ودورة العمل وكل شاشاته، ثم اضغط شاشة لترى شرحها الكامل.',
                        'All modules grouped like the side menu. Click a module to see its role, its workflow and its screens, then click a screen for its full help.')},
+            {'key': 'path', 'title': T('مساري التدريبي', 'My training path'),
+             'body': T('قائمة الشاشات المطلوب تتعلمها حسب دورك، بالترتيب (أول أسبوع الأول). افتح كل شاشة، اقرأ شرحها وجرّبها، واضغط «فهمت هذه الشاشة ✓». '
+                       'بعد شاشات كل موديول ادخل اختباره القصير — النجاح من 80%، وتقدر تعيد الاختبار. لو شرح شاشة اتغيّر بعد ما علّمتها تظهر «⟳ راجعه». '
+                       'النسبة فوق = الشاشات اللي اتفهمت + الاختبارات الناجحة.',
+                       'The screens your role should learn, in order (first week first). Open each one, read its help and try it, then press "I understand this screen ✓". '
+                       'After a module\'s screens take its short quiz — the pass mark is 80% and you can retake it. If a screen\'s help changes after you ticked it, it shows "⟳ re-read". '
+                       'The percentage on top = screens understood + quizzes passed.')},
             {'key': 'whats_new', 'title': T('الجديد', "What's new"),
              'body': T('الشاشات التي تغيّر شرحها مؤخراً (ميزة جديدة أو تعديل)، الأحدث أولاً. علامة «جديد» تعني أنك لم تقرأ النسخة الحالية بعد.',
                        'Screens whose help changed recently (a new feature or change), newest first. A "New" badge means you have not read the current version yet.')},
             {'key': 'trainers', 'title': T('للمدربين', 'For trainers'),
-             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة. استخدمها لتعرف أين يحتاج الفريق تدريباً.',
-                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), and open comments. Use it to see where the team needs training.')},
+             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة، و«تقدّم الفريق في التدريب» (نسبة كل موظف، الاختبارات التي رسب فيها، وآخر نشاط — حسب الفروع المسموحة لك). استخدمها لتعرف أين يحتاج الفريق تدريباً.',
+                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), open comments, and "Team training progress" (each person\'s percentage, failed quizzes and last activity — for the branches you may see). Use it to see where the team needs training.')},
         ],
         'tips': [
             T('نقطة صفراء على زر المساعدة تعني أن شرح هذه الشاشة تغيّر منذ آخر مرة قرأته.',

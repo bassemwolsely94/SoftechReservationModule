@@ -322,3 +322,108 @@ class HelpApiTests(TestCase):
 
     def test_anonymous_rejected(self):
         self.assertIn(APIClient().get('/api/help/').status_code, (401, 403))
+
+
+class OnboardingContentTests(SimpleTestCase):
+    """content/onboarding.py must point at real screens/modules and grade sanely."""
+
+    def test_every_role_has_a_path_of_real_screens(self):
+        from apps.help.content import onboarding
+        from apps.users.models import ROLE_CHOICES
+        _, screens = registry.load()
+        self.assertEqual(set(onboarding.ROLE_PATHS), {r for r, _ in ROLE_CHOICES})
+        for role, keys in onboarding.ROLE_PATHS.items():
+            missing = [k for k in keys if k not in screens]
+            self.assertFalse(missing, f'{role}: unknown screens {missing}')
+            self.assertEqual(len(keys), len(set(keys)), f'{role}: duplicate screens')
+
+    def test_quizzes_valid_and_bilingual(self):
+        from apps.help.content import onboarding
+        modules, _ = registry.load()
+        self.assertFalse(set(onboarding.QUIZZES) - set(modules))
+        for mk, qs in onboarding.QUIZZES.items():
+            self.assertTrue(qs, mk)
+            for i, q in enumerate(qs):
+                self.assertGreaterEqual(len(q['options']), 2, f'{mk}[{i}]')
+                self.assertTrue(0 <= q['answer'] < len(q['options']), f'{mk}[{i}] answer index')
+                for where, t in _walk_t(q, f'{mk}[{i}]'):
+                    self.assertTrue(t['ar'].strip() and t['en'].strip(), where)
+
+    def test_every_path_module_has_a_quiz(self):
+        from apps.help.content import onboarding
+        for role, keys in onboarding.ROLE_PATHS.items():
+            mods = {k.split('.')[0] for k in keys}
+            self.assertFalse(mods - set(onboarding.QUIZZES), f'{role}: modules without quiz')
+
+
+class OnboardingApiTests(TestCase):
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name=None):
+        user, profile, _ = make_user(name or f'ob_{role}', role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_learn_and_changed(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpLearned
+        c, profile = self._client('pharmacist')
+        r = c.get('/api/help/onboarding/')
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual([i['key'] for i in body['path']], onboarding.ROLE_PATHS['pharmacist'])
+        self.assertEqual(body['progress']['learned'], 0)
+        self.assertEqual(body['roles'], ['pharmacist'])
+        key = body['path'][0]['key']
+        self.assertEqual(c.post('/api/help/onboarding/learned/', {'screen_key': key}, format='json').status_code, 200)
+        body = c.get('/api/help/onboarding/').json()
+        self.assertEqual(body['path'][0]['state'], 'done')
+        self.assertEqual(body['progress']['learned'], 1)
+        # the help text changes after it was learned → asks to re-read
+        HelpLearned.objects.filter(staff=profile, screen_key=key).update(version='2000-01-01')
+        self.assertEqual(c.get('/api/help/onboarding/').json()['path'][0]['state'], 'changed')
+        c.post('/api/help/onboarding/learned/', {'screen_key': key, 'done': False}, format='json')
+        self.assertFalse(HelpLearned.objects.filter(staff=profile).exists())
+        self.assertEqual(c.post('/api/help/onboarding/learned/', {'screen_key': 'x.y'}, format='json').status_code, 400)
+
+    def test_role_preview_only_for_trainers(self):
+        c, _ = self._client('pharmacist')
+        self.assertEqual(c.get('/api/help/onboarding/?role=admin').json()['role'], 'pharmacist')
+        c, _ = self._client('admin')
+        self.assertEqual(c.get('/api/help/onboarding/?role=delivery').json()['role'], 'delivery')
+
+    def test_quiz_hides_answers_and_grades_on_server(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpQuizAttempt
+        c, _ = self._client('pharmacist')
+        r = c.get('/api/help/quizzes/pos/')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('answer', str(r.json()))
+        self.assertNotIn('explain', str(r.json()))
+        qs = onboarding.QUIZZES['pos']
+        right = [q['answer'] for q in qs]
+        r = c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(r.json()['passed'])
+        self.assertEqual(r.json()['score'], len(qs))
+        wrong = [(q['answer'] + 1) % len(q['options']) for q in qs]
+        r = c.post('/api/help/quizzes/pos/submit/', {'answers': wrong}, format='json')
+        self.assertFalse(r.json()['passed'])
+        self.assertEqual(r.json()['score'], 0)
+        self.assertEqual(HelpQuizAttempt.objects.count(), 2)
+        # best attempt is what counts
+        best = c.get('/api/help/onboarding/').json()
+        self.assertTrue(next(q for q in best['quizzes'] if q['module'] == 'pos')['best']['passed'])
+        self.assertEqual(c.post('/api/help/quizzes/pos/submit/', {'answers': [0]}, format='json').status_code, 400)
+        self.assertEqual(c.get('/api/help/quizzes/nope/').status_code, 404)
+
+    def test_team_view_needs_help_edit(self):
+        c, _ = self._client('pharmacist')
+        self.assertEqual(c.get('/api/help/onboarding/team/').status_code, 403)
+        c, _ = self._client('admin')
+        r = c.get('/api/help/onboarding/team/?role=pharmacist')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json())
+        self.assertTrue(all(row['role'] == 'pharmacist' for row in r.json()))

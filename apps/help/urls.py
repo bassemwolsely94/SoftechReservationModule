@@ -1,6 +1,7 @@
 """apps/help/urls.py — mounted at /api/help/"""
 from django.urls import path
 
+from . import onboarding_views as ob
 from . import views
 
 urlpatterns = [
@@ -12,4 +13,9 @@ urlpatterns = [
     path('modules/<str:key>/', views.module_detail, name='help-module'),
     path('screens/<str:key>/', views.screen_detail, name='help-screen'),
     path('screens/<str:key>/revisions/', views.screen_revisions, name='help-screen-revisions'),
+    path('onboarding/', ob.my_path, name='help-onboarding'),
+    path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
+    path('onboarding/team/', ob.team, name='help-onboarding-team'),
+    path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),
+    path('quizzes/<str:module_key>/submit/', ob.quiz_submit, name='help-quiz-submit'),
 ]

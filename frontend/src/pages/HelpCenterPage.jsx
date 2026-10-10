@@ -1,7 +1,7 @@
 /**
  * HelpCenterPage (/help) — the full help guide: browse every module (grouped like the
  * side menu) → module role + workflow + its screens → a screen's full help; search;
- * "what's new"; and, for trainers (help/edit), usage statistics + open feedback.
+ * "what's new"; «مساري التدريبي» (role checklist + module quizzes); and, for trainers (help/edit), usage statistics + open feedback.
  */
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -16,12 +16,14 @@ import HelpArticle, { Workflow } from '../help/HelpArticle'
 import HelpEditor from '../help/HelpEditor'
 import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
+import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') || 'browse'
   const moduleKey = params.get('module')
   const screenKey = params.get('screen')
+  const quizKey = params.get('quiz')
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -37,6 +39,7 @@ export default function HelpCenterPage() {
   }
   const tabs = [
     ['browse', lang === 'en' ? 'Browse modules' : 'تصفح الموديولات'],
+    ['path', lang === 'en' ? 'My training path' : 'مساري التدريبي'],
     ['whats_new', lang === 'en' ? "What's new" : 'الجديد'],
     ...(index?.can_edit ? [['trainers', lang === 'en' ? 'For trainers' : 'للمدربين']] : []),
   ]
@@ -82,6 +85,8 @@ export default function HelpCenterPage() {
           {index && tab === 'browse' && !moduleKey && !screenKey && <Browse index={index} lang={lang} go={go} />}
           {index && tab === 'browse' && moduleKey && !screenKey && <ModuleView moduleKey={moduleKey} lang={lang} go={go} />}
           {index && tab === 'browse' && screenKey && <ScreenView screenKey={screenKey} lang={lang} go={go} index={index} />}
+          {index && tab === 'path' && !quizKey && <MyPath lang={lang} go={go} canPreview={index.can_edit} />}
+          {index && tab === 'path' && quizKey && <Quiz moduleKey={quizKey} lang={lang} onBack={() => go({ tab: 'path' })} />}
           {index && tab === 'whats_new' && <WhatsNew index={index} lang={lang} go={go} />}
           {index && tab === 'trainers' && index.can_edit && <Trainers index={index} lang={lang} go={go} />}
         </>
@@ -197,6 +202,7 @@ function ScreenView({ screenKey, lang, go, index }) {
         {!editing && (
           <div className="pt-3 border-t border-line flex flex-wrap items-center gap-4">
             <HelpFeedback screenKey={data.key} lang={lang} />
+            <LearnedButton screenKey={data.key} lang={lang} />
             {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
           </div>
         )}
@@ -296,6 +302,7 @@ function Trainers({ index, lang, go }) {
           </Box>
         </div>
       )}
+      <TeamProgress />
       <Box t="ملاحظات المستخدمين المفتوحة">
         {(fb.data || []).length === 0 && <div className="text-sm text-faint">لا توجد ملاحظات مفتوحة 🎉</div>}
         <div className="divide-y divide-line">

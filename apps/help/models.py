@@ -12,6 +12,8 @@ people add on top of it:
   HelpFeedback  — "was this helpful?" votes + optional comment from any user.
   HelpEvent     — one row each time someone opens a screen's help or searches it,
                   so trainers can see where users get stuck.
+  HelpLearned   — onboarding checklist: «فهمت هذه الشاشة» per staff + screen.
+  HelpQuizAttempt — server-graded module quiz attempts.
 """
 from django.db import models
 
@@ -75,7 +77,8 @@ class HelpFeedback(models.Model):
 class HelpEvent(models.Model):
     KIND_OPEN   = 'open'
     KIND_SEARCH = 'search'
-    KIND_CHOICES = [(KIND_OPEN, 'فتح الشرح'), (KIND_SEARCH, 'بحث')]
+    KIND_ASK    = 'ask'
+    KIND_CHOICES = [(KIND_OPEN, 'فتح الشرح'), (KIND_SEARCH, 'بحث'), (KIND_ASK, 'اسأل النظام')]
 
     kind       = models.CharField(max_length=10, choices=KIND_CHOICES)
     screen_key = models.CharField(max_length=80, blank=True, default='', db_index=True)
@@ -92,3 +95,35 @@ class HelpEvent(models.Model):
         ordering = ['-created_at']
         verbose_name = 'استخدام الشرح'
         verbose_name_plural = 'استخدام الشرح'
+
+
+class HelpLearned(models.Model):
+    """A staff member ticked «فهمت هذه الشاشة» on one screen's help (onboarding
+    checklist). `version` is the help's `updated` date at that moment — when the
+    text changes later, the item shows «اتغيّر الشرح — راجعه تاني»."""
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    screen_key = models.CharField(max_length=80)
+    version    = models.CharField(max_length=10, blank=True, default='')
+    created_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['staff', 'screen_key'], name='help_learned_once')]
+        verbose_name = 'شاشة تم فهمها'
+        verbose_name_plural = 'مسار التدريب — الشاشات المفهومة'
+
+
+class HelpQuizAttempt(models.Model):
+    """One submitted module quiz. Graded on the server (onboarding.QUIZZES); the
+    answers chosen are kept so a trainer can see which question trips people up."""
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    module_key = models.CharField(max_length=40, db_index=True)
+    score      = models.PositiveSmallIntegerField()
+    total      = models.PositiveSmallIntegerField()
+    passed     = models.BooleanField()
+    answers    = models.JSONField(default=list)   # chosen option index per question (None = skipped)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'محاولة اختبار'
+        verbose_name_plural = 'محاولات الاختبارات'

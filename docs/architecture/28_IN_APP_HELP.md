@@ -18,6 +18,26 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 - **Feedback**: «مفيد / غير مفيد» + comment on every article.
 - **Yellow dot** on the help button when the current screen's help changed since the user last read it.
 
+## Onboarding — «مساري التدريبي» (built 2026-10-10)
+
+- `apps/help/content/onboarding.py`: `ROLE_PATHS` (role → ordered screens, first week first),
+  `QUIZZES` (module → short multiple-choice questions, bilingual, with the explanation),
+  `PASS_PERCENT = 80`.
+- `/help?tab=path`: progress %, «كمّل» (next screen), the checklist (✓ done / ⟳ help changed —
+  re-read), and the module quizzes. «فهمت هذه الشاشة ✓» sits at the bottom of every article (panel
+  and help center) — it records the help version read (`HelpLearned.version`), so a later text
+  change asks the person to re-read.
+- Quizzes: options are shuffled per person and sent **without answers**; the server grades and
+  only then returns the right answer + explanation (`HelpQuizAttempt`). Best attempt counts.
+  Retakes allowed.
+- Trainers (help/edit): preview any role's path; «تقدّم الفريق في التدريب» in the trainers tab —
+  per person %, failed quizzes, last activity, limited to the branches they can access.
+- Tests: every role in `ROLE_CHOICES` has a path of real screens, every module on a path has a
+  quiz, answer indexes are valid, every text bilingual; API grading / hiding / permissions.
+
+**Rule:** a new screen a role must use → add it to that role's `ROLE_PATHS`; a new rule users
+must not get wrong → add a quiz question.
+
 ## Trainers (help/edit)
 
 - RBAC module `help`, action `edit` (Permissions Matrix). Admin always; seeds give it to
@@ -37,7 +57,8 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 |---|---|
 | Help text (source of truth) | `apps/help/content/<module>.py` — one file per module, `T(ar, en)`; order in `content/__init__.py` |
 | Loader / merge / search | `apps/help/registry.py` (repo text + `HelpOverride` → effective; Arabic-normalized search) |
-| DB | `HelpOverride`, `HelpRevision` (immutable), `HelpFeedback`, `HelpEvent` (open/search; `results=0` = nothing found) |
+| DB | `HelpOverride`, `HelpRevision` (immutable), `HelpFeedback`, `HelpEvent` (open/search/ask; `results=0` = nothing found), `HelpLearned`, `HelpQuizAttempt` |
+| Onboarding | `apps/help/content/onboarding.py`, `apps/help/onboarding_views.py`, `frontend/src/help/Onboarding.jsx` |
 | API | `/api/help/` — see 04_API_REGISTRY |
 | Frontend | `frontend/src/help/` — `HelpPanel`, `HelpButton`, `HelpArticle`, `HelpEditor`, `HelpFeedback`, `helpStore`, `useHelpIndex` (route → screen via react-router `matchPath`), `useHelpTab`; page `pages/HelpCenterPage.jsx` |
 
@@ -89,6 +110,5 @@ as they appear on screen («…»).
 ## Next steps (proposed, not built)
 
 - «اعرض لي» guided tours that highlight the real buttons (same pattern as the POS guided mode).
-- Role onboarding checklists + short quizzes per module, with a supervisor view of completion.
 - Printable training manual per role/module generated from the same content.
 - «اسأل النظام»: answers grounded only in this help content, with a link to the source article.

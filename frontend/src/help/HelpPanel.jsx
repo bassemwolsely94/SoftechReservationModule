@@ -17,6 +17,7 @@ import { useCurrentHelp } from './useHelpIndex'
 import HelpArticle from './HelpArticle'
 import HelpEditor from './HelpEditor'
 import HelpFeedback from './HelpFeedback'
+import { LearnedButton } from './Onboarding'
 import { pick, label } from './text'
 
 /** Global keyboard / event wiring — mount once per shell. */
@@ -159,8 +160,10 @@ function PanelBody() {
       {!editing && (
         <div className="shrink-0 border-t border-line px-4 py-2.5 space-y-2">
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
+            <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
             {data?.can_edit && !term && (
               <button type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
                 ✏️ {label('edit', lang)}
