@@ -135,6 +135,42 @@ BADGES = [
 ]
 
 
+# Reward catalog. Rewards that cost the company money or working time start INACTIVE —
+# management sets the price in points and switches them on (/gamification → settings).
+# icon, category, cost, active, limit/month, min_level, name_ar, name_en, desc_ar, desc_en
+REWARDS = [
+    ('📜', 'recognition', 500, True, None, 1, 'شهادة تقدير', 'Certificate of appreciation',
+     'شهادة تقدير موقعة من الإدارة', 'A certificate signed by management'),
+    ('🌟', 'recognition', 1000, True, 1, 2, 'موظف الأسبوع على لوحة الإعلانات',
+     'Employee of the week spotlight', 'صورتك وإنجازك في إعلانات الشركة لمدة أسبوع',
+     'Your photo and achievement in company announcements for a week'),
+    ('🔄', 'perk', 1200, True, 1, 2, 'اختيار ورديتك المفضلة لأسبوع', 'Pick your preferred shift for a week',
+     'حسب ما يسمح به جدول الفرع', 'Subject to the branch schedule'),
+    ('🍽️', 'perk', 800, False, 2, 1, 'وجبة غداء على الشركة', 'Lunch on the company',
+     'وجبة غداء من الشركة', 'A lunch paid by the company'),
+    ('🕐', 'time_off', 1500, False, 1, 3, 'نصف يوم إجازة', 'Half day off',
+     'نصف يوم إجازة مدفوعة بالتنسيق مع مدير الفرع', 'A paid half day off, agreed with the branch manager'),
+    ('🏖️', 'time_off', 3000, False, 1, 4, 'يوم إجازة إضافي', 'Extra day off',
+     'يوم إجازة مدفوع إضافي بالتنسيق مع مدير الفرع', 'An extra paid day off, agreed with the branch manager'),
+    ('🎟️', 'voucher', 2500, False, 1, 3, 'قسيمة شراء 200 جنيه', '200 EGP shopping voucher',
+     'قسيمة شراء من متجر تختاره الإدارة', 'A shopping voucher from a store chosen by management'),
+    ('🎓', 'development', 4000, False, None, 5, 'دورة تدريبية', 'Training course',
+     'دورة تدريبية مهنية تختارها مع الإدارة', 'A professional training course chosen with management'),
+]
+
+
+def ensure_rewards():
+    """Seed the reward catalog once (only when it is completely empty)."""
+    from .models import Reward
+    if Reward.objects.exists():
+        return 0
+    for i, (icon, cat, cost, active, lim, lvl, nar, nen, dar, den) in enumerate(REWARDS):
+        Reward.objects.create(icon=icon, category=cat, cost=cost, is_active=active,
+                              limit_per_month=lim, min_level=lvl, name_ar=nar, name_en=nen,
+                              desc_ar=dar, desc_en=den, sort=i * 10)
+    return len(REWARDS)
+
+
 def ensure_defaults(reset=False):
     from .models import Badge, Level, PointRule
 

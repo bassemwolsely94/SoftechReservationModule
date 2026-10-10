@@ -399,6 +399,15 @@ export const gamificationApi = {
   report:      (params = {}) => api.get('/gamification/reports/overview/', { params }),
   exportReport:(params = {}) => api.get('/gamification/reports/export/', { params, responseType: 'blob' }),
   changes:     ()            => api.get('/gamification/changes/'),
+  // reward catalog
+  rewards:      (params = {}) => api.get('/gamification/rewards/', { params }),
+  createReward: (data)        => api.post('/gamification/rewards/', data),
+  updateReward: (id, data)    => api.patch(`/gamification/rewards/${id}/`, data),
+  wallet:       ()            => api.get('/gamification/wallet/'),
+  redeem:       (data)        => api.post('/gamification/redemptions/', data),
+  redemptions:  (params = {}) => api.get('/gamification/redemptions/', { params }),
+  cancelRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/cancel/`, data),
+  fulfilRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/fulfil/`, data),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

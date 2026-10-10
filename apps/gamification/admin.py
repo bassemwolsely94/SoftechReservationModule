@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (Badge, DailyScore, GamificationChange, Level, LevelHistory, PlayerProfile,
-                     PointEvent, PointRule, StaffBadge)
+                     PointEvent, PointRule, Redemption, Reward, StaffBadge)
 
 
 @admin.register(PointRule)
@@ -44,3 +44,19 @@ admin.site.register(DailyScore)
 admin.site.register(StaffBadge)
 admin.site.register(LevelHistory)
 admin.site.register(GamificationChange)
+
+
+@admin.register(Reward)
+class RewardAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'category', 'cost', 'stock', 'min_level', 'is_active')
+    list_filter = ('category', 'is_active')
+
+
+@admin.register(Redemption)
+class RedemptionAdmin(admin.ModelAdmin):
+    list_display = ('staff', 'reward', 'cost', 'status', 'created_at')
+    list_filter = ('status',)
+    readonly_fields = [f.name for f in Redemption._meta.fields]
+
+    def has_change_permission(self, request, obj=None):   # moves only through the app
+        return False

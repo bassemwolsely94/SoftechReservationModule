@@ -220,6 +220,32 @@ def badges_for(staff):
     return out
 
 
+def _wallet(staff):
+    from .rewards import wallet
+    return wallet(staff)
+
+
+def rewards_summary(start, end, branch_id=None):
+    from .models import Redemption
+    qs = Redemption.objects.filter(created_at__date__gte=start, created_at__date__lte=end)
+    if branch_id:
+        qs = qs.filter(staff__branch_id=branch_id)
+    by_status = dict(qs.values('status').annotate(n=Count('id')).values_list('status', 'n'))
+    spent = qs.filter(status__in=('approved', 'fulfilled')).aggregate(n=Sum('cost'))['n'] or 0
+    top = [{'reward_id': r['reward_id'], 'name_ar': r['reward__name_ar'],
+            'name_en': r['reward__name_en'], 'icon': r['reward__icon'], 'requests': r['n'],
+            'points': r['p'] or 0}
+           for r in qs.exclude(status__in=('rejected', 'cancelled'))
+           .values('reward_id', 'reward__name_ar', 'reward__name_en', 'reward__icon')
+           .annotate(n=Count('id'), p=Sum('cost')).order_by('-n')[:10]]
+    waiting = Redemption.objects.filter(status='approved')
+    if branch_id:
+        waiting = waiting.filter(staff__branch_id=branch_id)
+    return {'requests': sum(by_status.values()), 'by_status': by_status,
+            'points_redeemed': spent, 'top': top,
+            'awaiting_fulfilment': waiting.count()}
+
+
 def me(staff):
     player, _ = PlayerProfile.objects.get_or_create(staff=staff)
     today = timezone.localdate()
@@ -249,6 +275,7 @@ def me(staff):
         'badges': badges_for(staff),
         'recent': recent_events(staff),
         'open_items': open_items(staff),
+        'wallet': _wallet(staff),
         'promotions': [{'level': _level_payload(h.level), 'reached_at': h.reached_at}
                        for h in LevelHistory.objects.filter(staff=staff)
                        .select_related('level')[:5]],
@@ -306,4 +333,5 @@ def report(start, end, branch_id=None):
         'branches': [] if branch_id else branch_ranking(start, end),
         'levels': level_dist,
         'promotions': promotions,
+        'rewards': rewards_summary(start, end, branch_id),
     }

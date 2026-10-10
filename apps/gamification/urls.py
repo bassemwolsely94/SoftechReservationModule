@@ -17,5 +17,12 @@ urlpatterns = [
     path('run/',                views.run_now,         name='gamification-run'),
     path('reports/overview/',   views.report_overview, name='gamification-report'),
     path('reports/export/',     views.report_export,   name='gamification-export'),
+    # reward catalog
+    path('rewards/',             views.rewards_view,       name='gamification-rewards'),
+    path('rewards/<int:pk>/',    views.reward_detail,      name='gamification-reward-detail'),
+    path('wallet/',              views.wallet_view,        name='gamification-wallet'),
+    path('redemptions/',         views.redemptions_view,   name='gamification-redemptions'),
+    path('redemptions/<int:pk>/cancel/', views.redemption_cancel, name='gamification-redemption-cancel'),
+    path('redemptions/<int:pk>/fulfil/', views.redemption_fulfil, name='gamification-redemption-fulfil'),
     path('changes/',            views.changes,         name='gamification-changes'),
 ]

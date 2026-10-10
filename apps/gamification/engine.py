@@ -565,4 +565,6 @@ def run(days=1, today=None, finalize=True):
         if staff:
             _write_daily(staff, today)
     promoted = refresh_players(sc.touched)
-    return {'awarded': sc.awarded, 'players': len(sc.touched), 'promotions': promoted}
+    from .rewards import reconcile
+    return {'awarded': sc.awarded, 'players': len(sc.touched), 'promotions': promoted,
+            'redemptions_refunded': reconcile()}

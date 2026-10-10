@@ -388,6 +388,14 @@ def report_export(request):
     for p in data['promotions']:
         ws4.append([p['name'], p['branch'], f"{p['level']['number']} {p['level']['title_ar']}",
                     timezone.localtime(p['reached_at']).strftime('%Y-%m-%d %H:%M')])
+    ws5 = wb.create_sheet('المكافآت')
+    ws5.sheet_view.rightToLeft = True
+    ws5.append(['المكافأة', 'عدد الطلبات', 'النقاط'])
+    for r in data['rewards']['top']:
+        ws5.append([r['name_ar'], r['requests'], r['points']])
+    ws5.append([])
+    ws5.append(['نقاط مستبدلة (معتمدة/مسلّمة)', data['rewards']['points_redeemed']])
+    ws5.append(['بانتظار التسليم', data['rewards']['awaiting_fulfilment']])
     resp = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="gamification_{start}_{end}.xlsx"'
@@ -406,3 +414,182 @@ def changes(request):
                       'action': c.action, 'target': c.target, 'before': c.before,
                       'after': c.after, 'reason': c.reason, 'created_at': c.created_at}
                      for c in rows])
+
+
+# ── reward catalog (phase 2) ──────────────────────────────────────────────────
+
+REWARD_FIELDS = {'name_ar': str, 'name_en': str, 'desc_ar': str, 'desc_en': str, 'icon': str,
+                 'category': str, 'cost': int, 'stock': int, 'limit_per_month': int,
+                 'min_level': int, 'roles': list, 'requires_approval': bool,
+                 'is_active': bool, 'sort': int}
+NULLABLE_REWARD = ('stock', 'limit_per_month')
+
+
+def _reward_payload(data, partial):
+    from .models import REWARD_CATEGORY_CHOICES
+    errors, clean = {}, {}
+    for f, typ in REWARD_FIELDS.items():
+        if f not in data:
+            continue
+        v = data[f]
+        if f in NULLABLE_REWARD and v in (None, ''):
+            clean[f] = None
+            continue
+        try:
+            if typ is bool:
+                v = bool(v)
+            elif typ is int:
+                v = int(v)
+                if v < 0:
+                    raise ValueError
+            elif typ is list:
+                from apps.users.models import ROLE_CHOICES
+                if not isinstance(v, list) or any(x not in {r[0] for r in ROLE_CHOICES} for x in v):
+                    raise ValueError
+            else:
+                v = str(v).strip()
+        except (TypeError, ValueError):
+            errors[f] = 'قيمة غير صحيحة — invalid value'
+            continue
+        clean[f] = v
+    if 'category' in clean and clean['category'] not in {c[0] for c in REWARD_CATEGORY_CHOICES}:
+        errors['category'] = 'فئة غير معروفة — unknown category'
+    if 'cost' in clean and not (1 <= clean['cost'] <= 1_000_000):
+        errors['cost'] = 'التكلفة من 1 — cost must be at least 1'
+    if 'min_level' in clean and clean['min_level'] < 1:
+        errors['min_level'] = 'أقل مستوى 1 — min 1'
+    for f in ('name_ar', 'name_en'):
+        if (not partial or f in clean) and not clean.get(f):
+            errors[f] = 'مطلوب — required'
+    if not partial and 'cost' not in clean:
+        errors['cost'] = 'مطلوب — required'
+    return clean, errors
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def rewards_view(request):
+    from . import rewards as R
+    from .defaults import ensure_rewards
+    from .models import Reward
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'no staff profile'}, status=404)
+    if request.method == 'GET':
+        ensure_rewards()
+        return Response(R.catalog_for(profile, include_inactive=bool(
+            request.query_params.get('all')) and _can(profile, 'edit')))
+    if not _can(profile, 'edit'):
+        return _deny()
+    clean, errors = _reward_payload(request.data, partial=False)
+    if errors:
+        return Response(errors, status=400)
+    r = Reward.objects.create(**clean)
+    _log(profile, 'reward_create', f'reward:{r.id}', {}, R.reward_json(r),
+         str(request.data.get('reason', ''))[:300])
+    return Response(R.reward_json(r), status=201)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def reward_detail(request, pk):
+    from . import rewards as R
+    from .models import Reward
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    r = get_object_or_404(Reward, pk=pk)
+    clean, errors = _reward_payload(request.data, partial=True)
+    if errors:
+        return Response(errors, status=400)
+    before = R.reward_json(r)
+    for f, v in clean.items():
+        setattr(r, f, v)
+    r.save()
+    _log(profile, 'reward_edit', f'reward:{r.id}', before, R.reward_json(r),
+         str(request.data.get('reason', ''))[:300])
+    return Response(R.reward_json(r))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def wallet_view(request):
+    from . import rewards as R
+    from .models import Redemption
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'no staff profile'}, status=404)
+    mine = Redemption.objects.filter(staff=profile).select_related(
+        'reward', 'staff__user', 'staff__branch', 'approval_request', 'fulfilled_by__user')[:50]
+    return Response({'wallet': R.wallet(profile),
+                     'redemptions': [R.redemption_json(x) for x in mine]})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def redemptions_view(request):
+    """POST: request a reward (everyone). GET: all requests (managers, gamification/view)."""
+    from . import rewards as R
+    from .models import Redemption
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'no staff profile'}, status=404)
+    if request.method == 'POST':
+        try:
+            x = R.request_reward(profile, _int(request.data.get('reward_id')),
+                                 str(request.data.get('note') or ''))
+        except R.RewardError as exc:
+            return Response({'detail': str(exc)}, status=400)
+        x = Redemption.objects.select_related('reward', 'staff__user', 'staff__branch',
+                                              'approval_request').get(pk=x.pk)
+        return Response(R.redemption_json(x), status=201)
+    if not _can(profile, 'view'):
+        return _deny()
+    qs = Redemption.objects.select_related('reward', 'staff__user', 'staff__branch',
+                                           'approval_request', 'fulfilled_by__user')
+    st = request.query_params.get('status')
+    if st:
+        qs = qs.filter(status__in=st.split(','))
+    branch = _int(request.query_params.get('branch'))
+    if branch:
+        qs = qs.filter(staff__branch_id=branch)
+    return Response([R.redemption_json(x) for x in qs[:300]])
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redemption_cancel(request, pk):
+    from . import rewards as R
+    from .models import Redemption
+    profile = _profile(request)
+    x = get_object_or_404(Redemption, pk=pk)
+    if not profile or (x.staff_id != profile.id and not _can(profile, 'edit')):
+        return _deny()
+    reason = str(request.data.get('reason') or '').strip()
+    if x.staff_id != profile.id and len(reason) < 5:
+        return Response({'reason': 'اكتب السبب — a reason is required'}, status=400)
+    try:
+        x = R.cancel(x, profile, reason)
+    except R.RewardError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    if x.staff_id != profile.id:
+        _log(profile, 'redemption_cancel', f'redemption:{x.id}', {}, {'status': x.status}, reason)
+    return Response(R.redemption_json(x))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redemption_fulfil(request, pk):
+    from . import rewards as R
+    from .models import Redemption
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    x = get_object_or_404(Redemption, pk=pk)
+    try:
+        x = R.fulfil(x, profile, str(request.data.get('note') or '').strip())
+    except R.RewardError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    _log(profile, 'redemption_fulfil', f'redemption:{x.id}', {}, {'status': x.status},
+         x.fulfillment_note)
+    return Response(R.redemption_json(x))

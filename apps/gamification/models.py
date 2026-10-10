@@ -248,3 +248,100 @@ class GamificationChange(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+# ── Reward catalog (phase 2) ─────────────────────────────────────────────────
+# Spending lives in Redemption, NOT in PointEvent: redeeming never lowers XP, level
+# or the period ranking. Wallet balance = lifetime net points − points held/spent
+# by redemptions that are pending, approved or fulfilled.
+
+REWARD_CATEGORY_CHOICES = [
+    ('time_off',    'وقت راحة'),
+    ('voucher',     'قسائم وهدايا'),
+    ('recognition', 'تقدير معنوي'),
+    ('development', 'تطوير وتدريب'),
+    ('perk',        'مزايا'),
+]
+
+
+class Reward(models.Model):
+    name_ar = models.CharField(max_length=120, verbose_name='الاسم (عربي)')
+    name_en = models.CharField(max_length=120, verbose_name='الاسم (إنجليزي)')
+    desc_ar = models.CharField(max_length=300, blank=True)
+    desc_en = models.CharField(max_length=300, blank=True)
+    icon = models.CharField(max_length=8, default='🎁')
+    category = models.CharField(max_length=20, choices=REWARD_CATEGORY_CHOICES,
+                                default='perk', db_index=True)
+    cost = models.PositiveIntegerField(verbose_name='التكلفة (نقاط)')
+    stock = models.PositiveIntegerField(null=True, blank=True, verbose_name='المتاح',
+                                        help_text='فارغ = بلا حد. يقل مع كل طلب ويعود عند الرفض/الإلغاء')
+    limit_per_month = models.PositiveIntegerField(null=True, blank=True,
+                                                  verbose_name='حد شهري لكل موظف')
+    min_level = models.PositiveIntegerField(default=1, verbose_name='أقل مستوى')
+    roles = models.JSONField(default=list, blank=True, help_text='فارغ = كل الأدوار')
+    requires_approval = models.BooleanField(default=True, verbose_name='يحتاج موافقة')
+    is_active = models.BooleanField(default=True, db_index=True)
+    sort = models.PositiveIntegerField(default=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'مكافأة'
+        verbose_name_plural = 'كتالوج المكافآت'
+        ordering = ['sort', 'cost', 'id']
+
+    def __str__(self):
+        return f'{self.name_ar} ({self.cost})'
+
+
+class Redemption(models.Model):
+    STATUS_PENDING   = 'pending'
+    STATUS_APPROVED  = 'approved'
+    STATUS_FULFILLED = 'fulfilled'
+    STATUS_REJECTED  = 'rejected'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PENDING,   'بانتظار الموافقة'),
+        (STATUS_APPROVED,  'معتمد — بانتظار التسليم'),
+        (STATUS_FULFILLED, 'تم التسليم'),
+        (STATUS_REJECTED,  'مرفوض — أعيدت النقاط'),
+        (STATUS_CANCELLED, 'ملغي — أعيدت النقاط'),
+    ]
+    HOLDING = (STATUS_PENDING, STATUS_APPROVED, STATUS_FULFILLED)   # points not available
+
+    # status → statuses it may move to (enforced by apps/gamification/rewards.py)
+    TRANSITIONS = {
+        STATUS_PENDING:   {STATUS_APPROVED, STATUS_REJECTED, STATUS_CANCELLED},
+        STATUS_APPROVED:  {STATUS_FULFILLED, STATUS_CANCELLED},
+        STATUS_FULFILLED: set(),
+        STATUS_REJECTED:  set(),
+        STATUS_CANCELLED: set(),
+    }
+
+    staff = models.ForeignKey('users.StaffProfile', on_delete=models.PROTECT,
+                              related_name='redemptions')
+    reward = models.ForeignKey(Reward, on_delete=models.PROTECT, related_name='redemptions')
+    cost = models.PositiveIntegerField(help_text='تكلفة المكافأة وقت الطلب')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PENDING,
+                              db_index=True)
+    note = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة الموظف')
+    approval_request = models.ForeignKey('approvals.ApprovalRequest', null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+    fulfilled_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                     null=True, blank=True, related_name='+')
+    fulfillment_note = models.CharField(max_length=300, blank=True,
+                                        verbose_name='تفاصيل التسليم')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'طلب مكافأة'
+        verbose_name_plural = 'طلبات المكافآت'
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['staff', 'status'])]
+
+    def __str__(self):
+        return f'{self.staff_id} → {self.reward_id} ({self.status})'

@@ -85,6 +85,8 @@ export default function GamificationCard({ className = '' }) {
           <Stat label={t('أيام نظيفة متتالية', 'Clean-day streak')}
                 value={`🔥 ${data.streak?.current ?? 0}`}
                 sub={t(`الأفضل ${data.streak?.best ?? 0}`, `best ${data.streak?.best ?? 0}`)} />
+          <Stat label={t('رصيد المكافآت', 'Reward balance')}
+                value={`🎁 ${fmt(data.wallet?.balance)}`} />
           {br && (
             <Stat label={t('ترتيبك في الفرع', 'Branch rank')}
                   value={br.rank ? `#${br.rank}` : '—'} sub={br.of ? `/ ${br.of}` : ''} />

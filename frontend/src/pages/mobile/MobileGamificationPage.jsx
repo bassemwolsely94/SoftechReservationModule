@@ -41,6 +41,11 @@ export default function MobileGamificationPage() {
           </div>
         ))}
       </div>
+      <button onClick={() => navigate('/gamification?tab=rewards')}
+              className="w-full bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between">
+        <span className="text-sm font-bold">{t('🎁 رصيد المكافآت', '🎁 Reward balance')}</span>
+        <span className="text-lg font-black text-brand-700">{(me.wallet?.balance ?? 0).toLocaleString('en-US')}</span>
+      </button>
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="font-bold text-sm mb-2">{t('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind')}</div>
         {open.length === 0

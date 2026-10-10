@@ -1,6 +1,6 @@
 # 29 — Gamification (التحفيز: النقاط والمستويات)
 
-**Status:** Phase 1 BUILT (2026-10-10) — recognition only. Reward catalog = Phase 2.
+**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog.
 **App:** `apps/gamification` · **API:** `/api/gamification/` · **Screens:** card on `/dashboard` + `/me`, `/gamification`, `/m/gamification`
 
 ## Decisions (agreed with the owner)
@@ -40,6 +40,16 @@ The engine **reads** records that already exist and writes only its own tables. 
 
 **Governance:** rules / levels / badges editable at `/gamification?tab=settings` (`gamification`/`edit`); every edit and every manual award (reason required, ±500 max, never to yourself) is written to `GamificationChange` (who / what / before / after / why). Seed grants: supervisor + quality_manager get `view` + `export`; admin everything.
 
+## Reward catalog (Phase 2)
+
+- **Wallet** = lifetime net points − points of redemptions that are `pending` (held), `approved` or `fulfilled` (spent). Spending lives in `Redemption`, never in `PointEvent`, so **XP, level and rankings are unchanged by redeeming**.
+- **Request** (`POST /api/gamification/redemptions/`): checks active, role, min level, stock, monthly limit and balance under a row lock on the player (no double spend), takes one from stock, and submits an `ApprovalRequest` with workflow `gamification_reward` (seeded in `seed_approval_workflows`, created on demand if missing): **branch manager (supervisor, own branch) → management (admin)**. Rewards with `requires_approval=False` are approved at once.
+- **Outcome** hook (`register_outcome_handler('gamification.redemption', …)`): approved → `approved`; rejected → `rejected` + refund + restock. An approval decided by the requester themselves is refused (→ rejected + refund).
+- **Cancel**: requester while pending (also cancels the approval request); admin any open request; managers with `gamification/edit` an approved-but-undelivered one with a written reason. Expired / inbox-cancelled approvals are refunded by `reconcile()` on every engine run.
+- **Fulfil** (`gamification/edit`, never your own): `approved → fulfilled` with delivery details; the employee is notified (`gamification_reward`).
+- **Catalog** seeded once: certificate, employee-of-the-week spotlight, preferred shift (ON); lunch, half day off, extra day off, 200 EGP voucher, training course (OFF until management prices them). Edited at `/gamification?tab=settings`; every change audited in `GamificationChange`.
+- **Screens**: `?tab=rewards` (everyone), `?tab=redemptions` (managers), catalog editor in settings, balance on the dashboard card and `/m/gamification`; report + Excel include redemptions.
+
 ## Known limits (Phase 1)
 
 - Sales score only for staff whose SOFTECH user code is linked (`softech_user_id`).
@@ -49,6 +59,6 @@ The engine **reads** records that already exist and writes only its own tables. 
 
 ## Next phases
 
-1. **Reward catalog** — redeem points (day off, voucher …) through `apps/approvals`; points ledger gets a `redeemed` spend.
+1. ~~Reward catalog~~ ✅ built (above).
 2. Monthly champions («بطل الشهر») per branch/role + announcement.
 3. Team goals per branch (shared challenges), per-role rule sets.

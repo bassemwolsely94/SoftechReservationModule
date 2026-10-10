@@ -13,8 +13,38 @@ MODULE = {
         '(cash scores higher), returns, reservations and their handover, lost sales and their recovery, follow-ups, '
         'transfer requests and replies to other branches, issue/receipt documents, ISR supply requests, stock counts, '
         'shortage lists and tasks. Points raise your "XP" so you climb levels with a new title and badges. Items left '
-        'overdue deduct a few points from the period ranking only — your level never drops. It is recognition only for '
-        'now (no money).'),
+        'overdue deduct a few points from the period ranking only — your level never drops. Your balance can be spent '
+        'on rewards from the catalog (approved by the branch manager, then management) — spending never lowers your '
+        'level or rank.'),
+    'workflows': [{
+        'key': 'redemption',
+        'title': T('دورة طلب المكافأة', 'Reward request life cycle'),
+        'model': 'gamification.Redemption', 'field': 'status',
+        'transitions': 'apps.gamification.models.Redemption.TRANSITIONS',
+        'intro': T('تُحجز النقاط لحظة الطلب، وتعود تلقائياً عند الرفض أو الإلغاء.',
+                   'Points are held the moment you ask, and come back automatically on rejection or cancellation.'),
+        'states': [
+            {'key': 'pending', 'label': T('بانتظار الموافقة', 'Waiting for approval'),
+             'desc': T('الطلب في صندوق الموافقات: مدير الفرع ثم الإدارة. يمكنك إلغاؤه الآن.',
+                       'The request is in the approvals inbox: branch manager, then management. You can still cancel it.'),
+             'next': ['approved', 'rejected', 'cancelled']},
+            {'key': 'approved', 'label': T('معتمد — بانتظار التسليم', 'Approved — to be delivered'),
+             'desc': T('تمت الموافقة؛ المسؤول يسلمك المكافأة ويسجل التسليم.',
+                       'Approved; the person in charge hands the reward over and records the delivery.'),
+             'next': ['fulfilled', 'cancelled']},
+            {'key': 'fulfilled', 'label': T('تم التسليم', 'Delivered'),
+             'desc': T('استلمت المكافأة — النقاط محسوبة كمستبدلة.', 'You received the reward — the points count as redeemed.'),
+             'next': []},
+            {'key': 'rejected', 'label': T('مرفوض — أعيدت النقاط', 'Rejected — points returned'),
+             'desc': T('رُفض الطلب (أو اعتمده صاحبه بنفسه وهذا غير مسموح) وعادت النقاط لرصيدك.',
+                       'The request was rejected (or approved by its own requester, which is not allowed) and the points came back.'),
+             'next': []},
+            {'key': 'cancelled', 'label': T('ملغي — أعيدت النقاط', 'Cancelled — points returned'),
+             'desc': T('ألغيته أنت، أو ألغاه المسؤول بسبب مكتوب، أو انتهت مهلة الموافقة — عادت النقاط.',
+                       'You cancelled it, a manager cancelled it with a reason, or the approval timed out — the points came back.'),
+             'next': []},
+        ],
+    }],
 }
 
 SCREENS = [
@@ -54,12 +84,18 @@ SCREENS = [
             {'key': 'rules', 'title': T('📜 كيف تكسب النقاط', '📜 How to earn'),
              'body': T('كل قاعدة بنقاطها وحدّها اليومي. مبيعات: نقاط لكل فاتورة + لكل 500 جنيه + لكل 100 جنيه ربح (الكاش ×1.5)، بحد يومي حتى لا تطغى الفروع الكبيرة.',
                        'Every rule with its points and daily cap. Sales: points per invoice + per 500 EGP + per 100 EGP of profit (cash ×1.5), capped daily so big branches do not dominate.')},
+            {'key': 'rewards', 'title': T('🎁 المكافآت', '🎁 Rewards'),
+             'body': T('رصيدك المتاح (صافي ما كسبته ناقص المحجوز والمستبدل) وكتالوج المكافآت. اضغط «استبدال» ثم «تأكيد»؛ يظهر سبب عدم الإتاحة إن وُجد (الرصيد، المستوى، الحد الشهري، الكمية). أسفلها «طلباتي» بحالاتها.',
+                       'Your available balance (net earned minus held and redeemed) and the reward catalog. Press "Redeem" then "Confirm"; if a reward is not available the reason shows (balance, level, monthly limit, stock). Below it, "My requests" with their status.')},
+            {'key': 'redemptions', 'title': T('📦 طلبات المكافآت', '📦 Reward requests'),
+             'body': T('للمديرين: كل طلبات المكافآت. الموافقة من صندوق الموافقات؛ هنا «تم التسليم» مع التفاصيل (التاريخ، كود القسيمة) أو «إلغاء» بسبب مكتوب فتعود النقاط.',
+                       'For managers: every reward request. Approval happens in the approvals inbox; here you "Mark delivered" with details (date, voucher code) or "Cancel" with a written reason, which returns the points.')},
             {'key': 'reports', 'title': T('📊 التقارير', '📊 Reports'),
              'body': T('للمديرين: المشاركون، النقاط والخصومات، نسبة الأيام النظيفة، الأفضل ومن يحتاج دعماً، الفئات، توزيع المستويات، الفروع والترقيات، وتصدير Excel.',
                        'For managers: participants, points and deductions, clean-day %, top performers and who needs support, categories, level distribution, branches and promotions, and Excel export.')},
             {'key': 'settings', 'title': T('⚙️ الإعدادات', '⚙️ Settings'),
-             'body': T('تعديل نقاط كل قاعدة وحدّها اليومي وتفعيلها، ألقاب المستويات وحدودها، تقدير يدوي بسبب مكتوب، وإعادة الاحتساب. كل تعديل يُسجَّل في «سجل التعديلات».',
-                       'Edit each rule\'s points, daily cap and on/off, level titles and thresholds, manual recognition with a written reason, and recalculation. Every edit is recorded in the "Change log".')},
+             'body': T('كتالوج المكافآت (إضافة، تعديل التكلفة والكمية والحد الشهري وأقل مستوى، إتاحة/إيقاف)، نقاط كل قاعدة وحدّها اليومي، ألقاب المستويات وحدودها، تقدير يدوي بسبب مكتوب، وإعادة الاحتساب. كل تعديل يُسجَّل في «سجل التعديلات».',
+                       'The reward catalog (add, edit cost, stock, monthly limit and minimum level, switch on/off), each rule\'s points and daily cap, level titles and thresholds, manual recognition with a written reason, and recalculation. Every edit is recorded in the "Change log".')},
         ],
         'tips': [
             T('المبيعات تُحتسب من كود المستخدم في SOFTECH — اطلب من مدير النظام ربط كودك بحسابك وإلا لن تظهر نقاط مبيعاتك.',
@@ -71,6 +107,9 @@ SCREENS = [
             {'q': T('هل ينزل مستواي إذا خُصمت نقاط؟', 'Can my level drop if points are deducted?'),
              'a': T('لا. المستوى يُبنى على النقاط المكتسبة فقط؛ الخصومات تؤثر على ترتيب الفترة فقط.',
                     'No. Your level is built on earned points only; deductions only affect the period ranking.')},
+            {'q': T('هل الاستبدال يخفض مستواي أو ترتيبي؟', 'Does redeeming lower my level or rank?'),
+             'a': T('لا. ينقص رصيد المكافآت فقط؛ المستوى والترتيب يبقيان كما هما.',
+                    'No. Only your reward balance goes down; level and rank stay as they are.')},
             {'q': T('متى تظهر نقاطي؟', 'When do my points show?'),
              'a': T('خلال نصف ساعة من تسجيل العمل. «اليوم النظيف» والخصومات تُحتسب بعد منتصف الليل.',
                     'Within 30 minutes of the work being recorded. The "clean day" and deductions are applied after midnight.')},

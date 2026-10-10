@@ -7,6 +7,8 @@
  *   branches    ترتيب الفروع — average points per active player (fair to small branches)
  *   badges      الشارات
  *   rules       كيف تكسب النقاط — every rule, transparent to everyone
+ *   rewards     المكافآت — spend points on the catalog (approval via /approvals)
+ *   redemptions طلبات المكافآت — managers: deliver / cancel approved rewards
  *   reports     التقارير — managers (RBAC gamification/view; Excel needs /export)
  *   settings    الإعدادات — editors (gamification/edit): rules, levels, badges, manual awards
  *
@@ -20,6 +22,7 @@ import useLangStore from '../store/langStore'
 import useHelpTab from '../help/useHelpTab'
 import { PageHeader } from '../components/ui'
 import { LevelBar, useGamificationMe } from '../components/GamificationCard'
+import { RedemptionsTab, RewardCatalogEditor, RewardsTab } from './gamification/RewardsTabs'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
 const signed = (n) => `${n > 0 ? '+' : ''}${fmt(n)}`
@@ -484,6 +487,24 @@ function ReportsTab({ t, lang }) {
           </table>
         </div>
       )}
+      {data.rewards && (
+        <div className="card">
+          <div className="font-black mb-2">{t('🎁 المكافآت في الفترة', '🎁 Rewards in the period')}</div>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <Kpi label={t('طلبات', 'Requests')} value={fmt(data.rewards.requests)} />
+            <Kpi label={t('نقاط مستبدلة', 'Points redeemed')} value={fmt(data.rewards.points_redeemed)} />
+            <Kpi label={t('بانتظار التسليم', 'To deliver')} value={fmt(data.rewards.awaiting_fulfilment)} tone="text-amber-700" />
+          </div>
+          <ul className="divide-y divide-gray-100 text-sm">
+            {data.rewards.top.map(r => (
+              <li key={r.reward_id} className="py-1.5 flex justify-between">
+                <span>{r.icon} {lang === 'en' ? r.name_en : r.name_ar}</span>
+                <span className="text-gray-500">{fmt(r.requests)} · {fmt(r.points)} {t('نقطة', 'pts')}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {data.promotions?.length > 0 && (
         <div className="card">
           <div className="font-black mb-2">{t('🎉 الترقيات في الفترة', '🎉 Promotions in the period')}</div>
@@ -573,6 +594,8 @@ function SettingsTab({ t, lang }) {
   return (
     <div className="space-y-4">
       {msg && <div className="rounded-lg bg-gray-900 text-white text-sm px-3 py-2">{msg}</div>}
+
+      <RewardCatalogEditor t={t} lang={lang} />
 
       <div className="card">
         <div className="flex items-center justify-between mb-2">
@@ -677,7 +700,9 @@ export default function GamificationPage() {
     ['branches', '🏢 ترتيب الفروع', '🏢 Branches'],
     ['badges', '🏅 الشارات', '🏅 Badges'],
     ['rules', '📜 كيف تكسب النقاط', '📜 How to earn'],
-    ...(me?.can_manage ? [['reports', '📊 التقارير', '📊 Reports']] : []),
+    ['rewards', '🎁 المكافآت', '🎁 Rewards'],
+    ...(me?.can_manage ? [['redemptions', '📦 طلبات المكافآت', '📦 Reward requests'],
+                          ['reports', '📊 التقارير', '📊 Reports']] : []),
     ...(me?.can_edit ? [['settings', '⚙️ الإعدادات', '⚙️ Settings']] : []),
   ]
   const requested = params.get('tab') || 'me'
@@ -708,6 +733,8 @@ export default function GamificationPage() {
             {tab === 'branches' && <BranchesTab t={t} />}
             {tab === 'badges' && <BadgesTab me={me} t={t} lang={lang} />}
             {tab === 'rules' && <RulesTab t={t} lang={lang} />}
+            {tab === 'rewards' && <RewardsTab t={t} lang={lang} />}
+            {tab === 'redemptions' && me.can_manage && <RedemptionsTab t={t} lang={lang} canEdit={me.can_edit} />}
             {tab === 'reports' && me.can_manage && <ReportsTab t={t} lang={lang} />}
             {tab === 'settings' && me.can_edit && <SettingsTab t={t} lang={lang} />}
           </>
