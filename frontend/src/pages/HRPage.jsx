@@ -8,6 +8,7 @@ import { hrApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { printHRRequest } from '../components/HRPrint'
 import { DateField, IdentityFields, weekdayAr } from '../components/HRForm'
+import useHelpTab from '../help/useHelpTab'
 
 // Small inline print action used across all request tables
 function PrintLink({ kind, row }) {
@@ -718,6 +719,7 @@ const TABS = [
 
 export default function HRPage() {
   const [tab, setTab] = useState('leave')
+  useHelpTab(tab)
   const Active = TABS.find(t => t.key === tab)?.Component || (() => null)
 
   return (

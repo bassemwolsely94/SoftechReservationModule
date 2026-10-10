@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reconciliationApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
+import useHelpTab from '../help/useHelpTab'
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -1424,6 +1425,7 @@ function Pager({ page, setPage, count, size = 50 }) {
 // ── page shell ────────────────────────────────────────────────────────────────
 export default function ReconciliationPage() {
   const [tab, setTab] = useState('candidates')
+  useHelpTab(tab)
   const [partyType, setPartyType] = useState('supplier')
   const [filters, setFilters] = useState({ personcodes: [], inv_date_from: '', inv_date_to: '', pay_date_from: '', pay_date_to: '', amount_min: '', amount_max: '' })
   const scope = {

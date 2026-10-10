@@ -242,3 +242,4 @@ Actions: view, create, edit, delete, approve, export, assign, finalize
 6. **Always check `Branch.is_operational`** before creating reservations.
 7. **Immutable records stay immutable.** Do not add update endpoints for `VoucherRedemption`, `IncentiveTransaction`, `StockCountSnapshot`.
 8. **Update this documentation** whenever architecture changes.
+9. **Update the in-app help with every feature.** New screen / tab / status → edit `apps/help/content/<module>.py` (Arabic + English) and bump the screen's `updated` date; pages with tabs call `useHelpTab(tab)`. `apps/tests/test_help.py` fails CI otherwise. See [28_IN_APP_HELP.md](28_IN_APP_HELP.md).

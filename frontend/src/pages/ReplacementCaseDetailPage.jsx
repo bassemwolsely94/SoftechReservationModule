@@ -13,6 +13,7 @@ import { replacementApi } from '../api/client'
 import { Chip, errText, money } from './supply/supplyUi'
 import { SEV_LABEL, SEV_TONE, STATUS_TONE } from './ReplacementCasesPage'
 import WorkflowPanel from './replacement/WorkflowPanel'
+import useHelpTab from '../help/useHelpTab'
 
 const KIND_ICON = {
   case: '📁', prescription: '📋', item: '💊', contract_sale: '🧾', contract_return: '↩️', contract_void: '🚫',
@@ -143,6 +144,8 @@ export default function ReplacementCaseDetailPage() {
   const [msg, setMsg] = useState('')
   const { data: c, isLoading, error } = useQuery({ queryKey: ['replacement-case', id],
                                                   queryFn: () => replacementApi.get(id).then((r) => r.data) })
+  // the same default as activeTab below (hooks must run before the early returns)
+  useHelpTab(tab || (c?.origin === 'live' ? 'workflow' : 'docs'))
   const done = (r) => { qc.setQueryData(['replacement-case', id], r.data); qc.invalidateQueries({ queryKey: ['replacement-list'] }); setMsg('') }
   const fail = (e) => setMsg(errText(e))
   const link = useMutation({ mutationFn: ({ cd, confirm }) => replacementApi.decideLink(id, cd, { confirm }), onSuccess: done, onError: fail })

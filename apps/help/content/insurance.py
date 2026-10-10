@@ -1,0 +1,125 @@
+from . import T
+
+MODULE = {
+    'key': 'insurance', 'group': 'finance', 'icon': '🏥',
+    'title': T('مطالبات التأمين', 'Insurance claims'),
+    'summary': T(
+        'تجهيز مطالبات جهات التأمين والتعاقدات من بيانات SOFTECH: تُستورد المطالبة (الموتالبة) بروشتاتها وأصنافها وتُجمَّد قيمها، '
+        'ثم تُراجع (الأسماء، تصنيف الأصناف محلي/مستورد/ترسية، الفروقات عن SOFTECH والكتالوج، الملاحق والروشتات اليدوية، فصل أسماء تخص جهة أخرى)، '
+        'وتُفحص جاهزيتها، وتُطبع بنماذج الجهة، ثم يُسجَّل التحصيل والخصومات المرفوضة. نسب الخصم تأتي من عقد الجهة (محلي، مستورد، ترسية).',
+        'Prepare claims for insurers and contract clients from SOFTECH data: the claim (motalba) is imported with its prescriptions and items and its values frozen, '
+        'then reviewed (names, item class local/imported/tender, differences vs SOFTECH and the catalog, supplements and manual prescriptions, separating names that belong to another payer), '
+        'checked for readiness, printed in the payer\'s templates, and finally payments and rejected deductions are recorded. Discount rates come from the payer\'s contract (local, imported, tender).'),
+    'workflows': [{
+        'title': T('مراحل المطالبة', 'Claim stages'),
+        'model': 'insurance.InsuranceClaim', 'field': 'status',
+        'states': [
+            {'key': 'draft', 'label': T('مسودة', 'Draft'), 'desc': T('استُوردت وتُراجع وتُعدَّل.', 'Imported, being reviewed and adjusted.'), 'next': ['ready', 'cancelled']},
+            {'key': 'ready', 'label': T('جاهزة للطباعة', 'Ready to print'), 'desc': T('اجتازت فحص الجاهزية وتُطبع.', 'Passed the readiness check and is printed.'), 'next': ['submitted']},
+            {'key': 'submitted', 'label': T('مُقدَّمة', 'Submitted'), 'desc': T('سُلّمت للجهة.', 'Handed to the payer.'), 'next': ['under_review']},
+            {'key': 'under_review', 'label': T('قيد المراجعة', 'Under review'), 'desc': T('الجهة تراجعها.', 'The payer is reviewing it.'), 'next': ['partially_paid', 'paid', 'rejected']},
+            {'key': 'partially_paid', 'label': T('مدفوعة جزئياً', 'Partially paid'), 'desc': T('سُجّل جزء من التحصيل؛ الرصيد المتبقي ظاهر.', 'Part was collected; the remaining balance shows.'), 'next': ['paid']},
+            {'key': 'paid', 'label': T('مدفوعة', 'Paid'), 'desc': T('حُصّلت بالكامل (بعد الخصومات).', 'Fully collected (after deductions).')},
+            {'key': 'rejected', 'label': T('مرفوضة', 'Rejected'), 'desc': T('رفضتها الجهة.', 'Rejected by the payer.')},
+            {'key': 'cancelled', 'label': T('ملغاة', 'Cancelled'), 'desc': T('أُلغيت.', 'Cancelled.')},
+        ],
+    }],
+}
+
+SCREENS = [
+    {
+        'key': 'insurance.claims',
+        'routes': ['/insurance'],
+        'title': T('مطالبات التأمين', 'Insurance claims'),
+        'summary': T('قائمة المطالبات بفلاتر (العميل، الفئة، الفترة، الحالة، السنة) وإجراءات جماعية، واستعراض المطالبات الجاهزة في SOFTECH واستيرادها.', 'The claims list with filters (client, category, period, status, year) and bulk actions, and discovering ready claims in SOFTECH to import them.'),
+        'audience': T('المشتريات وفريق التأمين والمدير.', 'Purchasing, the insurance team and admins.'),
+        'steps': [
+            T('«استعراض المطالبات من سوفتك»: حدد الفترة والعميل/الفئة ← «بحث في سوفتك» ← حدد غير المستوردة ← «استيراد».', '"Browse claims from SOFTECH": set the period and client/category → "Search SOFTECH" → select the not-imported ones → "Import".'),
+            T('أو «استيراد مطالبة» برقمها أو بفترة، واختر العقد لنسب الخصم.', 'Or "Import claim" by number or by period, and choose the contract for the discount rates.'),
+            T('لو ظهر «عميل غير مُعدّ» أضف العميل والفئة من «إدارة العملاء والعقود» ثم أعد البحث.', 'If "client not set up" appears, add the client and category in "Clients & contracts" then search again.'),
+        ],
+        'related': ['insurance.claim', 'insurance.clients'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.claim',
+        'routes': ['/insurance/claims/:id'],
+        'title': T('تفاصيل المطالبة', 'Claim workspace'),
+        'summary': T('مراجعة مطالبة واحدة حتى تصبح جاهزة للإصدار. القيم مجمّدة عند الاستيراد؛ كل تعديل مسجّل وقابل للتراجع.', 'Review one claim until it is ready to issue. Values are frozen at import; every change is logged and reversible.'),
+        'audience': T('فريق التأمين والمشتريات.', 'The insurance team and purchasing.'),
+        'tabs': [
+            {'key': 'prescriptions', 'title': T('الروشتات', 'Prescriptions'), 'body': T('كل روشتات المطالبة. لكل روشتة: تعديل الاسم (إكمال رباعي أو تصحيح إملائي مقترح)، «تفعيل تعديل البنود» لتغيير صنف/كمية/سعر، «استثناء» أو «إعادة إدراج». العلامات تنبهك لفرق الصافي عن SOFTECH.', 'All the claim\'s prescriptions. Per prescription: edit the name (suggested four-part completion or spelling fix), "enable item editing" to change item/qty/price, "exclude" or "re-include". Markers warn of a net difference vs SOFTECH.')},
+            {'key': 'items', 'title': T('أصناف المطالبة', 'Claim items'), 'body': T('كل أصناف المطالبة مجمّعة مع البحث، و«تعيين التصنيف» (محلي/مستورد/ترسية) لكل بنود صنف مرة واحدة.', 'All claim items grouped, with search and "assign class" (local/imported/tender) for all lines of an item at once.')},
+            {'key': 'billing', 'title': T('فئات الفوترة', 'Billing groups'), 'body': T('تقسيم المطالبة لفئات فرعية (مثلاً: للعضو، للزوجة، للأبناء، نقدي) بقواعد تخصيص تلقائي، ثم تصدير فاتورة منفصلة لكل فئة.', 'Split the claim into sub-groups (e.g. member, spouse, children, cash) with auto-assignment rules, then export a separate invoice per group.')},
+            {'key': 'supplements', 'title': T('الملاحق', 'Supplements'), 'body': T('ملاحق سابقة أو لاحقة أو ليوم معيّن أو مستقلة بقيم محلي/مستورد/ترسية قبل الخصم وعدد الروشتات؛ الخصم والصافي يُحسبان تلقائياً.', 'Prior, later, day-specific or standalone supplements with local/imported/tender values before discount and prescription count; discount and net are calculated automatically.')},
+            {'key': 'manual', 'title': T('إضافة يدوية', 'Manual add'), 'body': T('إضافة روشتة من SOFTECH برقم الفاتورة التأمينية (حتى لو تخص كود عميل آخر)؛ توضع في يوم صرفها أو كملحق سابق/لاحق لو خارج الفترة.', 'Add a prescription from SOFTECH by its insurance invoice number (even under another client code); it goes into its dispense day or a prior/later supplement if outside the period.')},
+            {'key': 'payments', 'title': T('التحصيل', 'Payments'), 'body': T('تسجيل الدفعات (المبلغ، رقم التحويل/الشيك) والخصومات/المرفوضات بسببها (صنف غير مشمول، روشتة مكررة، تجاوز الحد، وثائق ناقصة، خطأ تصنيف) والرصيد المتبقي.', 'Record payments (amount, transfer/cheque number) and deductions/rejections with a reason (item not covered, duplicate prescription, over the limit, missing documents, wrong class) and the remaining balance.')},
+            {'key': 'pivot', 'title': T('تحليل البيانات', 'Data analysis'), 'body': T('جدول محوري على الروشتات أو بنود الأصناف بتجميع صفوف وأعمدة متعدد، مع حفظ القوالب والتصدير.', 'A pivot table over prescriptions or item lines with multi-level row and column grouping, saved templates and export.')},
+            {'key': 'separation', 'title': T('فصل الأسماء', 'Name separation'), 'body': T('روشتات يطابق اسم مريضها اسماً في «قوائم فصل الأسماء» (مثل جهة تُفوتر منفصلة). المطابقة الكاملة محددة تلقائياً والجزئية تحتاج مراجعتك؛ «استبعاد» يخرجها لتُضاف لمطالبتها الصحيحة.', 'Prescriptions whose patient matches a name on a "name separation list" (e.g. a payer billed separately). Full matches are pre-selected, partial ones need your review; "Exclude" removes them to be added to the right claim.')},
+            {'key': 'name_review', 'title': T('مراجعة الأسماء', 'Name review'), 'body': T('اقتراحات آمنة من سجل نفس الجهة لإكمال الاسم رباعياً أو تصحيح إملائه. الاسم حقل طباعة فقط لا يؤثر على الإجماليات وقابل للتراجع؛ الأسماء متعددة الاحتمالات تُختار يدوياً.', 'Safe suggestions from the same payer\'s history to complete the name to four parts or fix spelling. The name is print-only, does not affect totals and is reversible; ambiguous names are chosen manually.')},
+            {'key': 'discrepancy', 'title': T('فحص الفروقات', 'Discrepancy check'), 'body': T('البنود التي تغيّر تصنيفها أو سعرها في الكتالوج منذ التجميد، وتطبيق «تصويبات تصنيف الأصناف» على هذه المطالبة. التحديث يعدّل القيم المجمّدة وقابل للتراجع.', 'Lines whose class or price changed in the catalog since freezing, and applying the "item class corrections" to this claim. Updating changes frozen values and is reversible.')},
+            {'key': 'revision', 'title': T('مراجعة الفروق', 'Difference review'), 'body': T('كل بند عليه علامة فرق (قيمة قد تخالف SOFTECH، فرق عن الكتالوج، تصنيف يخالف SOFTECH) لتعتمده بنداً بنداً — اعتماد تسجيلي يوثّق أنك راجعت ولا يغيّر القيم.', 'Every line flagged with a difference (value may differ from SOFTECH, catalog difference, class differs from SOFTECH) for you to approve one by one — a recording approval that documents your review and changes no values.')},
+            {'key': 'softech_reprice', 'title': T('تعديلات سوفتك', 'SOFTECH repricing'), 'body': T('تطبيق سعر صحيح لصنف على إيصالات المطالبة داخل SOFTECH نفسه (الرئيسي + الفرع)؛ كل إيصال عملية مستقلة بمعاينة وتأكيد وقابلة للتراجع من سجل العمليات.', 'Apply a correct item price on the claim\'s receipts inside SOFTECH itself (HQ + branch); each receipt is a separate operation with preview and confirmation, reversible from the operations log.')},
+            {'key': 'readiness', 'title': T('الجاهزية للإصدار', 'Readiness to issue'), 'body': T('درجة الجاهزية والأخطاء التي تمنع الإصدار والتحذيرات، مثل الأسماء غير الرباعية (فردي = خطورة أعلى، ثنائي، ثلاثي) وتوزيعها بالفرع. «إعادة الفحص» بعد الإصلاح.', 'The readiness score, errors blocking issue and warnings, such as names not in four parts (single = highest risk, two, three) and their distribution by branch. "Re-check" after fixing.')},
+            {'key': 'activity', 'title': T('سجل النشاط', 'Activity log'), 'body': T('كل تعديل على المطالبة: من، متى، لماذا، والقيمة قبل وبعد.', 'Every change on the claim: who, when, why, and the value before and after.')},
+        ],
+        'steps': [
+            T('ابدأ بالروشتات والأسماء، ثم الأصناف والفروقات، ثم الملاحق والإضافات اليدوية وفصل الأسماء.', 'Start with prescriptions and names, then items and differences, then supplements, manual additions and name separation.'),
+            T('افتح «الجاهزية للإصدار» حتى لا يبقى خطأ، ثم اطبع من «طباعة وتصدير».', 'Open "Readiness to issue" until no error remains, then print from "Print & export".'),
+        ],
+        'tips': [T('التعديلات تؤثر على إجمالي المطالبة — الشاشة تطلب تأكيداً، وكلها قابلة للتراجع ومسجّلة.', 'Edits change the claim total — the screen asks for confirmation, and all are reversible and logged.')],
+        'related': ['insurance.print', 'insurance.item_overrides', 'insurance.separation_lists'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.print',
+        'routes': ['/insurance/claims/:id/print'],
+        'title': T('طباعة وتصدير المطالبة', 'Print & export a claim'),
+        'summary': T('نماذج الطباعة: «يوميات» (روشتات مجمعة باليوم مع إجمالي كل يوم)، «مجمل اليوميات» (صف لكل يوم)، «الفاتورة النهائية المجمعة»، و«الغلاف» (تفصيل الخصومات محلي/مستورد/ترسية). اختر الترتيب والفرز ثم صدّر Excel.',
+                     'Print templates: "Daily" (prescriptions grouped by day with each day\'s total), "Daily summary" (one row per day), "Final combined invoice", and the "Cover" (discount breakdown local/imported/tender). Choose ordering and sorting, then export to Excel.'),
+        'audience': T('فريق التأمين.', 'The insurance team.'),
+        'related': ['insurance.print_profiles'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.clients',
+        'routes': ['/insurance/clients'],
+        'title': T('إدارة العملاء والعقود', 'Clients & contracts'),
+        'summary': T('ثلاثة أعمدة: جهات التأمين (الاسم، كود SOFTECH)، فئاتها (العاملين، المعاشات، الأسر… مع أكوادها)، وعقود كل فئة بتواريخها ونسب الخصم: محلي %، مستورد %، ترسية %.',
+                     'Three columns: payers (name, SOFTECH code), their categories (employees, pensioners, families… with codes), and each category\'s contracts with dates and discount rates: local %, imported %, tender %.'),
+        'audience': T('فريق التأمين والمدير.', 'The insurance team and admins.'),
+        'tips': [T('بدون عقد سارٍ تستورد المطالبة بلا نسب خصم صحيحة.', 'Without a valid contract, a claim imports without correct discount rates.')],
+        'related': ['insurance.claims'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.item_overrides',
+        'routes': ['/insurance/item-overrides'],
+        'title': T('تصويبات تصنيف الأصناف', 'Item class corrections'),
+        'summary': T('تصحيح أصناف مُعرّفة خطأً في SOFTECH كمستورد أو محلي (فتأخذ خصماً خاطئاً وتخصمها الجهة كاملة). التصويب عام بكود الصنف ويُطبَّق على المطالبات المسودة مطالبةً مطالبة: «فرض تصنيف موحّد» أو «مراجعة يدوية» للصنف مزدوج المنشأ.',
+                     'Correct items wrongly defined in SOFTECH as imported or local (which get the wrong discount and are deducted in full by the payer). A correction is global by item code and is applied to draft claims one by one: "force one class" or "manual review" for dual-origin items.'),
+        'audience': T('فريق التأمين.', 'The insurance team.'),
+        'related': ['insurance.claim'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.separation_lists',
+        'routes': ['/insurance/separation-lists'],
+        'title': T('قوائم فصل الأسماء', 'Name separation lists'),
+        'summary': T('قوائم أسماء تُفصل من مطالباتها لتُضاف لمطالبة أخرى (مثل جهة تُفوتر منفصلة). أنشئ قائمة، الصق الأسماء (اسم في كل سطر)، وفعّلها — تظهر مطابقاتها في تبويب «فصل الأسماء» بكل مطالبة.',
+                     'Lists of names pulled out of their claims to be added to another claim (e.g. a payer billed separately). Create a list, paste the names (one per line) and activate it — matches show in each claim\'s "Name separation" tab.'),
+        'audience': T('فريق التأمين.', 'The insurance team.'),
+        'related': ['insurance.claim'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'insurance.print_profiles',
+        'routes': ['/insurance/print-profiles'],
+        'title': T('تخصيص طباعة المطالبات', 'Claim print profiles'),
+        'summary': T('ملفات طباعة عامة أو لفئة معيّنة: الترويسة والتذييل (يمين/وسط/يسار مع متغيرات)، الخطوط والأحجام والألوان، سُمك الإطار، أسطر بين الأيام، تكرار العناوين، وعلامة مائية (شعار PNG).',
+                     'General or per-category print profiles: header and footer (right/centre/left with variables), fonts, sizes and colours, border thickness, blank lines between days, repeated headers, and a watermark (PNG logo).'),
+        'audience': T('فريق التأمين والمدير.', 'The insurance team and admins.'),
+        'related': ['insurance.print'],
+        'updated': '2026-10-10',
+    },
+]

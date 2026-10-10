@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { omniApi, customersApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const fmtDt = (dt) => {
@@ -429,6 +430,7 @@ export default function OmniInboxPage() {
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
+  useHelpTab(statusFilter || 'all')
   const [mineOnly, setMineOnly] = useState(false)
 
   const { data, isLoading } = useQuery({

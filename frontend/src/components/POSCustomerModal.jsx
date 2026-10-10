@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import api, { customersApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 /*
  * POSCustomerModal — the SOFTECH "Individual Customers Pop-Up" reached from the POS
@@ -19,6 +20,7 @@ const blankForm = () => ({
 
 export default function POSCustomerModal({ onSelect, onClose }) {
   const [tab, setTab] = useState('query')
+  useHelpTab(tab)
   const [q, setQ] = useState('')
   const [rows, setRows] = useState([])
   const [searching, setSearching] = useState(false)

@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { transfersApi } from '../api/client'
 import { useNavigate } from 'react-router-dom'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${Number(n || 0).toFixed(1)}%`
@@ -256,6 +257,7 @@ const TABS = [
 
 export default function TransfersAnalyticsPage() {
   const [activeTab, setActiveTab] = useState('analytics')
+  useHelpTab(activeTab)
   const [days, setDays] = useState(30)
 
   return (

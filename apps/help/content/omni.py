@@ -1,0 +1,150 @@
+from . import T
+
+MODULE = {
+    'key': 'omni', 'group': 'callcenter', 'icon': '📥',
+    'title': T('التواصل الموحّد (واتساب والمكالمات والسوشيال)', 'Unified communications (WhatsApp, calls, social)'),
+    'summary': T(
+        'كل قنوات التواصل مع العميل في مكان واحد: رسائل واتساب (عدة أرقام)، المكالمات، ماسنجر، إنستجرام، تيليجرام — مجمّعة لكل عميل في خط زمني واحد مع أحداث SOFTECH (حجوزات، فواتير). '
+        'منها: الصندوق الموحد للرد، حسابات القنوات وحالتها، لوحة المشرف الحية، قواعد الأتمتة، وتحليلات التواصل، وحملات واتساب التسويقية.\n'
+        'قاعدة واتساب المهمة: بعد آخر رسالة من العميل لديك «نافذة 24 ساعة» للرد بنص حر؛ بعد إغلاقها تُرسل فقط «قوالب» معتمدة.',
+        'Every customer channel in one place: WhatsApp messages (several numbers), calls, Messenger, Instagram, Telegram — grouped per customer into one timeline with SOFTECH events (reservations, invoices). '
+        'It includes the unified inbox to reply, channel accounts and their health, the live supervisor wallboard, automation rules, communication analytics, and WhatsApp marketing campaigns.\n'
+        'The key WhatsApp rule: after the customer\'s last message you have a "24-hour window" to reply with free text; once it closes you can only send approved "templates".'),
+    'workflows': [
+        {
+            'key': 'conversation',
+            'title': T('حالة المحادثة', 'Conversation status'),
+            'model': 'omni.Conversation', 'field': 'status',
+            'states': [
+                {'key': 'open', 'label': T('مفتوحة', 'Open'), 'desc': T('محادثة نشطة تحتاج رداً.', 'An active conversation that needs a reply.'), 'next': ['pending', 'snoozed', 'resolved']},
+                {'key': 'pending', 'label': T('بانتظار رد', 'Pending'), 'desc': T('ننتظر رد العميل.', 'Waiting for the customer.'), 'next': ['open', 'resolved']},
+                {'key': 'snoozed', 'label': T('مؤجلة', 'Snoozed'), 'desc': T('مؤجلة لوقت لاحق وتعود تلقائياً.', 'Postponed; returns automatically.'), 'next': ['open']},
+                {'key': 'resolved', 'label': T('محلولة', 'Resolved'), 'desc': T('انتهى الطلب؛ رسالة جديدة من العميل تفتحها مرة أخرى.', 'Request done; a new customer message reopens it.'), 'next': ['open', 'closed']},
+                {'key': 'closed', 'label': T('مغلقة', 'Closed'), 'desc': T('أُغلقت نهائياً.', 'Closed for good.')},
+            ],
+        },
+        {
+            'key': 'campaign',
+            'title': T('مراحل حملة واتساب', 'WhatsApp campaign stages'),
+            'model': 'campaigns.WhatsAppCampaign', 'field': 'status',
+            'states': [
+                {'key': 'draft', 'label': T('مسودة', 'Draft'), 'desc': T('قيد الإعداد.', 'Being set up.'), 'next': ['pending_approval', 'cancelled']},
+                {'key': 'pending_approval', 'label': T('بانتظار الموافقة', 'Pending approval'), 'desc': T('أُرسلت للاعتماد.', 'Sent for approval.'), 'next': ['approved', 'rejected']},
+                {'key': 'approved', 'label': T('معتمدة', 'Approved'), 'desc': T('جاهزة للإرسال أو الجدولة.', 'Ready to send or schedule.'), 'next': ['scheduled', 'running']},
+                {'key': 'scheduled', 'label': T('مجدولة', 'Scheduled'), 'desc': T('ستبدأ في موعدها.', 'Will start on time.'), 'next': ['running', 'cancelled']},
+                {'key': 'running', 'label': T('جارية', 'Running'), 'desc': T('تُرسل الآن.', 'Sending now.'), 'next': ['paused', 'completed']},
+                {'key': 'paused', 'label': T('موقوفة', 'Paused'), 'desc': T('أُوقفت مؤقتاً.', 'Temporarily stopped.'), 'next': ['running', 'cancelled']},
+                {'key': 'completed', 'label': T('مكتملة', 'Completed'), 'desc': T('انتهى الإرسال.', 'Sending finished.')},
+                {'key': 'cancelled', 'label': T('ملغاة', 'Cancelled'), 'desc': T('أُلغيت.', 'Cancelled.')},
+                {'key': 'rejected', 'label': T('مرفوضة', 'Rejected'), 'desc': T('رُفضت مع سبب.', 'Rejected with a reason.')},
+            ],
+        },
+    ],
+}
+
+SCREENS = [
+    {
+        'key': 'omni.inbox',
+        'routes': ['/omni/inbox'],
+        'title': T('الصندوق الموحّد', 'Unified inbox'),
+        'summary': T('ثلاثة أعمدة: قائمة المحادثات من كل القنوات، الخط الزمني الموحّد للعميل (رسائل، مكالمات مع تفريغها النصي، أحداث SOFTECH)، وملف العميل 360 مع إدارة المحادثة (الحالة، الإسناد).',
+                     'Three columns: the conversation list across channels, the customer\'s unified timeline (messages, calls with transcripts, SOFTECH events), and the customer 360 panel with conversation controls (status, assignment).'),
+        'audience': T('الكول سنتر والمشرفون.', 'Call center and supervisors.'),
+        'tabs': [
+            {'key': 'active', 'title': T('النشطة', 'Active'), 'body': T('المفتوحة والمنتظرة والمؤجلة — قائمة العمل اليومية.', 'Open, pending and snoozed — the daily worklist.')},
+            {'key': 'all', 'title': T('الكل', 'All'), 'body': T('كل المحادثات.', 'Every conversation.')},
+            {'key': 'resolved', 'title': T('المحلولة', 'Resolved'), 'body': T('المحادثات التي انتهى طلبها.', 'Conversations whose request is done.')},
+            {'key': 'closed', 'title': T('المغلقة', 'Closed'), 'body': T('المحادثات المغلقة نهائياً.', 'Closed conversations.')},
+        ],
+        'steps': [
+            T('فعّل «محادثاتي» لترى المسند لك، وابحث بالاسم أو الرقم.', 'Turn on "My conversations" to see yours, and search by name or number.'),
+            T('اقرأ الخط الزمني كاملاً قبل الرد — آخر حجز وفاتورة للعميل ظاهرة.', 'Read the whole timeline before replying — the customer\'s last reservation and invoice are shown.'),
+            T('«مساعد الذكاء الاصطناعي» يلخص المحادثة ويقيّم الإلحاح ويقترح ردوداً تضغطها لاستخدامها (راجعها قبل الإرسال).', '"AI assistant" summarises the chat, rates urgency and suggests replies you click to use (review before sending).'),
+            T('اكتب الرد عبر قناة المحادثة؛ لو نافذة الـ 24 ساعة مغلقة أرسل قالباً.', 'Reply through the conversation\'s channel; if the 24-hour window is closed, send a template.'),
+            T('غيّر الحالة إلى «محلولة» عند الانتهاء، أو أسندها لزميل.', 'Set the status to "Resolved" when done, or assign it to a colleague.'),
+        ],
+        'workflows': ['conversation'],
+        'related': ['omni.accounts', 'callcenter.operator', 'omni.whatsapp_inbox'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.accounts',
+        'routes': ['/omni/accounts'],
+        'title': T('حسابات القنوات', 'Channel accounts'),
+        'summary': T('كل أرقام واتساب والسنترال وصفحات السوشيال للشركة مع حالتها (متصل، منقطع، متدهور، بانتظار QR)، آخر نبضة، حمل كل رقم (المحادثات، الوارد اليوم، غير المقروء)، وإدارة بيانات الربط لكل حساب.',
+                     'Every company WhatsApp number, PBX and social page with its status (connected, disconnected, degraded, waiting for QR), last heartbeat, per-number load (conversations, inbound today, unread), and credential management per account.'),
+        'audience': T('المدير والمشرفون.', 'Admins and supervisors.'),
+        'steps': [
+            T('«حساب جديد»: القناة، المزوّد، اسم الحساب (مثال: واتساب فرع المعادي 1)، الرقم، القسم والفروع، وهل هو الافتراضي للإرسال.', '"New account": channel, provider, account name (e.g. WhatsApp Maadi branch 1), number, department and branches, and whether it is the default sender.'),
+            T('«فحص الاتصال» للتأكد من عمل الحساب.', '"Check connection" to confirm the account works.'),
+        ],
+        'workflows': [],
+        'related': ['omni.inbox'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.wallboard',
+        'routes': ['/omni/wallboard'],
+        'title': T('لوحة المشرف الحية', 'Live supervisor wallboard'),
+        'summary': T('تتحدث كل 5 ثوانٍ: المكالمات الجارية مع «استماع صامت» و«همس للعامل دون سماع العميل»، إحصاءات القوائم اليوم (مُجابة، مهجورة، متوسط الانتظار والحديث)، حالة العمال، حمل واتساب، والمحادثات غير المُسندة.',
+                     'Refreshes every 5 seconds: active calls with "silent listen" and "whisper to the agent without the customer hearing", today\'s queue stats (answered, abandoned, average wait and talk), agent states, WhatsApp load, and unassigned conversations.'),
+        'audience': T('المشرفون والمدير والجودة.', 'Supervisors, admins and quality.'),
+        'workflows': [],
+        'related': ['callcenter.analytics', 'callcenter.pbx'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.automations',
+        'routes': ['/omni/automations'],
+        'title': T('قواعد الأتمتة', 'Automation rules'),
+        'summary': T('قواعد بدون برمجة: «عند حدوث» (رسالة واردة، مكالمة، مكالمة فائتة، حجز، تحليل ذكي) + «الشروط» (كلمات مفتاحية، عملاء VIP، قناة) ← «الإجراءات» بالترتيب (ضبط الأولوية أو الحالة، إضافة وسم، إسناد لدور، إشعار دور، ملاحظة، رد آلي).',
+                     'No-code rules: "when" (incoming message, call, missed call, reservation, AI analysis) + "conditions" (keywords, VIP customers, channel) → "actions" in order (set priority or status, add a tag, assign to a role, notify a role, add a note, auto-reply).'),
+        'audience': T('المدير والمشرفون.', 'Admins and supervisors.'),
+        'tips': [T('جرّب القاعدة على عدد قليل قبل تعميمها؛ الرد الآلي يصل للعميل فوراً.', 'Try a rule on a few cases before relying on it; an auto-reply reaches the customer immediately.')],
+        'workflows': [],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.analytics',
+        'routes': ['/omni/analytics'],
+        'title': T('تحليلات التواصل', 'Communication analytics'),
+        'summary': T('لآخر 7/30/90 يوماً: عدد المحادثات وما تحوّل لحجز ونسبة التحويل، متوسط زمن أول رد، الحجم حسب القناة ويومياً، حالات المحادثات، ونشاط الموظفين في الردود.',
+                     'For the last 7/30/90 days: conversations, how many became reservations and the conversion rate, average first-response time, volume by channel and by day, conversation statuses, and staff reply activity.'),
+        'audience': T('المشرفون والمدير والجودة.', 'Supervisors, admins and quality.'),
+        'workflows': [],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.whatsapp_inbox',
+        'routes': ['/whatsapp/inbox'],
+        'title': T('صندوق واتساب', 'WhatsApp inbox'),
+        'summary': T('محادثات واتساب للأعمال: القائمة يميناً والرسائل يساراً. مؤشر النافذة أخضر = يمكن الرد بنص، أحمر = النافذة مغلقة وتُرسل قالباً معتمداً فقط.',
+                     'WhatsApp Business conversations: the list on one side, messages on the other. The window indicator green = you can reply with text, red = closed, send an approved template only.'),
+        'audience': T('الكول سنتر والمشرفون.', 'Call center and supervisors.'),
+        'tips': [T('الصندوق الموحّد يجمع واتساب مع باقي القنوات — استخدمه للعمل اليومي.', 'The unified inbox combines WhatsApp with the other channels — use it for daily work.')],
+        'workflows': [],
+        'related': ['omni.inbox'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'omni.campaigns',
+        'routes': ['/campaigns'],
+        'title': T('حملات واتساب', 'WhatsApp campaigns'),
+        'summary': T('رسائل تسويقية أو توعوية لشريحة عملاء: تحديد الجمهور (شريحة القيمة، خطر الانقطاع، حالة صحية مزمنة، الفرع المفضّل، تاريخ آخر شراء، حد أدنى للقيمة)، نص الرسالة بمتغيرات، معاينة الجمهور، ثم مسار اعتماد قبل الإرسال.',
+                     'Marketing or awareness messages to a customer segment: choose the audience (value segment, churn risk, chronic condition, preferred branch, last purchase date, minimum value), the message text with variables, preview the audience, then an approval flow before sending.'),
+        'audience': T('الكول سنتر والمشرفون والمشتريات والمدير.', 'Call center, supervisors, purchasing and admins.'),
+        'tabs': [
+            {'key': 'overview', 'title': T('نظرة عامة', 'Overview'), 'body': T('بيانات الحملة وحالتها وأرقام الإرسال (مُرسلة، مُسلَّمة) وأزرار الاعتماد/الرفض/الجدولة.', 'The campaign\'s data, status and send numbers (sent, delivered) and the approve/reject/schedule buttons.')},
+            {'key': 'audience', 'title': T('الجمهور', 'Audience'), 'body': T('شروط الاستهداف والوصول المقدّر وعيّنة من العملاء.', 'Targeting conditions, estimated reach and a sample of customers.')},
+            {'key': 'messages', 'title': T('الرسائل', 'Messages'), 'body': T('حالة كل رسالة: في الانتظار، مُرسلة، مُسلّمة، فاشلة، رفض العميل، تم التخطي.', 'Each message\'s status: pending, sent, delivered, failed, opted out, skipped.')},
+        ],
+        'steps': [
+            T('«حملة جديدة» ← الاسم ونص الرسالة (اضغط المتغير لإضافته مثل اسم العميل) ← الجمهور ← «معاينة الجمهور» ← «حفظ الحملة».', '"New campaign" → name and message text (click a variable such as the customer name to insert it) → audience → "Preview audience" → "Save campaign".'),
+            T('«طلب الموافقة»؛ بعد الاعتماد «جدولة الإرسال» أو الإرسال يدوياً.', '"Request approval"; once approved, "Schedule sending" or send manually.'),
+        ],
+        'tips': [T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
+        'workflows': ['campaign'],
+        'related': ['omni.inbox'],
+        'updated': '2026-10-10',
+    },
+]

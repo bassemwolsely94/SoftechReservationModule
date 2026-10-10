@@ -324,5 +324,7 @@ Status codes:
 | ERP sync management | COMPLETE | |
 | Audit trail | PARTIAL | Not all actions logged |
 | User activity reports | MISSING | |
+| In-app help (every screen/tab/workflow, ar+en, F1 panel, `/help`, Ctrl+K) | COMPLETE | `apps/help` + `frontend/src/help/`; CI test blocks routes without help — [28_IN_APP_HELP.md](28_IN_APP_HELP.md) |
+| Trainer editing of help (versioned, revertible) + feedback + usage stats | COMPLETE | RBAC `help`/`edit` |
 | API rate limiting | MISSING | |
 | Request logging / APM | MISSING | |

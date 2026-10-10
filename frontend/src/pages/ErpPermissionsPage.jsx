@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const PLATFORM_MODULES = [
   'catalog', 'customers', 'vouchers', 'purchasing', 'invoices', 'transfers',
@@ -20,6 +21,7 @@ function Check({ on }) {
 export default function ErpPermissionsPage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState('map')
+  useHelpTab(tab)
   const [newMap, setNewMap] = useState({ system: '', module: 'catalog', note: '' })
 
   const { data: map } = useQuery({ queryKey: ['erp-map'], queryFn: () => usersApi.erpMap().then(r => r.data) })

@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { insightsApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 const PERIODS = { day: 'يومي', week: 'أسبوعي', mtd: 'حتى تاريخه', month: 'شهري' }
 
@@ -115,6 +116,7 @@ export default function InsightsPage() {
   const canRun = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role)
   const canEditRules = ['admin', 'supervisor'].includes(user?.role)   // matches InsightRuleViewSet._guard
   const [view, setView] = useState('reports')                         // 'reports' | 'rules'
+  useHelpTab(view)
   const [domain, setDomain] = useState('sales')                       // 'sales' | 'purchasing'
   const [period, setPeriod] = useState('day')
   const [selId, setSelId] = useState(null)

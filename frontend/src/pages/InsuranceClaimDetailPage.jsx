@@ -16,6 +16,7 @@ import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
 import { wildcardMatch } from '../utils/wildcard'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -1583,6 +1584,7 @@ export default function InsuranceClaimDetailPage() {
   const [claim, setClaim]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab]       = useState('prescriptions')
+  useHelpTab(tab)
   const [rxFilter, setRxFilter] = useState('')
   const [rxSortKey, setRxSortKey] = useState('sequence')
   const [rxSortDir, setRxSortDir] = useState('asc')

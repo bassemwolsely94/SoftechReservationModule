@@ -14,6 +14,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | 14 | [14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md](14_PHASE2_INDIRECT_POS_WRITER_DESIGN.md) | ✅ BUILT (2026-07-25) | Phase-2 SOFTECH pending-order **writer is shipped** as `apps/pos_orders`: PG mirror `SoftechSalesOrder`+lines+payments (referral-doctor/prescription/multi-channel extras), transactional writer modeled on `discount_approvals/replication.py` (collision-safe serial alloc + verify-readback + dry-run), read-back reconciler, **offline retry queue** (`queue-status`/`flush`), discount authority + batch availability. Live SOFTECH writeback (PENDING side only: `stktransm5`/`stktrans5`/`branchesales5`). Desktop `/pos` + mobile `/m/pos`. Ops: `POS_OFFLINE_RESILIENCE.md`, `POS_OPERATOR_RUNBOOK.md`, `MDA_INSTALL_RUNBOOK.md`. See [02_MODULE_REGISTRY.md#pos-orders-indirect-pos-writeback](02_MODULE_REGISTRY.md). |
 | 15 | [15_CEP_OMNICHANNEL_DESIGN.md](15_CEP_OMNICHANNEL_DESIGN.md) | ✅ ALL PHASES 0–5 BUILT (2026-07-05) | Omnichannel Communication & Engagement Platform: thin `apps/omni` envelope layer (ChannelAccount / Conversation / TimelineEvent) unifying the EXISTING `apps/whatsapp` (Cloud API), `apps/pbx` (Issabel AMI), `apps/callcenter` (cases + AI) into one customer-grouped timeline; multi-account WhatsApp + provider abstraction, routing/SLA, supervisor wallboard, automation engine, social channels (FB/IG/TG/TikTok). 6-phase roadmap; extend-don't-rebuild. |
 | — | [SOFTECH_GIFT_VOUCHER_STOCKING.md](SOFTECH_GIFT_VOUCHER_STOCKING.md) | 🟡 ARCHIVE BUILT (2026-10-06) | Gift coupons stocked from supplier 1268 on two items (102230 points / 118639 served −50), one qty-1 purchase line per serial (`item_partno`) with a unique expiry key. Archive + generator + print/DataLoad export built; SOFTECH auto-push, lifecycle tracking, POS serial guard, daily misuse digest and the «كوبونات الهدايا» screen (§9) built. |
+| 28 | [28_IN_APP_HELP.md](28_IN_APP_HELP.md) | ✅ BUILT (2026-10-10) | In-app help (دليل الاستخدام): «؟ مساعدة»/F1 panel on every staff screen opened on the current tab, `/help` center, Ctrl+K search, Arabic + English. Text lives in `apps/help/content/` (CI fails if a route lacks help, a text lacks a language, or a workflow drifts from the model/transitions); trainers edit in-app (RBAC `help`/`edit`) with history + revert; feedback + usage stats. |
 | 27 | [27_CUSTOMER_CODE_MERGE.md](27_CUSTOMER_CODE_MERGE.md) | 🔍 INVESTIGATION (2026-10-08) | B7 — duplicate customer codes: SOFTECH deactivation field `phcodestatus` ('0'), main-code link `pphcode`, points balance `localcustomerspoints`; 11.4k shared numbers; merge design pending approval. |
 | 26 | [26_WHATSAPP_REFILL_REMINDERS.md](26_WHATSAPP_REFILL_REMINDERS.md) | ✅ BUILT 2026-10-07 — sending OFF | Daily WhatsApp refill reminder (template `refill_reminder`) per due follow-up task; quick replies → `cc_whatsapp` reservation (pickup / delivery) or opt-out; review screen `/followups/reminders`. |
 | 25 | [25_REPLACEMENT_CASE_ORCHESTRATION.md](25_REPLACEMENT_CASE_ORCHESTRATION.md) | ✅ P0 + P1 BUILT; parallel entry (link native SOFTECH docs + daily check, §19) BUILT 2026-10-07 | Insurance replacement / client buy-back case orchestration (بدل الروشتة). Key finding: SOFTECH already models the entitlement as an A/P payable to virtual suppliers 4469–4472 (purchase 10 = credit, سداد voucher = redemption) — ≈23.8k cases / 15.06M EGP, ≈3.03M open. Case ledger = projection of `finance` A/P mirror; reuses invoices/pos_orders/recon writers. New `apps/lineage` + `apps/replacement`. Not built. |
@@ -80,6 +81,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Payments | `apps/payments` | PARTIAL | Payment tracking + audit |
 | Tasks | `apps/tasks` | PARTIAL | Operational tasks + schedules + dashboard |
 | Dashboard | `apps/dashboard` | PARTIAL | Home dashboard aggregations |
+| In-app help (دليل الاستخدام) | `apps/help` | COMPLETE | [28_IN_APP_HELP.md](28_IN_APP_HELP.md) — repo content + trainer edits, F1 panel + `/help` |
 | ERP connector | `apps/erp` | INTERNAL | SOFTECH connector helpers + ERP permission model |
 
 ---
@@ -140,6 +142,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Omni (unified inbox) | `/api/omni/` | omni — conversations + timeline + reply + accounts + wallboard + automations + analytics + ai-assist |
 | Social webhooks | `/api/social/` | social — Meta Graph (Messenger+IG), Telegram, TikTok(stub) inbound webhooks |
 | بدل الروشتة (replacement cases, doc 25) | `/api/replacement/` | replacement — `cases/` (list, universal `?q=`, filters) + `cases/summary/` + `cases/{id}/` (items/documents/ledger/exceptions/tree/reconciliation) + `cases/{id}/links/{cd}/decide/` + `cases/{id}/exceptions/{x}/decide/` + `cases/{id}/rebuild/` + `exceptions/` + `runs/` — RBAC module `replacement` (view/edit), branch-scoped |
+| Help (in-app guide) | `/api/help/` | help — index, `search/`, `screens/{key}/` (GET; PUT/DELETE trainer edit/revert), `revisions/`, `modules/{key}/`, `feedback/`, `stats/` — read open to all staff, edits need `help`/`edit` |
 | **Customer Portal** (external) | `/api/portal/` | portal — customer self-service; **separate magic-link auth, NOT staff JWT** |
 
 Full endpoint details: [04_API_REGISTRY.md](04_API_REGISTRY.md)
@@ -299,6 +302,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | Comms Analytics (Omni) | `/omni/analytics` | Omni / CEP | COMPLETE (Phase 5 — cross-channel BI) |
 | Audit | `/audit` | Audit | PARTIAL |
 | Account Security (2FA) | `/security` | Users (all roles) | COMPLETE |
+| Help guide (دليل الاستخدام) | `/help` (+ «؟ مساعدة»/F1 panel on every screen) | Help (all roles) | COMPLETE |
 | **Mobile — Rider** | `/rider` | Delivery (standalone) | COMPLETE |
 | **Mobile — Reservations** | `/m/reservations` | Reservations (standalone mobile) | COMPLETE |
 | **Mobile — New Reservation** | `/m/reservations/new` | Reservations (standalone mobile) | COMPLETE |

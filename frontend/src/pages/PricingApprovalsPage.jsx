@@ -26,6 +26,7 @@ import ImportModal from './pricing/ImportModal'
 import InsightsPanel from './pricing/InsightsPanel'
 import PriceHistoryModal from './pricing/PriceHistoryModal'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Field config ──────────────────────────────────────────────────────────────
 
@@ -434,6 +435,7 @@ export default function PricingApprovalsPage() {
   const [reviewTarget, setReviewTarget] = useState(null)
   const [historyItem, setHistoryItem]   = useState(null)   // { softech_id, name }
   const [tab, setTab]                   = useState('requests')  // requests | sla | replication | insights
+  useHelpTab(tab)
   const qc = useQueryClient()
 
   const rollback = useMutation({

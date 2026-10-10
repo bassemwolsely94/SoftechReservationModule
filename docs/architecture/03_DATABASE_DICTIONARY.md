@@ -3299,6 +3299,31 @@ Tables prefixed with their Django app name.
 
 ---
 
+### help_helpoverride  (trainer's edited help for one screen — apps/help)
+| Column | Type | Notes |
+|---|---|---|
+| screen_key | varchar(80) UNIQUE | help screen key, e.g. `reservations.board` |
+| data | jsonb | edited fields (title, summary, audience, steps, tabs, tips, faq, notes) — replaces the repo text for those fields |
+| base_hash | varchar(64) | hash of the repo text the trainer edited (detects later developer changes) |
+| updated_by_id | FK users_staffprofile | |
+| updated_at | timestamptz | |
+
+### help_helprevision  (immutable history of trainer saves / reverts)
+| Column | Type | Notes |
+|---|---|---|
+| screen_key | varchar(80) | indexed |
+| action | varchar(10) | `save` / `revert` |
+| before / after | jsonb | effective text before / after |
+| note | varchar(300) | reason |
+| staff_id | FK users_staffprofile | |
+| created_at | timestamptz | indexed |
+
+### help_helpfeedback  ("was this helpful?")
+`screen_key`, `tab`, `helpful` (bool), `comment`, `lang`, `staff_id`, `role`, `resolved`, `created_at`.
+
+### help_helpevent  (help usage)
+`kind` (`open` / `search`), `screen_key`, `tab`, `query`, `results` (search hits; 0 = nothing found), `staff_id`, `role`, `branch_id`, `created_at`.
+
 ## ERD Relationship Summary
 
 ```

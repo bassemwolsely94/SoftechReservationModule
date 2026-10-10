@@ -16,5 +16,11 @@ MODULE_FILES = [
     'general',
     'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
     'customers', 'vouchers', 'loyalty',
-    'catalog', 'chronic', 'batches', 'shortage',
+    'catalog', 'chronic', 'batches', 'shortage', 'replacement',
+    'callcenter', 'omni',
+    'purchasing', 'invoices', 'pricing',
+    'analytics', 'incentives',
+    'finance', 'insurance', 'commerce',
+    'hr',
+    'admin',
 ]

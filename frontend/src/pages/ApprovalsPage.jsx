@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { approvalsApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const STATUS_LABELS = {
   pending:   { label: 'بانتظار القرار', color: 'bg-amber-100 text-amber-800' },
@@ -82,6 +83,7 @@ function DecideModal({ request, onClose }) {
 
 export default function ApprovalsPage() {
   const [tab, setTab]         = useState('pending')
+  useHelpTab(tab)
   const [selected, setSelected] = useState(null)
 
   // Pending tab → only requests awaiting MY decision (includes multi-step in_review).

@@ -16,6 +16,7 @@ import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -1307,6 +1308,7 @@ export default function CallCenterPage() {
   const { user }   = useAuthStore()
   const qc         = useQueryClient()
   const [tab, setTab]           = useState('operator')  // 'operator' | 'manager'
+  useHelpTab(tab)
   const [searchMode, setSearchMode] = useState('phone') // 'phone' | 'name'
   const [phone, setPhone]       = useState('')
   const [searchPhone, setSearchPhone]         = useState('')

@@ -23,6 +23,7 @@ import {
   applyTheme, cacheTheme, MODE_OPTIONS,
 } from '../theme/theme'
 import { useThemeMode } from '../theme/useThemeMode'
+import useHelpTab from '../help/useHelpTab'
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 // Most labels come from the DB (Arabic), English shown as sub-labels where provided.
@@ -920,6 +921,7 @@ export default function SettingsPage() {
   const isAdmin    = user?.role === 'admin'
 
   const [activeTab, setActiveTab] = useState('general')
+  useHelpTab(activeTab)
   const [settings,  setSettings]  = useState([])
   const [dropdowns, setDropdowns] = useState({})
   const [ddKeys,    setDdKeys]    = useState([])

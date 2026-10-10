@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { auditApi } from '../api/client'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -471,6 +472,7 @@ function AbuseFlagsTab() {
 
 export default function AuditPage() {
   const [tab, setTab] = useState('flags')
+  useHelpTab(tab)
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">

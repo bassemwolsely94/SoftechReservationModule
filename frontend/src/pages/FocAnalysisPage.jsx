@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt  = (n, dp = 2) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 const fmtK = (n)          => n == null ? '—' : `${(Number(n) / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}K`
@@ -73,6 +74,7 @@ function SimpleBarChart({ data, labelKey, valueKey, colorClass, maxValue }) {
 export default function FocAnalysisPage() {
   const { params } = useProcurementFilters()
   const [activeTab, setActiveTab] = useState('foc')
+  useHelpTab(activeTab)
 
   const focQ = useQuery({
     queryKey: ['foc-analysis', params],

@@ -42,6 +42,10 @@ For every batch of work:
 3. Make the change.
 4. Add/update migrations if needed.
 5. Add/update tests.
+5b. Update the in-app help (`apps/help/content/<module>.py`, Arabic + English) for every new or
+    changed screen, tab or status, and bump that screen's `updated` date; pages with tabs call
+    `useHelpTab(tab)`. `apps/tests/test_help.py` fails when a route has no help. See
+    docs/architecture/28_IN_APP_HELP.md.
 6. Run relevant tests, lint, and build checks.
 7. Check for regressions in existing functionality.
 8. Summarize the result.

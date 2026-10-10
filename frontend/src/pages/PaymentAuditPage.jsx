@@ -5,6 +5,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { paymentAuditApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const EXCEPTION_TYPE_LABELS = {
   unrecorded:         'غير مسجل',
@@ -114,6 +115,7 @@ function ResolveModal({ exception, onClose }) {
 export default function PaymentAuditPage() {
   const qc = useQueryClient()
   const [tab, setTab]       = useState('exceptions')
+  useHelpTab(tab)
   const [showUpload, setShowUpload] = useState(false)
   const [resolving, setResolving]   = useState(null)
 

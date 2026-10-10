@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { procurementIntelApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt  = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct  = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
@@ -385,6 +386,7 @@ function AlertsTab() {
 
 export default function ProcurementOptimizationPage() {
   const [activeTab, setActiveTab] = useState('optimization')
+  useHelpTab(activeTab)
   const [days, setDays]           = useState(90)
 
   const TABS = [

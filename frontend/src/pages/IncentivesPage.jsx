@@ -16,6 +16,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { incentivesApi, usersApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -2997,6 +2998,7 @@ function SuggestionsTab({ selectedProgram }) {
 
 export default function IncentivesPage() {
   const [activeTab, setActiveTab]             = useState('programs')
+  useHelpTab(activeTab)
   const [selectedProgram, setSelectedProgram] = useState(null)
 
   const handleSelectProgram = (p) => {

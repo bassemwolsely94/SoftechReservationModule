@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['spike-candidates', 'spike-summary'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
@@ -141,6 +142,7 @@ function SpikeTab() {
 
 export default function CashOptimizationPage() {
   const [tab, setTab] = useState('spike')
+  useHelpTab(tab)
   return (
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-1">💰 تحسين الكاش والمخزون</h1>

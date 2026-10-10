@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { refillRemindersApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const STATUS_TONE = { sent: 'bg-sky-50 text-sky-700', replied: 'bg-emerald-50 text-emerald-700', failed: 'bg-red-50 text-red-700' }
 const errMsg = (e) => e?.response?.data?.detail || e?.message || 'حدث خطأ'
@@ -27,6 +28,7 @@ export default function RefillRemindersPage() {
   const [ov, setOv] = useState(null)
   const [pv, setPv] = useState(null)
   const [view, setView] = useState('log')
+  useHelpTab(view)
   const [error, setError] = useState(null)
   const [running, setRunning] = useState(false)
   const [runMsg, setRunMsg] = useState('')

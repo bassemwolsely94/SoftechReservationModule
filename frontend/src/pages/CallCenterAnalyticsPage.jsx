@@ -19,6 +19,7 @@ import { callCenterApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -680,6 +681,7 @@ const TABS = [
 
 export default function CallCenterAnalyticsPage() {
   const [activeTab, setActiveTab] = useState('kpi')
+  useHelpTab(activeTab)
   const { user } = useAuthStore()
 
   // Access guard — supervisor/admin/quality_manager only

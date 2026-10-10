@@ -107,6 +107,12 @@ SCREENS = [
             'Review of the automatic daily reminders: what was sent, who replied and what they chose (branch pickup, delivery, stop), and reservations created from replies, '
             'with a preview of the "next run" and why any customer is skipped. Actual sending is switched on in system settings; when off, the screen is a preview only.'),
         'audience': T('مركز الاتصال والمشرفون.', 'Call center and supervisors.'),
+        'tabs': [
+            {'key': 'log', 'title': T('سجل التذكيرات', 'Reminder log'),
+             'body': T('كل رسالة أُرسلت: العميل، الرقم، الفرع، موعد الصرف، الحالة، رد العميل، والحجز الناتج.', 'Every message sent: customer, number, branch, refill date, status, the customer\'s reply and the resulting reservation.')},
+            {'key': 'preview', 'title': T('التشغيل القادم', 'Next run'),
+             'body': T('من سيصله تذكير في التشغيل القادم ومن لن يصله ولماذا (مثلاً أوقف التذكيرات، بلا رقم، أُرسل له مؤخراً).', 'Who will get a reminder in the next run and who will not, and why (e.g. opted out, no number, reminded recently).')},
+        ],
         'steps': [
             T('راجع المؤشرات: أُرسل خلال 30 يوماً، نسبة الرد، تجهيز في الفرع، توصيل، حجوزات أُنشئت، فشل، وأوقفوا التذكيرات.',
               'Check the numbers: sent in 30 days, reply rate, branch pickup, delivery, reservations created, failed, and opted out.'),

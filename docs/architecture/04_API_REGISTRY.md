@@ -544,6 +544,23 @@ Default pagination: CursorPagination (50 items)
 | `/api/pbx/queues/`, `sessions/` (`{id}/`) | GET | Queues + call sessions |
 | `/api/pbx/live/`, `spy/`, `recordings/{id}/` | GET, POST | Live wallboard, spy/whisper, recordings |
 
+## HELP  `/api/help/`  *(in-app user guide — reading open to all staff; edits need `help`/`edit`)*
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/help/` | GET | Index: groups, modules, screens (key, routes, title, tab keys, updated), `can_edit` |
+| `/api/help/search/?q=` | GET | Search all help (Arabic-normalized); logs the query + hit count (`log=0` to skip) |
+| `/api/help/modules/{key}/` | GET | Module role + workflows + its screens |
+| `/api/help/screens/{key}/?tab=` | GET | One screen's effective help (+ module workflows, related, siblings, override info; `base` for editors). Logs an `open` event (`log=0` to skip) |
+| `/api/help/screens/{key}/` | PUT | Trainer save `{data, note}` → `HelpOverride` + `HelpRevision` (help/edit) |
+| `/api/help/screens/{key}/` | DELETE | Revert to the repo text (help/edit) |
+| `/api/help/screens/{key}/revisions/` | GET | Edit history (help/edit) |
+| `/api/help/feedback/` | POST / GET | Any staff: vote + comment. GET (help/edit): feedback list (`open=1`) |
+| `/api/help/feedback/{id}/resolve/` | POST | Mark a comment handled (help/edit) |
+| `/api/help/stats/?days=` | GET | Trainers' dashboard: opens by screen/role, votes, searches (help/edit) |
+
+---
+
 ## OMNI  `/api/omni/`  *(unified inbox / CEP)*
 
 | Endpoint | Method | Purpose |

@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { campaignsApi, branchesApi, itemsApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -731,6 +732,7 @@ function MessagesTab({ campaign }) {
 // ── Campaign detail panel ─────────────────────────────────────────────────────
 function CampaignDetail({ campaignId, onClose }) {
   const [tab, setTab] = useState('overview')
+  useHelpTab(tab)
   const [editing, setEditing] = useState(false)
   const qc = useQueryClient()
 

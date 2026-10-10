@@ -19,6 +19,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi, branchesApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -1423,6 +1424,7 @@ export default function PurchasingDashboard() {
   const canRunEngine = isAdmin || user?.role === 'purchasing' || !!user?.can_run_engine
 
   const [viewTab,   setViewTab]   = useState('agg')
+  useHelpTab(viewTab)
   const [abcFilter, setAbcFilter] = useState('all')
   const [search,    setSearch]    = useState('')
   const [ordering,  setOrdering]  = useState('-total_monthly_value')

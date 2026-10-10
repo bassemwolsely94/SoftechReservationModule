@@ -9,6 +9,7 @@ import { analyticsApi } from '../api/client'
 import AnalyticsFilterPanel, { filtersToParams, defaultFilters } from '../components/AnalyticsFilterPanel'
 import DataTable from '../components/DataTable'
 import RefreshButton from '../components/RefreshButton'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${fmt(n, 1)}%`
@@ -120,6 +121,7 @@ const BRANCH_COLS = [
 export default function PerformanceDashboard() {
   const [filters,   setFilters]   = useState(defaultFilters())
   const [activeTab, setActiveTab] = useState('employees')
+  useHelpTab(activeTab)
 
   const { data: opts } = useQuery({
     queryKey: ['analytics-filter-options'],

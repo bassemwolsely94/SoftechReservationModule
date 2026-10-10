@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export default function PermissionsMatrixPage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   // 'modules' = module/action matrix · 'notifiers' = notification visibility
   const [view, setView] = useState('modules')
+  useHelpTab(view)
   const [localNotifiers, setLocalNotifiers] = useState({})   // {role: {category: bool}}
   const [notifierDirty, setNotifierDirty] = useState(new Set())  // keys: role::category
 

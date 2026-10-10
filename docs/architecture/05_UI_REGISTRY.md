@@ -502,6 +502,22 @@ routing note above. Reuse `CustomerSearchWidget`, `ItemSearchWidget`, `StatusBad
 | `RefreshButton.jsx` | Data refresh trigger | Tables |
 | `ui.jsx` | Input, Btn, Modal, Badge, etc. | All screens |
 
+## In-app help (دليل الاستخدام)
+
+| Piece | File | Notes |
+|---|---|---|
+| Help button | `help/HelpButton.jsx` | «؟ مساعدة» in the desktop header; `variant="mobile"` in `MobileLayout` / `RiderLayout`. Yellow dot = this screen's help changed since last read |
+| Help panel | `help/HelpPanel.jsx` | F1 / button / `window` event `help:open {key?, tab?}`. Docked (non-modal), ar/en toggle, search, feedback, trainer editor |
+| Article | `help/HelpArticle.jsx` | Shared by panel + `/help`; current tab marked «أنت هنا» |
+| Editor | `help/HelpEditor.jsx` | Trainers (help/edit): bilingual fields, history, original text, revert |
+| Help center | `pages/HelpCenterPage.jsx` (`/help`) | Browse modules · what's new · for trainers |
+| Tab hook | `help/useHelpTab.js` | `useHelpTab(tab)` in any page/drawer with tabs (stack: innermost wins) |
+| Route → screen | `help/useHelpIndex.js` | react-router `matchPath` over the index; most specific route wins |
+
+Ctrl+K also returns help articles («دليل الاستخدام» section) and has a «شرح هذه الشاشة (F1)» command.
+
+---
+
 ## WebSocket Hooks
 
 | Hook | Channel | Purpose |

@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastingApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 function KpiCard({ label, value, sub, color = 'text-gray-900' }) {
   return (
@@ -26,6 +27,7 @@ const STATUS_COLORS = {
 export default function ForecastingPage() {
   const qc   = useQueryClient()
   const [tab, setTab] = useState('runs')
+  useHelpTab(tab)
   const [triggerMsg, setTriggerMsg] = useState(null)
 
   const { data: runsData, isLoading: runsLoading } = useQuery({

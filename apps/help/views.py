@@ -27,6 +27,11 @@ def _overrides():
     return {o.screen_key: o for o in HelpOverride.objects.select_related('updated_by__user')}
 
 
+def _staff_name(staff):
+    user = getattr(staff, 'user', None)
+    return (user.get_full_name() or user.username) if user else ''
+
+
 def _updated(screen, override):
     """Date the text last changed (repo date, or the trainer's save if newer)."""
     d = screen.get('updated') or ''
@@ -109,8 +114,7 @@ def _screen_payload(request, key, s, modules, screens, override):
     if override is not None:
         payload['override'] = {
             'updated_at': override.updated_at,
-            'updated_by': getattr(getattr(override.updated_by, 'user', None), 'get_full_name', lambda: '')()
-                          or getattr(getattr(override.updated_by, 'user', None), 'username', ''),
+            'updated_by': _staff_name(override.updated_by),
             'base_changed': override.base_hash != registry.base_hash(s),
         }
     if can_edit:
@@ -222,7 +226,7 @@ def screen_revisions(request, key):
     rows = HelpRevision.objects.filter(screen_key=key).select_related('staff__user')[:50]
     return Response([{
         'id': r.id, 'action': r.action, 'note': r.note, 'created_at': r.created_at,
-        'staff': (r.staff.user.get_full_name() or r.staff.user.username) if r.staff_id else '',
+        'staff': _staff_name(r.staff),
         'before': r.before, 'after': r.after,
     } for r in rows])
 
@@ -271,7 +275,7 @@ def feedback(request):
         'id': f.id, 'screen_key': f.screen_key, 'tab': f.tab, 'helpful': f.helpful,
         'comment': f.comment, 'lang': f.lang, 'role': f.role, 'resolved': f.resolved,
         'created_at': f.created_at,
-        'staff': (f.staff.user.get_full_name() or f.staff.user.username) if f.staff_id else '',
+        'staff': _staff_name(f.staff),
     } for f in qs[:200]])
 
 

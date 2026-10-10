@@ -10,6 +10,7 @@ import AnalyticsFilterPanel, { filtersToParams, defaultFilters } from '../compon
 import ItemOperationalFiltersBar, { emptyItemFilters, buildItemParams } from '../components/ItemOperationalFiltersBar'
 import DataTable from '../components/DataTable'
 import RefreshButton from '../components/RefreshButton'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${fmt(n, 1)}%`
@@ -179,6 +180,7 @@ export default function SalesDashboard() {
   const [filters,     setFilters]     = useState(defaultFilters())
   const [itemFilters, setItemFilters] = useState(emptyItemFilters())
   const [activeTab,   setActiveTab]   = useState('overview')
+  useHelpTab(activeTab)
 
   const { data: opts } = useQuery({
     queryKey: ['analytics-filter-options'],

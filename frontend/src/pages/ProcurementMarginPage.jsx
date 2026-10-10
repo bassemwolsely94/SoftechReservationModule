@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { procurementIntelApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct = (n, d = 1) => n == null ? '—' : `${Number(n).toFixed(d)}%`
@@ -268,6 +269,7 @@ function PriceControlTab() {
 
 export default function ProcurementMarginPage() {
   const [activeTab, setActiveTab] = useState('margin')
+  useHelpTab(activeTab)
   const [days, setDays]           = useState(90)
 
   const TABS = [

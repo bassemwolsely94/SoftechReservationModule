@@ -1,0 +1,103 @@
+from . import T
+
+MODULE = {
+    'key': 'admin', 'group': 'admin', 'icon': '⚙️',
+    'title': T('الإدارة والنظام', 'Administration & system'),
+    'summary': T(
+        'إدارة المستخدمين وأدوارهم وفروعهم، مصفوفة الصلاحيات (ما يراه ويفعله كل دور في كل موديول) والصلاحيات الموروثة من مجموعات SOFTECH، '
+        'إعدادات النظام، حالة المزامنة مع SOFTECH، وسجل المراجعة مع كشف الأنماط المشبوهة. الأدوار: مدير، مشرف، صيدلي، مندوب مبيعات، كول سنتر، مشتريات، توصيل، جودة، مشاهد فقط.',
+        'Manage users, their roles and branches, the permissions matrix (what each role sees and does in each module) and permissions inherited from SOFTECH groups, '
+        'system settings, the SOFTECH sync status, and the audit log with suspicious-pattern detection. Roles: admin, supervisor, pharmacist, salesperson, call center, purchasing, delivery, quality, viewer.'),
+}
+
+SCREENS = [
+    {
+        'key': 'admin.users',
+        'routes': ['/users'],
+        'title': T('إدارة المستخدمين', 'User management'),
+        'summary': T('إنشاء المستخدمين وتعديلهم وتعطيلهم، وإعادة تعيين كلمة المرور، وسجل نشاط كل مستخدم (دخول، تغيير دور أو فرع أو صلاحيات).', 'Create, edit and deactivate users, reset passwords, and each user\'s activity log (logins, role, branch or permission changes).'),
+        'audience': T('المدير (والمشرف للعرض).', 'Admins (supervisors can view).'),
+        'steps': [
+            T('«إضافة مستخدم»: ابحث عن اسم المستخدم في SOFTECH ليُربط به، ثم كلمة المرور والاسم والهاتف وكود الموارد البشرية.', '"Add user": search the SOFTECH username to link, then password, name, phone and HR code.'),
+            T('حدد الدور والفرع الأساسي، وصلاحيات الوصول: وصول لكل الفروع، قنوات البيع المسموح بها في نقطة البيع (فارغ = كلها)، رؤية عملاء كل الفروع، رؤية رقم هاتف العميل.', 'Set the role and main branch, and access: all branches, allowed POS sales channels (empty = all), see customers of all branches, see customer phone numbers.'),
+            T('«الحساب نشط» لإيقاف أو تفعيل الدخول بدون حذف المستخدم.', '"Account active" stops or allows login without deleting the user.'),
+        ],
+        'tips': [T('ربط المستخدم بمستخدم SOFTECH ضروري للاعتمادات التي تُنفَّذ في SOFTECH باسمه.', 'Linking the user to a SOFTECH user is required for approvals executed in SOFTECH under their name.')],
+        'related': ['admin.permissions', 'admin.erp_permissions'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'admin.permissions',
+        'routes': ['/permissions'],
+        'title': T('مصفوفة الصلاحيات', 'Permissions matrix'),
+        'summary': T('لكل دور × موديول × إجراء (عرض، إنشاء، تعديل، حذف، اعتماد، تصدير، إسناد، إنهاء): مسموح أو ممنوع. السيرفر يطبق نفس المصفوفة على كل طلب، والقائمة والأزرار تُخفى حسبها. المدير له وصول كامل غير قابل للتعديل.',
+                     'For each role × module × action (view, create, edit, delete, approve, export, assign, finalize): allowed or denied. The server applies the same matrix to every request, and menus and buttons hide accordingly. Admins have full, non-editable access.'),
+        'audience': T('المدير فقط.', 'Admins only.'),
+        'tabs': [
+            {'key': 'modules', 'title': T('صلاحيات الوحدات', 'Module permissions'), 'body': T('اختر الدور ← فعّل/أوقف كل إجراء لكل موديول، أو «منح/سحب الكل» ← «حفظ التغييرات». موديول «دليل الاستخدام» بإجراء «تعديل» = من يستطيع تعديل الشرح (المدربون).', 'Pick the role → toggle each action per module, or "grant/revoke all" → "Save changes". The "Help guide" module with the "edit" action = who may edit the help (trainers).')},
+            {'key': 'notifiers', 'title': T('ظهور الإشعارات', 'Notification visibility'), 'body': T('لكل دور ولكل نوع إشعار: إظهار (يُنشأ ويظهر)، كتم (يُنشأ لكن لا يظهر)، إيقاف (لا يُنشأ). الافتراضي يتبع صلاحية «عرض» للموديول.', 'Per role and notification type: show (created and shown), mute (created, not shown), off (not created). The default follows the module\'s "view" permission.')},
+        ],
+        'related': ['admin.users', 'admin.erp_permissions'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'admin.erp_permissions',
+        'routes': ['/erp-permissions'],
+        'title': T('صلاحيات SOFTECH الموروثة', 'Inherited SOFTECH permissions'),
+        'summary': T('تُشتق صلاحيات الموديولات تلقائياً من مجموعة المستخدم في SOFTECH (SOFTECH هو المصدر، يُعاد البناء يومياً). هنا تراجع وتعدّل طريقة الاشتقاق.', 'Module permissions are derived automatically from the user\'s SOFTECH group (SOFTECH is the source, rebuilt daily). Here you review and adjust the derivation.'),
+        'audience': T('المدير فقط.', 'Admins only.'),
+        'tabs': [
+            {'key': 'map', 'title': T('ربط الأنظمة بالوحدات', 'System → module map'), 'body': T('أي نظام في SOFTECH يعطي أي موديول هنا؛ أضف أو احذف ربطاً وأكّد الربط الغامض.', 'Which SOFTECH system grants which module here; add or remove a mapping and confirm ambiguous ones.')},
+            {'key': 'groups', 'title': T('صلاحيات المجموعات', 'Group permissions'), 'body': T('لكل مجموعة SOFTECH: الموديولات المشتقة (عرض/تعديل/رؤية التكلفة والمال).', 'Per SOFTECH group: the derived modules (view/edit/see cost and money).')},
+            {'key': 'systems', 'title': T('أنظمة Softech', 'SOFTECH systems'), 'body': T('مرجع أنظمة SOFTECH وعدد شاشاتها وهل هي مربوطة.', 'Reference of SOFTECH systems, their screen counts and whether they are mapped.')},
+        ],
+        'steps': [T('«إعادة الاشتقاق الآن» بعد أي تعديل لتطبيقه فوراً.', '"Re-derive now" after a change to apply it immediately.')],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'admin.settings',
+        'routes': ['/settings'],
+        'title': T('إعدادات النظام', 'System settings'),
+        'summary': T('كل إعدادات النظام في تبويبات.', 'All system settings in tabs.'),
+        'audience': T('المدير (والصيدلي لإعدادات فرعه).', 'Admins (pharmacists for their branch settings).'),
+        'tabs': [
+            {'key': 'general', 'title': T('⚙️ عام', '⚙️ General'), 'body': T('بيانات الصيدلية (الاسم، الشعار، الموقع، واتساب الرئيسي، أرقام الاتصال — تظهر في الإيصالات ورسائل واتساب) ولغة الواجهة.', 'Pharmacy details (name, tagline, website, main WhatsApp, contact numbers — shown on receipts and WhatsApp messages) and the interface language.')},
+            {'key': 'appearance', 'title': T('🎨 المظهر', '🎨 Appearance'), 'body': T('ألوان الهوية: الأساسي (الأزرار والقائمة)، الثانوي، ولون التنبيه.', 'Brand colours: primary (buttons and menu), secondary, and the alert colour.')},
+            {'key': 'branches', 'title': T('🏪 الفروع', '🏪 Branches'), 'body': T('لكل فرع: يعمل / موقوف مؤقتاً / مغلق، الميزات المتاحة (الحجوزات، التحويلات، الجرد، النواقص…)، البيانات، وإحداثيات الموقع (لازمة لتحقق الحضور والاستلام الجغرافي — «استخدم موقعي الحالي» من داخل الفرع).', 'Per branch: working / paused / closed, enabled features (reservations, transfers, count, shortages…), details, and location coordinates (needed for attendance and pickup geo-checks — "use my current location" from inside the branch).')},
+            {'key': 'reservations', 'title': T('📋 الحجوزات', '📋 Reservations'), 'body': T('معاملات الحجوزات (المدد، التنبيهات، الحالات العالقة…).', 'Reservation parameters (durations, alerts, stuck thresholds…).')},
+            {'key': 'transfers', 'title': T('🔀 التحويل', '🔀 Transfers'), 'body': T('قواعد التحويلات.', 'Transfer rules.')},
+            {'key': 'notifications', 'title': T('🔔 الإشعارات', '🔔 Notifications'), 'body': T('مفاتيح تشغيل أنواع الإشعارات.', 'On/off gates for notification types.')},
+            {'key': 'sync', 'title': T('⟳ المزامنة', '⟳ Sync'), 'body': T('جدول المزامنة مع SOFTECH وحجم الدفعات.', 'The SOFTECH sync schedule and batch sizes.')},
+            {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'), 'body': T('إعدادات رموز التحقق وحدود القيم.', 'OTP settings and value limits.')},
+            {'key': 'dropdowns', 'title': T('📝 القوائم المنسدلة', '📝 Dropdowns'), 'body': T('خيارات القوائم المنسدلة في الشاشات (قنوات الحجز، أولويات الحجز، حالات التحويل…): أضف خياراً (تسمية عربية، قيمة، أيقونة) أو عطّله.', 'The dropdown options used in screens (reservation channels, priorities, transfer statuses…): add an option (Arabic label, value, icon) or disable it.')},
+        ],
+        'tips': [T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.')],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'admin.sync',
+        'routes': ['/sync'],
+        'title': T('المزامنة مع SOFTECH', 'SOFTECH sync'),
+        'summary': T('حالة اتصال الشبكة (المركز الرئيسي + كل الفروع: متصل، غير متصل، منقطع باستمرار) وحالة المزامنة: آخر مزامنة ومدتها، هل المجدول يعمل، وسجل كل عملية. تتحدث تلقائياً كل 5 دقائق.',
+                     'Network connection status (HQ + every branch: connected, disconnected, persistently down) and sync status: last sync and duration, whether the scheduler runs, and a log of every run. Refreshes every 5 minutes.'),
+        'audience': T('المدير فقط.', 'Admins only.'),
+        'steps': [
+            T('«فحص الآن» لاختبار اتصال نقطة. «مزامنة الآن» لمزامنة فورية، و«مزامنة كاملة (90 يوم)» لإعادة بناء أوسع.', '"Check now" tests a node\'s connection. "Sync now" runs an immediate sync, "Full sync (90 days)" a wider rebuild.'),
+            T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة الخادم.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
+        ],
+        'tips': [T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.')],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'admin.audit',
+        'routes': ['/audit'],
+        'title': T('سجلات المراجعة والمراقبة', 'Audit & monitoring'),
+        'summary': T('تتبع كل إجراء مهم وكشف الأنماط المشبوهة لحماية العمليات.', 'Track every important action and detect suspicious patterns to protect operations.'),
+        'audience': T('المدير والمشرف ومدير الجودة.', 'Admins, supervisors and the quality manager.'),
+        'tabs': [
+            {'key': 'flags', 'title': T('الإشارات المشبوهة', 'Suspicious flags'), 'body': T('أنماط يكشفها النظام (إلغاءات متكررة، تعديلات متكررة، عدم تطابق ERP، نشاط خارج الدوام) بدرجة خطورتها. «مراجعة» ← القرار: راجعت، تجاهل، أو تصعيد مع ملاحظة. «فحص الآن» لتشغيل الكشف.', 'Patterns the system detects (repeated cancellations, repeated edits, ERP mismatch, out-of-hours activity) by severity. "Review" → decision: reviewed, ignore or escalate with a note. "Scan now" runs detection.')},
+            {'key': 'logs', 'title': T('سجل الإجراءات', 'Action log'), 'body': T('من فعل ماذا ومتى ومن أي عنوان IP، مع التغييرات قبل وبعد — صفِّ بنوع الإجراء (إنشاء حجوزات، تغيير حالة، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة…).', 'Who did what, when and from which IP, with before/after changes — filter by action (reservations created, status changes, transfer approvals, logins, failed attempts, sync…).')},
+        ],
+        'updated': '2026-10-10',
+    },
+]

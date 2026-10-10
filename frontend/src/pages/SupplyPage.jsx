@@ -23,6 +23,7 @@ import IsrFulfilmentTab from './supply/IsrFulfilmentTab'
 import BranchRequestsTab from './supply/BranchRequestsTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
+import useHelpTab from '../help/useHelpTab'
 
 const STATUS = {
   proposed:  ['مقترح',  'bg-amber-100 text-amber-800 border-amber-200'],
@@ -63,6 +64,7 @@ export default function SupplyPage() {
   const fromUrl = params.get('tab')
   const tab = valid.includes(fromUrl) ? fromUrl
     : (valid.includes(readLastTab()) ? readLastTab() : 'inbox')
+  useHelpTab(tab)
   const setTab = (k) => {
     try { localStorage.setItem(TAB_KEY, k) } catch { /* storage blocked — URL still works */ }
     setParams(p => { const n = new URLSearchParams(p); n.set('tab', k); return n }, { replace: true })

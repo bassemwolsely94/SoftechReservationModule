@@ -19,6 +19,7 @@ import { approvalsApi, pricingApprovalsApi } from '../../api/client'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../../help/useHelpTab'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -67,6 +68,7 @@ const TABS = [
 export default function MobileApprovalsPage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState('operational')
+  useHelpTab(tab)
 
   const opQuery = useQuery({
     queryKey: ['m-approvals-op'],
