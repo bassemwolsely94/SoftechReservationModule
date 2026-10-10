@@ -443,7 +443,7 @@ export default function ReservationsKanban() {
           <div className="flex-1" />
 
           {/* View mode toggle */}
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm">
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm" data-tour="reservations-board-view">
             <button
               onClick={() => setViewMode('kanban')}
               className={`px-3 py-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
@@ -463,6 +463,7 @@ export default function ReservationsKanban() {
           <CanDo module="reservations" action="create">
             <button
               onClick={() => navigate('/reservations/new')}
+              data-tour="reservations-board-new"
               className="bg-brand-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-brand-700 transition-colors whitespace-nowrap"
             >
               + حجز جديد
@@ -477,6 +478,7 @@ export default function ReservationsKanban() {
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-blue-300"
             placeholder="بحث..."
             aria-label="بحث في الحجوزات"
+            data-tour="reservations-board-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -509,6 +511,7 @@ export default function ReservationsKanban() {
           {/* Status filter (more useful in list mode) */}
           <select
             aria-label="تصفية حسب الحالة"
+            data-tour="reservations-board-status"
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
@@ -564,7 +567,7 @@ export default function ReservationsKanban() {
         />
       ) : (
         /* Kanban board */
-        <div className="flex-1 overflow-x-auto">
+        <div className="flex-1 overflow-x-auto" data-tour="reservations-board-columns">
           <div className="flex gap-3 p-4 h-full" style={{ width: 'max-content', minWidth: '100%' }}>
             {!hasData ? (
               <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">

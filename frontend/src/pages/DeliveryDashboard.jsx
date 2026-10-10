@@ -811,7 +811,7 @@ export default function DeliveryDashboard() {
           <p className="text-sm text-gray-500 mt-0.5">إدارة طلبات التوصيل — دورة الحياة الكاملة</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowNew(true)}
+          <button onClick={() => setShowNew(true)} data-tour="delivery-dashboard-new"
             className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 flex items-center gap-2">
             + طلب جديد
           </button>
@@ -820,7 +820,7 @@ export default function DeliveryDashboard() {
 
       {/* KPI Cards */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3" data-tour="delivery-dashboard-kpis">
           <KpiCard label="إجمالي اليوم"      value={fmt(summary.total_today)}            color="brand"  icon="📦" />
           <KpiCard label="في الانتظار"        value={fmt(summary.pending)}               color="gray"   icon="⏳" />
           <KpiCard label="مكلَّف"             value={fmt(summary.assigned)}              color="blue"   icon="👤" />
@@ -841,10 +841,10 @@ export default function DeliveryDashboard() {
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         <div className="flex flex-wrap gap-3 items-center">
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input value={search} onChange={e => setSearch(e.target.value)} data-tour="delivery-dashboard-search"
             placeholder="بحث — اسم، هاتف، رقم طلب..."
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none min-w-52" />
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} data-tour="delivery-dashboard-branch"
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
             <option value="">كل الفروع</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
@@ -876,7 +876,7 @@ export default function DeliveryDashboard() {
               className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand-400 focus:outline-none" />
           </div>
         )}
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-status">
           {STATUS_FILTERS.map(f => (
             <button key={f.value} onClick={() => setStatusFilter(f.value)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
@@ -889,7 +889,7 @@ export default function DeliveryDashboard() {
       </div>
 
       {/* Orders list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="delivery-dashboard-orders">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-600">{orders.length} طلب</span>
         </div>

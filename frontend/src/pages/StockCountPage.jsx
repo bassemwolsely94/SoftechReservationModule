@@ -328,18 +328,19 @@ function SessionsTab({ onSelect, refresh }) {
     <div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
+          data-tour="stockcount-sessions-search"
           placeholder="بحث بالاسم أو الفرع..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 200, border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}
         />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} data-tour="stockcount-sessions-status"
           style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 12px' }}>
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <CanDo module="admin" action="create">
-          <button onClick={() => setShowCreate(true)} style={{
+          <button onClick={() => setShowCreate(true)} data-tour="stockcount-sessions-new" style={{
             padding: '8px 20px', borderRadius: 6, border: 'none',
             background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
           }}>
@@ -356,7 +357,7 @@ function SessionsTab({ onSelect, refresh }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} data-tour="stockcount-sessions-list">
         {sessions.map(s => (
           <div key={s.id} onClick={() => onSelect(s)} style={{
             border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px',
@@ -882,7 +883,7 @@ export default function StockCountPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 32px', display: 'flex', gap: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 32px', display: 'flex', gap: 0 }} data-tour="stockcount-sessions-tabs">
         {TABS.map(tab => {
           const disabled = tab.key !== 'sessions' && !selectedSession;
           return (

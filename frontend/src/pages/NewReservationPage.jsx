@@ -491,7 +491,7 @@ export default function NewReservationPage() {
       <div className="max-w-2xl mx-auto px-6 py-6 space-y-5">
 
         {/* ── Customer section ─────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5" data-tour="reservations-new-customer">
           <h2 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
             <span className="text-brand-600">👤</span> العميل
             <span className="text-xs text-gray-400 font-normal">(اختياري)</span>
@@ -504,7 +504,7 @@ export default function NewReservationPage() {
         </div>
 
         {/* ── Item search ─────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5" data-tour="reservations-new-item">
           <h2 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
             <span className="text-brand-600">💊</span> الصنف *
           </h2>
@@ -607,7 +607,7 @@ export default function NewReservationPage() {
         )}
 
         {/* ── Core details ──────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4" data-tour="reservations-new-details">
           <h2 className="font-semibold text-gray-700 flex items-center gap-2">
             <span className="text-brand-600">📋</span> تفاصيل الحجز
           </h2>
@@ -638,7 +638,7 @@ export default function NewReservationPage() {
             <label className="label">قناة الطلب (نوع POS)</label>
 
             {/* Level 1 — POS type */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2" data-tour="reservations-new-channel">
               {[
                 { value: 'cash_sales',     icon: '💵', label: 'بيع نقدي', sub: 'كاش (F2)' },
                 { value: 'home_delivery',  icon: '🚚', label: 'توصيل',    sub: 'Home Delivery (F3)' },
@@ -702,7 +702,7 @@ export default function NewReservationPage() {
           </div>
 
           {/* Contact */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4" data-tour="reservations-new-contact">
             <ChannelContactField
               channel={form.channel}
               contractSubtype={form.contract_subtype}
@@ -825,6 +825,7 @@ export default function NewReservationPage() {
           </button>
           <button
             onClick={() => handleSubmit(false)}
+            data-tour="reservations-new-submit"
             disabled={submitting}
             className="btn-primary flex-1 disabled:opacity-50 py-3 text-base"
           >

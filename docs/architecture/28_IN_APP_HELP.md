@@ -48,6 +48,33 @@ must not get wrong → add a quiz question.
 - Opened from «طباعة دليلي» (My training path) and «طباعة دليل الموديول» (module page).
 - Data: `GET /api/help/manual/`. Quizzes are not printed (taken in-app so results are recorded).
 
+## «اعرض لي» guided tours (built 2026-10-10)
+
+- A screen's help may have `tour: [{'target': '<data-tour id>', 'text': T(…)}]`. «👆 اعرض لي» (panel
+  footer, or «اعرض لي على الشاشة» in /help, which opens the screen first) spotlights each real
+  element (`[data-tour="…"]`) with a card: «التالي» / «السابق» / «إنهاء», Enter / Esc.
+- Calm: the dimmed mask ignores clicks (the highlighted button can be pressed for real); leaving the
+  screen ends the tour; a step whose element is not visible (other tab, role, nothing selected)
+  still shows its text with a note. Runner: `frontend/src/help/Tour.jsx` (mounted by `HelpPanel`).
+- Built for: POS, reservations board + new, demand list, transfers list + new, stock count,
+  follow-ups, delivery dashboard, customer detail.
+- Anchor ids: `<screen key with - instead of .>-<name>`. **Test:** every tour target must exist as
+  `data-tour="…"` in `frontend/src` — renaming/removing an anchor fails CI.
+- Tour text is repo-only for now (not in the trainer editor).
+
+## «اسأل النظام» (built 2026-10-10)
+
+- Type a question in the panel / help-center search box → «💬 اسأل النظام» (one click, never while
+  typing). `POST /api/help/ask/`.
+- `registry.retrieve()` picks the 5 best articles (sentence-friendly: ignores common words and
+  prefixes; the current screen gets a boost). `apps/help/ask.py` sends **only those articles** to
+  Gemini with strict rules: answer only from them, say when they don't cover it, never state
+  prices / discounts / totals / doses / substitutes or approve anything, cite the screens used.
+  Citations not among the sent articles are dropped. The answer always shows its source screens.
+- No model configured or it fails → the matching articles are shown instead (still useful).
+- 30 questions per person per hour. Every question is logged (`HelpEvent kind=ask`, `results=0`
+  when unanswered) and listed for trainers — unanswered questions = help that needs writing.
+
 ## Trainers (help/edit)
 
 - RBAC module `help`, action `edit` (Permissions Matrix). Admin always; seeds give it to
@@ -111,6 +138,7 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
     'faq': [{'q': T('…', '…'), 'a': T('…', '…')}],
     'related': ['other.screen'],
     'workflows': ['key'],              # optional: only these module workflows
+    'tour': [{'target': 'module-screen-btn', 'text': T('…', '…')}],  # optional «اعرض لي»; add data-tour="module-screen-btn" to the element
     'updated': 'YYYY-MM-DD',
 }
 ```
@@ -120,5 +148,5 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- «اعرض لي» guided tours that highlight the real buttons (same pattern as the POS guided mode).
-- «اسأل النظام»: answers grounded only in this help content, with a link to the source article.
+- Tours for more screens (mobile shells included) and tour text in the trainer editor.
+- Quiz/path editing by trainers in-app (today: repo `content/onboarding.py`).

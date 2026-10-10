@@ -180,6 +180,22 @@ class HelpContentCoverageTests(SimpleTestCase):
             for g in [self.modules[s['module']].get('group')]:
                 self.assertIn(g, [k for k, _, _ in registry.GROUPS], key)
 
+    def test_tour_targets_exist_in_the_frontend(self):
+        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
+        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+        src = Path(settings.BASE_DIR) / 'frontend' / 'src'
+        anchors = set()
+        for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
+            anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        missing = []
+        for key, s in self.screens.items():
+            for i, st in enumerate(s.get('tour') or []):
+                self.assertEqual(set(st), {'target', 'text'}, f'{key}.tour[{i}]')
+                if st['target'] not in anchors:
+                    missing.append(f'{key}: {st["target"]}')
+        self.assertEqual(missing, [], 'Tour targets with no data-tour anchor in frontend/src')
+        self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
+
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
             for wf in m.get('workflows') or []:
@@ -446,3 +462,55 @@ class OnboardingApiTests(TestCase):
         self.assertTrue(all(s['module'] == 'transfers' for s in r.json()['screens']))
         self.assertEqual(c.get('/api/help/manual/?module=nope').status_code, 404)
         self.assertEqual(c.get('/api/help/manual/?role=nope').status_code, 404)
+
+
+class AskTests(TestCase):
+    """«اسأل النظام»: grounded in the help text, citations limited to what was sent,
+    works without a model (falls back to the articles), rate limited, logged."""
+
+    def setUp(self):
+        user, self.profile, _ = make_user('ask_user', role='pharmacist', branch=make_branch())
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+
+    def test_retrieve_handles_sentences(self):
+        modules, screens = registry.load()
+        hits = registry.retrieve('ازاي أعمل طلب تحويل لفرع تاني؟', list(screens.values()), modules)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0]['module'], 'transfers')
+
+    def test_no_model_falls_back_to_articles(self):
+        from unittest import mock
+        with mock.patch('apps.help.ask.call_llm', return_value=None):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز جديد؟'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.json()['answer'])
+        self.assertFalse(r.json()['ai'])
+        self.assertTrue(r.json()['articles'])
+        self.assertEqual(HelpEvent.objects.filter(kind='ask').count(), 1)
+
+    def test_answer_only_cites_sent_articles(self):
+        from unittest import mock
+        captured = {}
+
+        def fake(prompt):
+            captured['prompt'] = prompt
+            return '```json\n{"answer": "1. اضغط «حجز جديد»", "found": true, "sources": ["reservations.new", "made.up"]}\n```'
+        with mock.patch('apps.help.ask.call_llm', side_effect=fake):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز جديد؟', 'screen_key': 'reservations.board'},
+                            format='json')
+        body = r.json()
+        self.assertTrue(body['ai'] and body['found'])
+        self.assertIn('حجز جديد', body['answer'])
+        self.assertEqual([s['key'] for s in body['sources']], ['reservations.new'] if '[reservations.new]' in captured['prompt'] else [])
+        self.assertIn('ONLY the help articles', captured['prompt'])
+        self.assertIn('Never state prices', captured['prompt'])
+
+    def test_rate_limit_and_validation(self):
+        from unittest import mock
+        from apps.help.views import ASK_PER_HOUR
+        self.assertEqual(self.c.post('/api/help/ask/', {'question': 'x'}, format='json').status_code, 400)
+        HelpEvent.objects.bulk_create([HelpEvent(kind='ask', staff=self.profile, query='q') for _ in range(ASK_PER_HOUR)])
+        with mock.patch('apps.help.ask.call_llm', return_value=None):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز؟'}, format='json')
+        self.assertEqual(r.status_code, 429)

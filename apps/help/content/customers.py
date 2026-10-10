@@ -77,6 +77,18 @@ SCREENS = [
         ],
         'related': ['customers.list', 'reservations.new', 'followups.tasks', 'loyalty.program'],
         'workflows': [],
+        'tour': [
+            {'target': 'customers-detail-identity', 'text': T('بيانات العميل ونوعه وكود SOFTECH.',
+                                              'The customer\'s details, type and SOFTECH code.')},
+            {'target': 'customers-detail-new-reservation', 'text': T('«+ حجز جديد» لنفس العميل من غير ما تدوّر عليه تاني.',
+                                              '"+ New reservation" for this customer without searching again.')},
+            {'target': 'customers-detail-tabs', 'text': T('التبويبات: الجدول الزمني، المشتريات، الحجوزات وغيرها.',
+                                              'Tabs: timeline, purchases, reservations and more.')},
+            {'target': 'customers-detail-note', 'text': T('اكتب ملاحظة عن العميل — Ctrl+Enter للحفظ.',
+                                              'Write a note about the customer — Ctrl+Enter saves.')},
+            {'target': 'customers-detail-kpis', 'text': T('ملخص: عدد الفواتير، الإجمالي، والحجوزات النشطة.',
+                                              'Summary: invoices, total, and active reservations.')},
+        ],
         'updated': '2026-10-10',
     },
     {

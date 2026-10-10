@@ -111,7 +111,7 @@ function KanbanView({ requests, navigate }) {
 
 function ListView({ requests, navigate }) {
   return (
-    <div className="px-6 py-4">
+    <div className="px-6 py-4" data-tour="transfers-list-table">
       <div className="card p-0 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -250,7 +250,7 @@ export default function TransfersPage() {
           <div className="flex-1" />
 
           {/* View toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+          <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5" data-tour="transfers-list-view">
             <button onClick={() => setViewMode('list')}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 viewMode === 'list' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
@@ -262,14 +262,14 @@ export default function TransfersPage() {
           </div>
 
           <CanDo module="transfers" action="create">
-            <button onClick={() => navigate('/transfers/new')} className="btn-primary text-sm">
+            <button onClick={() => navigate('/transfers/new')} className="btn-primary text-sm" data-tour="transfers-list-new">
               + طلب تحويل جديد
             </button>
           </CanDo>
         </div>
 
         {/* Row 2: status tabs */}
-        <div className="flex gap-1 mt-3 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 mt-3 overflow-x-auto no-scrollbar" data-tour="transfers-list-tabs">
           {[
             { label: 'الكل',                value: '' },
             { label: 'مسوداتي',             value: 'draft' },
@@ -294,7 +294,7 @@ export default function TransfersPage() {
 
         {/* Row 3: search + branch + date filters */}
         <div className="flex gap-2 mt-2 flex-wrap items-center">
-          <input className="input-field w-48 text-xs" placeholder="🔍 بحث برقم الطلب..."
+          <input className="input-field w-48 text-xs" placeholder="🔍 بحث برقم الطلب..." data-tour="transfers-list-search"
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
 

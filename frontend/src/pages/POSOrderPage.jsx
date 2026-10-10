@@ -518,7 +518,7 @@ function HeaderBand({ P, onOpenCust, onOpenPic }) {
       {/* Row 1 — context toolbar */}
       <div className="flex items-center gap-1.5 flex-wrap text-xs">
         <span title="مبيعات فرع" className="text-sm">🏢</span>
-        <select value={P.branch} onChange={e => P.setBranch(e.target.value)} className={`${sel} max-w-[11rem]`} title="مبيعات فرع">
+        <select value={P.branch} onChange={e => P.setBranch(e.target.value)} className={`${sel} max-w-[11rem]`} title="مبيعات فرع" data-tour="pos-order-branch">
           <option value="">فرع…</option>
           {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
         </select>
@@ -564,7 +564,7 @@ function HeaderBand({ P, onOpenCust, onOpenPic }) {
       </div>
 
       {/* Row 2 — three-level customer cascade (dense, single line) */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5" data-tour="pos-order-customer">
         <span title="العميل" className="text-sm shrink-0">🧑‍⚕️</span>
         <div className="flex-1 min-w-0"><CustomerTypePicker P={P} dense onOpenPic={onOpenPic} flow={{
           type: posFlow('flow:custname', null),                 // ① نوع العميل → ② الإسم
@@ -656,7 +656,7 @@ function Tabs({ P }) {
     </button>
   )
   return (
-    <div className="flex border-b bg-gray-50">
+    <div className="flex border-b bg-gray-50" data-tour="pos-order-tabs">
       <T id="items" label="🛒 الأصناف" />
       <T id="payment" label={`💳 السداد (${P.tenders.length})`} />
       <T id="contract" label="📋 بيانات التعاقد" />
@@ -751,7 +751,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search"><ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
                   className="px-2 rounded text-white text-xs whitespace-nowrap self-start mt-1" style={{ background: '#022871' }}>📷🎤 ذكي</button>
           {Object.values(P.suggest.map || {}).some(v => v != null) &&
@@ -796,7 +796,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
 
       {/* ── the line grid: the star — its own scroll + a sticky, sortable header so hundreds of
              items stay readable while the column heads and the totals footer stay put ── */}
-      <div className="flex-1 min-h-0 overflow-auto border-t">
+      <div className="flex-1 min-h-0 overflow-auto border-t" data-tour="pos-order-lines">
         <table className="w-full text-xs">
           <thead className="text-white sticky top-0 z-10" style={{ background: '#022871' }}>
             <tr>{COLS.map(([key, label], ci) => (
@@ -1044,7 +1044,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <button onClick={P.parkOrder} title="تعليق السلة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
       <button onClick={onParked} title="السلال المعلّقة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">📥{P.parked.length ? ` ${P.parked.length}` : ''}</button>
       <button onClick={onReceipt} disabled={!P.lines.length} title="معاينة الإيصال" className="h-8 px-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-40">🧾</button>
-      <button onClick={() => P.submit(false)} disabled={P.busy || !P.lines.length} title="معاينة الإرسال (تجريبى)"
+      <button onClick={() => P.submit(false)} disabled={P.busy || !P.lines.length} title="معاينة الإرسال (تجريبى)" data-tour="pos-order-preview"
               className="h-8 px-3 rounded text-white font-semibold disabled:opacity-40 flex items-center gap-1.5" style={{ background: '#022871' }}>
         {P.busy ? '...' : <>🧾 معاينة <kbd className="text-[10px] bg-white/20 rounded px-1">F9</kbd></>}
       </button>

@@ -105,6 +105,18 @@ SCREENS = [
               'Record the request even if the customer is leaving; a request under a real customer is a "confirmed loss", the strongest signal for purchasing.'),
         ],
         'related': ['demand.detail', 'demand.dashboard', 'demand.recovery', 'reservations.new'],
+        'tour': [
+            {'target': 'demand-list-new', 'text': T('«+ تسجيل طلب جديد» لما عميل يطلب صنف مش موجود.',
+                                              '"+ Log new request" when a customer asks for an item we do not have.')},
+            {'target': 'demand-list-tabs', 'text': T('تبويبات الحالة — كل طلب بيمشي من التسجيل لحد ما يتقفل.',
+                                              'Status tabs — every request moves from logged until closed.')},
+            {'target': 'demand-list-search', 'text': T('ابحث بالهاتف أو اسم العميل أو PIC أو الصنف.',
+                                              'Search by phone, customer name, PIC or item.')},
+            {'target': 'demand-list-table', 'text': T('قائمة الطلبات — افتح أي طلب لتفاصيله ومتابعته.',
+                                              'The requests list — open any request for its details and follow-up.')},
+            {'target': 'demand-list-recovery', 'text': T('«🔔 عاد للمخزون» يوريك الطلبات اللي صنفها رجع، عشان تكلّم العميل.',
+                                              '"🔔 Back in stock" shows requests whose item came back, so you can call the customer.')},
+        ],
         'updated': '2026-10-10',
     },
     {

@@ -66,6 +66,18 @@ SCREENS = [
             T('أي بيع أو استلام بين اللقطة والعد يظهر كفرق — جمّد الحركة أو اجرد بسرعة بعد اللقطة.', 'Any sale or receipt between the snapshot and the count shows as a variance — pause movement or count quickly after the snapshot.'),
         ],
         'related': ['stockcount.mobile', 'batches.main', 'transfers.pick_zones'],
+        'tour': [
+            {'target': 'stockcount-sessions-tabs', 'text': T('خطوات الجرد بالترتيب: الجلسات ← اللقطة ← العد ← الفروق.',
+                                              'The count steps in order: Sessions → Snapshot → Count → Variances.')},
+            {'target': 'stockcount-sessions-new', 'text': T('«+ جلسة جديدة» يبدأ جرد لفرع.',
+                                              '"+ New session" starts a count for a branch.')},
+            {'target': 'stockcount-sessions-search', 'text': T('ابحث بالاسم أو الفرع.',
+                                              'Search by name or branch.')},
+            {'target': 'stockcount-sessions-status', 'text': T('فلتر حسب حالة الجلسة.',
+                                              'Filter by session status.')},
+            {'target': 'stockcount-sessions-list', 'text': T('الجلسات — اختار جلسة عشان تكمل اللقطة والعد والفروق بتاعتها.',
+                                              'The sessions — select one to continue its snapshot, count and variances.')},
+        ],
         'updated': '2026-10-10',
     },
     {
