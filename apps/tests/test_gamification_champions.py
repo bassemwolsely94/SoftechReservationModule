@@ -121,6 +121,18 @@ class CrownTests(TestCase):
         self.assertFalse(Champion.objects.filter(staff=admin).exists())
         self.assertNotIn('admin', C.race(self.s1)['network'])
 
+    def test_empty_month_is_not_locked(self):
+        empty = (LAST.replace(day=1) - timedelta(days=1)).replace(day=1)   # no points then
+        cm, created = C.crown(empty)
+        self.assertFalse(created)
+        self.assertTrue(cm.summary.get('empty'))
+        self.assertFalse(ChampionMonth.objects.filter(month=empty).exists())
+        # a stale empty crowning saved by an older version is cleared and redone
+        ChampionMonth.objects.create(month=LAST)
+        cm, created = C.crown(LAST)
+        self.assertTrue(created)
+        self.assertTrue(Champion.objects.filter(month=LAST).exists())
+
     def test_cannot_crown_running_month(self):
         with self.assertRaises(ValueError):
             C.crown(timezone.localdate())

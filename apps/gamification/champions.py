@@ -102,6 +102,9 @@ def crown(month, by=None):
     if end >= timezone.localdate():
         raise ValueError('لا يمكن تتويج شهر لم ينته بعد — the month has not ended yet')
     with transaction.atomic():
+        # A month that was "crowned" with nobody (e.g. before any points existed) is not
+        # a real crowning — drop it so the month can be crowned once points are there.
+        ChampionMonth.objects.filter(month=start, champions__isnull=True).delete()
         cm, created = ChampionMonth.objects.select_for_update().get_or_create(
             month=start, defaults={'crowned_by': by})
         if not created:
@@ -140,6 +143,11 @@ def crown(month, by=None):
                 champion_month=cm, month=start, kind=Champion.KIND_BRANCH_OF_MONTH,
                 branch_id=b['branch_id'], rank=1, net=b['net'], players=b['players']))
 
+        if not made:
+            # Nobody qualified: do not lock the month (and announce nothing).
+            transaction.set_rollback(True)
+            return ChampionMonth(month=start, summary={'network': 0, 'branch': 0,
+                                                       'branch_of_month': None, 'empty': True}), False
         cm.summary = {'network': sum(1 for c in made if c.kind == Champion.KIND_NETWORK),
                       'branch': sum(1 for c in made if c.kind == Champion.KIND_BRANCH),
                       'branch_of_month': next((c.branch_id for c in made

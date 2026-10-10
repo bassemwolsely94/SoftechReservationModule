@@ -31,6 +31,11 @@ class Command(BaseCommand):
             from apps.gamification import champions as C
             y, m = opts['crown'].split('-')
             cm, created = C.crown(date(int(y), int(m), 1))
+            if cm.summary.get('empty'):
+                self.stdout.write(self.style.WARNING(
+                    f'{cm.month:%Y-%m}: nobody qualified (no points that month?) — nothing saved; '
+                    f'back-fill with --days N first, then crown again'))
+                return
             self.stdout.write(self.style.SUCCESS(
                 f"{cm.month:%Y-%m}: {'crowned' if created else 'already crowned'} {cm.summary}"))
             return

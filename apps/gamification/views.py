@@ -632,6 +632,9 @@ def champions_crown(request):
         cm, created = C.crown(month, by=profile)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=400)
+    if cm.summary.get('empty'):
+        return Response({'detail': 'لا يوجد من يستحق اللقب في هذا الشهر (لا نقاط مسجلة) — '
+                                   'nobody qualified that month'}, status=400)
     data = C.board(cm.month)
     data['created'] = created
     return Response(data, status=201 if created else 200)
