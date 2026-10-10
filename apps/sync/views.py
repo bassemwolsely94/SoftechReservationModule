@@ -50,11 +50,20 @@ def trigger_sync(request):
     from datetime import timedelta
     from django.db import connections
     from django.utils import timezone
-    from apps.sync.tasks import run_full_sync
+    from apps.sync.tasks import run_full_sync, run_fast_sync, run_slow_sync
 
+    # `lane` picks a tiered lane; `full` (legacy) runs everything. The per-module
+    # freshness bars pass lane='fast' (stock+sales, ~15s) so a refresh is cheap.
+    lane = (request.data.get('lane') or '').strip().lower()
     full = bool(request.data.get('full', False))
+    if lane == 'fast':
+        worker, label = run_fast_sync, 'fast'
+    elif lane == 'slow':
+        worker, label = run_slow_sync, 'slow'
+    else:
+        worker, label = (lambda: run_full_sync(full_history=full)), 'full'
 
-    # Don't pile a second full run on top of one already in flight. The scheduled
+    # Don't pile a second run on top of one already in flight. The scheduled
     # fast/slow lanes also create 'running' rows but finish in seconds/minutes; a
     # row older than 15 min is treated as stale (crashed process) and ignored.
     cutoff = timezone.now() - timedelta(minutes=15)
@@ -67,17 +76,17 @@ def trigger_sync(request):
 
     def _worker():
         try:
-            run_full_sync(full_history=full)
+            worker()
         except Exception:
-            logger.exception('[trigger_sync] background sync failed')
+            logger.exception('[trigger_sync] background %s sync failed', label)
         finally:
             # Worker thread owns its own DB connections — close them so they
             # don't leak past the thread's lifetime.
             connections.close_all()
 
-    threading.Thread(target=_worker, name='manual-sync', daemon=True).start()
+    threading.Thread(target=_worker, name=f'manual-sync-{label}', daemon=True).start()
     return Response(
-        {'status': 'running', 'full': full, 'detail': 'sync started'},
+        {'status': 'running', 'lane': label, 'full': full, 'detail': 'sync started'},
         status=status.HTTP_202_ACCEPTED,
     )
 
@@ -87,6 +96,21 @@ def trigger_sync(request):
 def sync_logs(request):
     runs = SyncRun.objects.prefetch_related('logs').order_by('-started_at')[:20]
     return Response(SyncRunSerializer(runs, many=True).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def data_freshness(request):
+    """
+    Per-domain data freshness for the module-level freshness bars.
+
+    ?domains=stock,sales limits the response to those domains (one request per
+    page, cheap). Omit for all domains. See apps/sync/freshness.py.
+    """
+    from apps.sync.freshness import get_freshness
+    raw = request.query_params.get('domains')
+    wanted = [d.strip() for d in raw.split(',') if d.strip()] if raw else None
+    return Response(get_freshness(wanted))
 
 
 @api_view(['GET'])

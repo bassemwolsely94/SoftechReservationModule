@@ -1684,13 +1684,37 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
             raise _PermDenied('لا تملك صلاحية إدارة الأهداف')
         return p
 
+    @staticmethod
+    def _tgt_desc(t):
+        scope = t.branch.code if t.branch_id else (t.softech_user or t.get_scope_type_display())
+        return f'{scope} · {t.get_metric_display()} · {t.period_start:%Y-%m}'
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self._guard())
+        p = self._guard()
+        obj = serializer.save(created_by=p)
+        from apps.audit.models import AuditLog
+        AuditLog.log('sales_target_created', user=p, obj=obj,
+                     new_data={'target_value': float(obj.target_value)},
+                     note=f'إضافة هدف {self._tgt_desc(obj)} = {float(obj.target_value):,.0f}',
+                     request=self.request)
 
     def perform_update(self, serializer):
-        self._guard()
-        serializer.save()
+        p = self._guard()
+        old = float(serializer.instance.target_value or 0)
+        obj = serializer.save()
+        new = float(obj.target_value or 0)
+        if new != old:
+            from apps.audit.models import AuditLog
+            AuditLog.log('sales_target_changed', user=p, obj=obj,
+                         changes={'target_value': [old, new]},
+                         note=f'تعديل هدف {self._tgt_desc(obj)}: {old:,.0f} ← → {new:,.0f}',
+                         request=self.request)
 
     def perform_destroy(self, instance):
-        self._guard()
+        p = self._guard()
+        from apps.audit.models import AuditLog
+        AuditLog.log('sales_target_deleted', user=p, obj=instance,
+                     old_data={'target_value': float(instance.target_value or 0)},
+                     note=f'حذف هدف {self._tgt_desc(instance)} ({float(instance.target_value or 0):,.0f})',
+                     request=self.request)
         instance.delete()

@@ -15,6 +15,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { shortageApi, branchesApi, invoicesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useGridKeyboard from '../hooks/useGridKeyboard'
@@ -1741,6 +1743,7 @@ export default function ShortagePage() {
   const [showAggregate, setShowAggregate] = useState(false)
   const [filterBranch, setFilterBranch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const { user } = useAuthStore()
 
   const loadLists = useCallback(async () => {
     setLoading(true)
@@ -1841,6 +1844,8 @@ export default function ShortagePage() {
 
       {/* Lists grid */}
       <div className="flex-1 overflow-auto p-6">
+        {/* Stock freshness — shortage lists are judged against current stock */}
+        <DataFreshnessBar domains={['stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
         {loading ? (
           <div className="flex items-center justify-center h-40 text-gray-400 animate-pulse">
             جاري التحميل...

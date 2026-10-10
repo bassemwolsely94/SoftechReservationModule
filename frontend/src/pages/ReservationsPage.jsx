@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS, PRIORITY_OPTIONS } from '../components/StatusBadge'
 import BranchSelect from '../components/BranchSelect'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -198,6 +200,7 @@ function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
 export default function ReservationsPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { user } = useAuthStore()
   const [searchParams] = useSearchParams()
   const [selectedIds, setSelectedIds] = useState([])
   const [bulkMsg, setBulkMsg] = useState('')
@@ -286,6 +289,9 @@ export default function ReservationsPage() {
           </button>
         </div>
       </div>
+
+      {/* Stock freshness — reservations depend on up-to-date stock availability */}
+      <DataFreshnessBar domains={['stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
 
       <FilterBar filters={filters} onChange={f => { setFilters(f); setSelectedIds([]) }} branches={branches} />
 

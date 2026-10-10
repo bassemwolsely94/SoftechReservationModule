@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { wildcardMatch } from '../utils/wildcard'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -710,6 +711,8 @@ export default function InsuranceClaimsPage() {
             <p className="text-sm text-gray-500 mt-0.5">إدارة مطالبات التعاقدات والتأمين الصحي</p>
           </div>
           <div className="flex gap-2 items-center">
+            {/* Repricing writes back against CURRENT catalog prices (slow lane) */}
+            <DataFreshnessBar compact domains={['catalog']} />
             {cacheStats && (
               <span className="text-xs text-gray-400 ml-1" title={
                 `مطالبات: ${cacheStats.motalba?.rows || 0} صف\n` +

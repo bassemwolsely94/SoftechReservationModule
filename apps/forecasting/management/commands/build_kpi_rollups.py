@@ -31,8 +31,10 @@ class Command(BaseCommand):
         from apps.forecasting.kpi import KpiResolver
         from apps.forecasting.models import KpiActualRollup
 
-        # resolve branches
-        branches = Branch.objects.filter(is_active=True)
+        # resolve branches — NEVER the Call Center: its sales are attributed to CC agents
+        # across all branches (not to the CC branch id), so a branch-level rollup would
+        # wrongly write 0 and clobber build_call_center_rollups' agent-based values.
+        branches = Branch.objects.filter(is_active=True).exclude(softech_branch_id='CC')
         if opts.get('branch'):
             keys = set(map(str, opts['branch']))
             branches = branches.filter(code__in=keys) | branches.filter(softech_branch_id__in=keys)

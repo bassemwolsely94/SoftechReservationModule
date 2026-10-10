@@ -15,6 +15,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { incentivesApi, usersApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
@@ -2998,6 +3000,7 @@ function SuggestionsTab({ selectedProgram }) {
 export default function IncentivesPage() {
   const [activeTab, setActiveTab]             = useState('programs')
   const [selectedProgram, setSelectedProgram] = useState(null)
+  const { user } = useAuthStore()
 
   const handleSelectProgram = (p) => {
     setSelectedProgram(p)
@@ -3042,6 +3045,8 @@ export default function IncentivesPage() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto p-6">
+        {/* Incentives are computed from actual SOFTECH sales */}
+        <DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
         {activeTab === 'programs'    && <ProgramsTab    selectedProgram={selectedProgram} onSelect={handleSelectProgram} />}
         {activeTab === 'rules'       && <RulesTab       selectedProgram={selectedProgram} />}
         {activeTab === 'calculate'   && <CalculateTab   selectedProgram={selectedProgram} />}

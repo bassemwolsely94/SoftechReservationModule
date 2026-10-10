@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi, syncApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -728,6 +729,9 @@ export default function DashboardPage() {
 
       {/* ── Body ────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        {/* Data freshness — dashboard mixes live sales + stock */}
+        <DataFreshnessBar domains={['sales', 'stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
 
         {/* ── 2. Hero KPI Strip ──────────────────────────────────── */}
         {isLoading ? (

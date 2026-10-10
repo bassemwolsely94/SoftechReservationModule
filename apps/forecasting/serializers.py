@@ -2,8 +2,36 @@ from rest_framework import serializers
 from .models import (
     SeasonalityIndex, ForecastRun, ForecastAccuracy,
     ForecastScenario, ForecastFactor, ForecastResult, KpiActualRollup,
-    BacktestRun, BacktestResult,
+    BacktestRun, BacktestResult, ProfitExclusion,
 )
+
+
+class ProfitExclusionSerializer(serializers.ModelSerializer):
+    """Items removed from معامل الربحية. Create by `item_code` (SOFTECH itemcode) or `item` id."""
+    item_name     = serializers.CharField(source='item.name',         read_only=True, default='')
+    item_code     = serializers.CharField(source='item.softech_id',   read_only=True, default='')
+    medicine_type = serializers.CharField(source='item.medicine_type', read_only=True, default='')
+    # write-only convenience: look the item up by SOFTECH code
+    code = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model  = ProfitExclusion
+        fields = ['id', 'item', 'code', 'item_name', 'item_code', 'medicine_type',
+                  'note', 'active', 'created_at']
+        read_only_fields = ['created_at']
+        extra_kwargs = {'item': {'required': False}}
+
+    def validate(self, data):
+        from apps.catalog.models import Item
+        code = (data.pop('code', '') or '').strip()
+        if code and not data.get('item'):
+            it = Item.objects.filter(softech_id=code).first()
+            if not it:
+                raise serializers.ValidationError({'code': f'لا يوجد صنف بالكود {code}'})
+            data['item'] = it
+        if not data.get('item') and not self.instance:
+            raise serializers.ValidationError({'code': 'أدخل كود الصنف (itemcode)'})
+        return data
 
 
 class SeasonalityIndexSerializer(serializers.ModelSerializer):
@@ -61,7 +89,7 @@ class ForecastFactorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = ForecastFactor
-        fields = ['id', 'metric', 'metric_label', 'growth_goal',
+        fields = ['id', 'metric', 'metric_label', 'growth_goal', 'benchmark',
                   'w_lm', 'w_pm', 'w_yoy', 'seasonality_index']
 
 

@@ -25,6 +25,51 @@ from django.utils import timezone
 
 Q2 = Decimal('0.01')
 
+# ── "memorable" TARGET rounding (round UP to a clean step) ───────────────────
+# Only TARGETS are rounded — forecast/base/LM/PM and all actuals stay exact.
+# Steps inferred from the owner's target files (GCD of historical targets):
+#   cash+delivery / credit / profit → 5,000 ; customers (PIC) → 50 ; beauty → 2,500.
+# Owner-tunable per metric via SystemSetting 'kpi_round_step_<metric>'.
+ROUND_STEP_DEFAULTS = {
+    'cash_delivery': 5000, 'credit': 5000, 'gross_profit': 5000,
+    'customer_count': 50, 'beauty': 2500,
+}
+
+
+def kpi_round_steps():
+    """Return {metric: step} merging SystemSetting overrides over the defaults."""
+    from apps.config.models import SystemSetting
+    out = {}
+    for m, d in ROUND_STEP_DEFAULTS.items():
+        raw = SystemSetting.get(f'kpi_round_step_{m}', d)
+        try:
+            out[m] = int(float(raw))
+        except (TypeError, ValueError):
+            out[m] = d
+    return out
+
+
+def round_up_step(value, step):
+    """Round a target UP to the nearest `step`. step≤1 → nearest whole number
+    (ROUND_HALF_UP). Never applied to exact/actual values."""
+    from decimal import ROUND_CEILING
+    v = value if isinstance(value, Decimal) else Decimal(str(value))
+    if step and step > 1:
+        s = Decimal(step)
+        return (v / s).to_integral_value(rounding=ROUND_CEILING) * s
+    return v.to_integral_value(rounding=ROUND_HALF_UP)
+
+
+def cash_profit_margin():
+    """Owner rule: the معامل الربحية TARGET = this fraction of the cash-sales target
+    (branches AND call center). Default 0.235 (≈23-24%). 0 disables the derivation and
+    the engine keeps its independent profit forecast. SystemSetting 'kpi_cash_profit_margin'."""
+    from apps.config.models import SystemSetting
+    try:
+        return Decimal(str(SystemSetting.get('kpi_cash_profit_margin', '0.235')))
+    except (TypeError, ValueError, ArithmeticError):
+        return Decimal('0.235')
+
 
 def _shift_month(year, month, delta):
     idx = (year * 12 + (month - 1)) + delta
@@ -32,8 +77,9 @@ def _shift_month(year, month, delta):
 
 
 class ForecastEngine:
-    # Metrics generated (mirror the KPI board set).
-    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty']
+    # Metrics generated (mirror the KPI board set). call_count = Call-Center only;
+    # branches have no call history so those rows are skipped (see generate()).
+    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty', 'call_count']
 
     # Validated v2 defaults: growth_goal + blend weights (w_lm, w_pm, w_yoy).
     DEFAULT_FACTORS = {
@@ -42,6 +88,7 @@ class ForecastEngine:
         'beauty':         (Decimal('0.30'), Decimal('0.40'), Decimal('0.20'), Decimal('0.40')),
         'gross_profit':   (Decimal('0.15'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
         'customer_count': (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
+        'call_count':     (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
     }
 
     def __init__(self):
@@ -89,7 +136,15 @@ class ForecastEngine:
         out = []
         for b in analytics_branches().order_by('code', 'softech_branch_id'):
             out.append({'branch': b, 'key': b.code or b.softech_branch_id,
-                        'label': getattr(b, 'name_ar', '') or b.name, 'kwargs': {'branch_ids': [b.id]}})
+                        'label': getattr(b, 'name_ar', '') or b.name,
+                        'kwargs': {'branch_ids': [b.id]}, 'in_chain': True})
+        # Call Center overlay — forecast as its OWN member (sales/profit/beauty/orders +
+        # call_count), but NOT summed into the chain (its sales are already in the branches).
+        from apps.branches.models import Branch
+        cc = Branch.objects.filter(softech_branch_id='CC').first()
+        if cc:
+            out.append({'branch': cc, 'key': 'CC', 'label': 'الكول سنتر',
+                        'kwargs': {'branch_ids': [cc.id]}, 'in_chain': False})
         return out
 
     def _recent_window(self, scenario):
@@ -161,6 +216,7 @@ class ForecastEngine:
         bench = scenario.benchmark_growth or Decimal('0')
         infl = scenario.inflation or Decimal('0')
         promo = scenario.promotion_lift or Decimal('0')
+        steps = kpi_round_steps()   # memorable target rounding per metric
 
         ForecastResult.objects.filter(scenario=scenario).delete()
 
@@ -171,18 +227,26 @@ class ForecastEngine:
         n = 0
         for metric in self.METRICS:
             f = factors[metric]
+            fbench = f.benchmark if f.benchmark is not None else bench   # per-metric YoY, else global
             for mem in members:
                 base = self._member_actual(mem, by, bm, metric)
                 lmv  = self._member_actual(mem, ly, lm, metric)
                 pmv  = self._member_actual(mem, py, pm, metric)
 
+                # Skip metrics a member has no history for (e.g. CC has no credit;
+                # branches have no call_count) so there are no spurious zero targets.
+                if not (base or lmv or pmv):
+                    continue
+
                 model_a, model_b = self.compute_models(
                     base, lmv, pmv,
                     growth=f.growth_goal, w_lm=f.w_lm, w_pm=f.w_pm, w_yoy=f.w_yoy,
-                    seasonality=f.seasonality_index, bench=bench, infl=infl, promo=promo)
+                    seasonality=f.seasonality_index, bench=fbench, infl=infl, promo=promo)
 
                 forecast = self._pick(scenario.model, model_a, model_b)
-                target = (forecast / thr) if thr else forecast
+                raw_target = (forecast / thr) if thr else forecast
+                # round the TARGET up to a memorable step; forecast stays exact
+                target = round_up_step(raw_target, steps.get(metric, 1))
 
                 ForecastResult.objects.create(
                     scenario=scenario, branch=mem['branch'],
@@ -196,19 +260,28 @@ class ForecastEngine:
                     target_value=target.quantize(Q2, ROUND_HALF_UP),
                 )
                 n += 1
-                c = chain[metric]
-                c['base'] += base; c['lm'] += lmv; c['pm'] += pmv
-                c['a'] += model_a; c['b'] += model_b
-                c['forecast'] += forecast; c['target'] += target
+                # Chain aggregate: only members that are part of the chain (CC is an
+                # overlay — its sales are already counted inside the branches).
+                if mem.get('in_chain', True):
+                    c = chain[metric]
+                    c['base'] += base; c['lm'] += lmv; c['pm'] += pmv
+                    c['a'] += model_a; c['b'] += model_b
+                    c['forecast'] += forecast; c['target'] += target
 
-            # member shares (of forecast)
-            total_fc = chain[metric]['forecast'] or Decimal('1')
-            for r in ForecastResult.objects.filter(scenario=scenario, metric=metric).exclude(scope_key='chain'):
-                r.branch_share = (r.forecast_value / total_fc).quantize(Decimal('0.0001'), ROUND_HALF_UP)
-                r.save(update_fields=['branch_share'])
+            # member shares (of the chain forecast) — only for chain members; CC is an
+            # overlay (not part of the chain) so it has no chain share.
+            total_fc = chain[metric]['forecast']
+            if total_fc:
+                for r in ForecastResult.objects.filter(
+                        scenario=scenario, metric=metric).exclude(scope_key__in=['chain', 'CC']):
+                    r.branch_share = (r.forecast_value / total_fc).quantize(Decimal('0.0001'), ROUND_HALF_UP)
+                    r.save(update_fields=['branch_share'])
 
-        # chain aggregate rows (scope_key='chain')
+        # chain aggregate rows (scope_key='chain') — skip metrics with no chain signal
+        # (e.g. call_count, which only the non-chain CC member has).
         for metric, c in chain.items():
+            if not c['forecast']:
+                continue
             ForecastResult.objects.create(
                 scenario=scenario, branch=None, scope_key='chain', scope_label='الإجمالى', metric=metric,
                 base_value=c['base'].quantize(Q2, ROUND_HALF_UP),
@@ -220,6 +293,20 @@ class ForecastEngine:
                 target_value=c['target'].quantize(Q2, ROUND_HALF_UP),
                 branch_share=Decimal('1'),
             )
+
+        # Owner rule: derive the معامل الربحية TARGET as a fixed margin of the
+        # cash-sales (cash_delivery) target — same rate for branches, chain AND CC.
+        # The independent profit forecast stays in forecast_value for reference.
+        margin = cash_profit_margin()
+        if margin and margin > 0:
+            pstep = steps.get('gross_profit', 1)
+            cash_tgt = {r.scope_key: r.target_value for r in ForecastResult.objects.filter(
+                scenario=scenario, metric='cash_delivery')}
+            for r in ForecastResult.objects.filter(scenario=scenario, metric='gross_profit'):
+                ct = cash_tgt.get(r.scope_key)
+                if ct:
+                    r.target_value = round_up_step(margin * ct, pstep)
+                    r.save(update_fields=['target_value'])
 
         scenario.status = scenario.STATUS_GENERATED
         scenario.generated_at = timezone.now()
@@ -249,6 +336,8 @@ class ForecastEngine:
         label = f'{scenario.name} · {label_month}'
 
         n = 0
+        changes = {}          # descriptor → [old, new] for the audit trail
+        created_n = 0
         results = (ForecastResult.objects.filter(scenario=scenario)
                    .exclude(scope_key='chain').select_related('branch'))
         for r in results:
@@ -261,13 +350,30 @@ class ForecastEngine:
                 lookup = dict(scope_type=SalesTarget.SCOPE_CATEGORY, category_id=int(r.scope_key))
             else:
                 lookup = dict(scope_type=SalesTarget.SCOPE_BRANCH, branch=r.branch)
+            existing = SalesTarget.objects.filter(
+                metric=r.metric, period_start=start, period_end=end, **lookup).first()
+            old_val = float(existing.target_value) if existing else None
+            new_val = float(r.target_value)
             SalesTarget.objects.update_or_create(
                 metric=r.metric, period_start=start, period_end=end, **lookup,
                 defaults={'target_value': r.target_value, 'label': label, 'created_by': created_by},
             )
+            if old_val is None:
+                created_n += 1
+            if old_val != new_val:        # only record genuine changes
+                changes[f'{r.scope_key}·{r.metric}'] = [old_val, new_val]
             n += 1
 
         scenario.status = scenario.STATUS_COMMITTED
         scenario.committed_at = timezone.now()
         scenario.save(update_fields=['status', 'committed_at'])
+
+        # Audit the approved/assigned targets (who/what/when/before→after).
+        from apps.audit.models import AuditLog
+        AuditLog.log('sales_target_committed', user=created_by, obj=scenario,
+                     changes=changes or None,
+                     extra={'period': label_month, 'scope': scenario.scope_type,
+                            'model': scenario.model, 'committed': n, 'created': created_n,
+                            'updated': len(changes) - created_n if len(changes) >= created_n else 0},
+                     note=f'اعتماد {n} هدف من «{scenario.name}» ({label_month}) — {created_n} جديد / {len(changes)} تغيّر')
         return {'targets_committed': n}

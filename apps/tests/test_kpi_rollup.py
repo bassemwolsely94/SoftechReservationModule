@@ -93,6 +93,22 @@ class KpiResolverTests(TestCase):
         # only cosmetics item (medicine_type 50) on a non-exclude channel: S2 line_total 300
         self.assertEqual(self.m['beauty'], Decimal('300'))
 
+    def test_profit_exclusion_removes_item(self):
+        # Excluding the medicine item from profit removes its 560 (400+150+50−40 return);
+        # only the cosmetics item's 180 profit (300−120) remains. Sales/beauty unaffected.
+        from apps.forecasting.models import ProfitExclusion, KpiActualRollup as K
+        from apps.forecasting.kpi import KpiResolver
+        ProfitExclusion.objects.create(item=self.med, note='test', active=True)
+        r = KpiResolver()
+        s, e = r.month_bounds(2026, 5)
+        self.assertEqual(r.resolve(K.M_GROSS_PROFIT, branch_ids=[self.branch.id], start=s, end=e),
+                         Decimal('180'))
+        # revenue + beauty untouched by a profit exclusion
+        self.assertEqual(r.resolve(K.M_NET_REVENUE, branch_ids=[self.branch.id], start=s, end=e),
+                         Decimal('2600'))
+        self.assertEqual(r.resolve(K.M_BEAUTY, branch_ids=[self.branch.id], start=s, end=e),
+                         Decimal('300'))
+
 
 class SalesTargetKpiMetricTests(TestCase):
     """SalesTarget.actual_value() routes KPI metrics through the bucket resolver (Phase 2)."""
@@ -179,8 +195,9 @@ class ForecastEngineTests(TestCase):
         r = ForecastResult.objects.get(scenario=sc, branch=self.branch, metric='cash_delivery')
         self.assertEqual(r.base_value, Decimal('1000.00'))
         self.assertEqual(r.model_a, Decimal('1200.00'))          # 1000×1.20
-        self.assertEqual(r.forecast_value, Decimal('1200.00'))
-        self.assertEqual(r.target_value, Decimal('1333.33'))     # 1200÷0.90
+        self.assertEqual(r.forecast_value, Decimal('1200.00'))   # forecast stays exact
+        # target = 1200÷0.90 = 1333.33, rounded UP to the cash_delivery step (5,000)
+        self.assertEqual(r.target_value, Decimal('5000.00'))
 
     def test_model_b_blend(self):
         from apps.forecasting.engine import ForecastEngine
@@ -210,7 +227,7 @@ class ForecastEngineTests(TestCase):
         eng.commit(sc)
         t = SalesTarget.objects.get(branch=self.branch, metric='cash_delivery',
                                     period_start=date(2026, 9, 1))
-        self.assertEqual(float(t.target_value), 1333.33)
+        self.assertEqual(float(t.target_value), 5000.0)   # 1333.33 → nearest 5,000 (up)
         self.assertEqual(sc.status, 'committed')
 
 
@@ -264,7 +281,7 @@ class CallCountTests(TestCase):
         self.assertIsNone(extract_mobile('103'))                           # queue ext
         self.assertIsNone(extract_mobile('8200000000014'))                 # last-11 not 01…
 
-    def test_count_calls_per_day_distinct(self):
+    def test_count_calls_whole_month_distinct(self):
         from apps.forecasting.callcount import count_calls
         rows = [
             # agent 15, two answered calls to the SAME customer on ONE day → counts once
@@ -281,10 +298,10 @@ class CallCountTests(TestCase):
             # landline (not 11-digit mobile) → excluded
             {'calldate': '2026-05-01 15:00', 'src': '15', 'dst': '26224103', 'disposition': 'ANSWERED'},
         ]
-        # day1: {01063650014, 01200107789} = 2 ; day2: {01063650014} = 1 → 3
-        self.assertEqual(count_calls(rows, ['10', '12', '15']), 3)
-        # global distinct = {01063650014, 01200107789} = 2
-        self.assertEqual(count_calls(rows, ['10', '12', '15'], per_day_distinct=False), 2)
+        # DEFAULT = whole-month distinct (owner Grand Total): {01063650014, 01200107789} = 2
+        self.assertEqual(count_calls(rows, ['10', '12', '15']), 2)
+        # per-day distinct variant: day1 {…,01200107789}=2 ; day2 {01063650014}=1 → 3
+        self.assertEqual(count_calls(rows, ['10', '12', '15'], per_day_distinct=True), 3)
 
 
 class DiscountMetricTests(TestCase):

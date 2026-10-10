@@ -74,8 +74,10 @@ def supplier_options(item_id, residual_gap, *, availability_lines=None) -> dict:
         if ln.price is None:
             continue
         offered = _f(ln.supplier_qty) or gap
-        # FOC we'd actually earn on the qty we need (proportional to the offer's ratio).
-        foc_ratio = (_f(ln.foc_qty) / _f(ln.supplier_qty)) if ln.supplier_qty else 0.0
+        # FOC we'd actually earn on the qty we need (proportional to the offer's ratio):
+        # «25+1» = buy 25 get 1 (bonus_buy); an older line kept the "buy" in supplier_qty.
+        base = _f(getattr(ln, 'bonus_buy', None)) or _f(ln.supplier_qty)
+        foc_ratio = (_f(ln.foc_qty) / base) if base else 0.0
         buy_qty = min(offered, gap) if gap else offered
         foc_on_buy = buy_qty * foc_ratio
         options.append({

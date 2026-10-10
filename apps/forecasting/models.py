@@ -224,6 +224,30 @@ class UnitCountExclusion(models.Model):
         return f'exclude {self.item_id} — {self.note}'
 
 
+class ProfitExclusion(models.Model):
+    """
+    Items excluded from the GROSS-PROFIT metric (معامل الربحية) — e.g. the delivery
+    fee item 'D.L.V.' (itemcode 2): its price is ~pure margin that the delivery staff
+    take a daily cut of, so the owner removes it from the profit bias (matches the
+    legacy target sheet). Owner-managed list; does NOT affect revenue/sales metrics.
+    Note: Entresto/Kisqali (old 3+1 / 2+1 patient-support packs) were previously
+    excluded but are now INCLUDED again — so they are NOT in this list by default.
+    """
+    item = models.OneToOneField('catalog.Item', on_delete=models.CASCADE,
+                                related_name='profit_exclusion', verbose_name='الصنف')
+    note = models.CharField(max_length=200, blank=True, verbose_name='السبب')
+    active = models.BooleanField(default=True, db_index=True, verbose_name='نشط')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['item']
+        verbose_name = 'استثناء من الربحية'
+        verbose_name_plural = 'استثناءات الربحية'
+
+    def __str__(self):
+        return f'profit-exclude {self.item_id} — {self.note}'
+
+
 class BeautyClassRule(models.Model):
     """
     Which catalog `medicine_type` (itemmedicine) codes count as beauty/التجميل.
@@ -444,6 +468,10 @@ class ForecastFactor(models.Model):
                                 verbose_name='وزن الشهر قبل السابق')
     w_yoy = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal('0.2000'),
                                 verbose_name='وزن العام السابق')
+    # Per-metric YoY benchmark for Model B (grounded in historical YoY). NULL → fall back
+    # to the scenario-global benchmark_growth. Lets credit (+40%) and customers (0%) differ.
+    benchmark = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True,
+                                    verbose_name='نمو مرجعي للمؤشر (Model B)')
     seasonality_index = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal('1.0000'),
                                             verbose_name='مؤشر موسمي')
 
