@@ -164,6 +164,7 @@ INSTALLED_APPS = [
     'apps.pos_orders',     # Indirect-POS pending-order writer (SOFTECH writes gated off)
     'apps.help',           # In-app help (دليل الاستخدام) — repo content + trainer edits
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
+    'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
 ]
 
 MIDDLEWARE = [
@@ -647,6 +648,10 @@ POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, ca
 # B7 duplicate-code merge queue (apps/customers/duplicates.py) — weekly READ-ONLY rebuild; review roles
 # (maker-checker: the one who marks a pair cannot approve it).
 CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
+
+# Gamification (apps/gamification) — points / levels / badges / rankings, recognition only.
+# Scheduler scores today every 30 min and closes yesterday at 00:20. Reads our tables only.
+GAMIFICATION_ENABLED = config('GAMIFICATION_ENABLED', default=True, cast=bool)
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 # B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
 CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)

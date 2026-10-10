@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi, syncApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import GamificationCard from '../components/GamificationCard'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -728,6 +729,9 @@ export default function DashboardPage() {
 
       {/* ── Body ────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        {/* ── 1b. Gamification — my level, points, streak, what is waiting ── */}
+        <GamificationCard />
 
         {/* ── 2. Hero KPI Strip ──────────────────────────────────── */}
         {isLoading ? (

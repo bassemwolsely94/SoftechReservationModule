@@ -1,0 +1,81 @@
+from . import T
+
+MODULE = {
+    'key': 'gamification', 'group': 'home', 'icon': '🏆',
+    'title': T('التحفيز — النقاط والمستويات', 'Gamification — points & levels'),
+    'summary': T(
+        'كل عمل تنجزه في النظام أو في SOFTECH يُحتسب لك نقاطاً تلقائياً: فواتير البيع وربحيتها (الكاش أعلى)، المرتجعات، '
+        'الحجوزات وتسليمها، الطلب الضائع واسترداده، المتابعات، طلبات التحويل والرد على الفروع الأخرى، أذون الصرف والاستلام، '
+        'طلبات التوريد ISR، الجرد، النواقص والمهام. النقاط ترفع «خبرتك» فترتقي في المستويات وتحصل على لقب جديد وشارات. '
+        'البنود التي تُترك متأخرة تخصم نقاطاً بسيطة من ترتيب الفترة فقط — المستوى لا ينزل أبداً. '
+        'النظام للتقدير فقط حالياً (بدون مقابل مالي).',
+        'Every job you do in the system or in SOFTECH earns points automatically: sale invoices and their profitability '
+        '(cash scores higher), returns, reservations and their handover, lost sales and their recovery, follow-ups, '
+        'transfer requests and replies to other branches, issue/receipt documents, ISR supply requests, stock counts, '
+        'shortage lists and tasks. Points raise your "XP" so you climb levels with a new title and badges. Items left '
+        'overdue deduct a few points from the period ranking only — your level never drops. It is recognition only for '
+        'now (no money).'),
+}
+
+SCREENS = [
+    {
+        'key': 'gamification.main',
+        'routes': ['/gamification', '/m/gamification'],
+        'title': T('التحفيز والمستويات', 'Gamification & levels'),
+        'summary': T(
+            'ملفك في نظام التحفيز: مستواك ولقبك، نقاطك اليوم والأسبوع والشهر، سلسلة الأيام النظيفة، ترتيبك في فرعك وعلى الشبكة، '
+            'الشارات، وما زال ينتظرك من أعمال. يُحدَّث كل نصف ساعة، ويُغلق اليوم كل ليلة.',
+            'Your gamification profile: level and title, points today / this week / this month, clean-day streak, rank in '
+            'your branch and on the network, badges, and the work still waiting for you. Updated every 30 minutes; each day '
+            'is closed overnight.'),
+        'audience': T('كل الموظفين. التقارير للمديرين، والإعدادات لمن لديه صلاحية التعديل.',
+                      'Every employee. Reports for managers; settings for those allowed to edit.'),
+        'steps': [
+            T('ابدأ من «ملفي»: أنجز ما في قائمة «لا تترك شيئاً خلفك» — الأحمر منها يخصم نقاطاً عند إغلاق اليوم.',
+              'Start from "My profile": clear the "Leave nothing behind" list — red items deduct points at day close.'),
+            T('اليوم الذي تعمل فيه بدون أي بند متأخر يمنحك «يوم نظيف» (+10)، وكل 7 أيام نظيفة متتالية مكافأة إضافية.',
+              'A working day with nothing overdue gives a "clean day" (+10), and every 7 clean days in a row adds a bonus.'),
+            T('تابع ترتيبك في «الترتيب» واطّلع على «كيف تكسب النقاط» لتعرف قيمة كل عمل.',
+              'Follow your rank in "Leaderboard" and read "How to earn" to see what each job is worth.'),
+        ],
+        'tabs': [
+            {'key': 'me', 'title': T('🙋 ملفي', '🙋 My profile'),
+             'body': T('المستوى وشريط التقدم للترقية التالية، نقاطك، ترتيبك، قائمة الأعمال المعلقة، سلّم المستويات وآخر النقاط.',
+                       'Level and progress to the next promotion, your points, rank, pending work, the level ladder and recent points.')},
+            {'key': 'leaderboard', 'title': T('🏆 الترتيب', '🏆 Leaderboard'),
+             'body': T('ترتيب كامل لزملاء فرعك، وأفضل 10 على كل الفروع (يمكن التصفية بالدور والفترة). المديرون يرون الترتيب كاملاً.',
+                       'The full ranking of your branch colleagues, and the network top 10 (filter by role and period). Managers see everything.')},
+            {'key': 'branches', 'title': T('🏢 ترتيب الفروع', '🏢 Branches'),
+             'body': T('الفروع مرتبة بمتوسط نقاط الموظف النشط — عادل بين الفروع الكبيرة والصغيرة — مع نسبة الأيام النظيفة والبنود المتأخرة.',
+                       'Branches ranked by average points per active employee — fair to big and small branches — with clean-day % and items left behind.')},
+            {'key': 'badges', 'title': T('🏅 الشارات', '🏅 Badges'),
+             'body': T('الشارات المكتسبة وتقدمك نحو الباقي (مثل 100 فاتورة، صديق الفروع، حارس المخزون، أسبوع بلا تأخير).',
+                       'Badges you earned and your progress to the rest (e.g. 100 invoices, branch friend, stock guardian, week without delays).')},
+            {'key': 'rules', 'title': T('📜 كيف تكسب النقاط', '📜 How to earn'),
+             'body': T('كل قاعدة بنقاطها وحدّها اليومي. مبيعات: نقاط لكل فاتورة + لكل 500 جنيه + لكل 100 جنيه ربح (الكاش ×1.5)، بحد يومي حتى لا تطغى الفروع الكبيرة.',
+                       'Every rule with its points and daily cap. Sales: points per invoice + per 500 EGP + per 100 EGP of profit (cash ×1.5), capped daily so big branches do not dominate.')},
+            {'key': 'reports', 'title': T('📊 التقارير', '📊 Reports'),
+             'body': T('للمديرين: المشاركون، النقاط والخصومات، نسبة الأيام النظيفة، الأفضل ومن يحتاج دعماً، الفئات، توزيع المستويات، الفروع والترقيات، وتصدير Excel.',
+                       'For managers: participants, points and deductions, clean-day %, top performers and who needs support, categories, level distribution, branches and promotions, and Excel export.')},
+            {'key': 'settings', 'title': T('⚙️ الإعدادات', '⚙️ Settings'),
+             'body': T('تعديل نقاط كل قاعدة وحدّها اليومي وتفعيلها، ألقاب المستويات وحدودها، تقدير يدوي بسبب مكتوب، وإعادة الاحتساب. كل تعديل يُسجَّل في «سجل التعديلات».',
+                       'Edit each rule\'s points, daily cap and on/off, level titles and thresholds, manual recognition with a written reason, and recalculation. Every edit is recorded in the "Change log".')},
+        ],
+        'tips': [
+            T('المبيعات تُحتسب من كود المستخدم في SOFTECH — اطلب من مدير النظام ربط كودك بحسابك وإلا لن تظهر نقاط مبيعاتك.',
+              'Sales are counted by your SOFTECH user code — ask the system admin to link your code to your account, otherwise your sales will not score.'),
+            T('لا يمكن احتساب نفس العمل مرتين، ولا يمكن لأحد منح نفسه نقاطاً.',
+              'The same work can never be counted twice, and nobody can award points to themselves.'),
+        ],
+        'faq': [
+            {'q': T('هل ينزل مستواي إذا خُصمت نقاط؟', 'Can my level drop if points are deducted?'),
+             'a': T('لا. المستوى يُبنى على النقاط المكتسبة فقط؛ الخصومات تؤثر على ترتيب الفترة فقط.',
+                    'No. Your level is built on earned points only; deductions only affect the period ranking.')},
+            {'q': T('متى تظهر نقاطي؟', 'When do my points show?'),
+             'a': T('خلال نصف ساعة من تسجيل العمل. «اليوم النظيف» والخصومات تُحتسب بعد منتصف الليل.',
+                    'Within 30 minutes of the work being recorded. The "clean day" and deductions are applied after midnight.')},
+        ],
+        'related': ['general.dashboard', 'general.me', 'incentives.mine'],
+        'updated': '2026-10-10',
+    },
+]

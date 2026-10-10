@@ -55,6 +55,7 @@ import InsuranceClientsPage from './pages/InsuranceClientsPage'
 import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
 import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
+import GamificationPage from './pages/GamificationPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -87,6 +88,7 @@ import MobileItemsPage from './pages/mobile/MobileItemsPage'
 import MobileNotificationsPage from './pages/mobile/MobileNotificationsPage'
 import MobileCustomersPage from './pages/mobile/MobileCustomersPage'
 import MobileMyIncentivesPage from './pages/mobile/MobileMyIncentivesPage'
+import MobileGamificationPage from './pages/mobile/MobileGamificationPage'
 import MobileTasksPage from './pages/mobile/MobileTasksPage'
 import MobileTaskDetailPage from './pages/mobile/MobileTaskDetailPage'
 import MobileVoucherRedeemPage from './pages/mobile/MobileVoucherRedeemPage'
@@ -203,6 +205,7 @@ const MOBILE_TABS = [
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
   { to: '/m/attendance',   label: 'الحضور',    icon: '🕐' },
   { to: '/m/my-incentives', label: 'حوافزي',   icon: '🏅' },
+  { to: '/m/gamification',  label: 'التحفيز',  icon: '🏆' },
 ]
 
 function RequireAuth({ children }) {
@@ -295,6 +298,7 @@ export default function App() {
             <Route path="notifications"     element={<MobileNotificationsPage />} />
             <Route path="customers"         element={<MobileCustomersPage />} />
             <Route path="my-incentives"     element={<MobileMyIncentivesPage />} />
+            <Route path="gamification"      element={<MobileGamificationPage />} />
             <Route path="tasks"             element={<MobileTasksPage />} />
             <Route path="tasks/:id"         element={<MobileTaskDetailPage />} />
             <Route path="vouchers"          element={<MobileVoucherRedeemPage />} />
@@ -435,6 +439,7 @@ export default function App() {
             {/* ── Procurement operational ──────────────────────────────── */}
             {/* invoices + incentives guarded below in Administration section */}
             <Route path="my-incentives" element={<MyIncentivesPage />} />
+            <Route path="gamification"  element={<GamificationPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />

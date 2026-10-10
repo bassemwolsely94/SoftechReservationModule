@@ -13,7 +13,7 @@ def T(ar, en):
 
 
 MODULE_FILES = [
-    'general',
+    'general', 'gamification',
     'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
     'customers', 'vouchers', 'loyalty',
     'catalog', 'chronic', 'batches', 'shortage', 'replacement',

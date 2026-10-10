@@ -383,6 +383,24 @@ export const personalApi = {
   setRevision:   (data) => api.post('/personal/revision/', data),
 }
 
+// ── Gamification (التحفيز) — own data open to all; reports/config gated server-side ──
+export const gamificationApi = {
+  me:          ()            => api.get('/gamification/me/'),
+  leaderboard: (params = {}) => api.get('/gamification/leaderboard/', { params }),
+  branches:    (params = {}) => api.get('/gamification/branches/', { params }),
+  rules:       ()            => api.get('/gamification/rules/'),
+  levels:      ()            => api.get('/gamification/levels/'),
+  badges:      (params = {}) => api.get('/gamification/badges/', { params }),
+  updateRule:  (key, data)   => api.patch(`/gamification/rules/${key}/`, data),
+  updateLevel: (n, data)     => api.patch(`/gamification/levels/${n}/`, data),
+  updateBadge: (key, data)   => api.patch(`/gamification/badges/${key}/`, data),
+  adjust:      (data)        => api.post('/gamification/adjust/', data),
+  run:         (data = {})   => api.post('/gamification/run/', data),
+  report:      (params = {}) => api.get('/gamification/reports/overview/', { params }),
+  exportReport:(params = {}) => api.get('/gamification/reports/export/', { params, responseType: 'blob' }),
+  changes:     ()            => api.get('/gamification/changes/'),
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export const targetsApi = {

@@ -43,8 +43,10 @@ SCREENS = [
               'The numbers here are for quick monitoring; click any number or section to go to the detailed screen.'),
             T('لو حالة المزامنة «فشلت» أو آخر تحديث قديم، فالأرصدة قد لا تكون حديثة — بلّغ مسؤول النظام.',
               'If the sync shows "failed" or the last update is old, stock figures may be out of date — tell the system admin.'),
+            T('شريط «التحفيز» أعلى الصفحة يعرض مستواك ونقاط اليوم وسلسلة الأيام النظيفة وترتيبك في الفرع، وزر «بند ينتظرك» يفتح ما تبقّى عليك.',
+              'The "Gamification" strip at the top shows your level, today\'s points, clean-day streak and branch rank; the "items waiting" button opens what is still on you.'),
         ],
-        'related': ['general.me', 'general.notifications'],
+        'related': ['general.me', 'general.notifications', 'gamification.main'],
         'updated': '2026-10-10',
     },
     {
@@ -82,6 +84,7 @@ SCREENS = [
              'a': T('إما لم تضف لوحات بعد، أو هويتك في SOFTECH لم تُعتمد. ابدأ من «هوياتي».',
                     'Either you have not added widgets yet, or your SOFTECH identity is not approved. Start from "My identities".')},
         ],
+        'related': ['gamification.main'],
         'updated': '2026-10-10',
     },
     {

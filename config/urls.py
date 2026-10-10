@@ -64,6 +64,7 @@ urlpatterns = [
     path('api/qa/',         include('apps.qa.urls')),
     path('api/personal/',   include('apps.personal.urls')),
     path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
+    path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
     path('api/portal/',     include('apps.portal.urls')),
     # Uploads: signature-checked (core/storage.py, core/media.py) in every mode,

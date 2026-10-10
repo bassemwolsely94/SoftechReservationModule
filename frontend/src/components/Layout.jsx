@@ -98,6 +98,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/dashboard', icon: '◈', label: 'الرئيسية', roles: null },
       { to: '/me',        icon: '🙋', label: 'لوحتي الشخصية', roles: null },
+      { to: '/gamification', icon: '🏆', label: 'التحفيز والمستويات', roles: null },
       { to: '/help',      icon: '📖', label: 'دليل الاستخدام', roles: null },
     ],
   },

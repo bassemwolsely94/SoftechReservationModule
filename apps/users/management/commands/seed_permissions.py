@@ -32,6 +32,7 @@ ALL_MODULES = [
     'callcenter', 'hr', 'approvals', 'analytics', 'dashboard',
     'audit', 'sync', 'settings', 'users', 'admin',
     'help',          # in-app help: 'edit' = trainer may rewrite a screen's explanation
+    'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -229,6 +230,7 @@ PERMISSIONS = {
         'hr':           {'view', 'create', 'approve', 'export'},   # branch-manager approval step + own requests
         'approvals':    {'view', 'approve'},
         'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
+        'gamification': RE,   # executive gamification reports
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -239,6 +241,7 @@ PERMISSIONS = {
     # ─────────────────────────────────────────────────────────────────────
     'quality_manager': {
         'dashboard':    RO,
+        'gamification': RE,   # executive gamification reports
         'reservations': RE,
         'demand':       RE,
         'transfers':    RE,

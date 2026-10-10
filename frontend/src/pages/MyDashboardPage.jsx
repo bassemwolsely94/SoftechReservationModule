@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import GamificationCard from '../components/GamificationCard'
 import {
   PageHeader, Modal, EmptyState, Spinner, SectionTitle, useToast,
 } from '../components/ui'
@@ -135,6 +136,8 @@ export default function MyDashboardPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4">
+        {/* التحفيز — level, points, streak, open items (apps/gamification) */}
+        <GamificationCard className="mb-4" />
         {isAdmin && <AdminApprovalQueue />}
 
         {widgetsQ.isLoading ? (
