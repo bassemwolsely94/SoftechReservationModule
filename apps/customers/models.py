@@ -80,6 +80,9 @@ class Customer(models.Model):
     softech_deceased = models.BooleanField(default=False, help_text='picdied')
     points_enrolled = models.BooleanField(
         default=True, help_text='localcustomers.picpoints — registered in the points system')
+    merged_into_pic = models.CharField(
+        max_length=13, blank=True, default='', db_index=True,
+        help_text='B7: this duplicate code was merged into that main code (apps/customers/merge_write.py)')
     created_by = models.ForeignKey(
         'users.StaffProfile', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='created_customers'
@@ -671,3 +674,34 @@ class MergeCandidate(models.Model):
 
     def __str__(self):
         return f'{self.old_pic} → {self.main_pic} ({self.strength}, {self.status})'
+
+
+class CustomerMergeWrite(models.Model):
+    """
+    One attempt to merge an approved duplicate code into its main code AT HQ (B7 merge part 2, owner
+    2026-10-10 "Next batch (part 2)"). apps/customers/merge_write.py. The points rows carry the tag
+    `B7 merge <candidate id>` in picpoints.vf1, so a rerun never moves the same balance twice.
+    """
+    STATUS_DRY_RUN, STATUS_NO_CHANGE, STATUS_VERIFIED = 'dry_run', 'no_change', 'verified'
+    STATUS_CONFLICT, STATUS_FAILED = 'conflict', 'failed'
+    STATUS_CHOICES = [(STATUS_DRY_RUN, 'تجربة بدون كتابة'), (STATUS_NO_CHANGE, 'مدموج بالفعل'),
+                      (STATUS_VERIFIED, 'تم الدمج والتحقق'), (STATUS_CONFLICT, 'تغيّر أثناء التنفيذ'),
+                      (STATUS_FAILED, 'فشل')]
+
+    candidate = models.ForeignKey(MergeCandidate, on_delete=models.PROTECT, related_name='writes')
+    old_pic = models.CharField(max_length=13, db_index=True)
+    main_pic = models.CharField(max_length=13, db_index=True)
+    before = models.JSONField(default=dict, help_text='HQ old + main before')
+    after = models.JSONField(default=dict, help_text='HQ old + main read back')
+    points_moved = models.IntegerField(default=0)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, db_index=True)
+    error = models.TextField(blank=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.old_pic} → {self.main_pic} {self.status} ({self.points_moved})'

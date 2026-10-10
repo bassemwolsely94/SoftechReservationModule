@@ -561,6 +561,9 @@ POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, ca
 # (maker-checker: the one who marks a pair cannot approve it).
 CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
+# B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
+CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)
+CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

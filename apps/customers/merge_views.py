@@ -34,6 +34,7 @@ def _row(r, names):
             'marked_by': r.marked_by.full_name if r.marked_by_id else '', 'marked_by_id': r.marked_by_id,
             'approved_by': r.approved_by.full_name if r.approved_by_id else '',
             'rejected_by': r.rejected_by.full_name if r.rejected_by_id else '', 'reason': r.reason,
+            'error': r.error[:300], 'merged_at': r.merged_at.isoformat() if r.merged_at else None,
             'updated_at': r.updated_at.isoformat()}
 
 

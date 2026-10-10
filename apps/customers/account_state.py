@@ -15,6 +15,8 @@ CLOSED_MSG = 'غير مسموح بتنفيذ المطلوب لمريض داخل�
 DECEASED_MSG = 'العميل متوفى (مسجل في SOFTECH) — لا يمكن تنفيذ طلب على هذا الكود.'
 NO_POINTS_MSG = 'العميل مستبعد من نظام النقاط — لا يحق له استخدام كوبونات الهدايا.'
 
+MERGED_MSG = 'تم دمج هذا الكود في الكود {main} — استخدم الكود {main}.'
+
 LABELS = {'active': 'نشط', 'closed': 'ملف مغلق', 'deceased': 'متوفى', 'entity': 'جهة (ليس شخصاً)'}
 
 
@@ -22,10 +24,11 @@ def state(c):
     """{code, label, blocked, points, reminders, message} for a Customer (None → active)."""
     if c is None:
         return {'code': 'active', 'label': LABELS['active'], 'blocked': False, 'points': True,
-                'reminders': True, 'message': ''}
+                'reminders': True, 'message': '', 'merged_into': ''}
     status = (c.softech_status or '').strip()
+    merged = (getattr(c, 'merged_into_pic', '') or '').strip()
     if status == '0':
-        code, msg = 'closed', CLOSED_MSG
+        code, msg = 'closed', (MERGED_MSG.format(main=merged) if merged else CLOSED_MSG)
     elif status == '5' or c.softech_deceased:
         code, msg = 'deceased', DECEASED_MSG
     elif c.softech_locked:
@@ -36,7 +39,7 @@ def state(c):
     points = code == 'active' and bool(c.points_enrolled)
     return {'code': code, 'label': LABELS[code], 'blocked': blocked, 'points': points,
             'reminders': code == 'active', 'message': msg,
-            'points_enrolled': bool(c.points_enrolled)}
+            'points_enrolled': bool(c.points_enrolled), 'merged_into': merged}
 
 
 def for_pic(pic):
@@ -46,5 +49,5 @@ def for_pic(pic):
     if not pic:
         return None
     c = (Customer.objects.filter(softech_pic=pic)
-         .only('softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled').first())
+         .only('softech_status', 'softech_locked', 'softech_deceased', 'points_enrolled', 'merged_into_pic').first())
     return state(c) if c else None

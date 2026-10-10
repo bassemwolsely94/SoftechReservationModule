@@ -11,7 +11,7 @@ import { customerMergeApi } from '../api/client'
 
 const errMsg = (e) => e?.response?.data?.detail || e?.message || 'حدث خطأ'
 const STATUSES = [['proposed', 'مقترح'], ['marked', 'بانتظار الاعتماد'], ['approved', 'معتمد'],
-  ['rejected', 'مرفوض'], ['stale', 'لم يعد مكررًا'], ['all', 'الكل']]
+  ['merged', 'تم الدمج'], ['failed', 'فشل الدمج'], ['rejected', 'مرفوض'], ['stale', 'لم يعد مكررًا'], ['all', 'الكل']]
 const STRENGTHS = [['', 'كل الدرجات'], ['strong', 'قوي'], ['medium', 'نفس الاسم'], ['review', 'للمراجعة']]
 const TONE = { strong: 'bg-emerald-50 text-emerald-700', medium: 'bg-sky-50 text-sky-700', review: 'bg-amber-50 text-amber-700' }
 const STATUS_TEXT = { '0': 'مغلق', '1': 'نشط', '': 'نشط', '5': 'متوفى' }
@@ -47,6 +47,7 @@ function Row({ r, me, onAct, busy }) {
           <div className="text-[11px] text-gray-500">هاتف مشترك {(f.shared_phones || []).join('، ')}</div>
           <div className="text-[11px] text-gray-500">{r.status_label}{r.marked_by ? ` · علّمه ${r.marked_by}` : ''}
             {r.approved_by ? ` · اعتمده ${r.approved_by}` : ''}{r.rejected_by ? ` · رفضه ${r.rejected_by}: ${r.reason}` : ''}</div>
+          {r.error && <div className="text-[11px] text-red-600 max-w-xs">{r.error}</div>}
         </div>
       </div>
       {open && (
@@ -113,7 +114,7 @@ export default function CustomerMergePage() {
         <h1 className="text-xl font-bold text-gray-900">دمج الأكواد المكررة</h1>
         <p className="text-sm text-gray-500 mt-1">
           أكواد لنفس العميل على رقم هاتف واحد (الأسماء المختلفة على نفس الرقم = أسرة، لا تُقترح). يعلّم مراجع ويعتمد مراجع آخر.
-          الاعتماد لا يكتب في SOFTECH — الدمج خطوة منفصلة.
+          الاعتماد لا يكتب في SOFTECH — الدمج ينفذه المدير لاحقًا للأزواج المعتمدة (نقل النقاط وغلق الكود المكرر).
         </p>
       </div>
 

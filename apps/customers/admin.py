@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, MergeCandidate, PointsRemoval
+from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, CustomerMergeWrite, MergeCandidate, PointsRemoval
 
 
 @admin.register(CustomerHealthProfile)
@@ -108,6 +108,18 @@ class MergeCandidateAdmin(admin.ModelAdmin):
     list_filter = ('status', 'strength', 'main_swapped')
     search_fields = ('old_pic', 'main_pic', 'cluster')
     readonly_fields = [f.name for f in MergeCandidate._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(CustomerMergeWrite)
+class CustomerMergeWriteAdmin(admin.ModelAdmin):
+    """B7 merge part 2 — every HQ merge attempt (read-only record)."""
+    list_display = ('old_pic', 'main_pic', 'status', 'points_moved', 'requested_by', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('old_pic', 'main_pic')
+    readonly_fields = [f.name for f in CustomerMergeWrite._meta.fields]
 
     def has_add_permission(self, request):
         return False

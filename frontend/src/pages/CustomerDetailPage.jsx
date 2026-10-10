@@ -1528,6 +1528,7 @@ export default function CustomerDetailPage() {
               <span className="font-bold">حالة الحساب في SOFTECH: {customer.account_state.label}</span>
               {!customer.account_state.points && <span> · خارج نظام النقاط والكوبونات</span>}
               {customer.account_state.blocked && <span> · لا يمكن البيع أو الحجز أو التذكير</span>}
+              {customer.account_state.merged_into && <span> · تم دمجه في الكود <span className="font-mono font-bold">{customer.account_state.merged_into}</span></span>}
             </div>
           )}
 

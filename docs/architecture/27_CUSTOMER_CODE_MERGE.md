@@ -330,7 +330,47 @@ Items 1–3 of the design below. Nothing here writes SOFTECH; approving a pair o
   - Each action is audited (`customer_updated`, note `B7 merge queue: …`, before/after status or main).
 * Tests: `apps/tests/test_customer_merge_queue.py` (6).
 
-## Proposed design (for approval — part 1 built above; part 2 not built)
+## Merge write — part 2 (BUILT 2026-10-10, gated off; owner: "Next batch (part 2)")
+
+`apps/customers/merge_write.py`, command `merge_customer_codes`, record `CustomerMergeWrite` (migration
+`customers/0027`, which also adds `Customer.merged_into_pic`). Only pairs **approved** in the queue are written.
+
+* **Per pair, at HQ:**
+  1. **Points** (only if the old code's balance > 0): `picpoints` −balance on the old code, then +the same
+     on the main code. Both rows use branch `'100'`, doc `'0'`, docnumber 0, `vf1 = 'B7 merge <candidate id>'`
+     and `vf2` = the operator's SOFTECH user. `tr_picpoints` applies them.
+     - Debit first: a failure in between strands points but never doubles them.
+     - The credit amount is read from the tagged debit row.
+     - A rerun finds the tagged rows and only adds what is missing, so the balance never moves twice.
+  2. **Status:** `phcodestatus='0'`, `phcodestatususercode`, `phcodestatustime`, `usercode`, `trans_time` on
+     the old code, with an optimistic WHERE on the status read. The main code is untouched; `pphcode` is never
+     written; history stays under the old code.
+  3. **Read back:** old closed + tagged debit = −credit → *verified*. Otherwise *conflict* / *failed*; the run
+     stops and the pair shows «فشل الدمج» in the queue.
+* **Our side:** pair → *merged*. The old code's mirror gets `merged_into_pic` and status `'0'` at once, so the
+  POS and reservations refuse it with «تم دمج هذا الكود في الكود X — استخدم الكود X». The customer page
+  shows the link.
+* **Refused, nothing written:**
+  - pair not approved, or a code missing;
+  - main closed / deceased / entity;
+  - old deceased / entity;
+  - main itself merged away;
+  - points to move while either code is outside the points system (removed customers do not pass points on);
+  - more than one tagged row.
+* **Safety:** `CUSTOMER_MERGE_WRITE_ENABLED` (default False → dry run); `CUSTOMER_MERGE_BATCH_MAX` 20; one
+  run at a time (pg lock 7_301_005); the operator must be admin / supervisor with a SOFTECH user id;
+  AuditLog (`customer_updated`, before/after) for every committed attempt.
+* **Branch copies:** the daily status check shows the closed old code as *HQ stricter* →
+  `push_customer_branch_copy --from-drift --branch <code>` (existing, read back).
+* **Rollout:**
+  1. Approve the pilot 03HD3059 → 06HD8958 in /customers/merge (two reviewers).
+  2. `merge_customer_codes --pic 03HD3059 --user <you>` (dry run).
+  3. `CUSTOMER_MERGE_WRITE_ENABLED=True`, then the same command with `--commit`.
+  4. Trace both codes, then do the branch copies.
+  5. Then `--approved --batches N --quiet --commit`.
+* Tests: `apps/tests/test_customer_merge_write.py` (6).
+
+## Design (parts 1 and 2 built above)
 
 1. **Candidate queue (our DB, read-only vs SOFTECH):** pairs on a real shared phone, classified
    *strong* (same normalised name + same structured address), *medium* (same name), *review* (similar name);
