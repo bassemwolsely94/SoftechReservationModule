@@ -12,6 +12,7 @@
  */
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { couponsApi } from '../../api/client'
+import useHelpTab from '../../help/useHelpTab'
 
 const STAGE_LABEL = {
   stocked: 'في المخزن الرئيسي', issued: 'صُرف لعميل', at_branch: 'في فرع',
@@ -503,6 +504,7 @@ function BatchesView({ overview, onChanged }) {
 export default function GiftCouponsTab() {
   const [ov, setOv] = useState(null)
   const [view, setView] = useState('customers')
+  useHelpTab(view)
   const [error, setError] = useState(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState(null)

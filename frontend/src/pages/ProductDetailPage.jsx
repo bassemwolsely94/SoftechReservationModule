@@ -10,6 +10,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { productsApi, pickZonesApi } from '../api/client'
 import ShelfQrButton from '../components/ShelfQrButton'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -620,6 +621,7 @@ export default function ProductDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('info')
+  useHelpTab(activeTab)
 
   // Fetch detail
   const { data: product, isLoading, isError } = useQuery({

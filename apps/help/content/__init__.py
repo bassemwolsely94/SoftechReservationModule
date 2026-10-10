@@ -14,5 +14,7 @@ def T(ar, en):
 
 MODULE_FILES = [
     'general',
-    'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
+    'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
+    'customers', 'vouchers', 'loyalty',
+    'catalog', 'chronic', 'batches', 'shortage',
 ]

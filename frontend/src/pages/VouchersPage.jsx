@@ -16,6 +16,7 @@ import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import GiftCouponsTab from './vouchers/GiftCouponsTab'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
@@ -1358,6 +1359,7 @@ function ReportTab() {
 export default function VouchersPage() {
   const [searchParams] = useSearchParams()
   const [activeTab,    setActiveTab]    = useState(searchParams.get('tab') || 'vouchers')
+  useHelpTab(activeTab)
   const tabParam = searchParams.get('tab')
   useEffect(() => { if (tabParam) setActiveTab(tabParam) }, [tabParam])
   const [redeemTarget, setRedeemTarget] = useState(null)

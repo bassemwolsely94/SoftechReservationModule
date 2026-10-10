@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { referralApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -332,6 +333,7 @@ function MyCodeTab() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ReferralPage() {
   const [tab, setTab] = useState('leads')
+  useHelpTab(tab)
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">

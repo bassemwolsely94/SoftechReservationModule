@@ -92,10 +92,13 @@ def _screen_payload(request, key, s, modules, screens, override):
     eff = registry.effective(s, override)
     m = modules.get(s['module'], {})
     can_edit = _can_edit(_profile(request))
+    workflows = m.get('workflows') or []
+    if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
+        workflows = [w for w in workflows if w.get('key') in s['workflows']]
     payload = {
-        **eff,
+        **{k: v for k, v in eff.items() if k != 'workflows'},
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
-                   'summary': m.get('summary'), 'workflows': m.get('workflows') or []},
+                   'summary': m.get('summary'), 'workflows': workflows},
         'siblings': [_brief(registry.effective(screens[k], None), modules)
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],

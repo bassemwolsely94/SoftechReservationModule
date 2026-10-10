@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import api from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // stable cart id — correlates selection telemetry with the eventual order (client_token)
 const _genToken = () => (globalThis.crypto?.randomUUID?.()
@@ -187,6 +188,7 @@ export default function usePosOrder() {
   const [numMode, setNumMode] = useState('qty')                 // qty | disc | price
   const [tenders, setTenders] = useState([blankTender()])
   const [activeTab, setActiveTab] = useState('items')           // items | payment | contract
+  useHelpTab(activeTab)
   // batch picker + status
   const [batchModal, setBatchModal] = useState(null)
   // Gift coupon (server says batch_action='coupon_serial'): the agent types the serial PRINTED on the

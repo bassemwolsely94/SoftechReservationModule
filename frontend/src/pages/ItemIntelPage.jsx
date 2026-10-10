@@ -18,6 +18,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { itemsApi, productsApi, enrichmentApi, chronicApi } from '../api/client'
 import { useToast } from '../components/ui.jsx'
+import useHelpTab from '../help/useHelpTab'
 
 // Pull a human-readable message out of an axios error
 function errMsg(e, fallback = 'حدث خطأ أثناء الحفظ') {
@@ -763,6 +764,7 @@ export default function ItemIntelPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState('softech')
+  useHelpTab(activeSection)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['item-intel', id],

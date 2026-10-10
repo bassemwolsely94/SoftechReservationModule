@@ -21,6 +21,7 @@ import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -1330,6 +1331,7 @@ export default function CustomerDetailPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const [tab, setTab] = useState('timeline')
+  useHelpTab(tab)
   const [chronicValue, setChronicValue] = useState(null)
 
   const { data: customer, isLoading, isError } = useQuery({

@@ -19,6 +19,7 @@ import ItemSearchWidget from '../components/ItemSearchWidget'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import { createWorker } from 'tesseract.js'
+import useHelpTab from '../help/useHelpTab'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -888,6 +889,7 @@ function ShortageDetail({ listId, onBack }) {
   const [sl,          setSl]          = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [activeTab,   setActiveTab]   = useState('manual')
+  useHelpTab(activeTab)
   const [manualInputMode, setManualInputMode] = useState('text')   // 'text' | 'catalog'
   const [catalogItem,     setCatalogItem]     = useState(null)     // selected catalog item
   const [singleInput, setSingleInput] = useState({ raw_name: '', quantity_needed: 1 })

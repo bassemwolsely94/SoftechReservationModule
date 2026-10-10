@@ -172,6 +172,9 @@ class HelpContentCoverageTests(SimpleTestCase):
             for t in s.get('tabs') or []:
                 self.assertIn('title', t, key)
                 self.assertIn('body', t, key)
+            wf_keys = {w.get('key') for w in self.modules[s['module']].get('workflows') or []}
+            for w in s.get('workflows') or []:
+                self.assertTrue(w in wf_keys, f'{key}: unknown workflow key {w}')
             for r in s.get('related') or []:
                 self.assertTrue(r in self.screens, f'{key}: related screen {r} does not exist')
             for g in [self.modules[s['module']].get('group')]:

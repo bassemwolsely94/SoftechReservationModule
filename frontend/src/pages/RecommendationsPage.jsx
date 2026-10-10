@@ -22,6 +22,7 @@ import { recommendationsApi, customersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -600,6 +601,7 @@ const TABS = [
 
 export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState('fbt')
+  useHelpTab(activeTab)
   const qc = useQueryClient()
 
   return (

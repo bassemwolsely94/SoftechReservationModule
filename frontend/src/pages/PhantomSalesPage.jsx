@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const pct = (x) => `${Math.round((x ?? 0) * 100)}%`
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -133,6 +134,7 @@ function Table({ rows, tab, qc }) {
 export default function PhantomSalesPage() {
   const qc = useQueryClient()
   const [tab, setTab] = useState('flagged')
+  useHelpTab(tab)
   const [med, setMed] = useState(''); const [q, setQ] = useState('')
   const params = { ...(med ? { med } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
   const { data: summary } = useQuery({ queryKey: ['phantom-summary'], queryFn: () => purchasingApi.phantomSummary().then(r => r.data) })

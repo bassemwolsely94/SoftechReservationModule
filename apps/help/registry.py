@@ -9,6 +9,7 @@ Content format (one file per module, see content/reservations.py for a full exam
         'title': T('الحجوزات', 'Reservations'),
         'summary': T('…', '…'),
         'workflows': [{                      # optional — the record's life cycle
+            'key': 'order',                  # needed only when a screen picks workflows
             'title': T('…', '…'),
             'model': 'reservations.Reservation', 'field': 'status',   # optional; when
                 # given, a test checks every status of the model is explained here
@@ -30,6 +31,8 @@ Content format (one file per module, see content/reservations.py for a full exam
         'tips':   [T(..)],                    # common mistakes, good to know
         'faq':    [{'q': T(..), 'a': T(..)}],
         'related': ['demand.list'],           # other screen keys
+        'workflows': ['order'],               # optional — show only these module workflows
+                                              # (default: all of the module's)
         'updated': '2026-10-10',              # bump when the text changes → "new" badge
     }]
 

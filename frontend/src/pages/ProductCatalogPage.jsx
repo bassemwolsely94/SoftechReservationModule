@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { productsApi, itemsApi, pickZonesApi } from '../api/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -594,6 +595,7 @@ export default function ProductCatalogPage() {
   const [query,       setQuery]       = useState(searchParams.get('q') || '')
   const [viewMode,    setViewMode]    = useState('grid')    // grid | list
   const [viewTab,     setViewTab]     = useState('catalog') // catalog | fmi | low_stock | bundles | recent
+  useHelpTab(viewTab)
   const [page,        setPage]        = useState(1)
   const [ordering,    setOrdering]    = useState('popular')
   const [showFilters, setShowFilters] = useState(false)

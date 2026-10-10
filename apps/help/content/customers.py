@@ -1,0 +1,115 @@
+from . import T
+
+MODULE = {
+    'key': 'customers', 'group': 'customers', 'icon': '👥',
+    'title': T('العملاء', 'Customers'),
+    'summary': T(
+        'ملف كامل لكل عميل (360°) مبني على بيانات SOFTECH: مشترياته ومرتجعاته، حجوزاته، أدويته المزمنة وملفه الصحي (حساسية، حمل، أطفال)، '
+        'نقاط الولاء، وقيمته وخطر انقطاعه عن الشراء. الكود الموحّد للعميل هو «PIC». يوجد أيضاً «دمج الأكواد المكررة» لنفس العميل.',
+        'A complete (360°) profile per customer built from SOFTECH data: purchases and returns, reservations, chronic medicines and health '
+        'profile (allergies, pregnancy, children), loyalty points, and their value and churn risk. The customer\'s unified code is the "PIC". '
+        'There is also "merge duplicate codes" for the same customer.'),
+    'workflows': [{
+        'key': 'merge',
+        'title': T('دمج الأكواد المكررة (مراجع + معتمد)', 'Merging duplicate codes (maker + checker)'),
+        'model': 'customers.MergeCandidate', 'field': 'status',
+        'intro': T('مراجع يعلّم الزوج، ومراجع آخر مختلف يعتمده. الاعتماد لا يكتب في SOFTECH؛ الدمج الفعلي (نقل النقاط وإغلاق الكود المكرر) خطوة منفصلة ينفذها المدير.',
+                   'One reviewer marks the pair, a different reviewer approves it. Approval does not write to SOFTECH; the actual merge (moving points and closing the duplicate code) is a separate step run by the admin.'),
+        'states': [
+            {'key': 'proposed', 'label': T('مقترح', 'Proposed'), 'desc': T('اكتشفه الفحص الأسبوعي: نفس الاسم (أو مشابه) على رقم هاتف حقيقي مشترك.', 'Found by the weekly scan: same (or similar) name on a real shared phone.'), 'next': ['marked', 'rejected']},
+            {'key': 'marked', 'label': T('معلَّم — بانتظار الاعتماد', 'Marked — awaiting approval'), 'desc': T('علّمه مراجع؛ يجب أن يعتمده مراجع آخر.', 'A reviewer marked it; another reviewer must approve.'), 'next': ['approved', 'rejected']},
+            {'key': 'approved', 'label': T('معتمد — بانتظار الدمج', 'Approved — awaiting merge'), 'desc': T('جاهز للدمج الفعلي في SOFTECH.', 'Ready for the actual merge in SOFTECH.'), 'next': ['merged', 'failed']},
+            {'key': 'merged', 'label': T('تم الدمج', 'Merged'), 'desc': T('نُقلت النقاط للكود الرئيسي وأُغلق الكود المكرر.', 'Points moved to the main code and the duplicate code closed.')},
+            {'key': 'failed', 'label': T('فشل الدمج', 'Merge failed'), 'desc': T('توقف الدمج عند مشكلة — يراجعها المدير.', 'The merge stopped at a problem — the admin reviews it.')},
+            {'key': 'rejected', 'label': T('مرفوض', 'Rejected'), 'desc': T('ليس نفس العميل (مع ذكر السبب).', 'Not the same customer (with a reason).')},
+            {'key': 'stale', 'label': T('لم يعد مكرراً', 'No longer a duplicate'), 'desc': T('تغيّرت البيانات فلم يعد الزوج مكرراً.', 'The data changed so the pair is no longer a duplicate.')},
+        ],
+    }],
+}
+
+SCREENS = [
+    {
+        'key': 'customers.list',
+        'routes': ['/customers'],
+        'title': T('العملاء', 'Customers'),
+        'summary': T('البحث في كل العملاء المسجّلين وترتيبهم حسب خطر الانقطاع أو القيمة (LTV) أو الغياب أو آخر زيارة.',
+                     'Search all registered customers and sort them by churn risk, value (LTV), absence or last visit.'),
+        'audience': T('كل من يتعامل مع العملاء.', 'Everyone who deals with customers.'),
+        'steps': [
+            T('ابحث بالاسم أو رقم الهاتف أو كود SOFTECH.', 'Search by name, phone or SOFTECH code.'),
+            T('صفِّ بخطر الانقطاع (حرج / مرتفع / متوسط / مستقر) لاستهداف من يحتاج تواصلاً.', 'Filter by churn risk (critical / high / medium / stable) to target who needs contact.'),
+            T('اضغط العميل لفتح ملفه الكامل.', 'Click a customer to open their full profile.'),
+        ],
+        'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.')],
+        'related': ['customers.detail', 'customers.merge'],
+        'workflows': [],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'customers.detail',
+        'routes': ['/customers/:id'],
+        'title': T('ملف العميل (360°)', 'Customer profile (360°)'),
+        'summary': T('كل ما يخص العميل في صفحة واحدة: بطاقة العميل وقيمته وخطر انقطاعه وبيانات التواصل يميناً، والتبويبات للتفاصيل. منها تنشئ حجزاً أو تسجّل ملاحظة أو تعدّل نقاطه.',
+                     'Everything about the customer on one page: their card, value, churn risk and contact data on the side, with tabs for detail. From here you create a reservation, add a note or adjust points.'),
+        'audience': T('الصيادلة والكول سنتر والمشرفون.', 'Pharmacists, call center and supervisors.'),
+        'tabs': [
+            {'key': 'timeline', 'title': T('الجدول الزمني', 'Timeline'), 'body': T('الملاحظات والحجوزات الأخيرة، وخانة لإضافة ملاحظة أو تعليق طبي (Ctrl+Enter).', 'Recent notes and reservations, and a box to add a note or medical comment (Ctrl+Enter).')},
+            {'key': 'purchases', 'title': T('المشتريات', 'Purchases'), 'body': T('فواتير المبيعات والمرتجعات المتزامنة من SOFTECH مع إجمالي المشتريات؛ صفِّ (الكل / مبيعات / مرتجعات).', 'Sales and return invoices synced from SOFTECH with the purchase total; filter (all / sales / returns).')},
+            {'key': 'reservations', 'title': T('الحجوزات', 'Reservations'), 'body': T('كل حجوزات العميل وحالاتها.', 'All the customer\'s reservations and their status.')},
+            {'key': 'top', 'title': T('الأدوية الأكثر شراءً', 'Most-bought medicines'), 'body': T('الأصناف التي يشتريها العميل أكثر — مفيدة للتوصية والمتابعة.', 'The items the customer buys most — useful for suggestions and follow-up.')},
+            {'key': 'chronic', 'title': T('💊 المزمن', '💊 Chronic'), 'body': T('أدويته المزمنة مع آخر شراء والجرعة/الصرف التالي والمتأخر، والمتابعات النشطة.', 'Their chronic medicines with last purchase, next refill and overdue ones, and active follow-ups.')},
+            {'key': 'health', 'title': T('🏥 الصحة', '🏥 Health'),
+             'body': T('الملف الصحي المنظّم: الحالات المزمنة المكتشفة من المشتريات، تنبيهات خاصة (حامل، مرضعة، يشتري لطفل، أدوية متعددة)، الحساسيات، والأدوية النشطة. «بناء/تحديث الملف» يعيد حسابه؛ التعديل اليدوي يمنع إعادة الحساب التلقائي.',
+                       'The structured health profile: chronic conditions found from purchases, special alerts (pregnant, breastfeeding, buys for a child, polypharmacy), allergies and active medicines. "Build/refresh" recalculates it; a manual edit stops automatic recalculation.')},
+            {'key': 'fulltimeline', 'title': T('📅 التاريخ الكامل', '📅 Full history'), 'body': T('كل الأحداث مرتبة زمنياً: بيع، مرتجع، حجز، طلب، متابعة.', 'Every event in time order: sale, return, reservation, request, follow-up.')},
+            {'key': 'loyalty', 'title': T('🏆 النقاط', '🏆 Points'),
+             'body': T('رصيد نقاط SOFTECH (لكل الفروع) وسجل التعديلات. «تعديل النقاط» يضيف أو يخصم (برقم موجب أو سالب) مع سبب إلزامي ويُنفَّذ في SOFTECH.',
+                       'The SOFTECH points balance (all branches) and the adjustment log. "Adjust points" adds or subtracts (positive or negative) with a required reason and is applied in SOFTECH.')},
+        ],
+        'steps': [
+            T('راجع البطاقة الجانبية: الشريحة، خطر الانقطاع، وعدد الأيام منذ آخر زيارة — لو ظهر «يُنصح بالتواصل فوراً» اتصل به.', 'Check the side card: segment, churn risk and days since last visit — if "contact now" shows, call them.'),
+            T('سجّل الأمراض المزمنة في البطاقة (تعديل) لو العميل أخبرك بها.', 'Record chronic conditions on the card (edit) if the customer tells you.'),
+            T('استخدم الإجراءات السريعة لإنشاء حجز أو طلب له مباشرةً.', 'Use the quick actions to create a reservation or request for them directly.'),
+        ],
+        'tips': [
+            T('الملف الصحي معلومة حساسة — لا تشاركها خارج العمل.', 'The health profile is sensitive — never share it outside work.'),
+            T('تعديل النقاط يؤثر على رصيد العميل في كل الفروع ويُسجَّل باسمك.', 'Adjusting points affects the customer\'s balance in all branches and is recorded under your name.'),
+        ],
+        'related': ['customers.list', 'reservations.new', 'followups.tasks', 'loyalty.program'],
+        'workflows': [],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'customers.merge',
+        'routes': ['/customers/merge'],
+        'title': T('دمج الأكواد المكررة', 'Merge duplicate codes'),
+        'summary': T('أكواد SOFTECH مختلفة لنفس العميل على نفس رقم الهاتف. الأسماء المختلفة على نفس الرقم تعتبر أسرة ولا تُقترح. النظام يختار الكود الرئيسي (الأقدم إنشاءً ← الأعلى نقاطاً ← الأحدث بيعاً) ويمكن تبديله.',
+                     'Different SOFTECH codes for the same customer on the same phone. Different names on one phone count as a family and are never proposed. The system picks the main code (oldest → most points → latest sale), which can be swapped.'),
+        'audience': T('المدير والمشرف والكول سنتر.', 'Admin, supervisor and call center.'),
+        'steps': [
+            T('صفِّ بالحالة والدرجة (قوي = نفس الاسم والعنوان، نفس الاسم، للمراجعة = اسم مشابه).', 'Filter by status and strength (strong = same name and address, same name, review = similar name).'),
+            T('قارن الكودين: تاريخ الإنشاء، النقاط، آخر بيع، الحالة (نشط/مغلق/متوفى).', 'Compare the two codes: creation date, points, last sale, status (active/closed/deceased).'),
+            T('«تعليم للدمج» (أو «اجعل … الرئيسي» لتبديل الرئيسي)، أو «ليس نفس العميل» مع السبب.', '"Mark for merge" (or "make … the main" to swap), or "Not the same customer" with a reason.'),
+            T('مراجع آخر يضغط «اعتماد» على ما علّمه غيره. يوجد زر لتعليم/اعتماد الأزواج القوية دفعة واحدة (حتى 100).', 'Another reviewer presses "Approve" on what someone else marked. A button marks/approves strong pairs in bulk (up to 100).'),
+        ],
+        'tips': [T('لا يمكنك اعتماد ما علّمته أنت — هذا مقصود للحماية.', 'You cannot approve what you marked yourself — this is on purpose.')],
+        'related': ['customers.list'],
+        'workflows': ['merge'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'customers.mobile',
+        'routes': ['/m/customers'],
+        'title': T('بحث العملاء (موبايل)', 'Customer lookup (mobile)'),
+        'summary': T('على الكاونتر: امسح رمز QR الخاص بالعميل أو ابحث بالاسم/الهاتف/PIC لترى ملفه ونقاطه (نقاط الشراء من SOFTECH ونقاط الإحالة) وآخر حجوزاته، واستبدل النقاط بمكافأة بضغطة.',
+                     'At the counter: scan the customer\'s QR code or search by name/phone/PIC to see their profile, points (SOFTECH purchase points and referral points) and recent reservations, and redeem points for a reward in one tap.'),
+        'audience': T('الصيادلة والمندوبون.', 'Pharmacists and salespeople.'),
+        'steps': [
+            T('«مسح رمز العميل (QR)» أو اكتب في البحث.', '"Scan customer QR" or type in the search.'),
+            T('«استبدال» على المكافأة المناسبة؛ يُنشأ طلب استبدال بانتظار الاعتماد.', '"Redeem" on the right reward; a redemption request is created, awaiting approval.'),
+        ],
+        'related': ['loyalty.program'],
+        'workflows': [],
+        'updated': '2026-10-10',
+    },
+]

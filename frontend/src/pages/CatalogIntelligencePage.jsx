@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { catalogIntelApi, recommendationsApi, enrichmentApi } from '../api/client'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
@@ -1040,6 +1041,7 @@ const TABS = [
 
 export default function CatalogIntelligencePage() {
   const [tab, setTab] = useState('variants')
+  useHelpTab(tab)
 
   return (
     <div className="flex flex-col h-screen bg-gray-50" dir="rtl">

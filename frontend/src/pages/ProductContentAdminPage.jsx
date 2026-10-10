@@ -14,6 +14,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { productsApi } from '../api/client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -523,6 +524,7 @@ export default function ProductContentAdminPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('media')
+  useHelpTab(activeTab)
 
   const { data: product, isLoading, isError } = useQuery({
     queryKey: ['product-detail', id],

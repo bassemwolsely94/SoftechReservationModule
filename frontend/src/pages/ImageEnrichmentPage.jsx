@@ -12,6 +12,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { imageApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -1264,6 +1265,7 @@ const TABS = [
 
 export default function ImageEnrichmentPage() {
   const [tab,        setTab]       = useState('dashboard')
+  useHelpTab(tab)
   const [galleryItem,setGalleryItem] = useState('')
   const {data:rpt}  = useQuery({queryKey:['img-report'],queryFn:()=>imageApi.report().then(r=>r.data),refetchInterval:30000})
   const {data:meta} = useQuery({queryKey:['img-filter-meta'],queryFn:()=>imageApi.filterMeta?.().then(r=>r.data).catch(()=>({})), staleTime:300000})

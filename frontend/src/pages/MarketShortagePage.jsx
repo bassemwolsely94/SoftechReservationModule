@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
+import useHelpTab from '../help/useHelpTab'
 
 const daysBehind = (d) => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return Math.max(0, Math.floor(ms / 86400000)) }
 
@@ -664,6 +665,7 @@ function TrendsTab() {
 
 export default function MarketShortagePage() {
   const [tab, setTab] = useState('changes')
+  useHelpTab(tab)
   const [med, setMed] = useState('')
   const [q, setQ] = useState('')
   const { data: confirmed } = useQuery({ queryKey: ['shortage-confirmed', ''],

@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chronicApi, enrichmentApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -1706,6 +1707,7 @@ const TABS = [
 
 export default function ChronicClassifierPage() {
   const [tab, setTab] = useState('classifier')
+  useHelpTab(tab)
 
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-hidden" dir="rtl">

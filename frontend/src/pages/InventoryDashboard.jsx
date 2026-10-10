@@ -10,6 +10,7 @@ import AnalyticsFilterPanel, { filtersToParams, defaultFilters } from '../compon
 import ItemOperationalFiltersBar, { emptyItemFilters, buildItemParams } from '../components/ItemOperationalFiltersBar'
 import DataTable from '../components/DataTable'
 import RefreshButton from '../components/RefreshButton'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 
@@ -63,6 +64,7 @@ const ABC_INV_COLORS = {
 
 export default function InventoryDashboard() {
   const [activeTab,   setActiveTab]   = useState('shortages')
+  useHelpTab(activeTab)
   const [filters,     setFilters]     = useState(defaultFilters())
   const [itemFilters, setItemFilters] = useState(emptyItemFilters())
 

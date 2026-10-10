@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { wildcardMatch } from '../utils/wildcard'
+import useHelpTab from '../help/useHelpTab'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -1382,6 +1383,7 @@ function DisposalTab() {
 
 export default function BatchesPage() {
   const [tab, setTab] = useState('alerts')
+  useHelpTab(tab)
 
   // KPI cards now read the live stkbalexpiry mirror (all nodes).
   const { data: summary } = useQuery({
