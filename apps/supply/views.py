@@ -37,6 +37,7 @@ from . import availability as av
 from . import cases as case_svc
 from . import execution as exe
 from .permissions import CanOperateSupply
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.supply')
 
@@ -217,7 +218,7 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
             rows = _read_tabular(f)
         except Exception as exc:
             logger.warning('availability import-file parse failed: %s', exc)
-            return Response({'detail': f'تعذّر قراءة الملف: {exc}'},
+            return Response({'detail': f'تعذّر قراءة الملف: {public_error(request, exc)}'},
                             status=status.HTTP_400_BAD_REQUEST)
 
         # Column layout (apps/supply/file_layouts): a layout confirmed before for this supplier

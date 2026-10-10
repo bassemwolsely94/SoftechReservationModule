@@ -508,7 +508,9 @@ def branch_procurement(request):
         PurchaseLine.objects.filter(doc_date__gte=since)
         .values('branch_code')
         .annotate(
-            net_value=Sum('net_value'),
+            # not named net_value: an annotation shadowing the field makes the
+            # Sum('net_value', filter=…) below aggregate an aggregate (FieldError)
+            total_net=Sum('net_value'),
             net_qty=Sum('net_qty'),
             purchase_value=Sum('net_value', filter=Q(is_return=False)),
             return_value=Sum('net_value', filter=Q(is_return=True)),
@@ -517,8 +519,10 @@ def branch_procurement(request):
             supplier_count=Count('supplier_code', distinct=True),
             avg_margin=Avg('margin_pct', filter=Q(is_return=False)),
         )
-        .order_by('-net_value')
+        .order_by('-total_net')
     )
+    for b in branches:
+        b['net_value'] = b.pop('total_net')
 
     total_val = sum(float(b['net_value'] or 0) for b in branches)
     result = []

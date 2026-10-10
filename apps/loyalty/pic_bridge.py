@@ -241,6 +241,9 @@ def adjust_softech_points(softech_pic: str, delta: int,
     """
     if delta == 0:
         raise ValueError('delta cannot be 0 — no-op adjustments are not allowed.')
+    from django.conf import settings
+    if not getattr(settings, 'LOYALTY_SOFTECH_WRITE_ENABLED', True):
+        raise RuntimeError('SOFTECH loyalty writes are disabled (LOYALTY_SOFTECH_WRITE_ENABLED=False).')
 
     op         = operator or _operator()
     branchcode = _crm_branchcode()

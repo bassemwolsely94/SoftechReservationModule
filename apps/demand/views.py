@@ -35,6 +35,7 @@ from .serializers import (
     DisqualifySerializer, OptOutSerializer, FromReservationSerializer,
 )
 from . import service
+from core.errors import public_error
 
 
 def _profile(request):
@@ -1215,4 +1216,4 @@ def shelf_qr(request):
         qrcode.make(url).save(buf, format='PNG')
         return Response({'url': url, 'qr_code': base64.b64encode(buf.getvalue()).decode()})
     except Exception as exc:
-        return Response({'url': url, 'qr_code': None, 'detail': str(exc)})
+        return Response({'url': url, 'qr_code': None, 'detail': public_error(request, exc)})

@@ -24,6 +24,7 @@ from apps.whatsapp.serializers import (
 from apps.whatsapp.webhook import process_webhook
 from apps.whatsapp.sender import WhatsAppSender
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.whatsapp')
 
@@ -48,7 +49,7 @@ class WebhookView(APIView):
         challenge = request.GET.get('hub.challenge')
         verify_token = getattr(settings, 'WHATSAPP_VERIFY_TOKEN', '')
 
-        if mode == 'subscribe' and token == verify_token:
+        if mode == 'subscribe' and verify_token and hmac.compare_digest((token or '').encode(), verify_token.encode()):
             return HttpResponse(challenge, content_type='text/plain')
         return HttpResponse('Forbidden', status=403)
 
@@ -70,8 +71,11 @@ class WebhookView(APIView):
     def _verify_signature(self, request) -> bool:
         app_secret = getattr(settings, 'WHATSAPP_APP_SECRET', '')
         if not app_secret:
-            logger.warning('WHATSAPP_APP_SECRET not set — skipping signature verification')
-            return True
+            # Fail closed: without the app secret anyone could post forged events.
+            # Only a DEBUG (dev) process accepts unsigned payloads.
+            logger.warning('WHATSAPP_APP_SECRET not set — %s unsigned webhook',
+                           'accepting (DEBUG)' if settings.DEBUG else 'rejecting')
+            return bool(settings.DEBUG)
 
         sig_header = request.META.get('HTTP_X_HUB_SIGNATURE_256', '')
         if not sig_header.startswith('sha256='):
@@ -80,7 +84,7 @@ class WebhookView(APIView):
         expected = hmac.new(
             app_secret.encode(), request.body, hashlib.sha256
         ).hexdigest()
-        return hmac.compare_digest(sig_header[7:], expected)
+        return hmac.compare_digest(sig_header[7:].encode(), expected.encode())
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -166,7 +170,7 @@ class SendTextView(APIView):
             return Response({'wamid': result.get('messages', [{}])[0].get('id', '')})
         except Exception as exc:
             logger.error('SendTextView error: %s', exc)
-            return Response({'detail': str(exc)}, status=500)
+            return Response({'detail': public_error(request, exc)}, status=500)
 
 
 class SendTemplateView(APIView):
@@ -192,7 +196,7 @@ class SendTemplateView(APIView):
             return Response({'wamid': result.get('messages', [{}])[0].get('id', '')})
         except Exception as exc:
             logger.error('SendTemplateView error: %s', exc)
-            return Response({'detail': str(exc)}, status=500)
+            return Response({'detail': public_error(request, exc)}, status=500)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import login_view, refresh_view, me_view, change_password_view
+from .views import login_view, logout_view, refresh_view, me_view, change_password_view
 from .mfa import (
     verify_2fa_view, setup_2fa_view, enable_2fa_view, disable_2fa_view, status_2fa_view,
 )
@@ -7,6 +7,7 @@ from .mfa import (
 urlpatterns = [
     path('login/',           login_view),
     path('refresh/',         refresh_view),
+    path('logout/',          logout_view),
     path('me/',              me_view),
     path('change-password/', change_password_view),
 

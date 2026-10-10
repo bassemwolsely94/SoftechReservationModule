@@ -44,6 +44,7 @@ from rest_framework.response import Response
 from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
 from django.db.models import Q
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 from .serializers import (
     StockCountSessionListSerializer,
     StockCountSessionDetailSerializer,
@@ -137,7 +138,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('preview_items failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ في الاتصال بـ SOFTECH: {e}'},
+                {'detail': f'خطأ في الاتصال بـ SOFTECH: {public_error(request, e)}'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -191,7 +192,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('generate_snapshot failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ في الاتصال بـ SOFTECH: {e}'},
+                {'detail': f'خطأ في الاتصال بـ SOFTECH: {public_error(request, e)}'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -237,7 +238,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('export_sheet failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ أثناء توليد الملف: {e}'},
+                {'detail': f'خطأ أثناء توليد الملف: {public_error(request, e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -289,7 +290,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('parse_count_sheet failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ في قراءة الملف: {e}'},
+                {'detail': f'خطأ في قراءة الملف: {public_error(request, e)}'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -306,7 +307,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('process_upload failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ أثناء معالجة البيانات: {e}'},
+                {'detail': f'خطأ أثناء معالجة البيانات: {public_error(request, e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -501,7 +502,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception('adjustment_export failed for session %s', session.pk)
             return Response(
-                {'detail': f'خطأ أثناء توليد الملف: {e}'},
+                {'detail': f'خطأ أثناء توليد الملف: {public_error(request, e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

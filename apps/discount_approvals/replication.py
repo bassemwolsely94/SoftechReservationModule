@@ -385,9 +385,13 @@ def force_replication(softech_id, erp_usercode=None, mode='restamp', target_bran
     target_branches: list of branchcodes to push to (None = all).
     Returns dict {restamped: bool, pushed: {branchcode: 'ok'|'reverted'|'error..'}}
     """
+    from django.conf import settings
     from config.sybase import get_sybase_connection, get_branch_connection
 
     result = {'restamped': False, 'pushed': {}}
+    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+        result['error'] = 'replication_repair_disabled'
+        return result
 
     # Read authoritative HQ row — including the ORIGINAL editor to preserve it
     conn = get_sybase_connection()

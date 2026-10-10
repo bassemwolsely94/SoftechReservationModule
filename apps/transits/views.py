@@ -33,6 +33,7 @@ from rest_framework.response import Response
 
 from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 from .serializers import (
     ForceCloseSerializer,
     InTransitNoteCreateSerializer,
@@ -217,7 +218,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         except Exception as exc:
             logger.exception('export-%s failed (%d transfers)', mode, len(transfers))
             return Response(
-                {'detail': f'خطأ أثناء توليد {label}: {exc}'},
+                {'detail': f'خطأ أثناء توليد {label}: {public_error(request, exc)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -483,7 +484,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         except Exception as exc:
             logger.error('Manual transit sync trigger failed: %s', exc)
             return Response(
-                {'detail': f'فشل تشغيل المزامنة: {exc}'},
+                {'detail': f'فشل تشغيل المزامنة: {public_error(request, exc)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

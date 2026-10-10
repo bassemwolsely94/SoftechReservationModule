@@ -44,6 +44,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+from core.errors import public_error
 
 from .models import (
     IncentiveProgram, IncentiveRule, IncentiveRuleItem,
@@ -176,7 +177,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
         except Exception as exc:
             logger.exception('calculate action failed for program %d', program.id)
             return Response(
-                {'detail': f'فشل الاحتساب: {exc}'},
+                {'detail': f'فشل الاحتساب: {public_error(request, exc)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -214,7 +215,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
         except Exception as exc:
             logger.exception('simulate action failed for program %d', program.id)
             return Response(
-                {'detail': f'فشل المحاكاة: {exc}'},
+                {'detail': f'فشل المحاكاة: {public_error(request, exc)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -1116,7 +1117,7 @@ class IncentiveRuleViewSet(viewsets.ModelViewSet):
                     raw_items.append({'item_code': code, 'item_name': name, 'incentive_override': ov})
             except Exception as exc:
                 return Response(
-                    {'detail': f'فشل قراءة ملف CSV: {exc}'},
+                    {'detail': f'فشل قراءة ملف CSV: {public_error(request, exc)}'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         else:
@@ -1389,7 +1390,7 @@ class MyProgressView(APIView):
             data = get_my_progress(profile)
         except Exception as exc:
             logger.exception('my_progress: failed for user %d', profile.id)
-            return Response({'detail': f'فشل الاحتساب: {exc}'},
+            return Response({'detail': f'فشل الاحتساب: {public_error(request, exc)}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
@@ -1609,10 +1610,12 @@ class NearExpiryStockView(viewsets.ViewSet):
                 include_quarantine=include_quarantine,
             )
         except Exception as exc:
+            # Upstream (SOFTECH) unavailable → 503; the driver error (hosts, SQL)
+            # goes to the log, not to the browser.
             logger.exception('near_expiry_stock: SOFTECH query failed')
             return Response(
-                {'detail': f'فشل الاستعلام من قاعدة بيانات ERP: {exc}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {'detail': 'تعذر الاستعلام من قاعدة بيانات ERP حالياً'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # ── Aggregations ──────────────────────────────────────────────────────

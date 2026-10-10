@@ -17,7 +17,8 @@ This prevents the thread-pool crash that causes 500 on every request after a rel
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3.12 python3.12-venv python3-pip nginx postgresql postgresql-contrib
+sudo apt install -y python3.12 python3.12-venv python3-pip nginx postgresql postgresql-contrib \
+    default-jre-headless   # Java runtime: the SOFTECH JDBC driver (libs/jconn3.jar) runs in-process via JPype
 ```
 
 Create a dedicated system user:
@@ -50,10 +51,28 @@ sudo -u elrezeiky nano .env
 Critical settings for production:
 ```env
 DEBUG=False
-ALLOWED_HOSTS=yourdomain.com,YOUR_VPS_IP
+ALLOWED_HOSTS=yourdomain.com,YOUR_VPS_IP   # required — '*' is no longer the default
 SCHEDULER_AUTOSTART=False          # MUST be False — scheduler runs separately
-SECRET_KEY=<generate a long random key>
+SECRET_KEY=<generate a long random key>     # REQUIRED — the app refuses to start without it
+BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Proto)
+CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
+MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file
+# Login cookies get the Secure flag automatically because BEHIND_HTTPS_PROXY=True.
 ```
+
+> ⚠️ **Rotating an old/placeholder SECRET_KEY:** stored omni channel credentials
+> are encrypted with a key derived from SECRET_KEY when `OMNI_CREDENTIALS_KEY` is
+> empty. Pin the old derived key BEFORE changing SECRET_KEY, or re-enter the
+> channel credentials afterwards:
+> ```bash
+> venv/bin/python -c "import base64,hashlib;print(base64.urlsafe_b64encode(hashlib.sha256(b'<OLD SECRET_KEY>').digest()).decode())"
+> # → put the output in OMNI_CREDENTIALS_KEY, then set the new SECRET_KEY
+> ```
+> All logged-in users are signed out by the change (JWTs are re-keyed).
+
+For a **staging / UAT** server start from `deploy/staging.env.example` instead
+(SOFTECH read-only, all writers off, channels empty).
 
 ---
 
@@ -122,7 +141,7 @@ On your dev machine (or on the VPS):
 cd frontend
 npm install
 npm run build
-# Output goes to frontend/dist — served by Nginx /
+# Output goes to staticfiles/frontend (vite.config.js build.outDir) — served by Nginx /
 ```
 
 ---
@@ -163,7 +182,7 @@ journalctl -u elrezeiky-scheduler -f
 ### Emergency: reset admin password
 ```bash
 sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py shell \
-  -c "from django.contrib.auth.models import User; u=User.objects.get(username='bassemwolsely94'); u.set_password('NewPassword123!'); u.save(); print('done')"
+  -c "from django.contrib.auth.models import User; u=User.objects.get(username='<admin_username>'); u.set_password('<new strong password>'); u.save(); print('done')"
 ```
 
 ---
@@ -195,3 +214,16 @@ venv\Scripts\python.exe manage.py run_scheduler
 ```
 
 Never set `SCHEDULER_AUTOSTART=True` in `.env`.
+
+---
+
+## 11. Backups (do this before any UAT session or migration)
+
+```bash
+sudo -u postgres pg_dump -Fc elrezeiky_db > /opt/elrezeiky/backups/elrezeiky_$(date +%F_%H%M).dump
+tar czf /opt/elrezeiky/backups/media_$(date +%F).tgz -C /opt/elrezeiky media
+# restore: sudo -u postgres pg_restore --clean -d elrezeiky_db <file>.dump
+```
+Schedule the pg_dump nightly (cron) and keep at least 7 days. SOFTECH itself is
+backed up by its own administrator — this app never needs to restore it as long as
+staging runs with `SOFTECH_READ_ONLY=True`.

@@ -218,10 +218,10 @@ export default function PbxLivePage() {
 
   // WebSocket
   useEffect(() => {
-    const token = localStorage.getItem('access_token') || ''
+    // Auth: the httpOnly session cookie rides along with the same-origin handshake.
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const host  = window.location.host
-    const ws = new WebSocket(`${proto}://${host}/ws/pbx/agent/?token=${token}`)
+    const ws = new WebSocket(`${proto}://${host}/ws/pbx/agent/`)
     wsRef.current = ws
 
     ws.onopen  = () => setWsStatus('connected')

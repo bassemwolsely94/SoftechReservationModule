@@ -34,7 +34,7 @@ class MetaGraphWebhookView(APIView):
         token     = request.GET.get('hub.verify_token')
         challenge = request.GET.get('hub.challenge')
         verify_token = getattr(settings, 'META_GRAPH_VERIFY_TOKEN', '')
-        if mode == 'subscribe' and token == verify_token:
+        if mode == 'subscribe' and verify_token and hmac.compare_digest((token or '').encode(), verify_token.encode()):
             return HttpResponse(challenge, content_type='text/plain')
         return HttpResponse('Forbidden', status=403)
 
@@ -44,11 +44,15 @@ class MetaGraphWebhookView(APIView):
             sig = request.META.get('HTTP_X_HUB_SIGNATURE_256', '')
             expected = hmac.new(app_secret.encode(), request.body, hashlib.sha256).hexdigest()
             if not (sig.startswith('sha256=') and
-                    hmac.compare_digest(sig[7:], expected)):
+                    hmac.compare_digest(sig[7:].encode(), expected.encode())):
                 logger.warning('Meta Graph webhook: invalid signature')
                 return HttpResponse('Forbidden', status=403)
+        elif not settings.DEBUG:
+            # Fail closed: unsigned events would let anyone inject messages.
+            logger.warning('META_GRAPH_APP_SECRET not set — rejecting unsigned webhook')
+            return HttpResponse('Forbidden', status=403)
         else:
-            logger.warning('META_GRAPH_APP_SECRET not set — skipping signature verification')
+            logger.warning('META_GRAPH_APP_SECRET not set — accepting unsigned webhook (DEBUG)')
 
         try:
             payload = json.loads(request.body)

@@ -23,6 +23,7 @@ from .permissions import CanOperatePosOrders, CanPushPosOrders
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
+from core.errors import public_error
 
 
 def _staff(user):
@@ -460,7 +461,7 @@ def lost_sales_view(request):
             branch.effective_db_host, branch.softech_branch_id, since,
             branch.effective_db_port, branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'detail': f'تعذّر قراءة سجل الإلغاء: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'detail': f'تعذّر قراءة سجل الإلغاء: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
 
     # resolve names from OUR mirrors (no extra SOFTECH round-trip): items ← catalog, cashiers ← staff.
     item_names, cashier_names = {}, {}
@@ -895,7 +896,7 @@ def batch_availability_view(request):
         batches, stockable = item_availability(branch.effective_db_host, store, item,
                                                branch.effective_db_port, branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'detail': f'تعذّر قراءة الأرصدة: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'detail': f'تعذّر قراءة الأرصدة: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
     # SOFTECH items.itempartno «رقم القطعة أو الباتش» (synced to catalog.Item.batch_required):
     # authoritative "batch selection is mandatory" flag, returned so every POS add-path (favorites,
     # barcode, repeat — not just item search) drives the batch matrix correctly.
@@ -937,7 +938,7 @@ def contract_fields_view(request):
         fields = contract_field_spec(branch.effective_db_host, branch.effective_db_port,
                                      branch.db_name or 'SOFTECHDB9', personcode)
     except Exception as e:
-        return Response({'detail': f'تعذّر قراءة إعدادات حقول التعاقد: {e}'},
+        return Response({'detail': f'تعذّر قراءة إعدادات حقول التعاقد: {public_error(request, e)}'},
                         status=status.HTTP_502_BAD_GATEWAY)
     return Response({'customer': personcode, 'fields': fields})
 

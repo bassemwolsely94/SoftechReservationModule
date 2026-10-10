@@ -34,6 +34,7 @@ from .importer import (
 )
 from .audit import record_audit
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 logger = logging.getLogger('elrezeiky.insurance')
 
@@ -84,7 +85,7 @@ class InsuranceClientViewSet(viewsets.ModelViewSet):
             ]
             return Response(data)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response({'error': public_error(request, e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
 class InsuranceSubClientViewSet(viewsets.ModelViewSet):
@@ -220,7 +221,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         except InsuranceImportError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': f'تعذّرت المزامنة: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': f'تعذّرت المزامنة: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
 
     @action(detail=True, methods=['post'], url_path='resync/apply')
     def resync_apply(self, request, pk=None):
@@ -338,7 +339,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.exception('Insurance import failed for claim %s', claim.claim_number)
-            return Response({'error': f'خطأ غير متوقع: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': f'خطأ غير متوقع: {public_error(request, e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
             'message': 'تم الاستيراد بنجاح',
@@ -418,7 +419,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         except Exception as e:
             claim.delete()
             logger.exception('Insurance import failed')
-            return Response({'error': f'خطأ غير متوقع: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': f'خطأ غير متوقع: {public_error(request, e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
             'message': 'تم إنشاء المطالبة والاستيراد بنجاح',
@@ -525,7 +526,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                             'personcode':   personcode,
                         })
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response({'error': public_error(request, e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # Sort by motalbano descending
         results.sort(key=lambda x: x['motalbano'] or 0, reverse=True)
@@ -1095,7 +1096,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         except KeyError:
             return Response({'detail': 'docnumber, branch, prices مطلوبة'}, status=400)
         except Exception as e:
-            return Response({'detail': f'تعذّر الاتصال بسوفتك: {str(e)[:120]}'}, status=502)
+            return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
 
     @action(detail=True, methods=['get'], url_path='softech-reprice/receipt-lines')
     def softech_reprice_receipt_lines(self, request, pk=None):
@@ -1108,7 +1109,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'lines': list_receipt_lines(str(docno), str(branch),
                                                           request.query_params.get('doccode', '115'))})
         except Exception as e:
-            return Response({'detail': f'تعذّر جلب البنود: {str(e)[:120]}'}, status=502)
+            return Response({'detail': f'تعذّر جلب البنود: {public_error(request, e)}'}, status=502)
 
     @action(detail=True, methods=['get'], url_path='softech-reprice/item-receipts')
     def softech_reprice_item_receipts(self, request, pk=None):
@@ -1193,7 +1194,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         except RepriceError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': f'تعذّرت المعاينة: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': f'تعذّرت المعاينة: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
 
     @action(detail=True, methods=['post'], url_path='softech-date/apply')
     def softech_date_apply(self, request, pk=None):
@@ -1844,7 +1845,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             from config.sybase import get_sybase_connection
             conn = get_sybase_connection()
         except Exception as e:
-            return Response({'error': f'فشل الاتصال بسوفتك: {e}'},
+            return Response({'error': f'فشل الاتصال بسوفتك: {public_error(request, e)}'},
                             status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # Build personcode → personname map from personsdata so that
@@ -1960,7 +1961,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                     if row:
                         results.append(row)
             except Exception as e:
-                return Response({'error': f'خطأ في الاستعلام: {e}'},
+                return Response({'error': f'خطأ في الاستعلام: {public_error(request, e)}'},
                                 status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         results.sort(key=lambda x: x['motalbano'], reverse=True)
@@ -2197,8 +2198,8 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 traceback.format_exc(),
             )
             return Response(
-                {'error': f'تعذّر تطبيق التحديث: {exc}',
-                 'detail': str(exc), 'error_type': type(exc).__name__},
+                {'error': f'تعذّر تطبيق التحديث: {public_error(request, exc)}',
+                 'detail': public_error(request, exc), 'error_type': type(exc).__name__},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         scope = f'{len(line_ids)} بند محدد' if line_ids else 'كل البنود'
@@ -2532,7 +2533,7 @@ class InsuranceCacheSyncView(APIView):
             result = sync_insurance_cache()
             return Response(result, status=status.HTTP_200_OK)
         except Exception as exc:
-            return Response({'status': 'error', 'error': str(exc)},
+            return Response({'status': 'error', 'error': public_error(request, exc)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request):

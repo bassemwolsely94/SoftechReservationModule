@@ -13,11 +13,13 @@ from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Count, Q, Avg
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
+from core.errors import public_error
 from .serializers import (
     CallLogListSerializer, CallLogDetailSerializer, CallLogCreateSerializer,
     AddressUpdateSerializer, AddressUpdateWriteSerializer,
@@ -410,7 +412,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
             from apps.callcenter.ai import summarize_call_async
             Thread(target=summarize_call_async, args=(call.pk,), daemon=True).start()
         except Exception as e:
-            return Response({'detail': f'فشل تشغيل التلخيص: {e}'}, status=500)
+            return Response({'detail': f'فشل تشغيل التلخيص: {public_error(request, e)}'}, status=500)
 
         return Response({'queued': True, 'call_id': call.pk})
 
@@ -510,7 +512,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
             return Response({'created': True, 'task_id': task.pk, 'due_date': str(task.due_date)}, status=201)
         except Exception as e:
-            return Response({'detail': f'فشل إنشاء المتابعة: {e}'}, status=500)
+            return Response({'detail': f'فشل إنشاء المتابعة: {public_error(request, e)}'}, status=500)
 
     # ── Quality scoring ────────────────────────────────────────────────────────
 
@@ -735,7 +737,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
                 created.append({'call_item_id': ci.pk, 'reservation_id': res.pk})
 
         except Exception as e:
-            return Response({'detail': f'فشل إنشاء الحجز: {e}'}, status=500)
+            return Response({'detail': f'فشل إنشاء الحجز: {public_error(request, e)}'}, status=500)
 
         return Response({'created': created, 'count': len(created)}, status=201)
 
@@ -817,7 +819,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
                 converted.append(ci.pk)
 
         except Exception as e:
-            return Response({'detail': f'فشل إنشاء طلب النقل: {e}'}, status=500)
+            return Response({'detail': f'فشل إنشاء طلب النقل: {public_error(request, e)}'}, status=500)
 
         return Response({
             'transfer_request_id': tr.pk,
@@ -1021,7 +1023,8 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         case.set_csat(score=score, note=note)
         return Response({'csat_score': case.csat_score, 'csat_note': case.csat_note})
 
-    @action(detail=True, methods=['post'], url_path='add-note', parser_classes=None)
+    @action(detail=True, methods=['post'], url_path='add-note',
+            parser_classes=[JSONParser, MultiPartParser, FormParser])
     def add_note(self, request, pk=None):
         """
         POST /api/callcenter/cases/{id}/add-note/

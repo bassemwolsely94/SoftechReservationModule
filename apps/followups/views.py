@@ -34,6 +34,7 @@ from .serializers import (
 )
 from . import services
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 
 def _profile(request):
@@ -434,7 +435,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
                 call.save(update_fields=['related_item'])
             call_id = call.id
         except Exception as exc:
-            return Response({'detail': f'تعذّر إنشاء سجل المكالمة: {exc}'}, status=500)
+            return Response({'detail': f'تعذّر إنشاء سجل المكالمة: {public_error(request, exc)}'}, status=500)
 
         # Update task state
         if request.data.get('mark_done'):
@@ -903,7 +904,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
                 featured_item_id=featured_item_id,
             )
         except Exception as e:
-            return Response({'detail': str(e)}, status=400)
+            return Response({'detail': public_error(request, e)}, status=400)
 
         return Response({
             'campaign_id':       campaign.id,

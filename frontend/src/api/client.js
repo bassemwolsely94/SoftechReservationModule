@@ -1,33 +1,53 @@
 import axios from 'axios'
 
+// Auth lives in httpOnly cookies set by the server (core/auth_cookies.py): page
+// script never sees a token. X-Requested-With marks our own requests — the
+// server refuses cookie-authenticated writes without it (CSRF protection).
+const XHR = { 'X-Requested-With': 'XMLHttpRequest' }
+
 const api = axios.create({
   baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', ...XHR },
+  withCredentials: true,
 })
 
-// Attach JWT token to every request
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('access_token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
+// One refresh at a time, shared by every request that hit a 401 meanwhile.
+let refreshing = null
+function refreshSession() {
+  if (!refreshing) {
+    refreshing = axios.post('/api/auth/refresh/', {}, { headers: XHR, withCredentials: true })
+      .finally(() => { refreshing = null })
+  }
+  return refreshing
+}
 
-// Auto-refresh on 401
+// Browsers that still hold tokens in localStorage (pre-cookie builds): trade the
+// refresh token for cookies once, then forget it — no forced re-login.
+export async function migrateLegacyTokens() {
+  const legacy = localStorage.getItem('refresh_token')
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  if (!legacy) return
+  try {
+    await axios.post('/api/auth/refresh/', { refresh: legacy }, { headers: XHR, withCredentials: true })
+  } catch { /* expired — the user simply logs in again */ }
+}
+
+const NO_REFRESH = ['/auth/login/', '/auth/refresh/', '/auth/logout/', '/auth/2fa/']
+
+// Access cookie expired → rotate it from the refresh cookie, retry once.
 api.interceptors.response.use(
   res => res,
   async err => {
-    const original = err.config
-    if (err.response?.status === 401 && !original._retry) {
+    const original = err.config || {}
+    const url = original.url || ''
+    if (err.response?.status === 401 && !original._retry && !NO_REFRESH.some(p => url.includes(p))) {
       original._retry = true
-      const refresh = localStorage.getItem('refresh_token')
-      if (refresh) {
-        try {
-          const { data } = await axios.post('/api/auth/refresh/', { refresh })
-          localStorage.setItem('access_token', data.access)
-          original.headers.Authorization = `Bearer ${data.access}`
-          return api(original)
-        } catch {
-          localStorage.clear()
+      try {
+        await refreshSession()
+        return api(original)
+      } catch {
+        if (!window.location.pathname.startsWith('/login') && !url.includes('/auth/me/')) {
           window.location.href = '/login'
         }
       }
@@ -44,6 +64,7 @@ export const authApi = {
   login: (username, password, deviceToken) =>
     api.post('/auth/login/', { username, password, device_token: deviceToken || undefined }),
   me: () => api.get('/auth/me/'),
+  logout: () => api.post('/auth/logout/', {}),
 
   // ── Two-factor (TOTP) ──
   verify2fa: (mfaToken, code, rememberDevice) =>

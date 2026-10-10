@@ -40,10 +40,51 @@ if sys.version_info >= (3, 14):
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='change-me-in-production-abc123xyz')
+SECRET_KEY = config('SECRET_KEY', default='')
+
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',')
+# Signing key for JWTs, portal sessions, delivery-tracking / PBX-recording links and
+# (when OMNI_CREDENTIALS_KEY is unset) the encryption of stored channel credentials.
+# A missing or placeholder key would make all of those forgeable, so a non-DEBUG
+# process refuses to start without a real one. Dev (DEBUG=True) and the test runner
+# fall back to a throwaway per-process key.
+_RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+if not SECRET_KEY or SECRET_KEY.startswith('change-me'):
+    if DEBUG or _RUNNING_TESTS:
+        SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            'SECRET_KEY is missing or still the placeholder. Set a long random value in .env '
+            '(python -c "import secrets; print(secrets.token_urlsafe(50))").'
+        )
+
+# Production must list its hostnames; '*' is only a DEBUG convenience.
+ALLOWED_HOSTS = [h.strip() for h in config(
+    'ALLOWED_HOSTS', default='*' if DEBUG else 'localhost,127.0.0.1',
+).split(',') if h.strip()]
+
+# ── HTTPS / reverse-proxy hardening ──────────────────────────────────────────
+# Origins allowed to POST to Django-rendered forms (the /admin/ login) — needed
+# behind HTTPS on Django 4.x, e.g. "https://erp.example.com".
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if o.strip()]
+# Set BEHIND_HTTPS_PROXY=True ONLY when a proxy (Nginx / tunnel) terminates TLS and
+# overwrites X-Forwarded-Proto — otherwise a client could claim https itself.
+BEHIND_HTTPS_PROXY = config('BEHIND_HTTPS_PROXY', default=False, cast=bool)
+if BEHIND_HTTPS_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+# Secure flag on the JWT cookies (core/auth_cookies.py). On by default whenever the
+# site is served over HTTPS; off only for plain-HTTP LAN deployments.
+AUTH_COOKIE_SECURE = config('AUTH_COOKIE_SECURE', default=BEHIND_HTTPS_PROXY or SECURE_SSL_REDIRECT, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+X_FRAME_OPTIONS = 'DENY'
+SESSION_COOKIE_HTTPONLY = True
 
 INSTALLED_APPS = [
     # daphne MUST be first so it can serve WebSocket + HTTP via ASGI
@@ -206,7 +247,8 @@ DATABASES = {
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Bearer header OR the httpOnly access cookie (core/auth_cookies.py)
+        'core.auth_cookies.CookieJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -265,6 +307,16 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# Uploaded files get signed, expiring URLs (core/storage.py); /media/ is served by
+# core.media.serve_media, which checks the signature. Product images stay public.
+STORAGES = {
+    'default':     {'BACKEND': 'core.storage.SignedMediaStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+MEDIA_URL_TTL = config('MEDIA_URL_TTL', default=6 * 3600, cast=int)   # seconds, minimum link lifetime
+# True behind Nginx: Django checks the signature, Nginx sends the bytes via the
+# internal /protected-media/ location (deploy/nginx.conf).
+MEDIA_ACCEL_REDIRECT = config('MEDIA_ACCEL_REDIRECT', default=False, cast=bool)
 
 # ── INTERNATIONALISATION ──────────────────────────────────────────────────────
 LANGUAGE_CODE = 'ar'
@@ -320,6 +372,40 @@ SYBASE_HOST     = config('SYBASE_HOST', default='localhost')
 SYBASE_PORT     = config('SYBASE_PORT', default='5000')
 SYBASE_USER     = config('SYBASE_USER', default='')
 SYBASE_PASSWORD = config('SYBASE_PASSWORD', default='')
+# Global kill-switch: True refuses EVERY non-read statement on EVERY SOFTECH
+# connection (HQ + branches), whatever the per-feature *_ENABLED flags say.
+# Turn it on for staging / UAT / demos. See config/sybase.py.
+SOFTECH_READ_ONLY = config('SOFTECH_READ_ONLY', default=False, cast=bool)
+# Staging: send every branch-server connection to this host ('host' or 'host:port')
+# instead of the production addresses stored in Branch.db_host.
+SOFTECH_BRANCH_HOST_OVERRIDE = config('SOFTECH_BRANCH_HOST_OVERRIDE', default='')
+# The test runner must never reach a real SOFTECH, whatever the developer's .env
+# says (several writer tests drive the live code path to prove a gate is open).
+# No HQ host, every branch connection sent to an unresolvable name, and the
+# read-only guard on. SOFTECH_TESTS_ALLOW_LIVE=True opts out for a deliberate
+# integration run against a TEST server.
+if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast=bool):
+    SYBASE_HOST = ''
+    SOFTECH_BRANCH_HOST_OVERRIDE = 'softech-disabled-in-tests.invalid'
+    SOFTECH_READ_ONLY = True
+    for _k in ('SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST'):
+        os.environ.pop(_k, None)
+
+# Per-feature switches for the SOFTECH writes that had none (default ON = today's
+# behaviour). Set one to False to stop that single write in production without
+# the all-or-nothing SOFTECH_READ_ONLY. Checked in the view AND in the writer, so
+# scheduled jobs and management commands obey them too.
+PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # approved price/discount + classification UPDATE items
+REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=True, cast=bool)       # restamp/push items to branches (manual + scheduled)
+LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # manual purchase-points INSERT picpoints
+PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=True, cast=bool)   # stktransm.comments / cheques.chequenote
+
+# Roles allowed to manually add/deduct customer loyalty points (POST
+# /api/loyalty/customers/<id>/adjust/ — purchase points write SOFTECH picpoints).
+LOYALTY_ADJUST_ROLES = frozenset(
+    r.strip() for r in config('LOYALTY_ADJUST_ROLES', default='admin,supervisor,call_center').split(',')
+    if r.strip()
+)
 # Default per-statement timeout (seconds) for INTERACTIVE queries — bounds an
 # HTTP request against a slow/blocked Sybase read. jConnect enforces this as a
 # socket read-timeout (fires as JZ0T3 on fetch), so keep it snappy.
@@ -660,4 +746,11 @@ MIDDLEWARE += [
     'core.middleware.db_cleanup.CloseConnectionsMiddleware',
     # Stores current StaffProfile in thread-local for serializer audit helpers
     'apps.users.middleware.CurrentUserMiddleware',
+    # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
+    'core.middleware.module_access.ModuleAccessMiddleware',
 ]
+
+# off | log | enforce — roll out as: log in production, clean up the matrix until the
+# "elrezeiky.rbac" log is quiet, then enforce. The test runner defaults to off so
+# existing endpoint tests keep exercising view-level permissions only.
+RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')

@@ -37,8 +37,9 @@ class CustomerReferralCodeView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
+        from django.shortcuts import get_object_or_404
         from apps.customers.models import Customer
-        customer = Customer.objects.get(pk=self.kwargs['customer_id'])
+        customer = get_object_or_404(Customer, pk=self.kwargs['customer_id'])
         return ReferralCode.get_or_create_for(customer)
 
 

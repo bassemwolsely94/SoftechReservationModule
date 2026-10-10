@@ -25,3 +25,5 @@ beautifulsoup4>=4.12.0
 # ── Web Push (VAPID) ──────────────────────────────────────────────────────────
 pywebpush>=2.0.0              # browser push notifications (VAPID) — "alive" bell
 PyMySQL==1.2.0  # Issabel CDR (call-center call counts, doc 16 Phase 5)
+python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
+JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT

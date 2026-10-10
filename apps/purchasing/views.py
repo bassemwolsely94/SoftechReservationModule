@@ -30,6 +30,7 @@ from .models import DemandCalculationRun, ItemDemandMetrics, ItemDemandAggregate
 from .serializers import RunSerializer, MetricsSerializer, AggregatedSerializer
 from apps.catalog.wildcard import wq
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
+from core.errors import public_error
 
 
 # ── Shared item-level filter helper ───────────────────────────────────────────
@@ -1655,7 +1656,7 @@ def export_purchasing(request):
 
     except Exception as exc:
         logger.error('[EXPORT] EXCEPTION: %s\n%s', exc, _tb.format_exc())
-        return Response({'error': str(exc), 'type': type(exc).__name__}, status=500)
+        return Response({'error': public_error(request, exc), 'type': type(exc).__name__}, status=500)
 
 
 # ── Manual trigger (background thread) ───────────────────────────────────────

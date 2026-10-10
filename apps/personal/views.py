@@ -31,6 +31,7 @@ from .models import SoftechIdentityClaim, PersonalWidget, DocumentCommentEdit, D
 from .serializers import IdentityClaimSerializer, PersonalWidgetSerializer
 from .providers import WIDGET_REGISTRY, catalog
 from . import queries
+from core.errors import public_error
 
 
 def _can_edit_comments(profile):
@@ -305,7 +306,7 @@ def set_document_comment(request):
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:  # SOFTECH connectivity / driver failure
         return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
-                         'error': str(e)[:150]}, status=502)
+                         'error': public_error(request, e)}, status=502)
 
     DocumentCommentEdit.objects.create(
         staff=profile, identity=widget.identity,
@@ -380,7 +381,7 @@ def set_cheque_note(request):
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
         return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
-                         'error': str(e)[:150]}, status=502)
+                         'error': public_error(request, e)}, status=502)
 
     DocumentCommentEdit.objects.create(
         staff=profile, identity=widget.identity,
@@ -466,7 +467,7 @@ def set_revision(request):
         return Response({'detail': e.detail}, status=e.status)
     except Exception as e:
         return Response({'detail': 'تعذّر الاتصال بسيرفر SOFTECH (المركز الرئيسي) — لم يُحفظ التعديل',
-                         'error': str(e)[:150]}, status=502)
+                         'error': public_error(request, e)}, status=502)
 
     rec.status = DocumentRevision.STATUS_REVISED if revised else DocumentRevision.STATUS_REVOKED
     rec.note = (request.data.get('note') or '').strip()[:250]
@@ -616,7 +617,7 @@ def widget_data(request, pk):
     try:
         payload = meta['fetch'](person_key, widget.config or {}, profile)
     except Exception as e:  # provider-level failure — never 500 the dashboard
-        return Response({'detail': 'تعذّر جلب البيانات', 'error': str(e)[:200]}, status=502)
+        return Response({'detail': 'تعذّر جلب البيانات', 'error': public_error(request, e)}, status=502)
 
     envelope = {
         'widget_type': widget.widget_type,

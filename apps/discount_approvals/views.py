@@ -8,6 +8,12 @@ from apps.catalog.models import Item
 from .models import ItemPriceChangeRequest, USER_EDITABLE_FIELDS, FIELD_LABELS
 from .serializers import ItemPriceChangeRequestSerializer, ReviewSerializer
 from .services import execute_price_change, compute_derived_preview
+import logging
+
+from django.conf import settings
+from core.errors import public_error
+
+logger = logging.getLogger("elrezeiky.discount_approvals")
 
 
 def _is_admin(user):
@@ -102,6 +108,12 @@ def approve_request(request, pk):
             {'detail': f'لا يمكن اعتماد طلب بحالة: {obj.get_status_display()}'},
             status=400
         )
+
+    # Refuse BEFORE approving, so a switched-off write never leaves an
+    # approved-but-unexecuted request behind (it stays pending for later).
+    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+        return Response({'detail': 'اعتماد الأسعار معطّل حالياً من إعدادات النظام',
+                         'error_code': 'pricing_writes_disabled'}, status=503)
 
     # Stamp the approver's OWN real SOFTECH usercode (synced from the users
     # table), so the edit is attributable to that admin in SOFTECH exactly as if
@@ -265,6 +277,9 @@ def request_force_replication(request, pk):
         obj = ItemPriceChangeRequest.objects.select_related('item').get(pk=pk)
     except ItemPriceChangeRequest.DoesNotExist:
         return Response({'detail': 'غير موجود'}, status=404)
+    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+        return Response({'detail': 'إصلاح النسخ معطّل حالياً من إعدادات النظام',
+                         'error_code': 'replication_repair_disabled'}, status=503)
     # Repair preserves the item's original editor — no approver usercode needed.
     mode = request.data.get('mode', 'restamp')
     from .replication import force_replication
@@ -529,6 +544,9 @@ def repair_gaps(request):
     """
     from .models import ReplicationGap
     from .replication import force_replication, check_item
+    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+        return Response({'detail': 'إصلاح النسخ معطّل حالياً من إعدادات النظام',
+                         'error_code': 'replication_repair_disabled'}, status=503)
     # Repair preserves each item's original editor — no approver usercode needed.
     mode = request.data.get('mode', 'restamp')
     gap_ids = request.data.get('gap_ids')
@@ -574,7 +592,11 @@ def repair_gaps(request):
 def item_replication_status(request, softech_id):
     """Ad-hoc replication check for ANY item (not tied to a request)."""
     from .replication import check_item
-    return Response(check_item(softech_id))
+    try:
+        return Response(check_item(softech_id))
+    except Exception:
+        logger.exception('item_replication_status: SOFTECH check failed for %s', softech_id)
+        return Response({'detail': 'تعذر الاتصال بقاعدة بيانات ERP حالياً'}, status=503)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -711,7 +733,7 @@ def who_changed_what(request):
             by_user.append({'usercode': uc, 'name': names.get(uc, '') or uc, 'edits': n})
         by_user.sort(key=lambda x: -x['edits'])
     except Exception as exc:
-        return Response({'detail': f'تعذّر قراءة Softech: {exc}'}, status=502)
+        return Response({'detail': f'تعذّر قراءة Softech: {public_error(request, exc)}'}, status=502)
 
     from django.db.models import Count
     mod = (ItemPriceChangeRequest.objects

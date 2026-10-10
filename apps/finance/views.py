@@ -714,6 +714,12 @@ def trigger_sync(request):
 class FinanceSyncRunListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class   = FinanceSyncRunSerializer
-    queryset           = FinanceSyncRun.objects.order_by('-started_at')[:50]
     filter_backends    = [filters.OrderingFilter]
     ordering           = ['-started_at']
+
+    def get_queryset(self):
+        return FinanceSyncRun.objects.order_by('-started_at')
+
+    def filter_queryset(self, queryset):
+        # Slice AFTER ordering — a sliced queryset can't be re-ordered (TypeError).
+        return super().filter_queryset(queryset)[:50]

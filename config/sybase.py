@@ -1,6 +1,7 @@
 import datetime as _dt
 import os
 import pathlib
+import re
 import threading
 import time
 
@@ -137,12 +138,139 @@ SYBASE_CONNECT_ATTEMPTS    = int(getattr(settings, 'SYBASE_CONNECT_ATTEMPTS', 3)
 SYBASE_CONNECT_RETRY_DELAY = float(getattr(settings, 'SYBASE_CONNECT_RETRY_DELAY', 1.5))
 
 
+# ── Global SOFTECH read-only kill-switch ─────────────────────────────────────
+# SOFTECH_READ_ONLY=True (staging / UAT / any non-production copy) makes EVERY
+# connection this module opens refuse anything that is not a plain read, no matter
+# which writer, view, scheduled job or management command asks — including the
+# writers that drop down to the raw java.sql.Connection (`conn._conn`). The per-
+# feature *_ENABLED flags stay as they are; this sits underneath all of them.
+#
+# The check is deliberately strict (allow-list on the first keyword, deny-list on
+# write keywords anywhere outside string literals/comments). A false "blocked" on
+# a read is an inconvenience in staging; a false "allowed" on a write is not.
+
+class SoftechReadOnlyError(RuntimeError):
+    """Raised when a write is attempted while SOFTECH_READ_ONLY is on."""
+
+
+_SQL_LITERAL_RE  = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"")
+_SQL_COMMENT_RE  = re.compile(r'--[^\n]*|/\*.*?\*/', re.S)
+_SQL_READ_STARTS = frozenset({
+    'SELECT', 'SET', 'DECLARE', 'USE', 'PRINT',
+    'BEGIN', 'COMMIT', 'ROLLBACK', 'SAVE', 'IF', 'WHILE',
+})
+_SQL_WRITE_WORDS_RE = re.compile(
+    r'\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|'
+    r'EXEC|EXECUTE|WRITETEXT|UPDATETEXT|READTEXT|BULK|DUMP|LOAD|KILL|SHUTDOWN|'
+    r'DBCC|RECONFIGURE|SETUSER|DISK|INTO)\b',
+    re.I,
+)
+
+
+def softech_read_only() -> bool:
+    return bool(getattr(settings, 'SOFTECH_READ_ONLY', False))
+
+
+def is_read_only_sql(sql) -> bool:
+    """True when `sql` is a plain read that is safe under SOFTECH_READ_ONLY."""
+    text = _SQL_COMMENT_RE.sub(' ', str(sql or ''))
+    text = _SQL_LITERAL_RE.sub("''", text).strip().lstrip('(').strip()
+    if not text:
+        return False
+    first = re.split(r'[\s(;]+', text, maxsplit=1)[0].upper()
+    if first not in _SQL_READ_STARTS:
+        return False
+    return not _SQL_WRITE_WORDS_RE.search(text)
+
+
+def _refuse_if_write(sql):
+    if not is_read_only_sql(sql):
+        snippet = ' '.join(str(sql or '').split())[:120]
+        logger.warning('[sybase] SOFTECH_READ_ONLY blocked statement: %s', snippet)
+        raise SoftechReadOnlyError(
+            'SOFTECH is in read-only mode (SOFTECH_READ_ONLY=True); '
+            f'refused: {snippet}'
+        )
+
+
+class _ReadOnlyStatement:
+    """java.sql.Statement proxy: checks every SQL string it is handed."""
+
+    def __init__(self, stmt):
+        self._stmt = stmt
+
+    def execute(self, sql, *args):
+        _refuse_if_write(sql)
+        return self._stmt.execute(sql, *args)
+
+    def executeQuery(self, sql):
+        _refuse_if_write(sql)
+        return self._stmt.executeQuery(sql)
+
+    def executeUpdate(self, sql, *args):
+        _refuse_if_write(sql)
+        return self._stmt.executeUpdate(sql, *args)
+
+    def executeLargeUpdate(self, sql, *args):
+        _refuse_if_write(sql)
+        return self._stmt.executeLargeUpdate(sql, *args)
+
+    def addBatch(self, sql):
+        _refuse_if_write(sql)
+        return self._stmt.addBatch(sql)
+
+    def __getattr__(self, name):
+        return getattr(self._stmt, name)
+
+
+class _ReadOnlyJavaConnection:
+    """java.sql.Connection proxy used when SOFTECH_READ_ONLY is on."""
+
+    def __init__(self, java_conn):
+        self._jc = java_conn
+        try:
+            java_conn.setReadOnly(True)   # driver hint only — the proxy is the real guard
+        except Exception:
+            pass
+
+    def createStatement(self, *args):
+        return _ReadOnlyStatement(self._jc.createStatement(*args))
+
+    def prepareStatement(self, sql, *args):
+        _refuse_if_write(sql)
+        return self._jc.prepareStatement(sql, *args)
+
+    def prepareCall(self, sql, *args):
+        _refuse_if_write(f'EXEC {sql}')   # callable statements are procedures — never reads
+        return self._jc.prepareCall(sql, *args)
+
+    def __getattr__(self, name):
+        return getattr(self._jc, name)
+
+
+def _guard(java_conn):
+    return _ReadOnlyJavaConnection(java_conn) if softech_read_only() else java_conn
+
+
+def _branch_host(db_host, db_port):
+    """
+    SOFTECH_BRANCH_HOST_OVERRIDE (staging) sends every branch-server connection to
+    one host — e.g. a cloned/test ASE — instead of the production branch address
+    stored in Branch.db_host. Format: 'host' or 'host:port'.
+    """
+    override = (getattr(settings, 'SOFTECH_BRANCH_HOST_OVERRIDE', '') or '').strip()
+    if not override:
+        return db_host, db_port
+    host, _, port = override.partition(':')
+    return host, (int(port) if port else db_port)
+
+
 def _connect_with_retry(driver, jdbc_url, props, label=''):
     """driver.connect() with bounded retries for the flaky branch link."""
     last_exc = None
     for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
         try:
-            return driver.connect(jdbc_url, props)
+            return _guard(driver.connect(jdbc_url, props))
         except Exception as exc:
             last_exc = exc
             logger.warning(
@@ -197,6 +325,7 @@ def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=N
     Returns a ConnectionWrapper (same interface as get_sybase_connection).
     Raises on connection failure.
     """
+    db_host, db_port = _branch_host(db_host, db_port)
     _ensure_jvm()
     jpype.imports.registerDomain('com')
     from com.sybase.jdbc3.jdbc import SybDriver
@@ -236,6 +365,7 @@ def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
 
         {'ok': bool, 'elapsed_ms': float, 'error': str | None}
     """
+    host, port = _branch_host(host, port) if host != settings.SYBASE_HOST else (host, port)
     _ensure_jvm()
     jpype.imports.registerDomain('com')
     from com.sybase.jdbc3.jdbc import SybDriver

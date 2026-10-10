@@ -13,6 +13,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.catalog.wildcard import wq
+from core.errors import public_error
 
 from apps.omni.models import (
     AutomationRule, AutomationRun, ChannelAccount, Conversation, TimelineEvent,
@@ -176,7 +177,7 @@ class ReplyView(APIView):
             return Response({'message_id': msg.pk, 'channel': thread.account.channel})
         except Exception as exc:
             logger.error('omni ReplyView error: %s', exc)
-            return Response({'detail': str(exc)}, status=500)
+            return Response({'detail': public_error(request, exc)}, status=500)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

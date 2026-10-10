@@ -2633,7 +2633,11 @@ def _run_replication_audit(full_catalog=False):
         logger.info('[APScheduler] replication_audit(full=%s) scan #%s gaps=%s down=%s',
                     full_catalog, scan.pk, scan.items_with_gaps, scan.branches_down)
 
-        if pol.auto_repair_enabled and scan.items_with_gaps:
+        from django.conf import settings as _s
+        if not getattr(_s, 'REPLICATION_REPAIR_ENABLED', True):
+            logger.info('[APScheduler] replication_audit: auto-repair skipped '
+                        '(REPLICATION_REPAIR_ENABLED=False)')
+        elif pol.auto_repair_enabled and scan.items_with_gaps:
             codes = sorted(set(
                 ReplicationGap.objects.filter(scan=scan)
                 .exclude(status=ReplicationGap.STATUS_REPAIRED)

@@ -1,6 +1,8 @@
 from rest_framework import serializers as drf_serializers, status, viewsets, filters
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+
+from core.auth_cookies import set_auth_cookies
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import AnonRateThrottle
@@ -165,7 +167,7 @@ def login_view(request):
     _log_auth('login_success', profile, ip)
 
     refresh = RefreshToken.for_user(user)
-    return Response({
+    resp = Response({
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
         'user': _MeSerializer(profile).data if profile else {
@@ -173,13 +175,53 @@ def login_view(request):
             'role': 'admin' if user.is_superuser else 'viewer',
         }
     })
+    # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
+    # scripts / non-browser clients, which need the password anyway).
+    return set_auth_cookies(resp, refresh.access_token, refresh)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def refresh_view(request):
-    from rest_framework_simplejwt.views import TokenRefreshView
-    return TokenRefreshView.as_view()(request._request)
+    """
+    Body {"refresh": …} → legacy behaviour (tokens in the body) + cookies set, which
+    also migrates a browser that still had tokens in localStorage.
+    No body token → rotate from the httpOnly refresh cookie; tokens are NOT
+    returned in the body, so script on the page can never obtain one.
+    """
+    from rest_framework_simplejwt.exceptions import TokenError
+    from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+    from core.auth_cookies import REFRESH_COOKIE, clear_auth_cookies
+
+    body_token = request.data.get('refresh')
+    raw = body_token or request.COOKIES.get(REFRESH_COOKIE)
+    if not raw:
+        return Response({'detail': 'لا توجد جلسة'}, status=status.HTTP_401_UNAUTHORIZED)
+    ser = TokenRefreshSerializer(data={'refresh': raw})
+    try:
+        ser.is_valid(raise_exception=True)
+    except TokenError:
+        return clear_auth_cookies(Response({'detail': 'انتهت الجلسة'}, status=status.HTTP_401_UNAUTHORIZED))
+    except Exception:
+        return clear_auth_cookies(Response({'detail': 'انتهت الجلسة'}, status=status.HTTP_401_UNAUTHORIZED))
+    data = ser.validated_data
+    resp = Response(data if body_token else {'ok': True})
+    return set_auth_cookies(resp, data.get('access'), data.get('refresh'))
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def logout_view(request):
+    """Blacklist the refresh token (cookie or body) and clear the auth cookies."""
+    from rest_framework_simplejwt.tokens import RefreshToken as _RT
+    from core.auth_cookies import REFRESH_COOKIE, clear_auth_cookies
+    raw = request.data.get('refresh') or request.COOKIES.get(REFRESH_COOKIE)
+    if raw:
+        try:
+            _RT(raw).blacklist()
+        except Exception:
+            pass   # already expired / blacklisted — logging out anyway
+    return clear_auth_cookies(Response({'ok': True}))
 
 
 @api_view(['GET'])

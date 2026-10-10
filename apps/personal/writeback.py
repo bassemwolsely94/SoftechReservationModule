@@ -23,6 +23,8 @@ owns. Everything else in apps/personal stays read-only.
 """
 from __future__ import annotations
 
+from django.conf import settings
+
 from config.sybase import get_sybase_connection, get_branch_connection
 
 DB = 'SOFTECHDB9'
@@ -114,6 +116,10 @@ def write_document_comment(*, branchcode, doccode, docnumber, comment=None,
     docnum = _docnum_param(docnumber)
     _key = [('branchcode', branchcode), ('doccode', doccode), ('docnumber', docnum)]
     old_comment, final = '', ''
+    if not getattr(settings, 'PERSONAL_COMMENT_WRITE_ENABLED', True):
+        raise CommentWriteError('معطّل حالياً من إعدادات النظام', 503)
+    if transform is None:
+        _validate_text(comment, MAX_LEN)   # reject bad input before touching SOFTECH
 
     # 1) HQ read — the ownership + existence gate. No write happens unless the
     #    document's counterparty is exactly the caller's approved personcode.
@@ -185,6 +191,10 @@ def write_cheque_note(*, branchcode, financialdoccode, cheqsno, note=None,
     sno = _docnum_param(cheqsno)
     key = [('branchcode', branchcode), ('financialdoccode', fdc), ('cheqsno', sno)]
     old_note, final = '', ''
+    if not getattr(settings, 'PERSONAL_COMMENT_WRITE_ENABLED', True):
+        raise CommentWriteError('معطّل حالياً من إعدادات النظام', 503)
+    if transform is None:
+        _validate_text(note, CHEQ_MAX_LEN)   # reject bad input before touching SOFTECH
 
     hq = get_sybase_connection()
     try:
