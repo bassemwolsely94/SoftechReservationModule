@@ -558,6 +558,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/feedback/` | POST / GET | Any staff: vote + comment. GET (help/edit): feedback list (`open=1`) |
 | `/api/help/feedback/{id}/resolve/` | POST | Mark a comment handled (help/edit) |
 | `/api/help/stats/?days=` | GET | Trainers' dashboard: opens by screen/role, votes, searches (help/edit) |
+| `/api/help/manual/?role=` or `?module=` | GET | Printable manual data: screens (role path, or all of one module) with role-filtered steps/tips, modules (with workflows) in first-seen order, latest help date |
 | `/api/help/onboarding/?role=` | GET | My training path (`ROLE_PATHS[my role]`): screens with state `todo`/`done`/`changed`, module quizzes + my best score, progress %, `learned` map. `role=` preview only for help/edit |
 | `/api/help/onboarding/learned/` | POST | `{screen_key, done}` — «فهمت هذه الشاشة» on/off (stores the help version read) |
 | `/api/help/onboarding/team/?role=&branch=` | GET | Team completion per staff member (help/edit; limited to the caller's accessible branches) |

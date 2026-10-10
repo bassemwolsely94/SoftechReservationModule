@@ -84,6 +84,10 @@ export function MyPath({ lang, go, canPreview }) {
               {data.roles.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           )}
+          <a href={`/help/manual?role=${data.role}&lang=${lang}`} target="_blank" rel="noreferrer"
+             className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+            🖨️ {en(lang) ? 'Print my manual' : 'طباعة دليلي'}
+          </a>
           <span className="text-2xl font-bold text-brand-600 tabnum">{p.percent}%</span>
         </div>
         <Bar percent={p.percent} />

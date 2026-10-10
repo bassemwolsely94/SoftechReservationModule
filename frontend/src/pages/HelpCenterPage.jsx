@@ -144,7 +144,13 @@ function ModuleView({ moduleKey, lang, go }) {
     <div className="space-y-5">
       <Crumbs lang={lang} go={go} />
       <div className="rounded-xl border border-line bg-surface p-5 space-y-2">
-        <h2 className="text-lg font-bold text-content">{data.icon} {pick(data.title, lang)}</h2>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-lg font-bold text-content flex-1">{data.icon} {pick(data.title, lang)}</h2>
+          <a href={`/help/manual?module=${data.key}&lang=${lang}`} target="_blank" rel="noreferrer"
+             className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+            🖨️ {lang === 'en' ? 'Print this module\'s manual' : 'طباعة دليل الموديول'}
+          </a>
+        </div>
         <p className="text-sm text-content leading-7 whitespace-pre-line">{pick(data.summary, lang)}</p>
       </div>
       {(data.workflows || []).length > 0 && (

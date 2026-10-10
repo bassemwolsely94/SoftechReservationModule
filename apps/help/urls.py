@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.index, name='help-index'),
     path('search/', views.search, name='help-search'),
     path('stats/', views.stats, name='help-stats'),
+    path('manual/', views.manual, name='help-manual'),
     path('feedback/', views.feedback, name='help-feedback'),
     path('feedback/<int:pk>/resolve/', views.feedback_resolve, name='help-feedback-resolve'),
     path('modules/<str:key>/', views.module_detail, name='help-module'),

@@ -351,6 +351,7 @@ export const helpApi = {
   feedbackList: (params = {})    => api.get('/help/feedback/', { params }),
   resolveFeedback: (id, resolved = true) => api.post(`/help/feedback/${id}/resolve/`, { resolved }),
   stats:      (days = 30)        => api.get('/help/stats/', { params: { days } }),
+  manual:     (params)           => api.get('/help/manual/', { params }),
   onboarding: (role)             => api.get('/help/onboarding/', { params: role ? { role } : {} }),
   learned:    (screen_key, done = true) => api.post('/help/onboarding/learned/', { screen_key, done }),
   team:       (params = {})      => api.get('/help/onboarding/team/', { params }),

@@ -321,3 +321,54 @@ def stats(request):
         'overrides': HelpOverride.objects.count(),
         'open_comments': HelpFeedback.objects.filter(resolved=False).exclude(comment='').count(),
     })
+
+
+def _for_role(items, role):
+    """Steps / tips limited to one role (items without `roles` are for everyone)."""
+    return [it for it in items or []
+            if not (isinstance(it, dict) and 'roles' in it) or role in it['roles']]
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manual(request):
+    """Printable training manual, built from the same help text:
+    ?role=<role>  → that role's onboarding path (steps/tips limited to the role);
+    ?module=<key> → every screen of one module.
+    Modules appear in first-seen order, each with its workflows once."""
+    from .content import onboarding
+    modules, screens = registry.load()
+    role = request.query_params.get('role') or ''
+    module_key = request.query_params.get('module') or ''
+    if module_key:
+        if module_key not in modules:
+            return Response({'detail': 'unknown module'}, status=404)
+        keys = list(modules[module_key]['screens'])
+        role = ''
+    else:
+        if not role:
+            role = getattr(_profile(request), 'role', '') or 'viewer'
+        if role not in onboarding.ROLE_PATHS:
+            return Response({'detail': 'unknown role'}, status=404)
+        keys = onboarding.ROLE_PATHS[role]
+    ov = {o.screen_key: o for o in HelpOverride.objects.filter(screen_key__in=keys)}
+    out_modules, out_screens = [], []
+    for k in keys:
+        s = screens[k]
+        eff = registry.effective(s, ov.get(k))
+        mk = s['module']
+        if mk not in [m['key'] for m in out_modules]:
+            m = modules[mk]
+            out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
+                                'summary': m['summary'], 'workflows': m.get('workflows') or []})
+        item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
+                    steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
+                    tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])
+        out_screens.append(item)
+    return Response({
+        'role': role, 'module': module_key,
+        'modules': out_modules, 'screens': out_screens,
+        'updated': max([s['updated'] or '' for s in out_screens] or ['']),
+        'generated_at': timezone.now(),
+    })

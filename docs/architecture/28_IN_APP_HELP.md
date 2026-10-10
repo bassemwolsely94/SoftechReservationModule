@@ -38,6 +38,16 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 **Rule:** a new screen a role must use → add it to that role's `ROLE_PATHS`; a new rule users
 must not get wrong → add a quiz question.
 
+## Printable training manual (built 2026-10-10)
+
+- `/help/manual?role=<role>` or `?module=<key>`, `&lang=ar|en` — its own shell (no side menu) so the
+  browser's print / "Save as PDF" gives a clean booklet: cover (help last-updated date, print date),
+  contents, then one chapter per module (summary + workflows) followed by its screens (purpose,
+  audience, tabs, steps, tips, FAQ, trainer's notes). Each chapter starts on a new page.
+- By role = that role's `ROLE_PATHS`, with steps/tips limited to the role. By module = all screens.
+- Opened from «طباعة دليلي» (My training path) and «طباعة دليل الموديول» (module page).
+- Data: `GET /api/help/manual/`. Quizzes are not printed (taken in-app so results are recorded).
+
 ## Trainers (help/edit)
 
 - RBAC module `help`, action `edit` (Permissions Matrix). Admin always; seeds give it to
@@ -60,6 +70,7 @@ must not get wrong → add a quiz question.
 | DB | `HelpOverride`, `HelpRevision` (immutable), `HelpFeedback`, `HelpEvent` (open/search/ask; `results=0` = nothing found), `HelpLearned`, `HelpQuizAttempt` |
 | Onboarding | `apps/help/content/onboarding.py`, `apps/help/onboarding_views.py`, `frontend/src/help/Onboarding.jsx` |
 | API | `/api/help/` — see 04_API_REGISTRY |
+| Manual | `views.manual`, `frontend/src/pages/HelpManualPage.jsx` (route `/help/manual`, outside `Layout`) |
 | Frontend | `frontend/src/help/` — `HelpPanel`, `HelpButton`, `HelpArticle`, `HelpEditor`, `HelpFeedback`, `helpStore`, `useHelpIndex` (route → screen via react-router `matchPath`), `useHelpTab`; page `pages/HelpCenterPage.jsx` |
 
 Reading help is open to every logged-in staff member (`/api/help/` is exempt from
@@ -110,5 +121,4 @@ as they appear on screen («…»).
 ## Next steps (proposed, not built)
 
 - «اعرض لي» guided tours that highlight the real buttons (same pattern as the POS guided mode).
-- Printable training manual per role/module generated from the same content.
 - «اسأل النظام»: answers grounded only in this help content, with a link to the source article.

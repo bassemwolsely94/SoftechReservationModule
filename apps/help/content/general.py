@@ -221,4 +221,33 @@ SCREENS = [
         ],
         'updated': '2026-10-10',
     },
+    {
+        'key': 'general.help_manual',
+        'routes': ['/help/manual'],
+        'title': T('دليل التدريب المطبوع', 'Printable training manual'),
+        'summary': T(
+            'كتيّب تدريب جاهز للطباعة أو الحفظ PDF، مأخوذ من نفس شرح النظام: إما حسب الدور (شاشات «مساري التدريبي» بالترتيب، '
+            'والخطوات الخاصة بالدور فقط) أو حسب الموديول (كل شاشاته). فيه غلاف وفهرس، وكل موديول في فصل بدورة العمل ثم شاشاته.',
+            'A training booklet ready to print or save as PDF, built from the same in-app help: either by role (the "My training path" '
+            'screens in order, with only that role\'s steps) or by module (all its screens). It has a cover and contents, and each module '
+            'is a chapter with its workflow followed by its screens.'),
+        'audience': T('المدربون والمشرفون لتجهيز التدريب، وأي موظف يحب يذاكر من ورق.',
+                      'Trainers and supervisors preparing training, and anyone who prefers to study on paper.'),
+        'steps': [
+            T('افتحه من «طباعة دليلي» في «مساري التدريبي»، أو «طباعة دليل الموديول» في صفحة أي موديول في دليل الاستخدام.',
+              'Open it from "Print my manual" in "My training path", or "Print this module\'s manual" on any module page of the help guide.'),
+            T('من الشريط أعلى الصفحة اختر الدور أو الموديول واللغة.',
+              'From the bar at the top choose the role or module and the language.'),
+            T('اضغط «طباعة / حفظ PDF» — الشريط لا يُطبع، وكل موديول يبدأ في صفحة جديدة.',
+              'Press "Print / save as PDF" — the bar is not printed and each module starts on a new page.'),
+        ],
+        'tips': [
+            T('الدليل المطبوع يتقادم: لو الشرح اتغيّر بعد الطباعة، تاريخ «آخر تحديث للشرح» على الغلاف يوضح ده — اطبع نسخة جديدة.',
+              'A printed manual gets old: if the help changes after printing, the "Help last updated" date on the cover shows it — print a fresh copy.'),
+            T('أسئلة الاختبارات لا تُطبع في الدليل — الاختبار يتم من داخل النظام عشان التصحيح يتسجّل.',
+              'Quiz questions are not printed — quizzes are taken in the system so the result is recorded.'),
+        ],
+        'related': ['general.help_center'],
+        'updated': '2026-10-10',
+    },
 ]

@@ -427,3 +427,22 @@ class OnboardingApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json())
         self.assertTrue(all(row['role'] == 'pharmacist' for row in r.json()))
+
+    def test_manual_by_role_and_module(self):
+        from apps.help.content import onboarding
+        c, _ = self._client('pharmacist')
+        r = c.get('/api/help/manual/')
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body['role'], 'pharmacist')
+        self.assertEqual([s['key'] for s in body['screens']], onboarding.ROLE_PATHS['pharmacist'])
+        self.assertEqual(len({m['key'] for m in body['modules']}), len(body['modules']))
+        for s in body['screens']:   # role-limited steps only
+            for st in s['steps'] + s['tips']:
+                if isinstance(st, dict) and 'roles' in st:
+                    self.assertIn('pharmacist', st['roles'])
+        r = c.get('/api/help/manual/?module=transfers')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(all(s['module'] == 'transfers' for s in r.json()['screens']))
+        self.assertEqual(c.get('/api/help/manual/?module=nope').status_code, 404)
+        self.assertEqual(c.get('/api/help/manual/?role=nope').status_code, 404)
