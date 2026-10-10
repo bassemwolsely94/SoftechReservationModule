@@ -1,10 +1,10 @@
 /**
  * HelpCenterPage (/help) — the full help guide: browse every module (grouped like the
  * side menu) → module role + workflow + its screens → a screen's full help; search;
- * "what's new"; and, for trainers (help/edit), usage statistics + open feedback.
+ * "what's new"; «مساري التدريبي» (role checklist + module quizzes); and, for trainers (help/edit), usage statistics + open feedback.
  */
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -16,12 +16,16 @@ import HelpArticle, { Workflow } from '../help/HelpArticle'
 import HelpEditor from '../help/HelpEditor'
 import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
+import AskBox from '../help/AskBox'
+import TrainingEditor from '../help/TrainingEditor'
+import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') || 'browse'
   const moduleKey = params.get('module')
   const screenKey = params.get('screen')
+  const quizKey = params.get('quiz')
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -37,6 +41,7 @@ export default function HelpCenterPage() {
   }
   const tabs = [
     ['browse', lang === 'en' ? 'Browse modules' : 'تصفح الموديولات'],
+    ['path', lang === 'en' ? 'My training path' : 'مساري التدريبي'],
     ['whats_new', lang === 'en' ? "What's new" : 'الجديد'],
     ...(index?.can_edit ? [['trainers', lang === 'en' ? 'For trainers' : 'للمدربين']] : []),
   ]
@@ -82,6 +87,8 @@ export default function HelpCenterPage() {
           {index && tab === 'browse' && !moduleKey && !screenKey && <Browse index={index} lang={lang} go={go} />}
           {index && tab === 'browse' && moduleKey && !screenKey && <ModuleView moduleKey={moduleKey} lang={lang} go={go} />}
           {index && tab === 'browse' && screenKey && <ScreenView screenKey={screenKey} lang={lang} go={go} index={index} />}
+          {index && tab === 'path' && !quizKey && <MyPath lang={lang} go={go} canPreview={index.can_edit} />}
+          {index && tab === 'path' && quizKey && <Quiz moduleKey={quizKey} lang={lang} onBack={() => go({ tab: 'path' })} />}
           {index && tab === 'whats_new' && <WhatsNew index={index} lang={lang} go={go} />}
           {index && tab === 'trainers' && index.can_edit && <Trainers index={index} lang={lang} go={go} />}
         </>
@@ -139,7 +146,13 @@ function ModuleView({ moduleKey, lang, go }) {
     <div className="space-y-5">
       <Crumbs lang={lang} go={go} />
       <div className="rounded-xl border border-line bg-surface p-5 space-y-2">
-        <h2 className="text-lg font-bold text-content">{data.icon} {pick(data.title, lang)}</h2>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-lg font-bold text-content flex-1">{data.icon} {pick(data.title, lang)}</h2>
+          <a href={`/help/manual?module=${data.key}&lang=${lang}`} target="_blank" rel="noreferrer"
+             className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+            🖨️ {lang === 'en' ? 'Print this module\'s manual' : 'طباعة دليل الموديول'}
+          </a>
+        </div>
         <p className="text-sm text-content leading-7 whitespace-pre-line">{pick(data.summary, lang)}</p>
       </div>
       {(data.workflows || []).length > 0 && (
@@ -165,6 +178,8 @@ function ModuleView({ moduleKey, lang, go }) {
 
 function ScreenView({ screenKey, lang, go, index }) {
   const role = useAuthStore((s) => s.user?.role)
+  const navigate = useNavigate()
+  const startTour = useHelpStore((s) => s.startTour)
   const [editing, setEditing] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'screen', screenKey],
@@ -184,6 +199,12 @@ function ScreenView({ screenKey, lang, go, index }) {
               {lang === 'en' ? 'Open this screen' : 'فتح الشاشة'} ↗
             </Link>
           )}
+          {openRoute && data.tour?.length > 0 && (
+            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour), 400) }}
+                    className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
+              👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
+            </button>
+          )}
           {data.can_edit && !editing && (
             <button type="button" onClick={() => setEditing(true)} className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
               ✏️ {label('edit', lang)}
@@ -197,6 +218,7 @@ function ScreenView({ screenKey, lang, go, index }) {
         {!editing && (
           <div className="pt-3 border-t border-line flex flex-wrap items-center gap-4">
             <HelpFeedback screenKey={data.key} lang={lang} />
+            <LearnedButton screenKey={data.key} lang={lang} />
             {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
           </div>
         )}
@@ -211,9 +233,12 @@ function SearchResults({ q, lang, onOpen }) {
     queryFn: () => helpApi.search(q).then((r) => r.data),
     staleTime: 60_000,
   })
+  const ask = q.length >= 3 && <AskBox question={q} lang={lang} onOpen={onOpen} />
   if (isLoading) return <div className="text-faint text-sm">{label('loading', lang)}</div>
-  if (!data?.length) return <div className="text-faint text-sm">{label('noResults', lang)}</div>
+  if (!data?.length) return <div className="space-y-3">{ask}<div className="text-faint text-sm">{label('noResults', lang)}</div></div>
   return (
+    <div className="space-y-3">
+    {ask}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {data.map((r) => (
         <button key={r.key} type="button" onClick={() => onOpen(r.key)}
@@ -223,6 +248,7 @@ function SearchResults({ q, lang, onOpen }) {
           <div className="text-xs text-muted leading-5 line-clamp-3">{pick(r.summary, lang)}</div>
         </button>
       ))}
+    </div>
     </div>
   )
 }
@@ -291,11 +317,18 @@ function Trainers({ index, lang, go }) {
               {s.misses > 0 && <span className="text-[10px] text-red-600 border border-red-200 rounded px-1">بدون نتيجة {s.misses}</span>}
               <span className="tabnum">{s.n}</span></>} />
           </Box>
+          <Box t="أسئلة «اسأل النظام» (اللي ملقتش إجابة في الشرح أولاً)">
+            <Rows rows={st.asks} render={(a) => <><span className="flex-1">{a.query}</span>
+              {a.misses > 0 && <span className="text-[10px] text-red-600 border border-red-200 rounded px-1">بدون إجابة {a.misses}</span>}
+              <span className="tabnum">{a.n}</span></>} />
+          </Box>
           <Box t="فتح الشرح حسب الدور">
             <Rows rows={st.by_role} render={(r) => <><span className="flex-1">{r.role || '—'}</span><span className="tabnum">{r.n}</span></>} />
           </Box>
         </div>
       )}
+      <TeamProgress />
+      <TrainingEditor index={index} />
       <Box t="ملاحظات المستخدمين المفتوحة">
         {(fb.data || []).length === 0 && <div className="text-sm text-faint">لا توجد ملاحظات مفتوحة 🎉</div>}
         <div className="divide-y divide-line">

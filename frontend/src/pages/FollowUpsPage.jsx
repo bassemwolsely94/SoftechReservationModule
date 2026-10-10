@@ -221,7 +221,7 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
   }))
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" data-tour="followups-tasks-filters">
       {/* Toggle bar */}
       <button
         onClick={() => setOpen(p => !p)}
@@ -2334,7 +2334,7 @@ export default function FollowUpsPage() {
 
           {/* KPI strip */}
           {stats && (
-            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }} data-tour="followups-tasks-kpis">
               {[
                 { label: 'معلق',         val: stats.pending,     color: '#f59e0b', bg: '#fffbeb' },
                 { label: 'اتصلت',        val: stats.called,      color: '#3b82f6', bg: '#eff6ff' },
@@ -2377,7 +2377,7 @@ export default function FollowUpsPage() {
 
           {/* View mode toggle + personal tabs row */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
+            <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5 flex-shrink-0" data-tour="followups-tasks-view">
               {[
                 { id: 'list',    icon: '☰', label: 'قائمة' },
                 { id: 'grouped', icon: '👥', label: 'مجمّع بالعميل' },
@@ -2396,7 +2396,7 @@ export default function FollowUpsPage() {
           </div>
 
           {/* Personal view tabs */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }} data-tour="followups-tasks-personal">
             {PERSONAL_TABS.map(t => (
               <button key={t.id}
                 onClick={() => applyPersonalTab(t)}
@@ -2411,7 +2411,7 @@ export default function FollowUpsPage() {
           </div>
 
           {/* Status tab strip */}
-          <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }} data-tour="followups-tasks-status">
             {TAB_STATUSES.map(t => (
               <button key={t.v}
                 onClick={() => setFilters(p => ({ ...p, status: t.v }))}
@@ -2486,7 +2486,7 @@ export default function FollowUpsPage() {
             <div className="text-xs text-gray-400 mt-1">جرّب تغيير الفلاتر أو توليد مهام جديدة</div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="followups-tasks-list">
             {tasks.map(task => (
               <TaskCard
                 key={task.id}

@@ -505,11 +505,11 @@ function VouchersList({ onRedeem }) {
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <input
+        <input data-tour="vouchers-main-search"
           value={searchQ} onChange={e => setSearchQ(e.target.value)}
           className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-400"
           placeholder="بحث بالكود أو العنوان..." />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+        <select data-tour="vouchers-main-status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_CFG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
@@ -525,7 +525,7 @@ function VouchersList({ onRedeem }) {
           {Object.entries(CAT_CFG).map(([v, c]) => <option key={v} value={v}>{c.icon} {c.label}</option>)}
         </select>
         <div className="flex-1" />
-        <CanDo module="reservations" action="create"><Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
+        <CanDo module="reservations" action="create"><Btn data-tour="vouchers-main-new" variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
       </div>
 
       {/* Table */}
@@ -538,7 +538,7 @@ function VouchersList({ onRedeem }) {
           <CanDo module="reservations" action="create"><Btn variant="primary" onClick={() => setShowCreate(true)}>+ قسيمة جديدة</Btn></CanDo>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto rounded-xl border border-gray-100">
+        <div data-tour="vouchers-main-table" className="flex-1 overflow-auto rounded-xl border border-gray-100">
           <table className="w-full text-right text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
@@ -1399,7 +1399,7 @@ export default function VouchersPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1">
+        <div data-tour="vouchers-main-tabs" className="flex gap-1">
           {tabs.map(t => (
             <button
               key={t.key}

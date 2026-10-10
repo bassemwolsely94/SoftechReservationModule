@@ -377,7 +377,7 @@ export default function TasksPage() {
           </div>
           <div className="flex items-center gap-2">
             {/* View switch */}
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <div data-tour="tasks-list-views" className="flex rounded-lg overflow-hidden border border-gray-200">
               {[
                 { key: 'list',   label: '≡ قائمة' },
                 { key: 'kanban', label: '⊟ كانبان' },
@@ -404,7 +404,7 @@ export default function TasksPage() {
               📊 لوحة التحكم
             </button>
 
-            <button
+            <button data-tour="tasks-list-new"
               onClick={() => setShowNewModal(true)}
               className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium"
             >
@@ -415,8 +415,8 @@ export default function TasksPage() {
       </div>
 
       {/* ── Filters bar ── */}
-      <div className="bg-white border-b px-6 py-2 flex-shrink-0 flex flex-wrap items-center gap-3">
-        <input
+      <div data-tour="tasks-list-filters" className="bg-white border-b px-6 py-2 flex-shrink-0 flex flex-wrap items-center gap-3">
+        <input data-tour="tasks-list-search"
           className="border rounded-lg px-3 py-1.5 text-sm text-right w-48 focus:ring-2 focus:ring-brand-300 focus:outline-none"
           placeholder="بحث..."
           value={filters.search}
@@ -453,7 +453,7 @@ export default function TasksPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-auto">
+      <div data-tour="tasks-list-content" className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400">
             <div className="text-center">

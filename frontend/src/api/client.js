@@ -351,6 +351,16 @@ export const helpApi = {
   feedbackList: (params = {})    => api.get('/help/feedback/', { params }),
   resolveFeedback: (id, resolved = true) => api.post(`/help/feedback/${id}/resolve/`, { resolved }),
   stats:      (days = 30)        => api.get('/help/stats/', { params: { days } }),
+  ask:        (payload)          => api.post('/help/ask/', payload),
+  manual:     (params)           => api.get('/help/manual/', { params }),
+  training:   (kind, key)        => api.get(`/help/training/${kind}/${key}/`),
+  saveTraining: (kind, key, data, note) => api.put(`/help/training/${kind}/${key}/`, { data, note }),
+  revertTraining: (kind, key, note) => api.delete(`/help/training/${kind}/${key}/`, { data: { note } }),
+  onboarding: (role)             => api.get('/help/onboarding/', { params: role ? { role } : {} }),
+  learned:    (screen_key, done = true) => api.post('/help/onboarding/learned/', { screen_key, done }),
+  team:       (params = {})      => api.get('/help/onboarding/team/', { params }),
+  quiz:       (module)           => api.get(`/help/quizzes/${module}/`),
+  submitQuiz: (module, answers)  => api.post(`/help/quizzes/${module}/submit/`, { answers }),
 }
 
 export const personalApi = {

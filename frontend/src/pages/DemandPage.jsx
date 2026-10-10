@@ -630,7 +630,7 @@ useEffect(() => {
             </CanDo>
             <button
               onClick={() => navigate('/demand/recovery')}
-              className="btn-secondary text-sm relative">
+              className="btn-secondary text-sm relative" data-tour="demand-list-recovery">
               🔔 عاد للمخزون
               {openRecovery > 0 && (
                 <span className="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
@@ -644,14 +644,14 @@ useEffect(() => {
               📊 لوحة الطلب الضائع
             </button>
             <CanDo module="demand" action="create">
-              <button onClick={() => setShowCreate(true)} className="btn-primary text-sm">
+              <button onClick={() => setShowCreate(true)} className="btn-primary text-sm" data-tour="demand-list-new">
                 + تسجيل طلب جديد
               </button>
             </CanDo>
           </div>
 
           {/* Status tab strip */}
-          <div className="flex gap-1 mt-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-1 mt-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }} data-tour="demand-list-tabs">
             {TAB_FILTERS.map(t => (
               <button key={t.value}
                 onClick={() => setFilters(p => ({ ...p, status: t.value }))}
@@ -667,7 +667,7 @@ useEffect(() => {
 
           {/* Search + filters row */}
           <div className="flex gap-2 mt-2 flex-wrap">
-            <input className="input-field w-52 text-xs"
+            <input className="input-field w-52 text-xs" data-tour="demand-list-search"
   placeholder="🔍 بحث بالهاتف، اسم العميل، PIC، الصنف..."
   value={searchInput}
   onChange={e => setSearchInput(e.target.value)}
@@ -706,7 +706,7 @@ useEffect(() => {
       </div>
 
       {/* List */}
-      <div className="max-w-7xl mx-auto px-6 py-5">
+      <div className="max-w-7xl mx-auto px-6 py-5" data-tour="demand-list-table">
         {isLoading ? (
           <div className="space-y-2 animate-pulse">
             {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}

@@ -589,7 +589,7 @@ export default function UserManagementPage() {
           <p className="text-sm text-gray-500 mt-0.5">{total} مستخدم إجمالاً</p>
         </div>
         {isAdmin && (
-          <button
+          <button data-tour="admin-users-add"
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 shadow-sm"
           >
@@ -604,7 +604,7 @@ export default function UserManagementPage() {
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-5 flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-48">
-          <input
+          <input data-tour="admin-users-search"
             type="text"
             placeholder="بحث بالاسم أو اسم المستخدم…"
             value={search}
@@ -612,7 +612,7 @@ export default function UserManagementPage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
         </div>
-        <select
+        <select data-tour="admin-users-role-filter"
           value={roleFilter}
           onChange={e => { setRoleFilter(e.target.value); setPage(1) }}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
@@ -620,7 +620,7 @@ export default function UserManagementPage() {
           <option value="">كل الأدوار</option>
           {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
-        <select
+        <select data-tour="admin-users-status-filter"
           value={activeFilter}
           onChange={e => { setActiveFilter(e.target.value); setPage(1) }}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
@@ -632,7 +632,7 @@ export default function UserManagementPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" data-tour="admin-users-table">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b text-right text-xs text-gray-500 uppercase tracking-wide font-semibold">
@@ -641,7 +641,7 @@ export default function UserManagementPage() {
               <th className="px-4 py-3">الفرع</th>
               <th className="px-4 py-3">SOFTECH</th>
               <th className="px-4 py-3">الحالة</th>
-              {isAdmin && <th className="px-4 py-3 text-center">إجراءات</th>}
+              {isAdmin && <th className="px-4 py-3 text-center" data-tour="admin-users-actions">إجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">

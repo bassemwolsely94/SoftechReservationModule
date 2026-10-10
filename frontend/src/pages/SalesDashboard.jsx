@@ -239,7 +239,7 @@ export default function SalesDashboard() {
           <h1 className="text-2xl font-bold text-gray-800">لوحة المبيعات</h1>
           <p className="text-sm text-gray-500 mt-0.5">إيرادات · ربح · خصم · قنوات · أصناف · توزيع زمني</p>
         </div>
-        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary">
+        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary" data-tour="analytics-sales-refresh">
           تحديث
         </RefreshButton>
       </div>
@@ -264,7 +264,7 @@ export default function SalesDashboard() {
       {data && (
         <>
           {/* KPIs row 1 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3" data-tour="analytics-sales-kpis">
             <KpiCard label="صافي الإيرادات"      value={`${fmt(s.total_revenue)} جم`}    color="brand" icon="💰"
               sub={`مبيعات ${fmt(s.sales_revenue)} − مردودات ${fmt(s.returns_revenue)}`} />
             <KpiCard label="صافي الربح"           value={`${fmt(s.total_profit)} جم`}     color="green" icon="📈"
@@ -291,7 +291,7 @@ export default function SalesDashboard() {
 
           {/* Tab bar */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div className="flex border-b border-gray-100 overflow-x-auto" data-tour="analytics-sales-tabs">
               {TABS.map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px
@@ -301,7 +301,7 @@ export default function SalesDashboard() {
               ))}
             </div>
 
-            <div className="p-5">
+            <div className="p-5" data-tour="analytics-sales-tab-panel">
 
               {activeTab === 'overview' && (
                 <div className="space-y-6">

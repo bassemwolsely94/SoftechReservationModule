@@ -180,6 +180,22 @@ class HelpContentCoverageTests(SimpleTestCase):
             for g in [self.modules[s['module']].get('group')]:
                 self.assertIn(g, [k for k, _, _ in registry.GROUPS], key)
 
+    def test_tour_targets_exist_in_the_frontend(self):
+        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
+        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+        src = Path(settings.BASE_DIR) / 'frontend' / 'src'
+        anchors = set()
+        for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
+            anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        missing = []
+        for key, s in self.screens.items():
+            for i, st in enumerate(s.get('tour') or []):
+                self.assertEqual(set(st), {'target', 'text'}, f'{key}.tour[{i}]')
+                if st['target'] not in anchors:
+                    missing.append(f'{key}: {st["target"]}')
+        self.assertEqual(missing, [], 'Tour targets with no data-tour anchor in frontend/src')
+        self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
+
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
             for wf in m.get('workflows') or []:
@@ -322,3 +338,359 @@ class HelpApiTests(TestCase):
 
     def test_anonymous_rejected(self):
         self.assertIn(APIClient().get('/api/help/').status_code, (401, 403))
+
+
+class OnboardingContentTests(SimpleTestCase):
+    """content/onboarding.py must point at real screens/modules and grade sanely."""
+
+    def test_every_role_has_a_path_of_real_screens(self):
+        from apps.help.content import onboarding
+        from apps.users.models import ROLE_CHOICES
+        _, screens = registry.load()
+        self.assertEqual(set(onboarding.ROLE_PATHS), {r for r, _ in ROLE_CHOICES})
+        for role, keys in onboarding.ROLE_PATHS.items():
+            missing = [k for k in keys if k not in screens]
+            self.assertFalse(missing, f'{role}: unknown screens {missing}')
+            self.assertEqual(len(keys), len(set(keys)), f'{role}: duplicate screens')
+
+    def test_quizzes_valid_and_bilingual(self):
+        from apps.help.content import onboarding
+        modules, _ = registry.load()
+        self.assertFalse(set(onboarding.QUIZZES) - set(modules))
+        for mk, qs in onboarding.QUIZZES.items():
+            self.assertTrue(qs, mk)
+            for i, q in enumerate(qs):
+                self.assertGreaterEqual(len(q['options']), 2, f'{mk}[{i}]')
+                self.assertTrue(0 <= q['answer'] < len(q['options']), f'{mk}[{i}] answer index')
+                for where, t in _walk_t(q, f'{mk}[{i}]'):
+                    self.assertTrue(t['ar'].strip() and t['en'].strip(), where)
+
+    def test_every_path_module_has_a_quiz(self):
+        from apps.help.content import onboarding
+        for role, keys in onboarding.ROLE_PATHS.items():
+            mods = {k.split('.')[0] for k in keys}
+            self.assertFalse(mods - set(onboarding.QUIZZES), f'{role}: modules without quiz')
+
+
+class OnboardingApiTests(TestCase):
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name=None):
+        user, profile, _ = make_user(name or f'ob_{role}', role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_learn_and_changed(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpLearned
+        c, profile = self._client('pharmacist')
+        r = c.get('/api/help/onboarding/')
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual([i['key'] for i in body['path']], onboarding.ROLE_PATHS['pharmacist'])
+        self.assertEqual(body['progress']['learned'], 0)
+        self.assertEqual(body['roles'], ['pharmacist'])
+        key = body['path'][0]['key']
+        self.assertEqual(c.post('/api/help/onboarding/learned/', {'screen_key': key}, format='json').status_code, 200)
+        body = c.get('/api/help/onboarding/').json()
+        self.assertEqual(body['path'][0]['state'], 'done')
+        self.assertEqual(body['progress']['learned'], 1)
+        # the help text changes after it was learned → asks to re-read
+        HelpLearned.objects.filter(staff=profile, screen_key=key).update(version='2000-01-01')
+        self.assertEqual(c.get('/api/help/onboarding/').json()['path'][0]['state'], 'changed')
+        c.post('/api/help/onboarding/learned/', {'screen_key': key, 'done': False}, format='json')
+        self.assertFalse(HelpLearned.objects.filter(staff=profile).exists())
+        self.assertEqual(c.post('/api/help/onboarding/learned/', {'screen_key': 'x.y'}, format='json').status_code, 400)
+
+    def test_role_preview_only_for_trainers(self):
+        c, _ = self._client('pharmacist')
+        self.assertEqual(c.get('/api/help/onboarding/?role=admin').json()['role'], 'pharmacist')
+        c, _ = self._client('admin')
+        self.assertEqual(c.get('/api/help/onboarding/?role=delivery').json()['role'], 'delivery')
+
+    def test_quiz_hides_answers_and_grades_on_server(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpQuizAttempt
+        c, _ = self._client('pharmacist')
+        r = c.get('/api/help/quizzes/pos/')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('answer', str(r.json()))
+        self.assertNotIn('explain', str(r.json()))
+        qs = onboarding.QUIZZES['pos']
+        right = [q['answer'] for q in qs]
+        r = c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(r.json()['passed'])
+        self.assertEqual(r.json()['score'], len(qs))
+        wrong = [(q['answer'] + 1) % len(q['options']) for q in qs]
+        r = c.post('/api/help/quizzes/pos/submit/', {'answers': wrong}, format='json')
+        self.assertFalse(r.json()['passed'])
+        self.assertEqual(r.json()['score'], 0)
+        self.assertEqual(HelpQuizAttempt.objects.count(), 2)
+        # best attempt is what counts
+        best = c.get('/api/help/onboarding/').json()
+        self.assertTrue(next(q for q in best['quizzes'] if q['module'] == 'pos')['best']['passed'])
+        self.assertEqual(c.post('/api/help/quizzes/pos/submit/', {'answers': [0]}, format='json').status_code, 400)
+        self.assertEqual(c.get('/api/help/quizzes/nope/').status_code, 404)
+
+    def test_team_view_needs_help_edit(self):
+        c, _ = self._client('pharmacist')
+        self.assertEqual(c.get('/api/help/onboarding/team/').status_code, 403)
+        c, _ = self._client('admin')
+        r = c.get('/api/help/onboarding/team/?role=pharmacist')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json())
+        self.assertTrue(all(row['role'] == 'pharmacist' for row in r.json()))
+
+    def test_manual_by_role_and_module(self):
+        from apps.help.content import onboarding
+        c, _ = self._client('pharmacist')
+        r = c.get('/api/help/manual/')
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body['role'], 'pharmacist')
+        self.assertEqual([s['key'] for s in body['screens']], onboarding.ROLE_PATHS['pharmacist'])
+        self.assertEqual(len({m['key'] for m in body['modules']}), len(body['modules']))
+        for s in body['screens']:   # role-limited steps only
+            for st in s['steps'] + s['tips']:
+                if isinstance(st, dict) and 'roles' in st:
+                    self.assertIn('pharmacist', st['roles'])
+        r = c.get('/api/help/manual/?module=transfers')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(all(s['module'] == 'transfers' for s in r.json()['screens']))
+        self.assertEqual(c.get('/api/help/manual/?module=nope').status_code, 404)
+        self.assertEqual(c.get('/api/help/manual/?role=nope').status_code, 404)
+
+
+class AskTests(TestCase):
+    """«اسأل النظام»: grounded in the help text, citations limited to what was sent,
+    works without a model (falls back to the articles), rate limited, logged."""
+
+    def setUp(self):
+        user, self.profile, _ = make_user('ask_user', role='pharmacist', branch=make_branch())
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+
+    def test_retrieve_handles_sentences(self):
+        modules, screens = registry.load()
+        hits = registry.retrieve('ازاي أعمل طلب تحويل لفرع تاني؟', list(screens.values()), modules)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0]['module'], 'transfers')
+
+    def test_no_model_falls_back_to_articles(self):
+        from unittest import mock
+        with mock.patch('apps.help.ask.call_llm', return_value=None):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز جديد؟'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.json()['answer'])
+        self.assertFalse(r.json()['ai'])
+        self.assertTrue(r.json()['articles'])
+        self.assertEqual(HelpEvent.objects.filter(kind='ask').count(), 1)
+
+    def test_answer_only_cites_sent_articles(self):
+        from unittest import mock
+        captured = {}
+
+        def fake(prompt):
+            captured['prompt'] = prompt
+            return '```json\n{"answer": "1. اضغط «حجز جديد»", "found": true, "sources": ["reservations.new", "made.up"]}\n```'
+        with mock.patch('apps.help.ask.call_llm', side_effect=fake):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز جديد؟', 'screen_key': 'reservations.board'},
+                            format='json')
+        body = r.json()
+        self.assertTrue(body['ai'] and body['found'])
+        self.assertIn('حجز جديد', body['answer'])
+        self.assertEqual([s['key'] for s in body['sources']], ['reservations.new'] if '[reservations.new]' in captured['prompt'] else [])
+        self.assertIn('ONLY the help articles', captured['prompt'])
+        self.assertIn('Never state prices', captured['prompt'])
+
+    def test_rate_limit_and_validation(self):
+        from unittest import mock
+        from apps.help.views import ASK_PER_HOUR
+        self.assertEqual(self.c.post('/api/help/ask/', {'question': 'x'}, format='json').status_code, 400)
+        HelpEvent.objects.bulk_create([HelpEvent(kind='ask', staff=self.profile, query='q') for _ in range(ASK_PER_HOUR)])
+        with mock.patch('apps.help.ask.call_llm', return_value=None):
+            r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز؟'}, format='json')
+        self.assertEqual(r.status_code, 429)
+
+
+class TrainingEditTests(TestCase):
+    """Trainers edit tour text, role paths and quizzes in the app; every change is
+    versioned and revertible; learners immediately get the edited version."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c
+
+    def test_tour_text_editable_targets_fixed(self):
+        c = self._client('admin', 'tr_admin')
+        _, screens = registry.load()
+        base = screens['reservations.board']['tour']
+        edited = [{'target': base[0]['target'], 'text': {'ar': 'نص المدرب', 'en': 'Trainer text'}},
+                  {'target': 'made-up', 'text': {'ar': 'x', 'en': 'x'}}]
+        r = c.put('/api/help/screens/reservations.board/', {'data': {'tour': edited}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        tour = r.json()['tour']
+        self.assertEqual([t['target'] for t in tour], [t['target'] for t in base])
+        self.assertEqual(tour[0]['text']['ar'], 'نص المدرب')
+        self.assertEqual(tour[1]['text'], base[1]['text'])
+        bad = c.put('/api/help/screens/reservations.board/', {'data': {'tour': [{'target': 'x'}]}}, format='json')
+        self.assertEqual(bad.status_code, 400)
+
+    def test_path_edit_applies_and_reverts(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpRevision
+        t = self._client('admin', 'tr_admin2')
+        learner = self._client('salesperson', 'tr_sales')
+        self.assertEqual(learner.get('/api/help/training/path/salesperson/').status_code, 403)
+        new = ['general.help_center', 'pos.order', 'customers.mobile']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}, 'note': 'أقصر'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['current'], new)
+        self.assertEqual([i['key'] for i in learner.get('/api/help/onboarding/').json()['path']], new)
+        self.assertEqual(t.put('/api/help/training/path/salesperson/', {'data': {'screens': ['nope.x']}},
+                               format='json').status_code, 400)
+        r = t.delete('/api/help/training/path/salesperson/', {'note': 'رجوع'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([i['key'] for i in learner.get('/api/help/onboarding/').json()['path']],
+                         onboarding.ROLE_PATHS['salesperson'])
+        self.assertEqual(HelpRevision.objects.filter(screen_key='path:salesperson').count(), 2)
+        self.assertEqual(t.get('/api/help/training/path/nope/').status_code, 404)
+
+    def test_quiz_edit_grades_with_new_answers(self):
+        t = self._client('admin', 'tr_admin3')
+        learner = self._client('pharmacist', 'tr_ph')
+        q = {'q': {'ar': 'سؤال؟', 'en': 'Q?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 1, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        r = t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(t.get('/api/help/training/quiz/pos/').json()['current'][0]['answer'], 1)
+        g = learner.get('/api/help/quizzes/pos/').json()
+        self.assertEqual(len(g['questions']), 1)
+        self.assertNotIn('answer', str(g))
+        res = learner.post('/api/help/quizzes/pos/submit/', {'answers': [1]}, format='json').json()
+        self.assertTrue(res['passed'])
+        bad = dict(q, answer=5)
+        self.assertEqual(t.put('/api/help/training/quiz/pos/', {'data': {'questions': [bad]}},
+                               format='json').status_code, 400)
+        # a trainer can add a quiz to a module that has none in the repo
+        from apps.help.content import onboarding
+        modules, _ = registry.load()
+        free = next(m for m in modules if m not in onboarding.QUIZZES) if set(modules) - set(onboarding.QUIZZES) else None
+        if free:
+            t.put(f'/api/help/training/quiz/{free}/', {'data': {'questions': [q]}}, format='json')
+            self.assertEqual(learner.get(f'/api/help/quizzes/{free}/').status_code, 200)
+
+
+class TrainingNotifyTests(TestCase):
+    """Path additions notify the role; a changed quiz voids old passes (retake) and
+    notifies the people who had passed it."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_addition_notifies_role(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        t, _ = self._client('admin', 'nt_admin')
+        _, seller = self._client('salesperson', 'nt_sales')
+        _, other = self._client('pharmacist', 'nt_ph')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertTrue(Notification.objects.filter(recipient=seller, title__contains='مسارك').exists())
+        self.assertFalse(Notification.objects.filter(recipient=other, title__contains='مسارك').exists())
+        # removing screens is not news
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new[:3]}}, format='json')
+        self.assertEqual(r.json()['notified'], 0)
+
+    def test_quiz_change_voids_pass_and_notifies(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        t, _ = self._client('admin', 'nq_admin')
+        c, ph = self._client('pharmacist', 'nq_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        self.assertTrue(c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json').json()['passed'])
+        best = lambda: next(q for q in c.get('/api/help/onboarding/').json()['quizzes'] if q['module'] == 'pos')['best']
+        self.assertTrue(best()['passed'])
+        q = {'q': {'ar': 'سؤال جديد؟', 'en': 'New?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        r = t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertTrue(Notification.objects.filter(recipient=ph, title__contains='أعد الاختبار').exists())
+        b = best()
+        self.assertTrue(b['stale'])
+        self.assertFalse(b['passed'])
+        prog = c.get('/api/help/onboarding/').json()['progress']
+        self.assertEqual(prog['quizzes_passed'], 0)
+        # retake on the new version counts again
+        c.post('/api/help/quizzes/pos/submit/', {'answers': [0]}, format='json')
+        self.assertTrue(best()['passed'])
+        self.assertFalse(best()['stale'])
+        # reverting to the original changes the quiz again → the first pass counts again, no one to tell
+        r = t.delete('/api/help/training/quiz/pos/', {}, format='json')
+        self.assertTrue(best()['passed'])
+
+
+class AnnounceChangesTests(TestCase):
+    """The hourly check notifies repo (developer) changes to paths and quizzes once,
+    and does not repeat what a trainer's save already announced."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_repo_path_change_notified_once(self):
+        from unittest import mock
+        from apps.help import training
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        _, seller = self._client('salesperson', 'an_sales')
+        self.assertEqual(training.announce_changes(), {'paths': 0, 'quizzes': 0})   # first run records
+        new_paths = {**onboarding.ROLE_PATHS, 'salesperson': onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']}
+        with mock.patch.object(onboarding, 'ROLE_PATHS', new_paths):
+            self.assertEqual(training.announce_changes()['paths'], 1)
+            self.assertEqual(training.announce_changes()['paths'], 0)
+        self.assertEqual(Notification.objects.filter(recipient=seller, title__contains='مسارك').count(), 1)
+
+    def test_repo_quiz_change_notifies_passers(self):
+        from unittest import mock
+        from apps.help import training
+        from apps.help.content import onboarding
+        c, ph = self._client('pharmacist', 'an_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        training.announce_changes()
+        changed = {**onboarding.QUIZZES, 'pos': onboarding.QUIZZES['pos'][:1]}
+        with mock.patch.object(onboarding, 'QUIZZES', changed):
+            self.assertEqual(training.announce_changes()['quizzes'], 1)
+            self.assertEqual(training.announce_changes()['quizzes'], 0)
+
+    def test_trainer_save_not_announced_twice(self):
+        from apps.help import training
+        from apps.help.content import onboarding
+        training.announce_changes()
+        t, _ = self._client('admin', 'an_admin')
+        self._client('salesperson', 'an_sales2')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertEqual(training.announce_changes(), {'paths': 0, 'quizzes': 0})

@@ -371,7 +371,7 @@ Every module in the platform is registered here with its purpose, status, and de
 | Content | `apps/help/content/<module>.py` (repo = source of truth, `T(ar, en)`); merged with trainer edits by `registry.py` |
 | Models | `HelpOverride` (trainer edit per screen + `base_hash`), `HelpRevision` (immutable save/revert history), `HelpFeedback` (helpful + comment), `HelpEvent` (open/search usage) |
 | Permissions | Read: any staff (`/api/help/` exempt from `ModuleAccessMiddleware`). Edit / history / feedback list / stats: RBAC `help`/`edit` (admin always; seeded for supervisor + quality_manager) |
-| Key APIs | `/api/help/` (index), `search/`, `screens/{key}/` (GET/PUT/DELETE), `screens/{key}/revisions/`, `modules/{key}/`, `feedback/`, `feedback/{id}/resolve/`, `stats/` |
+| Key APIs | `/api/help/` (index), `search/`, `screens/{key}/` (GET/PUT/DELETE), `screens/{key}/revisions/`, `modules/{key}/`, `feedback/`, `feedback/{id}/resolve/`, `stats/`, `ask/`, `manual/`, `onboarding/`, `onboarding/learned/`, `onboarding/team/`, `training/{kind}/{key}/`, `quizzes/{module}/`, `quizzes/{module}/submit/` |
 | Screens | Help panel in `Layout` / `MobileLayout` / `RiderLayout`; `HelpCenterPage` (`/help`) |
 | Docs | [28_IN_APP_HELP.md](28_IN_APP_HELP.md) |
 

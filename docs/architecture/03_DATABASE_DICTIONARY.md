@@ -3322,7 +3322,19 @@ Tables prefixed with their Django app name.
 `screen_key`, `tab`, `helpful` (bool), `comment`, `lang`, `staff_id`, `role`, `resolved`, `created_at`.
 
 ### help_helpevent  (help usage)
-`kind` (`open` / `search`), `screen_key`, `tab`, `query`, `results` (search hits; 0 = nothing found), `staff_id`, `role`, `branch_id`, `created_at`.
+`kind` (`open` / `search` / `ask`), `screen_key`, `tab`, `query`, `results` (search hits; 0 = nothing found), `staff_id`, `role`, `branch_id`, `created_at`.
+
+### help_helplearned  (onboarding checklist — «فهمت هذه الشاشة»)
+`staff_id` (FK StaffProfile, cascade), `screen_key`, `version` (the help's `updated` date when ticked; older than the current date → «راجعه»), `created_at`. Unique (`staff`, `screen_key`).
+
+### help_helpquizattempt  (server-graded module quiz)
+`staff_id`, `module_key`, `score`, `total`, `passed` (≥ `onboarding.PASS_PERCENT`), `answers` (JSON: chosen option index per question), `version` (quiz fingerprint answered; a pass counts only while it equals the current quiz's version), `created_at`.
+
+### help_helptrainingoverride  (trainer's version of a training path / quiz)
+`kind` (`path` / `quiz`), `key` (role / module), `data` (JSON `{screens: [...]}` or `{questions: [{q, options, answer, explain}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
+
+### help_helptrainingsnapshot  (what staff were last told about their training)
+`kind` (`path` / `quiz`), `key` (role / module), `data` (path: list of screen keys; quiz: version string), `updated_at`. Unique (`kind`, `key`). Compared hourly by `help_announce_training` to notify only changes.
 
 ## ERD Relationship Summary
 

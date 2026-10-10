@@ -24,18 +24,18 @@ export default function MobileStockCountPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <h1 className="text-base font-bold text-gray-900">جلسات الجرد</h1>
+      <h1 data-tour="stockcount-mobile-title" className="text-base font-bold text-gray-900">جلسات الجرد</h1>
       {isLoading ? <MobileLoading />
         : isError ? <MobileError text="تعذّر تحميل الجلسات" onRetry={refetch} />
         : rows.length === 0 ? <MobileEmpty icon="📦" text="لا توجد جلسات جرد" />
         : (
-          <div className="space-y-2.5">
+          <div data-tour="stockcount-mobile-list" className="space-y-2.5">
             {rows.map(s => (
-              <button key={s.id} onClick={() => navigate(`/m/stock-count/${s.id}`)}
+              <button data-tour="stockcount-mobile-card" key={s.id} onClick={() => navigate(`/m/stock-count/${s.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <span className="font-bold text-sm text-gray-900">{s.name || s.title || `جرد #${s.id}`}</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 shrink-0">
+                  <span data-tour="stockcount-mobile-status" className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 shrink-0">
                     {s.status_label || s.status}
                   </span>
                 </div>

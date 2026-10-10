@@ -144,7 +144,7 @@ export default function FinanceDashboardPage() {
   return (
     <div className="space-y-6" dir="rtl">
       {/* ── Controls ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3" data-tour="finance-dashboard-period">
         <select
           value={year}
           onChange={e => setYear(Number(e.target.value))}
@@ -161,7 +161,7 @@ export default function FinanceDashboardPage() {
             <option key={i + 1} value={i + 1}>{m}</option>
           ))}
         </select>
-        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary">
+        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary" data-tour="finance-dashboard-refresh">
           تحديث
         </RefreshButton>
         {data?.period_label && (
@@ -187,7 +187,7 @@ export default function FinanceDashboardPage() {
       {!isLoading && !isError && (
         <>
           {/* ── KPI Grid ───────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" data-tour="finance-dashboard-kpis">
             <KpiCard
               icon="📈" color="green" label="صافي الإيرادات"
               value={fmt(kpi.net_revenue)}
@@ -230,7 +230,7 @@ export default function FinanceDashboardPage() {
 
           {/* ── Monthly trend ──────────────────────────────────────────────── */}
           {trend.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="finance-dashboard-trend">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">
                 الاتجاه الشهري — صافي الإيرادات ({year})
               </h2>
@@ -240,7 +240,7 @@ export default function FinanceDashboardPage() {
 
           {/* ── Branch breakdown ───────────────────────────────────────────── */}
           {branches.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-dashboard-branches">
               <div className="px-5 py-3 border-b border-gray-100">
                 <h2 className="text-sm font-semibold text-gray-700">
                   تفصيل الفروع — {MONTHS_AR[month - 1]} {year}

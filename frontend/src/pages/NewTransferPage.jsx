@@ -119,7 +119,7 @@ export default function NewTransferPage() {
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
 
         {/* Branches */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5" data-tour="transfers-new-branches">
           <h2 className="text-sm font-bold text-gray-700 mb-4">الفروع</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -144,7 +144,7 @@ export default function NewTransferPage() {
         </div>
 
         {/* Items */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5" data-tour="transfers-new-items">
           <h2 className="text-sm font-bold text-gray-700 mb-4">الأصناف المطلوبة</h2>
 
           {/* Shared ItemSearchWidget — barcode scanner compatible */}
@@ -249,7 +249,7 @@ export default function NewTransferPage() {
         </div>
 
         {/* Notes */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5" data-tour="transfers-new-notes">
           <h2 className="text-sm font-bold text-gray-700 mb-3">ملاحظات عامة (اختياري)</h2>
           <textarea rows={3} className="input-field resize-none text-sm"
             placeholder="سبب الطلب، أولوية، تفاصيل إضافية..."
@@ -263,7 +263,7 @@ export default function NewTransferPage() {
 
         {/* Submit bar */}
         <div className="flex items-center gap-4 pb-8">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none" data-tour="transfers-new-send-now">
             <input type="checkbox" checked={submitAndSend}
               onChange={e => setSubmitAndSend(e.target.checked)} className="rounded" />
             حفظ وتقديم الطلب مباشرةً
@@ -278,6 +278,7 @@ export default function NewTransferPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting || items.length === 0}
+            data-tour="transfers-new-submit"
             className="btn-primary text-sm disabled:opacity-50 px-6"
           >
             {submitting ? 'جارٍ...' : submitAndSend ? '📤 حفظ وتقديم' : '💾 حفظ كمسودة'}

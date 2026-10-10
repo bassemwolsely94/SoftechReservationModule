@@ -109,7 +109,7 @@ export default function AvailabilityInboxTab() {
   return (
     <div className="space-y-3">
       {/* Batches — a compact strip (full width left to the review grid) */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" data-tour="purchasing-supply-batches">
         <span className="text-xs text-content/60 shrink-0">القوائم:</span>
         <div className="flex gap-2 overflow-x-auto pb-1 grow">
           {listQ.isLoading && <span className="text-sm text-content/50">جارٍ التحميل…</span>}
@@ -145,7 +145,7 @@ export default function AvailabilityInboxTab() {
       {showCodes && <SupplierCodeReport onClose={() => setShowCodes(false)} />}
 
       {/* Import bar */}
-      {importOpen && <div className="rounded-lg border border-line bg-surface p-3 space-y-2">
+      {importOpen && <div className="rounded-lg border border-line bg-surface p-3 space-y-2" data-tour="purchasing-supply-import">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col">
             <label className="text-xs text-content/60 mb-1">المورد (كما في الرسالة)</label>
@@ -169,11 +169,11 @@ export default function AvailabilityInboxTab() {
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadM.mutate({ kind: 'file', file: f }) }} />
           </div>
         </div>
-        <textarea value={raw} onChange={e => setRaw(e.target.value)} onKeyDown={onPasteKey} rows={5}
+        <textarea data-tour="purchasing-supply-paste" value={raw} onChange={e => setRaw(e.target.value)} onKeyDown={onPasteKey} rows={5}
           dir="auto" placeholder={PLACEHOLDER}
           className={`${inputCls} w-full font-mono text-[13px] leading-relaxed`} />
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => createM.mutate()} disabled={!raw.trim() || createM.isPending}
+          <button data-tour="purchasing-supply-analyze" type="button" onClick={() => createM.mutate()} disabled={!raw.trim() || createM.isPending}
             className={btnPrimary} title="Ctrl+Enter">
             {createM.isPending ? 'جارٍ التحليل…' : 'تحليل القائمة'}
           </button>

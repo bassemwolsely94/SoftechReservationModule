@@ -46,7 +46,7 @@ function BranchHealthPanel({ data, onProbe, probing }) {
   const { summary, chronic_threshold } = data
 
   return (
-    <div>
+    <div data-tour="admin-sync-branch-health">
       <SectionTitle icon="🔌">حالة اتصال الشبكة (المركز + الفروع)</SectionTitle>
       <div className="card">
         {/* Summary badges */}
@@ -180,7 +180,7 @@ export default function SyncPage() {
         subtitle="تحديث تلقائي كل 5 دقائق · Sybase ASE 12.5"
         actions={
           <div className="flex gap-2">
-            <button
+            <button data-tour="admin-sync-now"
               disabled={isBusy}
               onClick={() => triggerMutation.mutate(false)}
               className="btn-secondary text-sm disabled:opacity-50"
@@ -188,7 +188,7 @@ export default function SyncPage() {
               {isBusy ? <Spinner size="sm" /> : '↻'}
               {isBusy ? 'جارٍ...' : 'مزامنة الآن'}
             </button>
-            <button
+            <button data-tour="admin-sync-full"
               disabled={isBusy}
               onClick={() => triggerMutation.mutate(true)}
               className="btn-primary text-sm disabled:opacity-50"
@@ -223,7 +223,7 @@ export default function SyncPage() {
         {statusLoading ? (
           <SkeletonCard lines={3} />
         ) : status ? (
-          <div
+          <div data-tour="admin-sync-status"
             className="card border-r-4"
             style={{
               borderRightColor:
@@ -286,7 +286,7 @@ export default function SyncPage() {
         />
 
         {/* Logs */}
-        <div>
+        <div data-tour="admin-sync-logs">
           <SectionTitle icon="📋">سجل المزامنة</SectionTitle>
 
           {logsLoading ? (

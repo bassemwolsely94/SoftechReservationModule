@@ -64,7 +64,7 @@ export default function MobilePOSOrderPage() {
       )}
       {/* config */}
       <div className="bg-white p-3 space-y-2 border-b">
-        <select value={P.branch} onChange={e => P.setBranch(e.target.value)} className="w-full border rounded px-2 py-2">
+        <select data-tour="pos-mobile-branch" value={P.branch} onChange={e => P.setBranch(e.target.value)} className="w-full border rounded px-2 py-2">
           <option value="">— اختر الفرع —</option>
           {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name} ({b.softech_branch_id})</option>)}
         </select>
@@ -82,7 +82,7 @@ export default function MobilePOSOrderPage() {
                  placeholder="رقم فاتورة المرتجع" className="w-full border rounded px-2 py-2" />
         )}
         {/* three-level customer cascade: نوع العميل → إسم العميل → العميل الفعلي (PIC) */}
-        <div className="flex gap-1 items-start">
+        <div data-tour="pos-mobile-customer" className="flex gap-1 items-start">
           <div className="flex-1"><CustomerTypePicker P={P} compact onOpenPic={() => setShowPic(true)} /></div>
           <button onClick={() => setShowCust(true)} title="دليل العملاء الأفراد"
                   className="px-3 py-2 border rounded bg-gray-50 shrink-0 self-start mt-4">…</button>
@@ -100,7 +100,7 @@ export default function MobilePOSOrderPage() {
       </div>
 
       {/* product search + barcode + favorites */}
-      <div className="p-3 bg-white border-b space-y-2">
+      <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
         <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
         <div className="flex gap-2">
           <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
@@ -129,7 +129,7 @@ export default function MobilePOSOrderPage() {
       </div>
 
       {/* cart */}
-      <div className="bg-white">
+      <div data-tour="pos-mobile-cart" className="bg-white">
         {!P.lines.length && <div className="text-center text-gray-400 py-8">لا أصناف بعد</div>}
         {P.lines.map((l, i) => {
           const net = +(l.item_sale_price * (1 - l.cust_discp / 100)) * l.qty
@@ -202,7 +202,7 @@ export default function MobilePOSOrderPage() {
       {/* sticky bottom bar */}
       <div className="fixed bottom-0 inset-x-0 bg-white border-t p-3 space-y-2 z-40">
         <QueueIndicator P={P} />
-        <div className="flex justify-between text-xs text-gray-600">
+        <div data-tour="pos-mobile-totals" className="flex justify-between text-xs text-gray-600">
           <span>إجمالى {money(P.totals.gross)}</span>
           <span className="text-orange-600">خصم {money(P.totals.discount)}</span>
           <span className="font-bold text-green-700 text-base">الصافي {money(P.totals.net)}</span>
@@ -216,7 +216,7 @@ export default function MobilePOSOrderPage() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
-          <button onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
+          <button data-tour="pos-mobile-preview" onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
           {P.ref?.writer_enabled
             ? <button onClick={() => P.submit(true)} disabled={P.busy} className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
             : <button disabled className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}

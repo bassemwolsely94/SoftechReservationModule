@@ -1919,6 +1919,16 @@ def _insights_daily():
     _run_insights('day')
 
 
+def _help_announce_training():
+    """In-app help: notify staff about training paths / quizzes changed since the last
+    run (repo changes after a deploy, or trainer edits). See apps/help/training.py."""
+    try:
+        from apps.help import training
+        training.announce_changes()
+    except Exception as exc:
+        logger.warning('help_announce_training failed: %s', exc)
+
+
 def _insights_weekly():
     _run_insights('week')
 
@@ -3179,6 +3189,10 @@ def start_scheduler():
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
+    _scheduler.add_job(   # in-app help: tell staff about training changes (cheap)
+        _help_announce_training, 'cron', minute=20, id='help_announce_training',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
     _scheduler.add_job(
         _insights_daily, 'cron', hour=7, minute=30, id='insights_daily',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,

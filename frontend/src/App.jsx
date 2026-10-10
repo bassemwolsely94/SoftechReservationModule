@@ -68,6 +68,7 @@ import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
 import HelpCenterPage from './pages/HelpCenterPage'
+import HelpManualPage from './pages/HelpManualPage'
 import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
 import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
 import MobileNewReservationPage from './pages/mobile/MobileNewReservationPage'
@@ -309,6 +310,8 @@ export default function App() {
             <Route path="attendance"        element={<MobileAttendancePage />} />
           </Route>
 
+          {/* printable training manual — own shell so it prints without the side menu */}
+          <Route path="/help/manual" element={<RequireAuth><HelpManualPage /></RequireAuth>} />
           <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
 

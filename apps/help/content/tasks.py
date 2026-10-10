@@ -42,6 +42,18 @@ SCREENS = [
             T('«لوحة التحكم» لنظرة عامة على الأداء.', '"Dashboard" for an overview of performance.'),
         ],
         'related': ['tasks.detail', 'tasks.dashboard', 'tasks.schedules'],
+        'tour': [
+            {'target': 'tasks-list-new', 'text': T('«+ مهمة جديدة».',
+                                              '"+ New task".')},
+            {'target': 'tasks-list-views', 'text': T('العرض: قائمة، كانبان، أو «مهامي» بس.',
+                                              'View: list, kanban, or only "My tasks".')},
+            {'target': 'tasks-list-search', 'text': T('ابحث في المهام.',
+                                              'Search the tasks.')},
+            {'target': 'tasks-list-filters', 'text': T('فلتر الحالة والأولوية والنوع والفرع، و«متأخرة فقط».',
+                                              'Filter by status, priority, type, branch, and "Overdue only".')},
+            {'target': 'tasks-list-content', 'text': T('المهام — افتح أي مهمة لتحديثها.',
+                                              'The tasks — open one to update it.')},
+        ],
         'updated': '2026-10-10',
     },
     {

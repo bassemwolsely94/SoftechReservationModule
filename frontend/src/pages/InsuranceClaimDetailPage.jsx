@@ -1752,12 +1752,12 @@ export default function InsuranceClaimDetailPage() {
                 🔄 مزامنة سوفتك
               </button>
             )}
-            <button
+            <button data-tour="insurance-claim-issue"
               onClick={() => setShowWizard(true)}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
               إصدار المطالبة
             </button>
-            <button
+            <button data-tour="insurance-claim-print"
               onClick={() => navigate(`/insurance/claims/${id}/print`)}
               className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700">
               طباعة / تصدير
@@ -1766,7 +1766,7 @@ export default function InsuranceClaimDetailPage() {
         </div>
 
         {/* KPI strip */}
-        <div className="flex gap-6 mt-4 pt-4 border-t border-gray-100">
+        <div className="flex gap-6 mt-4 pt-4 border-t border-gray-100" data-tour="insurance-claim-kpis">
           {[
             { label: 'عدد الروشتات', value: claim.final_rx_count },
             { label: 'محلى', value: fmt(claim.final_local_before) },
@@ -1791,7 +1791,7 @@ export default function InsuranceClaimDetailPage() {
 
       {/* Tabs */}
       <div className="bg-white border-b border-gray-200 px-6">
-        <div className="flex gap-1">
+        <div className="flex gap-1" data-tour="insurance-claim-tabs">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -1809,7 +1809,7 @@ export default function InsuranceClaimDetailPage() {
       {tab === 'prescriptions' && (
         <div className="px-6 py-4">
           <div className="mb-3 flex gap-3 items-center">
-            <input
+            <input data-tour="insurance-claim-rx-search"
               className="border border-gray-300 rounded px-3 py-1.5 text-sm w-72"
               placeholder="بحث باسم المريض أو رقم الفاتورة أو اسم الصنف..."
               value={rxFilter}
@@ -1869,7 +1869,7 @@ export default function InsuranceClaimDetailPage() {
               <button onClick={() => setSelRx(new Set())} className="text-xs text-gray-500 hover:text-gray-700">إلغاء التحديد</button>
             </div>
           )}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="insurance-claim-rx-table">
             <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">

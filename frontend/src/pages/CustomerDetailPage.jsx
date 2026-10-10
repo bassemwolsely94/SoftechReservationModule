@@ -269,7 +269,7 @@ function NoteCompose({ customerId, onPosted }) {
   }
 
   return (
-    <div className="border border-gray-200 rounded-xl p-3 mb-4">
+    <div className="border border-gray-200 rounded-xl p-3 mb-4" data-tour="customers-detail-note">
       <textarea
         ref={ref}
         rows={2}
@@ -1393,7 +1393,7 @@ export default function CustomerDetailPage() {
             </svg>
           </button>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" data-tour="customers-detail-identity">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-black text-gray-900">{customer.name}</h1>
               <span
@@ -1416,6 +1416,7 @@ export default function CustomerDetailPage() {
           <button
             onClick={() => navigate(`/reservations/new?customer=${customer.id}`)}
             className="btn-primary text-sm"
+            data-tour="customers-detail-new-reservation"
           >
             + حجز جديد
           </button>
@@ -1432,7 +1433,7 @@ export default function CustomerDetailPage() {
           <UnmetDemandStrip customerId={id} navigate={navigate} />
 
           {/* Tab bar */}
-          <div className="border-b border-gray-200 flex gap-0 overflow-x-auto">
+          <div className="border-b border-gray-200 flex gap-0 overflow-x-auto" data-tour="customers-detail-tabs">
             <Tab label="الجدول الزمني" active={tab === 'timeline'} onClick={() => setTab('timeline')}
               count={(customer.notes?.length || 0) + (reservations?.length || 0)} />
             <Tab label="المشتريات" active={tab === 'purchases'} onClick={() => setTab('purchases')}
@@ -1493,7 +1494,7 @@ export default function CustomerDetailPage() {
         <div className="flex flex-col gap-4">
 
           {/* KPI strip */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2" data-tour="customers-detail-kpis">
             {[
               { label: 'فاتورة', value: customer.total_purchases, color: BRAND, bg: 'rgb(var(--c-brand-50))' },
               {

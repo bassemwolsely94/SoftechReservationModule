@@ -1803,13 +1803,13 @@ export default function ShortagePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button data-tour="shortage-list-aggregate"
               onClick={() => setShowAggregate(true)}
               className="px-3 py-2 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 flex items-center gap-1.5"
             >
               📊 عرض مجمع
             </button>
-            <button
+            <button data-tour="shortage-list-new"
               onClick={() => setShowCreate(true)}
               className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700"
             >
@@ -1819,7 +1819,7 @@ export default function ShortagePage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
+        <div data-tour="shortage-list-filters" className="flex gap-3 flex-wrap">
           <BranchSelect
             size="sm"
             value={filterBranch}
@@ -1860,7 +1860,7 @@ export default function ShortagePage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div data-tour="shortage-list-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {lists.map(sl => {
               const cfg = STATUS_CONFIG[sl.status] || {}
               const matchPct = sl.item_count > 0
@@ -1871,7 +1871,7 @@ export default function ShortagePage() {
                 : 0
 
               return (
-                <button key={sl.id} onClick={() => setActiveId(sl.id)}
+                <button data-tour="shortage-list-card" key={sl.id} onClick={() => setActiveId(sl.id)}
                   className="bg-white rounded-2xl border border-gray-200 p-5 text-right
                     hover:border-brand-300 hover:shadow-md transition-all">
                   <div className="flex items-start justify-between mb-3">

@@ -188,24 +188,44 @@ SCREENS = [
               'If the screen has tabs, the help opens on the tab you are on, marked "You are here".'),
             T('في هذه الصفحة تتصفح كل الموديولات أو تبحث بكلمة (عربي أو إنجليزي). يمكنك أيضاً البحث من Ctrl+K.',
               'On this page you can browse every module or search by a word (Arabic or English). You can also search from Ctrl+K.'),
+            T('في الشاشات اللي ليها جولة، اضغط «👆 اعرض لي» تحت الشرح: النظام بيعلّم على الأزرار الحقيقية واحد واحد. «التالي» / «السابق»، وEsc أو «إنهاء» يقفل الجولة. تقدر تضغط الزر المعلَّم فعلاً.',
+              'On screens that have a tour, press "👆 Show me" under the help: the system highlights the real buttons one by one. "Next" / "Back", and Esc or "End" stops it. You can press the highlighted button for real.'),
+            T('اكتب سؤالك في خانة البحث (زي «ازاي أعمل تحويل لفرع تاني؟») واضغط «💬 اسأل النظام»: الرد مكتوب من دليل الاستخدام فقط، وتحته الشاشات اللي اتاخد منها. لو الدليل مش بيغطي السؤال هيقولك كده.',
+              'Type your question in the search box (e.g. "How do I transfer to another branch?") and press "💬 Ask the system": the answer is written only from the help guide, with the screens it came from underneath. If the guide does not cover it, it says so.'),
+            T('موظف جديد؟ افتح تبويب «مساري التدريبي» واتبع الترتيب: اقرأ الشاشة، جرّبها، اضغط «فهمت هذه الشاشة ✓»، وبعدين اختبار الموديول.',
+              'New here? Open the "My training path" tab and follow the order: read the screen, try it, press "I understand this screen ✓", then take the module quiz.'),
             T('في آخر كل شرح اضغط «مفيد» أو «غير مفيد» واكتب ما ليس واضحاً — يصل للمدرب ليحسّن الشرح.',
               'At the end of any article press "Helpful" or "Not helpful" and write what is unclear — it reaches the trainer, who improves the text.'),
             {'text': T('للمدربين: افتح أي شرح واضغط «تعديل الشرح». التعديل يظهر للجميع فوراً ويُحفظ في السجل، ويمكن الرجوع للنسخة الأصلية في أي وقت.',
                        'For trainers: open any article and press "Edit help". The change shows to everyone immediately, is kept in the history, and can be reverted to the original at any time.'),
+             'roles': ['admin', 'supervisor', 'quality_manager']},
+            {'text': T('للمدربين: نص جولة «اعرض لي» بيتعدّل من «تعديل الشرح» (الخطوات والأزرار ثابتة حسب الشاشة). المسارات والاختبارات بتتعدّل من تبويب «للمدربين».',
+                       'For trainers: the "Show me" tour text is edited in "Edit help" (the steps and buttons are fixed by the screen). Paths and quizzes are edited in the "For trainers" tab.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
         ],
         'tabs': [
             {'key': 'browse', 'title': T('تصفح الموديولات', 'Browse modules'),
              'body': T('كل موديولات النظام مقسّمة مثل القائمة الجانبية. اضغط موديول لترى دوره ودورة العمل وكل شاشاته، ثم اضغط شاشة لترى شرحها الكامل.',
                        'All modules grouped like the side menu. Click a module to see its role, its workflow and its screens, then click a screen for its full help.')},
+            {'key': 'path', 'title': T('مساري التدريبي', 'My training path'),
+             'body': T('قائمة الشاشات المطلوب تتعلمها حسب دورك، بالترتيب (أول أسبوع الأول). افتح كل شاشة، اقرأ شرحها وجرّبها، واضغط «فهمت هذه الشاشة ✓». '
+                       'بعد شاشات كل موديول ادخل اختباره القصير — النجاح من 80%، وتقدر تعيد الاختبار. لو شرح شاشة اتغيّر بعد ما علّمتها تظهر «⟳ راجعه». '
+                       'النسبة فوق = الشاشات اللي اتفهمت + الاختبارات الناجحة. لو المدرب غيّر اختبار بعد ما نجحت فيه يظهر «⟳ اتغيّر — أعد الاختبار» ومش بيتحسب لحد ما تعيده، '
+                       'وبيوصلك إشعار. ولو اتضافت شاشات لمسار دورك بيوصلك إشعار برضه.',
+                       'The screens your role should learn, in order (first week first). Open each one, read its help and try it, then press "I understand this screen ✓". '
+                       'After a module\'s screens take its short quiz — the pass mark is 80% and you can retake it. If a screen\'s help changes after you ticked it, it shows "⟳ re-read". '
+                       'The percentage on top = screens understood + quizzes passed. If a trainer changes a quiz after you passed it, it shows "⟳ Quiz changed — retake" and does not count until you retake it, '
+                       'and you get a notification. You are also notified when screens are added to your role\'s path.')},
             {'key': 'whats_new', 'title': T('الجديد', "What's new"),
              'body': T('الشاشات التي تغيّر شرحها مؤخراً (ميزة جديدة أو تعديل)، الأحدث أولاً. علامة «جديد» تعني أنك لم تقرأ النسخة الحالية بعد.',
                        'Screens whose help changed recently (a new feature or change), newest first. A "New" badge means you have not read the current version yet.')},
             {'key': 'trainers', 'title': T('للمدربين', 'For trainers'),
-             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة. استخدمها لتعرف أين يحتاج الفريق تدريباً.',
-                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), and open comments. Use it to see where the team needs training.')},
+             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة، أسئلة «اسأل النظام» (اللي ملقتش إجابة أولاً — دي شروحات محتاجة تتكتب)، و«تقدّم الفريق في التدريب» (نسبة كل موظف، الاختبارات التي رسب فيها، وآخر نشاط — حسب الفروع المسموحة لك). وفي آخر التبويب «تعديل المسارات التدريبية والاختبارات»: رتّب شاشات مسار أي دور (أضف / احذف / حرّك)، وعدّل أسئلة اختبار أي موديول واختياراته والإجابة الصحيحة والتوضيح. الحفظ يظهر للجميع فوراً، ويتسجّل في السجل، وتقدر ترجع للأصل. استخدمها لتعرف أين يحتاج الفريق تدريباً.',
+                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), open comments, "Ask the system" questions (unanswered first — help that needs writing), and "Team training progress" (each person\'s percentage, failed quizzes and last activity — for the branches you may see). At the bottom, "Edit training paths and quizzes": reorder any role\'s path (add / remove / move screens) and edit any module\'s quiz questions, options, correct answer and explanation. A save shows to everyone at once, is kept in the history, and can be reverted. Use it to see where the team needs training.')},
         ],
         'tips': [
+            T('«اسأل النظام» بيشرح استخدام النظام بس — مش بيحدد أسعار أو خصومات أو جرعات أو بدائل أدوية، ومش بيوافق على حاجة.',
+              '"Ask the system" only explains how to use the system — it never sets prices, discounts, doses or drug substitutes, and never approves anything.'),
             T('نقطة صفراء على زر المساعدة تعني أن شرح هذه الشاشة تغيّر منذ آخر مرة قرأته.',
               'A yellow dot on the help button means this screen\'s help changed since you last read it.'),
             T('يمكنك قراءة الشرح بالإنجليزي حتى لو الشاشة بالعربي — زر «ع / EN» داخل لوحة المساعدة.',
@@ -213,6 +233,35 @@ SCREENS = [
             T('صلاحية تعديل الشرح تُمنح من «مصفوفة الصلاحيات» على موديول «دليل الاستخدام» (إجراء تعديل).',
               'Permission to edit help is granted in the "Permissions matrix" on the "Help guide" module (edit action).'),
         ],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'general.help_manual',
+        'routes': ['/help/manual'],
+        'title': T('دليل التدريب المطبوع', 'Printable training manual'),
+        'summary': T(
+            'كتيّب تدريب جاهز للطباعة أو الحفظ PDF، مأخوذ من نفس شرح النظام: إما حسب الدور (شاشات «مساري التدريبي» بالترتيب، '
+            'والخطوات الخاصة بالدور فقط) أو حسب الموديول (كل شاشاته). فيه غلاف وفهرس، وكل موديول في فصل بدورة العمل ثم شاشاته.',
+            'A training booklet ready to print or save as PDF, built from the same in-app help: either by role (the "My training path" '
+            'screens in order, with only that role\'s steps) or by module (all its screens). It has a cover and contents, and each module '
+            'is a chapter with its workflow followed by its screens.'),
+        'audience': T('المدربون والمشرفون لتجهيز التدريب، وأي موظف يحب يذاكر من ورق.',
+                      'Trainers and supervisors preparing training, and anyone who prefers to study on paper.'),
+        'steps': [
+            T('افتحه من «طباعة دليلي» في «مساري التدريبي»، أو «طباعة دليل الموديول» في صفحة أي موديول في دليل الاستخدام.',
+              'Open it from "Print my manual" in "My training path", or "Print this module\'s manual" on any module page of the help guide.'),
+            T('من الشريط أعلى الصفحة اختر الدور أو الموديول واللغة.',
+              'From the bar at the top choose the role or module and the language.'),
+            T('اضغط «طباعة / حفظ PDF» — الشريط لا يُطبع، وكل موديول يبدأ في صفحة جديدة.',
+              'Press "Print / save as PDF" — the bar is not printed and each module starts on a new page.'),
+        ],
+        'tips': [
+            T('الدليل المطبوع يتقادم: لو الشرح اتغيّر بعد الطباعة، تاريخ «آخر تحديث للشرح» على الغلاف يوضح ده — اطبع نسخة جديدة.',
+              'A printed manual gets old: if the help changes after printing, the "Help last updated" date on the cover shows it — print a fresh copy.'),
+            T('أسئلة الاختبارات لا تُطبع في الدليل — الاختبار يتم من داخل النظام عشان التصحيح يتسجّل.',
+              'Quiz questions are not printed — quizzes are taken in the system so the result is recorded.'),
+        ],
+        'related': ['general.help_center'],
         'updated': '2026-10-10',
     },
 ]

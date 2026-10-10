@@ -73,6 +73,7 @@ def index(request):
             'key': s['key'], 'module': s['module'], 'routes': s['routes'],
             'title': registry.effective(s, ov.get(s['key']))['title'],
             'tabs': [t['key'] for t in s.get('tabs') or []],
+            'has_tour': bool(s.get('tour')),
             'updated': _updated(s, ov.get(s['key'])),
         } for s in screens.values()],
         'can_edit': _can_edit(_profile(request)),
@@ -208,6 +209,13 @@ def _validate_edit(data):
                 if not isinstance(t, dict) or not isinstance(t.get('key'), str) \
                         or not _is_t(t.get('title')) or not _is_t(t.get('body')):
                     errors.append(f'tabs[{i}]: العنوان والشرح مطلوبان')
+    if 'tour' in data:
+        if not isinstance(data['tour'], list):
+            errors.append('tour: يجب أن تكون قائمة')
+        else:
+            for i, t in enumerate(data['tour']):
+                if not isinstance(t, dict) or not isinstance(t.get('target'), str) or not _is_t(t.get('text')):
+                    errors.append(f'tour[{i}]: نص الخطوة مطلوب')
     if 'faq' in data:
         if not isinstance(data['faq'], list):
             errors.append('faq: يجب أن تكون قائمة')
@@ -310,14 +318,110 @@ def stats(request):
     searches = (HelpEvent.objects.filter(kind=HelpEvent.KIND_SEARCH, created_at__gte=since)
                 .values('query').annotate(n=Count('id'), misses=Count('id', filter=Q(results=0)))
                 .order_by('-n')[:30])
+    asks = (HelpEvent.objects.filter(kind=HelpEvent.KIND_ASK, created_at__gte=since)
+            .values('query').annotate(n=Count('id'), misses=Count('id', filter=Q(results=0)))
+            .order_by('-misses', '-n')[:30])
     _, screens = registry.load()
     title = {k: s['title'] for k, s in screens.items()}
     return Response({
         'days': days,
+        'asks': list(asks),
         'opens': [{**o, 'title': title.get(o['screen_key'])} for o in opens],
         'by_role': list(by_role),
         'votes': [{**v, 'title': title.get(v['screen_key'])} for v in votes],
         'searches': list(searches),
         'overrides': HelpOverride.objects.count(),
         'open_comments': HelpFeedback.objects.filter(resolved=False).exclude(comment='').count(),
+    })
+
+
+def _for_role(items, role):
+    """Steps / tips limited to one role (items without `roles` are for everyone)."""
+    return [it for it in items or []
+            if not (isinstance(it, dict) and 'roles' in it) or role in it['roles']]
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manual(request):
+    """Printable training manual, built from the same help text:
+    ?role=<role>  → that role's onboarding path (steps/tips limited to the role);
+    ?module=<key> → every screen of one module.
+    Modules appear in first-seen order, each with its workflows once."""
+    from . import training
+    from apps.users.models import ROLE_CHOICES
+    modules, screens = registry.load()
+    role = request.query_params.get('role') or ''
+    module_key = request.query_params.get('module') or ''
+    if module_key:
+        if module_key not in modules:
+            return Response({'detail': 'unknown module'}, status=404)
+        keys = list(modules[module_key]['screens'])
+        role = ''
+    else:
+        if not role:
+            role = getattr(_profile(request), 'role', '') or 'viewer'
+        if role not in [r for r, _ in ROLE_CHOICES]:
+            return Response({'detail': 'unknown role'}, status=404)
+        keys = training.path(role)
+    ov = {o.screen_key: o for o in HelpOverride.objects.filter(screen_key__in=keys)}
+    out_modules, out_screens = [], []
+    for k in keys:
+        s = screens[k]
+        eff = registry.effective(s, ov.get(k))
+        mk = s['module']
+        if mk not in [m['key'] for m in out_modules]:
+            m = modules[mk]
+            out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
+                                'summary': m['summary'], 'workflows': m.get('workflows') or []})
+        item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
+                    steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
+                    tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])
+        out_screens.append(item)
+    return Response({
+        'role': role, 'module': module_key,
+        'modules': out_modules, 'screens': out_screens,
+        'updated': max([s['updated'] or '' for s in out_screens] or ['']),
+        'generated_at': timezone.now(),
+    })
+
+
+ASK_PER_HOUR = 30
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ask(request):
+    """«اسأل النظام» — answer a how-to question from the help text only (see ask.py).
+    Always returns the matching articles too, so the user can read the source; when no
+    model is configured or it fails, those articles are the answer."""
+    from . import ask as ask_mod
+    profile = _profile(request)
+    q = str(request.data.get('question', '')).strip()[:500]
+    if len(q) < 3:
+        return Response({'detail': 'اكتب سؤالك'}, status=400)
+    lang = 'en' if request.data.get('lang') == 'en' else 'ar'
+    here = str(request.data.get('screen_key', ''))[:80]
+    since = timezone.now() - timezone.timedelta(hours=1)
+    if profile and HelpEvent.objects.filter(kind=HelpEvent.KIND_ASK, staff=profile,
+                                            created_at__gte=since).count() >= ASK_PER_HOUR:
+        return Response({'detail': 'وصلت للحد المسموح من الأسئلة في الساعة — جرّب البحث في الدليل.'}, status=429)
+
+    modules, screens = registry.load()
+    ov = _overrides()
+    eff = [registry.effective(s, ov.get(k)) for k, s in screens.items()]
+    articles = registry.retrieve(q, eff, modules, limit=5, prefer=here if here in screens else None)
+    role = getattr(profile, 'role', '') or ''
+    result, used = ask_mod.answer(q, lang, role, articles, modules) if articles else (None, [])
+    sources = (result or {}).get('sources') or []
+    _log(HelpEvent.KIND_ASK, request, screen_key=here, query=q,
+         results=(len(sources) if result and result['found'] else 0) if result else len(articles))
+    by_key = {s['key']: s for s in eff}
+    return Response({
+        'answer': result['answer'] if result else None,
+        'found': bool(result and result['found']),
+        'ai': result is not None,
+        'sources': [_brief(by_key[k], modules) for k in sources],
+        'articles': [{**_brief(s, modules), 'routes': s['routes']} for s in articles],
     })

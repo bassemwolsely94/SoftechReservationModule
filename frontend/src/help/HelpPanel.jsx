@@ -17,6 +17,9 @@ import { useCurrentHelp } from './useHelpIndex'
 import HelpArticle from './HelpArticle'
 import HelpEditor from './HelpEditor'
 import HelpFeedback from './HelpFeedback'
+import { LearnedButton } from './Onboarding'
+import TourRunner from './Tour'
+import AskBox from './AskBox'
 import { pick, label } from './text'
 
 /** Global keyboard / event wiring — mount once per shell. */
@@ -37,12 +40,11 @@ export function useHelpShortcuts() {
 export default function HelpPanel() {
   useHelpShortcuts()
   const isOpen = useHelpStore((s) => s.isOpen)
-  if (!isOpen) return null
-  return <PanelBody />
+  return <>{isOpen && <PanelBody />}<TourRunner /></>
 }
 
 function PanelBody() {
-  const { close, open, forcedKey, forcedTab, markSeen } = useHelpStore()
+  const { close, open, forcedKey, forcedTab, markSeen, startTour } = useHelpStore()
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -119,6 +121,7 @@ function PanelBody() {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {term.length >= 2 ? (
           <div className="space-y-1">
+            {term.length >= 3 && <div className="mb-2"><AskBox question={term} lang={lang} screenKey={screen?.key} onOpen={openScreen} /></div>}
             {results.isLoading && <div className="text-sm text-faint">{label('loading', lang)}</div>}
             {results.data && results.data.length === 0 && <div className="text-sm text-faint">{label('noResults', lang)}</div>}
             {(results.data || []).map((r) => (
@@ -159,8 +162,16 @@ function PanelBody() {
       {!editing && (
         <div className="shrink-0 border-t border-line px-4 py-2.5 space-y-2">
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
+              <button type="button" onClick={() => startTour(data.key, data.tour)}
+                      className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
+                👆 {lang === 'en' ? 'Show me' : 'اعرض لي'}
+              </button>
+            )}
+            {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
+            <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
             {data?.can_edit && !term && (
               <button type="button" onClick={() => setEditing(true)} className="ms-auto text-brand-600 hover:underline">
                 ✏️ {label('edit', lang)}

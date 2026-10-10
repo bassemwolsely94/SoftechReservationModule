@@ -29,7 +29,7 @@ function pctColor(pct) {
 function CallCenterBlock({ cc }) {
   const metrics = cc.metrics || []
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto mt-4">
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto mt-4" data-tour="analytics-kpi-board-call-center">
       <div className="px-4 pt-3 pb-1 font-bold text-gray-800 text-sm">📞 الكول سنتر</div>
       <table className="w-full text-sm">
         <thead>
@@ -86,7 +86,7 @@ export default function KpiBoardPage() {
           <h1 className="text-2xl font-bold text-gray-900">📊 لوحة مؤشرات الفروع</h1>
           <p className="text-sm text-gray-500 mt-0.5">التارجت مقابل المحقق لكل فرع — {MONTHS[month - 1]} {year}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="analytics-kpi-board-period">
           <select className="input-field !w-auto" value={month} onChange={e => setMonth(+e.target.value)}>
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
@@ -106,7 +106,7 @@ export default function KpiBoardPage() {
           <div className="text-xs mt-2 text-gray-400">شغّل <code>build_kpi_rollups --year {year} --month {month}</code></div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto" data-tour="analytics-kpi-board-table">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-gray-600">
@@ -154,7 +154,7 @@ export default function KpiBoardPage() {
                 </tr>
               ))}
               {/* Chain totals */}
-              <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold">
+              <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold" data-tour="analytics-kpi-board-totals">
                 <td className="px-4 py-3 sticky right-0 bg-gray-50 text-gray-900">إجمالى الفروع</td>
                 {metrics.map(m => {
                   const c = data.totals[m.key] || {}
@@ -174,7 +174,7 @@ export default function KpiBoardPage() {
 
       {data?.call_center && <CallCenterBlock cc={data.call_center} />}
 
-      <p className="text-[11px] text-gray-400 mt-3">
+      <p className="text-[11px] text-gray-400 mt-3" data-tour="analytics-kpi-board-legend">
         القيم المالية بالجنيه · «محقق» من فواتير SOFTECH (صافى بعد المرتجعات) · «تارجت» من الأهداف البيعية.
         الأهداف تُدار من صفحة <a href="/targets" className="text-blue-500 hover:underline">الأهداف البيعية</a>.
       </p>
