@@ -8,14 +8,15 @@ MODULE = {
         'الحجوزات وتسليمها، الطلب الضائع واسترداده، المتابعات، طلبات التحويل والرد على الفروع الأخرى، أذون الصرف والاستلام، '
         'طلبات التوريد ISR، الجرد، النواقص والمهام. النقاط ترفع «خبرتك» فترتقي في المستويات وتحصل على لقب جديد وشارات. '
         'البنود التي تُترك متأخرة تخصم نقاطاً بسيطة من ترتيب الفترة فقط — المستوى لا ينزل أبداً. '
-        'النظام للتقدير فقط حالياً (بدون مقابل مالي).',
+        'يمكن استبدال رصيدك بمكافآت من الكتالوج (بموافقة مدير الفرع ثم الإدارة) دون أن ينخفض مستواك أو ترتيبك، '
+        'وكل شهر يُتوَّج الأفضل في كل دور «أبطال الشهر».',
         'Every job you do in the system or in SOFTECH earns points automatically: sale invoices and their profitability '
         '(cash scores higher), returns, reservations and their handover, lost sales and their recovery, follow-ups, '
         'transfer requests and replies to other branches, issue/receipt documents, ISR supply requests, stock counts, '
         'shortage lists and tasks. Points raise your "XP" so you climb levels with a new title and badges. Items left '
         'overdue deduct a few points from the period ranking only — your level never drops. Your balance can be spent '
         'on rewards from the catalog (approved by the branch manager, then management) — spending never lowers your '
-        'level or rank.'),
+        'level or rank. Every month the best of each role are crowned champions (بطل الشهر).'),
     'workflows': [{
         'key': 'redemption',
         'title': T('دورة طلب المكافأة', 'Reward request life cycle'),
@@ -84,6 +85,9 @@ SCREENS = [
             {'key': 'rules', 'title': T('📜 كيف تكسب النقاط', '📜 How to earn'),
              'body': T('كل قاعدة بنقاطها وحدّها اليومي. مبيعات: نقاط لكل فاتورة + لكل 500 جنيه + لكل 100 جنيه ربح (الكاش ×1.5)، بحد يومي حتى لا تطغى الفروع الكبيرة.',
                        'Every rule with its points and daily cap. Sales: points per invoice + per 500 EGP + per 100 EGP of profit (cash ×1.5), capped daily so big branches do not dominate.')},
+            {'key': 'champions', 'title': T('👑 أبطال الشهر', '👑 Champions'),
+             'body': T('سباق الشهر الحالي لحظياً (المتصدرون لكل دور في فرعك وعلى الشبكة) ولوحة أبطال الأشهر السابقة. أول كل شهر يُتوَّج تلقائياً: بطل كل دور في كل فرع (+200)، وأفضل 3 لكل دور على الشبكة (+500 للأول و+200 للثاني والثالث)، وفرع الشهر، مع إعلان مثبّت للجميع. مكافآت الأبطال تزيد الخبرة والرصيد لكنها لا تدخل في الترتيب. من عليه ملاحظة مراجعة مؤكدة في الشهر لا يُتوَّج. يمكن للإدارة سحب لقب بسبب مكتوب فتُخصم مكافأته.',
+                       'This month\'s live race (leaders per role in your branch and on the network) and the hall of fame of past months. On the 1st of each month champions are crowned automatically: each role\'s #1 in each branch (+200), the network top 3 per role (+500 for first, +200 for second and third), and the branch of the month, with a pinned announcement for everyone. Champion bonuses raise XP and balance but never count in the ranking. Anyone with a confirmed audit flag that month is not crowned. Management can revoke a title with a written reason, which reverses its bonus.')},
             {'key': 'rewards', 'title': T('🎁 المكافآت', '🎁 Rewards'),
              'body': T('رصيدك المتاح (صافي ما كسبته ناقص المحجوز والمستبدل) وكتالوج المكافآت. اضغط «استبدال» ثم «تأكيد»؛ يظهر سبب عدم الإتاحة إن وُجد (الرصيد، المستوى، الحد الشهري، الكمية). أسفلها «طلباتي» بحالاتها.',
                        'Your available balance (net earned minus held and redeemed) and the reward catalog. Press "Redeem" then "Confirm"; if a reward is not available the reason shows (balance, level, monthly limit, stock). Below it, "My requests" with their status.')},
@@ -107,6 +111,9 @@ SCREENS = [
             {'q': T('هل ينزل مستواي إذا خُصمت نقاط؟', 'Can my level drop if points are deducted?'),
              'a': T('لا. المستوى يُبنى على النقاط المكتسبة فقط؛ الخصومات تؤثر على ترتيب الفترة فقط.',
                     'No. Your level is built on earned points only; deductions only affect the period ranking.')},
+            {'q': T('كيف أصبح بطل الشهر؟', 'How do I become champion of the month?'),
+             'a': T('كن الأول بين زملاء دورك في فرعك بنهاية الشهر (يحتاج زميلاً واحداً على الأقل في نفس الدور)، أو من أفضل 3 لدورك على كل الفروع. يُحتسب صافي نقاط الشهر بدون مكافآت الأبطال، وبشرط عدم وجود ملاحظة مراجعة مؤكدة. الإدارة لا تنافس على الألقاب.',
+                    'Be first among your role in your branch at month end (you need at least one colleague in the same role), or in the top 3 for your role across all branches. The month\'s net points count, without champion bonuses, and with no confirmed audit flag. Management (admin) does not compete.')},
             {'q': T('هل الاستبدال يخفض مستواي أو ترتيبي؟', 'Does redeeming lower my level or rank?'),
              'a': T('لا. ينقص رصيد المكافآت فقط؛ المستوى والترتيب يبقيان كما هما.',
                     'No. Only your reward balance goes down; level and rank stay as they are.')},

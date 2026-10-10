@@ -652,6 +652,13 @@ CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=Tr
 # Gamification (apps/gamification) — points / levels / badges / rankings, recognition only.
 # Scheduler scores today every 30 min and closes yesterday at 00:20. Reads our tables only.
 GAMIFICATION_ENABLED = config('GAMIFICATION_ENABLED', default=True, cast=bool)
+# Monthly champions: a branch × role group needs this many players to crown a champion;
+# branch of the month needs this many active players.
+GAMIFICATION_CHAMPION_MIN_PLAYERS = config('GAMIFICATION_CHAMPION_MIN_PLAYERS', default=2, cast=int)
+GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS = config('GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS', default=3, cast=int)
+# Roles that never compete for a monthly title (management).
+GAMIFICATION_CHAMPION_EXCLUDED_ROLES = config('GAMIFICATION_CHAMPION_EXCLUDED_ROLES', default='admin,viewer',
+                                              cast=lambda v: [r.strip() for r in v.split(',') if r.strip()])
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 # B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
 CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)

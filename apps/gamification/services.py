@@ -68,7 +68,9 @@ def _staff_row(staff):
 def ranking(start, end, branch_id=None, role=None, limit=None):
     """[{rank, staff…, net, earned, lost, events, level}] ordered by net desc."""
     from apps.users.models import StaffProfile
-    qs = PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True)
+    # Champion bonuses never count in a ranking — last month's winner starts level.
+    qs = PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True) \
+        .exclude(category='champion')
     if branch_id:
         qs = qs.filter(staff__branch_id=branch_id)
     if role:
@@ -107,7 +109,7 @@ def rank_of(staff, start, end, branch_id=None, role=None):
 def branch_ranking(start, end):
     from apps.branches.models import Branch
     ev = (PointEvent.objects.filter(day__gte=start, day__lte=end, staff__is_active=True,
-                                    staff__branch__isnull=False)
+                                    staff__branch__isnull=False).exclude(category='champion')
           .values('staff__branch_id')
           .annotate(net=Sum('points'), earned=Sum('points', filter=Q(points__gt=0)),
                     lost=Sum('points', filter=Q(points__lt=0)),
@@ -210,6 +212,9 @@ def badges_for(staff):
             have = counts.get(b.rule_key, 0)
         elif b.criteria == Badge.CRITERIA_STREAK:
             have = player.best_streak if player else 0
+        elif b.criteria == Badge.CRITERIA_CHAMPION:
+            from .engine import _titles
+            have = _titles(staff, b.rule_key)
         else:
             have = player.xp if player else 0
         out.append({'key': b.key, 'icon': b.icon, 'name_ar': b.name_ar, 'name_en': b.name_en,
@@ -218,6 +223,21 @@ def badges_for(staff):
                     'earned_at': earned.get(b.id)})
     out.sort(key=lambda x: (not x['earned'], -(x['progress'] / (x['threshold'] or 1))))
     return out
+
+
+def _titles(staff):
+    from .champions import titles_for
+    return titles_for(staff)
+
+
+def champions_in(start, end, branch_id=None):
+    from .champions import champion_json
+    from .models import Champion
+    qs = Champion.objects.filter(month__gte=start.replace(day=1), month__lte=end, revoked=False) \
+        .select_related('staff__user', 'branch')
+    if branch_id:
+        qs = qs.filter(branch_id=branch_id)
+    return [champion_json(c) for c in qs]
 
 
 def _wallet(staff):
@@ -276,6 +296,7 @@ def me(staff):
         'recent': recent_events(staff),
         'open_items': open_items(staff),
         'wallet': _wallet(staff),
+        'titles': _titles(staff),
         'promotions': [{'level': _level_payload(h.level), 'reached_at': h.reached_at}
                        for h in LevelHistory.objects.filter(staff=staff)
                        .select_related('level')[:5]],
@@ -334,4 +355,5 @@ def report(start, end, branch_id=None):
         'levels': level_dist,
         'promotions': promotions,
         'rewards': rewards_summary(start, end, branch_id),
+        'champions': champions_in(start, end, branch_id),
     }

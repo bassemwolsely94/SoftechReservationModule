@@ -1,6 +1,6 @@
 # 29 — Gamification (التحفيز: النقاط والمستويات)
 
-**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog.
+**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر).
 **App:** `apps/gamification` · **API:** `/api/gamification/` · **Screens:** card on `/dashboard` + `/me`, `/gamification`, `/m/gamification`
 
 ## Decisions (agreed with the owner)
@@ -50,6 +50,23 @@ The engine **reads** records that already exist and writes only its own tables. 
 - **Catalog** seeded once: certificate, employee-of-the-week spotlight, preferred shift (ON); lunch, half day off, extra day off, 200 EGP voucher, training course (OFF until management prices them). Edited at `/gamification?tab=settings`; every change audited in `GamificationChange`.
 - **Screens**: `?tab=rewards` (everyone), `?tab=redemptions` (managers), catalog editor in settings, balance on the dashboard card and `/m/gamification`; report + Excel include redemptions.
 
+## Monthly champion — بطل الشهر (Phase 3)
+
+`apps/gamification/champions.py`. Job `gamification_champions` runs on the **1st of each month at 01:05** and crowns the month that just ended (`crown(month)`; also `run_gamification --crown YYYY-MM` and `POST /api/gamification/champions/crown/` for editors). `ChampionMonth.month` is UNIQUE → a month is crowned exactly once; a running month is refused.
+
+| Title | Who | Bonus (rule) |
+|---|---|---|
+| بطل الفرع | #1 of each role in each branch — group needs ≥ `GAMIFICATION_CHAMPION_MIN_PLAYERS` (2) | +200 `champion_branch` |
+| بطل الشبكة | #1 of each role across all branches | +500 `champion_network` |
+| منصة الشبكة | #2 / #3 of each role across all branches | +200 `podium_network` |
+| فرع الشهر | #1 of the branch ranking (avg per player), ≥ `GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS` (3) players | recognition |
+
+- **Eligible:** month net > 0, no `abuse_flag` deduction in the month, role not in `GAMIFICATION_CHAMPION_EXCLUDED_ROLES` (`admin,viewer`).
+- **Fair:** bonuses use the new `champion` category — counted in XP and the wallet, **excluded from every ranking**, so last month's winner starts level.
+- **Published:** one pinned, high-priority `notifications.Announcement` (network-wide, fanned out to the bell, expires in 10 days) + a `gamification_champion` notification to each winner. Badges: `champ_branch_1` (👑 بطل الشهر), `champ_branch_3` (بطل متكرر), `champ_network_1` (على منصة الشبكة).
+- **Revoke** (`POST champions/{id}/revoke/`, `gamification/edit`, written reason): marks the title revoked, books a `champion_revoked` reversal (−bonus; XP counts the champion category at its net value), drops champion badges no longer earned, audited in `GamificationChange`.
+- **Screens:** `/gamification?tab=champions` — live race this month (my branch + network leaders per role, days left) and the hall of fame per month; crown chip on the dashboard card for 2 months; champions listed in the executive report.
+
 ## Known limits (Phase 1)
 
 - Sales score only for staff whose SOFTECH user code is linked (`softech_user_id`).
@@ -60,5 +77,5 @@ The engine **reads** records that already exist and writes only its own tables. 
 ## Next phases
 
 1. ~~Reward catalog~~ ✅ built (above).
-2. Monthly champions («بطل الشهر») per branch/role + announcement.
+2. ~~Monthly champions~~ ✅ built (above).
 3. Team goals per branch (shared challenges), per-role rule sets.

@@ -71,6 +71,8 @@ export default function GamificationCard({ className = '' }) {
     return <div className={`card h-24 animate-pulse bg-gray-50 ${className}`} />
   }
   const left = (data.open_items || []).reduce((n, i) => n + i.count, 0)
+  const title = (data.titles || [])[0]            // newest title first
+  const recent = title && (Date.now() - new Date(title.month).getTime()) < 62 * 864e5
   const br = data.rank?.branch
   return (
     <div className={`card ${className}`} dir={lang === 'en' ? 'ltr' : 'rtl'}>
@@ -93,6 +95,15 @@ export default function GamificationCard({ className = '' }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {recent && (
+            <button onClick={() => navigate('/gamification?tab=champions')}
+                    className="text-xs rounded-lg px-3 py-2 font-bold border border-amber-300 bg-amber-100 text-amber-900">
+              {title.kind === 'network' ? ({ 1: '🥇', 2: '🥈', 3: '🥉' }[title.rank]) : '👑'}{' '}
+              {title.kind === 'network'
+                ? t('على منصة الشبكة', 'Network podium')
+                : t('بطل الفرع', 'Branch champion')} · {String(title.month).slice(0, 7)}
+            </button>
+          )}
           <button
             onClick={() => navigate('/gamification?tab=me')}
             className={`text-xs rounded-lg px-3 py-2 font-bold border ${left

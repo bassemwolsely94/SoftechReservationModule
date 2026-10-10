@@ -593,3 +593,64 @@ def redemption_fulfil(request, pk):
     _log(profile, 'redemption_fulfil', f'redemption:{x.id}', {}, {'status': x.status},
          x.fulfillment_note)
     return Response(R.redemption_json(x))
+
+
+# ── monthly champions (phase 3) ───────────────────────────────────────────────
+
+def _parse_month(v):
+    try:
+        y, m = str(v).split('-')[:2]
+        return date(int(y), int(m), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def champions_view(request):
+    """Hall of fame (?month=YYYY-MM, default latest crowned) + the live race this month."""
+    from . import champions as C
+    profile = _profile(request)
+    if not profile:
+        return Response({'detail': 'no staff profile'}, status=404)
+    data = C.board(_parse_month(request.query_params.get('month')))
+    data['race'] = C.race(profile)
+    data['can_edit'] = _can(profile, 'edit')
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def champions_crown(request):
+    """Crown a finished month now (normally automatic on the 1st). Idempotent."""
+    from . import champions as C
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    month = _parse_month(request.data.get('month')) or C.previous_month()
+    try:
+        cm, created = C.crown(month, by=profile)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    data = C.board(cm.month)
+    data['created'] = created
+    return Response(data, status=201 if created else 200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def champion_revoke(request, pk):
+    from . import champions as C
+    from .models import Champion
+    profile = _profile(request)
+    if not _can(profile, 'edit'):
+        return _deny()
+    c = get_object_or_404(Champion, pk=pk)
+    reason = str(request.data.get('reason') or '').strip()
+    if len(reason) < 5:
+        return Response({'reason': 'اكتب السبب — a reason is required'}, status=400)
+    try:
+        c = C.revoke(c, profile, reason)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    return Response(C.champion_json(c))

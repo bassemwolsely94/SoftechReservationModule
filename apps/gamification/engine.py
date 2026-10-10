@@ -498,8 +498,12 @@ def refresh_players(staff_ids=None):
         qs = qs.filter(id__in=list(staff_ids))
     promoted = 0
     for staff in qs:
+        # XP = earned points only (penalties never drop a level). Champion bonuses are
+        # positive; their revocations are the only negative 'champion' events and must
+        # cancel the bonus, so the whole champion category counts at its net value.
         agg = PointEvent.objects.filter(staff=staff).aggregate(
-            xp=Sum('points', filter=Q(points__gt=0)), net=Sum('points'))
+            xp=Sum('points', filter=Q(points__gt=0) | Q(category='champion')),
+            net=Sum('points'))
         xp, net = agg['xp'] or 0, agg['net'] or 0
         player, _ = PlayerProfile.objects.get_or_create(staff=staff)
         reached = [lv for lv in levels if lv.min_xp <= xp]
@@ -526,6 +530,12 @@ def refresh_players(staff_ids=None):
     return promoted
 
 
+def _titles(staff, kind):
+    from .models import Champion
+    qs = Champion.objects.filter(staff=staff, revoked=False)
+    return (qs.filter(kind=kind) if kind else qs).count()
+
+
 def _award_badges(staff, player, badges):
     have = set(StaffBadge.objects.filter(staff=staff).values_list('badge_id', flat=True))
     for b in badges:
@@ -537,6 +547,8 @@ def _award_badges(staff, player, badges):
             ok = player.best_streak >= b.threshold
         elif b.criteria == Badge.CRITERIA_XP:
             ok = player.xp >= b.threshold
+        elif b.criteria == Badge.CRITERIA_CHAMPION:
+            ok = _titles(staff, b.rule_key) >= b.threshold
         else:
             ok = False
         if ok:

@@ -90,6 +90,15 @@ RULES = [
      'مكافأة كل 7 أيام نظيفة متتالية', 'Bonus for every 7 clean days in a row', {}),
     ('abuse_flag', 'discipline', -10, 'ملاحظة مراجعة مؤكدة', 'Confirmed audit flag',
      'نشاط مشبوه تم تصعيده بعد المراجعة', 'Suspicious activity escalated after review', {}),
+    # ── Monthly champion (bonuses count for XP + wallet, never for rankings) ──
+    ('champion_branch', 'champion', 200, 'بطل الفرع للشهر', 'Branch champion of the month',
+     'الأول بين زملاء دورك في فرعك عن الشهر', 'First among your role in your branch for the month', {}),
+    ('champion_network', 'champion', 500, 'بطل الشبكة للشهر', 'Network champion of the month',
+     'الأول بين كل زملاء دورك في كل الفروع عن الشهر', 'First among your role across all branches for the month', {}),
+    ('podium_network', 'champion', 200, 'منصة التتويج (الثاني/الثالث)', 'Network podium (2nd/3rd)',
+     'الثاني أو الثالث على الشبكة لدورك عن الشهر', 'Second or third across the network for your role', {}),
+    ('champion_revoked', 'champion', 0, 'سحب لقب', 'Title revoked',
+     'إلغاء لقب بطل بقرار إداري مكتوب السبب — تُخصم مكافأته', 'A champion title withdrawn by management with a reason — its bonus is reversed', {}),
     ('manual_award', 'manual', 0, 'تقدير يدوي', 'Manual recognition',
      'نقاط يمنحها أو يخصمها المدير بسبب مكتوب', 'Points given or deducted by a manager with a reason',
      {}),
@@ -132,6 +141,12 @@ BADGES = [
      '30 يوماً نظيفاً متتالياً', '30 clean days in a row'),
     ('xp_10k', '🚀', 'xp', '', 10000, 'عشرة آلاف نقطة', '10K XP',
      'تجاوز 10,000 نقطة خبرة', 'Passing 10,000 XP'),
+    ('champ_branch_1', '👑', 'champion', 'branch', 1, 'بطل الشهر', 'Champion of the month',
+     'بطل فرعك لشهر', 'Branch champion for a month'),
+    ('champ_branch_3', '🏅', 'champion', 'branch', 3, 'بطل متكرر', 'Repeat champion',
+     'بطل فرعك 3 أشهر', 'Branch champion three times'),
+    ('champ_network_1', '🌍', 'champion', 'network', 1, 'على منصة الشبكة', 'Network podium',
+     'من أفضل 3 على الشبكة لشهر', 'Network top 3 for a month'),
 ]
 
 

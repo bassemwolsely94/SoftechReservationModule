@@ -408,6 +408,10 @@ export const gamificationApi = {
   redemptions:  (params = {}) => api.get('/gamification/redemptions/', { params }),
   cancelRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/cancel/`, data),
   fulfilRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/fulfil/`, data),
+  // monthly champions
+  champions:      (params = {}) => api.get('/gamification/champions/', { params }),
+  crownChampions: (data = {})   => api.post('/gamification/champions/crown/', data),
+  revokeChampion: (id, data)    => api.post(`/gamification/champions/${id}/revoke/`, data),
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ python manage.py run_gamification               # score today (no day close)
 python manage.py run_gamification --days 1      # score yesterday + today, close yesterday
 python manage.py run_gamification --days 30     # backfill the last 30 days of activity
 python manage.py run_gamification --seed [--reset-defaults]
+python manage.py run_gamification --crown 2026-09     # crown a finished month (idempotent)
 
 Reads existing records only (sales mirror, reservations, transfers, demand, tasks …);
 never writes to SOFTECH. Safe to re-run: every point carries a unique source key.
@@ -20,10 +21,19 @@ class Command(BaseCommand):
         parser.add_argument('--days', type=int, default=0)
         parser.add_argument('--no-finalize', action='store_true')
         parser.add_argument('--seed', action='store_true', help='only seed rules/levels/badges')
+        parser.add_argument('--crown', metavar='YYYY-MM', help='crown the champions of a finished month')
         parser.add_argument('--reset-defaults', action='store_true',
                             help='with --seed: overwrite admin edits with the defaults')
 
     def handle(self, *args, **opts):
+        if opts['crown']:
+            from datetime import date
+            from apps.gamification import champions as C
+            y, m = opts['crown'].split('-')
+            cm, created = C.crown(date(int(y), int(m), 1))
+            self.stdout.write(self.style.SUCCESS(
+                f"{cm.month:%Y-%m}: {'crowned' if created else 'already crowned'} {cm.summary}"))
+            return
         if opts['seed']:
             n = ensure_defaults(reset=opts['reset_defaults'])
             self.stdout.write(self.style.SUCCESS(f'seeded ({n} new rows)'))

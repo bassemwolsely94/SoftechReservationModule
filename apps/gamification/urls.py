@@ -24,5 +24,9 @@ urlpatterns = [
     path('redemptions/',         views.redemptions_view,   name='gamification-redemptions'),
     path('redemptions/<int:pk>/cancel/', views.redemption_cancel, name='gamification-redemption-cancel'),
     path('redemptions/<int:pk>/fulfil/', views.redemption_fulfil, name='gamification-redemption-fulfil'),
+    # monthly champions
+    path('champions/',           views.champions_view,     name='gamification-champions'),
+    path('champions/crown/',     views.champions_crown,    name='gamification-champions-crown'),
+    path('champions/<int:pk>/revoke/', views.champion_revoke, name='gamification-champion-revoke'),
     path('changes/',            views.changes,         name='gamification-changes'),
 ]

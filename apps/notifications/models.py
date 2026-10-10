@@ -75,6 +75,7 @@ class Notification(models.Model):
         ('gamification_level_up',     '🏆 ترقية مستوى'),
         ('gamification_badge',        '🏅 شارة جديدة'),
         ('gamification_reward',       '🎁 مكافأة'),
+        ('gamification_champion',     '👑 بطل الشهر'),
         # ── Internal broadcast ────────────────────────────────────────────────
         ('announcement',              '📢 إعلان داخلي'),
     ]
@@ -188,6 +189,7 @@ class Notification(models.Model):
         'gamification_level_up': CATEGORY_GLOBAL,
         'gamification_badge':    CATEGORY_GLOBAL,
         'gamification_reward':   CATEGORY_GLOBAL,
+        'gamification_champion': CATEGORY_GLOBAL,
         # ── Internal announcement → bell ──────────────────────────────────────
         'announcement':         CATEGORY_GLOBAL,
     }

@@ -2095,6 +2095,22 @@ def _run_gamification(close_day=False):
         logger.error('[APScheduler] gamification failed: %s', exc)
 
 
+def _run_gamification_champions():
+    """1st of the month: crown last month's champions (بطل الشهر) — branch #1 per role,
+    network top 3 per role, branch of the month; bonus points + pinned announcement.
+    Idempotent (a month is crowned once). Off with GAMIFICATION_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'GAMIFICATION_ENABLED', True):
+        return
+    try:
+        from apps.gamification import champions as C
+        cm, created = C.crown(C.previous_month())
+        logger.info('[APScheduler] gamification champions %s: %s (new=%s)',
+                    cm.month, cm.summary, created)
+    except Exception as exc:
+        logger.error('[APScheduler] gamification champions failed: %s', exc)
+
+
 def _run_merge_candidates():
     """Weekly READ-ONLY rebuild of the B7 duplicate customer-code merge queue (writes only our rows).
     Off with CUSTOMER_MERGE_QUEUE_ENABLED=False."""
@@ -3124,6 +3140,11 @@ def start_scheduler():
         _run_gamification, 'cron', hour=0, minute=20, id='gamification_day_close',
         kwargs={'close_day': True},
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_gamification_champions, 'cron', day=1, hour=1, minute=5,
+        id='gamification_champions', replace_existing=True, max_instances=1,
+        misfire_grace_time=6 * 3600,
     )
     # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.
     _scheduler.add_job(

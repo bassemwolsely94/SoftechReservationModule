@@ -7,6 +7,7 @@
  *   branches    ترتيب الفروع — average points per active player (fair to small branches)
  *   badges      الشارات
  *   rules       كيف تكسب النقاط — every rule, transparent to everyone
+ *   champions   أبطال الشهر — live race + hall of fame (crown / revoke for editors)
  *   rewards     المكافآت — spend points on the catalog (approval via /approvals)
  *   redemptions طلبات المكافآت — managers: deliver / cancel approved rewards
  *   reports     التقارير — managers (RBAC gamification/view; Excel needs /export)
@@ -23,6 +24,8 @@ import useHelpTab from '../help/useHelpTab'
 import { PageHeader } from '../components/ui'
 import { LevelBar, useGamificationMe } from '../components/GamificationCard'
 import { RedemptionsTab, RewardCatalogEditor, RewardsTab } from './gamification/RewardsTabs'
+import ChampionsTab from './gamification/ChampionsTab'
+import { ROLES, roleLabel } from './gamification/labels'
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US')
 const signed = (n) => `${n > 0 ? '+' : ''}${fmt(n)}`
@@ -31,15 +34,9 @@ const PERIODS = [
   ['day', 'اليوم', 'Today'], ['week', 'الأسبوع', 'Week'], ['month', 'الشهر', 'Month'],
   ['quarter', 'الربع', 'Quarter'], ['year', 'السنة', 'Year'], ['all', 'الكل', 'All time'],
 ]
-const ROLES = [
-  ['', 'كل الأدوار', 'All roles'], ['salesperson', 'مندوب بيع', 'Salesperson'],
-  ['pharmacist', 'صيدلي', 'Pharmacist'], ['call_center', 'كول سنتر', 'Call center'],
-  ['delivery', 'توصيل', 'Delivery'], ['purchasing', 'مشتريات', 'Purchasing'],
-  ['supervisor', 'مشرف', 'Supervisor'], ['quality_manager', 'جودة', 'Quality'],
-]
-const ROLE_NAMES = Object.fromEntries([...ROLES.slice(1), ['admin', 'مدير النظام', 'Admin'],
-  ['viewer', 'مشاهد', 'Viewer']].map(([k, ar, en]) => [k, [ar, en]]))
-export const roleLabel = (role, t) => (ROLE_NAMES[role] ? t(...ROLE_NAMES[role]) : role)
+// Role names live in ./gamification/labels so the tab modules can share them
+// without importing this page (no import cycle).
+export { roleLabel }
 
 const CATEGORY = {
   sales: ['المبيعات', 'Sales'], reservations: ['الحجوزات', 'Reservations'],
@@ -487,6 +484,20 @@ function ReportsTab({ t, lang }) {
           </table>
         </div>
       )}
+      {data.champions?.length > 0 && (
+        <div className="card">
+          <div className="font-black mb-2">{t('👑 أبطال الأشهر في الفترة', '👑 Champions in the period')}</div>
+          <ul className="divide-y divide-gray-100 text-sm">
+            {data.champions.filter(c => c.kind !== 'branch_of_month').map(c => (
+              <li key={c.id} className="py-1.5 flex justify-between gap-2">
+                <span>{String(c.month).slice(0, 7)} · {c.kind === 'network' ? ({ 1: '🥇', 2: '🥈', 3: '🥉' }[c.rank]) : '👑'} {c.name}
+                  <span className="text-xs text-gray-400"> {c.branch} · {roleLabel(c.role, t)}</span></span>
+                <span className="text-gray-500">+{fmt(c.bonus)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {data.rewards && (
         <div className="card">
           <div className="font-black mb-2">{t('🎁 المكافآت في الفترة', '🎁 Rewards in the period')}</div>
@@ -700,6 +711,7 @@ export default function GamificationPage() {
     ['branches', '🏢 ترتيب الفروع', '🏢 Branches'],
     ['badges', '🏅 الشارات', '🏅 Badges'],
     ['rules', '📜 كيف تكسب النقاط', '📜 How to earn'],
+    ['champions', '👑 أبطال الشهر', '👑 Champions'],
     ['rewards', '🎁 المكافآت', '🎁 Rewards'],
     ...(me?.can_manage ? [['redemptions', '📦 طلبات المكافآت', '📦 Reward requests'],
                           ['reports', '📊 التقارير', '📊 Reports']] : []),
@@ -733,6 +745,7 @@ export default function GamificationPage() {
             {tab === 'branches' && <BranchesTab t={t} />}
             {tab === 'badges' && <BadgesTab me={me} t={t} lang={lang} />}
             {tab === 'rules' && <RulesTab t={t} lang={lang} />}
+            {tab === 'champions' && <ChampionsTab t={t} lang={lang} />}
             {tab === 'rewards' && <RewardsTab t={t} lang={lang} />}
             {tab === 'redemptions' && me.can_manage && <RedemptionsTab t={t} lang={lang} canEdit={me.can_edit} />}
             {tab === 'reports' && me.can_manage && <ReportsTab t={t} lang={lang} />}

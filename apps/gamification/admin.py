@@ -1,7 +1,8 @@
 from django.contrib import admin
 
 from .models import (Badge, DailyScore, GamificationChange, Level, LevelHistory, PlayerProfile,
-                     PointEvent, PointRule, Redemption, Reward, StaffBadge)
+                     PointEvent, PointRule, Redemption, Reward, StaffBadge,
+                     Champion, ChampionMonth)
 
 
 @admin.register(PointRule)
@@ -59,4 +60,19 @@ class RedemptionAdmin(admin.ModelAdmin):
     readonly_fields = [f.name for f in Redemption._meta.fields]
 
     def has_change_permission(self, request, obj=None):   # moves only through the app
+        return False
+
+
+@admin.register(ChampionMonth)
+class ChampionMonthAdmin(admin.ModelAdmin):
+    list_display = ('month', 'crowned_at', 'crowned_by', 'summary')
+
+
+@admin.register(Champion)
+class ChampionAdmin(admin.ModelAdmin):
+    list_display = ('month', 'kind', 'role', 'branch', 'staff', 'rank', 'net', 'bonus', 'revoked')
+    list_filter = ('kind', 'revoked', 'month')
+    readonly_fields = [f.name for f in Champion._meta.fields]
+
+    def has_change_permission(self, request, obj=None):   # revoke through the app (reverses the bonus)
         return False

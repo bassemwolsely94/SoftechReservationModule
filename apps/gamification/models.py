@@ -28,6 +28,7 @@ CATEGORY_CHOICES = [
     ('tasks',        'المهام'),
     ('discipline',   'الالتزام (لا تترك شيئاً خلفك)'),
     ('manual',       'تقدير يدوي'),
+    ('champion',     'بطل الشهر'),   # monthly titles — count for XP/wallet, NOT for rankings
 ]
 
 
@@ -102,10 +103,12 @@ class Badge(models.Model):
     CRITERIA_RULE_COUNT = 'rule_count'   # N events of `rule_key`
     CRITERIA_STREAK     = 'streak'       # best clean-day streak ≥ N
     CRITERIA_XP         = 'xp'           # lifetime XP ≥ N
+    CRITERIA_CHAMPION   = 'champion'     # N monthly titles of kind `rule_key` (not revoked)
     CRITERIA_CHOICES = [
         (CRITERIA_RULE_COUNT, 'عدد مرات قاعدة'),
         (CRITERIA_STREAK,     'سلسلة أيام نظيفة'),
         (CRITERIA_XP,         'إجمالي الخبرة'),
+        (CRITERIA_CHAMPION,   'ألقاب بطل الشهر'),
     ]
     key = models.SlugField(max_length=50, unique=True)
     name_ar = models.CharField(max_length=100)
@@ -345,3 +348,58 @@ class Redemption(models.Model):
 
     def __str__(self):
         return f'{self.staff_id} → {self.reward_id} ({self.status})'
+
+
+
+# ── Monthly champion (phase 3) ───────────────────────────────────────────────
+
+class ChampionMonth(models.Model):
+    """One row per crowned month — the idempotency guard (a month is crowned once)."""
+    month = models.DateField(unique=True, help_text='أول يوم في الشهر')
+    crowned_at = models.DateTimeField(auto_now_add=True)
+    crowned_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+',
+                                   help_text='فارغ = تلقائي من الجدولة')
+    announcement = models.ForeignKey('notifications.Announcement', on_delete=models.SET_NULL,
+                                     null=True, blank=True, related_name='+')
+    summary = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = 'شهر متوَّج'
+        verbose_name_plural = 'أشهر الأبطال'
+        ordering = ['-month']
+
+
+class Champion(models.Model):
+    KIND_BRANCH  = 'branch'    # #1 of a role inside a branch
+    KIND_NETWORK = 'network'   # top 3 of a role across the network
+    KIND_BRANCH_OF_MONTH = 'branch_of_month'
+    KIND_CHOICES = [
+        (KIND_BRANCH,  'بطل الفرع'),
+        (KIND_NETWORK, 'بطل الشبكة'),
+        (KIND_BRANCH_OF_MONTH, 'فرع الشهر'),
+    ]
+    champion_month = models.ForeignKey(ChampionMonth, on_delete=models.CASCADE,
+                                       related_name='champions')
+    month = models.DateField(db_index=True)
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, db_index=True)
+    role = models.CharField(max_length=20, blank=True)
+    branch = models.ForeignKey('branches.Branch', on_delete=models.SET_NULL, null=True,
+                               blank=True, related_name='+')
+    staff = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, null=True,
+                              blank=True, related_name='champion_titles')
+    rank = models.PositiveSmallIntegerField(default=1)
+    net = models.IntegerField(default=0, help_text='نقاط الشهر (بدون مكافآت الأبطال)')
+    players = models.PositiveIntegerField(default=0, help_text='عدد المنافسين في المجموعة')
+    bonus = models.IntegerField(default=0)
+    revoked = models.BooleanField(default=False, db_index=True)
+    revoked_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='+')
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoke_reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'بطل شهر'
+        verbose_name_plural = 'أبطال الشهر'
+        ordering = ['-month', 'kind', 'role', 'rank']
