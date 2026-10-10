@@ -233,6 +233,14 @@ after the latest removal). Both commands take `--batches N --quiet` (repeat 50-c
 conflict / failure), because the PowerShell loop broke on the `·` character and hid one batch's output.
 Candidates are now read in bulk (one query per 150 codes).
 
+**Run 2026-10-10 02:05–03:49 (all `verified`, no conflict / failure):**
+* HQ: 100 removed before the discount decision (15,066 + one hidden batch) → 50 + 50 got the discount; then 58 batches = 2,876
+  more removed, **1,654,700 points cleared** (largest batches: #39 593,375 · #41 212,224 → owner to review the top
+  balances in the review lists / `PointsRemoval`);
+* branch copies `--from-removals`: 130, 140, 150, 160, 170 all ran to `0 codes` (most codes `skipped` = not held
+  by that branch);
+* daily check after: **HQ stricter 0**; 19 branch-stricter differences left for review (130: 3 · 160: 14 · 170: 2).
+
 ### Earlier findings that led here
 `investigate_pic_replication --reset-only` writes the review list `scratch/pic_reset_customers.csv` (codes
 only): reset date and user, HQ status / points flag / balance, coupon conversions after the reset, and each
