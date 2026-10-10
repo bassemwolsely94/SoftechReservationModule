@@ -18,6 +18,8 @@ import useAuthStore from '../store/authStore'
 import ErrorBoundary from './ErrorBoundary'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import { useOnline, useOfflineQueue } from './mobileUi'
+import HelpButton from '../help/HelpButton'
+import HelpPanel from '../help/HelpPanel'
 import { useThemeMode } from '../theme/useThemeMode'
 
 const MODE_EMOJI = { light: '☀️', dark: '🌙', system: '💻' }
@@ -98,6 +100,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <HelpButton variant="mobile" />
           <button
             onClick={cycle}
             className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/15 active:bg-white/30"
@@ -244,6 +247,8 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
           </div>
         </div>
       )}
+      {/* In-app help (the "؟" button / F1) */}
+      <HelpPanel />
     </div>
   )
 }

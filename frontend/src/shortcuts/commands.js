@@ -41,6 +41,7 @@ export function buildCommands() {
     nav('go-sync', '/sync', 'المزامنة', 'Sync', '🔄', ['سوفتك', 'softech']),
     nav('go-users', '/users', 'المستخدمون', 'Users', '👤', ['صلاحيات', 'permissions']),
     nav('go-settings', '/settings', 'الإعدادات', 'Settings', '⚙️', ['اعدادات', 'config']),
+    nav('go-help', '/help', 'دليل الاستخدام', 'Help guide', '📖', ['مساعدة', 'شرح', 'help', 'guide', 'manual']),
 
     // ── Actions ──
     {
@@ -48,6 +49,12 @@ export function buildCommands() {
       title: 'تبديل الوضع الفاتح/الداكن', title_en: 'Toggle light/dark',
       keywords: ['ثيم', 'داكن', 'فاتح', 'theme', 'dark', 'light'],
       run: ({ cycleMode }) => cycleMode && cycleMode(),
+    },
+    {
+      id: 'help-this-screen', section: 'action', icon: '❓',
+      title: 'شرح هذه الشاشة (F1)', title_en: 'Help for this screen (F1)',
+      keywords: ['مساعدة', 'شرح', 'ازاي', 'help', 'how'],
+      run: () => window.dispatchEvent(new CustomEvent('help:open', { detail: {} })),
     },
     {
       id: 'logout', section: 'action', icon: '🚪',

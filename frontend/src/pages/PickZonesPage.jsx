@@ -26,6 +26,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pickZonesApi, branchesApi } from '../api/client'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatin = s =>
   s == null ? '' : String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660))
@@ -904,6 +905,7 @@ export default function PickZonesPage() {
   const qc = useQueryClient()
   const canEdit = user?.role === 'admin' || user?.role === 'purchasing'
   const [tab, setTab] = useState('zones')
+  useHelpTab(tab)
   const [toast, setToast] = useState('')
   // '' = the default config; otherwise a branch id (string from the select)
   const [branchParam, setBranchParam] = useState('')

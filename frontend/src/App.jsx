@@ -66,6 +66,7 @@ import DispatchBoard from './pages/DispatchBoard'
 import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
+import HelpCenterPage from './pages/HelpCenterPage'
 import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
 import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
 import MobileNewReservationPage from './pages/mobile/MobileNewReservationPage'
@@ -310,6 +311,7 @@ export default function App() {
             {/* ── Core ─────────────────────────────────────────────────── */}
             <Route path="dashboard"          element={<DashboardPage />} />
             <Route path="me"                 element={<MyDashboardPage />} />
+            <Route path="help"               element={<HelpCenterPage />} />{/* in-app help guide — all roles */}
             <Route path="security"           element={<SecurityPage />} />{/* 2FA self-service — all roles */}
             <Route path="notifications"      element={<NotificationsInboxPage />} />
             <Route path="announcements"      element={<AnnouncementsPage />} />

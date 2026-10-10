@@ -77,8 +77,9 @@ READ_OPEN_PREFIXES = {
 }
 
 # Never checked: own session/profile, notifications, personal dashboard, global
-# search, the external customer portal and inbound webhooks (own auth).
-EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'portal', 'social'}
+# search, in-app help (reading is for everyone; its views check help/edit for
+# trainer edits), the external customer portal and inbound webhooks (own auth).
+EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'portal', 'social'}
 
 _POST_ACTIONS = ('create', 'edit', 'approve', 'assign', 'finalize', 'export')
 _GRANTS_TTL = 60.0

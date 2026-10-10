@@ -13,6 +13,8 @@ import ThemeToggle from './ThemeToggle'
 import CommandPalette from './CommandPalette'
 import CustomerDrawer from './CustomerDrawer'
 import BrandMark from './BrandMark'
+import HelpButton from '../help/HelpButton'
+import HelpPanel from '../help/HelpPanel'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -96,6 +98,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/dashboard', icon: '◈', label: 'الرئيسية', roles: null },
       { to: '/me',        icon: '🙋', label: 'لوحتي الشخصية', roles: null },
+      { to: '/help',      icon: '📖', label: 'دليل الاستخدام', roles: null },
     ],
   },
   {
@@ -476,6 +479,7 @@ export default function Layout() {
               <span>بحث…</span>
               <kbd className="text-[10px] border border-line rounded px-1 py-0.5">Ctrl K</kbd>
             </button>
+            <HelpButton />
             <ThemeToggle />
             <NotificationBell />
             {/* Quiet feeds beside the bell — hidden if the role can't see them */}
@@ -529,6 +533,8 @@ export default function Layout() {
 
       {/* Global Ctrl+K command palette + universal search */}
       <CommandPalette />
+      {/* In-app help panel (F1 / "؟" / window 'help:open') */}
+      <HelpPanel />
       {/* Global Customer-360 side-drawer (opens on window 'customer360:open') */}
       <CustomerDrawer />
     </div>

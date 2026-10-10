@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi, branchesApi } from '../api/client'
 import DeliveryBackfillModal from '../components/DeliveryBackfillModal'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -211,6 +212,7 @@ function OrderDetailPanel({ orderId, onClose, onAction }) {
   })
 
   const [tab, setTab] = useState('details')
+  useHelpTab(tab)
   const [showBackfill, setShowBackfill] = useState(false)
 
   if (isLoading || !order) {

@@ -32,6 +32,7 @@ import { ar } from 'date-fns/locale'
 import RefreshButton from '../components/RefreshButton'
 import ModuleNotificationBell from '../components/ModuleNotificationBell'
 import CanDo from '../components/CanDo'
+import useHelpTab from '../help/useHelpTab'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -1206,6 +1207,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
   const [callStatus, setCallStatus]           = useState('answered')
   const [callNotes, setCallNotes]             = useState('')
   const [tab, setTab]                         = useState('overview')
+  useHelpTab(tab)
   const [acting, setActing]                   = useState(false)
   // Editable WhatsApp message — seeded from server when task loads
   const [waMsg, setWaMsg]                     = useState('')
@@ -2160,6 +2162,7 @@ export default function FollowUpsPage() {
   }
 
   const [personalTab, setPersonalTab] = useState('all')
+  useHelpTab(personalTab)
   const applyPersonalTab = (tab) => {
     setPersonalTab(tab.id)
     setFilters(p => ({ ...p, ...tab.filters }))

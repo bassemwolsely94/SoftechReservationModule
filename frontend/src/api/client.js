@@ -338,6 +338,21 @@ export const dashboardApi = {
 
 // ── Personal Dashboard (per-user SOFTECH identity claims + configurable widgets) ──
 
+// In-app help (دليل الاستخدام) — /api/help/. Reading: everyone; edits: help/edit grant.
+export const helpApi = {
+  index:      ()                 => api.get('/help/'),
+  screen:     (key, params = {}) => api.get(`/help/screens/${key}/`, { params }),
+  module:     (key)              => api.get(`/help/modules/${key}/`),
+  search:     (q, params = {})   => api.get('/help/search/', { params: { q, ...params } }),
+  save:       (key, data, note)  => api.put(`/help/screens/${key}/`, { data, note }),
+  revert:     (key, note)        => api.delete(`/help/screens/${key}/`, { data: { note } }),
+  revisions:  (key)              => api.get(`/help/screens/${key}/revisions/`),
+  feedback:   (payload)          => api.post('/help/feedback/', payload),
+  feedbackList: (params = {})    => api.get('/help/feedback/', { params }),
+  resolveFeedback: (id, resolved = true) => api.post(`/help/feedback/${id}/resolve/`, { resolved }),
+  stats:      (days = 30)        => api.get('/help/stats/', { params: { days } }),
+}
+
 export const personalApi = {
   // Person search for claiming an identity — kind: 'supplier' | 'customer'
   searchPersons: (q, kind) => api.get('/personal/persons/search/', { params: { q, ...(kind ? { kind } : {}) } }),

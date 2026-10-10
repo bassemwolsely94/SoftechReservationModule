@@ -12,6 +12,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import CanDo from '../components/CanDo'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -969,6 +970,7 @@ export default function DemandDetailPage() {
   const qc         = useQueryClient()
   const { user }   = useAuthStore()
   const [tab, setTab]          = useState('details')
+  useHelpTab(tab)
   const [actionLoading, setActionLoading] = useState(false)
 
   const { data: demand, isLoading, isError } = useQuery({

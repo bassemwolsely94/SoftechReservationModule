@@ -21,6 +21,7 @@ import { transitsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import useHelpTab from '../help/useHelpTab'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -197,6 +198,7 @@ function DetailPanel({ transit, onClose, onAction }) {
   const [closeReason, setCloseReason] = useState('')
   const [exporting, setExporting] = useState('') // '' | 'picking' | 'stocking'
   const [tab, setTab] = useState('items') // items | notes | timeline
+  useHelpTab(tab)
 
   // picking = supplying-warehouse walk; stocking = receiving-branch shelf order
   async function handleExportSheet(mode) {

@@ -162,6 +162,7 @@ INSTALLED_APPS = [
     'apps.qa',
     'apps.portal',         # Customer-facing self-service portal (external, magic-link auth)
     'apps.pos_orders',     # Indirect-POS pending-order writer (SOFTECH writes gated off)
+    'apps.help',           # In-app help (دليل الاستخدام) — repo content + trainer edits
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
 ]
 

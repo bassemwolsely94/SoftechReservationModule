@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { deliveryApi, branchesApi } from '../api/client'
+import useHelpTab from '../help/useHelpTab'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -302,6 +303,7 @@ const TABS = [
 
 export default function DeliveryAnalyticsPage() {
   const [activeTab, setActiveTab]  = useState('drivers')
+  useHelpTab(activeTab)
   const [dateFrom,  setDateFrom]   = useState(_daysAgo(30))
   const [dateTo,    setDateTo]     = useState(_today())
   const [branchId,  setBranchId]   = useState('')

@@ -5,6 +5,8 @@
  */
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
+import HelpButton from '../help/HelpButton'
+import HelpPanel from '../help/HelpPanel'
 
 export default function RiderLayout({ children }) {
   const { user, logout } = useAuthStore()
@@ -20,14 +22,18 @@ export default function RiderLayout({ children }) {
             <div className="text-[11px] text-white/70 truncate">{user?.full_name || user?.username}</div>
           </div>
         </div>
-        <button
-          onClick={() => { logout(); navigate('/login') }}
-          className="text-xs bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5 font-medium shrink-0"
-        >
-          خروج
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <HelpButton variant="mobile" />
+          <button
+            onClick={() => { logout(); navigate('/login') }}
+            className="text-xs bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5 font-medium"
+          >
+            خروج
+          </button>
+        </div>
       </header>
       <main className="flex-1 overflow-auto">{children}</main>
+      <HelpPanel />
     </div>
   )
 }

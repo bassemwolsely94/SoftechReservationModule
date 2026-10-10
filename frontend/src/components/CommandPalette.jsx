@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchApi } from '../api/client'
+import { searchApi, helpApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { useThemeMode } from '../theme/useThemeMode'
 import { buildCommands, matchScore } from '../shortcuts/commands'
@@ -17,13 +17,14 @@ import Highlight from './Highlight'
 
 const SECTION_LABEL = {
   commands: 'أوامر', items: 'الأصناف', customers: 'العملاء',
-  orders: 'طلبات POS', reservations: 'الحجوزات',
+  orders: 'طلبات POS', reservations: 'الحجوزات', help: 'دليل الاستخدام',
 }
 
 export default function CommandPalette() {
   const [open, setOpen]   = useState(false)
   const [q, setQ]         = useState('')
   const [remote, setRemote] = useState({ items: [], customers: [], orders: [], reservations: [] })
+  const [helpHits, setHelpHits] = useState([])
   const [loading, setLoading] = useState(false)
   const [active, setActive] = useState(0)
   const inputRef = useRef(null)
@@ -50,21 +51,24 @@ export default function CommandPalette() {
   }, [])
 
   useEffect(() => {
-    if (open) { setQ(''); setActive(0); setRemote({ items: [], customers: [], orders: [], reservations: [] }); setTimeout(() => inputRef.current?.focus(), 30) }
+    if (open) { setQ(''); setActive(0); setRemote({ items: [], customers: [], orders: [], reservations: [] }); setHelpHits([]); setTimeout(() => inputRef.current?.focus(), 30) }
   }, [open])
 
   // ── debounced universal search ──
   useEffect(() => {
     if (!open) return
     const term = q.trim()
-    if (term.length < 2) { setRemote({ items: [], customers: [], orders: [], reservations: [] }); setLoading(false); return }
+    if (term.length < 2) { setRemote({ items: [], customers: [], orders: [], reservations: [] }); setHelpHits([]); setLoading(false); return }
     setLoading(true)
     const id = setTimeout(async () => {
       try {
         const params = {}
         if (user?.branch_id) params.branch = user.branch_id
+        // help articles ride along (not logged as a help search — this box is mostly items)
+        const helpReq = helpApi.search(term, { log: 0 }).then((r) => r.data.slice(0, 4)).catch(() => [])
         const { data } = await searchApi.universal(term, params)
         setRemote(data.results || { items: [], customers: [], orders: [], reservations: [] })
+        setHelpHits(await helpReq)
       } catch { /* keep last */ } finally { setLoading(false) }
     }, 180)
     return () => clearTimeout(id)
@@ -89,8 +93,9 @@ export default function CommandPalette() {
     remote.customers.forEach((c) => rows.push({ kind: 'customer', section: 'customers', data: c }))
     remote.orders.forEach((o) => rows.push({ kind: 'order', section: 'orders', data: o }))
     remote.reservations.forEach((r) => rows.push({ kind: 'reservation', section: 'reservations', data: r }))
+    helpHits.forEach((h) => rows.push({ kind: 'help', section: 'help', data: { ...h, id: h.key } }))
     return rows
-  }, [commandMatches, remote])
+  }, [commandMatches, remote, helpHits])
 
   useEffect(() => { setActive(0) }, [flat.length])
 
@@ -103,6 +108,7 @@ export default function CommandPalette() {
     else if (row.kind === 'customer')    window.dispatchEvent(new CustomEvent('customer360:open', { detail: { id: d.id } }))
     else if (row.kind === 'reservation') navigate(`/reservations/${d.id}`)
     else if (row.kind === 'order')       navigate('/pos')
+    else if (row.kind === 'help')        window.dispatchEvent(new CustomEvent('help:open', { detail: { key: d.key } }))
   }, [navigate, logout, cycleMode])
 
   const onKeyNav = (e) => {
@@ -115,7 +121,7 @@ export default function CommandPalette() {
 
   // group rows for rendering while keeping a global index for highlight
   let idx = -1
-  const sections = ['commands', 'items', 'customers', 'orders', 'reservations']
+  const sections = ['commands', 'items', 'customers', 'orders', 'reservations', 'help']
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-start justify-center pt-[12vh] px-4"
@@ -207,6 +213,11 @@ function Row({ row, q }) {
     return (<><span className="text-base">🧾</span>
       <span className="flex-1 truncate">{d.customer_name || `طلب #${d.id}`}
         <span className="text-[11px] text-faint"> · {d.status_label}</span></span></>)
+  }
+  if (row.kind === 'help') {
+    return (<><span className="text-base">📖</span>
+      <span className="flex-1 truncate">{d.title?.ar}<span className="text-[11px] text-faint"> · {d.module_title?.ar}</span></span>
+      <span className="text-[10px] text-faint">شرح</span></>)
   }
   return (<><span className="text-base">📌</span>
     <span className="flex-1 truncate">{d.contact_name}<span className="text-[11px] text-faint"> · {d.item_name} · {d.status_label}</span></span></>)

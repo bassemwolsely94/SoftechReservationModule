@@ -31,6 +31,7 @@ ALL_MODULES = [
     'insurance', 'commerce', 'replacement',
     'callcenter', 'hr', 'approvals', 'analytics', 'dashboard',
     'audit', 'sync', 'settings', 'users', 'admin',
+    'help',          # in-app help: 'edit' = trainer may rewrite a screen's explanation
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -224,6 +225,7 @@ PERMISSIONS = {
         'delivery':     {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'users':        RO,   # can view staff list; cannot create/edit
         'audit':        RE,
+        'help':         {'view', 'edit'},   # trainers: edit the in-app help text
         'hr':           {'view', 'create', 'approve', 'export'},   # branch-manager approval step + own requests
         'approvals':    {'view', 'approve'},
         'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
@@ -253,6 +255,7 @@ PERMISSIONS = {
         'incentives':   RE,
         'delivery':     RE,
         'audit':        RE,
+        'help':         {'view', 'edit'},   # trainers: edit the in-app help text
         'finance':      RO,
         'hr':           RE,                  # view + export; own requests
         'approvals':    {'view', 'approve'}, # batch_quarantine authorization

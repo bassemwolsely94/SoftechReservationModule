@@ -1,0 +1,147 @@
+from . import T
+
+MODULE = {
+    'key': 'delivery', 'group': 'operations', 'icon': '🚚',
+    'title': T('توصيل الطلبات', 'Home delivery'),
+    'summary': T(
+        'إدارة طلبات التوصيل من الإنشاء حتى التسليم والتحصيل: الطلب يأتي من الكول سنتر أو الفرع، يُجهَّز في الفرع، '
+        'يُكلَّف به سائق (فردياً أو ضمن «مسار» يجمع عدة طلبات)، السائق يقبل ويخرج ويسلّم مع إثبات التسليم (اسم المستلم، صورة، وموقعه)، '
+        'ثم يُطابَق النقد المحصَّل. العميل يستطيع متابعة طلبه برابط تتبع بدون تسجيل دخول.',
+        'Manage delivery orders from creation to delivery and cash collection: an order comes from the call center or a branch, '
+        'is prepared at the branch, assigned to a driver (alone or in a "route" of several orders), the driver accepts, goes out and '
+        'delivers with proof of delivery (recipient name, photo and location), then the collected cash is reconciled. The customer '
+        'can follow the order with a tracking link, no login needed.'),
+    'workflows': [{
+        'title': T('مراحل طلب التوصيل', 'Delivery order stages'),
+        'model': 'delivery.DeliveryOrder', 'field': 'status',
+        'transitions': 'apps.delivery.views.VALID_TRANSITIONS',
+        'states': [
+            {'key': 'created', 'label': T('جديد', 'New'), 'desc': T('سُجّل الطلب.', 'Order recorded.'),
+             'next': ['pending_review', 'preparing', 'cancelled']},
+            {'key': 'pending_review', 'label': T('بانتظار المراجعة', 'Pending review'),
+             'desc': T('يحتاج مراجعة (أصناف، سعر، عنوان) قبل التحضير.', 'Needs a check (items, price, address) before preparing.'),
+             'next': ['preparing', 'cancelled']},
+            {'key': 'preparing', 'label': T('جاري التحضير', 'Preparing'), 'desc': T('الفرع يجهّز الأصناف ويصدر مستند التجهيز.', 'The branch prepares the items and issues the preparation document.'),
+             'next': ['ready', 'cancelled']},
+            {'key': 'ready', 'label': T('جاهز للتسليم', 'Ready'), 'desc': T('مُغلَّف وينتظر سائقاً.', 'Packed and waiting for a driver.'),
+             'next': ['assigned', 'cancelled']},
+            {'key': 'assigned', 'label': T('تم التكليف', 'Assigned'), 'desc': T('كُلِّف سائق وينتظر قبوله.', 'A driver is assigned and must accept.'),
+             'next': ['driver_accepted', 'cancelled']},
+            {'key': 'driver_accepted', 'label': T('السائق قبل الطلب', 'Driver accepted'), 'desc': T('السائق قبل وسيستلم من الفرع (يُطلب منه تفعيل الموقع).', 'The driver accepted and will collect from the branch (location required).'),
+             'next': ['out_for_delivery', 'cancelled']},
+            {'key': 'out_for_delivery', 'label': T('في الطريق', 'Out for delivery'), 'desc': T('السائق في الطريق للعميل.', 'The driver is on the way.'),
+             'next': ['delivered', 'partial_delivery', 'customer_unavailable', 'failed']},
+            {'key': 'delivered', 'label': T('تم التسليم', 'Delivered'), 'desc': T('سُلّم بإثبات تسليم ومبلغ محصَّل.', 'Delivered with proof and the collected amount.'),
+             'next': ['closed']},
+            {'key': 'partial_delivery', 'label': T('تسليم جزئي', 'Partial delivery'), 'desc': T('العميل استلم جزءاً فقط — سجّل ما سُلّم وما رجع.', 'The customer took only part — record what was delivered and returned.'),
+             'next': ['closed']},
+            {'key': 'customer_unavailable', 'label': T('العميل غير متاح', 'Customer unavailable'), 'desc': T('لم يرد أو غير موجود — حاول مرة أخرى أو سجّل فشلاً.', 'No answer or not there — retry or record a failure.'),
+             'next': ['out_for_delivery', 'failed', 'cancelled']},
+            {'key': 'failed', 'label': T('فشل التسليم', 'Failed'), 'desc': T('لم يتم التسليم — إما يُعاد إنشاؤه أو يُرجَع للفرع.', 'Not delivered — either recreate it or return to the branch.'),
+             'next': ['created', 'returned']},
+            {'key': 'returned', 'label': T('مُعاد', 'Returned'), 'desc': T('الأصناف رجعت للفرع.', 'The items came back to the branch.'), 'next': ['closed']},
+            {'key': 'cancelled', 'label': T('ملغى', 'Cancelled'), 'desc': T('أُلغي قبل الخروج. نهائي.', 'Cancelled before leaving. Final.')},
+            {'key': 'closed', 'label': T('مغلق', 'Closed'), 'desc': T('أُغلق بعد التسليم أو الإرجاع ومطابقة النقد. نهائي.', 'Closed after delivery or return and cash reconciliation. Final.')},
+        ],
+    }],
+}
+
+SCREENS = [
+    {
+        'key': 'delivery.dashboard',
+        'routes': ['/delivery'],
+        'title': T('لوحة التوصيل', 'Delivery board'),
+        'summary': T(
+            'إدارة كل طلبات التوصيل بدورة حياتها الكاملة: مؤشرات اليوم (إجمالي، في الانتظار، مكلّف، في الطريق، مُسلَّم، فشل)، فلترة بالحالة، '
+            'إنشاء طلب جديد، وتفاصيل كل طلب (العميل والعنوان على خرائط جوجل، المالية، مراجع SOFTECH، الأصناف، سجل الحالات) مع أزرار الإجراء حسب الحالة.',
+            'Manage every delivery order through its whole life: today\'s numbers (total, waiting, assigned, on the way, delivered, failed), status filters, '
+            'creating a new order, and each order\'s details (customer and address on Google Maps, money, SOFTECH references, items, status log) with actions by status.'),
+        'audience': T('الكول سنتر، الصيادلة، المشرفون، مسؤول التوزيع.', 'Call center, pharmacists, supervisors, the dispatcher.'),
+        'tabs': [
+            {'key': 'details', 'title': T('الأصناف 📦', 'Items 📦'),
+             'body': T('أصناف الطلب من SOFTECH: الكمية، سعر الوحدة، الخصم، السعر الفعلي والإجمالي، وكم وفّر العميل.',
+                       'Order items from SOFTECH: quantity, unit price, discount, net price and total, and how much the customer saved.')},
+            {'key': 'timeline', 'title': T('سجل الحالات 📋', 'Status log 📋'),
+             'body': T('كل تغيير حالة بالوقت ومن قام به. «إدخال يدوي» يعني أن الحالة سُجّلت من اللوحة لأن السائق لم يسجلها.',
+                       'Every status change with time and who did it. "Manual entry" means it was recorded from the board because the driver did not.')},
+        ],
+        'steps': [
+            T('«طلب جديد»: اختر المصدر (كول سنتر/الفرع) والفرع، بيانات العميل والهاتف والعنوان والمنطقة، قيمة الطلب ورسوم التوصيل، ثم «إنشاء الطلب».',
+              '"New order": choose the source (call center/branch) and branch, customer, phone, address and area, order value and delivery fee, then "Create order".'),
+            T('افتح الطلب وحرّكه حسب المرحلة: تحضير ← جاهز ← «تكليف سائق» (من قائمة السائقين أو بالاسم والمركبة).',
+              'Open the order and move it through the stages: preparing → ready → "Assign driver" (from the list or by name and vehicle).'),
+            T('«إبلاغ العميل عبر واتساب» يرسل له حالة الطلب ورابط التتبع.', '"Notify customer on WhatsApp" sends the status and the tracking link.'),
+            T('بعد التسليم: «تحصيل نقدي» وأدخل المبلغ المحصَّل — النظام يحسب العجز أو الزيادة مقابل (قيمة الأصناف + رسوم التوصيل).',
+              'After delivery: "Cash collection" and enter the collected amount — the system shows any shortage or excess vs (items + delivery fee).'),
+        ],
+        'tips': [
+            T('لو السائق لم يسجل حالة من تطبيقه يمكنك تسجيلها يدوياً من هنا، وتظهر «إدخال يدوي» في السجل.',
+              'If the driver did not record a status in their app, you can record it here; it shows as "manual entry".'),
+        ],
+        'related': ['delivery.dispatch', 'delivery.analytics', 'delivery.driver'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'delivery.dispatch',
+        'routes': ['/delivery/dispatch'],
+        'title': T('لوحة التوزيع (المسارات)', 'Dispatch board (routes)'),
+        'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
+                     'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
+        'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
+        'steps': [
+            T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
+            T('اختر السائق ثم «إنشاء مسار».', 'Choose the driver, then "Create route".'),
+            T('«إطلاق المسار» يكلّف السائق بكل طلباته مرة واحدة؛ تظهر في تطبيقه بالترتيب.', '"Launch route" assigns all its orders to the driver at once; they appear in their app in order.'),
+        ],
+        'related': ['delivery.dashboard', 'delivery.driver'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'delivery.driver',
+        'routes': ['/delivery/my', '/rider'],
+        'title': T('مهام السائق', "Driver's tasks"),
+        'summary': T('شاشة السائق على الموبايل: طلبات اليوم بترتيب المسار، مع اتصال بالعميل وفتح الخريطة، وخطوات: قبول ← انطلقت ← تم التسليم مع إثبات التسليم.',
+                     'The driver\'s phone screen: today\'s orders in route order, with a call button and map, and the steps: accept → out → delivered with proof of delivery.'),
+        'audience': T('السائقون (والمشرف للمتابعة).', 'Drivers (and supervisors to follow).'),
+        'steps': [
+            T('«قبول الطلب» لكل طلب مكلَّف به — يطلب تفعيل الموقع لتأكيد الاستلام من الفرع.', '"Accept" each assigned order — location must be on to confirm pickup from the branch.'),
+            T('«انطلقت» عند الخروج للعميل.', '"Out" when leaving for the customer.'),
+            T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
+              'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),
+        ],
+        'tips': [T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.')],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'delivery.analytics',
+        'routes': ['/delivery/analytics'],
+        'title': T('تحليلات التوصيل', 'Delivery analytics'),
+        'summary': T('أداء التوصيل خلال فترة (اليوم، 7، 30، 90 يوماً) ولكل فرع أو كل الفروع.', 'Delivery performance over a period (today, 7, 30, 90 days) for one or all branches.'),
+        'audience': T('المشرفون والإدارة والجودة.', 'Supervisors, management and quality.'),
+        'tabs': [
+            {'key': 'drivers', 'title': T('🚴 أداء السائقين', '🚴 Driver performance'),
+             'body': T('لكل سائق: إجمالي الطلبات، المُسلَّم، معدل النجاح، متوسط وقت التسليم، والنقد المحصَّل.', 'Per driver: total orders, delivered, success rate, average delivery time and cash collected.')},
+            {'key': 'heatmap', 'title': T('🗺️ خريطة المناطق', '🗺️ Area map'),
+             'body': T('الطلبات حسب المحافظة وأكثر 20 منطقة طلباً — لتوزيع السائقين والفروع.', 'Orders by governorate and the top 20 areas — to plan drivers and branches.')},
+            {'key': 'shifts', 'title': T('⏰ تقرير الورديات', '⏰ Shift report'),
+             'body': T('توزيع الطلبات على ساعات اليوم وساعة الذروة — لتحديد عدد السائقين في كل وردية.', 'Orders by hour of day and the peak hour — to plan drivers per shift.')},
+            {'key': 'csat', 'title': T('⭐ رضا العملاء', '⭐ Customer satisfaction'),
+             'body': T('متوسط تقييم العملاء بعد التسليم، توزيع التقييمات، والتقييمات المنخفضة (1-2) لمتابعتها.', 'Average customer rating after delivery, the distribution, and low ratings (1-2) to follow up.')},
+        ],
+        'related': ['delivery.dashboard'],
+        'updated': '2026-10-10',
+    },
+    {
+        'key': 'delivery.mobile_board',
+        'routes': ['/m/delivery', '/m/delivery/:id'],
+        'title': T('حالة التوصيل (موبايل)', 'Delivery status (mobile)'),
+        'summary': T('متابعة طلبات التوصيل من الموبايل: الحالة، علامة «متأخر»، وتفاصيل الطلب (اتصال، واتساب، الموقع، الأصناف، السائق، سجل الحالة) '
+                     'وإرسال رابط التتبع للعميل. إجراءات تغيير الحالة تتم من لوحة التوزيع وتطبيق السائق.',
+                     'Follow delivery orders on the phone: status, "late" flag, and order details (call, WhatsApp, location, items, driver, status log), '
+                     'and send the tracking link to the customer. Status changes are done from the dispatch board and the driver app.'),
+        'audience': T('مسؤول التوزيع والمديرون والكول سنتر.', 'The dispatcher, managers and the call center.'),
+        'steps': [T('اضغط طلباً ثم «إرسال رابط التتبع للعميل» لو سأل عن طلبه.', 'Tap an order, then "Send tracking link" if the customer asks about it.')],
+        'related': ['delivery.dashboard'],
+        'updated': '2026-10-10',
+    },
+]

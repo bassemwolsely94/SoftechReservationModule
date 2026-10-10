@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -286,6 +287,7 @@ export default function TasksPage() {
   const { user } = useAuthStore()
 
   const [view, setView] = useState('list') // list | kanban | mine
+  useHelpTab(view)
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [branches, setBranches] = useState([])

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { stockCountApi } from '../api/client';
 import CanDo from '../components/CanDo';
+import useHelpTab from '../help/useHelpTab'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -835,6 +836,7 @@ const TABS = [
 
 export default function StockCountPage() {
   const [activeTab, setActiveTab]           = useState('sessions');
+  useHelpTab(activeTab)
   const [selectedSession, setSelectedSession] = useState(null);
   const [refresh, setRefresh]               = useState(0);
 
