@@ -20,13 +20,13 @@ function toLatin(s) {
 
 function TransferCard({ t, onOpen }) {
   return (
-    <button
+    <button data-tour="transfers-mobile-list-card"
       onClick={onOpen}
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors"
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="font-bold text-sm text-gray-900">{t.request_number}</span>
-        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${transferBadgeClass(t.status_color)}`}>
+        <span data-tour="transfers-mobile-list-status" className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${transferBadgeClass(t.status_color)}`}>
           {t.status_label}
         </span>
       </div>
@@ -62,7 +62,7 @@ export default function MobileTransfersPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div data-tour="transfers-mobile-list-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
         {TRANSFER_FILTERS.map(f => (
           <button
             key={f.value || 'all'}
@@ -83,7 +83,7 @@ export default function MobileTransfersPage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="🔀" text="لا توجد طلبات تحويل" />
       ) : (
-        <div className="space-y-2.5">
+        <div data-tour="transfers-mobile-list-list" className="space-y-2.5">
           {rows.map(t => (
             <TransferCard key={t.id} t={t} onOpen={() => navigate(`/m/transfers/${t.id}`)} />
           ))}
@@ -96,7 +96,7 @@ export default function MobileTransfersPage() {
         </div>
       )}
 
-      <button
+      <button data-tour="transfers-mobile-list-new"
         onClick={() => navigate('/m/transfers/new')}
         className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
         title="طلب تحويل جديد"

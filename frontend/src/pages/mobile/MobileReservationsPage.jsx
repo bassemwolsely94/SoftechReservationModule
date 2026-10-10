@@ -38,7 +38,7 @@ function ReservationCard({ r, onOpen }) {
     : r.item_name
 
   return (
-    <button
+    <button data-tour="reservations-mobile-list-card"
       onClick={onOpen}
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors"
     >
@@ -94,7 +94,7 @@ export default function MobileReservationsPage() {
     <div className="p-3 space-y-3">
 
       {/* Filter chips */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div data-tour="reservations-mobile-list-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
         {FILTERS.map(f => (
           <button
             key={f.value || 'all'}
@@ -118,7 +118,7 @@ export default function MobileReservationsPage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="📋" text="لا توجد حجوزات" />
       ) : (
-        <div className="space-y-2.5">
+        <div data-tour="reservations-mobile-list-list" className="space-y-2.5">
           {rows.map(r => (
             <ReservationCard key={r.id} r={r} onOpen={() => navigate(`/m/reservations/${r.id}`)} />
           ))}
@@ -136,7 +136,7 @@ export default function MobileReservationsPage() {
       )}
 
       {/* Floating new-reservation button */}
-      <button
+      <button data-tour="reservations-mobile-list-new"
         onClick={() => navigate('/m/reservations/new')}
         className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
         title="حجز جديد"

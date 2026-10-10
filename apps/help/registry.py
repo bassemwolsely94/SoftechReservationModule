@@ -46,7 +46,7 @@ from functools import lru_cache
 
 from .content import MODULE_FILES
 
-EDITABLE_FIELDS = ('title', 'summary', 'audience', 'steps', 'tabs', 'tips', 'faq', 'notes')
+EDITABLE_FIELDS = ('title', 'summary', 'audience', 'steps', 'tabs', 'tips', 'faq', 'notes', 'tour')
 
 GROUPS = [
     ('home',       'الرئيسية',      'Home'),
@@ -80,7 +80,9 @@ def load():
 
 
 def base_hash(screen):
-    payload = {f: screen.get(f) for f in EDITABLE_FIELDS}
+    # 'tour' only counts when the screen has one, so adding the field did not flag
+    # every existing trainer edit as "base changed"
+    payload = {f: screen.get(f) for f in EDITABLE_FIELDS if f != 'tour' or screen.get('tour')}
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
@@ -96,6 +98,13 @@ def _merge_tabs(base_tabs, edited_tabs):
     return out
 
 
+def _merge_tour(base_tour, edited_tour):
+    """Like tabs: the steps and their targets follow the code; trainers edit the text."""
+    edited = {t.get('target'): t for t in (edited_tour or []) if isinstance(t, dict)}
+    return [{**t, **({'text': edited[t['target']]['text']} if edited.get(t['target'], {}).get('text') else {})}
+            for t in base_tour or []]
+
+
 def effective(screen, override=None):
     """The screen as users see it: repo text, with the trainer's edit on top."""
     s = dict(screen)
@@ -105,6 +114,8 @@ def effective(screen, override=None):
                 continue
             if f == 'tabs':
                 s['tabs'] = _merge_tabs(screen.get('tabs'), override.data.get('tabs'))
+            elif f == 'tour':
+                s['tour'] = _merge_tour(screen.get('tour'), override.data.get('tour'))
             else:
                 s[f] = override.data[f]
     return s

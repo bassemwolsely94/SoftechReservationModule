@@ -127,3 +127,25 @@ class HelpQuizAttempt(models.Model):
         ordering = ['-created_at']
         verbose_name = 'محاولة اختبار'
         verbose_name_plural = 'محاولات الاختبارات'
+
+
+class HelpTrainingOverride(models.Model):
+    """A trainer's version of a role's training path or a module's quiz, replacing the
+    repo one (content/onboarding.py) until reverted. History → HelpRevision with
+    screen_key 'path:<role>' / 'quiz:<module>'."""
+    KIND_PATH = 'path'
+    KIND_QUIZ = 'quiz'
+    KIND_CHOICES = [(KIND_PATH, 'مسار تدريبي لدور'), (KIND_QUIZ, 'اختبار موديول')]
+
+    kind       = models.CharField(max_length=10, choices=KIND_CHOICES)
+    key        = models.CharField(max_length=40)          # role or module key
+    data       = models.JSONField(default=dict)           # {'screens': [...]} or {'questions': [...]}
+    base_hash  = models.CharField(max_length=64, blank=True, default='')
+    updated_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['kind', 'key'], name='help_training_override_once')]
+        verbose_name = 'تعديل مسار/اختبار تدريبي'
+        verbose_name_plural = 'تعديلات المسارات والاختبارات'

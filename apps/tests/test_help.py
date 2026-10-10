@@ -514,3 +514,76 @@ class AskTests(TestCase):
         with mock.patch('apps.help.ask.call_llm', return_value=None):
             r = self.c.post('/api/help/ask/', {'question': 'ازاي أعمل حجز؟'}, format='json')
         self.assertEqual(r.status_code, 429)
+
+
+class TrainingEditTests(TestCase):
+    """Trainers edit tour text, role paths and quizzes in the app; every change is
+    versioned and revertible; learners immediately get the edited version."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c
+
+    def test_tour_text_editable_targets_fixed(self):
+        c = self._client('admin', 'tr_admin')
+        _, screens = registry.load()
+        base = screens['reservations.board']['tour']
+        edited = [{'target': base[0]['target'], 'text': {'ar': 'نص المدرب', 'en': 'Trainer text'}},
+                  {'target': 'made-up', 'text': {'ar': 'x', 'en': 'x'}}]
+        r = c.put('/api/help/screens/reservations.board/', {'data': {'tour': edited}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        tour = r.json()['tour']
+        self.assertEqual([t['target'] for t in tour], [t['target'] for t in base])
+        self.assertEqual(tour[0]['text']['ar'], 'نص المدرب')
+        self.assertEqual(tour[1]['text'], base[1]['text'])
+        bad = c.put('/api/help/screens/reservations.board/', {'data': {'tour': [{'target': 'x'}]}}, format='json')
+        self.assertEqual(bad.status_code, 400)
+
+    def test_path_edit_applies_and_reverts(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpRevision
+        t = self._client('admin', 'tr_admin2')
+        learner = self._client('salesperson', 'tr_sales')
+        self.assertEqual(learner.get('/api/help/training/path/salesperson/').status_code, 403)
+        new = ['general.help_center', 'pos.order', 'customers.mobile']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}, 'note': 'أقصر'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['current'], new)
+        self.assertEqual([i['key'] for i in learner.get('/api/help/onboarding/').json()['path']], new)
+        self.assertEqual(t.put('/api/help/training/path/salesperson/', {'data': {'screens': ['nope.x']}},
+                               format='json').status_code, 400)
+        r = t.delete('/api/help/training/path/salesperson/', {'note': 'رجوع'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([i['key'] for i in learner.get('/api/help/onboarding/').json()['path']],
+                         onboarding.ROLE_PATHS['salesperson'])
+        self.assertEqual(HelpRevision.objects.filter(screen_key='path:salesperson').count(), 2)
+        self.assertEqual(t.get('/api/help/training/path/nope/').status_code, 404)
+
+    def test_quiz_edit_grades_with_new_answers(self):
+        t = self._client('admin', 'tr_admin3')
+        learner = self._client('pharmacist', 'tr_ph')
+        q = {'q': {'ar': 'سؤال؟', 'en': 'Q?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 1, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        r = t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(t.get('/api/help/training/quiz/pos/').json()['current'][0]['answer'], 1)
+        g = learner.get('/api/help/quizzes/pos/').json()
+        self.assertEqual(len(g['questions']), 1)
+        self.assertNotIn('answer', str(g))
+        res = learner.post('/api/help/quizzes/pos/submit/', {'answers': [1]}, format='json').json()
+        self.assertTrue(res['passed'])
+        bad = dict(q, answer=5)
+        self.assertEqual(t.put('/api/help/training/quiz/pos/', {'data': {'questions': [bad]}},
+                               format='json').status_code, 400)
+        # a trainer can add a quiz to a module that has none in the repo
+        from apps.help.content import onboarding
+        modules, _ = registry.load()
+        free = next(m for m in modules if m not in onboarding.QUIZZES) if set(modules) - set(onboarding.QUIZZES) else None
+        if free:
+            t.put(f'/api/help/training/quiz/{free}/', {'data': {'questions': [q]}}, format='json')
+            self.assertEqual(learner.get(f'/api/help/quizzes/{free}/').status_code, 200)

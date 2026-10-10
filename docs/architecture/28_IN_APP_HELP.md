@@ -35,6 +35,14 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 - Tests: every role in `ROLE_CHOICES` has a path of real screens, every module on a path has a
   quiz, answer indexes are valid, every text bilingual; API grading / hiding / permissions.
 
+**Trainer editing (built 2026-10-10):** «للمدربين» → «تعديل المسارات التدريبية والاختبارات»: reorder /
+add / remove a role's path screens; edit a module's questions, options, correct answer and
+explanation (or add a quiz to a module that has none; an empty quiz removes it). Stored in
+`HelpTrainingOverride` (kind `path`/`quiz`, key), replacing the repo version until reverted; every
+save/revert → `HelpRevision` with `screen_key` `path:<role>` / `quiz:<module>`; `base_changed`
+warns when the repo version changed after the edit. All readers use `apps/help/training.py`.
+API: `GET/PUT/DELETE /api/help/training/{path|quiz}/{key}/` (help/edit; GET includes answers).
+
 **Rule:** a new screen a role must use → add it to that role's `ROLE_PATHS`; a new rule users
 must not get wrong → add a quiz question.
 
@@ -56,11 +64,14 @@ must not get wrong → add a quiz question.
 - Calm: the dimmed mask ignores clicks (the highlighted button can be pressed for real); leaving the
   screen ends the tour; a step whose element is not visible (other tab, role, nothing selected)
   still shows its text with a note. Runner: `frontend/src/help/Tour.jsx` (mounted by `HelpPanel`).
-- Built for: POS, reservations board + new, demand list, transfers list + new, stock count,
-  follow-ups, delivery dashboard, customer detail.
+- Built for 21 screens — desktop: POS, reservations board + new, demand list, transfers list + new,
+  stock count, follow-ups, delivery dashboard, customer detail, shortages, call-center operator, HR
+  requests, tasks, vouchers; mobile: POS, reservations, new demand, transfers, stock count,
+  customers. Steps on repeated items (cards) highlight the first one.
 - Anchor ids: `<screen key with - instead of .>-<name>`. **Test:** every tour target must exist as
   `data-tour="…"` in `frontend/src` — renaming/removing an anchor fails CI.
-- Tour text is repo-only for now (not in the trainer editor).
+- Trainers edit the tour **text** in «تعديل الشرح» (field `tour`, merged by `target` like tabs — the
+  steps and their buttons stay fixed by the code).
 
 ## «اسأل النظام» (built 2026-10-10)
 
@@ -94,8 +105,8 @@ must not get wrong → add a quiz question.
 |---|---|
 | Help text (source of truth) | `apps/help/content/<module>.py` — one file per module, `T(ar, en)`; order in `content/__init__.py` |
 | Loader / merge / search | `apps/help/registry.py` (repo text + `HelpOverride` → effective; Arabic-normalized search) |
-| DB | `HelpOverride`, `HelpRevision` (immutable), `HelpFeedback`, `HelpEvent` (open/search/ask; `results=0` = nothing found), `HelpLearned`, `HelpQuizAttempt` |
-| Onboarding | `apps/help/content/onboarding.py`, `apps/help/onboarding_views.py`, `frontend/src/help/Onboarding.jsx` |
+| DB | `HelpOverride`, `HelpRevision` (immutable), `HelpFeedback`, `HelpEvent` (open/search/ask; `results=0` = nothing found), `HelpLearned`, `HelpQuizAttempt`, `HelpTrainingOverride` |
+| Onboarding | `apps/help/content/onboarding.py`, `apps/help/training.py`, `apps/help/onboarding_views.py`, `frontend/src/help/Onboarding.jsx`, `frontend/src/help/TrainingEditor.jsx` |
 | API | `/api/help/` — see 04_API_REGISTRY |
 | Manual | `views.manual`, `frontend/src/pages/HelpManualPage.jsx` (route `/help/manual`, outside `Layout`) |
 | Frontend | `frontend/src/help/` — `HelpPanel`, `HelpButton`, `HelpArticle`, `HelpEditor`, `HelpFeedback`, `helpStore`, `useHelpIndex` (route → screen via react-router `matchPath`), `useHelpTab`; page `pages/HelpCenterPage.jsx` |
@@ -148,5 +159,5 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for more screens (mobile shells included) and tour text in the trainer editor.
-- Quiz/path editing by trainers in-app (today: repo `content/onboarding.py`).
+- Tours for the remaining screens (analytics, finance, insurance, purchasing, admin).
+- Notify a person when their role's path gains a screen or a quiz they passed is changed.

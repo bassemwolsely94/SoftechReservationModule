@@ -46,6 +46,18 @@ SCREENS = [
         ],
         'tips': [T('لا تؤكد مطابقة لست متأكداً منها — اختيار صنف خطأ يعني طلب صنف خطأ.', 'Never confirm a match you are unsure of — a wrong item means ordering the wrong item.')],
         'related': ['shortage.market', 'transfers.new', 'demand.list'],
+        'tour': [
+            {'target': 'shortage-list-new', 'text': T('«+ قائمة جديدة» لتسجيل نواقص فرعك.',
+                                              '"+ New list" records your branch\'s shortages.')},
+            {'target': 'shortage-list-filters', 'text': T('فلتر الفرع والحالة.',
+                                              'Branch and status filters.')},
+            {'target': 'shortage-list-aggregate', 'text': T('«📊 عرض مجمع» يجمع النواقص من كل القوائم للمشتريات.',
+                                              '"📊 Aggregate view" combines shortages from all lists for purchasing.')},
+            {'target': 'shortage-list-grid', 'text': T('القوائم الموجودة.',
+                                              'The existing lists.')},
+            {'target': 'shortage-list-card', 'text': T('افتح أي قائمة لإضافة أصناف أو متابعة حالتها.',
+                                              'Open any list to add items or follow its status.')},
+        ],
         'updated': '2026-10-10',
     },
     {

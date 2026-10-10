@@ -8,7 +8,8 @@ apps/help/onboarding_views.py — role onboarding (checklist + module quizzes).
   GET  /api/help/quizzes/<module>/           questions; options shuffled, NO answers
   POST /api/help/quizzes/<module>/submit/    {answers: [option id | null]} → graded here
 
-The path comes from content/onboarding.ROLE_PATHS. Grading is deterministic and done
+Paths and quizzes come from training.py (the repo's
+content/onboarding.py, or a trainer's saved version). Grading is deterministic and done
 only on the server; answers + explanations are returned after submitting.
 """
 import random
@@ -21,22 +22,13 @@ from rest_framework.response import Response
 
 from apps.users.models import ROLE_CHOICES, StaffProfile
 
-from . import registry
-from .content import onboarding
-from .models import HelpLearned, HelpOverride, HelpQuizAttempt
+from . import registry, training
+from .models import HelpLearned, HelpOverride, HelpQuizAttempt, HelpRevision, HelpTrainingOverride
 from .views import _can_edit, _profile, _staff_name, _updated
 
 ROLES = [r for r, _ in ROLE_CHOICES]
 
 
-def path_modules(keys):
-    """Modules of a path, in first-seen order, that have a quiz."""
-    out = []
-    for k in keys:
-        m = k.split('.', 1)[0]
-        if m in onboarding.QUIZZES and m not in out:
-            out.append(m)
-    return out
 
 
 def _versions():
@@ -83,14 +75,15 @@ def my_path(request):
     role = profile.role
     # trainers may preview another role's path (read-only; progress stays their own)
     asked = request.query_params.get('role')
-    if asked and asked != role and _can_edit(profile) and asked in onboarding.ROLE_PATHS:
+    if asked and asked != role and _can_edit(profile) and asked in ROLES:
         role = asked
-    keys = onboarding.ROLE_PATHS.get(role, onboarding.ROLE_PATHS['viewer'])
+    keys = training.path(role)
+    qz = training.quizzes()
     modules, screens = registry.load()
     ov = {o.screen_key: o for o in HelpOverride.objects.filter(screen_key__in=keys)}
     versions = _versions()
     learned = dict(HelpLearned.objects.filter(staff=profile).values_list('screen_key', 'version'))
-    mods = path_modules(keys)
+    mods = training.path_modules(keys, qz)
     best = _best([profile.id]).get(profile.id, {})
     items = []
     for k in keys:
@@ -104,11 +97,11 @@ def my_path(request):
     return Response({
         'role': role,
         'roles': ROLES if _can_edit(profile) else [profile.role],
-        'pass_percent': onboarding.PASS_PERCENT,
+        'pass_percent': training.PASS_PERCENT,
         'path': items,
         'quizzes': [{
             'module': mk, 'title': modules.get(mk, {}).get('title'), 'icon': modules.get(mk, {}).get('icon', ''),
-            'questions': len(onboarding.QUIZZES[mk]), 'best': best.get(mk),
+            'questions': len(qz[mk]), 'best': best.get(mk),
         } for mk in mods],
         'progress': _progress(keys, learned, versions, mods, best),
         # every screen I ticked (also outside my path), so the «فهمت» button knows its state
@@ -145,14 +138,14 @@ def _shuffled(staff_id, module_key, qi, n):
 @permission_classes([IsAuthenticated])
 def quiz(request, module_key):
     profile = _profile(request)
-    qs = onboarding.QUIZZES.get(module_key)
+    qs = training.quiz(module_key)
     if qs is None or profile is None:
         return Response({'detail': 'not found'}, status=404)
     modules, _ = registry.load()
     best = _best([profile.id]).get(profile.id, {}).get(module_key)
     return Response({
         'module': module_key, 'title': modules.get(module_key, {}).get('title'),
-        'pass_percent': onboarding.PASS_PERCENT, 'best': best,
+        'pass_percent': training.PASS_PERCENT, 'best': best,
         'questions': [{
             'q': q['q'],
             'options': [{'id': i, 'text': q['options'][i]}
@@ -165,7 +158,7 @@ def quiz(request, module_key):
 @permission_classes([IsAuthenticated])
 def quiz_submit(request, module_key):
     profile = _profile(request)
-    qs = onboarding.QUIZZES.get(module_key)
+    qs = training.quiz(module_key)
     if qs is None or profile is None:
         return Response({'detail': 'not found'}, status=404)
     answers = request.data.get('answers')
@@ -179,11 +172,11 @@ def quiz_submit(request, module_key):
     score = sum(r['correct'] for r in results)
     total = len(qs)
     percent = round(100 * score / total)
-    passed = percent >= onboarding.PASS_PERCENT
+    passed = percent >= training.PASS_PERCENT
     HelpQuizAttempt.objects.create(staff=profile, module_key=module_key, score=score, total=total,
                                    passed=passed, answers=clean)
     return Response({'score': score, 'total': total, 'percent': percent, 'passed': passed,
-                     'pass_percent': onboarding.PASS_PERCENT, 'results': results},
+                     'pass_percent': training.PASS_PERCENT, 'results': results},
                     status=status.HTTP_201_CREATED)
 
 
@@ -212,10 +205,12 @@ def team(request):
     last = dict(HelpLearned.objects.filter(staff_id__in=ids).values('staff_id')
                 .annotate(t=Max('created_at')).values_list('staff_id', 't'))
     best = _best(ids)
+    path_ov = training.overrides('path')
+    qz = training.quizzes()
     rows = []
     for p in staff:
-        keys = onboarding.ROLE_PATHS.get(p.role, onboarding.ROLE_PATHS['viewer'])
-        mods = path_modules(keys)
+        keys = training.path(p.role, path_ov)
+        mods = training.path_modules(keys, qz)
         mine = best.get(p.id, {})
         at = [v['at'] for v in mine.values()] + ([last[p.id]] if p.id in last else [])
         rows.append({
@@ -226,3 +221,68 @@ def team(request):
             'last_activity': max(at) if at else None,
         })
     return Response(rows)
+
+
+# ── trainers: edit paths / quizzes (help/edit) ────────────────────────────────
+
+def _training_payload(kind, key, override):
+    base = training.base_path(key) if kind == 'path' else training.base_quiz(key)
+    if override is None:
+        current = base
+    else:
+        current = override.data.get('screens' if kind == 'path' else 'questions', [])
+    revs = HelpRevision.objects.filter(screen_key=f'{kind}:{key}').select_related('staff__user')[:20]
+    return {
+        'kind': kind, 'key': key, 'current': current, 'base': base,
+        'override': None if override is None else {
+            'updated_at': override.updated_at, 'updated_by': _staff_name(override.updated_by),
+            'base_changed': override.base_hash != training.base_hash(kind, key),
+        },
+        'revisions': [{'id': r.id, 'action': r.action, 'note': r.note, 'created_at': r.created_at,
+                       'staff': _staff_name(r.staff)} for r in revs],
+    }
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def training_edit(request, kind, key):
+    """GET the path/quiz as trainers edit it (quiz answers included), PUT {data, note}
+    to save a trainer version, DELETE {note} to go back to the repo version."""
+    profile = _profile(request)
+    if not _can_edit(profile):
+        return Response({'detail': 'ليس لديك صلاحية تعديل التدريب'}, status=403)
+    modules, _ = registry.load()
+    if (kind == 'path' and key not in ROLES) or (kind == 'quiz' and key not in modules) \
+            or kind not in ('path', 'quiz'):
+        return Response({'detail': 'not found'}, status=404)
+    override = HelpTrainingOverride.objects.filter(kind=kind, key=key).select_related('updated_by__user').first()
+    if request.method == 'GET':
+        return Response(_training_payload(kind, key, override))
+
+    field = 'screens' if kind == 'path' else 'questions'
+    before = {field: override.data.get(field) if override else
+              (training.base_path(key) if kind == 'path' else training.base_quiz(key))}
+    note = str((request.data or {}).get('note', ''))[:300] if isinstance(request.data, dict) else ''
+    if request.method == 'DELETE':
+        if override is None:
+            return Response({'detail': 'لا يوجد تعديل للرجوع عنه'}, status=400)
+        override.delete()
+        base = training.base_path(key) if kind == 'path' else training.base_quiz(key)
+        HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_REVERT,
+                                    before=before, after={field: base}, note=note, staff=profile)
+        return Response(_training_payload(kind, key, None))
+
+    data = request.data.get('data')
+    errors = training.validate_path(data) if kind == 'path' else training.validate_quiz(data)
+    if errors:
+        return Response({'detail': 'محتوى غير صالح', 'errors': errors}, status=400)
+    clean = training.clean_path(data) if kind == 'path' else training.clean_quiz(data)
+    if override is None:
+        override = HelpTrainingOverride(kind=kind, key=key)
+    override.data = clean
+    override.base_hash = training.base_hash(kind, key)
+    override.updated_by = profile
+    override.save()
+    HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_SAVE,
+                                before=before, after=clean, note=note, staff=profile)
+    return Response(_training_payload(kind, key, override))

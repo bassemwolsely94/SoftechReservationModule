@@ -63,6 +63,18 @@ SCREENS = [
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
         ],
         'related': ['vouchers.mobile', 'pos.order'],
+        'tour': [
+            {'target': 'vouchers-main-tabs', 'text': T('التبويبات: القسائم، الاسترداد، وثائق POS، والتقارير.',
+                                              'Tabs: vouchers, redemption, POS documents and reports.')},
+            {'target': 'vouchers-main-new', 'text': T('«+ قسيمة جديدة».',
+                                              '"+ New voucher".')},
+            {'target': 'vouchers-main-search', 'text': T('ابحث بالكود أو العنوان.',
+                                              'Search by code or title.')},
+            {'target': 'vouchers-main-status', 'text': T('فلتر الحالة.',
+                                              'Status filter.')},
+            {'target': 'vouchers-main-table', 'text': T('القسائم — افتح أي قسيمة لتفاصيلها.',
+                                              'The vouchers — open one for its details.')},
+        ],
         'updated': '2026-10-10',
     },
     {

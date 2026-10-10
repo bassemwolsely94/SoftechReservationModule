@@ -242,6 +242,18 @@ SCREENS = [
             T('ابحث عن الصنف وأضفه، أو اكتب اسم صنف غير مكوَّد ثم «إضافة».', 'Search and add the item, or type an uncoded item name then "Add".'),
             T('الفرع يُختار تلقائياً (فرعك). حدد الأولوية والمصدر ثم «تسجيل الطلب».', 'The branch defaults to yours. Set priority and source, then "Record request".'),
         ],
+        'tour': [
+            {'target': 'demand-mobile-new-customer', 'text': T('رقم وإسم العميل عشان نبلّغه لما الصنف يوصل.',
+                                              'The customer\'s phone and name so we can tell them when the item arrives.')},
+            {'target': 'demand-mobile-new-items', 'text': T('ابحث عن الصنف المطلوب، أو ضيفه يدوي لو مش موجود في الكتالوج.',
+                                              'Search the requested item, or add it manually if it is not in the catalog.')},
+            {'target': 'demand-mobile-new-lines', 'text': T('الأصناف المضافة للطلب.',
+                                              'The items added to the request.')},
+            {'target': 'demand-mobile-new-details', 'text': T('الفرع والأولوية والمصدر وأي ملاحظات.',
+                                              'Branch, priority, source and any notes.')},
+            {'target': 'demand-mobile-new-submit', 'text': T('«✅ تسجيل الطلب» يحفظه ويبدأ متابعته.',
+                                              '"✅ Log request" saves it and starts its follow-up.')},
+        ],
         'updated': '2026-10-10',
     },
     {

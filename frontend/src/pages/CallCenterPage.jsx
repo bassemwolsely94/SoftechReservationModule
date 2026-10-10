@@ -1448,7 +1448,7 @@ export default function CallCenterPage() {
           {/* Search card — phone mode or name/PIC mode */}
           <div className="card mb-5">
             {/* Mode toggle */}
-            <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+            <div data-tour="callcenter-operator-mode" className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
               <button
                 onClick={() => setSearchMode('phone')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -1475,7 +1475,7 @@ export default function CallCenterPage() {
               <div className="flex gap-3 items-end flex-wrap">
                 <div className="flex-1 min-w-52">
                   <label className="label text-sm">رقم الهاتف</label>
-                  <input
+                  <input data-tour="callcenter-operator-phone"
                     className="input-field font-mono text-lg"
                     placeholder="010xxxxxxxx"
                     dir="ltr"
@@ -1485,7 +1485,7 @@ export default function CallCenterPage() {
                     autoFocus
                   />
                 </div>
-                <button onClick={handleSearch} disabled={phone.length < 8}
+                <button data-tour="callcenter-operator-search" onClick={handleSearch} disabled={phone.length < 8}
                   className="btn-primary text-sm px-6 py-2.5 disabled:opacity-50">
                   🔍 بحث
                 </button>
@@ -1526,7 +1526,7 @@ export default function CallCenterPage() {
             <div className="grid md:grid-cols-3 gap-5">
 
               {/* ── Left: Patient 360 profile ── */}
-              <div className="md:col-span-2 space-y-4">
+              <div data-tour="callcenter-operator-profile" className="md:col-span-2 space-y-4">
 
                 {/* ── Customer picker (multiple matches, none selected yet) ── */}
                 {needsPicker && (
@@ -1862,7 +1862,7 @@ export default function CallCenterPage() {
 
               {/* ── Right: Log call + actions ── */}
               <div className="space-y-4">
-                <div className="card">
+                <div data-tour="callcenter-operator-log" className="card">
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
                     📝 تسجيل المكالمة
                   </div>
@@ -1966,7 +1966,7 @@ export default function CallCenterPage() {
                           value={logForm.notes}
                           onChange={e => setLogForm(p => ({ ...p, notes: e.target.value }))} />
                       </div>
-                      <button onClick={handleSaveLog} disabled={!searchPhone}
+                      <button data-tour="callcenter-operator-save" onClick={handleSaveLog} disabled={!searchPhone}
                         className="btn-primary w-full text-sm disabled:opacity-50">
                         💾 حفظ المكالمة
                       </button>

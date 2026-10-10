@@ -563,6 +563,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/onboarding/?role=` | GET | My training path (`ROLE_PATHS[my role]`): screens with state `todo`/`done`/`changed`, module quizzes + my best score, progress %, `learned` map. `role=` preview only for help/edit |
 | `/api/help/onboarding/learned/` | POST | `{screen_key, done}` — «فهمت هذه الشاشة» on/off (stores the help version read) |
 | `/api/help/onboarding/team/?role=&branch=` | GET | Team completion per staff member (help/edit; limited to the caller's accessible branches) |
+| `/api/help/training/{path\|quiz}/{role\|module}/` | GET / PUT / DELETE | Trainers (help/edit): the path or quiz as edited (quiz answers included) + history; PUT `{data: {screens}\|{questions}, note}` saves a trainer version (validated); DELETE `{note}` reverts to the repo version |
 | `/api/help/quizzes/{module}/` | GET | Quiz questions, options shuffled per person, **no answers** |
 | `/api/help/quizzes/{module}/submit/` | POST | `{answers: [option id \| null]}` → server-graded score, pass (≥ `PASS_PERCENT`), per-question answer + explanation; saves `HelpQuizAttempt` |
 

@@ -17,6 +17,7 @@ import HelpEditor from '../help/HelpEditor'
 import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
+import TrainingEditor from '../help/TrainingEditor'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
@@ -327,6 +328,7 @@ function Trainers({ index, lang, go }) {
         </div>
       )}
       <TeamProgress />
+      <TrainingEditor index={index} />
       <Box t="ملاحظات المستخدمين المفتوحة">
         {(fb.data || []).length === 0 && <div className="text-sm text-faint">لا توجد ملاحظات مفتوحة 🎉</div>}
         <div className="divide-y divide-line">

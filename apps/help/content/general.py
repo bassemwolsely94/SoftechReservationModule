@@ -196,6 +196,9 @@ SCREENS = [
             {'text': T('للمدربين: افتح أي شرح واضغط «تعديل الشرح». التعديل يظهر للجميع فوراً ويُحفظ في السجل، ويمكن الرجوع للنسخة الأصلية في أي وقت.',
                        'For trainers: open any article and press "Edit help". The change shows to everyone immediately, is kept in the history, and can be reverted to the original at any time.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
+            {'text': T('للمدربين: نص جولة «اعرض لي» بيتعدّل من «تعديل الشرح» (الخطوات والأزرار ثابتة حسب الشاشة). المسارات والاختبارات بتتعدّل من تبويب «للمدربين».',
+                       'For trainers: the "Show me" tour text is edited in "Edit help" (the steps and buttons are fixed by the screen). Paths and quizzes are edited in the "For trainers" tab.'),
+             'roles': ['admin', 'supervisor', 'quality_manager']},
         ],
         'tabs': [
             {'key': 'browse', 'title': T('تصفح الموديولات', 'Browse modules'),
@@ -212,8 +215,8 @@ SCREENS = [
              'body': T('الشاشات التي تغيّر شرحها مؤخراً (ميزة جديدة أو تعديل)، الأحدث أولاً. علامة «جديد» تعني أنك لم تقرأ النسخة الحالية بعد.',
                        'Screens whose help changed recently (a new feature or change), newest first. A "New" badge means you have not read the current version yet.')},
             {'key': 'trainers', 'title': T('للمدربين', 'For trainers'),
-             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة، أسئلة «اسأل النظام» (اللي ملقتش إجابة أولاً — دي شروحات محتاجة تتكتب)، و«تقدّم الفريق في التدريب» (نسبة كل موظف، الاختبارات التي رسب فيها، وآخر نشاط — حسب الفروع المسموحة لك). استخدمها لتعرف أين يحتاج الفريق تدريباً.',
-                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), open comments, "Ask the system" questions (unanswered first — help that needs writing), and "Team training progress" (each person\'s percentage, failed quizzes and last activity — for the branches you may see). Use it to see where the team needs training.')},
+             'body': T('يظهر لمن لديه صلاحية تعديل الشرح: أكثر الشاشات التي يُفتح شرحها، تقييمات الشرح، ما يبحث عنه المستخدمون (وما لم يجدوا له نتيجة)، والملاحظات المفتوحة، أسئلة «اسأل النظام» (اللي ملقتش إجابة أولاً — دي شروحات محتاجة تتكتب)، و«تقدّم الفريق في التدريب» (نسبة كل موظف، الاختبارات التي رسب فيها، وآخر نشاط — حسب الفروع المسموحة لك). وفي آخر التبويب «تعديل المسارات التدريبية والاختبارات»: رتّب شاشات مسار أي دور (أضف / احذف / حرّك)، وعدّل أسئلة اختبار أي موديول واختياراته والإجابة الصحيحة والتوضيح. الحفظ يظهر للجميع فوراً، ويتسجّل في السجل، وتقدر ترجع للأصل. استخدمها لتعرف أين يحتاج الفريق تدريباً.',
+                       'For those allowed to edit help: the screens whose help is opened most, ratings, what users search for (and what found nothing), open comments, "Ask the system" questions (unanswered first — help that needs writing), and "Team training progress" (each person\'s percentage, failed quizzes and last activity — for the branches you may see). At the bottom, "Edit training paths and quizzes": reorder any role\'s path (add / remove / move screens) and edit any module\'s quiz questions, options, correct answer and explanation. A save shows to everyone at once, is kept in the history, and can be reverted. Use it to see where the team needs training.')},
         ],
         'tips': [
             T('«اسأل النظام» بيشرح استخدام النظام بس — مش بيحدد أسعار أو خصومات أو جرعات أو بدائل أدوية، ومش بيوافق على حاجة.',

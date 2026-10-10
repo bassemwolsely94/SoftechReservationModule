@@ -83,11 +83,11 @@ export default function MobileCustomersPage() {
     <div className="p-3 space-y-3">
       {scanning && <QrScanner onScan={resolveCode} onClose={() => setScan(false)} />}
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
+      <div data-tour="customers-mobile-search" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
         <h2 className="font-semibold text-gray-700 text-sm">👥 بحث عن عميل</h2>
         <CustomerSearchWidget selected={cust} onSelect={setCust} allowManual={false} />
         {!cust && (
-          <button onClick={() => setScan(true)}
+          <button data-tour="customers-mobile-scan" onClick={() => setScan(true)}
             className="w-full text-center text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl py-2.5 font-medium">
             📷 مسح رمز العميل (QR)
           </button>
@@ -99,7 +99,7 @@ export default function MobileCustomersPage() {
       {cust && cust.id && (
         <>
           {/* Loyalty */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <div data-tour="customers-mobile-loyalty" className="bg-white rounded-2xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-700 text-sm">🏆 الولاء</h2>
               {tier?.name_ar && (
@@ -126,7 +126,7 @@ export default function MobileCustomersPage() {
 
           {/* Rewards / redeem */}
           {rewardList.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div data-tour="customers-mobile-rewards" className="bg-white rounded-2xl border border-gray-200 p-4">
               <h2 className="font-semibold text-gray-700 text-sm mb-2.5">🎁 استبدال النقاط</h2>
               <div className="space-y-2">
                 {rewardList.map(rw => {
@@ -152,7 +152,7 @@ export default function MobileCustomersPage() {
           )}
 
           {/* Recent reservations */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <div data-tour="customers-mobile-reservations" className="bg-white rounded-2xl border border-gray-200 p-4">
             <h2 className="font-semibold text-gray-700 text-sm mb-2.5">📋 آخر الحجوزات</h2>
             {resv.isLoading ? (
               <MobileLoading />

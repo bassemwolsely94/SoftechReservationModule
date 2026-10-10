@@ -88,7 +88,7 @@ export default function MobileNewDemandPage() {
   return (
     <div className="p-3 space-y-3">
       {/* Customer */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+      <div data-tour="demand-mobile-new-customer" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <h2 className="font-semibold text-gray-700 text-sm">👤 العميل</h2>
         <div>
           <label className="label">رقم الهاتف *</label>
@@ -102,7 +102,7 @@ export default function MobileNewDemandPage() {
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="demand-mobile-new-items" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الأصناف المطلوبة *</h2>
         <ItemSearchWidget selected={null} onSelect={addCatalog} onClear={() => {}}
           placeholder="ابحث وأضف صنفاً..." />
@@ -115,7 +115,7 @@ export default function MobileNewDemandPage() {
         </div>
 
         {lines.length > 0 && (
-          <div className="mt-3 space-y-2">
+          <div data-tour="demand-mobile-new-lines" className="mt-3 space-y-2">
             {lines.map(l => (
               <div key={l.key} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5">
                 <div className="flex-1 min-w-0">
@@ -132,7 +132,7 @@ export default function MobileNewDemandPage() {
       </div>
 
       {/* Details */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="demand-mobile-new-details" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         {canPickBranch ? (
           <div>
             <label className="label">الفرع *</label>
@@ -180,7 +180,7 @@ export default function MobileNewDemandPage() {
 
       <div className="flex gap-2.5">
         <button onClick={() => navigate('/m/demand')} className="btn-secondary px-5">إلغاء</button>
-        <button onClick={submit} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
+        <button data-tour="demand-mobile-new-submit" onClick={submit} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
           {busy ? 'جارٍ التسجيل...' : '✅ تسجيل الطلب'}
         </button>
       </div>

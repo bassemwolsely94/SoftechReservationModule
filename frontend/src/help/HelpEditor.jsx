@@ -12,7 +12,7 @@ import { pick, itemText } from './text'
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
 const emptyT = () => ({ ar: '', en: '' })
 
-function TField({ value, onChange, rows = 2, required }) {
+export function TField({ value, onChange, rows = 2, required }) {
   const v = value || emptyT()
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
@@ -74,7 +74,7 @@ export default function HelpEditor({ data, onDone }) {
     title: clone(data.title), summary: clone(data.summary),
     audience: clone(data.audience) || emptyT(), notes: clone(data.notes) || emptyT(),
     steps: clone(data.steps) || [], tips: clone(data.tips) || [],
-    faq: clone(data.faq) || [], tabs: clone(data.tabs) || [],
+    faq: clone(data.faq) || [], tabs: clone(data.tabs) || [], tour: clone(data.tour) || [],
   }))
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -174,6 +174,20 @@ export default function HelpEditor({ data, onDone }) {
                         onChange={(v) => up('tabs')(draft.tabs.map((x, j) => (j === i ? { ...x, title: v } : x)))} />
                 <TField value={t.body} rows={3} required
                         onChange={(v) => up('tabs')(draft.tabs.map((x, j) => (j === i ? { ...x, body: v } : x)))} />
+              </div>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {draft.tour.length > 0 && (
+        <Field title="جولة «اعرض لي» (الخطوات والأزرار ثابتة حسب الشاشة — عدّل النص فقط)">
+          <div className="space-y-2">
+            {draft.tour.map((t, i) => (
+              <div key={t.target} className="rounded-lg border border-line p-2 space-y-1.5">
+                <div className="text-[10px] text-faint">{i + 1}. {t.target}</div>
+                <TField value={t.text} rows={2} required
+                        onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? { ...x, text: v } : x)))} />
               </div>
             ))}
           </div>

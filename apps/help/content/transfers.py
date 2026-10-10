@@ -239,6 +239,18 @@ SCREENS = [
             T('زر «+» لطلب تحويل جديد.', 'The "+" button creates a new transfer request.'),
         ],
         'related': ['transfers.new', 'transfers.detail'],
+        'tour': [
+            {'target': 'transfers-mobile-list-new', 'text': T('زر «+» لطلب تحويل جديد.',
+                                              'The "+" button makes a new transfer request.')},
+            {'target': 'transfers-mobile-list-filters', 'text': T('فلتر الحالة: بانتظار الموافقة، الكل، مسودة…',
+                                              'Status filter: waiting for approval, all, draft…')},
+            {'target': 'transfers-mobile-list-list', 'text': T('طلبات التحويل حسب الفلتر.',
+                                              'The transfer requests matching the filter.')},
+            {'target': 'transfers-mobile-list-card', 'text': T('كل كارت: رقم الطلب ومن أي فرع لأي فرع — اضغطه للتفاصيل.',
+                                              'Each card: request number and from which branch to which — tap it for details.')},
+            {'target': 'transfers-mobile-list-status', 'text': T('حالة الطلب الحالية.',
+                                              'The request\'s current status.')},
+        ],
         'updated': '2026-10-10',
     },
 ]

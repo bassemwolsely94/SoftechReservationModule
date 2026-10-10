@@ -209,6 +209,13 @@ def _validate_edit(data):
                 if not isinstance(t, dict) or not isinstance(t.get('key'), str) \
                         or not _is_t(t.get('title')) or not _is_t(t.get('body')):
                     errors.append(f'tabs[{i}]: العنوان والشرح مطلوبان')
+    if 'tour' in data:
+        if not isinstance(data['tour'], list):
+            errors.append('tour: يجب أن تكون قائمة')
+        else:
+            for i, t in enumerate(data['tour']):
+                if not isinstance(t, dict) or not isinstance(t.get('target'), str) or not _is_t(t.get('text')):
+                    errors.append(f'tour[{i}]: نص الخطوة مطلوب')
     if 'faq' in data:
         if not isinstance(data['faq'], list):
             errors.append('faq: يجب أن تكون قائمة')
@@ -341,7 +348,8 @@ def manual(request):
     ?role=<role>  → that role's onboarding path (steps/tips limited to the role);
     ?module=<key> → every screen of one module.
     Modules appear in first-seen order, each with its workflows once."""
-    from .content import onboarding
+    from . import training
+    from apps.users.models import ROLE_CHOICES
     modules, screens = registry.load()
     role = request.query_params.get('role') or ''
     module_key = request.query_params.get('module') or ''
@@ -353,9 +361,9 @@ def manual(request):
     else:
         if not role:
             role = getattr(_profile(request), 'role', '') or 'viewer'
-        if role not in onboarding.ROLE_PATHS:
+        if role not in [r for r, _ in ROLE_CHOICES]:
             return Response({'detail': 'unknown role'}, status=404)
-        keys = onboarding.ROLE_PATHS[role]
+        keys = training.path(role)
     ov = {o.screen_key: o for o in HelpOverride.objects.filter(screen_key__in=keys)}
     out_modules, out_screens = [], []
     for k in keys:

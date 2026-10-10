@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import HelpOverride, HelpRevision, HelpFeedback, HelpEvent
+from .models import HelpOverride, HelpRevision, HelpFeedback, HelpEvent, HelpTrainingOverride
 
 
 @admin.register(HelpOverride)
@@ -30,3 +30,9 @@ class HelpFeedbackAdmin(admin.ModelAdmin):
 class HelpEventAdmin(admin.ModelAdmin):
     list_display = ('kind', 'screen_key', 'tab', 'query', 'role', 'created_at')
     list_filter = ('kind', 'role')
+
+
+@admin.register(HelpTrainingOverride)
+class HelpTrainingOverrideAdmin(admin.ModelAdmin):
+    list_display = ('kind', 'key', 'updated_by', 'updated_at')
+    list_filter = ('kind',)

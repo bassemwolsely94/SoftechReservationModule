@@ -210,6 +210,16 @@ SCREENS = [
             T('زر «+» أسفل الشاشة لحجز جديد.', 'The "+" button at the bottom creates a new reservation.'),
         ],
         'related': ['reservations.new', 'reservations.detail'],
+        'tour': [
+            {'target': 'reservations-mobile-list-new', 'text': T('زر «+» لحجز جديد.',
+                                              'The "+" button makes a new reservation.')},
+            {'target': 'reservations-mobile-list-filters', 'text': T('شرائح الفلتر: النشطة، الكل، قيد الانتظار…',
+                                              'Filter chips: active, all, pending…')},
+            {'target': 'reservations-mobile-list-list', 'text': T('الحجوزات حسب الفلتر.',
+                                              'The reservations matching the filter.')},
+            {'target': 'reservations-mobile-list-card', 'text': T('اضغط على أي حجز لتفاصيله وتحريكه للخطوة اللي بعدها.',
+                                              'Tap any reservation for its details and to move it to its next step.')},
+        ],
         'updated': '2026-10-10',
     },
 ]

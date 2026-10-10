@@ -122,6 +122,18 @@ SCREENS = [
         ],
         'related': ['loyalty.program'],
         'workflows': [],
+        'tour': [
+            {'target': 'customers-mobile-search', 'text': T('ابحث عن العميل بالاسم أو الهاتف.',
+                                              'Search the customer by name or phone.')},
+            {'target': 'customers-mobile-scan', 'text': T('أو امسح رمز QR بتاع العميل.',
+                                              'Or scan the customer\'s QR code.')},
+            {'target': 'customers-mobile-loyalty', 'text': T('نقاط الولاء ومستوى العميل.',
+                                              'The customer\'s loyalty points and tier.')},
+            {'target': 'customers-mobile-rewards', 'text': T('استبدال النقاط بمكافأة.',
+                                              'Redeem points for a reward.')},
+            {'target': 'customers-mobile-reservations', 'text': T('آخر حجوزات العميل.',
+                                              'The customer\'s latest reservations.')},
+        ],
         'updated': '2026-10-10',
     },
 ]

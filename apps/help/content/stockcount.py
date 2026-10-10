@@ -95,6 +95,16 @@ SCREENS = [
             T('راجع القائمة بفلتر عجز / فائض / مطابق وأعد عدّ ما يبدو خطأ.', 'Review the list with deficit / surplus / match filters and recount anything that looks wrong.'),
         ],
         'related': ['stockcount.sessions'],
+        'tour': [
+            {'target': 'stockcount-mobile-title', 'text': T('جلسات الجرد المفتوحة لفرعك.',
+                                              'The count sessions for your branch.')},
+            {'target': 'stockcount-mobile-list', 'text': T('قائمة الجلسات.',
+                                              'The list of sessions.')},
+            {'target': 'stockcount-mobile-card', 'text': T('اضغط على الجلسة عشان تبدأ العد.',
+                                              'Tap a session to start counting.')},
+            {'target': 'stockcount-mobile-status', 'text': T('حالة الجلسة — العد متاح بس في الجلسات المفتوحة.',
+                                              'The session status — counting is only possible in open sessions.')},
+        ],
         'updated': '2026-10-10',
     },
 ]
