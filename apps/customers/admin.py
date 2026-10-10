@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, PointsRemoval
+from .models import BranchCopyWrite, Customer, CustomerHealthProfile, CustomerNote, CustomerStatusDrift, MergeCandidate, PointsRemoval
 
 
 @admin.register(CustomerHealthProfile)
@@ -97,4 +97,17 @@ class PointsRemovalAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MergeCandidate)
+class MergeCandidateAdmin(admin.ModelAdmin):
+    """B7 duplicate-code merge queue — review happens in the app (/customers/merge, maker-checker)."""
+    list_display = ('old_pic', 'main_pic', 'strength', 'status', 'main_swapped', 'marked_by', 'approved_by',
+                    'updated_at')
+    list_filter = ('status', 'strength', 'main_swapped')
+    search_fields = ('old_pic', 'main_pic', 'cluster')
+    readonly_fields = [f.name for f in MergeCandidate._meta.fields]
+
+    def has_add_permission(self, request):
         return False

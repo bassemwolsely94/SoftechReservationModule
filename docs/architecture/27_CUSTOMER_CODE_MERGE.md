@@ -302,7 +302,35 @@ branch copy's balance and flag. Before any write:
   - If the native change moves history or points itself, the merge should replay **that** DML rather than
     our status + points pair.
 
-## Proposed design (for approval — nothing built)
+## Merge queue — part 1 (BUILT 2026-10-10, read-only vs SOFTECH)
+
+Items 1–3 of the design below. Nothing here writes SOFTECH; approving a pair only records the decision.
+
+* **Builder** `apps/customers/duplicates.py`, command `build_merge_candidates`, weekly job Sat 05:30
+  (`CUSTOMER_MERGE_QUEUE_ENABLED`, pg lock 7_301_004).
+  - Reads HQ `localcustomers`, `personphones` (phoneblock 0) and `localcustomerspoints`.
+  - Grouping uses the probe's own rules: real shared phone (placeholders and > 10 codes per number excluded),
+    then same / similar name joined by union-find. Different names on one phone = family → never proposed.
+  - Deceased (`'5'` / `picdied`) and entity (`piclock`) codes are never merged.
+  - Main = eligible code by: known `custdate` → older `custdate` → higher balance → latest sale
+    (our `PurchaseHistory`, doc 115). A closed `'0'` code can be merged *into* a main, never be one;
+    a group with no eligible code is skipped.
+  - Strength vs the main: **strong** = same name + same address (structured street/home/floor/apartment,
+    or the same address text) · **medium** = same name · **review** = similar name / linked through another code.
+* **`MergeCandidate`** (one row per old code; migration `customers/0026`).
+  - Statuses: proposed → marked → approved (→ merged / failed in part 2) · rejected · stale.
+  - A rebuild keeps decisions: approved / rejected / merged rows are untouched. Open rows not found again
+    become *stale*; a swapped main is kept while it is still eligible, and its strength is re-measured.
+* **Review** `/customers/merge` (sidebar «دمج الأكواد المكررة»); API `api/customers/merge-candidates/`.
+  - Roles `CUSTOMER_MERGE_ROLES` = admin, supervisor, call_center, enforced server-side.
+  - Maker-checker: whoever marks cannot approve. Reject needs a reason.
+  - Swap makes the old code the main for the whole group; every open row goes back to *proposed*
+    (other rows read *review* until the next rebuild). A closed / deceased / entity code cannot become the main.
+  - Bulk mark / approve applies to **strong** pairs only (≤ 100 per click); bulk approve skips your own marks.
+  - Each action is audited (`customer_updated`, note `B7 merge queue: …`, before/after status or main).
+* Tests: `apps/tests/test_customer_merge_queue.py` (6).
+
+## Proposed design (for approval — part 1 built above; part 2 not built)
 
 1. **Candidate queue (our DB, read-only vs SOFTECH):** pairs on a real shared phone, classified
    *strong* (same normalised name + same structured address), *medium* (same name), *review* (similar name);

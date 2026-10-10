@@ -624,3 +624,50 @@ class PointsRemoval(models.Model):
 
     def __str__(self):
         return f'{self.pic} {self.status} (−{self.points_cleared})'
+
+
+class MergeCandidate(models.Model):
+    """
+    One duplicate customer code proposed for merging into a main code (B7 merge queue, owner 2026-10-07/09).
+    Built READ-ONLY from HQ by apps/customers/duplicates.py: codes sharing a real phone number AND the same /
+    similar name (different names on one phone = family → never proposed). Main code: older creation date,
+    then higher points balance, then most recent sale; a closed / deceased / entity code is never the main.
+    Review is maker-checker: one reviewer marks, a different one approves; either may reject; the main can be
+    swapped. Approving does NOT write SOFTECH — the merge write is a separate, gated step (part 2).
+    """
+    STRONG, MEDIUM, REVIEW = 'strong', 'medium', 'review'
+    STRENGTH_CHOICES = [(STRONG, 'قوي — نفس الاسم ونفس العنوان'), (MEDIUM, 'نفس الاسم'), (REVIEW, 'اسم مشابه — للمراجعة')]
+    PROPOSED, MARKED, APPROVED, REJECTED = 'proposed', 'marked', 'approved', 'rejected'
+    MERGED, FAILED, STALE = 'merged', 'failed', 'stale'
+    STATUS_CHOICES = [(PROPOSED, 'مقترح'), (MARKED, 'معلَّم — بانتظار الاعتماد'), (APPROVED, 'معتمد — بانتظار الدمج'),
+                      (REJECTED, 'مرفوض'), (MERGED, 'تم الدمج'), (FAILED, 'فشل الدمج'),
+                      (STALE, 'لم يعد مكررًا')]
+    OPEN = (PROPOSED, MARKED)
+
+    old_pic = models.CharField(max_length=13, unique=True)
+    main_pic = models.CharField(max_length=13, db_index=True)
+    main_auto_pic = models.CharField(max_length=13, help_text='main chosen by the rule')
+    main_swapped = models.BooleanField(default=False)
+    cluster = models.CharField(max_length=20, db_index=True, help_text='smallest code of the duplicate group')
+    strength = models.CharField(max_length=10, choices=STRENGTH_CHOICES, db_index=True)
+    facts = models.JSONField(default=dict)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PROPOSED, db_index=True)
+    marked_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name='+')
+    marked_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    reason = models.CharField(max_length=255, blank=True)
+    merged_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['cluster', 'old_pic']
+
+    def __str__(self):
+        return f'{self.old_pic} → {self.main_pic} ({self.strength}, {self.status})'

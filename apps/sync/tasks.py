@@ -2080,6 +2080,19 @@ def _run_customer_status_drift():
         logger.error('[APScheduler] customer status drift failed: %s', exc)
 
 
+def _run_merge_candidates():
+    """Weekly READ-ONLY rebuild of the B7 duplicate customer-code merge queue (writes only our rows).
+    Off with CUSTOMER_MERGE_QUEUE_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'CUSTOMER_MERGE_QUEUE_ENABLED', True):
+        return
+    try:
+        from apps.customers import duplicates as DUP
+        logger.info('[APScheduler] merge candidates: %s', DUP.rebuild_locked())
+    except Exception as exc:
+        logger.error('[APScheduler] merge candidates failed: %s', exc)
+
+
 def _run_coupon_lifecycle_sync():
     """Daily gift-coupon mirror (READ-ONLY from SOFTECH) + yesterday's misuse digest
     (lines without a serial, reused serials, customers over their issued coupons) as an
@@ -3076,6 +3089,11 @@ def start_scheduler():
     # Customer status HQ vs branch nodes (B7, read-only) — 06:40.
     _scheduler.add_job(
         _run_customer_status_drift, 'cron', hour=6, minute=40, id='customer_status_drift',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Duplicate customer-code merge queue (B7, read-only) — Saturday 05:30.
+    _scheduler.add_job(
+        _run_merge_candidates, 'cron', day_of_week='sat', hour=5, minute=30, id='customer_merge_candidates',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.

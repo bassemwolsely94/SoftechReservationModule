@@ -557,6 +557,10 @@ CUSTOMER_BRANCH_COPY_HOLD           = config('CUSTOMER_BRANCH_COPY_HOLD', defaul
 # B7 Option B — points flag off + balance cleared at HQ (apps/customers/points_removal.py). Off by default.
 POINTS_REMOVAL_WRITE_ENABLED = config('POINTS_REMOVAL_WRITE_ENABLED', default=False, cast=bool)
 POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, cast=int)
+# B7 duplicate-code merge queue (apps/customers/duplicates.py) — weekly READ-ONLY rebuild; review roles
+# (maker-checker: the one who marks a pair cannot approve it).
+CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
+CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

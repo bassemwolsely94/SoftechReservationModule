@@ -41,6 +41,7 @@ import POSOrderPage from './pages/POSOrderPage'
 import ExceptionCenterPage from './pages/ExceptionCenterPage'
 import VouchersPage from './pages/VouchersPage'
 import RefillRemindersPage from './pages/RefillRemindersPage'
+import CustomerMergePage from './pages/CustomerMergePage'
 import OffersPage from './pages/OffersPage'
 import InvoicePage from './pages/InvoicePage'
 import IncentivesPage from './pages/IncentivesPage'
@@ -375,6 +376,7 @@ export default function App() {
 
             {/* ── Customers ────────────────────────────────────────────── */}
             <Route path="customers"          element={<CustomersPage />} />
+            <Route path="customers/merge"    element={<CustomerMergePage />} />
             <Route path="customers/:id"      element={<CustomerDetailPage />} />
             <Route path="vouchers"           element={<VouchersPage />} />
             <Route path="offers"             element={<OffersPage />} />

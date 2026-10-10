@@ -1665,6 +1665,14 @@ export const refillRemindersApi = {
   run:      () => api.post('/followups/refill-reminders/run/'),
 }
 
+// B7 duplicate customer-code merge queue (review only — no SOFTECH write here)
+export const customerMergeApi = {
+  list: (params) => api.get('/customers/merge-candidates/', { params }),
+  act:  (id, action, data) => api.post(`/customers/merge-candidates/${id}/${action}/`, data || {}),
+  bulk: (action, strength = 'strong', limit = 100) =>
+    api.post('/customers/merge-candidates/bulk/', { action, strength, limit }),
+}
+
 export const followupsApi = {
   // Dashboard KPIs
   dashboard:    ()         => api.get('/followups/tasks/dashboard/'),
