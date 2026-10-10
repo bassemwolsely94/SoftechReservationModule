@@ -608,6 +608,44 @@ export default function usePosOrder() {
     ...extra,
   })
 
+  // ── item-selection telemetry → SOFTECH pos_cancel (Wave 3 inc3) ─────────────────────────────
+  // Every add/clear of an item is captured (fire-and-forget, buffered+debounced) so our POS feeds
+  // the native «المبيعات غير المخزنة» log. cart_token == the eventual order client_token, so the
+  // backend can suppress items that ended up sold. Telemetry NEVER blocks or breaks the POS.
+  // Must stay ABOVE addItem: addItem lists _captureSelection in its deps, which are read during
+  // render — a later `const` declaration throws (TDZ) and crashes /pos and /m/pos on load.
+  const cartTokenRef = useRef(_genToken())
+  const selBufRef = useRef([])
+  const selTimerRef = useRef(null)
+  const _flushSelections = useCallback(() => {
+    const evs = selBufRef.current
+    if (!evs.length || !branch) return          // need a branch; else keep buffering until one is set
+    selBufRef.current = []
+    api.post('/pos-orders/selection-events/', {
+      branch: Number(branch), cart_token: cartTokenRef.current, events: evs,
+    }).catch(() => { /* telemetry is advisory — drop on failure, never surface */ })
+  }, [branch])
+  const _captureSelection = useCallback((src, eventType) => {
+    const list = Number(src.item_sale_price ?? src.pack_price ?? src.unit_price) || 0
+    const qty = eventType === 'clear' ? 0 : (Number(src.qty) || 1)
+    const unit = Math.round(list * (1 - (Number(src.cust_discp) || 0) / 100) * 10000) / 10000
+    selBufRef.current.push({
+      item: src.item_id || src.item || src.id || null,
+      item_code: src.softech_itemcode || src.softech_id || '',
+      item_name: src.item_name || src.name || '',
+      doc_kind: docKind, event_type: eventType,
+      itemsaleprice: list, transprice: unit, transqty: qty,
+      transprice_total: Math.round(unit * qty * 10000) / 10000,
+      custcode: (picCustomer?.cust_branch_code || customer?.cust_branch_code
+                 || picCustomer?.softech_pic || customer?.softech_pic || ''),
+      occurred_at: new Date().toISOString(),
+    })
+    if (selTimerRef.current) clearTimeout(selTimerRef.current)
+    selTimerRef.current = setTimeout(_flushSelections, 2000)
+  }, [docKind, customer, picCustomer, _flushSelections])
+  // flush buffered selections once a branch is chosen (items added before branch selection)
+  useEffect(() => { if (branch) _flushSelections() }, [branch, _flushSelections])
+
   const addItem = useCallback(async (item) => {
     if (!item) return
     setMsg('')
@@ -794,41 +832,6 @@ export default function usePosOrder() {
                                           * (Number(l.cust_discp) || 0) / 100 * 100) / 100
   const lineSellPrice = (l) => Math.round((Number(l.item_sale_price) || 0)
                                           * (1 - (Number(l.cust_discp) || 0) / 100) * 100) / 100
-  // ── item-selection telemetry → SOFTECH pos_cancel (Wave 3 inc3) ─────────────────────────────
-  // Every add/clear of an item is captured (fire-and-forget, buffered+debounced) so our POS feeds
-  // the native «المبيعات غير المخزنة» log. cart_token == the eventual order client_token, so the
-  // backend can suppress items that ended up sold. Telemetry NEVER blocks or breaks the POS.
-  const cartTokenRef = useRef(_genToken())
-  const selBufRef = useRef([])
-  const selTimerRef = useRef(null)
-  const _flushSelections = useCallback(() => {
-    const evs = selBufRef.current
-    if (!evs.length || !branch) return          // need a branch; else keep buffering until one is set
-    selBufRef.current = []
-    api.post('/pos-orders/selection-events/', {
-      branch: Number(branch), cart_token: cartTokenRef.current, events: evs,
-    }).catch(() => { /* telemetry is advisory — drop on failure, never surface */ })
-  }, [branch])
-  const _captureSelection = useCallback((src, eventType) => {
-    const list = Number(src.item_sale_price ?? src.pack_price ?? src.unit_price) || 0
-    const qty = eventType === 'clear' ? 0 : (Number(src.qty) || 1)
-    const unit = Math.round(list * (1 - (Number(src.cust_discp) || 0) / 100) * 10000) / 10000
-    selBufRef.current.push({
-      item: src.item_id || src.item || src.id || null,
-      item_code: src.softech_itemcode || src.softech_id || '',
-      item_name: src.item_name || src.name || '',
-      doc_kind: docKind, event_type: eventType,
-      itemsaleprice: list, transprice: unit, transqty: qty,
-      transprice_total: Math.round(unit * qty * 10000) / 10000,
-      custcode: (picCustomer?.cust_branch_code || customer?.cust_branch_code
-                 || picCustomer?.softech_pic || customer?.softech_pic || ''),
-      occurred_at: new Date().toISOString(),
-    })
-    if (selTimerRef.current) clearTimeout(selTimerRef.current)
-    selTimerRef.current = setTimeout(_flushSelections, 2000)
-  }, [docKind, customer, picCustomer, _flushSelections])
-  // flush buffered selections once a branch is chosen (items added before branch selection)
-  useEffect(() => { if (branch) _flushSelections() }, [branch, _flushSelections])
 
   const removeLine = i => {
     const gone = lines[i]
