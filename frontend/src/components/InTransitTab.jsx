@@ -172,7 +172,7 @@ function KpiStrip({ data }) {
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-6 py-3 bg-white border-b border-gray-100">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-6 py-3 bg-white border-b border-gray-100" data-tour="transfers-transits-kpis">
       {kpis.map((k, i) => (
         <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
           <div className="flex items-center gap-1.5 mb-1">
@@ -714,7 +714,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
 function FiltersBar({ filters, setFilters, branches }) {
   return (
-    <div className="flex gap-2 px-6 py-3 border-b border-gray-100 bg-white flex-wrap items-center">
+    <div className="flex gap-2 px-6 py-3 border-b border-gray-100 bg-white flex-wrap items-center" data-tour="transfers-transits-filters">
       {/* Priority filter */}
       <select
         className="input-field text-xs w-36"
@@ -837,7 +837,7 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
 
   return (
     <div className="px-6 py-4">
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden" data-tour="transfers-transits-grid">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
@@ -1197,6 +1197,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
           مناطق التجميع
         </Link>
         <button
+          data-tour="transfers-transits-scorecard"
           onClick={() => setShowScorecard(true)}
           className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
         >

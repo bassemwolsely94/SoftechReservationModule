@@ -47,10 +47,10 @@ export default function MobileDemandDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/demand')} className="text-sm text-gray-500">→ الرجوع للقائمة</button>
+      <button onClick={() => navigate('/m/demand')} data-tour="demand-mobile-detail-back" className="text-sm text-gray-500">→ الرجوع للقائمة</button>
 
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="demand-mobile-detail-header">
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <h1 className="font-bold text-base text-gray-900">{d.demand_number}</h1>
           <div className="flex items-center gap-1.5">
@@ -61,12 +61,12 @@ export default function MobileDemandDetailPage() {
           </div>
         </div>
         {d.phone && (
-          <a href={`tel:${d.phone}`} className="inline-block text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl px-4 py-1.5 font-medium" dir="ltr">📞 {d.phone}</a>
+          <a href={`tel:${d.phone}`} data-tour="demand-mobile-detail-call" className="inline-block text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl px-4 py-1.5 font-medium" dir="ltr">📞 {d.phone}</a>
         )}
       </div>
 
       {/* Info */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50" data-tour="demand-mobile-detail-info">
         <Row label="العميل">{d.customer_name || '—'}</Row>
         <Row label="الفرع">{d.branch_name || '—'}</Row>
         <Row label="الأولوية">{d.priority_label}</Row>
@@ -77,7 +77,7 @@ export default function MobileDemandDetailPage() {
 
       {/* Items */}
       {Array.isArray(d.items) && d.items.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="demand-mobile-detail-items">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">الأصناف ({toLatin(d.items.length)})</h2>
           <div className="space-y-1.5">
             {d.items.map(it => (

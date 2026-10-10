@@ -37,7 +37,7 @@ export default function TransitsPage() {
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10" data-tour="transfers-transits-tabs">
         <TransferModuleTabs active="transit" />
       </div>
       <InTransitTab openId={openId} onOpenConsumed={clearParam} />

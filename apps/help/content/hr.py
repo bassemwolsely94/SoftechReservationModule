@@ -67,6 +67,16 @@ SCREENS = [
         ],
         'tips': [T('السيرفر يتحقق أنك المعتمد المختص بهذه الخطوة؛ ظهور الطلب لا يعني دائماً أنك صاحب القرار.', 'The server checks that you are the right approver for this step; seeing a request does not always mean the decision is yours.')],
         'related': ['hr.mobile_approvals', 'pricing.approvals'],
+        'tour': [
+            {'target': 'hr-approvals-header', 'text': T('صندوق الطلبات اللي مستنية قرارك.',
+                                              'The requests waiting for your decision.')},
+            {'target': 'hr-approvals-tabs', 'text': T('«بانتظار القرار» أو «السجل».',
+                                              '"Awaiting decision" or "History".')},
+            {'target': 'hr-approvals-table', 'text': T('الطلبات.',
+                                              'The requests.')},
+            {'target': 'hr-approvals-decide', 'text': T('«اتخاذ قرار» للموافقة أو الرفض مع السبب.',
+                                              '"Decide" to approve or reject with a reason.')},
+        ],
         'updated': '2026-10-10',
     },
     {

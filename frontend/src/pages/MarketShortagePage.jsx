@@ -59,7 +59,7 @@ function RunControls() {
         <div className="mr-auto flex gap-2">
           <button onClick={() => setDetails(d => !d)} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">تفاصيل آخر تشغيل</button>
           {!okData && <button onClick={() => sync.mutate()} disabled={running || sync.isPending} className="px-3 py-1.5 text-sm border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-50">{sync.isPending ? '…' : '⏬ مزامنة المبيعات'}</button>}
-          <button onClick={() => run.mutate()} disabled={running || run.isPending} className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50">{run.isPending || running ? 'جارٍ…' : '🔄 تشغيل المحرك ومزامنة البيانات'}</button>
+          <button onClick={() => run.mutate()} disabled={running || run.isPending} data-tour="shortage-market-run" className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50">{run.isPending || running ? 'جارٍ…' : '🔄 تشغيل المحرك ومزامنة البيانات'}</button>
         </div>
       </div>
       {details && last && (
@@ -287,7 +287,7 @@ function Toolbar({ med, setMed, q, setQ, view }) {
     onSuccess: (r) => downloadArrayBuffer(r.data, `market-shortage-${view}.xlsx`),
   })
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-4">
+    <div className="flex flex-wrap items-center gap-2 mb-4" data-tour="shortage-market-toolbar">
       <select value={med} onChange={e => setMed(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm">
         <option value="">كل التصنيفات</option>
         {(mt?.med_types || []).map(m => <option key={m.code} value={m.code}>{m.label}</option>)}
@@ -317,7 +317,7 @@ function CandidateTable({ rows, onConfirm, onDismiss, onNotShortage, confirming 
     lost: r => r.lost_monthly, cov: r => r.coverage, supp: r => r.suppression, sod: r => r.stockout_days,
   })
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="shortage-market-table">
       <table className="w-full text-sm min-w-[900px]">
         <thead>
           <tr className="text-xs text-gray-500 bg-gray-50 text-right">
@@ -695,14 +695,14 @@ export default function MarketShortagePage() {
 
       <RunControls />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-tour="shortage-market-kpis">
         <div className="bg-white rounded-xl border border-gray-200 p-4"><p className="text-xs text-gray-500">مؤكدة (في نقص)</p><p className="text-2xl font-bold text-red-600 tabular-nums">{confirmed?.count ?? '—'}</p></div>
         <div className="bg-white rounded-xl border border-gray-200 p-4"><p className="text-xs text-gray-500">🆕 نواقص جديدة</p><p className="text-2xl font-bold text-red-600 tabular-nums">{deltas?.counts.new ?? '—'}</p></div>
         <div className="bg-white rounded-xl border border-gray-200 p-4"><p className="text-xs text-gray-500">🔄 قد توفّرت</p><p className="text-2xl font-bold text-emerald-600 tabular-nums">{deltas?.counts.recovering ?? '—'}</p></div>
         <div className="bg-white rounded-xl border border-red-200 bg-red-50/40 p-4"><p className="text-xs text-gray-500">💸 خسارة شهرية (مؤكدة)</p><p className="text-2xl font-bold text-red-600 tabular-nums">{confirmed?.total_lost_monthly != null ? egp(confirmed.total_lost_monthly) : '—'}</p><p className="text-xs text-gray-400 mt-0.5">ج.م/شهر طلب غير مُلبَّى</p></div>
       </div>
 
-      <div className="flex gap-2 mb-4 border-b border-gray-200 flex-wrap">
+      <div className="flex gap-2 mb-4 border-b border-gray-200 flex-wrap" data-tour="shortage-market-tabs">
         {TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{l}</button>
         ))}

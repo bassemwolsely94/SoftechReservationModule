@@ -18,6 +18,7 @@ import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
+import HelpUsage from '../help/HelpUsage'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
@@ -327,6 +328,7 @@ function Trainers({ index, lang, go }) {
           </Box>
         </div>
       )}
+      <HelpUsage days={days} go={go} />
       <TeamProgress />
       <TrainingEditor index={index} />
       <Box t="ملاحظات المستخدمين المفتوحة">

@@ -43,6 +43,18 @@ SCREENS = [
         'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.')],
         'related': ['customers.detail', 'customers.merge'],
         'workflows': [],
+        'tour': [
+            {'target': 'customers-list-search', 'text': T('ابحث بالاسم أو الهاتف أو كود SOFTECH.',
+                                              'Search by name, phone or SOFTECH code.')},
+            {'target': 'customers-list-churn', 'text': T('فلتر العملاء (مثلاً اللي بطّلوا يشتروا).',
+                                              'Filter customers (for example those who stopped buying).')},
+            {'target': 'customers-list-sort', 'text': T('الترتيب.',
+                                              'Sort order.')},
+            {'target': 'customers-list-table', 'text': T('العملاء — افتح أي عميل لملفه الكامل.',
+                                              'The customers — open one for the full profile.')},
+            {'target': 'customers-list-pages', 'text': T('التنقل بين الصفحات.',
+                                              'Move between pages.')},
+        ],
         'updated': '2026-10-10',
     },
     {

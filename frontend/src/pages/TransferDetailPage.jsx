@@ -215,6 +215,7 @@ function ActionButtons({ tr, onAction, loading }) {
       <CanDo module="transfers" action="approve">
         {tr.can_approve && (
           <button
+            data-tour="transfers-detail-approve"
             onClick={openApproveForm}
             disabled={loading}
             className="text-sm px-4 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
@@ -1313,7 +1314,7 @@ export default function TransferDetailPage() {
           </button>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap" data-tour="transfers-detail-header">
               <h1 className="text-xl font-black text-gray-900 font-mono">{tr.request_number}</h1>
               <span className="badge text-sm px-3 py-1 font-semibold"
                 style={{ background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
@@ -1338,7 +1339,7 @@ export default function TransferDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap" data-tour="transfers-detail-actions">
             {/* Print & WhatsApp */}
             <button
               onClick={() => setShowPrintModal(true)}
@@ -1364,7 +1365,7 @@ export default function TransferDetailPage() {
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
 
           {/* ── Details ── */}
-          <div className="card animate-fade-in">
+          <div className="card animate-fade-in" data-tour="transfers-detail-details">
             <SectionHeading icon="📋" label="التفاصيل" />
             <DetailsTab tr={tr} />
           </div>
@@ -1373,7 +1374,7 @@ export default function TransferDetailPage() {
           <ERPMatchPanel tr={tr} onRefresh={invalidate} />
 
           {/* ── Items ── */}
-          <div className="card">
+          <div className="card" data-tour="transfers-detail-items">
             <SectionHeading icon="💊" label="الأصناف" count={tr.items?.length} />
             <ItemsTab tr={tr} onRefresh={invalidate} />
           </div>
@@ -1387,7 +1388,7 @@ export default function TransferDetailPage() {
         </div>
 
         {/* Right: always-visible chatter panel */}
-        <div className="w-80 flex-shrink-0 flex flex-col bg-white border-r border-gray-200 shadow-inner">
+        <div className="w-80 flex-shrink-0 flex flex-col bg-white border-r border-gray-200 shadow-inner" data-tour="transfers-detail-chatter">
           <CommunicationTab tr={tr} onRefresh={invalidate} onDeleteMessage={handleDeleteMessage} />
         </div>
       </div>

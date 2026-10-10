@@ -78,7 +78,9 @@ class HelpEvent(models.Model):
     KIND_OPEN   = 'open'
     KIND_SEARCH = 'search'
     KIND_ASK    = 'ask'
-    KIND_CHOICES = [(KIND_OPEN, 'فتح الشرح'), (KIND_SEARCH, 'بحث'), (KIND_ASK, 'اسأل النظام')]
+    KIND_TOUR   = 'tour'      # a «اعرض لي» tour ended: results = steps reached, query 'done' if finished
+    KIND_CHOICES = [(KIND_OPEN, 'فتح الشرح'), (KIND_SEARCH, 'بحث'), (KIND_ASK, 'اسأل النظام'),
+                    (KIND_TOUR, 'جولة اعرض لي')]
 
     kind       = models.CharField(max_length=10, choices=KIND_CHOICES)
     screen_key = models.CharField(max_length=80, blank=True, default='', db_index=True)

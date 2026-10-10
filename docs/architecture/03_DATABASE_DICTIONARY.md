@@ -3322,7 +3322,7 @@ Tables prefixed with their Django app name.
 `screen_key`, `tab`, `helpful` (bool), `comment`, `lang`, `staff_id`, `role`, `resolved`, `created_at`.
 
 ### help_helpevent  (help usage)
-`kind` (`open` / `search` / `ask`), `screen_key`, `tab`, `query`, `results` (search hits; 0 = nothing found), `staff_id`, `role`, `branch_id`, `created_at`.
+`kind` (`open` / `search` / `ask` / `tour` — `results` = steps reached, `query`='done' when finished), `screen_key`, `tab`, `query`, `results` (search hits; 0 = nothing found), `staff_id`, `role`, `branch_id`, `created_at`.
 
 ### help_helplearned  (onboarding checklist — «فهمت هذه الشاشة»)
 `staff_id` (FK StaffProfile, cascade), `screen_key`, `version` (the help's `updated` date when ticked; older than the current date → «راجعه»), `created_at`. Unique (`staff`, `screen_key`).

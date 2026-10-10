@@ -71,14 +71,14 @@ function SpikeTab() {
         {summary && <span className={`mr-2 px-2 py-0.5 rounded-full text-xs ${summary.cap_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
           {summary.cap_active ? 'التقليل مُفعَّل' : 'التقليل غير مُفعَّل (رصد فقط)'}</span>}
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4" data-tour="purchasing-cash-kpis">
         <Stat label="📈 مكتشفة" value={summary?.flagged ?? '—'} tone="text-orange-600" />
         <Stat label="قوية (قابلة للتقليل)" value={summary?.strong ?? '—'} tone="text-red-600" />
         <Stat label="للمراقبة" value={summary?.watch ?? '—'} tone="text-amber-600" />
         <Stat label="✓ مؤكَّدة" value={summary?.confirmed ?? '—'} tone="text-emerald-700" />
         <Stat label="توفير الطلب المؤكَّد" value={`${egp(data?.confirmed_avoided_value)} ج`} tone="text-emerald-700" />
       </div>
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3" data-tour="purchasing-cash-filters">
         {[['', 'الكل'], ['strong', 'قوية'], ['watch', 'مراقبة']].map(([v, l]) => (
           <button key={v} onClick={() => setTier(v)} className={`px-3 py-1.5 text-sm rounded-lg border ${tier === v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>{l}</button>
         ))}
@@ -91,7 +91,7 @@ function SpikeTab() {
       {isLoading ? <p className="text-gray-400 py-10 text-center">جارٍ التحميل…</p>
         : !rows.length ? <p className="text-gray-400 py-10 text-center">لا توجد ذروات</p>
           : (
-            <div className="overflow-x-auto bg-white rounded-xl border border-gray-200">
+            <div className="overflow-x-auto bg-white rounded-xl border border-gray-200" data-tour="purchasing-cash-table">
               <table className="w-full text-sm text-right">
                 <thead className="bg-gray-50 text-gray-600 border-b">
                   <tr>
@@ -128,7 +128,7 @@ function SpikeTab() {
                           ? <span className="text-xs text-gray-400">مراقبة فقط</span>
                           : r.confirmed
                             ? <button onClick={() => unconfirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">إلغاء التأكيد</button>
-                            : <button onClick={() => confirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-red-700 border border-red-200 rounded hover:bg-red-50">تأكيد (طبّق التقليل)</button>}
+                            : <button onClick={() => confirm.mutate(r.item_id)} data-tour="purchasing-cash-confirm" className="px-2 py-1 text-xs text-red-700 border border-red-200 rounded hover:bg-red-50">تأكيد (طبّق التقليل)</button>}
                       </td>
                     </tr>
                   ))}
@@ -147,7 +147,7 @@ export default function CashOptimizationPage() {
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-1">💰 تحسين الكاش والمخزون</h1>
       <p className="text-sm text-gray-500 mb-4">رصد وتحرير الكاش المجمّد ومنع الشراء الزائد — تُظهر النتائج على شيت النواقص كتنبيهات.</p>
-      <div className="flex gap-4 border-b mb-4">
+      <div className="flex gap-4 border-b mb-4" data-tour="purchasing-cash-tabs">
         {[['spike', '📈 ذروة الطلب'], ['dead', '🧊 مخزون راكد'], ['overstock', '📦 فائض']].map(([k, l]) => (
           <button key={k} onClick={() => k === 'spike' && setTab(k)} disabled={k !== 'spike'}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-400'} ${k !== 'spike' ? 'cursor-not-allowed' : ''}`}>

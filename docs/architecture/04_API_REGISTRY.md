@@ -558,6 +558,8 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/feedback/` | POST / GET | Any staff: vote + comment. GET (help/edit): feedback list (`open=1`) |
 | `/api/help/feedback/{id}/resolve/` | POST | Mark a comment handled (help/edit) |
 | `/api/help/stats/?days=` | GET | Trainers' dashboard: opens by screen/role, votes, searches, «اسأل النظام» questions (unanswered first) (help/edit) |
+| `/api/help/tour-event/` | POST | Tour runner reports an ended «اعرض لي» tour `{screen_key, reached, done}` → `HelpEvent(kind=tour)` |
+| `/api/help/usage/?days=` | GET | Trainers (help/edit): screens whose help nobody opened (+ which role paths include them), tour runs / finished % / common stop step / never run |
 | `/api/help/ask/` | POST | «اسأل النظام» `{question, lang, screen_key}` → answer written only from the retrieved help articles (Gemini, `GEMINI_API_KEY` → `_2` fallback), `found`, `ai`, `sources` (only articles that were sent), `articles` (always — the fallback when no model). 30 / staff / hour (429). Logged as `HelpEvent(kind=ask)` |
 | `/api/help/manual/?role=` or `?module=` | GET | Printable manual data: screens (role path, or all of one module) with role-filtered steps/tips, modules (with workflows) in first-seen order, latest help date |
 | `/api/help/onboarding/?role=` | GET | My training path (`ROLE_PATHS[my role]`): screens with state `todo`/`done`/`changed`, module quizzes + my best score, progress %, `learned` map. `role=` preview only for help/edit |

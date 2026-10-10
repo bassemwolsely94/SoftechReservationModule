@@ -409,7 +409,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
           </div>
 
           {/* State machine buttons */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" data-tour="callcenter-cases-actions">
             {cas.status === 'open' && (
               <button onClick={() => doAction(callCenterApi.cases.assign, { staff_id: user?.staff_id || user?.id })}
                 className="btn-secondary text-xs py-1.5 px-2">
@@ -647,7 +647,7 @@ export default function CasesPage() {
           </div>
           <div className="flex items-center gap-2">
             {canCreate && (
-              <button onClick={() => setShowCreate(true)}
+              <button onClick={() => setShowCreate(true)} data-tour="callcenter-cases-new"
                 className="btn-primary text-sm">
                 + حالة جديدة
               </button>
@@ -664,7 +664,7 @@ export default function CasesPage() {
           <div className={`flex-1 min-w-0 ${selectedCase ? 'hidden md:block md:max-w-xl' : ''}`}>
 
             {/* Filters */}
-            <div className="card mb-4">
+            <div className="card mb-4" data-tour="callcenter-cases-filters">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <input className="input-field text-sm col-span-2 md:col-span-1"
                   placeholder="بحث..."
@@ -711,13 +711,13 @@ export default function CasesPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2" data-tour="callcenter-cases-list">
                 {cases.map(c => {
                   const sm = STATUS_META[c.status] || { label: c.status, cls: 'bg-gray-100' }
                   const pm = PRIORITY_META[c.priority] || {}
                   const isSelected = selectedCase === c.id
                   return (
-                    <div key={c.id}
+                    <div key={c.id} data-tour="callcenter-cases-card"
                       onClick={() => setSelectedCase(isSelected ? null : c.id)}
                       className={`card cursor-pointer transition-all hover:shadow-md
                         ${isSelected ? 'ring-2 ring-brand-400' : ''}
@@ -772,7 +772,7 @@ export default function CasesPage() {
 
           {/* ── Detail panel ── */}
           {selectedCase && (
-            <div className="w-full md:w-96 shrink-0">
+            <div className="w-full md:w-96 shrink-0" data-tour="callcenter-cases-detail">
               <div className="card h-[calc(100vh-180px)] flex flex-col p-0 overflow-hidden">
                 <CaseDetailPanel
                   caseId={selectedCase}

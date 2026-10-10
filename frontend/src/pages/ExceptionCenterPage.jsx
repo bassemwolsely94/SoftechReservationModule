@@ -63,7 +63,7 @@ export default function ExceptionCenterPage() {
     <div dir="rtl" className="p-4 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
+          <h1 className="text-xl font-bold flex items-center gap-2" data-tour="pos-exceptions-header">
             <Icon name="alert" size={22} /> مركز الاستثناءات — أوامر البيع
           </h1>
           <p className="text-sm text-gray-500">الأوامر التى تحتاج مراجعة: فشل الإرسال، العالقة، والمتأخرة عن التحصيل.</p>
@@ -72,7 +72,7 @@ export default function ExceptionCenterPage() {
           <MetricChip icon="repeat" label="إجمالى الاستثناءات" value={data?.total_count ?? '—'} />
           <MetricChip icon="trending" label="قيمة معرّضة للخطر" value={money(data?.total_value_at_risk)}
                       tone={data?.total_value_at_risk > 0 ? 'warn' : 'ok'} />
-          <select value={branch} onChange={e => setBranch(e.target.value)}
+          <select value={branch} onChange={e => setBranch(e.target.value)} data-tour="pos-exceptions-branch"
                   className="px-2 py-1.5 rounded border text-sm bg-white">
             <option value="">كل الفروع</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
@@ -84,7 +84,7 @@ export default function ExceptionCenterPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap" data-tour="pos-exceptions-flush">
         <button onClick={() => { setBusy('queued'); flush.mutate(false) }}
                 disabled={writerOff || busy === 'queued'}
                 className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm flex items-center gap-1 disabled:opacity-50">
@@ -115,7 +115,7 @@ export default function ExceptionCenterPage() {
       )}
 
       {buckets.filter(b => b.count > 0).map(b => (
-        <section key={b.key} className="border rounded-lg overflow-hidden">
+        <section key={b.key} className="border rounded-lg overflow-hidden" data-tour="pos-exceptions-bucket">
           <header className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
             <div className="flex items-center gap-2">
               <Badge tone={BUCKET_TONE[b.key]} icon={BUCKET_ICON[b.key]} label={b.label} />
@@ -156,7 +156,7 @@ export default function ExceptionCenterPage() {
                           : <span className="text-xs text-gray-500">{o.status_display}</span>}
                     </td>
                     <td className="px-3 py-1.5 whitespace-nowrap">
-                      <button onClick={() => setDetailId(o.id)}
+                      <button onClick={() => setDetailId(o.id)} data-tour="pos-exceptions-details"
                               className="text-xs px-2 py-1 rounded border hover:bg-gray-100 ml-1">تفاصيل</button>
                       <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }}
                               disabled={cancel.isPending}
@@ -200,7 +200,7 @@ function LostSalesTrendsPanel({ branch }) {
   const daily = data?.daily || []
   const maxLost = Math.max(1, ...daily.map(d => d.lost_value))
   return (
-    <section className="border rounded-lg overflow-hidden">
+    <section className="border rounded-lg overflow-hidden" data-tour="pos-exceptions-trends">
       <header className="flex items-center justify-between px-3 py-2 bg-sky-50 border-b border-sky-200">
         <div className="flex items-center gap-2">
           <Badge tone="info" icon="trending" label={`اتجاه الفرص الضائعة (تاريخى${branch ? '' : ' — كل الفروع'})`} />

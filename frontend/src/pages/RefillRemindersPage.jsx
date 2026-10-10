@@ -64,11 +64,11 @@ export default function RefillRemindersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-1 rounded ${ov.send_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+          <span data-tour="followups-reminders-send-status" className={`text-xs px-2 py-1 rounded ${ov.send_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
             {ov.send_enabled ? 'الإرسال مفعّل' : 'الإرسال متوقف (معاينة فقط)'}
           </span>
           {ov.can_run && (
-            <button onClick={run} disabled={running}
+            <button onClick={run} disabled={running} data-tour="followups-reminders-run"
               className="px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40">
               {running ? '…' : 'تشغيل الآن'}
             </button>
@@ -77,7 +77,7 @@ export default function RefillRemindersPage() {
       </div>
       {runMsg && <div className="text-sm text-gray-600">{runMsg}</div>}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3" data-tour="followups-reminders-kpis">
         <Card label="أُرسل (30 يوم)" value={ov.sent} />
         <Card label="نسبة الرد" value={`${ov.reply_rate}%`} />
         <Card label="تجهيز في الفرع" value={ov.by_choice.branch || 0} tone="text-emerald-700" />
@@ -87,7 +87,7 @@ export default function RefillRemindersPage() {
         <Card label="أوقفوا التذكيرات" value={ov.opt_outs} sub="الإجمالي" />
       </div>
 
-      <div className="flex gap-1">
+      <div className="flex gap-1" data-tour="followups-reminders-tabs">
         {[['log', 'سجل التذكيرات'], ['preview', `التشغيل القادم (${pv ? pv.to_send.length : '…'})`]].map(([k, l]) => (
           <button key={k} onClick={() => setView(k)}
             className={`px-3 py-1.5 text-sm rounded-lg ${view === k ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{l}</button>
@@ -95,7 +95,7 @@ export default function RefillRemindersPage() {
       </div>
 
       {view === 'log' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="followups-reminders-log">
           <table className="w-full text-sm text-right">
             <thead className="text-xs text-gray-500 border-b">
               <tr><th className="py-2 px-3">العميل</th><th>الرقم</th><th>الفرع</th><th>موعد الصرف</th><th>الحالة</th><th>الرد</th><th>الحجز</th><th>أُرسل</th></tr>
@@ -121,7 +121,7 @@ export default function RefillRemindersPage() {
       )}
 
       {view === 'preview' && pv && (
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="followups-reminders-preview">
           <div className="flex flex-wrap gap-2">
             {Object.entries(pv.skipped).map(([k, n]) => (
               <span key={k} className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1">

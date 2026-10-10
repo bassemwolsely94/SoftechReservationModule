@@ -20,7 +20,7 @@ function toLatin(s) {
 
 function OrderCard({ o, onOpen }) {
   return (
-    <button onClick={onOpen}
+    <button onClick={onOpen} data-tour="delivery-mobile-board-card"
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="font-bold text-sm text-gray-900">{o.order_number || `#${o.id}`}</span>
@@ -62,7 +62,7 @@ export default function MobileDeliveryPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1" data-tour="delivery-mobile-board-filters">
         {DELIVERY_FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -80,7 +80,7 @@ export default function MobileDeliveryPage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="🚚" text="لا توجد طلبات توصيل" />
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5" data-tour="delivery-mobile-board-list">
           {rows.map(o => <OrderCard key={o.id} o={o} onOpen={() => navigate(`/m/delivery/${o.id}`)} />)}
           {hasNextPage && (
             <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}

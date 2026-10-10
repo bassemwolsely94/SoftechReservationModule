@@ -20,7 +20,7 @@ function toLatin(s) {
 function DemandCard({ d, onOpen }) {
   const items = (d.item_names || []).join('، ')
   return (
-    <button onClick={onOpen}
+    <button onClick={onOpen} data-tour="demand-mobile-list-card"
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="font-bold text-sm text-gray-900">{d.demand_number}</span>
@@ -62,7 +62,7 @@ export default function MobileDemandPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1" data-tour="demand-mobile-list-filters">
         {DEMAND_FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -80,7 +80,7 @@ export default function MobileDemandPage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="🔍" text="لا يوجد طلب ضائع" />
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5" data-tour="demand-mobile-list-list">
           {rows.map(d => <DemandCard key={d.id} d={d} onOpen={() => navigate(`/m/demand/${d.id}`)} />)}
           {hasNextPage && (
             <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}
@@ -91,7 +91,7 @@ export default function MobileDemandPage() {
         </div>
       )}
 
-      <button onClick={() => navigate('/m/demand/new')}
+      <button onClick={() => navigate('/m/demand/new')} data-tour="demand-mobile-list-new"
         className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
         title="تسجيل طلب ضائع">
         +

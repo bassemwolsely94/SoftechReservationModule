@@ -140,7 +140,7 @@ function MessageThread({ conv }) {
           <p className="text-xs text-gray-500">{conv.wa_id}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium
+          <span data-tour="omni-whatsapp-inbox-window" className={`text-xs px-2 py-0.5 rounded-full font-medium
             ${windowOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
             {windowOpen ? 'نافذة مفتوحة' : 'نافذة مغلقة'}
           </span>
@@ -159,7 +159,7 @@ function MessageThread({ conv }) {
       </div>
 
       {/* Compose */}
-      <div className="border-t border-gray-200 bg-white p-3">
+      <div className="border-t border-gray-200 bg-white p-3" data-tour="omni-whatsapp-inbox-compose">
         {!windowOpen && !templateMode && (
           <div className="mb-2 bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-xs text-yellow-700">
             نافذة الـ 24 ساعة مغلقة — يمكنك إرسال قوالب معتمدة فقط.
@@ -250,14 +250,14 @@ export default function WhatsAppInboxPage() {
       <div className="w-80 shrink-0 border-l border-gray-200 flex flex-col bg-white">
         <div className="px-3 py-3 border-b border-gray-100">
           <h1 className="font-bold text-gray-800 mb-2 text-lg">صندوق واتساب</h1>
-          <input
+          <input data-tour="omni-whatsapp-inbox-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="بحث برقم أو اسم..."
             className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-green-400"
           />
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" data-tour="omni-whatsapp-inbox-list">
           {isLoading ? (
             <p className="text-center text-gray-400 py-10 text-sm">جاري التحميل...</p>
           ) : conversations.length === 0 ? (
@@ -276,7 +276,7 @@ export default function WhatsAppInboxPage() {
       </div>
 
       {/* Right: thread */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" data-tour="omni-whatsapp-inbox-thread">
         {selected ? (
           <MessageThread conv={selected} />
         ) : (

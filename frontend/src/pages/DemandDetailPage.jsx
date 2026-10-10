@@ -190,7 +190,7 @@ function ActionBar({ demand, onAction, loading }) {
   )
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap" data-tour="demand-detail-actions">
 
       {/* Assign — new only, admin/CC/supervisor */}
       <CanDo module="demand" action="assign">
@@ -224,7 +224,7 @@ function ActionBar({ demand, onAction, loading }) {
 
       {/* Contact */}
       {canContact && !showNote && (
-        <button disabled={loading} onClick={() => setShowNote(true)}
+        <button disabled={loading} onClick={() => setShowNote(true)} data-tour="demand-detail-contact"
           className="text-sm px-4 py-2 rounded-lg font-semibold text-white transition-colors"
           style={{ background: BRAND }}>
           📞 تواصلت مع العميل
@@ -249,7 +249,7 @@ function ActionBar({ demand, onAction, loading }) {
       {/* Fulfill */}
       <CanDo module="demand" action="finalize">
         {canFulfill && !showERP && (
-          <button disabled={loading} onClick={() => setShowERP(true)}
+          <button disabled={loading} onClick={() => setShowERP(true)} data-tour="demand-detail-fulfill"
             className="text-sm px-4 py-2 rounded-lg font-semibold text-white"
             style={{ background: GREEN }}>
             تم التوريد
@@ -1040,7 +1040,7 @@ await map[action]()
             </button>
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap" data-tour="demand-detail-header">
                 <h1 className="text-xl font-black text-gray-900 font-mono">
                   {demand.demand_number}
                 </h1>
@@ -1069,7 +1069,7 @@ await map[action]()
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0 mt-3 border-b border-gray-200 overflow-x-auto -mb-px">
+          <div className="flex gap-0 mt-3 border-b border-gray-200 overflow-x-auto -mb-px" data-tour="demand-detail-tabs">
             <Tab icon="📋" label="التفاصيل"   active={tab === 'details'}   onClick={() => setTab('details')} />
             <Tab icon="💊" label="الأصناف"    active={tab === 'items'}     onClick={() => setTab('items')}
               count={demand.items?.length} />
@@ -1083,7 +1083,7 @@ await map[action]()
 
       {/* Tab content */}
       <div className="max-w-5xl mx-auto px-6 py-6">
-        <div className="card animate-fade-in">
+        <div className="card animate-fade-in" data-tour="demand-detail-content">
           {tab === 'details'   && <DetailsTab   demand={demand} />}
           {tab === 'items'     && <ItemsTab     demand={demand} onRefresh={invalidate} />}
           {tab === 'followups' && <FollowUpsTab demand={demand} onRefresh={invalidate} />}
