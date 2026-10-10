@@ -351,6 +351,8 @@ export const helpApi = {
   feedbackList: (params = {})    => api.get('/help/feedback/', { params }),
   resolveFeedback: (id, resolved = true) => api.post(`/help/feedback/${id}/resolve/`, { resolved }),
   stats:      (days = 30)        => api.get('/help/stats/', { params: { days } }),
+  tourEvent:  (payload)          => api.post('/help/tour-event/', payload),
+  usage:      (days = 30)        => api.get('/help/usage/', { params: { days } }),
   ask:        (payload)          => api.post('/help/ask/', payload),
   manual:     (params)           => api.get('/help/manual/', { params }),
   training:   (kind, key)        => api.get(`/help/training/${kind}/${key}/`),

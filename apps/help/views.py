@@ -425,3 +425,79 @@ def ask(request):
         'sources': [_brief(by_key[k], modules) for k in sources],
         'articles': [{**_brief(s, modules), 'routes': s['routes']} for s in articles],
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tour_event(request):
+    """The frontend reports a finished or abandoned «اعرض لي» tour:
+    {screen_key, reached (steps seen), done (bool)} — for the trainers' usage report."""
+    _, screens = registry.load()
+    key = str(request.data.get('screen_key', ''))
+    s = screens.get(key)
+    if s is None or not s.get('tour'):
+        return Response({'detail': 'unknown tour'}, status=400)
+    try:
+        reached = max(1, min(int(request.data.get('reached', 1)), len(s['tour'])))
+    except (TypeError, ValueError):
+        reached = 1
+    done = bool(request.data.get('done')) and reached == len(s['tour'])
+    _log(HelpEvent.KIND_TOUR, request, screen_key=key, query='done' if done else '', results=reached)
+    return Response({'ok': True}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def usage(request):
+    """Trainers: help that is NOT being used in the period — screens whose help nobody
+    opened (by module, and those on a role's training path), and how tours are used
+    (runs, finished %, where people stop; tours never run)."""
+    if not _can_edit(_profile(request)):
+        return Response({'detail': 'forbidden'}, status=403)
+    from apps.users.models import ROLE_CHOICES
+    from . import training
+    try:
+        days = max(1, min(int(request.query_params.get('days', 30)), 365))
+    except ValueError:
+        days = 30
+    since = timezone.now() - timezone.timedelta(days=days)
+    modules, screens = registry.load()
+    opened = set(HelpEvent.objects.filter(kind=HelpEvent.KIND_OPEN, created_at__gte=since)
+                 .values_list('screen_key', flat=True).distinct())
+    unopened = [k for k in screens if k not in opened]
+    path_ov = training.overrides('path')
+    on_path = {}
+    for role, _ in ROLE_CHOICES:
+        for k in training.path(role, path_ov):
+            on_path.setdefault(k, []).append(role)
+
+    tours = {}
+    for e in HelpEvent.objects.filter(kind=HelpEvent.KIND_TOUR, created_at__gte=since).values('screen_key', 'query', 'results'):
+        t = tours.setdefault(e['screen_key'], {'runs': 0, 'done': 0, 'stops': {}})
+        t['runs'] += 1
+        if e['query'] == 'done':
+            t['done'] += 1
+        else:
+            t['stops'][e['results'] or 1] = t['stops'].get(e['results'] or 1, 0) + 1
+    tour_rows = []
+    for k, s in screens.items():
+        if not s.get('tour'):
+            continue
+        t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
+        stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None
+        tour_rows.append({
+            'screen_key': k, 'title': s['title'], 'steps': len(s['tour']),
+            'runs': t['runs'], 'done': t['done'],
+            'done_pct': round(100 * t['done'] / t['runs']) if t['runs'] else None,
+            # the step most people stopped after (the next one is probably unclear / not visible)
+            'common_stop': stop,
+        })
+    tour_rows.sort(key=lambda r: (r['runs'] > 0, r['done_pct'] if r['done_pct'] is not None else 101))
+    return Response({
+        'days': days,
+        'screens_total': len(screens),
+        'unopened': [{'screen_key': k, 'title': screens[k]['title'], 'module': screens[k]['module'],
+                      'module_title': modules[screens[k]['module']]['title'],
+                      'on_paths': on_path.get(k, [])} for k in unopened],
+        'tours': tour_rows,
+    })

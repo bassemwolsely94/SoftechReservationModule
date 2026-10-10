@@ -694,3 +694,32 @@ class AnnounceChangesTests(TestCase):
         r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}}, format='json')
         self.assertEqual(r.json()['notified'], 1)
         self.assertEqual(training.announce_changes(), {'paths': 0, 'quizzes': 0})
+
+
+class HelpUsageTests(TestCase):
+    def setUp(self):
+        branch = make_branch()
+        u1, _, _ = make_user('us_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('us_ph', role='pharmacist', branch=branch)
+        self.admin, self.ph = APIClient(), APIClient()
+        self.admin.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u1)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def test_tour_events_and_report(self):
+        _, screens = registry.load()
+        n = len(screens['reservations.board']['tour'])
+        ok = self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': n, 'done': True}, format='json')
+        self.assertEqual(ok.status_code, 201)
+        self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': 2, 'done': True}, format='json')
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'general.me'}, format='json').status_code, 400)
+        self.ph.get('/api/help/screens/reservations.board/')
+        self.assertEqual(self.ph.get('/api/help/usage/').status_code, 403)
+        r = self.admin.get('/api/help/usage/?days=7').json()
+        row = next(t for t in r['tours'] if t['screen_key'] == 'reservations.board')
+        self.assertEqual((row['runs'], row['done'], row['done_pct'], row['common_stop']), (2, 1, 50, 2))
+        unopened = {u['screen_key'] for u in r['unopened']}
+        self.assertNotIn('reservations.board', unopened)
+        self.assertIn('pos.order', unopened)
+        pos = next(u for u in r['unopened'] if u['screen_key'] == 'pos.order')
+        self.assertIn('pharmacist', pos['on_paths'])
+        self.assertTrue(any(t['runs'] == 0 for t in r['tours']))

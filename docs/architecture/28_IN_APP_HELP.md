@@ -78,7 +78,7 @@ must not get wrong → add a quiz question.
 - Calm: the dimmed mask ignores clicks (the highlighted button can be pressed for real); leaving the
   screen ends the tour; a step whose element is not visible (other tab, role, nothing selected)
   still shows its text with a note. Runner: `frontend/src/help/Tour.jsx` (mounted by `HelpPanel`).
-- Built for 44 screens — desktop: reservation / demand / transfer detail, transits, customers list, product catalog + product, omni inbox, dispatch board, rider app, POS exceptions, HR approvals; sales analytics, KPI board, finance dashboard, expenses, insurance
+- Built for 56 screens — desktop: call-center cases, WhatsApp inbox, loyalty program + branch points, refill reminders, cash optimization, supplier performance, market shortages, replacement cases; mobile: demand list + detail, delivery board; reservation / demand / transfer detail, transits, customers list, product catalog + product, omni inbox, dispatch board, rider app, POS exceptions, HR approvals; sales analytics, KPI board, finance dashboard, expenses, insurance
   claims + claim, purchasing engine, supply, users, permissions matrix, sync; POS, reservations board + new, demand list, transfers list + new,
   stock count, follow-ups, delivery dashboard, customer detail, shortages, call-center operator, HR
   requests, tasks, vouchers; mobile: POS, reservations, new demand, transfers, stock count,
@@ -100,6 +100,14 @@ must not get wrong → add a quiz question.
 - No model configured or it fails → the matching articles are shown instead (still useful).
 - 30 questions per person per hour. Every question is logged (`HelpEvent kind=ask`, `results=0`
   when unanswered) and listed for trainers — unanswered questions = help that needs writing.
+
+## Usage report — help nobody uses (built 2026-10-10)
+
+«للمدربين» → for the selected period: screens whose help nobody opened (those on a role's training
+path first — people should have read them), and «اعرض لي» tours: runs, % finished, the step most
+people stop after (the next step is probably unclear or its button not visible), tours never run.
+The tour runner reports its end once (`POST /api/help/tour-event/` → `HelpEvent kind=tour`,
+`results` = steps reached, `query='done'` when finished); report: `GET /api/help/usage/?days=`.
 
 ## Trainers (help/edit)
 
@@ -174,4 +182,4 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (only ~44 of 176 have one; the panel shows the button only where one exists).
+- Tours for the remaining screens (only ~56 of 176 have one; the panel shows the button only where one exists).

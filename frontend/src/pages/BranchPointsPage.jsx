@@ -31,7 +31,7 @@ function BalanceCard({ customer }) {
   const loading     = isLoading || isFetching
 
   return (
-    <div className="w-full max-w-md" dir="rtl">
+    <div className="w-full max-w-md" dir="rtl" data-tour="loyalty-branch-balance">
       {/* Customer header */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="bg-gray-800 px-6 py-4 text-white flex items-center justify-between">
@@ -70,7 +70,7 @@ function BalanceCard({ customer }) {
         {/* Refresh */}
         {!warning && (
           <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between">
-            <button
+            <button data-tour="loyalty-branch-refresh"
               onClick={() => refetch()}
               disabled={loading}
               className="text-sm text-green-600 hover:text-green-700 disabled:opacity-40 font-medium"
@@ -88,7 +88,7 @@ function BalanceCard({ customer }) {
 
       {/* Messaging tip for the branch agent */}
       {!warning && !loading && (
-        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700" dir="rtl">
+        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700" dir="rtl" data-tour="loyalty-branch-tip">
           <p>
             <span className="font-semibold">للعميل:</span>{' '}
             رصيدك الحالي هو{' '}
@@ -108,7 +108,7 @@ export default function BranchPointsPage() {
 
   return (
     <div className="min-h-full bg-gray-50 flex flex-col items-center px-4 py-12" dir="rtl">
-      <div className="w-full max-w-md mb-8 text-center">
+      <div className="w-full max-w-md mb-8 text-center" data-tour="loyalty-branch-header">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">استعلام عن نقاط العميل</h1>
         <p className="text-gray-500 text-sm">للعملاء الزائرين للفرع</p>
       </div>
@@ -124,7 +124,7 @@ export default function BranchPointsPage() {
       {customer && (
         <div className="mt-6 w-full flex flex-col items-center">
           <BalanceCard customer={customer} />
-          <button
+          <button data-tour="loyalty-branch-new-search"
             onClick={() => setCustomer(null)}
             className="mt-4 text-sm text-gray-400 hover:text-gray-600"
           >

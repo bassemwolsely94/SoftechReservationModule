@@ -10,6 +10,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { helpApi } from '../api/client'
 import useLangStore from '../store/langStore'
 import useHelpStore from './helpStore'
 import { pick } from './text'
@@ -44,6 +45,16 @@ function TourBody({ tour }) {
   const step = tour.steps[tour.i]
   const last = tour.i === tour.steps.length - 1
 
+  // usage for trainers: how far people get (sent once, when the tour really ends)
+  const reached = useRef(1)
+  const finished = useRef(false)
+  reached.current = Math.max(reached.current, tour.i + 1)
+  useEffect(() => () => {
+    if (useHelpStore.getState().tour) return          // re-mount (dev), not an end
+    helpApi.tourEvent({ screen_key: tour.key, reached: reached.current, done: finished.current }).catch(() => {})
+  }, [tour.key])
+  const finish = () => { finished.current = true; endTour() }
+
   // leaving the screen ends the tour
   useEffect(() => { if (pathname !== startPath.current) endTour() }, [pathname, endTour])
 
@@ -70,12 +81,12 @@ function TourBody({ tour }) {
     const onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); endTour() }
       if (e.key === 'Enter' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-        e.preventDefault(); last ? endTour() : tourStep(tour.i + 1)
+        e.preventDefault(); last ? finish() : tourStep(tour.i + 1)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [tour.i, last, endTour, tourStep])
+  }, [tour.i, last, endTour, tourStep])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const vw = window.innerWidth
   const vh = window.innerHeight
@@ -125,7 +136,7 @@ function TourBody({ tour }) {
               {en ? 'Back' : 'السابق'}
             </button>
           )}
-          <button type="button" onClick={() => (last ? endTour() : tourStep(tour.i + 1))}
+          <button type="button" onClick={() => (last ? finish() : tourStep(tour.i + 1))}
                   className="ms-auto text-xs bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700">
             {last ? (en ? 'Done' : 'تمام') : (en ? 'Next' : 'التالي')}
           </button>

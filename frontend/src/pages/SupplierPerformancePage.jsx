@@ -88,7 +88,7 @@ function SupplierDetail({ supplierCode, onBack }) {
       </button>
 
       {/* Header */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm" data-tour="purchasing-suppliers-detail">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">{s.supplier_name}</h2>
@@ -122,7 +122,7 @@ function SupplierDetail({ supplierCode, onBack }) {
       </div>
 
       {/* Scoring Breakdown */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm" data-tour="purchasing-suppliers-score">
         <h3 className="font-semibold text-gray-700 mb-3">تفصيل الدرجة</h3>
         <ScoreBar label="هامش الربح (×0.30)" value={s.score_margin} color="#10b981" />
         <ScoreBar label="التوافر / التكرار (×0.25)" value={s.score_availability} color="#3b82f6" />
@@ -230,14 +230,14 @@ export default function SupplierPerformancePage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
-        <input
+        <input data-tour="purchasing-suppliers-search"
           type="text"
           placeholder="بحث باسم أو كود المورد…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64"
         />
-        <select
+        <select data-tour="purchasing-suppliers-sort"
           value={ordering}
           onChange={e => setOrdering(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -250,7 +250,7 @@ export default function SupplierPerformancePage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto" data-tour="purchasing-suppliers-table">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="border-b border-gray-200 text-xs text-gray-500">
@@ -271,7 +271,7 @@ export default function SupplierPerformancePage() {
             ) : paged.length === 0 ? (
               <tr><td colSpan={9} className="py-8 text-center text-gray-400">لا توجد نتائج</td></tr>
             ) : paged.map(s => (
-              <tr
+              <tr data-tour="purchasing-suppliers-row"
                 key={s.supplier_code}
                 className="border-b border-gray-100 hover:bg-brand-50 cursor-pointer"
                 onClick={() => navigate(`/procurement/suppliers/${s.supplier_code}`)}

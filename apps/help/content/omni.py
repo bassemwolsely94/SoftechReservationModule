@@ -138,6 +138,18 @@ SCREENS = [
         'tips': [T('الصندوق الموحّد يجمع واتساب مع باقي القنوات — استخدمه للعمل اليومي.', 'The unified inbox combines WhatsApp with the other channels — use it for daily work.')],
         'workflows': [],
         'related': ['omni.inbox'],
+        'tour': [
+            {'target': 'omni-whatsapp-inbox-search', 'text': T('ابحث برقم أو اسم.',
+                                              'Search by number or name.')},
+            {'target': 'omni-whatsapp-inbox-list', 'text': T('محادثات واتساب.',
+                                              'The WhatsApp conversations.')},
+            {'target': 'omni-whatsapp-inbox-thread', 'text': T('المحادثة المختارة.',
+                                              'The selected conversation.')},
+            {'target': 'omni-whatsapp-inbox-window', 'text': T('نافذة الـ24 ساعة: لو مقفولة، تقدر تبعت قالب معتمد بس.',
+                                              'The 24-hour window: when closed, only an approved template can be sent.')},
+            {'target': 'omni-whatsapp-inbox-compose', 'text': T('اكتب رسالتك، أو 📋 لاختيار قالب.',
+                                              'Write your message, or 📋 to pick a template.')},
+        ],
         'updated': '2026-10-10',
     },
     {

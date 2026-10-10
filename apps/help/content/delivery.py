@@ -184,6 +184,14 @@ SCREENS = [
         'audience': T('مسؤول التوزيع والمديرون والكول سنتر.', 'The dispatcher, managers and the call center.'),
         'steps': [T('اضغط طلباً ثم «إرسال رابط التتبع للعميل» لو سأل عن طلبه.', 'Tap an order, then "Send tracking link" if the customer asks about it.')],
         'related': ['delivery.dashboard'],
+        'tour': [
+            {'target': 'delivery-mobile-board-filters', 'text': T('فلتر حالة الطلبات.',
+                                              'Order status filter.')},
+            {'target': 'delivery-mobile-board-list', 'text': T('طلبات التوصيل.',
+                                              'The delivery orders.')},
+            {'target': 'delivery-mobile-board-card', 'text': T('اضغط على طلب لتفاصيله: اتصال، واتساب، الموقع، ورابط التتبع.',
+                                              'Tap an order for its details: call, WhatsApp, location and the tracking link.')},
+        ],
         'updated': '2026-10-10',
     },
 ]

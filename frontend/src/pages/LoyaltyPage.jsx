@@ -51,7 +51,7 @@ function AccountCard({ customerId, onAdjust }) {
   const hasPic    = !!data.softech_pic
 
   return (
-    <div className="rounded-xl overflow-hidden shadow-sm" dir="rtl">
+    <div className="rounded-xl overflow-hidden shadow-sm" dir="rtl" data-tour="loyalty-program-account">
       {/* SOFTECH balance — primary / authoritative */}
       <div className="bg-gradient-to-br from-green-600 to-green-800 p-5 text-white">
         <div className="flex items-start justify-between mb-3">
@@ -84,7 +84,7 @@ function AccountCard({ customerId, onAdjust }) {
 
       {/* Actions */}
       <div className="bg-gray-50 px-5 py-3 flex gap-2">
-        <button
+        <button data-tour="loyalty-program-adjust"
           onClick={onAdjust}
           disabled={!hasPic}
           className="flex-1 bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-medium
@@ -108,7 +108,7 @@ function TransactionLedger({ customerId }) {
   const txs = data?.results || data || []
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl" data-tour="loyalty-program-ledger">
       <div className="px-4 py-3 border-b border-gray-100">
         <h3 className="font-semibold text-gray-800 text-sm">سجل المعاملات</h3>
       </div>
@@ -258,7 +258,7 @@ function RewardCatalog() {
   const rewards = data?.results || data || []
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl" data-tour="loyalty-program-rewards">
       <div className="px-4 py-3 border-b border-gray-100">
         <h3 className="font-semibold text-gray-800 text-sm">كتالوج المكافآت</h3>
       </div>
@@ -325,11 +325,11 @@ export default function LoyaltyPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <h1 className="text-xl font-bold text-gray-800 mb-6">نظام النقاط والولاء</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-6" data-tour="loyalty-program-header">نظام النقاط والولاء</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left column */}
-        <div className="space-y-4">
+        <div className="space-y-4" data-tour="loyalty-program-customer">
           <CustomerSearchWidget
             selected={customer}
             onSelect={setCustomer}

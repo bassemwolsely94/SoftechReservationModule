@@ -75,7 +75,7 @@ export default function MobileDeliveryDetailPage() {
             </span>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-tour="delivery-mobile-board-contact">
           {o.customer_phone && (
             <a href={`tel:${o.customer_phone}`} className="flex-1 text-center text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl py-2 font-medium" dir="ltr">📞 اتصال</a>
           )}
@@ -86,13 +86,13 @@ export default function MobileDeliveryDetailPage() {
             <a href={o.google_maps_url} target="_blank" rel="noreferrer" className="flex-1 text-center text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-xl py-2 font-medium">🗺️ الموقع</a>
           )}
         </div>
-        <button onClick={shareTracking} className="mt-2 w-full text-center text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl py-2 font-medium">
+        <button onClick={shareTracking} data-tour="delivery-mobile-board-tracking" className="mt-2 w-full text-center text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-xl py-2 font-medium">
           📍 إرسال رابط التتبع للعميل
         </button>
       </div>
 
       {/* Info */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50" data-tour="delivery-mobile-board-info">
         <Row label="العميل">{o.customer_name || '—'}</Row>
         {o.customer_phone && <Row label="الهاتف"><span dir="ltr">{o.customer_phone}</span></Row>}
         {address && <Row label="العنوان">{address}</Row>}
@@ -120,7 +120,7 @@ export default function MobileDeliveryDetailPage() {
 
       {/* Status timeline */}
       {logs.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="delivery-mobile-board-timeline">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">📜 سجل الحالة</h2>
           <div className="space-y-2.5">
             {logs.map(l => (

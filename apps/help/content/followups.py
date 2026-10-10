@@ -140,6 +140,18 @@ SCREENS = [
               'The message does not name the medicine (patient privacy); the pharmacist confirms the items when preparing.'),
         ],
         'related': ['followups.tasks', 'reservations.board'],
+        'tour': [
+            {'target': 'followups-reminders-send-status', 'text': T('هل الإرسال مفعّل، ولا معاينة بس.',
+                                              'Whether sending is on, or preview only.')},
+            {'target': 'followups-reminders-kpis', 'text': T('المرسل في آخر 30 يوم ونسبة الرد.',
+                                              'Sent in the last 30 days and the reply rate.')},
+            {'target': 'followups-reminders-tabs', 'text': T('«سجل التذكيرات» أو «التشغيل القادم».',
+                                              '"Reminder log" or "Next run".')},
+            {'target': 'followups-reminders-log', 'text': T('التذكيرات اللي اتبعتت ونتيجتها.',
+                                              'The reminders sent and their outcome.')},
+            {'target': 'followups-reminders-run', 'text': T('«تشغيل الآن» للمشرفين.',
+                                              '"Run now" for supervisors.')},
+        ],
         'updated': '2026-10-10',
     },
 ]

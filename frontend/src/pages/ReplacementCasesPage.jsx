@@ -58,7 +58,7 @@ export default function ReplacementCasesPage() {
             إعادة بناء من بيانات SOFTECH — للقراءة فقط.
           </p>
         </div>
-        <button onClick={() => nav('/replacement/new')} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm">➕ حالة جديدة</button>
+        <button onClick={() => nav('/replacement/new')} data-tour="replacement-cases-new" className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm">➕ حالة جديدة</button>
         {s?.last_run && (
           <span className="text-[11px] text-gray-500">
             آخر إعادة بناء: {String(s.last_run.finished_at || s.last_run.started_at).slice(0, 16).replace('T', ' ')}
@@ -67,7 +67,7 @@ export default function ReplacementCasesPage() {
         )}
       </div>
 
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap" data-tour="replacement-cases-kpis">
         <Kpi label="عدد الحالات" value={t.n ?? '—'} sub={`قيمة الأرصدة ${money(t.entitlement)}`} />
         <Kpi label="صُرف منتجات" value={money(t.redeemed_products)} tone="text-emerald-700" />
         <Kpi label="صُرف نقداً" value={money(t.redeemed_cash)} tone="text-indigo-700" />
@@ -80,7 +80,7 @@ export default function ReplacementCasesPage() {
       </div>
 
       {!!s?.exceptions?.length && (
-        <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-2 flex-wrap items-center" data-tour="replacement-cases-exceptions">
           <span className="text-xs text-gray-500">الاستثناءات المفتوحة:</span>
           {s.exceptions.map((e) => (
             <button key={`${e.exception_type}-${e.severity}`} onClick={() => set('exception_type',
@@ -93,7 +93,7 @@ export default function ReplacementCasesPage() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap items-center bg-white border border-gray-200 rounded-xl p-3">
+      <div className="flex gap-2 flex-wrap items-center bg-white border border-gray-200 rounded-xl p-3" data-tour="replacement-cases-filters">
         <input value={f.q} onChange={(e) => set('q', e.target.value)} placeholder="بحث: رقم حالة، PIC، اسم، موبايل، أي رقم مستند، كود صنف…"
                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[260px]" />
         <input value={f.branch} onChange={(e) => set('branch', e.target.value)} placeholder="فرع"
@@ -120,7 +120,7 @@ export default function ReplacementCasesPage() {
         </label>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto" data-tour="replacement-cases-table">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-[11px] text-gray-500">
             <tr>
@@ -162,7 +162,7 @@ export default function ReplacementCasesPage() {
         </table>
       </div>
 
-      <div className="flex items-center gap-2 justify-center text-sm">
+      <div className="flex items-center gap-2 justify-center text-sm" data-tour="replacement-cases-pager">
         <button disabled={f.page <= 1} onClick={() => set('page', f.page - 1)} className="px-3 py-1 border rounded-lg disabled:opacity-40">السابق</button>
         <span className="text-gray-600">صفحة {f.page} من {pages} · {list.data?.count ?? 0} حالة</span>
         <button disabled={f.page >= pages} onClick={() => set('page', f.page + 1)} className="px-3 py-1 border rounded-lg disabled:opacity-40">التالي</button>

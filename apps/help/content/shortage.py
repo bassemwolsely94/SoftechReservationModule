@@ -77,6 +77,18 @@ SCREENS = [
         'steps': [{'text': T('«تشغيل المحرك ومزامنة البيانات» لتحديث القائمة (تأكد أن المبيعات غير متأخرة).', '"Run engine and sync data" to refresh the list (make sure sales data is not behind).'), 'roles': ['admin', 'purchasing']}],
         'workflows': [],
         'related': ['shortage.list', 'shortage.phantom', 'purchasing.engine'],
+        'tour': [
+            {'target': 'shortage-market-kpis', 'text': T('النواقص المؤكدة والجديدة واللي ممكن توفّرت والخسارة الشهرية.',
+                                              'Confirmed and new shortages, ones that may be available again, and the monthly loss.')},
+            {'target': 'shortage-market-tabs', 'text': T('التغييرات، المرشحون، المؤكدة، المستبعدة، والاتجاهات.',
+                                              'Changes, candidates, confirmed, excluded and trends.')},
+            {'target': 'shortage-market-toolbar', 'text': T('فلتر وبحث وتصدير Excel أو واتساب.',
+                                              'Filter, search and export to Excel or WhatsApp.')},
+            {'target': 'shortage-market-table', 'text': T('الأصناف — راجع وأكّد أو استبعد.',
+                                              'The items — review and confirm or exclude.')},
+            {'target': 'shortage-market-run', 'text': T('«🔄 تشغيل المحرك» يحدّث التحليل.',
+                                              '"🔄 Run the engine" refreshes the analysis.')},
+        ],
         'updated': '2026-10-10',
     },
     {
