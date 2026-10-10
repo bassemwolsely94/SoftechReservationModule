@@ -152,3 +152,17 @@ class HelpTrainingOverride(models.Model):
         constraints = [models.UniqueConstraint(fields=['kind', 'key'], name='help_training_override_once')]
         verbose_name = 'تعديل مسار/اختبار تدريبي'
         verbose_name_plural = 'تعديلات المسارات والاختبارات'
+
+
+class HelpTrainingSnapshot(models.Model):
+    """What people were last told about: a role's path (list of screen keys) or a
+    quiz's version. The hourly check (training.announce_changes) compares the current
+    paths/quizzes — repo or trainer — with this and notifies only the difference, so a
+    developer adding a screen to a role's path in the code reaches people too."""
+    kind       = models.CharField(max_length=10)     # 'path' | 'quiz'
+    key        = models.CharField(max_length=40)
+    data       = models.JSONField(default=list)      # path: [screen keys]; quiz: "version"
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['kind', 'key'], name='help_training_snapshot_once')]

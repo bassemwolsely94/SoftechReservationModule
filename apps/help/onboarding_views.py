@@ -302,11 +302,15 @@ def training_edit(request, kind, key):
 
 
 def _announce(kind, key, before, after, revision_id):
-    """Tell the people affected (see notify.py). → number notified."""
+    """Tell the people affected (see notify.py), then record the new state as
+    announced so the hourly check does not tell them again. → number notified."""
     from . import notify
     if kind == 'path':
-        return notify.path_changed(key, before or [], after or [], revision_id)
-    if not after:            # quiz removed — nothing to retake
-        return 0
-    return notify.quiz_changed(key, training.quiz_version(before or []),
-                               training.quiz_version(after), revision_id)
+        n = notify.path_changed(key, before or [], after or [], revision_id)
+    elif not after:          # quiz removed — nothing to retake
+        n = 0
+    else:
+        n = notify.quiz_changed(key, training.quiz_version(before or []),
+                                training.quiz_version(after), revision_id)
+    training.record_snapshot(kind, key)
+    return n

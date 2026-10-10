@@ -51,6 +51,12 @@ the quiz is unchanged; after a trainer (or developer) edit it shows as `stale` (
 role; a quiz changed → everyone who had passed the old version. The editor shows how many were
 notified.
 
+**Developer changes too (built 2026-10-10):** `HelpTrainingSnapshot` keeps what people were last
+told (each role's path, each quiz's version). `training.announce_changes()` — hourly scheduler job
+`help_announce_training` (minute 20) and `manage.py help_announce_training` (run after a deploy to
+announce at once) — notifies only the difference, then records it. The first run only records.
+Trainer saves record the snapshot too, so nothing is announced twice.
+
 **Rule:** a new screen a role must use → add it to that role's `ROLE_PATHS`; a new rule users
 must not get wrong → add a quiz question.
 
@@ -169,4 +175,3 @@ as they appear on screen («…»).
 ## Next steps (proposed, not built)
 
 - Tours for the remaining screens (only ~32 of 176 have one; the panel shows the button only where one exists).
-- Notify when developers (not trainers) add screens to a role path in the repo — needs a deploy-time check.

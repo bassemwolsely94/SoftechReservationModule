@@ -643,3 +643,54 @@ class TrainingNotifyTests(TestCase):
         # reverting to the original changes the quiz again → the first pass counts again, no one to tell
         r = t.delete('/api/help/training/quiz/pos/', {}, format='json')
         self.assertTrue(best()['passed'])
+
+
+class AnnounceChangesTests(TestCase):
+    """The hourly check notifies repo (developer) changes to paths and quizzes once,
+    and does not repeat what a trainer's save already announced."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_repo_path_change_notified_once(self):
+        from unittest import mock
+        from apps.help import training
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        _, seller = self._client('salesperson', 'an_sales')
+        self.assertEqual(training.announce_changes(), {'paths': 0, 'quizzes': 0})   # first run records
+        new_paths = {**onboarding.ROLE_PATHS, 'salesperson': onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']}
+        with mock.patch.object(onboarding, 'ROLE_PATHS', new_paths):
+            self.assertEqual(training.announce_changes()['paths'], 1)
+            self.assertEqual(training.announce_changes()['paths'], 0)
+        self.assertEqual(Notification.objects.filter(recipient=seller, title__contains='مسارك').count(), 1)
+
+    def test_repo_quiz_change_notifies_passers(self):
+        from unittest import mock
+        from apps.help import training
+        from apps.help.content import onboarding
+        c, ph = self._client('pharmacist', 'an_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        training.announce_changes()
+        changed = {**onboarding.QUIZZES, 'pos': onboarding.QUIZZES['pos'][:1]}
+        with mock.patch.object(onboarding, 'QUIZZES', changed):
+            self.assertEqual(training.announce_changes()['quizzes'], 1)
+            self.assertEqual(training.announce_changes()['quizzes'], 0)
+
+    def test_trainer_save_not_announced_twice(self):
+        from apps.help import training
+        from apps.help.content import onboarding
+        training.announce_changes()
+        t, _ = self._client('admin', 'an_admin')
+        self._client('salesperson', 'an_sales2')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertEqual(training.announce_changes(), {'paths': 0, 'quizzes': 0})

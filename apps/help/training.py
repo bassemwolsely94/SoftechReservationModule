@@ -126,3 +126,43 @@ def clean_quiz(data):
         return {'ar': v['ar'].strip(), 'en': (v.get('en') or '').strip()}
     return {'questions': [{'q': t(q['q']), 'options': [t(o) for o in q['options']],
                            'answer': q['answer'], 'explain': t(q['explain'])} for q in data['questions']]}
+
+
+# ── announcing changes (repo or trainer) ──────────────────────────────────────
+
+def record_snapshot(kind, key):
+    """Remember the current path / quiz version as already announced."""
+    from .models import HelpTrainingSnapshot
+    if kind == 'path':
+        data = path(key)
+    else:
+        data = quiz_version(quizzes().get(key) or [])
+    HelpTrainingSnapshot.objects.update_or_create(kind=kind, key=key, defaults={'data': data})
+
+
+def announce_changes():
+    """Notify what changed since the last snapshot — screens added to a role's path,
+    quizzes whose questions changed — then store the new snapshot. The first run only
+    records (nothing to compare with). → {'paths': n_notified, 'quizzes': n_notified}."""
+    from apps.users.models import ROLE_CHOICES
+    from . import notify
+    from .models import HelpTrainingSnapshot
+    snaps = {(s.kind, s.key): s.data for s in HelpTrainingSnapshot.objects.all()}
+    sent = {'paths': 0, 'quizzes': 0}
+    path_ov = overrides(HelpTrainingOverride.KIND_PATH)
+    for role, _ in ROLE_CHOICES:
+        cur = path(role, path_ov)
+        old = snaps.get(('path', role))
+        if old is not None and cur != old:
+            sent['paths'] += notify.path_changed(role, old, cur, 'auto-' + _hash(cur)[:10])
+        if old != cur:
+            HelpTrainingSnapshot.objects.update_or_create(kind='path', key=role, defaults={'data': cur})
+    qz = quizzes()
+    for module in set(qz) | {k for (kind, k) in snaps if kind == 'quiz'}:
+        cur = quiz_version(qz.get(module) or [])
+        old = snaps.get(('quiz', module))
+        if old is not None and cur != old and qz.get(module):
+            sent['quizzes'] += notify.quiz_changed(module, old, cur, 'auto-' + cur)
+        if old != cur:
+            HelpTrainingSnapshot.objects.update_or_create(kind='quiz', key=module, defaults={'data': cur})
+    return sent
