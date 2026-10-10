@@ -2217,7 +2217,7 @@ export default function PurchasingDashboard() {
 
             {/* Export button + dropdown */}
             <div className="relative" ref={exportRef}>
-              <button
+              <button data-tour="purchasing-engine-export"
                 onClick={() => setExportOpen(v => !v)}
                 disabled={exporting}
                 className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700
@@ -2433,7 +2433,7 @@ export default function PurchasingDashboard() {
                   </button>
                   )}
                   {/* ▶ Run — incremental (gap-based lookback, typically < 1 min) */}
-                  <button
+                  <button data-tour="purchasing-engine-run"
                     onClick={() => triggerMutation.mutate({ full: false })}
                     disabled={isRunning || triggerMutation.isLoading}
                     className="text-xs px-3 py-1.5 bg-brand-600 text-white hover:bg-brand-700
@@ -2456,7 +2456,7 @@ export default function PurchasingDashboard() {
 
         {/* Summary cards */}
         {summaryData && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3" data-tour="purchasing-engine-summary">
             <SummaryCard
               label="إجمالي الأصناف"
               value={fmt(s.totalItems, 0)}
@@ -2505,7 +2505,7 @@ export default function PurchasingDashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
           {/* View tabs */}
-          <div className="flex items-center border-b border-gray-100 px-4 pt-3 gap-1">
+          <div className="flex items-center border-b border-gray-100 px-4 pt-3 gap-1" data-tour="purchasing-engine-view-tabs">
             {VIEW_TABS.map(t => (
               <button
                 key={t.value}
@@ -2524,7 +2524,7 @@ export default function PurchasingDashboard() {
           {/* ABC filter + search bar — hidden on Transfer and Lost Sales tabs */}
           {viewTab !== 'transfer' && viewTab !== 'lostsales' && (
             <>
-              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100" data-tour="purchasing-engine-abc-filter">
                 {ABC_TABS.map(t => (
                   <button
                     key={t.value}
@@ -2552,7 +2552,7 @@ export default function PurchasingDashboard() {
                 </button>
 
                 <div className="mr-auto">
-                  <input
+                  <input data-tour="purchasing-engine-search"
                     type="text"
                     placeholder="ابحث عن صنف..."
                     value={search}

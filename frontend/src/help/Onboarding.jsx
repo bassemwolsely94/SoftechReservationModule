@@ -133,7 +133,9 @@ export function MyPath({ lang, go, canPreview }) {
             <button key={q.module} type="button" onClick={() => go({ tab: 'path', quiz: q.module })}
                     className="w-full text-start rounded-lg border border-line px-3 py-2 flex items-center gap-2 hover:border-brand-300">
               <span className="flex-1 text-sm text-content">{q.icon} {pick(q.title, lang)}</span>
-              {q.best
+              {q.best?.stale
+                ? <span className="text-[11px] text-amber-700">{en(lang) ? '⟳ Quiz changed — retake' : '⟳ اتغيّر — أعد الاختبار'}</span>
+                : q.best
                 ? <span className={`text-[11px] tabnum ${q.best.passed ? 'text-emerald-700' : 'text-red-600'}`}>
                     {q.best.passed ? '✓ ' : ''}{q.best.score}/{q.best.total}
                   </span>
@@ -176,7 +178,8 @@ export function Quiz({ moduleKey, lang, onBack }) {
         <h2 className="text-lg font-bold text-content">📝 {pick(data.title, lang)}</h2>
         <div className="text-xs text-muted">
           {en(lang) ? `${data.questions.length} questions · pass mark ${data.pass_percent}%` : `${data.questions.length} أسئلة · درجة النجاح ${data.pass_percent}%`}
-          {data.best && (en(lang) ? ` · your best ${data.best.score}/${data.best.total}` : ` · أفضل نتيجة لك ${data.best.score}/${data.best.total}`)}
+          {data.best?.stale && (en(lang) ? ' · this quiz changed since you passed it — retake it to count' : ' · الاختبار اتغيّر بعد ما نجحت — أعده عشان يتحسب')}
+          {data.best && !data.best.stale && (en(lang) ? ` · your best ${data.best.score}/${data.best.total}` : ` · أفضل نتيجة لك ${data.best.score}/${data.best.total}`)}
         </div>
       </div>
       {result && (
@@ -252,6 +255,7 @@ export function TeamProgress() {
             <span className="col-span-2 text-xs text-muted tabnum">{r.progress.learned}/{r.progress.screens} · {r.progress.quizzes_passed}/{r.progress.quizzes}</span>
             <span className="col-span-2 text-[11px] text-faint">
               {r.failed_quizzes.length > 0 && <span className="text-red-600">رسب: {r.failed_quizzes.join('، ')} · </span>}
+              {r.retake_quizzes?.length > 0 && <span className="text-amber-700">يعيد: {r.retake_quizzes.join('، ')} · </span>}
               {r.last_activity ? new Date(r.last_activity).toLocaleDateString('ar-EG-u-nu-latn') : 'لم يبدأ'}
             </span>
           </div>

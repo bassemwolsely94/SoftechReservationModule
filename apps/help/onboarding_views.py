@@ -55,14 +55,24 @@ def _progress(keys, learned, versions, mods, best):
     }
 
 
-def _best(staff_ids):
-    """{staff_id: {module: {score, total, passed, at}}} — best attempt per module."""
-    out = {}
+def _best(staff_ids, qz):
+    """{staff_id: {module: {score, total, passed, stale, at}}} — best attempt per module
+    on the CURRENT version of its quiz. A pass on an older version (the quiz changed
+    since) is reported as stale and does not count: it has to be retaken."""
+    current = {m: training.quiz_version(q) for m, q in qz.items()}
+    out, stale = {}, {}
     for a in HelpQuizAttempt.objects.filter(staff_id__in=staff_ids).order_by('created_at'):
+        mine = {'score': a.score, 'total': a.total, 'passed': a.passed, 'stale': False, 'at': a.created_at}
+        if a.version != current.get(a.module_key):
+            if a.passed:
+                stale.setdefault(a.staff_id, {})[a.module_key] = {**mine, 'passed': False, 'stale': True}
+            continue
         cur = out.setdefault(a.staff_id, {}).get(a.module_key)
-        mine = {'score': a.score, 'total': a.total, 'passed': a.passed, 'at': a.created_at}
         if cur is None or (a.passed, a.score) >= (cur['passed'], cur['score']):
             out[a.staff_id][a.module_key] = mine
+    for sid, mods in stale.items():
+        for m, v in mods.items():
+            out.setdefault(sid, {}).setdefault(m, v)
     return out
 
 
@@ -84,7 +94,7 @@ def my_path(request):
     versions = _versions()
     learned = dict(HelpLearned.objects.filter(staff=profile).values_list('screen_key', 'version'))
     mods = training.path_modules(keys, qz)
-    best = _best([profile.id]).get(profile.id, {})
+    best = _best([profile.id], qz).get(profile.id, {})
     items = []
     for k in keys:
         s = registry.effective(screens[k], ov.get(k))
@@ -142,7 +152,7 @@ def quiz(request, module_key):
     if qs is None or profile is None:
         return Response({'detail': 'not found'}, status=404)
     modules, _ = registry.load()
-    best = _best([profile.id]).get(profile.id, {}).get(module_key)
+    best = _best([profile.id], training.quizzes()).get(profile.id, {}).get(module_key)
     return Response({
         'module': module_key, 'title': modules.get(module_key, {}).get('title'),
         'pass_percent': training.PASS_PERCENT, 'best': best,
@@ -174,7 +184,7 @@ def quiz_submit(request, module_key):
     percent = round(100 * score / total)
     passed = percent >= training.PASS_PERCENT
     HelpQuizAttempt.objects.create(staff=profile, module_key=module_key, score=score, total=total,
-                                   passed=passed, answers=clean)
+                                   passed=passed, answers=clean, version=training.quiz_version(qs))
     return Response({'score': score, 'total': total, 'percent': percent, 'passed': passed,
                      'pass_percent': training.PASS_PERCENT, 'results': results},
                     status=status.HTTP_201_CREATED)
@@ -204,9 +214,9 @@ def team(request):
         learned.setdefault(sid, {})[key] = ver
     last = dict(HelpLearned.objects.filter(staff_id__in=ids).values('staff_id')
                 .annotate(t=Max('created_at')).values_list('staff_id', 't'))
-    best = _best(ids)
     path_ov = training.overrides('path')
     qz = training.quizzes()
+    best = _best(ids, qz)
     rows = []
     for p in staff:
         keys = training.path(p.role, path_ov)
@@ -217,7 +227,8 @@ def team(request):
             'id': p.id, 'name': _staff_name(p), 'role': p.role,
             'branch': p.branch_name,
             'progress': _progress(keys, learned.get(p.id, {}), versions, mods, mine),
-            'failed_quizzes': [m for m, v in mine.items() if not v['passed']],
+            'failed_quizzes': [m for m, v in mine.items() if not v['passed'] and not v['stale']],
+            'retake_quizzes': [m for m, v in mine.items() if v['stale']],
             'last_activity': max(at) if at else None,
         })
     return Response(rows)
@@ -268,9 +279,10 @@ def training_edit(request, kind, key):
             return Response({'detail': 'لا يوجد تعديل للرجوع عنه'}, status=400)
         override.delete()
         base = training.base_path(key) if kind == 'path' else training.base_quiz(key)
-        HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_REVERT,
-                                    before=before, after={field: base}, note=note, staff=profile)
-        return Response(_training_payload(kind, key, None))
+        rev = HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_REVERT,
+                                          before=before, after={field: base}, note=note, staff=profile)
+        return Response({**_training_payload(kind, key, None),
+                         'notified': _announce(kind, key, before[field], base, rev.id)})
 
     data = request.data.get('data')
     errors = training.validate_path(data) if kind == 'path' else training.validate_quiz(data)
@@ -283,6 +295,18 @@ def training_edit(request, kind, key):
     override.base_hash = training.base_hash(kind, key)
     override.updated_by = profile
     override.save()
-    HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_SAVE,
-                                before=before, after=clean, note=note, staff=profile)
-    return Response(_training_payload(kind, key, override))
+    rev = HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_SAVE,
+                                      before=before, after=clean, note=note, staff=profile)
+    return Response({**_training_payload(kind, key, override),
+                     'notified': _announce(kind, key, before[field], clean[field], rev.id)})
+
+
+def _announce(kind, key, before, after, revision_id):
+    """Tell the people affected (see notify.py). → number notified."""
+    from . import notify
+    if kind == 'path':
+        return notify.path_changed(key, before or [], after or [], revision_id)
+    if not after:            # quiz removed — nothing to retake
+        return 0
+    return notify.quiz_changed(key, training.quiz_version(before or []),
+                               training.quiz_version(after), revision_id)

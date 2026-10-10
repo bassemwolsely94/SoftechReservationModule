@@ -80,7 +80,10 @@ function TourBody({ tour }) {
   const vw = window.innerWidth
   const vh = window.innerHeight
   let cardStyle
-  if (rect) {
+  if (rect && rect.height > vh * 0.6) {
+    // a big element (a whole table/board): keep the card out of its way, bottom corner
+    cardStyle = { bottom: 24, left: 24, width: CARD_W }
+  } else if (rect) {
     const below = rect.top + rect.height + 12
     const top = below + 180 < vh ? below : Math.max(12, rect.top - 12 - 180)
     const left = Math.min(Math.max(12, rect.left + rect.width / 2 - CARD_W / 2), vw - CARD_W - 12)

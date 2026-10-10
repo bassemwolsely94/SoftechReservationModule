@@ -43,6 +43,14 @@ save/revert → `HelpRevision` with `screen_key` `path:<role>` / `quiz:<module>`
 warns when the repo version changed after the edit. All readers use `apps/help/training.py`.
 API: `GET/PUT/DELETE /api/help/training/{path|quiz}/{key}/` (help/edit; GET includes answers).
 
+**Quiz versions + notifications (built 2026-10-10):** every attempt stores the quiz version it
+answered (`HelpQuizAttempt.version` = `training.quiz_version(questions)`). A pass counts only while
+the quiz is unchanged; after a trainer (or developer) edit it shows as `stale` («⟳ اتغيّر — أعد
+الاختبار») and is listed under «يعيد» in team progress. On save/revert (`apps/help/notify.py`, via
+`apps.notifications`, never breaks the save): screens **added** to a role's path → everyone in that
+role; a quiz changed → everyone who had passed the old version. The editor shows how many were
+notified.
+
 **Rule:** a new screen a role must use → add it to that role's `ROLE_PATHS`; a new rule users
 must not get wrong → add a quiz question.
 
@@ -64,7 +72,8 @@ must not get wrong → add a quiz question.
 - Calm: the dimmed mask ignores clicks (the highlighted button can be pressed for real); leaving the
   screen ends the tour; a step whose element is not visible (other tab, role, nothing selected)
   still shows its text with a note. Runner: `frontend/src/help/Tour.jsx` (mounted by `HelpPanel`).
-- Built for 21 screens — desktop: POS, reservations board + new, demand list, transfers list + new,
+- Built for 32 screens — desktop: sales analytics, KPI board, finance dashboard, expenses, insurance
+  claims + claim, purchasing engine, supply, users, permissions matrix, sync; POS, reservations board + new, demand list, transfers list + new,
   stock count, follow-ups, delivery dashboard, customer detail, shortages, call-center operator, HR
   requests, tasks, vouchers; mobile: POS, reservations, new demand, transfers, stock count,
   customers. Steps on repeated items (cards) highlight the first one.
@@ -159,5 +168,5 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (analytics, finance, insurance, purchasing, admin).
-- Notify a person when their role's path gains a screen or a quiz they passed is changed.
+- Tours for the remaining screens (only ~32 of 176 have one; the panel shows the button only where one exists).
+- Notify when developers (not trainers) add screens to a role path in the repo — needs a deploy-time check.

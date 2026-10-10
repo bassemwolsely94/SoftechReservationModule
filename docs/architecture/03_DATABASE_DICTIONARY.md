@@ -3328,7 +3328,7 @@ Tables prefixed with their Django app name.
 `staff_id` (FK StaffProfile, cascade), `screen_key`, `version` (the help's `updated` date when ticked; older than the current date → «راجعه»), `created_at`. Unique (`staff`, `screen_key`).
 
 ### help_helpquizattempt  (server-graded module quiz)
-`staff_id`, `module_key`, `score`, `total`, `passed` (≥ `onboarding.PASS_PERCENT`), `answers` (JSON: chosen option index per question), `created_at`.
+`staff_id`, `module_key`, `score`, `total`, `passed` (≥ `onboarding.PASS_PERCENT`), `answers` (JSON: chosen option index per question), `version` (quiz fingerprint answered; a pass counts only while it equals the current quiz's version), `created_at`.
 
 ### help_helptrainingoverride  (trainer's version of a training path / quiz)
 `kind` (`path` / `quiz`), `key` (role / module), `data` (JSON `{screens: [...]}` or `{questions: [{q, options, answer, explain}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).

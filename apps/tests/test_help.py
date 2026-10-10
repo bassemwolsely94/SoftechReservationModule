@@ -587,3 +587,59 @@ class TrainingEditTests(TestCase):
         if free:
             t.put(f'/api/help/training/quiz/{free}/', {'data': {'questions': [q]}}, format='json')
             self.assertEqual(learner.get(f'/api/help/quizzes/{free}/').status_code, 200)
+
+
+class TrainingNotifyTests(TestCase):
+    """Path additions notify the role; a changed quiz voids old passes (retake) and
+    notifies the people who had passed it."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_addition_notifies_role(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        t, _ = self._client('admin', 'nt_admin')
+        _, seller = self._client('salesperson', 'nt_sales')
+        _, other = self._client('pharmacist', 'nt_ph')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertTrue(Notification.objects.filter(recipient=seller, title__contains='مسارك').exists())
+        self.assertFalse(Notification.objects.filter(recipient=other, title__contains='مسارك').exists())
+        # removing screens is not news
+        r = t.put('/api/help/training/path/salesperson/', {'data': {'screens': new[:3]}}, format='json')
+        self.assertEqual(r.json()['notified'], 0)
+
+    def test_quiz_change_voids_pass_and_notifies(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        t, _ = self._client('admin', 'nq_admin')
+        c, ph = self._client('pharmacist', 'nq_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        self.assertTrue(c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json').json()['passed'])
+        best = lambda: next(q for q in c.get('/api/help/onboarding/').json()['quizzes'] if q['module'] == 'pos')['best']
+        self.assertTrue(best()['passed'])
+        q = {'q': {'ar': 'سؤال جديد؟', 'en': 'New?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        r = t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        self.assertTrue(Notification.objects.filter(recipient=ph, title__contains='أعد الاختبار').exists())
+        b = best()
+        self.assertTrue(b['stale'])
+        self.assertFalse(b['passed'])
+        prog = c.get('/api/help/onboarding/').json()['progress']
+        self.assertEqual(prog['quizzes_passed'], 0)
+        # retake on the new version counts again
+        c.post('/api/help/quizzes/pos/submit/', {'answers': [0]}, format='json')
+        self.assertTrue(best()['passed'])
+        self.assertFalse(best()['stale'])
+        # reverting to the original changes the quiz again → the first pass counts again, no one to tell
+        r = t.delete('/api/help/training/quiz/pos/', {}, format='json')
+        self.assertTrue(best()['passed'])

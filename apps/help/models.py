@@ -121,6 +121,9 @@ class HelpQuizAttempt(models.Model):
     total      = models.PositiveSmallIntegerField()
     passed     = models.BooleanField()
     answers    = models.JSONField(default=list)   # chosen option index per question (None = skipped)
+    # hash of the questions answered (training.quiz_version) — a pass counts only
+    # while the quiz is unchanged; after a trainer/developer edit it must be retaken
+    version    = models.CharField(max_length=16, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

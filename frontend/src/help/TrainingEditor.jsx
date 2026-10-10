@@ -38,7 +38,8 @@ export default function TrainingEditor({ index }) {
     qc.setQueryData(['help', 'training', kind, key], payload)
     qc.invalidateQueries({ queryKey: ['help', 'onboarding'] })
     qc.invalidateQueries({ queryKey: ['help', 'quiz'] })
-    setNote(''); setMsg({ ok: true, text })
+    const n = payload?.notified
+    setNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
   }
   const run = async (fn, text) => {
     setBusy(true); setMsg(null)

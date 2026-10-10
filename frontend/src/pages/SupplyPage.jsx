@@ -77,7 +77,7 @@ export default function SupplyPage() {
         <span className="text-xs text-content/50">الإتاحة والنواقص والتحويلات ومعدلات الإستهلاك وطلبات التوريد</span>
       </div>
 
-      <div className="flex gap-1 border-b border-line overflow-x-auto">
+      <div className="flex gap-1 border-b border-line overflow-x-auto" data-tour="purchasing-supply-tabs">
         {SUPPLY_TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition whitespace-nowrap ${

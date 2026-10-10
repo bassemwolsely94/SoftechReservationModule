@@ -280,11 +280,11 @@ export default function ExpenseAnalyticsPage() {
 
       {/* ── Filter Bar ─────────────────────────────────────────────────────── */}
       <Card className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3" data-tour="finance-expenses-filters">
           <h2 className="text-base font-bold text-gray-700 ml-auto">تحليل المصروفات</h2>
 
           {/* Filter mode toggle */}
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs" data-tour="finance-expenses-mode">
             {['month','range'].map(m => (
               <button key={m}
                 onClick={() => { setFilterMode(m); setPage(1) }}
@@ -371,7 +371,7 @@ export default function ExpenseAnalyticsPage() {
       {bLoading ? (
         <div className="h-20 bg-gray-50 rounded-2xl animate-pulse" />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" data-tour="finance-expenses-kpis">
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 col-span-2">
             <div className="text-xs text-gray-500 mb-1">إجمالي المصروفات</div>
             <div className="text-2xl font-bold text-orange-700" dir="ltr">{fmt(total)}</div>
@@ -394,7 +394,7 @@ export default function ExpenseAnalyticsPage() {
 
       {/* ── Category breakdown + Sub-category breakdown side by side ────────── */}
       {!bLoading && catRows.length > 0 && (
-        <div className={`grid gap-5 ${subRowsVisible.length > 0 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+        <div data-tour="finance-expenses-breakdown" className={`grid gap-5 ${subRowsVisible.length > 0 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
 
           {/* Category breakdown */}
           <Card>
@@ -481,7 +481,7 @@ export default function ExpenseAnalyticsPage() {
             <span className="text-xs text-gray-400" dir="ltr">{fmt(totalCount)} سجل</span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" data-tour="finance-expenses-table">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500">
@@ -556,7 +556,7 @@ export default function ExpenseAnalyticsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between" data-tour="finance-expenses-pagination">
             <button
               disabled={page === 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}

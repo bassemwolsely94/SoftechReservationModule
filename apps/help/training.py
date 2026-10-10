@@ -60,6 +60,11 @@ def quizzes(ov=None):
     return out
 
 
+def quiz_version(questions):
+    """Short, stable fingerprint of a quiz's questions."""
+    return _hash(questions or [])[:12]
+
+
 def quiz(module):
     return quizzes().get(module)
 

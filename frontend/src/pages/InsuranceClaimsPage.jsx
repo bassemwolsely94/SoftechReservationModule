@@ -709,7 +709,7 @@ export default function InsuranceClaimsPage() {
             <h1 className="text-xl font-bold text-gray-900">مطالبات التأمين</h1>
             <p className="text-sm text-gray-500 mt-0.5">إدارة مطالبات التعاقدات والتأمين الصحي</p>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center" data-tour="insurance-claims-actions">
             {cacheStats && (
               <span className="text-xs text-gray-400 ml-1" title={
                 `مطالبات: ${cacheStats.motalba?.rows || 0} صف\n` +
@@ -742,7 +742,7 @@ export default function InsuranceClaimsPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-4 px-6 py-4">
+      <div className="grid grid-cols-3 gap-4 px-6 py-4" data-tour="insurance-claims-kpis">
         {[
           { label: 'إجمالى المطالبات المعروضة', value: fmt(totalNet), sub: `${filteredClaims.length} مطالبة`, color: 'text-blue-700' },
           { label: 'المُحصَّل', value: fmt(totalPaid), color: 'text-green-700' },
@@ -759,7 +759,7 @@ export default function InsuranceClaimsPage() {
       {/* Filters */}
       <div className="px-6 pb-3 space-y-2">
         {/* Row 1: dropdowns */}
-        <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-2 flex-wrap items-center" data-tour="insurance-claims-filters">
           <select className={inp} value={filters.status} onChange={e => setF('status', e.target.value)}>
             <option value="">كل الحالات</option>
             {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -805,7 +805,7 @@ export default function InsuranceClaimsPage() {
             <input type="date" className={inp} value={filters.date_to}
               onChange={e => setF('date_to', e.target.value)} />
           </div>
-          <input className={`${inp} w-64`} placeholder="بحث: رقم مطالبة، عميل، رقم سوفتك..."
+          <input data-tour="insurance-claims-search" className={`${inp} w-64`} placeholder="بحث: رقم مطالبة، عميل، رقم سوفتك..."
             value={filters.search} onChange={e => setF('search', e.target.value)} />
         </div>
       </div>
@@ -827,7 +827,7 @@ export default function InsuranceClaimsPage() {
 
       {/* Table */}
       <div className="px-6 pb-8">
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="insurance-claims-table">
           {loading ? (
             <div className="py-20 text-center text-gray-400">جارٍ التحميل...</div>
           ) : filteredClaims.length === 0 ? (

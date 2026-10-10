@@ -207,10 +207,12 @@ SCREENS = [
             {'key': 'path', 'title': T('مساري التدريبي', 'My training path'),
              'body': T('قائمة الشاشات المطلوب تتعلمها حسب دورك، بالترتيب (أول أسبوع الأول). افتح كل شاشة، اقرأ شرحها وجرّبها، واضغط «فهمت هذه الشاشة ✓». '
                        'بعد شاشات كل موديول ادخل اختباره القصير — النجاح من 80%، وتقدر تعيد الاختبار. لو شرح شاشة اتغيّر بعد ما علّمتها تظهر «⟳ راجعه». '
-                       'النسبة فوق = الشاشات اللي اتفهمت + الاختبارات الناجحة.',
+                       'النسبة فوق = الشاشات اللي اتفهمت + الاختبارات الناجحة. لو المدرب غيّر اختبار بعد ما نجحت فيه يظهر «⟳ اتغيّر — أعد الاختبار» ومش بيتحسب لحد ما تعيده، '
+                       'وبيوصلك إشعار. ولو اتضافت شاشات لمسار دورك بيوصلك إشعار برضه.',
                        'The screens your role should learn, in order (first week first). Open each one, read its help and try it, then press "I understand this screen ✓". '
                        'After a module\'s screens take its short quiz — the pass mark is 80% and you can retake it. If a screen\'s help changes after you ticked it, it shows "⟳ re-read". '
-                       'The percentage on top = screens understood + quizzes passed.')},
+                       'The percentage on top = screens understood + quizzes passed. If a trainer changes a quiz after you passed it, it shows "⟳ Quiz changed — retake" and does not count until you retake it, '
+                       'and you get a notification. You are also notified when screens are added to your role\'s path.')},
             {'key': 'whats_new', 'title': T('الجديد', "What's new"),
              'body': T('الشاشات التي تغيّر شرحها مؤخراً (ميزة جديدة أو تعديل)، الأحدث أولاً. علامة «جديد» تعني أنك لم تقرأ النسخة الحالية بعد.',
                        'Screens whose help changed recently (a new feature or change), newest first. A "New" badge means you have not read the current version yet.')},
