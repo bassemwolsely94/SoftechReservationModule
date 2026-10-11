@@ -170,3 +170,11 @@ class HelpTrainingSnapshot(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['kind', 'key'], name='help_training_snapshot_once')]
+
+
+class HelpPreference(models.Model):
+    """Per-person help preferences. first_day_hidden_at: the person hid the «أول يوم»
+    cards on the home page (they stay reachable from «مساري التدريبي»)."""
+    staff               = models.OneToOneField('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    first_day_hidden_at = models.DateTimeField(null=True, blank=True)
+    updated_at          = models.DateTimeField(auto_now=True)

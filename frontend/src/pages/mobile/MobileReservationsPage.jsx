@@ -5,6 +5,7 @@
  * existing reservations API — branch-scoped server-side for branch roles.
  * Status filter chips + infinite "load more" following the cursor `next` link.
  */
+import { FirstDayStrip } from '../../help/FirstDay'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInfiniteQuery } from '@tanstack/react-query'
@@ -92,6 +93,7 @@ export default function MobileReservationsPage() {
 
   return (
     <div className="p-3 space-y-3">
+      <FirstDayStrip />
 
       {/* Filter chips */}
       <div data-tour="reservations-mobile-list-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">

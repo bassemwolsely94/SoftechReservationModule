@@ -88,6 +88,7 @@ export function MyPath({ lang, go, canPreview }) {
              className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
             🖨️ {en(lang) ? 'Print my manual' : 'طباعة دليلي'}
           </a>
+          <ShowFirstDayAgain lang={lang} />
           <span className="text-2xl font-bold text-brand-600 tabnum">{p.percent}%</span>
         </div>
         <Bar percent={p.percent} />
@@ -262,5 +263,23 @@ export function TeamProgress() {
         ))}
       </div>
     </div>
+  )
+}
+
+/** Bring back the «ابدأ من هنا» cards on the home page after hiding them. */
+function ShowFirstDayAgain({ lang }) {
+  const qc = useQueryClient()
+  const { data } = useQuery({
+    queryKey: ['help', 'first-day', false],
+    queryFn: () => helpApi.firstDay(false).then((r) => r.data),
+    staleTime: 60_000,
+  })
+  if (!data?.hidden || data.progress.percent >= 100) return null
+  const show = async () => { await helpApi.hideFirstDay(false); qc.invalidateQueries({ queryKey: ['help', 'first-day'] }) }
+  return (
+    <button type="button" onClick={show}
+            className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+      👋 {en(lang) ? 'Show the start cards on Home' : 'إظهار كروت «ابدأ من هنا» في الرئيسية'}
+    </button>
   )
 }

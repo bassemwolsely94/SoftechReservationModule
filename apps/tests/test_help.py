@@ -842,3 +842,55 @@ class FlowEditTests(TestCase):
             self.assertIn(fid, ids)
         self.assertTrue(ids['flow:reservations.mobile']['mobile'])
         self.assertFalse(ids['flow:reservations.lifecycle']['mobile'])
+
+
+class FirstDayTests(TestCase):
+    """«أول يوم»: cards on the home page until the path is complete or hidden."""
+
+    def setUp(self):
+        branch = make_branch()
+        user, self.profile, _ = make_user('fd_sales', role='salesperson', branch=branch)
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+
+    def test_cards_for_a_new_person(self):
+        from apps.help.content import onboarding
+        d = self.c.get('/api/help/first-day/').json()
+        self.assertTrue(d['show'])
+        self.assertEqual(d['role'], 'salesperson')
+        self.assertEqual(d['system_tour']['id'], 'flow:general.system')
+        self.assertFalse(d['system_tour']['done'])
+        self.assertEqual(d['next_screen']['key'], onboarding.ROLE_PATHS['salesperson'][0])
+        ids = [f['id'] for f in d['flows']]
+        self.assertTrue(ids)
+        self.assertTrue(all(not f['mobile'] for f in d['flows']))
+        self.assertNotIn('flow:pos.exceptions', ids)          # not a salesperson's tour
+        self.assertIsNotNone(d['quiz'])
+        m = self.c.get('/api/help/first-day/?mobile=1').json()
+        self.assertIsNone(m['system_tour'])                   # the system tour is desktop
+        self.assertTrue(all(f['mobile'] for f in m['flows']))
+
+    def test_done_ticks_and_next_screen_move(self):
+        from apps.help.content import onboarding
+        n = len(registry.flows(registry.load()[0])['flow:general.system']['steps'])
+        self.c.post('/api/help/tour-event/', {'screen_key': 'flow:general.system', 'reached': n, 'done': True},
+                    format='json')
+        first = onboarding.ROLE_PATHS['salesperson'][0]
+        self.c.post('/api/help/onboarding/learned/', {'screen_key': first}, format='json')
+        d = self.c.get('/api/help/first-day/').json()
+        self.assertTrue(d['system_tour']['done'])
+        self.assertEqual(d['next_screen']['key'], onboarding.ROLE_PATHS['salesperson'][1])
+
+    def test_hide_and_complete(self):
+        from unittest import mock
+        self.assertEqual(self.c.post('/api/help/first-day/', {'hidden': True}, format='json').json(), {'hidden': True})
+        self.assertFalse(self.c.get('/api/help/first-day/').json()['show'])
+        self.c.post('/api/help/first-day/', {'hidden': False}, format='json')
+        self.assertTrue(self.c.get('/api/help/first-day/').json()['show'])
+        # a finished path hides it by itself
+        with mock.patch('apps.help.training.path', return_value=['general.help_center']), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            self.c.post('/api/help/onboarding/learned/', {'screen_key': 'general.help_center'}, format='json')
+            d = self.c.get('/api/help/first-day/').json()
+        self.assertEqual(d['progress']['percent'], 100)
+        self.assertFalse(d['show'])

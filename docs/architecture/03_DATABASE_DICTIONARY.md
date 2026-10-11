@@ -3333,6 +3333,9 @@ Tables prefixed with their Django app name.
 ### help_helptrainingoverride  (trainer's version of a training path / quiz)
 `kind` (`path` / `quiz` / `flow`), `key` (role / module / `<module>.<flow key>`), `data` (JSON `{screens: [...]}`, `{questions: [{q, options, answer, explain}]}` or `{title, summary, steps: [{target, text}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
 
+### help_helppreference  (per-person help preferences)
+`staff_id` (one-to-one StaffProfile), `first_day_hidden_at` (the person hid the «ابدأ من هنا» home cards), `updated_at`.
+
 ### help_helptrainingsnapshot  (what staff were last told about their training)
 `kind` (`path` / `quiz`), `key` (role / module), `data` (path: list of screen keys; quiz: version string), `updated_at`. Unique (`kind`, `key`). Compared hourly by `help_announce_training` to notify only changes.
 

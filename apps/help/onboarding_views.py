@@ -15,6 +15,7 @@ only on the server; answers + explanations are returned after submitting.
 import random
 
 from django.db.models import Max
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -348,3 +349,68 @@ def _flow_edit(request, key, override, profile, note):
     HelpRevision.objects.create(screen_key=f'flow:{key}', action=HelpRevision.ACTION_SAVE,
                                 before=before, after=training.merge_flow(base, clean), note=note, staff=profile)
     return Response(_training_payload('flow', key, override))
+
+
+# ── «أول يوم» — first-day cards on the home page ─────────────────────────────
+
+def _done_tours(profile):
+    """Tour ids (screen keys / flow ids) this person finished at least once."""
+    from .models import HelpEvent
+    return set(HelpEvent.objects.filter(kind=HelpEvent.KIND_TOUR, staff=profile, query='done')
+               .values_list('screen_key', flat=True).distinct())
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def first_day(request):
+    """GET  → the cards: system tour, my training path (+ the next screen), my role's
+              workflow tours, the next quiz; `show` = path not finished and not hidden.
+       POST {hidden: bool} → hide / show the cards (stored per person)."""
+    from .models import HelpPreference
+    profile = _profile(request)
+    if profile is None:
+        return Response({'detail': 'no staff profile'}, status=400)
+    pref, _ = HelpPreference.objects.get_or_create(staff=profile)
+    if request.method == 'POST':
+        pref.first_day_hidden_at = timezone.now() if request.data.get('hidden', True) else None
+        pref.save(update_fields=['first_day_hidden_at', 'updated_at'])
+        return Response({'hidden': bool(pref.first_day_hidden_at)})
+
+    mobile = request.query_params.get('mobile') == '1'
+    role = profile.role
+    keys = training.path(role)
+    qz = training.quizzes()
+    modules, screens = registry.load()
+    versions = _versions()
+    learned = dict(HelpLearned.objects.filter(staff=profile).values_list('screen_key', 'version'))
+    mods = training.path_modules(keys, qz)
+    best = _best([profile.id], qz).get(profile.id, {})
+    progress = _progress(keys, learned, versions, mods, best)
+    done = _done_tours(profile)
+    nxt = next((k for k in keys if _state(learned.get(k), versions.get(k)) != 'done'), None)
+    flows = training.flows_effective(modules)
+    system = flows.get('flow:general.system')
+    mine = [training.flow_brief(fid, f) for fid, f in flows.items()
+            if fid != 'flow:general.system' and bool(f.get('mobile')) == mobile
+            and (not f.get('roles') or role in f['roles'])]
+    quiz = next((m for m in mods if not best.get(m, {}).get('passed')), None)
+
+    def screen_card(k):
+        s = screens[k]
+        return {'key': k, 'title': s['title'], 'summary': s['summary'], 'routes': s['routes'],
+                'module_title': modules[s['module']]['title'], 'icon': modules[s['module']].get('icon', ''),
+                'has_tour': bool(s.get('tour'))}
+
+    return Response({
+        'show': progress['percent'] < 100 and pref.first_day_hidden_at is None,
+        'hidden': pref.first_day_hidden_at is not None,
+        'role': role,
+        'progress': progress,
+        'system_tour': (None if mobile or not system else
+                        {**training.flow_brief('flow:general.system', system),
+                         'done': 'flow:general.system' in done}),
+        'next_screen': screen_card(nxt) if nxt else None,
+        'flows': [{**f, 'done': f['id'] in done} for f in mine[:4]],
+        'quiz': None if not quiz else {'module': quiz, 'title': modules[quiz]['title'],
+                                       'icon': modules[quiz].get('icon', ''), 'questions': len(qz[quiz])},
+    })

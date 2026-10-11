@@ -10,6 +10,7 @@
  * All widget data flows through /api/personal/widgets/:id/data/, which is
  * hard-scoped server-side to an APPROVED identity claim you own.
  */
+import FirstDay from '../help/FirstDay'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
@@ -74,6 +75,7 @@ function BranchFilter({ options, selected, onChange }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function MyDashboardPage() {
+  const isMobileRoute = window.location.pathname.startsWith('/m/')
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
   const qc = useQueryClient()
@@ -135,6 +137,8 @@ export default function MyDashboardPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4">
+        {/* «أول يوم» — on mobile «لوحتي» is the home; on desktop it lives on /dashboard */}
+        {isMobileRoute && <div className="mb-4"><FirstDay mobile /></div>}
         {isAdmin && <AdminApprovalQueue />}
 
         {widgetsQ.isLoading ? (

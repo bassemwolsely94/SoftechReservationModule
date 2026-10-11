@@ -15,6 +15,7 @@
  *  9.  Sync status
  */
 
+import FirstDay from '../help/FirstDay'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -729,6 +730,9 @@ export default function DashboardPage() {
 
       {/* ── Body ────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        {/* ── «أول يوم»: system tour + training path, until complete or hidden ── */}
+        <FirstDay />
 
         {/* ── 2. Hero KPI Strip ──────────────────────────────────── */}
         {isLoading ? (

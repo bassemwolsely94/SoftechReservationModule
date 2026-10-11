@@ -62,6 +62,10 @@ SCREENS = [
         'audience': T('كل الأدوار — كل دور يرى الأقسام التي تخصه.',
                       'All roles — each role sees the sections that concern it.'),
         'steps': [
+            T('أول ما تدخل النظام هتلاقي فوق «👋 أهلاً بيك — ابدأ من هنا»: الجولة التعريفية، الشاشة الجاية في مسارك التدريبي، جولات شغل دورك، والاختبار الجاي. كل كارت بيبدأ لما تضغطه، وبيتعلّم ✓ لما تخلّصه.',
+              'When you first log in, the top shows "👋 Welcome — start here": the system tour, the next screen on your training path, your role\'s workflow tours, and the next quiz. Each card starts when you click it and is ticked ✓ when done.'),
+            T('الكروت بتختفي لوحدها لما تخلّص مسارك، أو اضغط «إخفاء ✕». ترجّعها من «دليل الاستخدام» ← «مساري التدريبي».',
+              'The cards disappear by themselves when your path is complete, or press "Hide ✕". Bring them back from "Help guide" → "My training path".'),
             T('ابدأ يومك من شريط الأرقام العلوي: حجوزات نشطة، عاجلة، تنتظر اتصالاً، وما تم تسليمه هذا الأسبوع.',
               'Start your day from the top number strip: active, urgent, waiting-for-call and delivered-this-week reservations.'),
             T('اضغط «حجز جديد» من شريط الإجراءات السريعة لتسجيل طلب عميل فوراً.',
@@ -83,6 +87,8 @@ SCREENS = [
         ],
         'related': ['general.me', 'general.notifications'],
         'tour': [
+            {'target': 'general-first-day', 'text': T('«ابدأ من هنا»: جولة النظام، مسارك التدريبي، وجولات شغلك — كل كارت بيبدأ بضغطة.',
+                                              '"Start here": the system tour, your training path and your workflow tours — each card starts on a click.')},
             {'target': 'general-dashboard-actions', 'text': T('اختصارات سريعة: «📋 الحجوزات»، «🔀 التحويلات»، و«+ حجز جديد» لتسجيل طلب عميل على طول.',
                                               'Quick shortcuts: "📋 Reservations", "🔀 Transfers", and "+ New reservation" to record a customer request right away.')},
             {'target': 'general-dashboard-kpis', 'text': T('ابدأ يومك من الأرقام دي: النشط، المخزون المتاح، متابعة اليوم، العاجل والتسليم؛ اضغط رقم يفتح الحجوزات.',
@@ -111,6 +117,8 @@ SCREENS = [
             'operational tasks. You choose which widgets appear and in what order.'),
         'audience': T('كل الموظفين.', 'Every employee.'),
         'steps': [
+            {'text': T('على الموبايل «لوحتي» هي بداية التدريب: كروت «ابدأ من هنا» (جولات الموبايل ومسارك) بتظهر فوق لحد ما تخلّص مسارك.',
+                       'On mobile, "My dashboard" is where training starts: the "Start here" cards (mobile tours and your path) show at the top until your path is complete.')},
             T('أول مرة: اضغط «هوياتي» ثم «المطالبة بهوية جديدة»، ابحث عن اسمك أو كودك في SOFTECH واطلب اعتماده.',
               'First time: press "My identities" then "Claim a new identity", search your name or code in SOFTECH and request approval.'),
             T('انتظر اعتماد المدير — الحالة تظهر «قيد المراجعة» ثم «معتمد». البيانات لا تظهر إلا لهوية معتمدة.',

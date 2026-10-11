@@ -4,6 +4,12 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 
 ## What users get
 
+- **«👋 ابدأ من هنا» (first day)** at the top of the home page (/dashboard; mobile «لوحتي», with a one-line
+  pointer on the mobile landing page): system tour, the next screen on the role's training path (opens
+  it and starts its tour), the role's workflow tours, the next quiz — ticked ✓ when done. Shown until
+  the path is 100% or the person hides it (`HelpPreference.first_day_hidden_at`; «إظهار» in «مساري
+  التدريبي»). Cards, never a popup. API `GET/POST /api/help/first-day/`.
+
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.
 
