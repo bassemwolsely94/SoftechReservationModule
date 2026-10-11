@@ -84,7 +84,7 @@ export default function ReplacementNewCasePage() {
         <p className="text-xs text-gray-500">الحساب والاعتماد والترحيل يتم في صفحة الحالة بعد الإنشاء — القيم المالية يحسبها السيرفر فقط.</p>
       </div>
 
-      <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <section data-tour="replacement-new-type" className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex flex-wrap gap-4 items-center">
           <label className="text-sm text-gray-600">الفرع
             <select value={branch} onChange={(e) => setBranch(e.target.value)} className="mr-2 border border-gray-300 rounded-lg px-2 py-1 text-sm">
@@ -103,7 +103,7 @@ export default function ReplacementNewCasePage() {
         </div>
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <section data-tour="replacement-new-patient" className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex gap-2 items-center flex-wrap">
           <input value={pic} onChange={(e) => setPic(e.target.value)} placeholder="كود المريض PIC"
                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono w-48" />
@@ -148,7 +148,7 @@ export default function ReplacementNewCasePage() {
         )}
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+      <section data-tour="replacement-new-extra-items" className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
         <div className="text-sm text-gray-700">إضافة أصناف أخرى (بدون روشتة / من خارج صرفنا)</div>
         <ItemSearchInput placeholder="ابحث عن الصنف…" onSelect={(it) => it?.item_id && setExtra((x) =>
           x.some((e) => e.item_id === it.item_id) ? x : [...x, { item_id: it.item_id, name: it.name, price: it.pack_price, qty: 1 }])} />
@@ -164,7 +164,7 @@ export default function ReplacementNewCasePage() {
         ))}
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-xl p-4 grid md:grid-cols-3 gap-2">
+      <section data-tour="replacement-new-refs" className="bg-white border border-gray-200 rounded-xl p-4 grid md:grid-cols-3 gap-2">
         {[['prescription_no', 'رقم الروشتة'], ['approval_no', 'رقم الموافقة'], ['notes', 'ملاحظات']].map(([k, l]) => (
           <input key={k} value={refs[k]} onChange={(e) => setRefs((r) => ({ ...r, [k]: e.target.value }))} placeholder={l}
                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
@@ -172,7 +172,7 @@ export default function ReplacementNewCasePage() {
       </section>
 
       {err && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{err}</div>}
-      <div className="flex items-center gap-3">
+      <div data-tour="replacement-new-create" className="flex items-center gap-3">
         <button disabled={!branch || !items.length || create.isPending} onClick={() => { setErr(''); create.mutate() }}
                 className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-40">إنشاء الحالة</button>
         <Chip tone="gray">{items.length} صنف للاستبدال</Chip>

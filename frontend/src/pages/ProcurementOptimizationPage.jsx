@@ -37,7 +37,7 @@ function OptimizationTab({ days }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div data-tour="purchasing-optimization-suppliers" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Top suppliers to use */}
         <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -93,7 +93,7 @@ function OptimizationTab({ days }) {
       </div>
 
       {/* Price Saving Opportunities */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
+      <div data-tour="purchasing-optimization-savings" className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
         <h3 className="font-semibold text-blue-700 mb-3">💡 فرص توفير السعر (أصناف بعدة موردين)</h3>
         {(data.price_saving_items || []).length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">لا توجد فرص مكتشفة</p>
@@ -170,7 +170,7 @@ function MappingTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3 items-center">
+      <div data-tour="purchasing-optimization-mapping-filters" className="flex flex-wrap gap-3 items-center">
         <input
           type="text" placeholder="بحث بالصنف أو المورد…"
           value={search} onChange={e => setSearch(e.target.value)}
@@ -306,7 +306,7 @@ function AlertsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3 items-center">
+      <div data-tour="purchasing-optimization-alert-filters" className="flex flex-wrap gap-3 items-center">
         <select value={severity} onChange={e => setSeverity(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <option value="">جميع المستويات</option>
@@ -400,7 +400,7 @@ export default function ProcurementOptimizationPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">تحسين المشتريات والتنبيهات</h1>
         {activeTab === 'optimization' && (
-          <div className="flex items-center gap-2 text-sm">
+          <div data-tour="purchasing-optimization-period" className="flex items-center gap-2 text-sm">
             <span className="text-gray-600">الفترة:</span>
             {[30, 90, 365].map(d => (
               <button key={d} onClick={() => setDays(d)}
@@ -412,7 +412,7 @@ export default function ProcurementOptimizationPage() {
         )}
       </div>
 
-      <div className="flex border-b border-gray-200 gap-1">
+      <div data-tour="purchasing-optimization-tabs" className="flex border-b border-gray-200 gap-1">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${

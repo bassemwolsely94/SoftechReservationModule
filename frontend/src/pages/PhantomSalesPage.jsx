@@ -53,7 +53,7 @@ function Stat({ label, value, tone = 'text-gray-800' }) {
 
 function Toolbar({ med, setMed, q, setQ, medTypes }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-3">
+    <div data-tour="shortage-phantom-toolbar" className="flex flex-wrap items-center gap-2 mb-3">
       <select value={med} onChange={e => setMed(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
         <option value="">كل التصنيفات</option>
         {medTypes.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -80,7 +80,7 @@ function Table({ rows, tab, qc }) {
   const sorted = applySort(rows, sort, acc)
   if (!rows.length) return <p className="text-gray-400 py-10 text-center">لا توجد أصناف</p>
   return (
-    <div className="overflow-x-auto bg-white rounded-xl border border-gray-200">
+    <div data-tour="shortage-phantom-table" className="overflow-x-auto bg-white rounded-xl border border-gray-200">
       <table className="w-full text-sm text-right">
         <thead className="bg-gray-50 text-gray-600 border-b">
           <tr>
@@ -114,7 +114,7 @@ function Table({ rows, tab, qc }) {
               </td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {tab === 'flagged' ? (
-                  <div className="flex gap-1">
+                  <div data-tour="shortage-phantom-row-actions" className="flex gap-1">
                     {r.override !== 'confirmed' &&
                       <button onClick={() => confirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-violet-700 border border-violet-200 rounded hover:bg-violet-50">تأكيد</button>}
                     <button onClick={() => exclude.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">ليست وهمية</button>
@@ -145,19 +145,19 @@ export default function PhantomSalesPage() {
   })
   return (
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">
-      <div className="mb-4">
+      <div data-tour="shortage-phantom-header" className="mb-4">
         <h1 className="text-xl font-bold text-gray-800">🩹 مبيعات وهمية</h1>
         <p className="text-sm text-gray-500">أصناف يُعاد شراء معظم مبيعاتها من العميل/المريض (تعاقد) لا من الموردين — تُقلَّل كميتها في شيت النواقص.
           الحد: ≥ {pct(summary?.threshold)} من المبيعات خلال {summary?.window_months} شهر.</p>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div data-tour="shortage-phantom-stats" className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <Stat label="🩹 مُكتشفة" value={summary?.flagged ?? '—'} tone="text-violet-700" />
         <Stat label="⏳ بانتظار المراجعة" value={summary?.pending_review ?? '—'} tone="text-amber-600" />
         <Stat label="✓ مؤكَّدة" value={summary?.confirmed ?? '—'} tone="text-violet-700" />
         <Stat label="مستبعدة (ليست وهمية)" value={summary?.excluded ?? '—'} tone="text-gray-600" />
         <Stat label="تخفيض الطلب (تقديري)" value={`${egp(data?.total_order_reduction_value)} ج`} tone="text-emerald-700" />
       </div>
-      <div className="flex gap-4 border-b mb-4">
+      <div data-tour="shortage-phantom-tabs" className="flex gap-4 border-b mb-4">
         {[['flagged', `المُكتشفة (${summary?.flagged ?? 0})`], ['excluded', `المستبعدة (${summary?.excluded ?? 0})`]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{l}</button>
         ))}

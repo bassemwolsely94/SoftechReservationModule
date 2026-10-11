@@ -58,7 +58,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5" dir="rtl">
+    <div className="bg-white rounded-xl border border-gray-200 p-5" dir="rtl" data-tour="tasks-schedules-form">
       <h3 className="font-bold text-gray-800 mb-4 text-right">{initial?.id ? 'تعديل الجدول' : 'جدول جديد'}</h3>
       {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded mb-3">{error}</div>}
 
@@ -134,7 +134,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
           <textarea className="w-full border rounded-lg px-3 py-2 text-sm text-right resize-none" rows={2} placeholder="اختياري..." value={form.description_template} onChange={e => set('description_template', e.target.value)} />
         </div>
 
-        <div className="col-span-2 flex items-center gap-2 justify-end">
+        <div className="col-span-2 flex items-center gap-2 justify-end" data-tour="tasks-schedules-active">
           <label className="text-sm text-gray-600">نشط</label>
           <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} className="w-4 h-4 accent-brand-600" />
         </div>
@@ -215,12 +215,12 @@ export default function TaskSchedulesPage() {
     <div className="min-h-full bg-gray-50" dir="rtl">
       <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">الجداول التلقائية</h1>
+          <h1 className="text-xl font-bold text-gray-800" data-tour="tasks-schedules-header">الجداول التلقائية</h1>
           <p className="text-sm text-gray-500 mt-0.5">إنشاء وإدارة المهام المتكررة</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => navigate('/tasks/dashboard')} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">← لوحة التحكم</button>
-          <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium">+ جدول جديد</button>
+          <button onClick={() => { setEditTarget(null); setShowForm(true) }} data-tour="tasks-schedules-new" className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium">+ جدول جديد</button>
         </div>
       </div>
 
@@ -262,7 +262,7 @@ export default function TaskSchedulesPage() {
             <button onClick={() => setShowForm(true)} className="text-sm text-brand-600 underline">إنشاء أول جدول</button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="tasks-schedules-table">
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-gray-50 border-b text-xs text-gray-500 font-semibold">
@@ -294,7 +294,7 @@ export default function TaskSchedulesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" data-tour="tasks-schedules-actions">
                         {s.is_active && (
                           <button onClick={() => runNow(s.id, s.name)} className="text-xs text-brand-600 hover:underline">تشغيل</button>
                         )}

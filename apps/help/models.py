@@ -140,7 +140,9 @@ class HelpTrainingOverride(models.Model):
     screen_key 'path:<role>' / 'quiz:<module>'."""
     KIND_PATH = 'path'
     KIND_QUIZ = 'quiz'
-    KIND_CHOICES = [(KIND_PATH, 'مسار تدريبي لدور'), (KIND_QUIZ, 'اختبار موديول')]
+    KIND_FLOW = 'flow'      # a module workflow tour's text: key '<module>.<flow key>'
+    KIND_CHOICES = [(KIND_PATH, 'مسار تدريبي لدور'), (KIND_QUIZ, 'اختبار موديول'),
+                    (KIND_FLOW, 'جولة دورة عمل')]
 
     kind       = models.CharField(max_length=10, choices=KIND_CHOICES)
     key        = models.CharField(max_length=40)          # role or module key

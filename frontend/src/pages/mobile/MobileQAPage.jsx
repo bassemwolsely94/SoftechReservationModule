@@ -67,7 +67,7 @@ export default function MobileQAPage() {
   return (
     <div className="p-3 space-y-3">
       {creating && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+        <div data-tour="hr-qa-new-form" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <h2 className="font-semibold text-gray-700 text-sm">مراجعة جديدة</h2>
           <div>
             <label className="label">القالب</label>
@@ -98,11 +98,11 @@ export default function MobileQAPage() {
         : inspections.isError ? <MobileError text="تعذّر تحميل المراجعات" onRetry={inspections.refetch} />
         : rows.length === 0 ? <MobileEmpty icon="✔️" text="لا توجد مراجعات بعد" />
         : (
-          <div className="space-y-2.5">
+          <div data-tour="hr-qa-list" className="space-y-2.5">
             {rows.map(r => (
               <button key={r.id} onClick={() => navigate(`/m/qa/${r.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">
-                <div className="flex items-start justify-between gap-2">
+                <div data-tour="hr-qa-status" className="flex items-start justify-between gap-2">
                   <span className="font-bold text-sm text-gray-900">{r.branch_name || `فرع ${r.branch}`}</span>
                   {r.status === 'submitted'
                     ? <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${scoreClass(r.score)}`}>{r.score != null ? `${toLatin(r.score)}%` : 'مُرسَلة'}</span>
@@ -118,7 +118,7 @@ export default function MobileQAPage() {
         )}
 
       {!creating && (
-        <button onClick={() => { setCreating(true); setError('') }}
+        <button data-tour="hr-qa-new" onClick={() => { setCreating(true); setError('') }}
           className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
           title="مراجعة جديدة">+</button>
       )}

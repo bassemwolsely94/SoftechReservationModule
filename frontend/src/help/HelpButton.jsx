@@ -12,7 +12,7 @@ export default function HelpButton({ variant = 'desktop' }) {
 
   if (variant === 'mobile') {
     return (
-      <button type="button" onClick={toggle} title={title} aria-label={title}
+      <button type="button" data-tour="mshell-help" onClick={toggle} title={title} aria-label={title}
               className="relative w-9 h-9 rounded-lg bg-white/15 active:bg-white/30 flex items-center justify-center font-bold text-base">
         ؟
         {screen && isNew && <span className="absolute -top-0.5 -end-0.5 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-brand-600" />}

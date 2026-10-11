@@ -28,7 +28,7 @@ function DisableForm({ onDone }) {
   }
 
   return (
-    <div className="space-y-3" dir="rtl">
+    <div className="space-y-3" dir="rtl" data-tour="general-security-disable">
       <p className="text-sm text-gray-500">لإيقاف المصادقة الثنائية أدخل كلمة المرور ورمزاً حالياً.</p>
       <input type="password" className="input-field w-full" placeholder="كلمة المرور"
         value={password} onChange={e => setPassword(e.target.value)} />
@@ -57,10 +57,10 @@ export default function SecurityPage() {
 
   return (
     <div className="max-w-xl mx-auto px-6 py-6" dir="rtl">
-      <h1 className="text-lg font-bold text-gray-900 mb-1">أمان الحساب</h1>
+      <h1 className="text-lg font-bold text-gray-900 mb-1" data-tour="general-security-header">أمان الحساب</h1>
       <p className="text-sm text-gray-400 mb-6">المصادقة الثنائية (TOTP) لحماية الدخول من خارج الصيدلية.</p>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 p-6" data-tour="general-security-status">
         {isLoading ? (
           <div className="text-sm text-gray-400 text-center py-6">جارٍ التحميل...</div>
         ) : enrolling ? (
@@ -89,7 +89,7 @@ export default function SecurityPage() {
                 {st.enforcement_on ? ' الإلزام مفعّل حالياً.' : ' يُفضّل تفعيلها الآن.'}
               </p>
             )}
-            <button onClick={() => setEnrolling(true)} className="btn-primary">
+            <button onClick={() => setEnrolling(true)} className="btn-primary" data-tour="general-security-enable">
               تفعيل المصادقة الثنائية
             </button>
           </div>

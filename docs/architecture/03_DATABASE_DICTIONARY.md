@@ -3331,7 +3331,7 @@ Tables prefixed with their Django app name.
 `staff_id`, `module_key`, `score`, `total`, `passed` (≥ `onboarding.PASS_PERCENT`), `answers` (JSON: chosen option index per question), `version` (quiz fingerprint answered; a pass counts only while it equals the current quiz's version), `created_at`.
 
 ### help_helptrainingoverride  (trainer's version of a training path / quiz)
-`kind` (`path` / `quiz`), `key` (role / module), `data` (JSON `{screens: [...]}` or `{questions: [{q, options, answer, explain}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
+`kind` (`path` / `quiz` / `flow`), `key` (role / module / `<module>.<flow key>`), `data` (JSON `{screens: [...]}`, `{questions: [{q, options, answer, explain}]}` or `{title, summary, steps: [{target, text}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
 
 ### help_helptrainingsnapshot  (what staff were last told about their training)
 `kind` (`path` / `quiz`), `key` (role / module), `data` (path: list of screen keys; quiz: version string), `updated_at`. Unique (`kind`, `key`). Compared hourly by `help_announce_training` to notify only changes.

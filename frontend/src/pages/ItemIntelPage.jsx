@@ -796,7 +796,7 @@ export default function ItemIntelPage() {
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 text-sm text-gray-400">
+        <div data-tour="catalog-intel-breadcrumb" className="max-w-7xl mx-auto flex items-center gap-2 text-sm text-gray-400">
           <button onClick={() => navigate('/products')} className="hover:text-brand-600">الكتالوج</button>
           <span>›</span>
           <button onClick={() => navigate(`/products/${id}`)} className="hover:text-brand-600 truncate max-w-xs">{itemName}</button>
@@ -810,7 +810,7 @@ export default function ItemIntelPage() {
 
           {/* Sidebar nav */}
           <aside className="w-52 shrink-0 space-y-1 sticky top-20 self-start">
-            <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
+            <div data-tour="catalog-intel-sections" className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
               {SECTIONS.map(s => (
                 <button
                   key={s.key}
@@ -827,7 +827,7 @@ export default function ItemIntelPage() {
             </div>
 
             {/* Quick meta */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2">
+            <div data-tour="catalog-intel-quick-meta" className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2">
               <p className="text-xs font-semibold text-gray-500 mb-2">معلومات سريعة</p>
               <div className="flex items-center gap-2">
                 <AbcBadge cls={data.demand_network?.abc_class} />
@@ -848,7 +848,7 @@ export default function ItemIntelPage() {
             </div>
 
             {/* Links */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
+            <div data-tour="catalog-intel-links" className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
               <Link to={`/products/${id}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-brand-600 px-3 py-2 rounded-lg hover:bg-gray-50">
                 🔍 صفحة المنتج
               </Link>
@@ -859,7 +859,7 @@ export default function ItemIntelPage() {
           </aside>
 
           {/* Content area */}
-          <div className="flex-1 min-w-0 space-y-6">
+          <div data-tour="catalog-intel-content" className="flex-1 min-w-0 space-y-6">
             {activeSection === 'softech' && (
               <SectionCard title="بيانات SOFTECH (للقراءة فقط)" icon="🔗"
                 actions={<span className="text-xs text-gray-400">مصدر: SOFTECH ERP — لا يمكن التعديل</span>}>

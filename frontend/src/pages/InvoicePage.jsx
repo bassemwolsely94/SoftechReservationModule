@@ -685,7 +685,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             {stCfg.dot} {stCfg.label}
           </span>
 
-          <div className="mr-auto flex items-center gap-2 flex-wrap">
+          <div data-tour="invoices-main-actions" className="mr-auto flex items-center gap-2 flex-wrap">
             {/* Processing spinner */}
             {inv.status === 'processing' && (
               <span className="text-xs text-blue-600 animate-pulse flex items-center gap-1">
@@ -779,7 +779,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         </div>
 
         {/* Header card */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-3">
+        <div data-tour="invoices-main-header-card" className="bg-gray-50 rounded-xl p-4 mb-3">
           {headerEdit ? (
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -872,7 +872,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
       </div>
 
       {/* Lines */}
-      <div className="flex-1 overflow-auto p-6">
+      <div data-tour="invoices-main-lines" className="flex-1 overflow-auto p-6">
 
         {/* Anomaly panel */}
         {showAnomalies && anomalies !== null && (
@@ -1121,12 +1121,12 @@ export default function InvoicePage() {
               <p className="text-sm text-gray-500">رفع وتحليل فواتير الموردين مع مطابقة الأصناف</p>
             </div>
           </div>
-          <button onClick={() => setShowCreate(true)}
+          <button data-tour="invoices-main-new" onClick={() => setShowCreate(true)}
             className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700">
             + فاتورة جديدة
           </button>
         </div>
-        <div className="flex gap-3 mt-4 flex-wrap">
+        <div data-tour="invoices-main-filters" className="flex gap-3 mt-4 flex-wrap">
           <BranchSelect
             size="sm"
             value={filterBranch}
@@ -1157,7 +1157,7 @@ export default function InvoicePage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div data-tour="invoices-main-list" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {invoices.map(inv => {
               const cfg = STATUS_CONFIG[inv.status] || {}
               const matchPct = inv.line_count > 0

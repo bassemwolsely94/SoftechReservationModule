@@ -38,7 +38,7 @@ export default function ForecastScenarioPage() {
           <p className="text-sm text-gray-500 mt-0.5">اضبط العوامل، احسب النموذج، ثم اعتمد الأهداف للفروع</p>
         </div>
         {canEdit && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button data-tour="analytics-scenarios-new" onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
             {showForm ? 'إغلاق' : '+ سيناريو جديد'}
           </button>
         )}
@@ -52,7 +52,7 @@ export default function ForecastScenarioPage() {
 
       <div className="grid md:grid-cols-[280px_1fr] gap-4">
         {/* scenario list */}
-        <div className="space-y-2">
+        <div data-tour="analytics-scenarios-list" className="space-y-2">
           {isLoading ? <div className="text-gray-400 text-sm py-8 text-center">جارٍ التحميل…</div>
             : scenarios.length === 0 ? <div className="text-gray-400 text-sm py-8 text-center">لا توجد سيناريوهات</div>
             : scenarios.map(s => {
@@ -101,7 +101,7 @@ function BacktestPanel({ canEdit }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+    <div data-tour="analytics-scenarios-backtest" className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
       <div className="flex items-center justify-between">
         <button onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
           <span>{open ? '▾' : '▸'}</span> 🏁 دقة النماذج (اختبار رجعي على التاريخ)
@@ -225,7 +225,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
         <FactorTable sc={sc} canEdit={canEdit} onSave={saveFactors.mutate} />
 
         {canEdit && (
-          <div className="flex gap-2 mt-4">
+          <div data-tour="analytics-scenarios-actions" className="flex gap-2 mt-4">
             <button onClick={() => gen.mutate()} disabled={gen.isPending} className="btn-primary text-sm disabled:opacity-40">
               {gen.isPending ? 'جارٍ الحساب…' : '⚙️ احسب التنبؤ'}
             </button>
@@ -242,7 +242,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
 
       {/* results */}
       {sc.status !== 'draft' && results.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 overflow-x-auto">
+        <div data-tour="analytics-scenarios-results" className="bg-white rounded-2xl border border-gray-100 p-4 overflow-x-auto">
           <div className="font-bold text-gray-800 mb-3 text-sm">النتائج (الإجمالى · {SCOPES[sc.scope_type] || 'الفروع'})</div>
           <table className="w-full text-sm">
             <thead>
@@ -315,7 +315,7 @@ function GlobalKnobs({ sc, canEdit, onSave }) {
     </label>
   )
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 pb-3 border-b border-gray-50">
+    <div data-tour="analytics-scenarios-knobs" className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 pb-3 border-b border-gray-50">
       <label className="text-xs text-gray-500">النموذج
         <select disabled={!canEdit} className="input-field mt-0.5" value={v.model} onChange={e => set('model', e.target.value)}>
           {Object.entries(MODELS).map(([k, x]) => <option key={k} value={k}>{x}</option>)}

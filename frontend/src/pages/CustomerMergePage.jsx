@@ -51,7 +51,7 @@ function Row({ r, me, onAct, busy }) {
         </div>
       </div>
       {open && (
-        <div className="flex flex-wrap items-center gap-2 mt-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2 mt-3 text-sm" data-tour="customers-merge-actions">
           {r.status === 'proposed' && (
             <button disabled={busy} onClick={() => onAct(r.id, 'mark')} className="px-3 py-1 rounded-lg bg-gray-900 text-white disabled:opacity-50">تعليم للدمج</button>
           )}
@@ -111,14 +111,14 @@ export default function CustomerMergePage() {
   return (
     <div className="p-4 md:p-6 space-y-4" dir="rtl">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">دمج الأكواد المكررة</h1>
+        <h1 className="text-xl font-bold text-gray-900" data-tour="customers-merge-header">دمج الأكواد المكررة</h1>
         <p className="text-sm text-gray-500 mt-1">
           أكواد لنفس العميل على رقم هاتف واحد (الأسماء المختلفة على نفس الرقم = أسرة، لا تُقترح). يعلّم مراجع ويعتمد مراجع آخر.
           الاعتماد لا يكتب في SOFTECH — الدمج ينفذه المدير لاحقًا للأزواج المعتمدة (نقل النقاط وغلق الكود المكرر).
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" data-tour="customers-merge-status">
         {STATUSES.map(([k, label]) => (
           <button key={k} onClick={() => setStatus(k)}
             className={`px-3 py-1.5 rounded-lg text-sm border ${status === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-200 text-gray-700'}`}>
@@ -128,10 +128,10 @@ export default function CustomerMergePage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select value={strength} onChange={e => setStrength(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+        <select value={strength} onChange={e => setStrength(e.target.value)} data-tour="customers-merge-strength" className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           {STRENGTHS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود"
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود" data-tour="customers-merge-search"
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40" />
         <span className="flex-1" />
         {status === 'proposed' && (
@@ -149,7 +149,7 @@ export default function CustomerMergePage() {
       {data && data.total > data.rows.length && (
         <div className="text-[11px] text-gray-400">يظهر {data.rows.length} من {data.total} — استخدم البحث أو الدرجة للتضييق</div>
       )}
-      <div className="space-y-2">
+      <div className="space-y-2" data-tour="customers-merge-list">
         {data?.rows.map(r => <Row key={r.id} r={r} me={data.me} onAct={act} busy={busy} />)}
       </div>
     </div>

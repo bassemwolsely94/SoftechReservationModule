@@ -75,7 +75,7 @@ export default function OmniAnalyticsPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-5" dir="rtl">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">📈 تحليلات التواصل</h1>
-        <select value={days} onChange={e => setDays(Number(e.target.value))}
+        <select data-tour="omni-analytics-period" value={days} onChange={e => setDays(Number(e.target.value))}
                 className="border border-gray-200 rounded px-3 py-1.5 text-sm">
           <option value={7}>آخر 7 أيام</option>
           <option value={30}>آخر 30 يوم</option>
@@ -84,7 +84,7 @@ export default function OmniAnalyticsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div data-tour="omni-analytics-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
           <p className="text-2xl font-bold text-indigo-600">{conv.conversations}</p>
           <p className="text-xs text-gray-400 mt-1">محادثات</p>
@@ -103,7 +103,7 @@ export default function OmniAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div data-tour="omni-analytics-breakdown" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* By channel */}
         <Card title="الحجم حسب القناة">
           {data.by_channel.length === 0 ? (
@@ -160,7 +160,7 @@ export default function OmniAnalyticsPage() {
         {data.by_agent.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">لا توجد بيانات</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+          <div data-tour="omni-analytics-agents" className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
             {data.by_agent.map(a => (
               <div key={a.actor} className="flex items-center justify-between text-sm px-2 py-1 rounded hover:bg-gray-50">
                 <span className="text-gray-700 truncate">{a.agent_name}</span>

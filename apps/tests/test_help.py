@@ -197,6 +197,11 @@ class HelpContentCoverageTests(SimpleTestCase):
         nav_paths = set(re.findall(r"\bto:\s*'([^']+)'", nav_block))
         anchors |= {'nav-group-' + g for g in re.findall(r"\bid:\s*'([a-z0-9_-]+)'", nav_block)}
         anchors |= {'nav-' + re.sub(r'-$', '', re.sub(r'[^a-z0-9]+', '-', p.lstrip('/'))) for p in nav_paths}
+        app_src = APP_JSX.read_text(encoding='utf-8')
+        tabs = app_src[app_src.index('MOBILE_TABS'):]
+        tabs = tabs[:tabs.index('\n]\n')]
+        anchors |= {'mnav-' + re.sub(r'-$', '', re.sub(r'[^a-z0-9]+', '-', re.sub(r'^/m/?', '', p)))
+                    for p in re.findall(r"\bto:\s*'(/m/[^']*)'", tabs)}
         routes = app_routes()
 
         def check(where, steps):
@@ -229,7 +234,8 @@ class HelpContentCoverageTests(SimpleTestCase):
                 self.assertTrue(f.get('key') and f.get('title'), m['key'])
                 missing += check(f"{m['key']}.flows.{f['key']}", f['steps'])
         self.assertEqual(missing, [], 'Broken tour steps')
-        self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
+        no_tour = [k for k, s in self.screens.items() if not s.get('tour')]
+        self.assertEqual(no_tour, [], 'Every screen needs a «اعرض لي» tour (add data-tour anchors + tour steps)')
 
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
@@ -747,7 +753,7 @@ class HelpUsageTests(TestCase):
         ok = self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': n, 'done': True}, format='json')
         self.assertEqual(ok.status_code, 201)
         self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': 2, 'done': True}, format='json')
-        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'general.me'}, format='json').status_code, 400)
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'nope.screen'}, format='json').status_code, 400)
         self.ph.get('/api/help/screens/reservations.board/')
         self.assertEqual(self.ph.get('/api/help/usage/').status_code, 403)
         r = self.admin.get('/api/help/usage/?days=7').json()
@@ -789,3 +795,50 @@ class TourMergeTests(SimpleTestCase):
         self.assertEqual(out[1]['wait'], '/x/:id')
         # a step the code replaced keeps the repo text
         self.assertEqual(registry._merge_tour([{'target': 'b', 'text': {'ar': 'r', 'en': 'r'}}], edited)[0]['text']['ar'], 'r')
+
+
+class FlowEditTests(TestCase):
+    """Trainers edit workflow-tour text (title, summary, step text); steps stay the code's."""
+
+    def setUp(self):
+        branch = make_branch()
+        u1, _, _ = make_user('fe_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('fe_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u1)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def test_edit_apply_validate_revert(self):
+        from apps.help.models import HelpRevision
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        self.assertEqual(self.ph.get(url).status_code, 403)
+        cur = self.t.get(url).json()['current']
+        cur['title'] = {'ar': 'دورة الحجز (نسخة المدرب)', 'en': 'Reservation (trainer)'}
+        cur['steps'][2]['text'] = {'ar': 'نص أوضح للخطوة', 'en': 'Clearer step text'}
+        r = self.t.put(url, {'data': cur, 'note': 'أوضح'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        flows = self.ph.get('/api/help/modules/reservations/').json()['flows']
+        f = next(x for x in flows if x['id'] == 'flow:reservations.lifecycle')
+        self.assertEqual(f['title']['ar'], 'دورة الحجز (نسخة المدرب)')
+        self.assertEqual(f['steps'][2]['text']['ar'], 'نص أوضح للخطوة')
+        self.assertEqual(f['steps'][2]['wait'], '/reservations/new')     # behaviour kept from the code
+        # steps are fixed by the code: wrong count / moved target rejected
+        bad = dict(cur, steps=cur['steps'][:-1])
+        self.assertEqual(self.t.put(url, {'data': bad}, format='json').status_code, 400)
+        bad = dict(cur, steps=[dict(cur['steps'][0], target='other')] + cur['steps'][1:])
+        self.assertEqual(self.t.put(url, {'data': bad}, format='json').status_code, 400)
+        self.assertEqual(self.t.delete(url, {'note': 'رجوع'}, format='json').status_code, 200)
+        f = next(x for x in self.ph.get('/api/help/modules/reservations/').json()['flows']
+                 if x['id'] == 'flow:reservations.lifecycle')
+        self.assertNotEqual(f['title']['ar'], 'دورة الحجز (نسخة المدرب)')
+        self.assertEqual(HelpRevision.objects.filter(screen_key='flow:reservations.lifecycle').count(), 2)
+        self.assertEqual(self.t.get('/api/help/training/flow/nope.x/').status_code, 404)
+
+    def test_index_lists_flows_with_mobile_flag(self):
+        flows = self.ph.get('/api/help/').json()['flows']
+        ids = {f['id']: f for f in flows}
+        for fid in ('flow:pos.order', 'flow:demand.lifecycle', 'flow:delivery.lifecycle',
+                    'flow:reservations.mobile', 'flow:transfers.mobile', 'flow:demand.mobile'):
+            self.assertIn(fid, ids)
+        self.assertTrue(ids['flow:reservations.mobile']['mobile'])
+        self.assertFalse(ids['flow:reservations.lifecycle']['mobile'])

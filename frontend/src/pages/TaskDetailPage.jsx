@@ -97,7 +97,7 @@ function Chatter({ taskId, messages, onRefresh }) {
   const visibleMsgs = messages.filter(m => !m.is_deleted)
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-tour="tasks-detail-comments">
       <div className="space-y-3 max-h-72 overflow-y-auto mb-3">
         {visibleMsgs.length === 0 ? (
           <p className="text-center text-xs text-gray-400 py-4">لا توجد رسائل بعد</p>
@@ -177,7 +177,7 @@ function Checklist({ taskId, items, onRefresh }) {
   const pct = items.length ? Math.round(checked / items.length * 100) : 0
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-tour="tasks-detail-checklist">
       {items.length > 0 && (
         <div className="mb-3">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -517,7 +517,7 @@ export default function TaskDetailPage() {
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
       {/* ── Header ── */}
-      <div className="bg-white border-b px-6 py-4 sticky top-0 z-10">
+      <div className="bg-white border-b px-6 py-4 sticky top-0 z-10" data-tour="tasks-detail-header">
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => navigate('/tasks')}
@@ -535,6 +535,7 @@ export default function TaskDetailPage() {
           {/* Actions */}
           {!isDone && (
             <button
+              data-tour="tasks-detail-close"
               onClick={() => setShowComplete(true)}
               className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
             >
@@ -551,6 +552,7 @@ export default function TaskDetailPage() {
           )}
           {!editMode ? (
             <button
+              data-tour="tasks-detail-edit"
               onClick={startEdit}
               className="px-4 py-1.5 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
             >
@@ -642,7 +644,7 @@ export default function TaskDetailPage() {
         <div className="space-y-4">
 
           {/* Details card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3" data-tour="tasks-detail-details">
             <h3 className="font-semibold text-gray-700 text-sm text-right border-b pb-2">تفاصيل المهمة</h3>
 
             {editMode ? (

@@ -88,7 +88,7 @@ export default function MobileQADetailPage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div data-tour="hr-qa-item-result" className="grid grid-cols-3 gap-1.5">
                   {RESULTS.map(opt => (
                     <button key={opt.v} onClick={() => setResult(i, opt.v)}
                       className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${r.result === opt.v ? `${opt.on} border-transparent` : `bg-white ${opt.off}`}`}>
@@ -113,7 +113,7 @@ export default function MobileQADetailPage() {
             <textarea rows={2} className="input-field w-full resize-none" value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600 text-center">{error}</div>}
-          <div className="flex gap-2">
+          <div data-tour="hr-qa-save" className="flex gap-2">
             <button onClick={() => save(false)} disabled={busy} className="btn-secondary flex-1 disabled:opacity-50">حفظ كمسودة</button>
             <button onClick={() => save(true)} disabled={busy || answered === 0} className="btn-primary flex-1 py-3 disabled:opacity-50">
               {busy ? '...' : '✅ إرسال'}

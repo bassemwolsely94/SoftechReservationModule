@@ -78,7 +78,7 @@ export default function ForecastingPage() {
           <h1 className="text-2xl font-bold text-gray-900">محرك التنبؤ بالمبيعات</h1>
           <p className="text-sm text-gray-500 mt-1">FEFO forecast · موسمية · دقة التنبؤ</p>
         </div>
-        <button
+        <button data-tour="analytics-forecasting-run"
           onClick={() => triggerRun.mutate()}
           disabled={triggerRun.isPending}
           className="px-5 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2"
@@ -96,7 +96,7 @@ export default function ForecastingPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div data-tour="analytics-forecasting-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard label="آخر تشغيل" value={latestRun ? new Date(latestRun.started_at).toLocaleDateString('ar-EG') : '—'} />
         <KpiCard
           label="حالة آخر تشغيل"
@@ -112,7 +112,7 @@ export default function ForecastingPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div data-tour="analytics-forecasting-tabs" className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {[
           { key: 'runs',        label: '🏃 سجل التشغيلات' },
           { key: 'accuracy',    label: '🎯 دقة التنبؤ'    },
@@ -141,7 +141,7 @@ export default function ForecastingPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div data-tour="analytics-forecasting-runs" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -223,7 +223,7 @@ export default function ForecastingPage() {
       {/* Seasonality tab */}
       {tab === 'seasonality' && (
         <div>
-          <div className="flex justify-end mb-4">
+          <div data-tour="analytics-forecasting-seasonality-recalc" className="flex justify-end mb-4">
             <button
               onClick={() => computeSeasonality.mutate()}
               disabled={computeSeasonality.isPending}

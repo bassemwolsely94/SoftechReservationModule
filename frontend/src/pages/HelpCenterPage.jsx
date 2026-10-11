@@ -52,7 +52,7 @@ export default function HelpCenterPage() {
     <div dir={lang === 'en' ? 'ltr' : 'rtl'} className="p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-content">📖 {label('guide', lang)}</h1>
+          <h1 className="text-xl font-bold text-content" data-tour="general-help-center-header">📖 {label('guide', lang)}</h1>
           <p className="text-sm text-muted">
             {lang === 'en'
               ? 'Every screen of the system explained — what it is for, how to use it, its tabs and the module workflow. Press F1 on any screen to open its help.'
@@ -60,7 +60,7 @@ export default function HelpCenterPage() {
           </p>
         </div>
         <SystemTourButton lang={lang} />
-        <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
+        <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm" data-tour="general-help-center-lang">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}
                     className={`px-3 py-1.5 ${lang === l ? 'bg-brand-600 text-white' : 'text-muted hover:bg-surface-3'}`}>
@@ -70,14 +70,14 @@ export default function HelpCenterPage() {
         </div>
       </div>
 
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={label('search', lang)}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={label('search', lang)} data-tour="general-help-center-search"
              className="w-full text-sm bg-surface border border-line rounded-xl px-4 py-2.5 text-content placeholder-faint outline-none focus:border-brand-400" />
 
       {q.trim().length >= 2 ? (
         <SearchResults q={q.trim()} lang={lang} onOpen={(k) => { setQ(''); go({ tab: 'browse', screen: k }) }} />
       ) : (
         <>
-          <div className="flex gap-1 border-b border-line">
+          <div className="flex gap-1 border-b border-line" data-tour="general-help-center-tabs">
             {tabs.map(([k, t]) => (
               <button key={k} type="button" onClick={() => go({ tab: k })}
                       className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-muted hover:text-content'}`}>
@@ -102,7 +102,7 @@ export default function HelpCenterPage() {
 
 function Browse({ index, lang, go }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="general-help-center-modules">
       {index.groups.map((g) => {
         const mods = index.modules.filter((m) => m.group === g.key)
         if (!mods.length) return null
@@ -213,7 +213,7 @@ function ScreenView({ screenKey, lang, go, index }) {
             </Link>
           )}
           {openRoute && data.tour?.length > 0 && (
-            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour), 400) }}
+            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes), 400) }}
                     className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
               👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
             </button>
@@ -392,7 +392,7 @@ function SystemTourButton({ lang }) {
   const flow = (data?.flows || []).find((f) => f.id === 'flow:general.system')
   if (!flow) return null
   return (
-    <button type="button" onClick={() => startTour(flow.id, flow.steps)}
+    <button type="button" onClick={() => startTour(flow.id, flow.steps)} data-tour="general-help-center-system-tour"
             className="text-sm bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
       🧭 {lang === 'en' ? 'System tour' : 'جولة تعريفية بالنظام'}
     </button>

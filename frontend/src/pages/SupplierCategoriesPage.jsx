@@ -86,7 +86,7 @@ export default function SupplierCategoriesPage() {
             فئات مُدارة + قواعد ربط أكواد SOFTECH (نوع الشخص / التصنيف) بالفئات
           </p>
         </div>
-        <button
+        <button data-tour="purchasing-categories-reclassify"
           onClick={() => reclassify.mutate()}
           disabled={reclassify.isPending}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50">
@@ -100,10 +100,10 @@ export default function SupplierCategoriesPage() {
       )}
 
       {/* Categories */}
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <section data-tour="purchasing-categories-list" className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-800">الفئات ({cats.length})</h2>
-          <button onClick={() => setCatModal({ color: 'gray', sort_order: 100, is_active: true })}
+          <button data-tour="purchasing-categories-new" onClick={() => setCatModal({ color: 'gray', sort_order: 100, is_active: true })}
             className="text-sm px-3 py-1.5 rounded-lg border border-brand-500 text-brand-700 hover:bg-brand-50">
             + فئة جديدة
           </button>
@@ -143,10 +143,10 @@ export default function SupplierCategoriesPage() {
       </section>
 
       {/* Rules */}
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <section data-tour="purchasing-categories-rules" className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-800">قواعد التصنيف ({rules.length})</h2>
-          <button onClick={() => setRuleModal({ ptcode: '20', ptclassifcode: '', priority: 10, is_active: true })}
+          <button data-tour="purchasing-categories-new-rule" onClick={() => setRuleModal({ ptcode: '20', ptclassifcode: '', priority: 10, is_active: true })}
             className="text-sm px-3 py-1.5 rounded-lg border border-brand-500 text-brand-700 hover:bg-brand-50">
             + قاعدة جديدة
           </button>

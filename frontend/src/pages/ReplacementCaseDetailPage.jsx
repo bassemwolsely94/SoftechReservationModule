@@ -32,7 +32,7 @@ function Rail({ c }) {
     ['المطابقة', c.status === 'reconciled' || c.status === 'closed'],
   ]
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div data-tour="replacement-detail-rail" className="flex items-center gap-1 flex-wrap">
       {steps.map(([label, ok], i) => (
         <div key={label} className="flex items-center gap-1">
           <span className={`text-xs px-2.5 py-1 rounded-full border ${ok
@@ -163,7 +163,7 @@ export default function ReplacementCaseDetailPage() {
     <div className="p-4 space-y-4" dir="rtl">
       <div className="text-xs"><Link to="/replacement" className="text-blue-700">← كل الحالات</Link></div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div data-tour="replacement-detail-header" className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -187,7 +187,7 @@ export default function ReplacementCaseDetailPage() {
               {c.supplier_tier_pct && ` (فئة المورد ${Number(c.supplier_tier_pct)}%)`}
             </div>
           </div>
-          <div className="flex gap-4">
+          <div data-tour="replacement-detail-balance" className="flex gap-4">
             <div className="text-center"><div className="text-[11px] text-gray-500">الرصيد</div><div className="text-2xl font-bold tabular-nums">{money(c.entitlement)}</div></div>
             <div className="text-center"><div className="text-[11px] text-gray-500">المتبقي</div>
               <div className={`text-2xl font-bold tabular-nums ${Number(c.outstanding) > 0.01 ? 'text-rose-700' : 'text-emerald-700'}`}>{money(c.outstanding)}</div></div>
@@ -206,7 +206,7 @@ export default function ReplacementCaseDetailPage() {
 
       {msg && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{msg}</div>}
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div data-tour="replacement-detail-tabs" className="flex gap-1 border-b border-gray-200">
         {TABS.filter(([k]) => k !== 'workflow' || live).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
                   className={`px-4 py-2 text-sm -mb-px border-b-2 ${activeTab === k ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-gray-500'}`}>
@@ -214,7 +214,7 @@ export default function ReplacementCaseDetailPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
+        <button data-tour="replacement-detail-rebuild" disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
       </div>
 
       {activeTab === 'workflow' && <WorkflowPanel c={c} />}

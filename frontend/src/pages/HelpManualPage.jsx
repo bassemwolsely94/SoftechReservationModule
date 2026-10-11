@@ -58,22 +58,22 @@ export default function HelpManualPage() {
 
       {/* controls — not printed */}
       <div className="no-print sticky top-0 z-10 bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap items-center gap-3 text-sm">
-        <a href="/help" className="text-brand-600 hover:underline">→ {label('guide', lang)}</a>
-        <select value={role} onChange={(e) => set('role', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+        <a href="/help" className="text-brand-600 hover:underline" data-tour="general-help-manual-back">→ {label('guide', lang)}</a>
+        <select value={role} onChange={(e) => set('role', e.target.value)} data-tour="general-help-manual-role" className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by role —' : '— حسب الدور —'}</option>
           {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r][en ? 1 : 0]}</option>)}
         </select>
-        <select value={module} onChange={(e) => set('module', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+        <select value={module} onChange={(e) => set('module', e.target.value)} data-tour="general-help-manual-module" className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by module —' : '— حسب الموديول —'}</option>
           {(index?.modules || []).map((m) => <option key={m.key} value={m.key}>{m.icon} {pick(m.title, lang)}</option>)}
         </select>
-        <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+        <div className="flex border border-gray-300 rounded-lg overflow-hidden" data-tour="general-help-manual-lang">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => set('lang', l)}
                     className={`px-3 py-1.5 ${lang === l ? 'bg-brand-600 text-white' : 'bg-white'}`}>{l === 'ar' ? 'عربي' : 'English'}</button>
           ))}
         </div>
-        <button type="button" onClick={() => window.print()} disabled={!data}
+        <button type="button" onClick={() => window.print()} disabled={!data} data-tour="general-help-manual-print"
                 className="ms-auto bg-brand-600 text-white rounded-lg px-4 py-1.5 disabled:opacity-50">
           🖨️ {en ? 'Print / save as PDF' : 'طباعة / حفظ PDF'}
         </button>
@@ -85,7 +85,7 @@ export default function HelpManualPage() {
         {data && (
           <>
             {/* cover + contents */}
-            <section className="space-y-4">
+            <section className="space-y-4" data-tour="general-help-manual-contents">
               <div className="text-sm text-gray-500">{en ? 'ElRezeiky Pharmacies' : 'صيدليات الرزيقي'}</div>
               <h1 className="text-3xl font-bold">📖 {title}</h1>
               <p className="text-sm text-gray-600 leading-7">

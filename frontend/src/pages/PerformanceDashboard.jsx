@@ -152,7 +152,7 @@ export default function PerformanceDashboard() {
   return (
     <div className="p-6 space-y-4 max-w-screen-xl mx-auto" dir="rtl">
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-tour="analytics-performance-header" className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">لوحة الأداء</h1>
           <p className="text-sm text-gray-500 mt-0.5">أداء الموظفين — إيراد · ربح · خصم · كود المستخدم واسمه</p>
@@ -174,7 +174,7 @@ export default function PerformanceDashboard() {
       {data && (
         <>
           {/* Summary KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div data-tour="analytics-performance-kpis" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             <KpiCard label="إجمالي الإيرادات"   value={`${fmt(s.total_revenue)} جم`}    color="brand" icon="💰" />
             <KpiCard label="صافي الربح"          value={`${fmt(s.total_profit)} جم`}     color="green" icon="📈" sub={`هامش ${fmtPct(s.profit_margin_pct)}`} />
             <KpiCard label="إجمالي الخصومات"    value={`${fmt(s.total_discount)} جم`}   color="amber" icon="🏷️" />
@@ -188,7 +188,7 @@ export default function PerformanceDashboard() {
 
           {/* Podium — top 3 */}
           {empRows.length >= 3 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div data-tour="analytics-performance-podium" className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">المتصدرون</h2>
               <div className="flex justify-center items-end gap-4">
                 <div className="text-center">
@@ -221,7 +221,7 @@ export default function PerformanceDashboard() {
 
           {/* Tabs */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div data-tour="analytics-performance-tabs" className="flex border-b border-gray-100 overflow-x-auto">
               {TABS.map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px
@@ -231,7 +231,7 @@ export default function PerformanceDashboard() {
               ))}
             </div>
 
-            <div>
+            <div data-tour="analytics-performance-content">
 
               {activeTab === 'employees' && (
                 <DataTable

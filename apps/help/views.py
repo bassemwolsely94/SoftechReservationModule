@@ -76,6 +76,8 @@ def index(request):
             'has_tour': bool(s.get('tour')),
             'updated': _updated(s, ov.get(s['key'])),
         } for s in screens.values()],
+        'flows': [{'id': fid, 'module': f['module'], 'title': f['title'], 'mobile': bool(f.get('mobile'))}
+                  for fid, f in _flows_effective(modules).items()],
         'can_edit': _can_edit(_profile(request)),
     })
 
@@ -90,10 +92,21 @@ def module_detail(request, key):
     ov = _overrides()
     return Response({
         **{k: v for k, v in m.items() if k not in ('screens', 'flows')},
-        'flows': [{'id': f"flow:{m['key']}.{f['key']}", 'title': f['title'], 'summary': f.get('summary'),
-                   'roles': f.get('roles'), 'steps': f['steps']} for f in m.get('flows') or []],
+        'flows': _module_flows(m['key']),
         'screens': [_brief(registry.effective(screens[k], ov.get(k)), modules) for k in m['screens']],
     })
+
+
+def _flows_effective(modules):
+    from . import training
+    return training.flows_effective(modules)
+
+
+def _module_flows(module_key):
+    """A module's workflow tours as users run them (trainers' text applied)."""
+    from . import training
+    return [training.flow_brief(fid, f) for fid, f in training.flows_effective().items()
+            if f['module'] == module_key]
 
 
 def _screen_payload(request, key, s, modules, screens, override):
@@ -110,8 +123,7 @@ def _screen_payload(request, key, s, modules, screens, override):
         'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
                    'summary': m.get('summary'), 'workflows': workflows,
-                   'flows': [{'id': f"flow:{m['key']}.{f['key']}", 'title': f['title'], 'summary': f.get('summary'),
-                              'roles': f.get('roles'), 'steps': f['steps']} for f in m.get('flows') or []]},
+                   'flows': _module_flows(m['key']) if m else []},
         'siblings': [_brief(registry.effective(screens[k], None), modules)
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],
@@ -442,7 +454,7 @@ def tour_event(request):
     modules, screens = registry.load()
     key = str(request.data.get('screen_key', ''))[:80]
     if key.startswith('flow:'):
-        f = registry.flows(modules).get(key)
+        f = registry.flows(modules).get(key)   # step count is fixed by the code
         total = len(f['steps']) if f else 0
     else:
         total = len(registry.tour_flow(key, screens)) if key in screens and screens[key].get('tour') else 0
@@ -493,8 +505,8 @@ def usage(request):
     ov = _overrides()
     tour_rows = []
     runs = [(k, s['title'], registry.tour_flow(k, screens, ov)) for k, s in screens.items() if s.get('tour')]
-    runs += [(k, f['title'], [{**st, 'screen': None, 'i': i} for i, st in enumerate(f['steps'])])
-             for k, f in registry.flows(modules).items()]
+    runs += [(k, f['title'], [{**st, 'screen': None, 'flow': k[5:], 'i': i} for i, st in enumerate(f['steps'])])
+             for k, f in training.flows_effective(modules).items()]
     for k, title, steps in runs:
         t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
         stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None
@@ -506,7 +518,9 @@ def usage(request):
             'done_pct': round(100 * t['done'] / t['runs']) if t['runs'] else None,
             'common_stop': stop,
             # where to fix it: that step's own screen + index (None for workflow tours)
-            'weak_step': {'screen': weak['screen'], 'i': weak['i']} if weak and weak.get('screen') else None,
+            'weak_step': (None if not weak else
+                          {'screen': weak['screen'], 'i': weak['i']} if weak.get('screen') else
+                          {'flow': weak['flow'], 'i': weak['i']}),
         })
     tour_rows.sort(key=lambda r: (r['runs'] > 0, r['done_pct'] if r['done_pct'] is not None else 101))
     return Response({

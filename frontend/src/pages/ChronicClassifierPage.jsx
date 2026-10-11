@@ -217,7 +217,7 @@ function ItemClassifier() {
 
         {/* Summary cards */}
         {summary && (
-          <div className="grid grid-cols-4 gap-3 flex-shrink-0">
+          <div data-tour="chronic-classifier-summary" className="grid grid-cols-4 gap-3 flex-shrink-0">
             {[
               { label: 'إجمالي الأصناف', value: summary.total_items,  color: 'blue'   },
               { label: 'مصنَّف',         value: summary.classified,   color: 'green'  },
@@ -235,7 +235,7 @@ function ItemClassifier() {
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border border-gray-200 p-3 flex gap-3 items-center flex-shrink-0">
+        <div data-tour="chronic-classifier-filters" className="bg-white rounded-xl border border-gray-200 p-3 flex gap-3 items-center flex-shrink-0">
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
@@ -256,7 +256,7 @@ function ItemClassifier() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
+        <div data-tour="chronic-classifier-table" className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
@@ -363,7 +363,7 @@ function ItemClassifier() {
 
       {/* ── Right: classify panel ──────────────────────────────────────── */}
       {panel && selected && (
-        <div className="w-80 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div data-tour="chronic-classifier-panel" className="w-80 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
           {/* Panel header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between">
             <div className="min-w-0">
@@ -1713,7 +1713,7 @@ export default function ChronicClassifierPage() {
     <div className="flex flex-col h-full p-4 gap-4 overflow-hidden" dir="rtl">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0">
+      <div data-tour="chronic-classifier-header" className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-gray-900">مصنّف الأدوية المزمنة</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -1723,7 +1723,7 @@ export default function ChronicClassifierPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-shrink-0">
+      <div data-tour="chronic-classifier-tabs" className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-shrink-0">
         {TABS.map(t => (
           <button
             key={t.id}

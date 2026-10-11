@@ -82,6 +82,7 @@ function TourBody({ tour }) {
     const page = pageOf(step)
     const expected = !page || on(page, pathname) || (step.wait && on(step.wait, pathname))
       || (next && (!pageOf(next) || on(pageOf(next), pathname)))
+      || (!isFlow && !step.route && (tour.routes || []).some((r) => on(r, pathname)))
     if (!expected) endTour()
   }, [pathname])  // eslint-disable-line react-hooks/exhaustive-deps
 

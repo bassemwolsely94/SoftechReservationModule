@@ -237,11 +237,15 @@ def team(request):
 # ── trainers: edit paths / quizzes (help/edit) ────────────────────────────────
 
 def _training_payload(kind, key, override):
-    base = training.base_path(key) if kind == 'path' else training.base_quiz(key)
-    if override is None:
-        current = base
+    if kind == 'flow':
+        base = training.base_flow(key)
+        current = training.merge_flow(base, override.data if override else None)
+    elif kind == 'path':
+        base = training.base_path(key)
+        current = base if override is None else override.data.get('screens', [])
     else:
-        current = override.data.get('screens' if kind == 'path' else 'questions', [])
+        base = training.base_quiz(key)
+        current = base if override is None else override.data.get('questions', [])
     revs = HelpRevision.objects.filter(screen_key=f'{kind}:{key}').select_related('staff__user')[:20]
     return {
         'kind': kind, 'key': key, 'current': current, 'base': base,
@@ -264,16 +268,18 @@ def training_edit(request, kind, key):
         return Response({'detail': 'ليس لديك صلاحية تعديل التدريب'}, status=403)
     modules, _ = registry.load()
     if (kind == 'path' and key not in ROLES) or (kind == 'quiz' and key not in modules) \
-            or kind not in ('path', 'quiz'):
+            or (kind == 'flow' and training.base_flow(key) is None) or kind not in ('path', 'quiz', 'flow'):
         return Response({'detail': 'not found'}, status=404)
     override = HelpTrainingOverride.objects.filter(kind=kind, key=key).select_related('updated_by__user').first()
     if request.method == 'GET':
         return Response(_training_payload(kind, key, override))
 
+    note = str((request.data or {}).get('note', ''))[:300] if isinstance(request.data, dict) else ''
+    if kind == 'flow':
+        return _flow_edit(request, key, override, profile, note)
     field = 'screens' if kind == 'path' else 'questions'
     before = {field: override.data.get(field) if override else
               (training.base_path(key) if kind == 'path' else training.base_quiz(key))}
-    note = str((request.data or {}).get('note', ''))[:300] if isinstance(request.data, dict) else ''
     if request.method == 'DELETE':
         if override is None:
             return Response({'detail': 'لا يوجد تعديل للرجوع عنه'}, status=400)
@@ -314,3 +320,31 @@ def _announce(kind, key, before, after, revision_id):
                                 training.quiz_version(after), revision_id)
     training.record_snapshot(kind, key)
     return n
+
+
+def _flow_edit(request, key, override, profile, note):
+    """Workflow-tour text: title, summary, each step's text (steps fixed by the code).
+    Same history as screen help (HelpRevision 'flow:<module>.<key>'); no notification."""
+    base = training.base_flow(key)
+    before = training.merge_flow(base, override.data if override else None)
+    if request.method == 'DELETE':
+        if override is None:
+            return Response({'detail': 'لا يوجد تعديل للرجوع عنه'}, status=400)
+        override.delete()
+        HelpRevision.objects.create(screen_key=f'flow:{key}', action=HelpRevision.ACTION_REVERT,
+                                    before=before, after=base, note=note, staff=profile)
+        return Response(_training_payload('flow', key, None))
+    data = request.data.get('data')
+    errors = training.validate_flow(data, base)
+    if errors:
+        return Response({'detail': 'محتوى غير صالح', 'errors': errors}, status=400)
+    clean = training.clean_flow(data)
+    if override is None:
+        override = HelpTrainingOverride(kind='flow', key=key)
+    override.data = clean
+    override.base_hash = training.base_hash('flow', key)
+    override.updated_by = profile
+    override.save()
+    HelpRevision.objects.create(screen_key=f'flow:{key}', action=HelpRevision.ACTION_SAVE,
+                                before=before, after=training.merge_flow(base, clean), note=note, staff=profile)
+    return Response(_training_payload('flow', key, override))

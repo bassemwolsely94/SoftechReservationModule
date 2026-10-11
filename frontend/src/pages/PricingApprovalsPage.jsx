@@ -486,7 +486,7 @@ export default function PricingApprovalsPage() {
             >
               📄 استيراد ملف
             </button>
-            <button
+            <button data-tour="pricing-approvals-new"
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
             >
@@ -497,7 +497,7 @@ export default function PricingApprovalsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-gray-200">
+        <div data-tour="pricing-approvals-tabs" className="flex gap-1 border-b border-gray-200">
           {[
             { key: 'requests',    label: 'الطلبات' },
             { key: 'sla',         label: 'متابعة المعلّقة (SLA)' },
@@ -529,7 +529,7 @@ export default function PricingApprovalsPage() {
         <>
 
         {/* Status filter */}
-        <div className="flex gap-2 flex-wrap">
+        <div data-tour="pricing-approvals-status" className="flex gap-2 flex-wrap">
           {[
             { key: '',         label: 'الكل' },
             { key: 'pending',  label: 'في الانتظار' },
@@ -552,7 +552,7 @@ export default function PricingApprovalsPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div data-tour="pricing-approvals-table" className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           {isLoading && <div className="text-center py-12 text-gray-400 text-sm">جاري التحميل…</div>}
           {isError   && <div className="text-center py-12 text-red-500 text-sm">حدث خطأ أثناء التحميل</div>}
           {!isLoading && !isError && requests.length === 0 && (
@@ -583,7 +583,7 @@ export default function PricingApprovalsPage() {
                         <div className="font-medium text-gray-900 text-sm">{req.item_name}</div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-gray-400 font-mono">{req.item_softech_id}</span>
-                          <button
+                          <button data-tour="pricing-approvals-history"
                             onClick={() => setHistoryItem({ softech_id: req.item_softech_id, name: req.item_name })}
                             title="سجل تغييرات السعر"
                             className="text-xs text-blue-500 hover:text-blue-700">🕘 السجل</button>
@@ -638,7 +638,7 @@ export default function PricingApprovalsPage() {
                         )}
                       </td>
                       {isAdmin && (
-                        <td className="px-4 py-3">
+                        <td data-tour="pricing-approvals-review" className="px-4 py-3">
                           {(req.status === 'pending' || req.status === 'failed') && (
                             <div className="flex gap-1.5">
                               <button

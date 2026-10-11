@@ -85,7 +85,7 @@ function AnalyticsPanel({ days }) {
   return (
     <div className="space-y-6">
       {/* KPI row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div data-tour="analytics-transfers-kpis" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard label="إجمالي الطلبات"     value={fmt(kpis.total)}           icon="🔀" color="brand" />
         <KpiCard label="نسبة الإكمال"        value={fmtPct(kpis.completion_rate)} icon="✅" color="green"
                  sub={`${fmt(kpis.completed)} طلب مكتمل`} />
@@ -97,7 +97,7 @@ function AnalyticsPanel({ days }) {
 
       <div className="grid sm:grid-cols-2 gap-6">
         {/* Top transferred items */}
-        <div className="card">
+        <div data-tour="analytics-transfers-top-items" className="card">
           <div className="text-sm font-bold text-gray-700 mb-4">أكثر الأصناف تحويلاً</div>
           {top_items.length === 0
             ? <div className="text-xs text-gray-400 text-center py-6">لا توجد بيانات</div>
@@ -114,7 +114,7 @@ function AnalyticsPanel({ days }) {
         </div>
 
         {/* Branch flow */}
-        <div className="card">
+        <div data-tour="analytics-transfers-routes" className="card">
           <div className="text-sm font-bold text-gray-700 mb-4">أكثر مسارات التحويل نشاطاً</div>
           {branch_flow.length === 0
             ? <div className="text-xs text-gray-400 text-center py-6">لا توجد بيانات</div>
@@ -272,7 +272,7 @@ export default function TransfersAnalyticsPage() {
           <div className="flex-1" />
 
           {activeTab === 'analytics' && (
-            <select
+            <select data-tour="analytics-transfers-period"
               value={days}
               onChange={e => setDays(Number(e.target.value))}
               className="input-field text-xs w-36"
@@ -286,7 +286,7 @@ export default function TransfersAnalyticsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-3">
+        <div data-tour="analytics-transfers-tabs" className="flex gap-1 mt-3">
           {TABS.map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${

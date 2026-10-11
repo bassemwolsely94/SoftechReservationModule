@@ -237,7 +237,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
 
           {/* Customer identity */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+          <div data-tour="demand-new-customer" className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
             <div className="text-xs font-bold text-blue-700">هوية العميل</div>
 
             {/* PIC / Customer search — auto-fills fields below when a known customer is found */}
@@ -283,7 +283,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
 
           {/* Branch + source + priority */}
-          <div className="grid grid-cols-3 gap-3">
+          <div data-tour="demand-new-details" className="grid grid-cols-3 gap-3">
             <div>
               <label className="label text-xs">الفرع *</label>
               <BranchSelect
@@ -310,7 +310,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
 
           {/* Items */}
-          <div>
+          <div data-tour="demand-new-items">
             <label className="label text-xs mb-2">الأصناف المطلوبة *</label>
             {/* Pass selected=null always so widget resets after each pick (items go to the list below) */}
             <ItemSearchWidget
@@ -421,7 +421,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-            <button onClick={handleSubmit}
+            <button onClick={handleSubmit} data-tour="demand-new-submit"
               disabled={submitting || items.length === 0}
               className="btn-primary text-sm disabled:opacity-50">
               {submitting ? 'جارٍ...' : '📋 تسجيل الطلب'}

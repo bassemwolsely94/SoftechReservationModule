@@ -214,7 +214,7 @@ function DashboardTab() {
 
   return (
     <div>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+      <div data-tour="catalog-images-stats" style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
         {stats.map(s=>(
           <div key={s.label} style={{...card,flex:1,minWidth:120,textAlign:'center',margin:0}}>
             <div style={{fontSize:26,fontWeight:700,color:s.color}}>{s.value}</div>
@@ -223,7 +223,7 @@ function DashboardTab() {
         ))}
       </div>
 
-      <div style={card}>
+      <div data-tour="catalog-images-coverage" style={card}>
         <div style={{fontWeight:600,marginBottom:8}}>التغطية البصرية</div>
         <CoverageBar pct={r.coverage_pct||0}/>
         <div style={{fontSize:12,color:'#64748b',marginTop:6}}>
@@ -280,7 +280,7 @@ function ReviewQueueTab({ onGallery }) {
   return (
     <div>
       {/* Filters row */}
-      <div style={{...card, padding:'14px 20px'}}>
+      <div data-tour="catalog-images-review-filters" style={{...card, padding:'14px 20px'}}>
         <div style={{display:'flex',gap:16,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:13,fontWeight:600}}>فلتر العرض</div>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
@@ -1279,7 +1279,7 @@ export default function ImageEnrichmentPage() {
 
   return (
     <div dir="rtl" style={{fontFamily:'Segoe UI,Tahoma,Arial,sans-serif',padding:'24px',maxWidth:1200,margin:'0 auto'}}>
-      <div style={{marginBottom:18}}>
+      <div data-tour="catalog-images-header" style={{marginBottom:18}}>
         <h1 style={{fontSize:22,fontWeight:700,margin:0}}>🖼️ محرك اكتساب صور المنتجات</h1>
         <p style={{fontSize:13,color:'#64748b',margin:'4px 0 0'}}>
           بحث آلي متعدد المصادر · كشف العلامات المائية وإزالتها · تقييم الجودة · مراجعة بشرية · تعلم آلي من الموافقات
@@ -1287,7 +1287,7 @@ export default function ImageEnrichmentPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid #e2e8f0',flexWrap:'wrap'}}>
+      <div data-tour="catalog-images-tabs" style={{display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid #e2e8f0',flexWrap:'wrap'}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
                   style={{padding:'9px 16px',border:'none',background:'none',cursor:'pointer',

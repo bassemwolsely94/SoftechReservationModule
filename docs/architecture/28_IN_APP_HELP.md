@@ -113,8 +113,20 @@ started only on request, it dims the page, zooms into one real area at a time an
 - **List → detail:** a screen with `tour_continue: '<detail screen>'` whose last step `wait`s for the
   detail route runs as one flow (`registry.tour_flow`, sent as `tour_flow`): reservations board,
   transfers list, demand list, customers list.
-- **Workflow tours** (`MODULE['flows']`, optional `roles`): «جولات دورة العمل» in the panel and on
-  the module page — reservations lifecycle, transfer lifecycle. **System tour** (`general.system`):
+- **Workflow tours** (`MODULE['flows']`, optional `roles`, `mobile: True` for the mobile app):
+  «جولات دورة العمل» in the panel (only the tours for the current shell — mobile or desktop) and on
+  the module page (all, 📱 marks mobile). Desktop: reservation lifecycle, transfer lifecycle, POS order
+  → cashier, POS exceptions, missed demand, delivery (dashboard → dispatch → rider). Mobile:
+  reservations, transfers, missed demand (anchors `mshell-*`, generated `mnav-<path>` for the bottom
+  tabs — tabs beyond the bar live under «المزيد»).
+- **Trainers edit workflow tours** in «للمدربين» → «جولة دورة عمل»: title, summary and each step's
+  text (steps, their buttons and pages stay the code's). `HelpTrainingOverride(kind='flow',
+  key='<module>.<key>')`, history `HelpRevision('flow:<module>.<key>')`, revert. A weak workflow step
+  in the usage report opens this editor on that step.
+- **Every screen has a tour** (enforced by `test_help`). Coverage per module / screen:
+  [29_PRODUCT_TOURS.md](29_PRODUCT_TOURS.md) — regenerate with `manage.py help_tour_coverage`.
+- A screen tour keeps running while you move between that screen's own pages (e.g. a mobile list
+  and its detail); steps whose element is on the other page show their text with a note. **System tour** (`general.system`):
   «🧭 جولة تعريفية بالنظام» on /help — side menu, search, help, notifications, security.
 - **App-frame anchors:** `shell-*` (rail, nav panel, search, help, notifications, security) and
   generated menu anchors `nav-group-<id>` / `nav-<path>` (Layout `navTourId`); the runner opens a
@@ -209,4 +221,4 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (only ~56 of 176 have one; the panel shows the button only where one exists).
+- Workflow tours for more modules (purchasing, insurance claims, HR requests → approvals).

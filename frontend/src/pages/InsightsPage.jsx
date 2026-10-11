@@ -175,7 +175,7 @@ export default function InsightsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {view === 'reports' && (
-            <div className="flex rounded-lg bg-gray-100 p-0.5">
+            <div data-tour="analytics-insights-domain" className="flex rounded-lg bg-gray-100 p-0.5">
               <button onClick={() => { setDomain('sales'); setSelId(null) }}
                 className={`px-3 py-1.5 text-sm rounded-md ${domain === 'sales' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>🧾 المبيعات</button>
               <button onClick={() => { setDomain('purchasing'); setSelId(null) }}
@@ -183,7 +183,7 @@ export default function InsightsPage() {
             </div>
           )}
           {canEditRules && (
-            <div className="flex rounded-lg bg-gray-100 p-0.5">
+            <div data-tour="analytics-insights-view" className="flex rounded-lg bg-gray-100 p-0.5">
               <button onClick={() => setView('reports')}
                 className={`px-3 py-1.5 text-sm rounded-md ${view === 'reports' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>📋 التقارير</button>
               <button onClick={() => setView('rules')}
@@ -192,7 +192,7 @@ export default function InsightsPage() {
           )}
 
           {view === 'reports' && (<>
-          <div className="flex rounded-lg bg-gray-100 p-0.5">
+          <div data-tour="analytics-insights-period" className="flex rounded-lg bg-gray-100 p-0.5">
             {Object.entries(PERIODS).map(([k, v]) => (
               <button key={k} onClick={() => changePeriod(k)}
                 className={`px-3 py-1.5 text-sm rounded-md ${period === k ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>{v}</button>
@@ -255,7 +255,7 @@ export default function InsightsPage() {
           )}
 
           {canRun && (
-            <button onClick={() => gen.mutate()} disabled={gen.isPending || !spanOk} className="btn-primary text-sm disabled:opacity-40"
+            <button data-tour="analytics-insights-generate" onClick={() => gen.mutate()} disabled={gen.isPending || !spanOk} className="btn-primary text-sm disabled:opacity-40"
               title={spanOk ? '' : 'المدة غير صالحة'}>
               {gen.isPending ? 'جارٍ التوليد…' : '⚙️ توليد التقرير'}
             </button>
@@ -301,7 +301,7 @@ export default function InsightsPage() {
 
       {view === 'rules' ? <RulesEditor /> : (
       <div className="grid md:grid-cols-[260px_1fr] gap-4">
-        <div className="space-y-2">
+        <div data-tour="analytics-insights-list" className="space-y-2">
           {isLoading ? <div className="text-gray-400 text-sm py-8 text-center">جارٍ التحميل…</div>
             : reports.length === 0 ? <div className="text-gray-400 text-sm py-8 text-center">لا توجد تقارير</div>
             : reports.map(r => (
@@ -505,7 +505,7 @@ function ReportView({ id }) {
       {needsKey && !scopeKey ? null : !rep ? (
         <div className="text-gray-400 text-sm py-8 text-center">{isFetching ? 'جارٍ التحميل…' : 'لا توجد بيانات'}</div>
       ) : (<>
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <div data-tour="analytics-insights-report" className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
             <button onClick={() => setLang('ar')} className={`px-3 py-1 rounded-md ${lang === 'ar' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>عربي</button>

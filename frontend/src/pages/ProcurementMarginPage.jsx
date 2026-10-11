@@ -78,7 +78,7 @@ function MarginTab({ days, setDays }) {
   return (
     <div className="space-y-5">
       {/* Overall KPIs */}
-      <div className="grid grid-cols-3 gap-3">
+      <div data-tour="purchasing-margins-kpis" className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">متوسط الهامش</p>
           <p className={`text-xl font-bold mt-1 ${Number(data.overall?.avg_margin) < 15 ? 'text-red-600' : 'text-emerald-600'}`}>
@@ -105,7 +105,7 @@ function MarginTab({ days, setDays }) {
         </div>
 
         {/* Low margin items */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto max-h-80">
+        <div data-tour="purchasing-margins-low" className="bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto max-h-80">
           <h3 className="font-semibold text-gray-700 mb-3">أدنى هوامش (أصناف)</h3>
           <table className="w-full text-xs">
             <thead>
@@ -133,7 +133,7 @@ function MarginTab({ days, setDays }) {
       </div>
 
       {/* By Supplier */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
+      <div data-tour="purchasing-margins-suppliers" className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
         <h3 className="font-semibold text-gray-700 mb-3">الهوامش حسب المورد</h3>
         <table className="w-full text-sm">
           <thead>
@@ -187,7 +187,7 @@ function PriceControlTab() {
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 items-center">
+      <div data-tour="purchasing-margins-price-filters" className="flex flex-wrap gap-3 items-center">
         <label className="text-sm text-gray-600 flex items-center gap-2">
           حد التذبذب المئوي:
           <input
@@ -282,7 +282,7 @@ export default function ProcurementMarginPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">الهوامش ومراقبة الأسعار</h1>
         {activeTab === 'margin' && (
-          <div className="flex items-center gap-2 text-sm">
+          <div data-tour="purchasing-margins-period" className="flex items-center gap-2 text-sm">
             <span className="text-gray-600">الفترة:</span>
             {[30, 90, 180, 365].map(d => (
               <button
@@ -298,7 +298,7 @@ export default function ProcurementMarginPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 gap-1">
+      <div data-tour="purchasing-margins-tabs" className="flex border-b border-gray-200 gap-1">
         {TABS.map(t => (
           <button
             key={t.key}

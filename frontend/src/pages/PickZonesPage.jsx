@@ -135,7 +135,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
   const currentThreshold = threshold ?? settings?.price_threshold ?? ''
 
   return (
-    <div className="card mb-4">
+    <div className="card mb-4" data-tour="transfers-pick-zones-settings">
       <div className="font-bold text-gray-800 text-sm mb-3">⚙️ إعدادات التصنيف</div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
@@ -303,7 +303,7 @@ function ZonesTab({ zones, branchParam, purpose, canEdit, showToast }) {
   return (
     <div>
       <SettingsCard zones={zones} canEdit={canEdit} showToast={showToast} />
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden" data-tour="transfers-pick-zones-zones">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
@@ -965,7 +965,7 @@ export default function PickZonesPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Purpose: picking (source warehouse walk) vs stocking (branch shelves) */}
-          <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden" data-tour="transfers-pick-zones-purpose">
             {PURPOSES.map(p => (
               <button
                 key={p.value}
@@ -983,6 +983,7 @@ export default function PickZonesPage() {
           </div>
           <label className="text-xs text-gray-500 font-semibold">الموقع:</label>
           <select
+            data-tour="transfers-pick-zones-location"
             className="input-field text-sm w-52"
             value={branchParam}
             onChange={e => setBranchParam(e.target.value)}
@@ -1025,7 +1026,7 @@ export default function PickZonesPage() {
         </div>
       )}
 
-      <div className="flex border-b border-gray-200 gap-5 mb-4">
+      <div className="flex border-b border-gray-200 gap-5 mb-4" data-tour="transfers-pick-zones-tabs">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`pb-2.5 text-sm font-semibold border-b-2 transition-colors ${

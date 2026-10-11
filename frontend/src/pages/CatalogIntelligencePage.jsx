@@ -66,7 +66,7 @@ function VariantGroupsTab() {
     <div className="flex gap-4 h-full" dir="rtl">
       {/* Left: list */}
       <div className="w-72 flex-shrink-0">
-        <div className="flex items-center gap-2 mb-3">
+        <div data-tour="catalog-intelligence-variant-search" className="flex items-center gap-2 mb-3">
           <input
             value={q} onChange={e => setQ(e.target.value)}
             placeholder="بحث في المجموعات..."
@@ -97,7 +97,7 @@ function VariantGroupsTab() {
           </div>
         )}
 
-        <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+        <div data-tour="catalog-intelligence-variant-list" className="space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
           {isLoading && <div className="text-center text-gray-400 py-4 text-sm">جارٍ التحميل...</div>}
           {!isLoading && groups.length === 0 && (
             <div className="text-center text-gray-400 py-6 text-sm">لا توجد مجموعات</div>
@@ -119,7 +119,7 @@ function VariantGroupsTab() {
       </div>
 
       {/* Right: detail */}
-      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto">
+      <div data-tour="catalog-intelligence-variant-detail" className="flex-1 bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto">
         {!selectedGroup && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <div className="text-5xl mb-3">🔗</div>
@@ -144,7 +144,7 @@ function VariantGroupsTab() {
             </div>
 
             {/* Add item */}
-            <div className="mb-4">
+            <div data-tour="catalog-intelligence-variant-add" className="mb-4">
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للمجموعة</label>
               <ItemSearchWidget
                 selected={null}
@@ -1046,7 +1046,7 @@ export default function CatalogIntelligencePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50" dir="rtl">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div data-tour="catalog-intelligence-header" className="bg-white border-b border-gray-200 px-6 py-4">
         <h1 className="text-xl font-bold text-gray-800">🧠 ذكاء الكتالوج</h1>
         <p className="text-xs text-gray-400 mt-0.5">
           إدارة مجموعات المتغيرات والباقات وبيانات الشراء المتزامن · إثراء بيانات الكتالوج بالذكاء الاصطناعي
@@ -1054,7 +1054,7 @@ export default function CatalogIntelligencePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-6">
+      <div data-tour="catalog-intelligence-tabs" className="flex border-b border-gray-200 bg-white px-6">
         {TABS.map(t => (
           <button
             key={t.key}

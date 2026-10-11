@@ -191,7 +191,7 @@ export default function ProcurementDashboard() {
     <div className="p-6 space-y-6 font-cairo" dir="rtl">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div data-tour="purchasing-overview-header" className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">ذكاء المشتريات</h1>
           <p className="text-sm text-gray-500">
@@ -202,7 +202,7 @@ export default function ProcurementDashboard() {
           <RefreshButton loading={loading} onClick={load}>
             🔄 تحديث
           </RefreshButton>
-          <button
+          <button data-tour="purchasing-overview-engine"
             onClick={handleTrigger}
             disabled={triggering || data?.engine_running}
             className="px-4 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded-lg disabled:opacity-50 transition-colors"
@@ -229,7 +229,7 @@ export default function ProcurementDashboard() {
 
       {/* KPI cards — 30d */}
       {snap && (
-        <div>
+        <div data-tour="purchasing-overview-kpis">
           <h2 className="text-sm font-semibold text-gray-500 mb-3">آخر 30 يوم</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard label="صافي المشتريات" value={`${fmt(snap.net_purchase_value_30d)} ج.م`} trend={Number(snap.purchase_growth_pct_mom)} color="brand" />
@@ -266,7 +266,7 @@ export default function ProcurementDashboard() {
         </div>
 
         {/* Alerts Summary */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+        <div data-tour="purchasing-overview-alerts" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-700">التنبيهات المفتوحة</h3>
             <button
@@ -308,7 +308,7 @@ export default function ProcurementDashboard() {
       </div>
 
       {/* Top Suppliers */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <div data-tour="purchasing-overview-suppliers" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-700">أفضل الموردين (حسب الدرجة)</h3>
           <button
@@ -379,7 +379,7 @@ export default function ProcurementDashboard() {
       </div>
 
       {/* Quick nav */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div data-tour="purchasing-overview-nav" className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { to: '/procurement/suppliers',   icon: '🏭', label: 'أداء الموردين' },
           { to: '/procurement/margins',     icon: '📊', label: 'تحليل الهوامش' },

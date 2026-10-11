@@ -19,7 +19,8 @@ export default function HelpUsage({ days, go }) {
   const neverRun = data.tours.filter((t) => !t.runs)
   // weak step → straight to that step's text in the editor; workflow tours → their module
   const openFix = (t) => {
-    if (t.weak_step) go({ tab: 'browse', screen: t.weak_step.screen, edit: '1', tour_step: String(t.weak_step.i) })
+    if (t.weak_step?.flow) go({ tab: 'trainers', tkind: 'flow', tkey: t.weak_step.flow, tstep: String(t.weak_step.i) })
+    else if (t.weak_step) go({ tab: 'browse', screen: t.weak_step.screen, edit: '1', tour_step: String(t.weak_step.i) })
     else if (t.flow) go({ tab: 'browse', module: t.screen_key.slice(5).split('.')[0] })
     else go({ tab: 'browse', screen: t.screen_key })
   }

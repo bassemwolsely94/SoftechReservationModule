@@ -145,7 +145,7 @@ function CandidateRow({ cand, classes, onApprove, onReject, onNonDrug, onSetClas
           {showItems && <LinkedItems candId={cand.id} />}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div data-tour="chronic-composition-row-actions" className="flex flex-wrap items-center gap-1.5">
           <select value={selectedClass || ''} onChange={e => onSetClass(cand.id, e.target.value ? Number(e.target.value) : '')}
             className="rounded border border-line bg-surface px-2 py-1 text-xs text-content max-w-[210px]" title="Class / التصنيف">
             <option value="">— no class / بدون —</option>
@@ -214,7 +214,7 @@ export default function CompositionPage() {
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
-      <div>
+      <div data-tour="chronic-composition-header">
         <h1 className="text-xl font-bold text-content">تنقية المواد الفعّالة</h1>
         <p className="text-sm text-muted">مراجعة واعتماد تحليل المواد الفعّالة من سوفتك — لا يتم أي تعديل على سوفتك.</p>
       </div>
@@ -225,7 +225,7 @@ export default function CompositionPage() {
         className="block w-full rounded-lg px-4 py-3 text-center text-base font-bold text-white hover:opacity-90">
         ＋ إضافة تصنيف جديد
       </button>
-      <button onClick={() => rebuildM.mutate()} disabled={rebuildM.isPending}
+      <button data-tour="chronic-composition-rebuild" onClick={() => rebuildM.mutate()} disabled={rebuildM.isPending}
         className="block w-full rounded-lg border border-line px-4 py-2 text-center text-sm font-medium text-content hover:bg-bg disabled:opacity-50">
         {rebuildM.isPending ? '… جارٍ التحديث' : '🔄 تحديث فهرس البحث'}
       </button>
@@ -237,7 +237,7 @@ export default function CompositionPage() {
       )}
 
       {summary && (
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+        <div data-tour="chronic-composition-stats" className="grid grid-cols-3 md:grid-cols-6 gap-2">
           <Stat label="سطور سوفتك" value={summary.raw_rows} />
           <Stat label="تركيبات مركّبة" value={summary.combinations} />
           <Stat label="قيم عامة/فارغة" value={summary.placeholders} />
@@ -247,7 +247,7 @@ export default function CompositionPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface p-2">
+      <div data-tour="chronic-composition-filters" className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface p-2">
         <input value={filters.q} onChange={e => { setPage(1); setFilters(f => ({ ...f, q: e.target.value })) }}
           placeholder="بحث بالاسم..." className="flex-1 min-w-[180px] rounded border border-line bg-surface px-3 py-1.5 text-sm text-content" />
         <select value={filters.status} onChange={e => { setPage(1); setFilters(f => ({ ...f, status: e.target.value })) }}
@@ -286,7 +286,7 @@ export default function CompositionPage() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div data-tour="chronic-composition-list" className="space-y-2">
         {isLoading && <div className="text-center text-muted py-8">جارٍ التحميل…</div>}
         {!isLoading && rows.length === 0 && <div className="text-center text-muted py-8">لا توجد نتائج</div>}
         {rows.map(cand => (

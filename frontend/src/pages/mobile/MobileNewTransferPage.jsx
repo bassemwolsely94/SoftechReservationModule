@@ -66,7 +66,7 @@ export default function MobileNewTransferPage() {
   return (
     <div className="p-3 space-y-3">
       {/* Branches */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="transfers-mnew-branches" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 text-sm">🔀 الفروع</h2>
         <div>
           <label className="label">الفرع الطالب *</label>
@@ -91,7 +91,7 @@ export default function MobileNewTransferPage() {
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="transfers-mnew-items" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الأصناف *</h2>
         <ItemSearchWidget selected={null} onSelect={addLine} onClear={() => {}}
           placeholder="ابحث وأضف صنفاً..." />
@@ -125,7 +125,7 @@ export default function MobileNewTransferPage() {
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-2xl px-4 py-3">{error}</div>}
 
-      <div className="flex gap-2.5">
+      <div className="flex gap-2.5" data-tour="transfers-mnew-submit">
         <button onClick={() => save(false)} disabled={!!busy} className="btn-secondary flex-1 disabled:opacity-50">
           {busy === 'draft' ? 'جارٍ الحفظ...' : 'حفظ كمسودة'}
         </button>

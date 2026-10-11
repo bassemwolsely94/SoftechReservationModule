@@ -102,10 +102,10 @@ export default function OffersPage() {
           <h1 className="text-lg font-bold text-content">العروض والتخفيضات</h1>
           <p className="text-xs text-faint">محرّك عروض مرن — تُطبَّق عبر نقطة البيع؛ التنفيذ في سوفتك مُقيَّد بمفتاح.</p>
         </div>
-        <button className="btn-primary" onClick={() => setEditing({ ...BLANK })}>+ عرض جديد</button>
+        <button className="btn-primary" onClick={() => setEditing({ ...BLANK })} data-tour="pos-offers-new">+ عرض جديد</button>
       </div>
 
-      <div className="card p-0 overflow-x-auto">
+      <div className="card p-0 overflow-x-auto" data-tour="pos-offers-list">
         <table className="data-table">
           <thead><tr>
             <th>الاسم</th><th>النوع</th><th>الحالة</th><th>الأولوية</th><th>مصدر القيمة</th><th>أصناف</th><th></th>
@@ -171,7 +171,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
         <div className="flex gap-2">
           {o.id && <button onClick={remove} className="btn-danger text-xs">حذف</button>}
           <button onClick={onDone} className="btn-secondary text-xs">تم</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? '…' : 'حفظ العرض'}</button>
+          <button onClick={save} disabled={saving} className="btn-primary" data-tour="pos-offers-save">{saving ? '…' : 'حفظ العرض'}</button>
         </div>
       </div>
 
@@ -234,7 +234,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
 
       {/* Flexible selector */}
       <Section title="اختيار الأصناف (مرن)" icon="🎯">
-        <label className="flex items-center gap-2 text-sm mb-2">
+        <label className="flex items-center gap-2 text-sm mb-2" data-tour="pos-offers-targets">
           <input type="checkbox" checked={o.target_all} onChange={e => set('target_all', e.target.checked)} /> كل الأصناف
         </label>
         {!o.target_all && (
@@ -321,13 +321,13 @@ function WarningsPanel({ offerId, refreshKey }) {
   useEffect(() => { run() }, [offerId, refreshKey])
   if (loading && warnings === null) return null
   if (warnings && !warnings.length) {
-    return <div className="card mb-3 border-emerald-200 bg-emerald-50/60">
+    return <div className="card mb-3 border-emerald-200 bg-emerald-50/60" data-tour="pos-offers-warnings">
       <div className="text-sm text-emerald-700 flex items-center gap-2">✓ لا تعارضات — الإعداد سليم.
         <button className="text-[11px] text-emerald-600 underline" onClick={run}>إعادة الفحص</button></div>
     </div>
   }
   return (
-    <div className="card mb-3 border-amber-300 bg-amber-50/60">
+    <div className="card mb-3 border-amber-300 bg-amber-50/60" data-tour="pos-offers-warnings">
       <div className="section-title flex items-center justify-between text-amber-800">
         <span>⚠ تنبيهات الإعداد</span>
         <button className="text-[11px] text-amber-700 underline" onClick={run} disabled={loading}>{loading ? '…' : 'إعادة الفحص'}</button>

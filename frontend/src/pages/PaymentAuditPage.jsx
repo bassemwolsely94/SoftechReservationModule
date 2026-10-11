@@ -146,13 +146,13 @@ export default function PaymentAuditPage() {
           <h1 className="text-2xl font-bold text-gray-900">مراجعة المدفوعات</h1>
           <p className="text-sm text-gray-500 mt-1">كشوف الحساب البنكية · مطابقة المدفوعات · استثناءات</p>
         </div>
-        <button onClick={() => setShowUpload(true)}
+        <button data-tour="finance-payment-audit-upload" onClick={() => setShowUpload(true)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + رفع كشف حساب
         </button>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div data-tour="finance-payment-audit-tabs" className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {[
           { key: 'exceptions', label: '⚠️ الاستثناءات' },
           { key: 'statements', label: '🏦 الكشوف البنكية' },
@@ -181,7 +181,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد استثناءات مفتوحة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div data-tour="finance-payment-audit-exceptions" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -215,7 +215,7 @@ export default function PaymentAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       {ex.status === 'open' && (
-                        <button onClick={() => setResolving(ex)}
+                        <button data-tour="finance-payment-audit-handle" onClick={() => setResolving(ex)}
                           className="text-xs text-brand-600 hover:underline">
                           معالجة
                         </button>
@@ -238,7 +238,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد كشوف حساب مرفوعة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div data-tour="finance-payment-audit-statements" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -282,7 +282,7 @@ export default function PaymentAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       {s.status === 'pending' && (
-                        <button
+                        <button data-tour="finance-payment-audit-match"
                           onClick={() => runMatch.mutate(s.id)}
                           disabled={runMatch.isPending}
                           className="text-xs text-brand-600 hover:underline disabled:opacity-50"

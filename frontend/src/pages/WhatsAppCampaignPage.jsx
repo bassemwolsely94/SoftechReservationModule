@@ -71,14 +71,14 @@ function CampaignList({ selectedId, onSelect, onNew }) {
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold text-gray-800">حملات واتساب</h2>
-          <button
+          <button data-tour="omni-campaigns-new"
             onClick={onNew}
             className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
           >
             + حملة جديدة
           </button>
         </div>
-        <input
+        <input data-tour="omni-campaigns-search"
           type="text"
           placeholder="بحث باسم الحملة..."
           value={q}
@@ -89,7 +89,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
       </div>
 
       {/* Status tabs */}
-      <div className="flex overflow-x-auto border-b border-gray-200 bg-gray-50">
+      <div data-tour="omni-campaigns-status-tabs" className="flex overflow-x-auto border-b border-gray-200 bg-gray-50">
         {STATUS_TABS.map(t => (
           <button
             key={t.key}
@@ -106,7 +106,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div data-tour="omni-campaigns-list" className="flex-1 overflow-y-auto">
         {isLoading && (
           <div className="p-6 text-center text-gray-400 text-sm">جارٍ التحميل...</div>
         )}
@@ -562,7 +562,7 @@ function WorkflowBar({ campaign, onAction }) {
   const { status } = campaign
 
   return (
-    <div className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
+    <div data-tour="omni-campaigns-workflow" className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
       {status === 'draft' && campaign.can_request_approval && (
         <button
           onClick={() => onAction('request-approval')}
@@ -847,7 +847,7 @@ function CampaignDetail({ campaignId, onClose }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-gray-50">
+      <div data-tour="omni-campaigns-detail-tabs" className="flex border-b border-gray-200 bg-gray-50">
         {[
           { key: 'overview', label: 'نظرة عامة' },
           { key: 'audience', label: 'الجمهور' },

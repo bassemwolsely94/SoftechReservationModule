@@ -72,15 +72,15 @@ export default function CommerceDocumentsPage() {
   return (
     <div className="p-6" dir="rtl">
       <div className="flex items-center justify-between mb-5">
-        <div>
+        <div data-tour="commerce-documents-header">
           <h1 className="text-xl font-bold text-gray-800">المستندات التجارية</h1>
           <p className="text-sm text-gray-500">عروض أسعار · فواتير بيع · شبكات توزيع المستشفيات</p>
         </div>
-        <button onClick={() => { setForm({ doc_type: '', recipient: '', doc_date: new Date().toISOString().slice(0, 10) }); setShowNew(true) }}
+        <button data-tour="commerce-documents-new" onClick={() => { setForm({ doc_type: '', recipient: '', doc_date: new Date().toISOString().slice(0, 10) }); setShowNew(true) }}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">+ مستند جديد</button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div data-tour="commerce-documents-table" className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>{['رقم المستند', 'النوع', 'الجهة', 'التاريخ', 'الحالة', 'البنود', 'الإجمالى', ''].map(h =>
@@ -90,7 +90,7 @@ export default function CommerceDocumentsPage() {
             {docs.length === 0 ? (
               <tr><td colSpan={8} className="text-center py-12 text-gray-400">لا توجد مستندات — أنشئ أول مستند</td></tr>
             ) : docs.map(d => (
-              <tr key={d.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/commerce/documents/${d.id}`)}>
+              <tr key={d.id} data-tour="commerce-documents-row" className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/commerce/documents/${d.id}`)}>
                 <td className="px-3 py-2.5 font-mono text-blue-700 font-semibold">{d.number}</td>
                 <td className="px-3 py-2.5 text-gray-700">{d.type_name}</td>
                 <td className="px-3 py-2.5 text-gray-700">{d.recipient_name || '—'}</td>
