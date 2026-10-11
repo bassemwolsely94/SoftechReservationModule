@@ -678,5 +678,9 @@ def notes_check(request):
         self_key = f'flow:{key}'
     else:
         return Response({'detail': 'not found'}, status=404)
-    hints = notecheck.check(kind, body.get('note', ''), before, after, recent_notes(), self_key)
+    from .glossary import terms
+    module = (screens[key]['module'] if kind == 'screen' else key if kind == 'quiz'
+              else key.split('.')[0] if kind == 'flow' else None)
+    hints = notecheck.check(kind, body.get('note', ''), before, after, recent_notes(), self_key,
+                            terms=terms(), module=module)
     return Response({'hints': hints})

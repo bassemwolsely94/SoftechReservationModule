@@ -1349,3 +1349,78 @@ class NoteCheckTests(TestCase):
         self.assertNotIn('similar', self._check('screen', 'transfers.list', 'عمود الفرع المستلم', {'title': cur['title']}))
         # sharing only «زر … جديد» is a different change (print, not export)
         self.assertNotIn('similar', self._check('screen', 'transfers.list', 'زر طباعة جديد', {'title': cur['title']}))
+
+
+class GlossaryTests(TestCase):
+    """«قاموس المصطلحات»: trainers keep agreed words + words to avoid (audited); the note
+    hints point out avoided words in a note (offering the fixed note) and in help text."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('gl_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('gl_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _add(self, **data):
+        return self.t.post('/api/help/glossary/', data, format='json')
+
+    def test_crud_validation_permissions_and_history(self):
+        from apps.help.models import HelpRevision
+        self.assertEqual(self.ph.post('/api/help/glossary/', {'preferred': 'x', 'avoid': 'y'}, format='json').status_code, 403)
+        r = self._add(preferred='الكاشير', avoid='الخزنة، الخزينة', why='اسم الشاشة')
+        self.assertEqual(r.status_code, 201, r.content)
+        tid = r.json()['id']
+        self.assertEqual(r.json()['avoid'], ['الخزنة', 'الخزينة'])
+        self.assertEqual(self._add(preferred='كاشير', avoid='كاش').status_code, 400)          # same word twice
+        self.assertEqual(self._add(preferred='حجز', avoid='').status_code, 400)
+        self.assertEqual(self._add(preferred='حجز', avoid='الحجز').status_code, 400)          # avoid = preferred
+        self.assertEqual(self._add(preferred='حجز', avoid='طلب', modules=['nope']).status_code, 400)
+        self.assertEqual(self.ph.put(f'/api/help/glossary/{tid}/', {}, format='json').status_code, 403)
+        r = self.t.put(f'/api/help/glossary/{tid}/', {'preferred': 'الكاشير', 'avoid': ['الخزنة']}, format='json')
+        self.assertEqual(r.json()['avoid'], ['الخزنة'])
+        g = self.ph.get('/api/help/glossary/').json()                # everyone may read; no usage scan
+        self.assertFalse(g['can_edit'])
+        self.assertNotIn('uses', g['terms'][0])
+        self.assertEqual(self.t.delete(f'/api/help/glossary/{tid}/').status_code, 204)
+        self.assertEqual(list(HelpRevision.objects.filter(screen_key=f'glossary:{tid}').order_by('id')
+                              .values_list('action', flat=True)), ['save', 'save', 'revert'])
+
+    def test_uses_counts_screens_in_scope(self):
+        from apps.help import notecheck, registry
+        _, screens = registry.load()
+        # a word the current help surely uses
+        tid = self._add(preferred='بند', avoid=['الشاشة']).json()['id']
+        u = next(t for t in self.t.get('/api/help/glossary/').json()['terms'] if t['id'] == tid)['uses']
+        self.assertGreater(u['count'], 0)
+        self.t.put(f'/api/help/glossary/{tid}/', {'preferred': 'بند', 'avoid': ['الشاشة'], 'modules': ['pos']},
+                   format='json')
+        u2 = next(t for t in self.t.get('/api/help/glossary/').json()['terms'] if t['id'] == tid)['uses']
+        self.assertLess(u2['count'], u['count'])
+        self.assertTrue(all(screens[k]['module'] == 'pos' for k in u2['screens']))
+
+    def test_hints_in_note_and_text(self):
+        self._add(preferred='الكاشير', avoid=['الخزنة'])
+        self._add(preferred='حجز', avoid=['طلب'], modules=['reservations'])
+        check = lambda key, note, data: {h['code']: h for h in self.t.post(
+            '/api/help/notes-check/', {'kind': 'screen', 'key': key, 'note': note, 'data': data},
+            format='json').json()['hints']}
+        h = check('reservations.board', 'زر جديد للخزنة', {})
+        self.assertEqual(h['term']['suggestion'], 'زر جديد للكاشير')
+        h = check('reservations.board', 'طلب جديد', {'tips': [{'ar': 'افتح الطلب من هنا', 'en': ''}]})
+        self.assertEqual(h['term']['suggestion'], 'حجز جديد')
+        self.assertIn('«طلب»', h['term_text']['text'])
+        # «طلب» is only avoided in reservations
+        h = check('purchasing.supply', 'طلب جديد', {})
+        self.assertNotIn('term', h)
+        # the agreed word itself is not flagged
+        self.assertNotIn('term', check('reservations.board', 'شاشة الكاشير', {}))
+
+    def test_unit_matching(self):
+        from apps.help import notecheck as n
+        T = [{'preferred': 'الكاشير', 'avoid': ['الخزنة'], 'modules': []}]
+        self.assertEqual([(a, c) for _, a, c in n.find_terms('روح للخزنة، والخزنة مقفولة', T)], [('الخزنة', 2)])
+        self.assertEqual(n.find_terms('خزنات', T), [])            # another word, not a prefix form
+        self.assertEqual(n.fix_note('اتغيّر «الخزنة».', T), 'اتغيّر «الكاشير».')
+        self.assertIsNone(n.fix_note('مفيش حاجة', T))

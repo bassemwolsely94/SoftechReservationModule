@@ -21,6 +21,7 @@ import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
 import HelpUsage from '../help/HelpUsage'
 import NotesLog from '../help/NotesLog'
+import Glossary from '../help/Glossary'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
@@ -348,6 +349,7 @@ function Trainers({ index, lang, go }) {
       <HelpUsage days={days} go={go} />
       <TeamProgress />
       <NotesLog go={go} />
+      <Glossary index={index} go={go} />
       <TrainingEditor index={index} />
       <Box t="ملاحظات المستخدمين المفتوحة">
         {(fb.data || []).length === 0 && <div className="text-sm text-faint">لا توجد ملاحظات مفتوحة 🎉</div>}

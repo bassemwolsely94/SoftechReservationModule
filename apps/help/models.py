@@ -14,6 +14,7 @@ people add on top of it:
                   so trainers can see where users get stuck.
   HelpLearned   — onboarding checklist: «فهمت هذه الشاشة» per staff + screen.
   HelpQuizAttempt — server-graded module quiz attempts.
+  HelpGlossaryTerm — «قاموس المصطلحات»: agreed word + words to avoid (hints only).
 """
 from django.db import models
 
@@ -194,3 +195,24 @@ class HelpReminder(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class HelpGlossaryTerm(models.Model):
+    """«قاموس المصطلحات» — one agreed word and the words to avoid for it (e.g. «الكاشير»,
+    not «الخزنة»), kept by trainers so help text and «إيه الجديد» notes say things the
+    same way. `modules` limits a term to some modules (empty = everywhere) — «طلب» is
+    wrong for a reservation but right for a purchase request. Only used for gentle hints
+    (notecheck.py); never changes text by itself. History → HelpRevision 'glossary:<id>'."""
+    preferred  = models.CharField(max_length=60)
+    avoid      = models.JSONField(default=list)            # ['الخزنة', 'الخزينة']
+    modules    = models.JSONField(default=list, blank=True)  # [] = all modules
+    why        = models.CharField(max_length=200, blank=True, default='')
+    updated_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['preferred']
+        verbose_name = 'مصطلح في القاموس'
+        verbose_name_plural = 'قاموس المصطلحات'

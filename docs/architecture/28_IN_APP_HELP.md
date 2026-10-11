@@ -38,6 +38,15 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   30 days on another screen / path / quiz / tour describing the same change in other words (Dice ≥ 0.6 on
   normalised Arabic words with a small synonym map, 2+ shared non-generic words) → «استخدمها» copies its
   wording. Never blocks a save.
+- **«📖 قاموس المصطلحات»** (`Glossary.jsx` in «للمدربين»; `HelpGlossaryTerm` preferred / avoid[] /
+  modules[] / why, migration 0012; `apps/help/glossary.py`, `GET/POST /api/help/glossary/`,
+  `PUT/DELETE /api/help/glossary/<id>/`, writes help/edit only, each change → `HelpRevision 'glossary:<id>'`).
+  A term can be limited to modules («حجز» not «طلب» only in reservations). Matching is on normalised
+  Arabic words with attached prefixes (ال/و/ب/ل/لل/وال/بال…) and never counts the agreed word itself.
+  Note hints gain `term` (offers the note with the agreed word, keeping the prefix: «للخزنة» → «للكاشير»)
+  and `term_text` (avoided words in the help text being edited, ×count). Trainers' GET adds `uses`:
+  how many screens' current help still use an avoided word (first 8, click → editor). Hints only — the
+  glossary never rewrites text.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.
