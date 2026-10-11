@@ -229,35 +229,72 @@ export function Quiz({ moduleKey, lang, onBack }) {
 
 /** Trainers: who finished their path, who is stuck. */
 export function TeamProgress() {
+  const qc = useQueryClient()
   const [role, setRole] = useState('')
+  const [onlyStuck, setOnlyStuck] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [busy, setBusy] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'team', role],
     queryFn: () => helpApi.team(role ? { role } : {}).then((r) => r.data),
   })
   const roles = [...new Set((data || []).map((r) => r.role))]
+  const rows = (data || []).filter((r) => !onlyStuck || r.stuck)
+  const cooled = (r) => r.last_reminded_at && (Date.now() - new Date(r.last_reminded_at)) < 3 * 86400000
+  const remindable = rows.filter((r) => r.stuck && !cooled(r))
+  const remind = async (ids) => {
+    setBusy(true); setMsg(null)
+    try {
+      const { data: res } = await helpApi.remind(ids)
+      const skipped = res.skipped.map((x) => x.reason)
+      setMsg({ ok: res.sent.length > 0, text: `اتبعت تذكير لـ ${res.sent.length}` + (skipped.length ? ` — اتساب ${skipped.length}: ${[...new Set(skipped)].join('، ')}` : '') })
+      qc.invalidateQueries({ queryKey: ['help', 'team'] })
+    } catch (e) {
+      setMsg({ ok: false, text: e?.response?.data?.detail || 'تعذّر الإرسال' })
+    } finally { setBusy(false) }
+  }
   return (
-    <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
-      <div className="flex items-center gap-2">
+    <div className="rounded-xl border border-line bg-surface p-4 space-y-2" data-tour="general-help-center-team">
+      <div className="flex items-center gap-2 flex-wrap">
         <h3 className="text-sm font-bold text-content flex-1">تقدّم الفريق في التدريب</h3>
+        <label className="text-xs text-muted flex items-center gap-1">
+          <input type="checkbox" checked={onlyStuck} onChange={(e) => setOnlyStuck(e.target.checked)} />
+          الواقفين بس ({(data || []).filter((r) => r.stuck).length})
+        </label>
+        {remindable.length > 0 && (
+          <button type="button" disabled={busy} onClick={() => remind(remindable.map((r) => r.id))}
+                  className="text-xs border border-amber-300 bg-amber-50 text-amber-800 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">
+            🔔 تذكير كل الواقفين ({remindable.length})
+          </button>
+        )}
         <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="text-xs bg-surface border border-line rounded-lg px-2 py-1 text-content">
           <option value="">كل الأدوار</option>
           {(role ? [role] : roles).map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       </div>
+      {msg && <div className={`text-xs ${msg.ok ? 'text-emerald-700' : 'text-amber-800'}`}>{msg.text}</div>}
+      <div className="text-[11px] text-faint">«واقف» = مفيش أي نشاط تدريب من 7 أيام أو أكتر والمسار لسه ما خلصش. التذكير إشعار لطيف بيوصل للشخص نفسه — مرة كل 3 أيام بالكتير.</div>
       {isLoading && <div className="text-faint text-sm">…جارٍ التحميل</div>}
-      {data && !data.length && <div className="text-sm text-faint">لا يوجد موظفون</div>}
+      {data && !rows.length && <div className="text-sm text-faint">{onlyStuck ? 'مفيش حد واقف 🎉' : 'لا يوجد موظفون'}</div>}
       <div className="divide-y divide-line">
-        {(data || []).map((r) => (
+        {rows.map((r) => (
           <div key={r.id} className="py-2 grid grid-cols-12 gap-3 items-center text-sm">
-            <span className="col-span-4 text-content truncate">{r.name}<span className="text-xs text-faint"> · {r.role}{r.branch ? ` · ${r.branch}` : ''}</span></span>
-            <span className="col-span-3"><Bar percent={r.progress.percent} /></span>
+            <span className="col-span-3 text-content truncate">{r.name}<span className="text-xs text-faint"> · {r.role}{r.branch ? ` · ${r.branch}` : ''}</span></span>
+            <span className="col-span-2"><Bar percent={r.progress.percent} /></span>
             <span className="col-span-1 tabnum text-content">{r.progress.percent}%</span>
             <span className="col-span-2 text-xs text-muted tabnum">{r.progress.learned}/{r.progress.screens} · {r.progress.quizzes_passed}/{r.progress.quizzes}</span>
             <span className="col-span-2 text-[11px] text-faint">
               {r.failed_quizzes.length > 0 && <span className="text-red-600">رسب: {r.failed_quizzes.join('، ')} · </span>}
               {r.retake_quizzes?.length > 0 && <span className="text-amber-700">يعيد: {r.retake_quizzes.join('، ')} · </span>}
               {r.last_activity ? new Date(r.last_activity).toLocaleDateString('ar-EG-u-nu-latn') : 'لم يبدأ'}
+            </span>
+            <span className="col-span-2 flex items-center gap-1.5 justify-end">
+              {r.stuck && <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5">⏳ واقف</span>}
+              {r.stuck && (cooled(r)
+                ? <span className="text-[10px] text-faint" title={new Date(r.last_reminded_at).toLocaleString('ar-EG-u-nu-latn')}>اتذكّر ✓</span>
+                : <button type="button" disabled={busy} onClick={() => remind([r.id])}
+                          className="text-xs border border-line rounded-lg px-2 py-0.5 text-brand-700 hover:bg-brand-50 disabled:opacity-50">🔔 تذكير</button>)}
             </span>
           </div>
         ))}

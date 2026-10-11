@@ -169,6 +169,15 @@ pass mark); ⟳ must retake a changed quiz. Up to 5 names per line, the rest in 
 same calculation as the trainers' team view (`onboarding_views.team_rows`). SystemSetting
 `help_training_digest_enabled` (default on). Code: `apps/help/digest.py`.
 
+## «🔔 تذكير» for stuck people (built 2026-10-11)
+
+In «للمدربين» → «تقدّم الفريق في التدريب»: a person is «⏳ واقف» when their path is not complete and
+they had no training activity for 7+ days (`onboarding_views.is_stuck`, the same rule as the weekly
+digest). «🔔 تذكير» (per row) / «تذكير كل الواقفين» → `POST /api/help/onboarding/remind/ {staff_ids}`:
+help/edit only, only people in the sender's branches, skips finished people, one reminder per person every
+3 days; each reminder is a `HelpReminder` (who / whom / when / progress) and a gentle notification (who
+sent it, what is left, where to continue); it also re-shows the person's «ابدأ من هنا» cards.
+
 ## Trainers (help/edit)
 
 - RBAC module `help`, action `edit` (Permissions Matrix). Admin always; seeds give it to

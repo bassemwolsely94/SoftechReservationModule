@@ -17,7 +17,7 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-STUCK_DAYS = 7
+from .onboarding_views import STUCK_DAYS  # noqa: E402 — one rule for digest, team view, «تذكير»
 MAX_NAMES = 5
 
 
@@ -42,7 +42,6 @@ def summary_for(supervisor, now=None):
     from .onboarding_views import team_rows
     now = now or timezone.now()
     week_ago = now - timezone.timedelta(days=7)
-    stuck_before = now - timezone.timedelta(days=STUCK_DAYS)
     staff = StaffProfile.objects.filter(is_active=True, user__is_active=True).exclude(pk=supervisor.pk)
     allowed = supervisor.accessible_branch_ids
     if allowed is not None:
@@ -53,8 +52,7 @@ def summary_for(supervisor, now=None):
         'team': len(rows),
         'complete': len(done),
         'finished_this_week': [r for r in done if r['last_activity'] and r['last_activity'] >= week_ago],
-        'stuck': [r for r in rows if r['progress']['percent'] < 100
-                  and (r['last_activity'] or r['joined']) < stuck_before],
+        'stuck': [r for r in rows if r['stuck']],
         'failed': [r for r in rows if r['failed_quizzes']],
         'retake': [r for r in rows if r['retake_quizzes']],
     }
@@ -81,7 +79,7 @@ def render(s):
         lines.append(f"❌ رسبوا في اختبار ({len(s['failed'])}): {_names(s['failed'], lambda r: mod(r['failed_quizzes']))}")
     if s['retake']:
         lines.append(f"⟳ محتاجين يعيدوا اختبار اتغيّر ({len(s['retake'])}): {_names(s['retake'], lambda r: mod(r['retake_quizzes']))}")
-    lines.append('التفاصيل: دليل الاستخدام ← للمدربين ← تقدّم الفريق في التدريب.')
+    lines.append('التفاصيل وزر «🔔 تذكير»: دليل الاستخدام ← للمدربين ← تقدّم الفريق في التدريب.')
     return '📊 ملخص التدريب الأسبوعي', '\n'.join(lines)
 
 

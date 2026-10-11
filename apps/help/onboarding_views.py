@@ -191,6 +191,17 @@ def quiz_submit(request, module_key):
                     status=status.HTTP_201_CREATED)
 
 
+STUCK_DAYS = 7          # no training activity for this long (and path not done) = stuck
+REMIND_COOLDOWN_DAYS = 3
+
+
+def is_stuck(row, now=None):
+    """Shared by the trainers' team view, «تذكير» and the weekly digest."""
+    now = now or timezone.now()
+    before = now - timezone.timedelta(days=STUCK_DAYS)
+    return row['progress']['percent'] < 100 and (row['last_activity'] or row['joined']) < before
+
+
 def team_rows(staff_qs, limit=500):
     """Training progress per person (shared by the trainers' team view and the
     weekly digest): progress, failed quizzes, quizzes to retake, last activity."""
@@ -220,6 +231,13 @@ def team_rows(staff_qs, limit=500):
             'last_activity': max(at) if at else None,
             'joined': p.user.date_joined,
         })
+    from .models import HelpReminder
+    reminded = dict(HelpReminder.objects.filter(staff_id__in=ids).values('staff_id')
+                    .annotate(t=Max('created_at')).values_list('staff_id', 't'))
+    now = timezone.now()
+    for r in rows:
+        r['stuck'] = is_stuck(r, now)
+        r['last_reminded_at'] = reminded.get(r['id'])
     return rows
 
 
@@ -421,3 +439,64 @@ def first_day(request):
         'quiz': None if not quiz else {'module': quiz, 'title': modules[quiz]['title'],
                                        'icon': modules[quiz].get('icon', ''), 'questions': len(qz[quiz])},
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remind(request):
+    """POST {staff_ids: [..]} — a supervisor's gentle «تذكير» to people stuck on their
+    training path. help/edit only; only people in the branches the supervisor can see;
+    one reminder per person every REMIND_COOLDOWN_DAYS days; each one recorded
+    (HelpReminder) and delivered through apps.notifications. Re-shows the person's
+    «ابدأ من هنا» cards if they had hidden them."""
+    from .models import HelpPreference, HelpReminder
+    profile = _profile(request)
+    if not _can_edit(profile):
+        return Response({'detail': 'ليس لديك صلاحية إرسال تذكير'}, status=403)
+    ids = request.data.get('staff_ids')
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) for i in ids) or len(ids) > 200:
+        return Response({'detail': 'staff_ids: قائمة أرقام مطلوبة'}, status=400)
+    staff = StaffProfile.objects.filter(pk__in=ids, is_active=True, user__is_active=True)
+    allowed = profile.accessible_branch_ids
+    if allowed is not None:
+        staff = staff.filter(branch_id__in=allowed)
+    rows = {r['id']: r for r in team_rows(staff, limit=200)}
+    since = timezone.now() - timezone.timedelta(days=REMIND_COOLDOWN_DAYS)
+    recent = set(HelpReminder.objects.filter(staff_id__in=rows, created_at__gte=since)
+                 .values_list('staff_id', flat=True))
+    sender = _staff_name(profile)
+    result = {'sent': [], 'skipped': []}
+    for sid in ids:
+        r = rows.get(sid)
+        if r is None:
+            result['skipped'].append({'id': sid, 'reason': 'خارج فروعك أو غير نشط'})
+            continue
+        if r['progress']['percent'] >= 100:
+            result['skipped'].append({'id': sid, 'reason': 'خلّص التدريب'})
+            continue
+        if sid in recent:
+            result['skipped'].append({'id': sid, 'reason': f'اتبعتله تذكير في آخر {REMIND_COOLDOWN_DAYS} أيام'})
+            continue
+        p = r['progress']
+        left = []
+        if p['screens'] - p['learned']:
+            left.append(f"{p['screens'] - p['learned']} شاشة")
+        if p['quizzes'] - p['quizzes_passed']:
+            left.append(f"{p['quizzes'] - p['quizzes_passed']} اختبار")
+        body = (f'👋 {sender} بيفكّرك تكمّل مسارك التدريبي — وصلت {p["percent"]}%'
+                + (f'، وفاضلك {" و".join(left)}' if left else '') + '. '
+                'ابدأ من «الرئيسية» ← «ابدأ من هنا»، أو «دليل الاستخدام» ← «مساري التدريبي». '
+                'كل خطوة قصيرة، وتقدر تكمّل وقت ما يناسبك.')
+        target = StaffProfile.objects.get(pk=sid)
+        try:
+            from apps.notifications.models import Notification
+            Notification.send_to_user(target, 'system', '🎓 تذكير بالتدريب', body,
+                                      dedup_key=f'help_remind_{sid}_{timezone.localdate().isoformat()}',
+                                      bypass_role_gate=True)
+        except Exception as exc:
+            result['skipped'].append({'id': sid, 'reason': f'تعذّر الإرسال: {exc}'})
+            continue
+        HelpReminder.objects.create(staff=target, sent_by=profile, percent=p['percent'])
+        HelpPreference.objects.filter(staff=target).update(first_day_hidden_at=None)
+        result['sent'].append(sid)
+    return Response(result)

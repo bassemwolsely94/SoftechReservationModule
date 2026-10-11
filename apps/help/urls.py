@@ -20,6 +20,7 @@ urlpatterns = [
     path('onboarding/', ob.my_path, name='help-onboarding'),
     path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
     path('onboarding/team/', ob.team, name='help-onboarding-team'),
+    path('onboarding/remind/', ob.remind, name='help-onboarding-remind'),
     path('first-day/', ob.first_day, name='help-first-day'),
     path('training/<str:kind>/<str:key>/', ob.training_edit, name='help-training-edit'),
     path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),

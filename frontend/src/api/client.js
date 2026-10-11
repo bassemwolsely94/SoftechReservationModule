@@ -363,6 +363,7 @@ export const helpApi = {
   onboarding: (role)             => api.get('/help/onboarding/', { params: role ? { role } : {} }),
   learned:    (screen_key, done = true) => api.post('/help/onboarding/learned/', { screen_key, done }),
   team:       (params = {})      => api.get('/help/onboarding/team/', { params }),
+  remind:     (staff_ids)        => api.post('/help/onboarding/remind/', { staff_ids }),
   quiz:       (module)           => api.get(`/help/quizzes/${module}/`),
   submitQuiz: (module, answers)  => api.post(`/help/quizzes/${module}/submit/`, { answers }),
 }

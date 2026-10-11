@@ -971,3 +971,63 @@ class TrainingDigestTests(TestCase):
         from apps.help import digest
         rows = [{'name': f'موظف {i}', 'progress': {'percent': 10}} for i in range(8)]
         self.assertIn('و3 غيرهم', digest._names(rows))
+
+
+class RemindTests(TestCase):
+    """«تذكير»: help/edit only, own branches only, 3-day cool-down, recorded, gentle
+    notification to the person, re-shows their «ابدأ من هنا» cards."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        from .factories import make_branch2
+        from django.utils import timezone
+        self.b1, self.b2 = make_branch(), make_branch2()
+        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
+        su, self.sup, _ = make_user('rm_sup', role='supervisor', branch=self.b1)
+        _, self.ph, _ = make_user('rm_ph', role='pharmacist', branch=self.b1)
+        _, self.other, _ = make_user('rm_other', role='pharmacist', branch=self.b2)
+        for p in (self.ph, self.other):
+            p.user.date_joined = timezone.now() - timezone.timedelta(days=20)
+            p.user.save(update_fields=['date_joined'])
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(su)}')
+
+    def test_team_marks_stuck(self):
+        rows = {r['id']: r for r in self.c.get('/api/help/onboarding/team/').json()}
+        self.assertTrue(rows[self.ph.id]['stuck'])
+        self.assertIsNone(rows[self.ph.id]['last_reminded_at'])
+
+    def test_remind_records_notifies_and_cools_down(self):
+        from apps.help.models import HelpPreference, HelpReminder
+        from apps.notifications.models import Notification
+        HelpPreference.objects.create(staff=self.ph, first_day_hidden_at='2026-01-01T00:00:00Z')
+        r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(r['sent'], [self.ph.id])
+        n = Notification.objects.get(recipient=self.ph, title__contains='تذكير بالتدريب')
+        self.assertIn('مساري التدريبي', n.body)
+        self.assertEqual(HelpReminder.objects.get(staff=self.ph).sent_by, self.sup)
+        self.assertIsNone(HelpPreference.objects.get(staff=self.ph).first_day_hidden_at)
+        again = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(again['sent'], [])
+        self.assertEqual(HelpReminder.objects.count(), 1)
+        rows = {x['id']: x for x in self.c.get('/api/help/onboarding/team/').json()}
+        self.assertIsNotNone(rows[self.ph.id]['last_reminded_at'])
+
+    def test_scope_permission_and_validation(self):
+        from apps.help.models import HelpReminder
+        r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.other.id]}, format='json').json()
+        self.assertEqual(r['sent'], [])                       # another branch
+        self.assertEqual(self.c.post('/api/help/onboarding/remind/', {'staff_ids': 'x'}, format='json').status_code, 400)
+        u, _, _ = make_user('rm_ph2', role='pharmacist', branch=self.b1)
+        c2 = APIClient()
+        c2.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.assertEqual(c2.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').status_code, 403)
+        self.assertFalse(HelpReminder.objects.exists())
+
+    def test_finished_not_reminded(self):
+        from unittest import mock
+        with mock.patch('apps.help.training.path', return_value=[]), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(r['sent'], [])
+        self.assertEqual(r['skipped'][0]['reason'], 'خلّص التدريب')

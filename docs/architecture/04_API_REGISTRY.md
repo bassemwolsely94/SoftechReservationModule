@@ -558,6 +558,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/feedback/` | POST / GET | Any staff: vote + comment. GET (help/edit): feedback list (`open=1`) |
 | `/api/help/feedback/{id}/resolve/` | POST | Mark a comment handled (help/edit) |
 | `/api/help/stats/?days=` | GET | Trainers' dashboard: opens by screen/role, votes, searches, «اسأل النظام» questions (unanswered first) (help/edit) |
+| `/api/help/onboarding/remind/` | POST | `{staff_ids}` — «🔔 تذكير» to people stuck on their training path (help/edit; own branches; 3-day cool-down per person; recorded in HelpReminder). → `{sent, skipped[{id, reason}]}`. Team rows now carry `stuck`, `last_reminded_at` |
 | `/api/help/first-day/?mobile=1` | GET / POST | «ابدأ من هنا» cards: `show`, `hidden`, progress, system tour (+done), next path screen, role's workflow tours (+done; mobile or desktop), next quiz. POST `{hidden}` hides / shows them for this person |
 | `/api/help/tour-event/` | POST | Tour runner reports an ended «اعرض لي» tour `{screen_key, reached, done}` → `HelpEvent(kind=tour)` |
 | `/api/help/usage/?days=` | GET | Trainers (help/edit): screens whose help nobody opened (+ which role paths include them), tour runs / finished % / common stop step / never run |

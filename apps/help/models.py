@@ -178,3 +178,15 @@ class HelpPreference(models.Model):
     staff               = models.OneToOneField('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
     first_day_hidden_at = models.DateTimeField(null=True, blank=True)
     updated_at          = models.DateTimeField(auto_now=True)
+
+
+class HelpReminder(models.Model):
+    """A supervisor's «تذكير» to someone stuck on their training path (who, whom,
+    when) — the audit trail, and the per-person cool-down."""
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    sent_by    = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    percent    = models.PositiveSmallIntegerField(default=0)   # their progress when reminded
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
