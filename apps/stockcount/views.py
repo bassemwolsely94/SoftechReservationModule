@@ -546,6 +546,11 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         session = self.get_object()
         if session.status == 'closed':
             return Response({'detail': 'الجلسة مغلقة بالفعل'})
+        # A session closes once it has counts: uploaded from the Excel sheet
+        # (variance_ready) or counted live on mobile (uploaded). Same rule as the UI.
+        if session.status not in ('uploaded', 'variance_ready'):
+            return Response({'detail': 'لا يمكن إغلاق الجلسة قبل تسجيل نتائج العد'},
+                            status=status.HTTP_400_BAD_REQUEST)
         session.status     = 'closed'
         session.updated_at = timezone.now()
         session.save(update_fields=['status', 'updated_at'])

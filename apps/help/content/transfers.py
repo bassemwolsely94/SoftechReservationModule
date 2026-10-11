@@ -164,8 +164,8 @@ MODULE = {
                  'text': T('أي ملاحظة (نقص، كسر، تأخير) اكتبها هنا عشان الفرعين يشوفوها.',
                            'Any note (missing, broken, delayed) goes here so both branches see it.')},
                 {'target': 'transfers-transit-mark-received', 'route': '/transits',
-                 'text': T('الاستلام الفعلي بيتسجّل في SOFTECH (مستند 25)، وبعد المزامنة الشحنة بتختفي من القائمة والمطابقة بتظهر.',
-                           'The actual receipt is recorded in SOFTECH (document 25); after sync the shipment leaves the list and the reconciliation appears.')},
+                 'text': T('«✅ تسجيل الاستلام» للفرع المستلم بيسجّله هنا ويظهر «⏳ مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل في SOFTECH، وبعدها المطابقة بتظهر.',
+                           '"✅ Record receipt" (receiving branch) records it here and shows "⏳ Received locally — awaiting SOFTECH" until the receipt document (25) is in SOFTECH; then the reconciliation appears.')},
             ],
         },
     ],
@@ -328,6 +328,8 @@ SCREENS = [
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
         'tips': [
+            T('«تسجيل الاستلام» هنا ما بيكتبش في SOFTECH: الشحنة بتفضل «مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل هناك، وساعتها المزامنة بتطابق الكميات (ولو فيه فرق تظهر «تباين مع ERP»).',
+              '"Record receipt" here does not write to SOFTECH: the shipment stays "received locally — awaiting SOFTECH" until the receipt document (25) is recorded there; the sync then reconciles quantities (a difference shows as "ERP mismatch").'),
             T('الشحنة يجب أن تُستلم في SOFTECH قبل انتهاء مهلة الإلغاء، وإلا تظهر «انتهت مهلة الإلغاء — يجب الاستلام».',
               'The shipment must be received in SOFTECH before its cancellation window ends, otherwise "cancellation window over — must receive" appears.'),
             T('«بطاقة مساءلة الفروع» أسفل الصفحة تعرض أداء كل فرع في الاستلام والمخزون العائم.', 'The "branch accountability card" at the bottom shows each branch\'s receiving performance and floating stock.'),
@@ -345,7 +347,7 @@ SCREENS = [
             {'target': 'transfers-transits-scorecard', 'text': T('«🏆 بطاقة المساءلة» لأداء الفروع في الاستلام.',
                                               '"🏆 Accountability card" for branches\' receiving performance.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-11',
     },
     {
         'key': 'transfers.pick_zones',

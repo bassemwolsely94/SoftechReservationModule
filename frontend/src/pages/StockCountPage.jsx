@@ -747,7 +747,8 @@ function VarianceTab({ session, onRefresh }) {
           }}>
             {exporting ? 'جاري...' : '📋 تصدير للتسوية'}
           </button>
-          {session.status === 'variance_ready' && (
+          {/* counts exist — uploaded from Excel (variance_ready) or counted live on mobile (uploaded) */}
+          {['uploaded', 'variance_ready'].includes(session.status) && (
             <button onClick={handleClose} disabled={closing} data-tour="stockcount-variance-close" style={{
               padding: '8px 18px', borderRadius: 6, border: 'none',
               background: '#1f2937', color: '#fff', cursor: 'pointer', fontWeight: 600,

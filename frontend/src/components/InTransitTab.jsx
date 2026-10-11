@@ -301,6 +301,12 @@ function DetailPanel({ transit, onClose, onAction }) {
         {/* Status row */}
         <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm" data-tour="transfers-transit-status">
           <StatusBadge status={transit.transit_status} />
+          {transit.manually_received_at && !transit.erp_received_date && (
+            <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-semibold"
+                  title="تم تسجيل الاستلام هنا — في انتظار مستند الاستلام (25) من SOFTECH للمطابقة">
+              ⏳ مستلم محلياً — في انتظار تأكيد SOFTECH
+            </span>
+          )}
           {transit.cancellation_available && (
             <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-semibold">
               ↩️ الإلغاء متاح حتى {fmtDate(transit.cancellation_expires_at)}

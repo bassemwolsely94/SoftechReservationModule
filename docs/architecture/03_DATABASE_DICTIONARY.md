@@ -2782,7 +2782,7 @@ Tables prefixed with their Django app name.
 | cancellation_available | bool | |
 | alert_notification_count / last_alert_sent_at / last_alert_level | int/datetime/varchar | Aging alerts |
 | internal_notes | text | |
-| manually_received_at / manually_received_by_id | datetime/FK | |
+| manually_received_at / manually_received_by_id | datetime/FK | Local «تسجيل الاستلام» (never written to SOFTECH). The sync keeps `transit_status='received'` while no doc 25 exists, and keeps re-checking these rows; once SOFTECH's 25 appears its result (received / erp_mismatch) and reconciliation win. UI shows «⏳ مستلم محلياً — في انتظار تأكيد SOFTECH». |
 | force_close_reason / force_closed_by_id | text/FK | |
 | first_seen_at / last_synced_at / updated_at | datetime | |
 

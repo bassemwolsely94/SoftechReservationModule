@@ -81,8 +81,8 @@ MODULE = {
                  'text': T('التسوية بتتعمل في SOFTECH: الزيادة مستند 50 والنقص مستند 150.',
                            'The adjustment is made in SOFTECH: surplus document 50, shortage document 150.')},
                 {'target': 'stockcount-variance-close', 'route': '/stock-count',
-                 'text': T('«🔒 إغلاق الجلسة» لما الفروق تكون جاهزة ومراجعة.',
-                           '"🔒 Close session" once the variances are ready and reviewed.')},
+                 'text': T('«🔒 إغلاق الجلسة» بعد ما العد يتسجّل (رفع الملف أو العد من الموبايل) والفروق تتراجع.',
+                           '"🔒 Close session" once the count is recorded (file upload or mobile counting) and the variances are reviewed.')},
             ],
         },
         {
@@ -155,6 +155,8 @@ SCREENS = [
             T('في «الفروق» راجع، أعد عدّ الأصناف ذات الفروق الكبيرة، صدّر للتسوية، ثم أغلق.', 'In "Variance" review, recount big differences, export for adjustment, then close.'),
         ],
         'tips': [
+            T('الجلسة تتقفل بعد تسجيل العد — سواء برفع ملف العد أو بالعد المباشر من الموبايل. قبل كده زر «🔒 إغلاق الجلسة» مش بيظهر والسيرفر بيرفض.',
+              'A session can be closed once counts are recorded — by uploading the count file or by counting live on mobile. Before that the "🔒 Close session" button is hidden and the server refuses.'),
             T('مخازن الحجر (102، 103، 105) لا تدخل في أرصدة الجرد التشغيلي.', 'Quarantine stores (102, 103, 105) are excluded from operational count balances.'),
             T('أي بيع أو استلام بين اللقطة والعد يظهر كفرق — جمّد الحركة أو اجرد بسرعة بعد اللقطة.', 'Any sale or receipt between the snapshot and the count shows as a variance — pause movement or count quickly after the snapshot.'),
         ],
@@ -171,7 +173,7 @@ SCREENS = [
             {'target': 'stockcount-sessions-list', 'text': T('الجلسات — اختار جلسة عشان تكمل اللقطة والعد والفروق بتاعتها.',
                                               'The sessions — select one to continue its snapshot, count and variances.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-11',
     },
     {
         'key': 'stockcount.mobile',

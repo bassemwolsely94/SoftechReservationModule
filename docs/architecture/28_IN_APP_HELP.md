@@ -224,6 +224,3 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Known gaps found while writing tours (queued as separate tasks): a local «تسجيل الاستلام» on a transit is
-  reset by the next sync; a follow-up scheduled from a saved call loses its type and reminder; a stock
-  count counted only on mobile cannot be closed from the UI. Tour text avoids promising those behaviours.

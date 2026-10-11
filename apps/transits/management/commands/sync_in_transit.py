@@ -34,6 +34,7 @@ ABSOLUTE RULE: SELECT ONLY on Sybase. Never INSERT/UPDATE/DELETE on SOFTECH.
 import datetime
 import logging
 
+from django.db.models import Q
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -307,9 +308,14 @@ class Command(BaseCommand):
                         changed = False
                         prev_status = existing.transit_status
 
-                        # Only update ERP-derived fields; leave local-only fields intact
+                        # Only update ERP-derived fields; leave local-only fields intact.
+                        # A local receipt («تسجيل الاستلام») stands until SOFTECH's own
+                        # receipt (doc 25) appears — no 25 yet must not undo it; once the
+                        # 25 exists, SOFTECH's result (received / erp_mismatch) wins.
+                        keep_local_receipt = (existing.manually_received_at is not None
+                                              and t_status == 'in_transit')
                         if existing.transit_status not in ('force_closed',):
-                            if existing.transit_status != t_status:
+                            if existing.transit_status != t_status and not keep_local_receipt:
                                 existing.transit_status = t_status
                                 changed = True
                             # Receiver is authoritative from the 125 header —
@@ -461,9 +467,13 @@ class Command(BaseCommand):
             InTransitAuditEvent, InTransitTransfer, compute_reconciliation,
         )
 
+        # Open = not yet received in SOFTECH: still in transit, or received locally
+        # and awaiting the 25 document (so a late 25 still reconciles it).
         open_qs = (
             InTransitTransfer.objects
-            .filter(transit_status='in_transit')
+            .filter(Q(transit_status='in_transit')
+                    | Q(manually_received_at__isnull=False, erp_receipt_doc_number=''))
+            .exclude(transit_status='force_closed')
             .exclude(erp_receiving_branch_code='')
         )
         rechecked = resolved = 0
