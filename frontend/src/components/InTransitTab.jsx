@@ -253,6 +253,7 @@ function DetailPanel({ transit, onClose, onAction }) {
       <div
         className="w-full max-w-2xl bg-white shadow-2xl overflow-y-auto flex flex-col"
         dir="rtl"
+        data-tour="transfers-transit-drawer"
       >
         {/* Header */}
         <div
@@ -298,7 +299,7 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Status row */}
-        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm">
+        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm" data-tour="transfers-transit-status">
           <StatusBadge status={transit.transit_status} />
           {transit.cancellation_available && (
             <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-semibold">
@@ -327,6 +328,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           )}
           <div className="flex-1" />
           <button
+            data-tour="transfers-transit-print"
             onClick={() => handleExportSheet('picking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة التجميع — بمسار مخزن المصدر (Excel)'}
@@ -336,6 +338,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             {exporting === 'picking' ? 'جارٍ التصدير...' : 'ورقة التجميع'}
           </button>
           <button
+            data-tour="transfers-transit-print-stocking"
             onClick={() => handleExportSheet('stocking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة الترصيص — بترتيب أرفف الفرع المستلم (Excel)'}
@@ -347,7 +350,7 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-6 gap-4">
+        <div className="flex border-b border-gray-100 px-6 gap-4" data-tour="transfers-transit-tabs">
           {[
             { key: 'items',    label: `الأصناف (${transit.item_count})` },
             ...(hasRecon ? [{ key: 'recon', label: `مطابقة 125↔25${reconCount ? ` (${reconCount})` : ''}` }] : []),
@@ -373,7 +376,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Items tab */}
           {tab === 'items' && (
-            <div className="px-6 py-4">
+            <div className="px-6 py-4" data-tour="transfers-transit-items">
               {transit.fefo_warning?.length > 0 && (
                 <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <div className="font-bold text-amber-800 text-sm mb-1">
@@ -487,7 +490,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Reconciliation tab (125 issued ↔ 25 received) */}
           {tab === 'recon' && (
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-6 py-4 space-y-4" data-tour="transfers-transit-recon">
               {/* Summary banner */}
               <div className={`rounded-xl px-4 py-3 border ${
                 transit.has_discrepancy
@@ -600,7 +603,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           {tab === 'notes' && (
             <div className="px-6 py-4 space-y-3">
               {/* Add note form */}
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-tour="transfers-transit-notes">
                 <textarea
                   className="flex-1 border border-gray-200 rounded-xl p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-200"
                   rows={2}
@@ -671,11 +674,12 @@ function DetailPanel({ transit, onClose, onAction }) {
 
         {/* Actions footer */}
         {transit.transit_status === 'in_transit' && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3" data-tour="transfers-transit-actions">
 
             {/* Mark Received (receiving branch or admin) */}
             {(isAdmin || isReceivingBranch) && (
               <button
+                data-tour="transfers-transit-mark-received"
                 onClick={() => markReceived.mutate('')}
                 disabled={markReceived.isPending}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
@@ -861,11 +865,12 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
               return (
                 <tr
                   key={tr.id}
+                  data-tour="transfers-transits-row"
                   onClick={() => onRowClick(tr)}
                   className="cursor-pointer hover:bg-brand-50 transition-colors"
                   style={{ borderRight: `3px solid ${p.dot}` }}
                 >
-                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-3" onClick={e => e.stopPropagation()} data-tour="transfers-transits-row-check">
                     <input
                       type="checkbox"
                       className="accent-brand-600 cursor-pointer"
@@ -1165,6 +1170,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         {checkedIds.size > 0 && (
           <>
             <button
+              data-tour="transfers-transits-bulk-print"
               onClick={() => exportSheetBulk('picking')}
               disabled={!!exporting}
               title="بمسار مخزن المصدر"
@@ -1189,6 +1195,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
           </>
         )}
         <Link
+          data-tour="transfers-transits-pickzones"
           to="/pick-zones"
           className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           title="إدارة مناطق التجميع وقواعد التصنيف"
@@ -1206,6 +1213,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         </button>
         {isAdmin && (
           <button
+            data-tour="transfers-transits-sync"
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
             className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"

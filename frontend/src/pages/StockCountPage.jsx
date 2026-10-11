@@ -359,7 +359,7 @@ function SessionsTab({ onSelect, refresh }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} data-tour="stockcount-sessions-list">
         {sessions.map(s => (
-          <div key={s.id} onClick={() => onSelect(s)} style={{
+          <div key={s.id} onClick={() => onSelect(s)} data-tour="stockcount-sessions-row" style={{
             border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px',
             cursor: 'pointer', background: '#fff', transition: 'box-shadow 0.15s',
           }}
@@ -435,20 +435,20 @@ function SnapshotTab({ session, onRefresh }) {
 
   return (
     <div>
-      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 16, marginBottom: 20, fontSize: 14 }}>
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 16, marginBottom: 20, fontSize: 14 }} data-tour="stockcount-snapshot-info">
         <strong>ℹ️ اللقطة (Snapshot)</strong>: تُجمّد الكميات المتوقعة من SOFTECH في لحظة بعينها.
         بعد أخذ اللقطة لن تتغير الكميات المتوقعة حتى لو تغيرت البيانات في SOFTECH.
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        <button onClick={handlePreview} disabled={loading} style={{
+        <button onClick={handlePreview} disabled={loading} data-tour="stockcount-snapshot-preview" style={{
           padding: '10px 24px', borderRadius: 6, border: '1px solid #2563eb',
           color: '#2563eb', background: '#fff', cursor: 'pointer', fontWeight: 600,
         }}>
           {loading ? 'جاري الاستعلام...' : '🔍 معاينة الأصناف'}
         </button>
         {canSnap && (
-          <button onClick={handleSnapshot} disabled={snapping} style={{
+          <button onClick={handleSnapshot} disabled={snapping} data-tour="stockcount-snapshot-take" style={{
             padding: '10px 24px', borderRadius: 6, border: 'none',
             background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
           }}>
@@ -467,7 +467,7 @@ function SnapshotTab({ session, onRefresh }) {
       )}
 
       {preview && (
-        <div>
+        <div data-tour="stockcount-snapshot-table">
           <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 15 }}>
             معاينة: {preview.item_count} صنف من {preview.source}
           </div>
@@ -559,7 +559,7 @@ function CountTab({ session, onRefresh }) {
       )}
 
       {/* Step 1 — Download */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20, marginBottom: 16 }} data-tour="stockcount-count-download">
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
           <span style={{
             background: '#2563eb', color: '#fff', borderRadius: '50%',
@@ -581,7 +581,7 @@ function CountTab({ session, onRefresh }) {
       </div>
 
       {/* Step 2 — Upload */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20 }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 20 }} data-tour="stockcount-count-upload">
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
           <span style={{
             background: '#2563eb', color: '#fff', borderRadius: '50%',
@@ -611,7 +611,7 @@ function CountTab({ session, onRefresh }) {
         )}
 
         {uploadResult && (
-          <div style={{ marginTop: 20 }}>
+          <div style={{ marginTop: 20 }} data-tour="stockcount-count-result">
             <div style={{ fontWeight: 600, color: '#15803d', marginBottom: 12 }}>
               ✓ تم الرفع بنجاح — {uploadResult.processed} صنف تمت معالجته
             </div>
@@ -692,7 +692,7 @@ function VarianceTab({ session, onRefresh }) {
 
   if (!['variance_ready', 'closed', 'uploaded'].includes(session.status)) {
     return (
-      <div style={{ textAlign: 'center', color: '#6b7280', padding: 48, background: '#f9fafb', borderRadius: 8 }}>
+      <div style={{ textAlign: 'center', color: '#6b7280', padding: 48, background: '#f9fafb', borderRadius: 8 }} data-tour="stockcount-variance-empty">
         يجب رفع نتائج العد أولاً لعرض تقرير الفروق.
       </div>
     );
@@ -702,7 +702,7 @@ function VarianceTab({ session, onRefresh }) {
     <div>
       {/* Summary cards */}
       {data && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }} data-tour="stockcount-variance-summary">
           {[
             { label: 'إجمالي الأصناف', value: data.summary?.item_count    || session.item_count,    color: '#2563eb' },
             { label: 'مطابق',          value: data.summary?.ok_count      || session.ok_count,      color: '#059669' },
@@ -718,7 +718,7 @@ function VarianceTab({ session, onRefresh }) {
       )}
 
       {/* Filters + actions */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }} data-tour="stockcount-variance-filters">
         {[
           { key: '',        label: 'الكل' },
           { key: 'surplus', label: 'زيادة فقط' },
@@ -741,14 +741,14 @@ function VarianceTab({ session, onRefresh }) {
           style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', width: 140 }}
         />
         <div style={{ marginRight: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={handleAdjExport} disabled={exporting} style={{
+          <button onClick={handleAdjExport} disabled={exporting} data-tour="stockcount-variance-export" style={{
             padding: '8px 18px', borderRadius: 6, border: '1px solid #059669',
             color: '#059669', background: '#fff', cursor: 'pointer', fontWeight: 600,
           }}>
             {exporting ? 'جاري...' : '📋 تصدير للتسوية'}
           </button>
           {session.status === 'variance_ready' && (
-            <button onClick={handleClose} disabled={closing} style={{
+            <button onClick={handleClose} disabled={closing} data-tour="stockcount-variance-close" style={{
               padding: '8px 18px', borderRadius: 6, border: 'none',
               background: '#1f2937', color: '#fff', cursor: 'pointer', fontWeight: 600,
             }}>
@@ -759,14 +759,14 @@ function VarianceTab({ session, onRefresh }) {
       </div>
 
       {/* ERP note */}
-      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13, color: '#9a3412' }}>
+      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13, color: '#9a3412' }} data-tour="stockcount-variance-erp-note">
         📌 لتسوية الفروق في SOFTECH: أصناف الزيادة ← doccode 50 | أصناف النقص ← doccode 150
       </div>
 
       {loading && <div style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>جاري التحميل...</div>}
 
       {data && (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto' }} data-tour="stockcount-variance-table">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#1e3a5f', color: '#fff' }}>
@@ -906,7 +906,7 @@ export default function StockCountPage() {
 
       {/* Session workflow bar */}
       {selectedSession && (
-        <div style={{ background: '#fff', padding: '12px 32px', borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{ background: '#fff', padding: '12px 32px', borderBottom: '1px solid #e5e7eb' }} data-tour="stockcount-session-progress">
           <WorkflowProgress status={selectedSession.status} />
         </div>
       )}

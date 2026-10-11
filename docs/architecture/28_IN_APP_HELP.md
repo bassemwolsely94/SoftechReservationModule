@@ -118,7 +118,9 @@ started only on request, it dims the page, zooms into one real area at a time an
   the module page (all, 📱 marks mobile). Desktop: reservation lifecycle, transfer lifecycle, POS order
   → cashier, POS exceptions, missed demand, delivery (dashboard → dispatch → rider), purchasing
   cycle (recommendations → supply → supplier invoices), insurance claim (import → review → issue →
-  print), HR request, HR approvals. Mobile: reservations, transfers, missed demand, approvals (anchors `mshell-*`, generated `mnav-<path>` for the bottom
+  print), HR request, HR approvals, stock count (session → snapshot → count → variances), transfers in
+  transit → receiving, call → case → follow-up. Mobile: reservations, transfers, missed demand,
+  approvals, stock counting (anchors `mshell-*`, generated `mnav-<path>` for the bottom
   tabs — tabs beyond the bar live under «المزيد»).
 - **Trainers edit workflow tours** in «للمدربين» → «جولة دورة عمل»: title, summary and each step's
   text (steps, their buttons and pages stay the code's). `HelpTrainingOverride(kind='flow',
@@ -222,4 +224,6 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Workflow tours for the remaining processes (stock count, transfers in transit → receiving, call center → case).
+- Known gaps found while writing tours (queued as separate tasks): a local «تسجيل الاستلام» on a transit is
+  reset by the next sync; a follow-up scheduled from a saved call loses its type and reminder; a stock
+  count counted only on mobile cannot be closed from the UI. Tour text avoids promising those behaviours.
