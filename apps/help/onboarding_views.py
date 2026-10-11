@@ -645,3 +645,38 @@ def notes_log(request):
     except ValueError:
         days = NOTES_LOG_DAYS
     return Response({'days': days, 'items': recent_notes(days)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def notes_check(request):
+    """Trainers: POST {kind: screen|path|quiz|flow, key, note, data} → {'hints': [...]}
+    (notecheck.py) for the note being typed against the draft being edited. Read-only."""
+    from . import notecheck
+    from .views import _overrides
+    if not _can_edit(_profile(request)):
+        return Response({'detail': 'ليس لديك صلاحية'}, status=403)
+    body = request.data if isinstance(request.data, dict) else {}
+    kind, key, data = body.get('kind'), str(body.get('key') or ''), body.get('data')
+    modules, screens = registry.load()
+    if kind == 'screen' and key in screens:
+        current = registry.effective(screens[key], _overrides().get(key))
+        before = {f: current.get(f) for f in registry.EDITABLE_FIELDS}
+        after = {**before, **{f: v for f, v in (data or {}).items() if f in registry.EDITABLE_FIELDS}} \
+            if isinstance(data, dict) else before
+        self_key = key
+    elif kind == 'path' and key in ROLES:
+        before, after = training.path(key), (data or {}).get('screens') if isinstance(data, dict) else None
+        self_key = f'path:{key}'
+    elif kind == 'quiz' and key in modules:
+        before, after = training.quizzes().get(key, []), (data or {}).get('questions') if isinstance(data, dict) else None
+        self_key = f'quiz:{key}'
+    elif kind == 'flow' and training.base_flow(key) is not None:
+        o = HelpTrainingOverride.objects.filter(kind='flow', key=key).first()
+        before = training.merge_flow(training.base_flow(key), o.data if o else None)
+        after = data if isinstance(data, dict) else before
+        self_key = f'flow:{key}'
+    else:
+        return Response({'detail': 'not found'}, status=404)
+    hints = notecheck.check(kind, body.get('note', ''), before, after, recent_notes(), self_key)
+    return Response({'hints': hints})

@@ -30,6 +30,14 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   `replaced` by a later change). Filter by kind; a row opens the screen editor or the training editor
   (`?tkind=&tkey=`). The weekly supervisors' digest adds the last 7 days' lines («📝 اتحدّث في التدريب»,
   first 3 + count). Built by `onboarding_views.recent_notes()`.
+- **«💡» note hints while typing** (`NoteHints.jsx` in the screen editor and the training editor, debounced
+  `POST /api/help/notes-check/ {kind, key, note, data}`, help/edit only, read-only; rules in
+  `apps/help/notecheck.py`, deterministic word rules, no model): `big_empty` — no note on a big edit
+  (`BIG_EDIT` = 3+ texts changed vs the current version), on path screens added, or on a changed quiz
+  (both notify people); `vague` — only generic words («تعديلات بسيطة»); `similar` — a note of the last
+  30 days on another screen / path / quiz / tour describing the same change in other words (Dice ≥ 0.6 on
+  normalised Arabic words with a small synonym map, 2+ shared non-generic words) → «استخدمها» copies its
+  wording. Never blocks a save.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.

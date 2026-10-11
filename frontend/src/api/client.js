@@ -354,6 +354,7 @@ export const helpApi = {
   whatsNew:   ()                 => api.get('/help/whats-new/'),
   whatsNewSeen: ()               => api.post('/help/whats-new/'),
   notesLog:   (days = 30)        => api.get('/help/notes-log/', { params: { days } }),
+  checkNote:  (kind, key, note, data) => api.post('/help/notes-check/', { kind, key, note, data }),
   firstDay:   (mobile = false)   => api.get('/help/first-day/', { params: mobile ? { mobile: 1 } : {} }),
   hideFirstDay: (hidden = true)  => api.post('/help/first-day/', { hidden }),
   tourEvent:  (payload)          => api.post('/help/tour-event/', payload),

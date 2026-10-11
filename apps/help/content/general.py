@@ -312,8 +312,8 @@ SCREENS = [
             {'text': T('للمدربين: نص جولة «اعرض لي» بيتعدّل من «تعديل الشرح» (الخطوات والأزرار ثابتة حسب الشاشة). المسارات والاختبارات بتتعدّل من تبويب «للمدربين».',
                        'For trainers: the "Show me" tour text is edited in "Edit help" (the steps and buttons are fixed by the screen). Paths and quizzes are edited in the "For trainers" tab.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
-            {'text': T('للمدربين: لما تحفظ مسار دور أو اختبار أو جولة دورة عمل من «للمدربين» اكتب في «إيه الجديد للمستخدمين؟» سطر واحد. في المسار والاختبار بيتضاف لإشعار «شاشات جديدة في مسارك» / «اختبار اتحدّث» (بعد «الجديد:»)، وفي الجولة بيظهر «✨ اتحدّث: …» على كارتها أسبوعين أو لحد تعديل تاني من غير سطر أو رجوع للأصل. «سبب التعديل» بيفضل في السجل بس.',
-                       'For trainers: when you save a role path, a quiz or a workflow tour in "For trainers", write one line in "What\'s new for users?". For paths and quizzes it is added to the "New screens in your path" / "Quiz updated" notification (after "What\'s new:"); for a workflow tour "✨ Updated: …" shows on its card for two weeks, or until a later save without a line or a revert. The "reason" stays in the history only.'),
+            {'text': T('للمدربين: لما تحفظ مسار دور أو اختبار أو جولة دورة عمل من «للمدربين» اكتب في «إيه الجديد للمستخدمين؟» سطر واحد. وإنت بتكتب بيظهر تحت الخانة «💡» لو: التعديل كبير والسطر فاضي، أو السطر عام زي «تعديلات بسيطة»، أو نفس التعديل اتكتب على شاشة تانية بصياغة مختلفة (اضغط «استخدمها» تاخد نفس الصياغة). دي تلميحات بس — الحفظ مش بيتمنع. في المسار والاختبار بيتضاف لإشعار «شاشات جديدة في مسارك» / «اختبار اتحدّث» (بعد «الجديد:»)، وفي الجولة بيظهر «✨ اتحدّث: …» على كارتها أسبوعين أو لحد تعديل تاني من غير سطر أو رجوع للأصل. «سبب التعديل» بيفضل في السجل بس.',
+                       'For trainers: when you save a role path, a quiz or a workflow tour in "For trainers", write one line in "What\'s new for users?". For paths and quizzes it is added to the "New screens in your path" / "Quiz updated" notification (after "What\'s new:"); for a workflow tour "✨ Updated: …" shows on its card for two weeks, or until a later save without a line or a revert. The "reason" stays in the history only. While you type, a "💡" hint shows under the field when: the edit is big and the line is empty, the line is only generic words like "minor changes", or the same change was written on another screen in different words (press "Use it" to take that wording). These are hints only — saving is never blocked.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
         ],
         'tabs': [
@@ -363,7 +363,7 @@ SCREENS = [
             {'target': 'general-help-center-modules', 'text': T('في «تصفح الموديولات»: اضغط موديول تشوف دورته وشاشاته، وبعدها اضغط الشاشة لشرحها الكامل.',
                                               'In "Browse modules": click a module to see its workflow and screens, then a screen for its full help.')},
         ],
-        'change_note': T('قائمة «📝 إيه الجديد» في «للمدربين»: كل سطور آخر 30 يوم في مكان واحد', '"📝 What\'s new" list in "For trainers": every line of the last 30 days in one place'),
+        'change_note': T('تلميحات «💡» وإنت بتكتب سطر «إيه الجديد» عشان الصياغة تفضل موحّدة', '"💡" hints while you type the "What\'s new" line, to keep wording consistent'),
         'updated': '2026-10-11',
     },
     {

@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { TField } from './HelpEditor'
+import NoteHints, { useNoteHints } from './NoteHints'
 import { pick } from './text'
 
 const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
@@ -48,6 +49,9 @@ export default function TrainingEditor({ index }) {
   const [draftOf, setDraftOf] = useState(null)   // the payload the draft was made from
   useEffect(() => { setDraft(data ? clone(data.current) : null); setDraftOf(data || null); setMsg(null) }, [data])
 
+  const ready = !!draft && draftOf === data
+  const hints = useNoteHints(kind, key, publicNote, !ready ? null
+    : kind === 'path' ? { screens: draft } : kind === 'quiz' ? { questions: draft } : draft)
   const flows = index.flows || []
   const switchKind = (k) => { setKind(k); setKey(k === 'path' ? 'pharmacist' : k === 'quiz' ? 'pos' : (flows[0]?.id || '').slice(5)) }
   const done = (payload, text) => {
@@ -110,6 +114,7 @@ export default function TrainingEditor({ index }) {
             <input value={publicNote} onChange={(e) => setPublicNote(e.target.value)} maxLength={120}
                    placeholder={kind === 'quiz' ? 'مثال: سؤالين جداد عن المرتجعات' : kind === 'path' ? 'مثال: اتضافت شاشة التحويلات — ابدأ بيها' : 'مثال: خطوة جديدة عن طباعة الفاتورة'}
                    className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
+            <NoteHints hints={hints} onUse={setPublicNote} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب التعديل (يظهر في السجل)"

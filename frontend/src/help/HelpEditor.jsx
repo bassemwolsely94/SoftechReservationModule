@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick, itemText } from './text'
+import NoteHints, { useNoteHints } from './NoteHints'
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
 const emptyT = () => ({ ar: '', en: '' })
@@ -83,6 +84,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
   }))
   const [note, setNote] = useState('')
   const [publicNote, setPublicNote] = useState('')
+  const hints = useNoteHints('screen', data.key, publicNote, draft)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [showOriginal, setShowOriginal] = useState(false)
@@ -230,6 +232,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
                placeholder="مثال: زر تصدير Excel جديد في القائمة"
                className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
         <div className="text-[10px] text-faint">{publicNote.length}/120 — لو سبته فاضي، الناس هتشوف تاريخ التحديث بس.</div>
+        <NoteHints hints={hints} onUse={setPublicNote} />
       </Field>
 
       <Field title="سبب التعديل (يظهر في السجل)">

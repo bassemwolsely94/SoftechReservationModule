@@ -1276,3 +1276,76 @@ class NotesLogTests(TestCase):
         self.assertIn('و2 غيرها', body)
         _, body = digest.render({**s, 'notes': []})
         self.assertNotIn('📝', body)
+
+
+class NoteCheckTests(TestCase):
+    """Gentle hints on the «إيه الجديد» note while typing: big edit with no note, a
+    generic note, the same change worded differently elsewhere. Never blocks a save."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('nc_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('nc_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _check(self, kind, key, note, data):
+        r = self.t.post('/api/help/notes-check/', {'kind': kind, 'key': key, 'note': note, 'data': data}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        return {h['code']: h for h in r.json()['hints']}
+
+    def test_rules_unit(self):
+        from apps.help import notecheck
+        self.assertEqual(notecheck.normalize('إضافةُ زرّ'), 'اضافه زر')
+        self.assertEqual(notecheck.words('زرار Excel'), {'زر', 'اكسل'})
+        self.assertGreaterEqual(notecheck.similarity('زر تصدير اكسل جديد', 'زرار تصدير Excel في القائمة'), 0.6)
+        self.assertLess(notecheck.similarity('زر تصدير جديد', 'عمود الفرع المستلم'), 0.6)
+        self.assertEqual(notecheck.changed_parts({'a': {'ar': 'x'}, 'b': None}, {'a': {'ar': 'x'}, 'b': {'ar': ''}}), 0)
+        self.assertEqual(notecheck.changed_parts([{'ar': 'x'}], [{'ar': 'y'}, {'ar': 'z'}]), 2)
+
+    def test_big_screen_edit_without_note(self):
+        self.assertEqual(self.ph.post('/api/help/notes-check/', {'kind': 'screen', 'key': 'reservations.board'},
+                                      format='json').status_code, 403)
+        key = 'reservations.board'
+        cur = self.t.get(f'/api/help/screens/{key}/?log=0').json()
+        draft = {'title': cur['title'], 'summary': {'ar': 'جديد 1', 'en': ''}, 'steps': cur['steps']}
+        self.assertEqual(self._check('screen', key, '', draft), {})            # one part: fine
+        draft['tips'] = [{'ar': 'نصيحة أ', 'en': ''}, {'ar': 'نصيحة ب', 'en': ''}, {'ar': 'نصيحة ج', 'en': ''}]
+        draft['tips'] = (cur.get('tips') or []) + draft['tips']
+        self.assertIn('big_empty', self._check('screen', key, '', draft))
+        self.assertNotIn('big_empty', self._check('screen', key, 'نصايح جديدة للحجز', draft))
+        self.assertEqual(self.t.post('/api/help/notes-check/', {'kind': 'screen', 'key': 'nope'},
+                                     format='json').status_code, 404)
+
+    def test_path_and_quiz_without_note(self):
+        from apps.help.content import onboarding
+        base = onboarding.ROLE_PATHS['salesperson']
+        self.assertIn('big_empty', self._check('path', 'salesperson', '', {'screens': base + ['tasks.list']}))
+        self.assertEqual(self._check('path', 'salesperson', '', {'screens': base[:2]}), {})    # removal: no news
+        q = {'q': {'ar': 'سؤال؟', 'en': ''}, 'options': [{'ar': 'أ', 'en': ''}, {'ar': 'ب', 'en': ''}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': ''}}
+        self.assertIn('big_empty', self._check('quiz', 'pos', '', {'questions': [q]}))
+        self.assertEqual(self._check('quiz', 'pos', '', {'questions': onboarding.QUIZZES['pos']}), {})
+
+    def test_vague_note(self):
+        cur = self.t.get('/api/help/screens/reservations.board/?log=0').json()
+        self.assertIn('vague', self._check('screen', 'reservations.board', 'تعديلات بسيطة', {'title': cur['title']}))
+        self.assertNotIn('vague', self._check('screen', 'reservations.board', 'زر تصدير جديد', {'title': cur['title']}))
+
+    def test_similar_note_elsewhere_offers_its_wording(self):
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'زر تصدير اكسل جديد في القائمة'},
+                   format='json')
+        cur = self.t.get('/api/help/screens/transfers.list/?log=0').json()
+        hints = self._check('screen', 'transfers.list', 'زرار تصدير إكسل جديد فوق', {'title': cur['title']})
+        self.assertIn('similar', hints)
+        self.assertEqual(hints['similar']['suggestion'], 'زر تصدير اكسل جديد في القائمة')
+        # the same wording → consistent, nothing to say; own screen's note is skipped
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'زر تصدير اكسل جديد في القائمة',
+                                                {'title': cur['title']}))
+        self.assertNotIn('similar', self._check('screen', 'reservations.board', 'زرار تصدير إكسل جديد فوق', {}))
+        # unrelated note → no hint
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'عمود الفرع المستلم', {'title': cur['title']}))
+        # sharing only «زر … جديد» is a different change (print, not export)
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'زر طباعة جديد', {'title': cur['title']}))
