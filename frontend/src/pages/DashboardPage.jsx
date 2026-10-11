@@ -16,6 +16,7 @@
  */
 
 import FirstDay from '../help/FirstDay'
+import WhatsNewCard from '../help/WhatsNewCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -733,6 +734,7 @@ export default function DashboardPage() {
 
         {/* ── «أول يوم»: system tour + training path, until complete or hidden ── */}
         <FirstDay />
+        <WhatsNewCard />
 
         {/* ── 2. Hero KPI Strip ──────────────────────────────────── */}
         {isLoading ? (

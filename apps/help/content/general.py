@@ -62,6 +62,8 @@ SCREENS = [
         'audience': T('كل الأدوار — كل دور يرى الأقسام التي تخصه.',
                       'All roles — each role sees the sections that concern it.'),
         'steps': [
+            T('كارت «🆕 الجديد في الشرح هذا الأسبوع»: الشاشات اللي شرحها أو جولتها اتغيّرت آخر 7 أيام وتخص شغلك (مسار دورك أو شاشات فتحت شرحها قبل كده). اضغط الشاشة يفتحها مع شرحها، أو «تمام، شفتها ✓». الكارت بيختفي لما مفيش جديد.',
+              'The "🆕 New in the help this week" card: screens whose help or tour changed in the last 7 days and that concern your work (your role\'s path, or screens whose help you opened). Click one to open it with its help, or "Got it ✓". The card disappears when there is nothing new.'),
             T('أول ما تدخل النظام هتلاقي فوق «👋 أهلاً بيك — ابدأ من هنا»: الجولة التعريفية، الشاشة الجاية في مسارك التدريبي، جولات شغل دورك، والاختبار الجاي. كل كارت بيبدأ لما تضغطه، وبيتعلّم ✓ لما تخلّصه.',
               'When you first log in, the top shows "👋 Welcome — start here": the system tour, the next screen on your training path, your role\'s workflow tours, and the next quiz. Each card starts when you click it and is ticked ✓ when done.'),
             T('الكروت بتختفي لوحدها لما تخلّص مسارك، أو اضغط «إخفاء ✕». ترجّعها من «دليل الاستخدام» ← «مساري التدريبي».',
@@ -87,6 +89,8 @@ SCREENS = [
         ],
         'related': ['general.me', 'general.notifications'],
         'tour': [
+            {'target': 'general-whats-new', 'text': T('«🆕 الجديد في الشرح»: الشاشات اللي شرحها اتغيّر الأسبوع ده وتخص شغلك.',
+                                              '"🆕 New in the help": screens whose help changed this week and concern your work.')},
             {'target': 'general-first-day', 'text': T('«ابدأ من هنا»: جولة النظام، مسارك التدريبي، وجولات شغلك — كل كارت بيبدأ بضغطة.',
                                               '"Start here": the system tour, your training path and your workflow tours — each card starts on a click.')},
             {'target': 'general-dashboard-actions', 'text': T('اختصارات سريعة: «📋 الحجوزات»، «🔀 التحويلات»، و«+ حجز جديد» لتسجيل طلب عميل على طول.',

@@ -3337,7 +3337,7 @@ Tables prefixed with their Django app name.
 `staff_id` (who was reminded), `sent_by_id`, `percent` (their progress then), `created_at`. Audit trail + 3-day cool-down.
 
 ### help_helppreference  (per-person help preferences)
-`staff_id` (one-to-one StaffProfile), `first_day_hidden_at` (the person hid the «ابدأ من هنا» home cards), `updated_at`.
+`staff_id` (one-to-one StaffProfile), `first_day_hidden_at` (the person hid the «ابدأ من هنا» home cards), `whats_new_seen_at` («تمام، شفتها» on the home «الجديد» card — help changes up to then count as read), `updated_at`.
 
 ### help_helptrainingsnapshot  (what staff were last told about their training)
 `kind` (`path` / `quiz`), `key` (role / module), `data` (path: list of screen keys; quiz: version string), `updated_at`. Unique (`kind`, `key`). Compared hourly by `help_announce_training` to notify only changes.

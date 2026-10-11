@@ -4,6 +4,11 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 
 ## What users get
 
+- **«🆕 الجديد في الشرح هذا الأسبوع»** home card (desktop /dashboard, mobile «لوحتي»): screens whose help or
+  tour changed in the last 7 days that matter to the person (role path + screens whose help they opened in
+  90 days), unread first; only changes after the person joined (newcomers get «ابدأ من هنا» instead). Read = opened that help after the change (HelpEvent open) or «تمام، شفتها»
+  (`HelpPreference.whats_new_seen_at`) — on the server, same on every device. Hidden when nothing is
+  unread. `GET/POST /api/help/whats-new/`.
 - **«👋 ابدأ من هنا» (first day)** at the top of the home page (/dashboard; mobile «لوحتي», with a one-line
   pointer on the mobile landing page): system tour, the next screen on the role's training path (opens
   it and starts its tour), the role's workflow tours, the next quiz — ticked ✓ when done. Shown until

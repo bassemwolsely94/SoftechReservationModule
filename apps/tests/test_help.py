@@ -1031,3 +1031,62 @@ class RemindTests(TestCase):
             r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
         self.assertEqual(r['sent'], [])
         self.assertEqual(r['skipped'][0]['reason'], 'خلّص التدريب')
+
+
+class WhatsNewTests(TestCase):
+    """Home «الجديد»: recent help changes that matter to the person; read on the server."""
+
+    def setUp(self):
+        from django.utils import timezone
+        u, self.p, _ = make_user('wn_sales', role='salesperson', branch=make_branch())
+        u.date_joined = timezone.now() - timezone.timedelta(days=60)
+        u.save(update_fields=['date_joined'])
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        today = timezone.localdate()
+        self.recent = today.isoformat()
+        self.old = (today - timezone.timedelta(days=30)).isoformat()
+
+    def _versions(self, recent_keys):
+        _, screens = registry.load()
+        return {k: (self.recent if k in recent_keys else self.old) for k in screens}
+
+    def test_relevant_recent_unread_then_read(self):
+        from unittest import mock
+        from apps.help.content import onboarding
+        on_path = onboarding.ROLE_PATHS['salesperson'][1]
+        off_path = 'finance.pnl'
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions({on_path, off_path})):
+            d = self.c.get('/api/help/whats-new/').json()
+            self.assertEqual([x['key'] for x in d['items']], [on_path])    # finance is not theirs
+            self.assertEqual(d['unread'], 1)
+            # opening that screen's help marks it read
+            self.c.get(f'/api/help/screens/{on_path}/')
+            d = self.c.get('/api/help/whats-new/').json()
+            self.assertEqual(d['unread'], 0)
+            self.assertTrue(d['items'][0]['read'])
+            # a screen whose help they opened becomes relevant too
+            self.c.get(f'/api/help/screens/{off_path}/?log=1')
+            keys = [x['key'] for x in self.c.get('/api/help/whats-new/').json()['items']]
+            self.assertIn(off_path, keys)
+
+    def test_dismiss_all_and_old_changes(self):
+        from unittest import mock
+        from apps.help.content import onboarding
+        keys = set(onboarding.ROLE_PATHS['salesperson'][:3])
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(keys)):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 3)
+            self.assertEqual(self.c.post('/api/help/whats-new/').json(), {'unread': 0})
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 0)
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(set())):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['items'], [])
+
+    def test_newcomer_sees_no_flood(self):
+        from unittest import mock
+        from django.utils import timezone
+        from apps.help.content import onboarding
+        self.p.user.date_joined = timezone.now()
+        self.p.user.save(update_fields=['date_joined'])
+        keys = set(onboarding.ROLE_PATHS['salesperson'])
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(keys)):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 0)

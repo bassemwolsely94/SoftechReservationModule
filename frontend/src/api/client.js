@@ -351,6 +351,8 @@ export const helpApi = {
   feedbackList: (params = {})    => api.get('/help/feedback/', { params }),
   resolveFeedback: (id, resolved = true) => api.post(`/help/feedback/${id}/resolve/`, { resolved }),
   stats:      (days = 30)        => api.get('/help/stats/', { params: { days } }),
+  whatsNew:   ()                 => api.get('/help/whats-new/'),
+  whatsNewSeen: ()               => api.post('/help/whats-new/'),
   firstDay:   (mobile = false)   => api.get('/help/first-day/', { params: mobile ? { mobile: 1 } : {} }),
   hideFirstDay: (hidden = true)  => api.post('/help/first-day/', { hidden }),
   tourEvent:  (payload)          => api.post('/help/tour-event/', payload),

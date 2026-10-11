@@ -22,6 +22,7 @@ urlpatterns = [
     path('onboarding/team/', ob.team, name='help-onboarding-team'),
     path('onboarding/remind/', ob.remind, name='help-onboarding-remind'),
     path('first-day/', ob.first_day, name='help-first-day'),
+    path('whats-new/', ob.whats_new, name='help-whats-new'),
     path('training/<str:kind>/<str:key>/', ob.training_edit, name='help-training-edit'),
     path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),
     path('quizzes/<str:module_key>/submit/', ob.quiz_submit, name='help-quiz-submit'),

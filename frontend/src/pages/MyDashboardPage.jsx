@@ -11,6 +11,7 @@
  * hard-scoped server-side to an APPROVED identity claim you own.
  */
 import FirstDay from '../help/FirstDay'
+import WhatsNewCard from '../help/WhatsNewCard'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
@@ -138,7 +139,7 @@ export default function MyDashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4">
         {/* «أول يوم» — on mobile «لوحتي» is the home; on desktop it lives on /dashboard */}
-        {isMobileRoute && <div className="mb-4"><FirstDay mobile /></div>}
+        {isMobileRoute && <div className="mb-4 space-y-3"><FirstDay mobile /><WhatsNewCard mobile /></div>}
         {isAdmin && <AdminApprovalQueue />}
 
         {widgetsQ.isLoading ? (

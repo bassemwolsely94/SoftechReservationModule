@@ -500,3 +500,58 @@ def remind(request):
         HelpPreference.objects.filter(staff=target).update(first_day_hidden_at=None)
         result['sent'].append(sid)
     return Response(result)
+
+
+# ── «الجديد في الشرح» — home card ────────────────────────────────────────────
+
+WHATS_NEW_DAYS = 7
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def whats_new(request):
+    """GET  → screens whose help (text or tour) changed in the last WHATS_NEW_DAYS days
+              that matter to this person — on their role's training path, or whose help
+              they opened in the last 90 days — each with `read` (opened the help after the
+              change, or dismissed). `unread` = how many are not read.
+       POST → «تمام، شفتها»: everything changed until now counts as read."""
+    from .models import HelpEvent, HelpPreference
+    profile = _profile(request)
+    if profile is None:
+        return Response({'detail': 'no staff profile'}, status=400)
+    pref, _ = HelpPreference.objects.get_or_create(staff=profile)
+    now = timezone.now()
+    if request.method == 'POST':
+        pref.whats_new_seen_at = now
+        pref.save(update_fields=['whats_new_seen_at', 'updated_at'])
+        return Response({'unread': 0})
+
+    modules, screens = registry.load()
+    versions = _versions()
+    since = (timezone.localdate() - timezone.timedelta(days=WHATS_NEW_DAYS)).isoformat()
+    # only changes after the person joined — for a newcomer everything is "new", and the
+    # «ابدأ من هنا» cards already cover that (also avoids a flood at go-live)
+    joined = timezone.localtime(profile.user.date_joined).date().isoformat()
+    opened = {}
+    for key, at in (HelpEvent.objects.filter(kind=HelpEvent.KIND_OPEN, staff=profile,
+                                             created_at__gte=now - timezone.timedelta(days=90))
+                    .values_list('screen_key', 'created_at')):
+        opened[key] = max(opened.get(key, at), at)
+    mine = set(training.path(profile.role)) | set(opened)
+    seen_day = timezone.localtime(pref.whats_new_seen_at).date().isoformat() if pref.whats_new_seen_at else ''
+    items = []
+    for k in mine:
+        v = versions.get(k) or ''
+        if k not in screens or v < since or v <= joined:
+            continue
+        read_day = timezone.localtime(opened[k]).date().isoformat() if k in opened else ''
+        s = screens[k]
+        m = modules[s['module']]
+        items.append({
+            'key': k, 'title': s['title'], 'module_title': m['title'], 'icon': m.get('icon', ''),
+            'routes': s['routes'], 'updated': v, 'has_tour': bool(s.get('tour')),
+            'read': bool((read_day and read_day >= v) or (seen_day and seen_day >= v)),
+        })
+    items.sort(key=lambda x: (x['read'], -int(x['updated'].replace('-', ''))))   # unread first, newest first
+    return Response({'days': WHATS_NEW_DAYS, 'items': items[:20],
+                     'unread': sum(1 for x in items if not x['read'])})

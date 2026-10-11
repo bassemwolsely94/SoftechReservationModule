@@ -177,6 +177,8 @@ class HelpPreference(models.Model):
     cards on the home page (they stay reachable from «مساري التدريبي»)."""
     staff               = models.OneToOneField('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
     first_day_hidden_at = models.DateTimeField(null=True, blank=True)
+    # «تمام، شفتها» on the home «الجديد» card: help changes up to this moment count as read
+    whats_new_seen_at   = models.DateTimeField(null=True, blank=True)
     updated_at          = models.DateTimeField(auto_now=True)
 
 
