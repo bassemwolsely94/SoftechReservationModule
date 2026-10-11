@@ -45,7 +45,9 @@ class HelpRevision(models.Model):
     action     = models.CharField(max_length=10, choices=ACTION_CHOICES)
     before     = models.JSONField(null=True, blank=True)   # effective content before
     after      = models.JSONField(null=True, blank=True)   # effective content after
-    note       = models.CharField(max_length=300, blank=True, default='')
+    note       = models.CharField(max_length=300, blank=True, default='')   # reason — trainers' history only
+    # one line for users: what changed (shown in «الجديد» and on the home card)
+    public_note = models.CharField(max_length=120, blank=True, default='')
     staff      = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)

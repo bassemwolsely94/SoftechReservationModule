@@ -234,7 +234,8 @@ function ScreenView({ screenKey, lang, go, index }) {
           <div className="pt-3 border-t border-line flex flex-wrap items-center gap-4">
             <HelpFeedback screenKey={data.key} lang={lang} />
             <LearnedButton screenKey={data.key} lang={lang} />
-            {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
+            {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span>
+              {data.change_note && <span className="text-amber-800"> — {pick(data.change_note, lang)}</span>}</span>}
           </div>
         )}
       </div>
@@ -284,7 +285,8 @@ function WhatsNew({ index, lang, go }) {
                   className="w-full text-start px-4 py-2.5 flex items-center gap-3 hover:bg-surface-2">
             <span className="text-xs text-faint tabnum w-24 shrink-0">{s.updated}</span>
             <span className="text-sm text-content flex-1">{pick(s.title, lang)}
-              <span className="text-xs text-faint"> · {modTitle[s.module]?.icon} {pick(modTitle[s.module]?.title, lang)}</span></span>
+              <span className="text-xs text-faint"> · {modTitle[s.module]?.icon} {pick(modTitle[s.module]?.title, lang)}</span>
+              {s.change_note && <span className="block text-xs text-amber-800">{lang === 'en' ? 'Updated: ' : 'اتحدّث: '}«{pick(s.change_note, lang)}»</span>}</span>
             {unread && <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5">{label('newBadge', lang)}</span>}
           </button>
         )

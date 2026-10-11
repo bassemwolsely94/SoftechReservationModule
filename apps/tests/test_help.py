@@ -1090,3 +1090,56 @@ class WhatsNewTests(TestCase):
         keys = set(onboarding.ROLE_PATHS['salesperson'])
         with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(keys)):
             self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 0)
+
+
+class ChangeNoteTests(TestCase):
+    """One-line «what changed» note: trainer's public note on the latest save, else the
+    repo change_note; shown in the index («الجديد»), the screen and the home card."""
+
+    def setUp(self):
+        u, _, _ = make_user('cn_admin', role='admin', branch=make_branch())
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.key = 'reservations.board'
+
+    def _note(self):
+        idx = {s['key']: s for s in self.c.get('/api/help/').json()['screens']}
+        return idx[self.key]['change_note']
+
+    def test_trainer_note_shown_then_cleared_by_a_later_plain_save(self):
+        self.assertIsNone(self._note())
+        r = self.c.put(f'/api/help/screens/{self.key}/',
+                       {'data': {'summary': {'ar': 'شرح أوضح', 'en': ''}}, 'note': 'سبب داخلي',
+                        'public_note': '  زر   تصدير جديد  '}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['change_note']['ar'], 'زر تصدير جديد')     # whitespace tidied
+        self.assertEqual(self._note()['ar'], 'زر تصدير جديد')
+        from apps.help.models import HelpRevision
+        rev = HelpRevision.objects.get(screen_key=self.key)
+        self.assertEqual((rev.note, rev.public_note), ('سبب داخلي', 'زر تصدير جديد'))
+        # a later save without a note: the old note no longer describes the current version
+        import time; time.sleep(0.01)
+        from apps.help.models import HelpOverride
+        from django.utils import timezone
+        HelpRevision.objects.update(created_at=timezone.now() - timezone.timedelta(minutes=5))
+        self.c.put(f'/api/help/screens/{self.key}/', {'data': {'summary': {'ar': 'تاني', 'en': ''}}}, format='json')
+        HelpOverride.objects.filter(screen_key=self.key).update(updated_at=timezone.now())
+        self.assertIsNone(self._note())
+
+    def test_repo_note(self):
+        idx = {s['key']: s for s in self.c.get('/api/help/').json()['screens']}
+        self.assertTrue(idx['general.help_center']['change_note']['ar'])
+        r = self.c.get('/api/help/screens/general.help_center/?log=0').json()
+        self.assertEqual(r['change_note'], idx['general.help_center']['change_note'])
+
+    def test_note_on_home_card(self):
+        from unittest import mock
+        from django.utils import timezone
+        self.c.put(f'/api/help/screens/{self.key}/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'عمود جديد'}, format='json')
+        from apps.users.models import StaffProfile
+        p = StaffProfile.objects.get(user__username='cn_admin')
+        p.user.date_joined = timezone.now() - timezone.timedelta(days=60)
+        p.user.save(update_fields=['date_joined'])
+        items = {x['key']: x for x in self.c.get('/api/help/whats-new/').json()['items']}
+        self.assertEqual(items[self.key]['change_note']['ar'], 'عمود جديد')

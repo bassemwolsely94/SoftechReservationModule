@@ -181,6 +181,7 @@ function PanelBody() {
                       mobile={window.location.pathname.startsWith('/m/') || window.location.pathname === '/m'} />
             <div className="mt-6 pt-4 border-t border-line text-[11px] text-faint flex flex-wrap gap-x-3 gap-y-1">
               {data.updated && <span>{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
+              {data.change_note && <span className="text-amber-800">— {pick(data.change_note, lang)}</span>}
               {data.override?.updated_by && <span>{label('editedBy', lang)}: {data.override.updated_by}</span>}
             </div>
           </>

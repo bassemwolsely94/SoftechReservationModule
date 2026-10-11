@@ -82,6 +82,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
     faq: clone(data.faq) || [], tabs: clone(data.tabs) || [], tour: clone(data.tour) || [],
   }))
   const [note, setNote] = useState('')
+  const [publicNote, setPublicNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [showOriginal, setShowOriginal] = useState(false)
@@ -102,7 +103,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
   const save = async () => {
     setBusy(true); setError(null)
     try {
-      const { data: payload } = await helpApi.save(data.key, draft, note)
+      const { data: payload } = await helpApi.save(data.key, draft, note, publicNote)
       refresh(payload); onDone && onDone()
     } catch (e) {
       const d = e?.response?.data
@@ -223,6 +224,13 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
       </Field>
 
       <Field title="ملاحظات المدرب (تظهر بلون مميز)"><TField value={draft.notes} onChange={up('notes')} rows={3} /></Field>
+
+      <Field title="إيه الجديد للمستخدمين؟ (سطر واحد — يظهر في «الجديد» وعلى الرئيسية، اختياري)">
+        <input value={publicNote} onChange={(e) => setPublicNote(e.target.value)} maxLength={120}
+               placeholder="مثال: زر تصدير Excel جديد في القائمة"
+               className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
+        <div className="text-[10px] text-faint">{publicNote.length}/120 — لو سبته فاضي، الناس هتشوف تاريخ التحديث بس.</div>
+      </Field>
 
       <Field title="سبب التعديل (يظهر في السجل)">
         <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300}

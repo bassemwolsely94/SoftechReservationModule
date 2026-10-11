@@ -51,7 +51,9 @@ export default function WhatsNewCard({ mobile = false }) {
             <span className="text-lg">{it.icon}</span>
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-semibold text-content truncate">{pick(it.title, 'ar')}</span>
-              <span className="block text-[11px] text-faint">{pick(it.module_title, 'ar')} · اتحدّث <span className="tabnum">{it.updated}</span></span>
+              {it.change_note
+                ? <span className="block text-[11px] text-amber-800 truncate">اتحدّث: «{pick(it.change_note, 'ar')}»</span>
+                : <span className="block text-[11px] text-faint">{pick(it.module_title, 'ar')} · اتحدّث <span className="tabnum">{it.updated}</span></span>}
             </span>
             <span className="text-[11px] font-semibold text-brand-700 shrink-0">اقرأ ←</span>
           </button>

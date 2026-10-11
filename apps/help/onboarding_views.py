@@ -528,6 +528,8 @@ def whats_new(request):
 
     modules, screens = registry.load()
     versions = _versions()
+    from .views import change_notes
+    notes = change_notes(screens, {o.screen_key: o for o in HelpOverride.objects.all()})
     since = (timezone.localdate() - timezone.timedelta(days=WHATS_NEW_DAYS)).isoformat()
     # only changes after the person joined — for a newcomer everything is "new", and the
     # «ابدأ من هنا» cards already cover that (also avoids a flood at go-live)
@@ -550,6 +552,7 @@ def whats_new(request):
         items.append({
             'key': k, 'title': s['title'], 'module_title': m['title'], 'icon': m.get('icon', ''),
             'routes': s['routes'], 'updated': v, 'has_tour': bool(s.get('tour')),
+            'change_note': notes.get(k),
             'read': bool((read_day and read_day >= v) or (seen_day and seen_day >= v)),
         })
     items.sort(key=lambda x: (x['read'], -int(x['updated'].replace('-', ''))))   # unread first, newest first

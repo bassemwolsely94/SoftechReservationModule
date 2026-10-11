@@ -3318,6 +3318,8 @@ Tables prefixed with their Django app name.
 | staff_id | FK users_staffprofile | |
 | created_at | timestamptz | indexed |
 
+Also `public_note` (≤120): one line for users — «what changed» — shown in «الجديد» and the home card; `note` stays the internal reason.
+
 ### help_helpfeedback  ("was this helpful?")
 `screen_key`, `tab`, `helpful` (bool), `comment`, `lang`, `staff_id`, `role`, `resolved`, `created_at`.
 

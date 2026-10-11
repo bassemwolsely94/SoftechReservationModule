@@ -306,8 +306,8 @@ SCREENS = [
               'New here? Open the "My training path" tab and follow the order: read the screen, try it, press "I understand this screen ✓", then take the module quiz.'),
             T('في آخر كل شرح اضغط «مفيد» أو «غير مفيد» واكتب ما ليس واضحاً — يصل للمدرب ليحسّن الشرح.',
               'At the end of any article press "Helpful" or "Not helpful" and write what is unclear — it reaches the trainer, who improves the text.'),
-            {'text': T('للمدربين: افتح أي شرح واضغط «تعديل الشرح». التعديل يظهر للجميع فوراً ويُحفظ في السجل، ويمكن الرجوع للنسخة الأصلية في أي وقت.',
-                       'For trainers: open any article and press "Edit help". The change shows to everyone immediately, is kept in the history, and can be reverted to the original at any time.'),
+            {'text': T('للمدربين: افتح أي شرح واضغط «تعديل الشرح». التعديل يظهر للجميع فوراً ويُحفظ في السجل، ويمكن الرجوع للنسخة الأصلية في أي وقت. اكتب في «إيه الجديد للمستخدمين؟» سطر واحد (مثلاً «زر تصدير جديد») — بيظهر للناس في «الجديد» وعلى الرئيسية.',
+                       'For trainers: open any article and press "Edit help". The change shows to everyone immediately, is kept in the history, and can be reverted to the original at any time. Write one line in "What\'s new for users?" (e.g. "New export button") — people see it in "What\'s new" and on the home page.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
             {'text': T('للمدربين: نص جولة «اعرض لي» بيتعدّل من «تعديل الشرح» (الخطوات والأزرار ثابتة حسب الشاشة). المسارات والاختبارات بتتعدّل من تبويب «للمدربين».',
                        'For trainers: the "Show me" tour text is edited in "Edit help" (the steps and buttons are fixed by the screen). Paths and quizzes are edited in the "For trainers" tab.'),
@@ -360,6 +360,7 @@ SCREENS = [
             {'target': 'general-help-center-modules', 'text': T('في «تصفح الموديولات»: اضغط موديول تشوف دورته وشاشاته، وبعدها اضغط الشاشة لشرحها الكامل.',
                                               'In "Browse modules": click a module to see its workflow and screens, then a screen for its full help.')},
         ],
+        'change_note': T('ملاحظة «إيه الجديد» للمستخدمين عند تعديل الشرح', 'A "what changed" note for users when help is edited'),
         'updated': '2026-10-11',
     },
     {

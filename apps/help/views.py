@@ -32,6 +32,28 @@ def _staff_name(staff):
     return (user.get_full_name() or user.username) if user else ''
 
 
+def change_notes(screens, overrides):
+    """screen key → {'ar', 'en'} «what changed» for the CURRENT help version: the
+    trainer's one-line note on their latest save when that save is the newest change,
+    else the repo's `change_note` (written by developers with the `updated` date)."""
+    latest = {}
+    for r in (HelpRevision.objects.filter(action=HelpRevision.ACTION_SAVE)
+              .exclude(public_note='').order_by('screen_key', '-created_at')
+              .values('screen_key', 'public_note', 'created_at')):
+        latest.setdefault(r['screen_key'], r)
+    out = {}
+    for k, s in screens.items():
+        o = overrides.get(k)
+        repo_date = s.get('updated') or ''
+        r = latest.get(k)
+        if o is not None and r and o.updated_at.date().isoformat() >= repo_date \
+                and r['created_at'] >= o.updated_at - timezone.timedelta(minutes=1):
+            out[k] = {'ar': r['public_note'], 'en': r['public_note']}
+        elif s.get('change_note') and (o is None or repo_date >= o.updated_at.date().isoformat()):
+            out[k] = s['change_note']
+    return out
+
+
 def _updated(screen, override):
     """Date the text last changed (repo date, or the trainer's save if newer)."""
     d = screen.get('updated') or ''
@@ -62,6 +84,7 @@ def index(request):
     center: modules (grouped), screens (key, routes, title, updated, tab keys)."""
     modules, screens = registry.load()
     ov = _overrides()
+    notes = change_notes(screens, ov)
     return Response({
         'groups': [{'key': k, 'title': {'ar': ar, 'en': en}} for k, ar, en in registry.GROUPS],
         'modules': [{
@@ -75,6 +98,7 @@ def index(request):
             'tabs': [t['key'] for t in s.get('tabs') or []],
             'has_tour': bool(s.get('tour')),
             'updated': _updated(s, ov.get(s['key'])),
+            'change_note': notes.get(s['key']),
         } for s in screens.values()],
         'flows': [{'id': fid, 'module': f['module'], 'title': f['title'], 'mobile': bool(f.get('mobile'))}
                   for fid, f in _flows_effective(modules).items()],
@@ -128,6 +152,7 @@ def _screen_payload(request, key, s, modules, screens, override):
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],
         'updated': _updated(s, override),
+        'change_note': change_notes({key: s}, {key: override} if override else {}).get(key),
         'can_edit': can_edit,
         'override': None,
     }
@@ -186,7 +211,9 @@ def screen_detail(request, key):
     HelpRevision.objects.create(
         screen_key=key, action=HelpRevision.ACTION_SAVE, before=before,
         after={f: registry.effective(s, override).get(f) for f in registry.EDITABLE_FIELDS},
-        note=str(request.data.get('note', ''))[:300], staff=profile)
+        note=str(request.data.get('note', ''))[:300],
+        public_note=' '.join(str(request.data.get('public_note', '') or '').split())[:120],
+        staff=profile)
     return Response(_screen_payload(request, key, s, modules, screens, override))
 
 

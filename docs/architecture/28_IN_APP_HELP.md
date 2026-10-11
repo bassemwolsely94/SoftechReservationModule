@@ -8,7 +8,10 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   tour changed in the last 7 days that matter to the person (role path + screens whose help they opened in
   90 days), unread first; only changes after the person joined (newcomers get «ابدأ من هنا» instead). Read = opened that help after the change (HelpEvent open) or «تمام، شفتها»
   (`HelpPreference.whats_new_seen_at`) — on the server, same on every device. Hidden when nothing is
-  unread. `GET/POST /api/help/whats-new/`.
+  unread. `GET/POST /api/help/whats-new/`. Each item shows «اتحدّث: …» when there is a «what changed»
+  note: the trainer's one-liner on their latest save («إيه الجديد للمستخدمين؟» in the editor,
+  `HelpRevision.public_note`, separate from the internal reason) if that save is the newest change, else
+  the repo `change_note` (`views.change_notes`). Also shown in the «الجديد» tab and the help panel.
 - **«👋 ابدأ من هنا» (first day)** at the top of the home page (/dashboard; mobile «لوحتي», with a one-line
   pointer on the mobile landing page): system tour, the next screen on the role's training path (opens
   it and starts its tour), the role's workflow tours, the next quiz — ticked ✓ when done. Shown until
@@ -229,7 +232,8 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
 5. a `related` / `workflows` reference points at something that does not exist.
 
 **Rule for every feature batch:** new screen / tab / status → update the matching
-`apps/help/content/<module>.py` and bump that screen's `updated` date (users get the "new" dot).
+`apps/help/content/<module>.py` and bump that screen's `updated` date (users get the "new" dot), and
+add a one-line `change_note` (ar + en) saying what changed — users see it in «الجديد» and on the home card.
 
 ## Adding help for a new screen
 
@@ -250,6 +254,7 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
     #   step extras: 'route': '/page', 'wait': '/page/:id', 'nav': '/menu-path'
     'tour_continue': 'module.detail',  # optional: last step waits for its route, then its tour follows
     'updated': 'YYYY-MM-DD',
+    'change_note': T('زر تصدير جديد', 'New export button'),  # optional: one line «what changed» for users
 }
 ```
 

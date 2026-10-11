@@ -344,7 +344,7 @@ export const helpApi = {
   screen:     (key, params = {}) => api.get(`/help/screens/${key}/`, { params }),
   module:     (key)              => api.get(`/help/modules/${key}/`),
   search:     (q, params = {})   => api.get('/help/search/', { params: { q, ...params } }),
-  save:       (key, data, note)  => api.put(`/help/screens/${key}/`, { data, note }),
+  save:       (key, data, note, public_note = '') => api.put(`/help/screens/${key}/`, { data, note, public_note }),
   revert:     (key, note)        => api.delete(`/help/screens/${key}/`, { data: { note } }),
   revisions:  (key)              => api.get(`/help/screens/${key}/revisions/`),
   feedback:   (payload)          => api.post('/help/feedback/', payload),
