@@ -415,7 +415,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{error}</div>}
 
         <div className="space-y-4">
-          <div>
+          <div data-tour="insurance-import-client">
             <label className={lbl}>الفئة / العميل *</label>
             <select className={inp} value={form.subclient_id}
               onChange={e => { set('subclient_id', e.target.value); setMotalbas([]) }}>
@@ -427,7 +427,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
           </div>
 
           {form.subclient_id && (
-            <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
+            <div data-tour="insurance-import-softech" className="border border-blue-200 rounded-lg p-3 bg-blue-50">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-blue-800">المطالبات المتاحة في سوفتك</span>
                 <Btn onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
@@ -462,7 +462,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div data-tour="insurance-import-period" className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>من تاريخ</label>
               <input type="date" className={inp} value={form.period_from}
@@ -497,7 +497,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div data-tour="insurance-import-submit" className="flex gap-3 mt-6">
           <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1">
             {loading ? 'جارٍ الاستيراد...' : 'استيراد وإنشاء المطالبة'}
           </Btn>

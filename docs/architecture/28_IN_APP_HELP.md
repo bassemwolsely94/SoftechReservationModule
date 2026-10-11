@@ -116,8 +116,9 @@ started only on request, it dims the page, zooms into one real area at a time an
 - **Workflow tours** (`MODULE['flows']`, optional `roles`, `mobile: True` for the mobile app):
   «جولات دورة العمل» in the panel (only the tours for the current shell — mobile or desktop) and on
   the module page (all, 📱 marks mobile). Desktop: reservation lifecycle, transfer lifecycle, POS order
-  → cashier, POS exceptions, missed demand, delivery (dashboard → dispatch → rider). Mobile:
-  reservations, transfers, missed demand (anchors `mshell-*`, generated `mnav-<path>` for the bottom
+  → cashier, POS exceptions, missed demand, delivery (dashboard → dispatch → rider), purchasing
+  cycle (recommendations → supply → supplier invoices), insurance claim (import → review → issue →
+  print), HR request, HR approvals. Mobile: reservations, transfers, missed demand, approvals (anchors `mshell-*`, generated `mnav-<path>` for the bottom
   tabs — tabs beyond the bar live under «المزيد»).
 - **Trainers edit workflow tours** in «للمدربين» → «جولة دورة عمل»: title, summary and each step's
   text (steps, their buttons and pages stay the code's). `HelpTrainingOverride(kind='flow',
@@ -221,4 +222,4 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Workflow tours for more modules (purchasing, insurance claims, HR requests → approvals).
+- Workflow tours for the remaining processes (stock count, transfers in transit → receiving, call center → case).
