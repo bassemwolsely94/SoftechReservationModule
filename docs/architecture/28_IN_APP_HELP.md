@@ -4,6 +4,9 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 
 ## What users get
 
+- **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
+  starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.
+
 - **«؟ مساعدة» button + F1** in every staff shell (desktop `Layout`, mobile `MobileLayout`,
   rider `RiderLayout`). Opens a docked side panel (not a modal — the page stays usable) with the
   help of the **screen the user is on**, opened on the **tab they are on** (marked «أنت هنا»).

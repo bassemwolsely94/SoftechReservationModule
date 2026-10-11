@@ -179,3 +179,10 @@ function TourBody({ tour }) {
     </div>
   )
 }
+
+/** Start the «اعرض لي» tour of the screen the user is on (its continuation included). */
+export async function startScreenTour(screenKey) {
+  const { data } = await helpApi.screen(screenKey, { log: '0' })
+  const steps = data.tour_flow?.length ? data.tour_flow : data.tour
+  useHelpStore.getState().startTour(data.key, steps, data.routes)
+}

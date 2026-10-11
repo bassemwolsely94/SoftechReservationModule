@@ -328,6 +328,8 @@ SCREENS = [
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
         'tips': [
+            T('لو تحويل اتسجّل استلامه هنا ومستند الاستلام (25) ما ظهرش في SOFTECH بعد عدد الأيام المحدد في الإعدادات (افتراضي 3)، بيوصل تنبيه يومي للفرع المستلم والإدارة. زر «⏳ بانتظار تأكيد SOFTECH» يعرضهم كلهم.',
+              'If a transfer was received here and its receipt document (25) has not appeared in SOFTECH after the number of days set in settings (default 3), a daily alert goes to the receiving branch and admins. The "⏳ Awaiting SOFTECH" button lists them all.'),
             T('«تسجيل الاستلام» هنا ما بيكتبش في SOFTECH: الشحنة بتفضل «مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل هناك، وساعتها المزامنة بتطابق الكميات (ولو فيه فرق تظهر «تباين مع ERP»).',
               '"Record receipt" here does not write to SOFTECH: the shipment stays "received locally — awaiting SOFTECH" until the receipt document (25) is recorded there; the sync then reconciles quantities (a difference shows as "ERP mismatch").'),
             T('الشحنة يجب أن تُستلم في SOFTECH قبل انتهاء مهلة الإلغاء، وإلا تظهر «انتهت مهلة الإلغاء — يجب الاستلام».',
@@ -342,6 +344,8 @@ SCREENS = [
                                               'A summary of transfers in transit.')},
             {'target': 'transfers-transits-filters', 'text': T('فلتر الأولوية والفرع وغيرها.',
                                               'Filter by priority, branch and more.')},
+            {'target': 'transfers-transits-awaiting-erp', 'text': T('«⏳ بانتظار تأكيد SOFTECH»: اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.',
+                                              '"⏳ Awaiting SOFTECH": shipments received here whose receipt document (25) is not in SOFTECH yet.')},
             {'target': 'transfers-transits-grid', 'text': T('الشحنات اللي اتصرفت ولسه ما اتستلمتش — الأقدم أولاً.',
                                               'Shipments issued but not yet received — oldest first.')},
             {'target': 'transfers-transits-scorecard', 'text': T('«🏆 بطاقة المساءلة» لأداء الفروع في الاستلام.',

@@ -448,6 +448,7 @@ class Command(BaseCommand):
 
         # ── Fire alerts for overdue in-transit transfers ──────────────────────
         self._fire_alerts()
+        self._fire_local_receipt_alerts()
 
         return stats
 
@@ -880,7 +881,76 @@ class Command(BaseCommand):
             ])
 
 
+    def _fire_local_receipt_alerts(self):
+        """
+        Transfers received LOCALLY («تسجيل الاستلام») whose SOFTECH receipt (doc 25)
+        still hasn't appeared after `transit_local_receipt_alert_days` days (default 3):
+        the goods are on the shelf but SOFTECH stock is wrong until the 25 is recorded.
+        Notify the receiving branch (+ admins) at most once a day per transfer, with a
+        note + audit entry — the same guard fields as the in-transit alerts (level
+        'local'; those levels no longer apply once received).
+        Nothing is written to SOFTECH.
+        """
+        from apps.transits.models import InTransitAuditEvent, InTransitNote, InTransitTransfer
+
+        days = _get_local_receipt_alert_days()
+        if days <= 0:
+            return 0
+        now = timezone.now()
+        today = timezone.localdate()
+        qs = (InTransitTransfer.objects
+              .filter(transit_status='received', manually_received_at__isnull=False,
+                      erp_received_date__isnull=True,
+                      manually_received_at__lte=now - datetime.timedelta(days=days))
+              .select_related('supplying_branch', 'receiving_branch'))
+        sent = 0
+        for transfer in qs:
+            if (transfer.last_alert_level == 'local' and transfer.last_alert_sent_at
+                    and timezone.localdate(transfer.last_alert_sent_at) == today):
+                continue
+            waited = (now - transfer.manually_received_at).days
+            body = (f'تحويل {transfer.erp_doc_number} اتسجّل استلامه هنا من {waited} يوم '
+                    f'ولسه مستند الاستلام (25) مش متسجّل في SOFTECH — سجّله في SOFTECH '
+                    f'عشان رصيد المخزون يبقى صحيح.')
+            try:
+                from apps.notifications.models import Notification
+                branch = transfer.receiving_branch or transfer.supplying_branch
+                if branch:
+                    Notification.send_to_branch(
+                        branch=branch,
+                        notification_type='transit_overdue',
+                        title=f'⏳ استلام غير مؤكَّد في SOFTECH — {transfer.erp_doc_number}',
+                        body=body,
+                        dedup_key=f'transit_local_unconfirmed_{transfer.id}_{today.isoformat()}',
+                        include_admins=True,
+                        dedup_once=True,
+                    )
+            except Exception as exc:
+                logger.warning('[sync_in_transit] local-receipt alert failed: %s', exc)
+            InTransitNote.objects.create(transfer=transfer, note_type='alert',
+                                         body=f'🔔 تنبيه تلقائي: {body}', created_by=None)
+            InTransitAuditEvent.log(transfer, 'alert_sent',
+                                    detail=f'level=local, days_since_local_receipt={waited}')
+            transfer.last_alert_level = 'local'
+            transfer.last_alert_sent_at = now
+            transfer.alert_notification_count += 1
+            transfer.save(update_fields=['last_alert_level', 'last_alert_sent_at',
+                                         'alert_notification_count', 'updated_at'])
+            sent += 1
+        return sent
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_local_receipt_alert_days() -> int:
+    """Days a LOCAL receipt may wait for SOFTECH's doc 25 before alerting
+    (SystemSetting transit_local_receipt_alert_days, default 3; 0 = off)."""
+    try:
+        from apps.config.models import SystemSetting
+        return int(SystemSetting.get('transit_local_receipt_alert_days', 3))
+    except Exception:
+        return 3
+
 
 def _get_cancel_window() -> int:
     """Read SOFTECH cancellation window from SystemSetting or use default (5 days)."""

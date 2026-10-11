@@ -1,11 +1,46 @@
 import useHelpStore from './helpStore'
 import { useCurrentHelp } from './useHelpIndex'
+import { startScreenTour } from './Tour'
 
 /**
  * The "؟ مساعدة" button for the top bars. Shows a dot when this screen's help
  * changed since the user last read it. `variant="mobile"` = white-on-brand header.
  */
 export default function HelpButton({ variant = 'desktop' }) {
+  return (
+    <>
+      <ShowMeButton variant={variant} />
+      <HelpOnlyButton variant={variant} />
+    </>
+  )
+}
+
+/** «👆 اعرض لي» — the screen's guided tour, one click from the top bar (Shift+F1).
+ *  Shown only on screens that have a tour (ignores clicks while a tour is running). */
+function ShowMeButton({ variant }) {
+  const { screen } = useCurrentHelp()
+  const running = useHelpStore((s) => !!s.tour)
+  if (!screen?.has_tour) return null
+  const title = 'اعرض لي — جولة على أزرار هذه الشاشة (Shift+F1)'
+  const go = () => { if (!running) startScreenTour(screen.key).catch(() => {}) }
+  if (variant === 'mobile') {
+    return (
+      <button type="button" onClick={go} title={title} aria-label={title} data-tour="mshell-showme"
+              className="w-9 h-9 rounded-lg bg-white/15 active:bg-white/30 flex items-center justify-center text-base">
+        👆
+      </button>
+    )
+  }
+  return (
+    <button type="button" onClick={go} title={title} aria-label={title} data-tour="shell-showme"
+            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg px-2.5 py-1.5 transition-colors">
+      <span>👆</span>
+      <span className="hidden md:inline">اعرض لي</span>
+    </button>
+  )
+}
+
+function HelpOnlyButton({ variant }) {
   const toggle = useHelpStore((s) => s.toggle)
   const { screen, isNew } = useCurrentHelp()
   const title = 'مساعدة — شرح هذه الشاشة (F1)'

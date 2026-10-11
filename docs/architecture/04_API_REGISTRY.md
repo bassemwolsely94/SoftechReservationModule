@@ -593,7 +593,7 @@ Default pagination: CursorPagination (50 items)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/transits/` (`{id}/`, `mark-received/`) | GET, POST | In-transit (doccode-125) transfers. `mark-received` = local receipt only (no SOFTECH write); kept by the sync until SOFTECH's doc 25 confirms/reconciles it |
+| `/api/transits/` (`{id}/`, `mark-received/`) | GET, POST | In-transit (doccode-125) transfers. `mark-received` = local receipt only (no SOFTECH write); kept by the sync until SOFTECH's doc 25 confirms/reconciles it. List filter `?awaiting_erp=1` = received locally, no 25 yet |
 | `/api/transits/{id}/export-picking\|export-stocking/` | GET | ورقة التجميع / ورقة الترصيص export (+ bulk POST) |
 | `/api/transits/pick-zones\|pick-rules\|item-overrides/` | GET, POST | Classification config (per location+purpose) |
 | `/api/transits/settings\|preview\|uncategorized\|classify-items\|seed-defaults/` | GET, POST | Threshold, preview, bulk classify |

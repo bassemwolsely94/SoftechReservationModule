@@ -97,6 +97,9 @@ DEFAULT_SETTINGS = [
     dict(key='transit_alert_max_days', label='أقصى عمر لتنبيهات التحويلات قيد النقل (يوم)',
          description='التحويلات العالقة قيد النقل لأكثر من هذه المدة تُعتبر بيانات قديمة/مهملة ويتوقف إرسال تنبيهاتها المتكررة. اضبطه على قيمة كبيرة جداً لتعطيل الحد.',
          value='21',                  value_type='integer', category='transfers', is_public=False),
+    dict(key='transit_local_receipt_alert_days', label='تنبيه الاستلام المحلي غير المؤكَّد في SOFTECH (يوم)',
+         description='تحويل اتسجّل استلامه في النظام («تسجيل الاستلام») ولم يظهر مستند استلامه (25) في SOFTECH بعد هذا العدد من الأيام → تنبيه يومي للفرع المستلم والإدارة. 0 = إيقاف.',
+         value='3',                   value_type='integer', category='transfers', is_public=False),
     dict(key='replenishment_price_threshold', label='حد سعر الغوالي (ج.م)',
          description='الصنف الذي يبلغ سعر جمهوره هذا الحد أو أكثر يذهب لمنطقة الغوالي في ورقة التجميع. '
                      'مناطق التجميع وقواعدها تُدار من شاشة /pick-zones (جداول PickZone).',

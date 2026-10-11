@@ -749,6 +749,20 @@ function FiltersBar({ filters, setFilters, branches }) {
         ))}
       </select>
 
+      {/* Received here but SOFTECH's receipt (doc 25) not seen yet — alerts point here */}
+      <button
+        type="button"
+        data-tour="transfers-transits-awaiting-erp"
+        onClick={() => setFilters(f => (f.awaiting_erp
+          ? { ...f, awaiting_erp: undefined, transit_status: 'in_transit' }
+          : { ...f, awaiting_erp: '1', transit_status: '' }))}
+        className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filters.awaiting_erp
+          ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50'}`}
+        title="تحويلات اتسجّل استلامها هنا ولسه مستند الاستلام (25) مش متسجّل في SOFTECH"
+      >
+        ⏳ بانتظار تأكيد SOFTECH
+      </button>
+
       {/* Supplying branch */}
       <select
         className="input-field text-xs w-44"
