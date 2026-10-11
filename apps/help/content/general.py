@@ -312,6 +312,9 @@ SCREENS = [
             {'text': T('للمدربين: نص جولة «اعرض لي» بيتعدّل من «تعديل الشرح» (الخطوات والأزرار ثابتة حسب الشاشة). المسارات والاختبارات بتتعدّل من تبويب «للمدربين».',
                        'For trainers: the "Show me" tour text is edited in "Edit help" (the steps and buttons are fixed by the screen). Paths and quizzes are edited in the "For trainers" tab.'),
              'roles': ['admin', 'supervisor', 'quality_manager']},
+            {'text': T('للمدربين: لما تحفظ مسار دور أو اختبار أو جولة دورة عمل من «للمدربين» اكتب في «إيه الجديد للمستخدمين؟» سطر واحد. في المسار والاختبار بيتضاف لإشعار «شاشات جديدة في مسارك» / «اختبار اتحدّث» (بعد «الجديد:»)، وفي الجولة بيظهر «✨ اتحدّث: …» على كارتها أسبوعين أو لحد تعديل تاني من غير سطر أو رجوع للأصل. «سبب التعديل» بيفضل في السجل بس.',
+                       'For trainers: when you save a role path, a quiz or a workflow tour in "For trainers", write one line in "What\'s new for users?". For paths and quizzes it is added to the "New screens in your path" / "Quiz updated" notification (after "What\'s new:"); for a workflow tour "✨ Updated: …" shows on its card for two weeks, or until a later save without a line or a revert. The "reason" stays in the history only.'),
+             'roles': ['admin', 'supervisor', 'quality_manager']},
         ],
         'tabs': [
             {'key': 'browse', 'title': T('تصفح الموديولات', 'Browse modules'),
@@ -360,7 +363,7 @@ SCREENS = [
             {'target': 'general-help-center-modules', 'text': T('في «تصفح الموديولات»: اضغط موديول تشوف دورته وشاشاته، وبعدها اضغط الشاشة لشرحها الكامل.',
                                               'In "Browse modules": click a module to see its workflow and screens, then a screen for its full help.')},
         ],
-        'change_note': T('ملاحظة «إيه الجديد» للمستخدمين عند تعديل الشرح', 'A "what changed" note for users when help is edited'),
+        'change_note': T('سطر «إيه الجديد» كمان مع تعديل المسارات والاختبارات وجولات دورة العمل', 'The "what\'s new" line now also comes with path, quiz and workflow-tour edits'),
         'updated': '2026-10-11',
     },
     {

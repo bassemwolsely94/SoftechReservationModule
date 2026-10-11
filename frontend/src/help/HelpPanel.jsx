@@ -224,6 +224,9 @@ export function FlowList({ flows, role, lang, onStart, mobile = null }) {
                 className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
           <div className="text-sm font-semibold text-content">{f.mobile ? '📱' : '👆'} {pick(f.title, lang)}</div>
           {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}
+          {f.change_note && (
+            <div className="text-[11px] text-brand-700 leading-5">✨ {lang === 'en' ? 'Updated' : 'اتحدّث'}: {pick(f.change_note, lang)}</div>
+          )}
         </button>
       ))}
     </section>

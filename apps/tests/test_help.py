@@ -1143,3 +1143,70 @@ class ChangeNoteTests(TestCase):
         p.user.save(update_fields=['date_joined'])
         items = {x['key']: x for x in self.c.get('/api/help/whats-new/').json()['items']}
         self.assertEqual(items[self.key]['change_note']['ar'], 'عمود جديد')
+
+
+class TrainingPublicNoteTests(TestCase):
+    """The trainer's one-line «what changed» on path / quiz / workflow-tour saves: added
+    to the notification those changes send; shown on the workflow tour's card."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.t, _ = self._client('admin', 'tp_admin')
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_note_in_notification_and_history(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpRevision
+        from apps.notifications.models import Notification
+        _, seller = self._client('salesperson', 'tp_sales')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = self.t.put('/api/help/training/path/salesperson/',
+                       {'data': {'screens': new}, 'note': 'داخلي', 'public_note': ' ابدأ  بالمهام '}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        n = Notification.objects.get(recipient=seller, title__contains='مسارك')
+        self.assertIn('الجديد: ابدأ بالمهام', n.body)
+        self.assertNotIn('داخلي', n.body)
+        self.assertEqual(r.json()['revisions'][0]['public_note'], 'ابدأ بالمهام')
+        self.assertEqual(HelpRevision.objects.get(screen_key='path:salesperson').public_note, 'ابدأ بالمهام')
+
+    def test_quiz_note_in_notification(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        c, ph = self._client('pharmacist', 'tp_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        q = {'q': {'ar': 'سؤال؟', 'en': 'Q?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        self.t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}, 'public_note': 'سؤال عن المرتجعات'},
+                   format='json')
+        n = Notification.objects.get(recipient=ph, title__contains='أعد الاختبار')
+        self.assertTrue(n.body.endswith('الجديد: سؤال عن المرتجعات'))
+
+    def test_no_note_keeps_message(self):
+        from apps.help import notify
+        self.assertEqual(notify._with_note('نص.', ''), 'نص.')
+
+    def test_flow_note_on_cards_until_revert_or_old(self):
+        from apps.help.models import HelpRevision
+        from django.utils import timezone
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        fid = 'flow:reservations.lifecycle'
+        card = lambda: next(x for x in self.t.get('/api/help/modules/reservations/').json()['flows'] if x['id'] == fid)
+        self.assertIsNone(card()['change_note'])
+        cur = self.t.get(url).json()['current']
+        cur['steps'][0]['text'] = {'ar': 'نص أوضح', 'en': ''}
+        self.t.put(url, {'data': cur, 'public_note': 'خطوة أوضح للبداية'}, format='json')
+        self.assertEqual(card()['change_note']['ar'], 'خطوة أوضح للبداية')
+        # older than two weeks → no longer «new»
+        HelpRevision.objects.filter(screen_key=fid).update(created_at=timezone.now() - timezone.timedelta(days=15))
+        self.assertIsNone(card()['change_note'])
+        HelpRevision.objects.filter(screen_key=fid).update(created_at=timezone.now())
+        # a revert clears it (the note described the trainer's version)
+        self.t.delete(url, {'public_note': 'ignored'}, format='json')
+        self.assertIsNone(card()['change_note'])
+        self.assertEqual(HelpRevision.objects.filter(screen_key=fid, action='revert').get().public_note, '')

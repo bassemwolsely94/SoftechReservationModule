@@ -33,7 +33,7 @@ export default function FirstDay({ mobile = false }) {
     } else navigate(`/help?tab=browse&screen=${next.key}`)
   }
 
-  const Card = ({ icon, title, sub, done, onClick, cta, primary }) => (
+  const Card = ({ icon, title, sub, note, done, onClick, cta, primary }) => (
     <button type="button" onClick={onClick}
             className={`text-start rounded-xl border p-4 space-y-1.5 transition hover:shadow-sm ${primary
               ? 'border-brand-300 bg-brand-50 hover:border-brand-400' : 'border-line bg-surface hover:border-brand-300'}`}>
@@ -43,6 +43,7 @@ export default function FirstDay({ mobile = false }) {
         {done && <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5">✓ تم</span>}
       </div>
       {sub && <div className="text-xs text-muted leading-5 line-clamp-2">{sub}</div>}
+      {note && <div className="text-[11px] text-brand-700 leading-5">✨ اتحدّث: {note}</div>}
       <div className="text-xs font-semibold text-brand-700">{cta} ←</div>
     </button>
   )
@@ -81,6 +82,7 @@ export default function FirstDay({ mobile = false }) {
         )}
         {data.flows.map((f) => (
           <Card key={f.id} icon={mobile ? '📱' : '👆'} done={f.done} title={pick(f.title, 'ar')} sub={pick(f.summary, 'ar')}
+                note={f.change_note && pick(f.change_note, 'ar')}
                 cta={f.done ? 'شوفها تاني' : 'ابدأ الجولة'} onClick={() => startTour(f.id, f.steps)} />
         ))}
         {data.quiz && (

@@ -17,6 +17,12 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   it and starts its tour), the role's workflow tours, the next quiz — ticked ✓ when done. Shown until
   the path is 100% or the person hides it (`HelpPreference.first_day_hidden_at`; «إظهار» in «مساري
   التدريبي»). Cards, never a popup. API `GET/POST /api/help/first-day/`.
+- Path / quiz / workflow-tour saves in «للمدربين» take the same one-liner (`public_note` on
+  `PUT /api/help/training/<kind>/<key>/`, tidied, ≤120, stored on the `HelpRevision`; reverts never
+  carry one). Paths and quizzes append it to their notification as «الجديد: …» (`notify._with_note`);
+  workflow tours send no notification, so `training.flow_notes()` puts it on the tour's card
+  (`change_note` in `flow_brief`: help panel, module page, «ابدأ من هنا») while that save is the
+  latest change to the tour and under `FLOW_NOTE_DAYS` (14) old.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.

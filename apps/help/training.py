@@ -60,18 +60,38 @@ def flows_effective(modules=None, ov=None):
     if modules is None:
         modules, _ = registry.load()
     ov = overrides(HelpTrainingOverride.KIND_FLOW) if ov is None else ov
+    notes = flow_notes()
     out = {}
     for fid, f in registry.flows(modules).items():
         o = ov.get(fid[5:])
         out[fid] = {**f, **merge_flow({'title': f['title'], 'summary': f.get('summary'), 'steps': f['steps']},
-                                      o.data if o else None)}
+                                      o.data if o else None),
+                    'change_note': notes.get(fid)}
     return out
+
+
+FLOW_NOTE_DAYS = 14
+
+
+def flow_notes(days=FLOW_NOTE_DAYS):
+    """'flow:<module>.<key>' → {'ar', 'en'}: the trainer's one-line «what changed» when
+    their save is the latest change to that workflow tour and is under `days` old (a
+    later save without a note, or a revert, clears it)."""
+    from django.utils import timezone
+    from .models import HelpRevision
+    latest = {}
+    for r in (HelpRevision.objects.filter(screen_key__startswith='flow:',
+                                          created_at__gte=timezone.now() - timezone.timedelta(days=days))
+              .order_by('screen_key', '-created_at', '-id').values('screen_key', 'action', 'public_note')):
+        latest.setdefault(r['screen_key'], r)
+    return {k: {'ar': r['public_note'], 'en': r['public_note']} for k, r in latest.items()
+            if r['action'] == HelpRevision.ACTION_SAVE and r['public_note']}
 
 
 def flow_brief(fid, f):
     """What the panel / module page need to list and start a workflow tour."""
     return {'id': fid, 'title': f['title'], 'summary': f.get('summary'), 'roles': f.get('roles'),
-            'mobile': bool(f.get('mobile')), 'steps': f['steps']}
+            'mobile': bool(f.get('mobile')), 'steps': f['steps'], 'change_note': f.get('change_note')}
 
 
 def path(role, ov=None):

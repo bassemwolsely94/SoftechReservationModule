@@ -279,7 +279,8 @@ def _training_payload(kind, key, override):
             'updated_at': override.updated_at, 'updated_by': _staff_name(override.updated_by),
             'base_changed': override.base_hash != training.base_hash(kind, key),
         },
-        'revisions': [{'id': r.id, 'action': r.action, 'note': r.note, 'created_at': r.created_at,
+        'revisions': [{'id': r.id, 'action': r.action, 'note': r.note, 'public_note': r.public_note,
+                       'created_at': r.created_at,
                        'staff': _staff_name(r.staff)} for r in revs],
     }
 
@@ -300,9 +301,12 @@ def training_edit(request, kind, key):
     if request.method == 'GET':
         return Response(_training_payload(kind, key, override))
 
-    note = str((request.data or {}).get('note', ''))[:300] if isinstance(request.data, dict) else ''
+    body = request.data if isinstance(request.data, dict) else {}
+    note = str(body.get('note', '') or '')[:300]
+    # one line for the people affected (notification / workflow-tour card); saves only
+    public = ' '.join(str(body.get('public_note', '') or '').split())[:120] if request.method == 'PUT' else ''
     if kind == 'flow':
-        return _flow_edit(request, key, override, profile, note)
+        return _flow_edit(request, key, override, profile, note, public)
     field = 'screens' if kind == 'path' else 'questions'
     before = {field: override.data.get(field) if override else
               (training.base_path(key) if kind == 'path' else training.base_quiz(key))}
@@ -328,29 +332,30 @@ def training_edit(request, kind, key):
     override.updated_by = profile
     override.save()
     rev = HelpRevision.objects.create(screen_key=f'{kind}:{key}', action=HelpRevision.ACTION_SAVE,
-                                      before=before, after=clean, note=note, staff=profile)
+                                      before=before, after=clean, note=note, public_note=public, staff=profile)
     return Response({**_training_payload(kind, key, override),
-                     'notified': _announce(kind, key, before[field], clean[field], rev.id)})
+                     'notified': _announce(kind, key, before[field], clean[field], rev.id, public)})
 
 
-def _announce(kind, key, before, after, revision_id):
+def _announce(kind, key, before, after, revision_id, note=''):
     """Tell the people affected (see notify.py), then record the new state as
     announced so the hourly check does not tell them again. → number notified."""
     from . import notify
     if kind == 'path':
-        n = notify.path_changed(key, before or [], after or [], revision_id)
+        n = notify.path_changed(key, before or [], after or [], revision_id, note)
     elif not after:          # quiz removed — nothing to retake
         n = 0
     else:
         n = notify.quiz_changed(key, training.quiz_version(before or []),
-                                training.quiz_version(after), revision_id)
+                                training.quiz_version(after), revision_id, note)
     training.record_snapshot(kind, key)
     return n
 
 
-def _flow_edit(request, key, override, profile, note):
+def _flow_edit(request, key, override, profile, note, public=''):
     """Workflow-tour text: title, summary, each step's text (steps fixed by the code).
-    Same history as screen help (HelpRevision 'flow:<module>.<key>'); no notification."""
+    Same history as screen help (HelpRevision 'flow:<module>.<key>'); no notification —
+    the one-line `public` note shows on the tour's card instead (training.flow_notes)."""
     base = training.base_flow(key)
     before = training.merge_flow(base, override.data if override else None)
     if request.method == 'DELETE':
@@ -372,7 +377,8 @@ def _flow_edit(request, key, override, profile, note):
     override.updated_by = profile
     override.save()
     HelpRevision.objects.create(screen_key=f'flow:{key}', action=HelpRevision.ACTION_SAVE,
-                                before=before, after=training.merge_flow(base, clean), note=note, staff=profile)
+                                before=before, after=training.merge_flow(base, clean), note=note,
+                                public_note=public, staff=profile)
     return Response(_training_payload('flow', key, override))
 
 

@@ -35,6 +35,7 @@ export default function TrainingEditor({ index }) {
   })
   const [draft, setDraft] = useState(null)
   const [note, setNote] = useState('')
+  const [publicNote, setPublicNote] = useState('')
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [draftOf, setDraftOf] = useState(null)   // the payload the draft was made from
@@ -47,7 +48,7 @@ export default function TrainingEditor({ index }) {
     qc.invalidateQueries({ queryKey: ['help', 'onboarding'] })
     qc.invalidateQueries({ queryKey: ['help', 'quiz'] })
     const n = payload?.notified
-    setNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
+    setNote(''); setPublicNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
   }
   const run = async (fn, text) => {
     setBusy(true); setMsg(null)
@@ -57,7 +58,7 @@ export default function TrainingEditor({ index }) {
     } finally { setBusy(false) }
   }
   const save = () => run(() => helpApi.saveTraining(kind, key,
-    kind === 'path' ? { screens: draft } : kind === 'quiz' ? { questions: draft } : draft, note), 'تم الحفظ — ظاهر للجميع الآن')
+    kind === 'path' ? { screens: draft } : kind === 'quiz' ? { questions: draft } : draft, note, publicNote), 'تم الحفظ — ظاهر للجميع الآن')
   const revert = () => run(() => helpApi.revertTraining(kind, key, note), 'رجعنا للنسخة الأصلية')
 
   return (
@@ -93,7 +94,16 @@ export default function TrainingEditor({ index }) {
             : kind === 'quiz'
             ? <QuizEditor items={draft} onChange={setDraft} />
             : <FlowEditor flow={draft} onChange={setDraft} focusStep={focusStep} />}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+          <div className="space-y-1 pt-2 border-t border-line">
+            <label className="block text-xs font-semibold text-content">
+              إيه الجديد للمستخدمين؟ <span className="font-normal text-faint">(سطر واحد، اختياري — {kind === 'flow'
+                ? 'يظهر على كارت الجولة أسبوعين' : kind === 'path' ? 'يتضاف لإشعار «شاشات جديدة في مسارك»' : 'يتضاف لإشعار «اختبار اتحدّث»'})</span>
+            </label>
+            <input value={publicNote} onChange={(e) => setPublicNote(e.target.value)} maxLength={120}
+                   placeholder={kind === 'quiz' ? 'مثال: سؤالين جداد عن المرتجعات' : kind === 'path' ? 'مثال: اتضافت شاشة التحويلات — ابدأ بيها' : 'مثال: خطوة جديدة عن طباعة الفاتورة'}
+                   className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب التعديل (يظهر في السجل)"
                    className="flex-1 min-w-[200px] text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
             <button type="button" disabled={busy} onClick={save}
@@ -110,7 +120,7 @@ export default function TrainingEditor({ index }) {
               <summary className="cursor-pointer">سجل التعديلات ({data.revisions.length})</summary>
               <div className="mt-1 space-y-0.5">
                 {data.revisions.map((r) => (
-                  <div key={r.id}>{new Date(r.created_at).toLocaleString('ar-EG-u-nu-latn')} · {r.staff} · {r.action === 'save' ? 'حفظ' : 'رجوع للأصل'}{r.note ? ` — ${r.note}` : ''}</div>
+                  <div key={r.id}>{new Date(r.created_at).toLocaleString('ar-EG-u-nu-latn')} · {r.staff} · {r.action === 'save' ? 'حفظ' : 'رجوع للأصل'}{r.note ? ` — ${r.note}` : ''}{r.public_note ? ` · للمستخدمين: «${r.public_note}»` : ''}</div>
                 ))}
               </div>
             </details>
