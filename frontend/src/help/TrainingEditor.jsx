@@ -27,7 +27,14 @@ export default function TrainingEditor({ index }) {
   const [key, setKey] = useState(params.get('tkey') || 'pharmacist')
   const focusStep = params.get('tstep') != null ? Number(params.get('tstep')) : null
   const boxRef = useRef(null)
-  useEffect(() => { if (params.get('tkind')) boxRef.current?.scrollIntoView({ block: 'start' }) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  // opened again from a link (usage report, «إيه الجديد») while the tab is already showing
+  const tkind = params.get('tkind')
+  const tkey = params.get('tkey')
+  useEffect(() => {
+    if (!tkind) return
+    if (tkey) { setKind(tkind); setKey(tkey) }
+    boxRef.current?.scrollIntoView({ block: 'start' })
+  }, [tkind, tkey])
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'training', kind, key],
@@ -47,6 +54,7 @@ export default function TrainingEditor({ index }) {
     qc.setQueryData(['help', 'training', kind, key], payload)
     qc.invalidateQueries({ queryKey: ['help', 'onboarding'] })
     qc.invalidateQueries({ queryKey: ['help', 'quiz'] })
+    qc.invalidateQueries({ queryKey: ['help', 'notes-log'] })
     const n = payload?.notified
     setNote(''); setPublicNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
   }

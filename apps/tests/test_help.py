@@ -1210,3 +1210,69 @@ class TrainingPublicNoteTests(TestCase):
         self.t.delete(url, {'public_note': 'ignored'}, format='json')
         self.assertIsNone(card()['change_note'])
         self.assertEqual(HelpRevision.objects.filter(screen_key=fid, action='revert').get().public_note, '')
+
+
+class NotesLogTests(TestCase):
+    """«📝 إيه الجديد» for trainers: last 30 days of one-line notes from screens, paths,
+    quizzes and tours together, with each line's state; also in the weekly digest."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('nl_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('nl_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _trainer_items(self):
+        r = self.t.get('/api/help/notes-log/')
+        self.assertEqual(r.status_code, 200)
+        return [x for x in r.json()['items'] if x['source'] == 'trainer']
+
+    def test_lists_all_kinds_with_state(self):
+        from apps.help.content import onboarding
+        self.assertEqual(self.ph.get('/api/help/notes-log/').status_code, 403)
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'عمود جديد'}, format='json')
+        self.t.put('/api/help/training/path/salesperson/',
+                   {'data': {'screens': onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']},
+                    'public_note': 'المهام اتضافت'}, format='json')
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        cur = self.t.get(url).json()['current']
+        self.t.put(url, {'data': cur, 'public_note': 'جولة أوضح'}, format='json')
+        items = {x['kind']: x for x in self._trainer_items()}
+        self.assertEqual(set(items), {'screen', 'path', 'flow'})
+        self.assertEqual((items['screen']['note'], items['screen']['state']), ('عمود جديد', 'shown'))
+        self.assertEqual(items['path']['state'], 'sent')
+        self.assertIn('البائع', items['path']['title']['ar'])
+        self.assertEqual(items['flow']['state'], 'shown')
+        self.assertTrue(items['flow']['staff'])
+        # a later save without a note → the older line is replaced
+        self.t.put(url, {'data': cur}, format='json')
+        items = {x['kind']: x for x in self._trainer_items()}
+        self.assertEqual(items['flow']['state'], 'replaced')
+
+    def test_older_than_window_left_out(self):
+        from apps.help.models import HelpRevision
+        from django.utils import timezone
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'قديم'}, format='json')
+        HelpRevision.objects.update(created_at=timezone.now() - timezone.timedelta(days=31))
+        self.assertEqual(self._trainer_items(), [])
+        r = self.t.get('/api/help/notes-log/?days=40').json()
+        self.assertEqual(r['days'], 40)
+        self.assertEqual([x['note'] for x in r['items'] if x['source'] == 'trainer'], ['قديم'])
+
+    def test_repo_notes_included(self):
+        items = self.t.get('/api/help/notes-log/?days=90').json()['items']
+        self.assertTrue(any(x['source'] == 'repo' and x['key'] == 'general.help_center' for x in items))
+
+    def test_digest_line(self):
+        from apps.help import digest
+        s = {'team': 2, 'complete': 0, 'finished_this_week': [], 'stuck': [], 'failed': [], 'retake': [],
+             'notes': [{'title': {'ar': f'شاشة {i}'}, 'note': f'سطر {i}'} for i in range(5)]}
+        _, body = digest.render(s)
+        self.assertIn('📝 اتحدّث في التدريب (5): شاشة 0: «سطر 0»', body)
+        self.assertIn('و2 غيرها', body)
+        _, body = digest.render({**s, 'notes': []})
+        self.assertNotIn('📝', body)

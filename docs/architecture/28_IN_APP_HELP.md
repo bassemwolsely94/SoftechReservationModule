@@ -23,6 +23,13 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   workflow tours send no notification, so `training.flow_notes()` puts it on the tour's card
   (`change_note` in `flow_brief`: help panel, module page, «ابدأ من هنا») while that save is the
   latest change to the tour and under `FLOW_NOTE_DAYS` (14) old.
+- **«📝 إيه الجديد» in «للمدربين»** (`NotesLog.jsx`, `GET /api/help/notes-log/?days=30`, help/edit only):
+  every one-liner of the last 30 days (1–90) in one list — trainers' screen / path / quiz / flow saves
+  (`HelpRevision.public_note`) plus the developers' repo `change_note` on screens updated in the window —
+  with author and state (`shown` still visible to people, `sent` went out in the path/quiz notification,
+  `replaced` by a later change). Filter by kind; a row opens the screen editor or the training editor
+  (`?tkind=&tkey=`). The weekly supervisors' digest adds the last 7 days' lines («📝 اتحدّث في التدريب»,
+  first 3 + count). Built by `onboarding_views.recent_notes()`.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.

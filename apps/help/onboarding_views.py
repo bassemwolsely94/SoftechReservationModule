@@ -564,3 +564,84 @@ def whats_new(request):
     items.sort(key=lambda x: (x['read'], -int(x['updated'].replace('-', ''))))   # unread first, newest first
     return Response({'days': WHATS_NEW_DAYS, 'items': items[:20],
                      'unread': sum(1 for x in items if not x['read'])})
+
+
+# ── «إيه الجديد» log — every one-line note of the last N days, for trainers ──
+
+NOTES_LOG_DAYS = 30
+ROLE_AR = {'pharmacist': 'الصيدلي', 'salesperson': 'البائع', 'call_center': 'الكول سنتر',
+           'purchasing': 'المشتريات', 'delivery': 'الطيار / التوصيل', 'supervisor': 'المشرف',
+           'quality_manager': 'مدير الجودة', 'viewer': 'مشاهد', 'admin': 'مدير النظام'}
+
+
+def recent_notes(days=NOTES_LOG_DAYS, now=None):
+    """→ newest first: the «what changed» one-liners of the last `days` days — trainers'
+    saves of screen help, paths, quizzes and workflow tours (HelpRevision.public_note) and
+    the developers' repo `change_note` on screens updated in that window. Each row:
+      kind   screen | path | quiz | flow       source  trainer | repo
+      state  shown     — people still see it («الجديد» / home card / tour card)
+             sent      — went out inside the path / quiz notification
+             replaced  — a later change replaced it (or a flow note older than 14 days)"""
+    from .views import change_notes
+    now = now or timezone.now()
+    since = now - timezone.timedelta(days=days)
+    modules, screens = registry.load()
+    flows = training.flows_effective(modules)
+    current = change_notes(screens, {o.screen_key: o for o in HelpOverride.objects.all()})
+    flow_now = training.flow_notes()
+    latest = {}
+    for sk, rid in (HelpRevision.objects.filter(created_at__gte=since)
+                    .order_by('screen_key', '-created_at', '-id').values_list('screen_key', 'id')):
+        latest.setdefault(sk, rid)
+
+    def title(kind, key):
+        if kind == 'path':
+            return {'ar': f'مسار {ROLE_AR.get(key, key)}', 'en': f'{key} path'}
+        if kind == 'quiz':
+            t = modules.get(key, {}).get('title') or {'ar': key, 'en': key}
+            return {'ar': f'اختبار {t["ar"]}', 'en': f'{t["en"]} quiz'}
+        if kind == 'flow':
+            return (flows.get(f'flow:{key}') or {}).get('title') or {'ar': key, 'en': key}
+        return (screens.get(key) or {}).get('title') or {'ar': key, 'en': key}
+
+    rows = []
+    for r in (HelpRevision.objects.filter(action=HelpRevision.ACTION_SAVE, created_at__gte=since)
+              .exclude(public_note='').select_related('staff__user').order_by('-created_at', '-id')[:300]):
+        kind, _, key = r.screen_key.partition(':')
+        if kind not in ('path', 'quiz', 'flow'):
+            kind, key = 'screen', r.screen_key
+        if kind == 'screen' and key not in screens or kind == 'flow' and f'flow:{key}' not in flows:
+            continue
+        if kind in ('path', 'quiz'):
+            state = 'sent'
+        elif latest.get(r.screen_key) != r.id:
+            state = 'replaced'
+        elif kind == 'flow':
+            state = 'shown' if r.screen_key in flow_now else 'replaced'
+        else:
+            state = 'shown' if (current.get(key) or {}).get('ar') == r.public_note else 'replaced'
+        rows.append({'kind': kind, 'key': key, 'title': title(kind, key), 'note': r.public_note,
+                     'source': 'trainer', 'staff': _staff_name(r.staff), 'at': r.created_at.isoformat(),
+                     'state': state})
+    since_day = timezone.localtime(since).date().isoformat()
+    for k, s in screens.items():
+        cn = s.get('change_note')
+        if cn and (s.get('updated') or '') >= since_day:
+            rows.append({'kind': 'screen', 'key': k, 'title': s['title'], 'note': cn['ar'], 'note_en': cn.get('en'),
+                         'source': 'repo', 'staff': None, 'at': s['updated'],
+                         'state': 'shown' if current.get(k) == cn else 'replaced'})
+    rows.sort(key=lambda x: x['at'], reverse=True)
+    return rows
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notes_log(request):
+    """Trainers (help/edit): GET ?days=30 (1–90) → {'days', 'items': recent_notes()}."""
+    if not _can_edit(_profile(request)):
+        return Response({'detail': 'ليس لديك صلاحية'}, status=403)
+    try:
+        days = min(max(int(request.query_params.get('days', NOTES_LOG_DAYS)), 1), 90)
+    except ValueError:
+        days = NOTES_LOG_DAYS
+    return Response({'days': days, 'items': recent_notes(days)})

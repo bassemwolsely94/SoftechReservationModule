@@ -8,6 +8,7 @@ branches they can see:
   ⏳ stuck — no training activity for STUCK_DAYS+ days (incl. never started)
   ❌ failed a quiz (best attempt on the current version below the pass mark)
   ⟳ must retake a quiz that changed after they passed it
+  📝 the «what changed» one-liners trainers / developers wrote this week (same for all)
 Names are capped per line; the full list is in «دليل الاستخدام» ← «للمدربين».
 Delivered through apps.notifications (same as every other module); never raises.
 """
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 from .onboarding_views import STUCK_DAYS  # noqa: E402 — one rule for digest, team view, «تذكير»
 MAX_NAMES = 5
+MAX_NOTES = 3
 
 
 def enabled():
@@ -35,7 +37,13 @@ def recipients():
             if p.can_do('help', 'edit')]
 
 
-def summary_for(supervisor, now=None):
+def week_notes(now=None):
+    """The «what changed» notes of the last 7 days (onboarding_views.recent_notes)."""
+    from .onboarding_views import recent_notes
+    return recent_notes(days=7, now=now)
+
+
+def summary_for(supervisor, now=None, notes=None):
     """→ dict with the four lists (rows from onboarding_views.team_rows), scoped to
     the supervisor's branches; the supervisor is left out of their own digest."""
     from apps.users.models import StaffProfile
@@ -55,6 +63,7 @@ def summary_for(supervisor, now=None):
         'stuck': [r for r in rows if r['stuck']],
         'failed': [r for r in rows if r['failed_quizzes']],
         'retake': [r for r in rows if r['retake_quizzes']],
+        'notes': week_notes(now) if notes is None else notes,
     }
 
 
@@ -79,6 +88,10 @@ def render(s):
         lines.append(f"❌ رسبوا في اختبار ({len(s['failed'])}): {_names(s['failed'], lambda r: mod(r['failed_quizzes']))}")
     if s['retake']:
         lines.append(f"⟳ محتاجين يعيدوا اختبار اتغيّر ({len(s['retake'])}): {_names(s['retake'], lambda r: mod(r['retake_quizzes']))}")
+    if s.get('notes'):
+        shown = '؛ '.join(f"{n['title']['ar']}: «{n['note']}»" for n in s['notes'][:MAX_NOTES])
+        more = len(s['notes']) - MAX_NOTES
+        lines.append(f"📝 اتحدّث في التدريب ({len(s['notes'])}): {shown}" + (f' و{more} غيرها' if more > 0 else ''))
     lines.append('التفاصيل وزر «🔔 تذكير»: دليل الاستخدام ← للمدربين ← تقدّم الفريق في التدريب.')
     return '📊 ملخص التدريب الأسبوعي', '\n'.join(lines)
 
@@ -90,9 +103,14 @@ def send_weekly(now=None, dry_run=False):
         return out
     now = now or timezone.now()
     year, week, _ = timezone.localtime(now).isocalendar()
+    try:
+        notes = week_notes(now)
+    except Exception as exc:
+        logger.warning('help training digest notes skipped: %s', exc)
+        notes = []
     for sup in recipients():
         try:
-            s = summary_for(sup, now)
+            s = summary_for(sup, now, notes)
             if not s['team']:
                 continue
             title, body = render(s)
