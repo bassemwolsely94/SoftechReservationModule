@@ -191,23 +191,10 @@ def quiz_submit(request, module_key):
                     status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def team(request):
-    """Trainers / supervisors: everyone's onboarding completion. Branch-bound trainers
-    see only the branches they can access."""
-    profile = _profile(request)
-    if not _can_edit(profile):
-        return Response({'detail': 'forbidden'}, status=403)
-    staff = StaffProfile.objects.filter(is_active=True, user__is_active=True).select_related('user', 'branch')
-    allowed = profile.accessible_branch_ids
-    if allowed is not None:
-        staff = staff.filter(branch_id__in=allowed)
-    if request.query_params.get('role'):
-        staff = staff.filter(role=request.query_params['role'])
-    if request.query_params.get('branch'):
-        staff = staff.filter(branch_id=request.query_params['branch'])
-    staff = list(staff.order_by('role', 'user__first_name')[:500])
+def team_rows(staff_qs, limit=500):
+    """Training progress per person (shared by the trainers' team view and the
+    weekly digest): progress, failed quizzes, quizzes to retake, last activity."""
+    staff = list(staff_qs.select_related('user', 'branch').order_by('role', 'user__first_name')[:limit])
     ids = [p.id for p in staff]
     versions = _versions()
     learned = {}
@@ -231,8 +218,28 @@ def team(request):
             'failed_quizzes': [m for m, v in mine.items() if not v['passed'] and not v['stale']],
             'retake_quizzes': [m for m, v in mine.items() if v['stale']],
             'last_activity': max(at) if at else None,
+            'joined': p.user.date_joined,
         })
-    return Response(rows)
+    return rows
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def team(request):
+    """Trainers / supervisors: everyone's onboarding completion. Branch-bound trainers
+    see only the branches they can access."""
+    profile = _profile(request)
+    if not _can_edit(profile):
+        return Response({'detail': 'forbidden'}, status=403)
+    staff = StaffProfile.objects.filter(is_active=True, user__is_active=True)
+    allowed = profile.accessible_branch_ids
+    if allowed is not None:
+        staff = staff.filter(branch_id__in=allowed)
+    if request.query_params.get('role'):
+        staff = staff.filter(role=request.query_params['role'])
+    if request.query_params.get('branch'):
+        staff = staff.filter(branch_id=request.query_params['branch'])
+    return Response(team_rows(staff))
 
 
 # ── trainers: edit paths / quizzes (help/edit) ────────────────────────────────

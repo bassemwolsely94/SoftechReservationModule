@@ -158,6 +158,17 @@ scrolls to that step's text and highlights it (workflow tours open their module 
 The tour runner reports its end once (`POST /api/help/tour-event/` → `HelpEvent kind=tour`,
 `results` = steps reached, `query='done'` when finished); report: `GET /api/help/usage/?days=`.
 
+## Weekly training digest for supervisors (built 2026-10-11)
+
+Every Sunday 08:40 (scheduler job `help_training_digest`; `manage.py help_training_digest [--dry-run]`)
+each person with `help/edit` gets one notification (`apps.notifications`, deduped per ISO week) about the
+active staff in the branches they can see (themselves excluded): team size and how many finished; ✅
+finished this week; ⏳ stuck — no training activity (screen ticked / quiz) for 7+ days, joined 7+ days ago,
+path not complete (incl. never started); ❌ failed a quiz (best attempt on the current version below the
+pass mark); ⟳ must retake a changed quiz. Up to 5 names per line, the rest in «للمدربين». Built on the
+same calculation as the trainers' team view (`onboarding_views.team_rows`). SystemSetting
+`help_training_digest_enabled` (default on). Code: `apps/help/digest.py`.
+
 ## Trainers (help/edit)
 
 - RBAC module `help`, action `edit` (Permissions Matrix). Admin always; seeds give it to

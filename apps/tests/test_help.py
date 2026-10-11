@@ -894,3 +894,80 @@ class FirstDayTests(TestCase):
             d = self.c.get('/api/help/first-day/').json()
         self.assertEqual(d['progress']['percent'], 100)
         self.assertFalse(d['show'])
+
+
+class TrainingDigestTests(TestCase):
+    """Weekly digest: right recipients, branch scope, finished / stuck / failed /
+    retake lists, once per week, can be switched off."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        from .factories import make_branch2
+        self.b1, self.b2 = make_branch(), make_branch2()
+        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
+        _, self.sup, _ = make_user('dg_sup', role='supervisor', branch=self.b1)
+        u, self.ph, _ = make_user('dg_ph', role='pharmacist', branch=self.b1)
+        _, self.other, _ = make_user('dg_other', role='pharmacist', branch=self.b2)
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+
+    def _age(self, profile, days):
+        from django.utils import timezone
+        profile.user.date_joined = timezone.now() - timezone.timedelta(days=days)
+        profile.user.save(update_fields=['date_joined'])
+
+    def test_recipients_and_scope(self):
+        from apps.help import digest
+        self.assertIn(self.sup, digest.recipients())
+        self.assertNotIn(self.ph, digest.recipients())
+        names = {r['id'] for r in digest.summary_for(self.sup)['stuck']} | \
+            {r['id'] for r in digest.summary_for(self.sup)['failed']}
+        s = digest.summary_for(self.sup)
+        self.assertEqual(s['team'], 1)                 # only branch 1, not the supervisor themself
+        self.assertNotIn(self.other.id, names)
+
+    def test_stuck_failed_and_text(self):
+        from apps.help import digest
+        from apps.help.content import onboarding
+        self._age(self.ph, 10)
+        wrong = [(q['answer'] + 1) % len(q['options']) for q in onboarding.QUIZZES['pos']]
+        self.c.post('/api/help/quizzes/pos/submit/', {'answers': wrong}, format='json')
+        s = digest.summary_for(self.sup)
+        self.assertEqual([r['id'] for r in s['failed']], [self.ph.id])
+        self.assertEqual(s['stuck'], [])                # a quiz attempt today = activity
+        title, body = digest.render(s)
+        self.assertIn('ملخص التدريب', title)
+        self.assertIn('رسبوا', body)
+        # no activity for 7+ days and joined long ago → stuck
+        from apps.help.models import HelpQuizAttempt
+        from django.utils import timezone
+        HelpQuizAttempt.objects.update(created_at=timezone.now() - timezone.timedelta(days=9))
+        self.assertEqual([r['id'] for r in digest.summary_for(self.sup)['stuck']], [self.ph.id])
+
+    def test_new_joiner_not_stuck_and_finished_this_week(self):
+        from unittest import mock
+        from apps.help import digest
+        self.assertEqual(digest.summary_for(self.sup)['stuck'], [])     # joined today
+        with mock.patch('apps.help.training.path', return_value=['general.help_center']), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            self.c.post('/api/help/onboarding/learned/', {'screen_key': 'general.help_center'}, format='json')
+            s = digest.summary_for(self.sup)
+        self.assertEqual([r['id'] for r in s['finished_this_week']], [self.ph.id])
+        self.assertEqual(s['complete'], 1)
+
+    def test_sent_once_a_week_and_switch_off(self):
+        from apps.config.models import SystemSetting
+        from apps.help import digest
+        from apps.notifications.models import Notification
+        self.assertEqual(len(digest.send_weekly()), 1)
+        digest.send_weekly()
+        self.assertEqual(Notification.objects.filter(recipient=self.sup, title__contains='ملخص التدريب').count(), 1)
+        self.assertEqual(digest.send_weekly(dry_run=True)[0][0], self.sup)
+        SystemSetting.objects.update_or_create(key='help_training_digest_enabled',
+                                               defaults={'value': 'false', 'value_type': 'boolean'})
+        self.assertEqual(digest.send_weekly(), [])
+
+    def test_names_capped(self):
+        from apps.help import digest
+        rows = [{'name': f'موظف {i}', 'progress': {'percent': 10}} for i in range(8)]
+        self.assertIn('و3 غيرهم', digest._names(rows))
