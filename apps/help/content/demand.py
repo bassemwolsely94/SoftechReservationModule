@@ -116,7 +116,11 @@ SCREENS = [
                                               'The requests list — open any request for its details and follow-up.')},
             {'target': 'demand-list-recovery', 'text': T('«🔔 عاد للمخزون» يوريك الطلبات اللي صنفها رجع، عشان تكلّم العميل.',
                                               '"🔔 Back in stock" shows requests whose item came back, so you can call the customer.')},
+            {'target': 'demand-list-table', 'wait': '/demand/:id',
+             'text': T('افتح أي طلب — الجولة هتكمّل على صفحة تفاصيله. لو القائمة فاضية اضغط «إنهاء».',
+                       'Open any request — the tour continues on its detail page. If the list is empty, press "End".')},
         ],
+        'tour_continue': 'demand.detail',
         'updated': '2026-10-10',
     },
     {

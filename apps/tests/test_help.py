@@ -182,18 +182,53 @@ class HelpContentCoverageTests(SimpleTestCase):
 
     def test_tour_targets_exist_in_the_frontend(self):
         """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
-        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+        so renaming/removing an anchor fails CI instead of silently breaking a tour.
+        Side-menu anchors are generated in Layout.jsx: nav-group-<group id> and
+        nav-<path> (navTourId) for every NAV_GROUPS item. Step pages (route / wait) must be
+        real routes, `nav` a real menu path, and a screen's `tour_continue` must follow a
+        last step that waits for that screen."""
         src = Path(settings.BASE_DIR) / 'frontend' / 'src'
         anchors = set()
         for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
             anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        layout = (src / 'components' / 'Layout.jsx').read_text(encoding='utf-8')
+        nav_block = layout[layout.index('const NAV_GROUPS'):]
+        nav_block = nav_block[:nav_block.index('\n]\n')]
+        nav_paths = set(re.findall(r"\bto:\s*'([^']+)'", nav_block))
+        anchors |= {'nav-group-' + g for g in re.findall(r"\bid:\s*'([a-z0-9_-]+)'", nav_block)}
+        anchors |= {'nav-' + re.sub(r'-$', '', re.sub(r'[^a-z0-9]+', '-', p.lstrip('/'))) for p in nav_paths}
+        routes = app_routes()
+
+        def check(where, steps):
+            bad = []
+            self.assertTrue(steps, where)
+            for i, st in enumerate(steps):
+                w = f'{where}[{i}]'
+                self.assertTrue({'target', 'text'} <= set(st) <= {'target', 'text', 'route', 'wait', 'nav'}, w)
+                if st['target'] not in anchors:
+                    bad.append(f'{w}: {st["target"]}')
+                for f in ('route', 'wait'):
+                    if st.get(f) and st[f] not in routes:
+                        bad.append(f'{w}: {f} {st[f]} is not a route in App.jsx')
+                if st.get('nav') and st['nav'] not in nav_paths:
+                    bad.append(f'{w}: nav {st["nav"]} is not a side-menu item')
+            return bad
+
         missing = []
         for key, s in self.screens.items():
-            for i, st in enumerate(s.get('tour') or []):
-                self.assertEqual(set(st), {'target', 'text'}, f'{key}.tour[{i}]')
-                if st['target'] not in anchors:
-                    missing.append(f'{key}: {st["target"]}')
-        self.assertEqual(missing, [], 'Tour targets with no data-tour anchor in frontend/src')
+            if s.get('tour'):
+                missing += check(f'{key}.tour', s['tour'])
+            nxt = s.get('tour_continue')
+            if nxt:
+                self.assertIn(nxt, self.screens, f'{key}: tour_continue')
+                self.assertTrue(self.screens[nxt].get('tour'), f'{key}: {nxt} has no tour to continue with')
+                self.assertIn(s['tour'][-1].get('wait'), self.screens[nxt]['routes'],
+                              f'{key}: last step must wait for a route of {nxt}')
+        for m in self.modules.values():
+            for f in m.get('flows') or []:
+                self.assertTrue(f.get('key') and f.get('title'), m['key'])
+                missing += check(f"{m['key']}.flows.{f['key']}", f['steps'])
+        self.assertEqual(missing, [], 'Broken tour steps')
         self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
 
     def test_workflow_explains_every_status(self):
@@ -707,7 +742,8 @@ class HelpUsageTests(TestCase):
 
     def test_tour_events_and_report(self):
         _, screens = registry.load()
-        n = len(screens['reservations.board']['tour'])
+        n = len(registry.tour_flow('reservations.board', screens))   # board + continued detail steps
+        self.assertGreater(n, len(screens['reservations.board']['tour']))
         ok = self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': n, 'done': True}, format='json')
         self.assertEqual(ok.status_code, 201)
         self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': 2, 'done': True}, format='json')
@@ -717,9 +753,39 @@ class HelpUsageTests(TestCase):
         r = self.admin.get('/api/help/usage/?days=7').json()
         row = next(t for t in r['tours'] if t['screen_key'] == 'reservations.board')
         self.assertEqual((row['runs'], row['done'], row['done_pct'], row['common_stop']), (2, 1, 50, 2))
+        # the step people did not get past (index 2) maps back to its own screen's text
+        self.assertEqual(row['weak_step'], {'screen': 'reservations.board', 'i': 2})
         unopened = {u['screen_key'] for u in r['unopened']}
         self.assertNotIn('reservations.board', unopened)
         self.assertIn('pos.order', unopened)
         pos = next(u for u in r['unopened'] if u['screen_key'] == 'pos.order')
         self.assertIn('pharmacist', pos['on_paths'])
         self.assertTrue(any(t['runs'] == 0 for t in r['tours']))
+        self.assertTrue(any(t['flow'] for t in r['tours']))
+        # workflow tours report too
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'flow:general.system', 'reached': 3},
+                                      format='json').status_code, 201)
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'flow:general.nope'},
+                                      format='json').status_code, 400)
+
+    def test_screen_payload_carries_flow_and_module_tours(self):
+        r = self.ph.get('/api/help/screens/reservations.board/?log=0').json()
+        screens_in_flow = {st['screen'] for st in r['tour_flow']}
+        self.assertEqual(screens_in_flow, {'reservations.board', 'reservations.detail'})
+        detail_steps = [st for st in r['tour_flow'] if st['screen'] == 'reservations.detail']
+        self.assertTrue(all(st['route'] == '/reservations/:id' for st in detail_steps))
+        self.assertTrue(any(f['id'] == 'flow:reservations.lifecycle' for f in r['module']['flows']))
+        m = self.ph.get('/api/help/modules/general/').json()
+        self.assertTrue(any(f['id'] == 'flow:general.system' for f in m['flows']))
+
+
+class TourMergeTests(SimpleTestCase):
+    def test_same_target_twice_edited_independently(self):
+        base = [{'target': 'a', 'text': {'ar': '1', 'en': '1'}}, {'target': 'a', 'wait': '/x/:id', 'text': {'ar': '2', 'en': '2'}}]
+        edited = [{'target': 'a', 'text': {'ar': 'جديد', 'en': 'new'}}, {'target': 'a', 'text': {'ar': '', 'en': ''}}]
+        out = registry._merge_tour(base, edited)
+        self.assertEqual(out[0]['text']['ar'], 'جديد')
+        self.assertEqual(out[1]['text']['ar'], '2')
+        self.assertEqual(out[1]['wait'], '/x/:id')
+        # a step the code replaced keeps the repo text
+        self.assertEqual(registry._merge_tour([{'target': 'b', 'text': {'ar': 'r', 'en': 'r'}}], edited)[0]['text']['ar'], 'r')

@@ -20,7 +20,7 @@ export default function HelpButton({ variant = 'desktop' }) {
     )
   }
   return (
-    <button type="button" onClick={toggle} title={title} aria-label={title}
+    <button type="button" onClick={toggle} title={title} aria-label={title} data-tour="shell-help"
             className="relative flex items-center gap-1.5 text-xs text-faint hover:text-brand-600 bg-surface-2 hover:bg-brand-50 border border-line rounded-lg px-2.5 py-1.5 transition-colors">
       <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px] font-bold">؟</span>
       <span className="hidden md:inline">مساعدة</span>

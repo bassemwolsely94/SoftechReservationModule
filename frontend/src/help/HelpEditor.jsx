@@ -4,7 +4,7 @@
  * field. Tabs follow the code, so their list is fixed here — only their wording
  * changes. Every save / revert is kept in the history with who, when and why.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick, itemText } from './text'
@@ -68,7 +68,12 @@ function TList({ items, onChange, addLabel }) {
   )
 }
 
-export default function HelpEditor({ data, onDone }) {
+export default function HelpEditor({ data, onDone, focusTourStep = null }) {
+  // opened from the usage report: bring the weak «اعرض لي» step into view
+  const focusRef = useRef(null)
+  useEffect(() => {
+    if (focusRef.current) focusRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [])
   const qc = useQueryClient()
   const [draft, setDraft] = useState(() => ({
     title: clone(data.title), summary: clone(data.summary),
@@ -184,8 +189,11 @@ export default function HelpEditor({ data, onDone }) {
         <Field title="جولة «اعرض لي» (الخطوات والأزرار ثابتة حسب الشاشة — عدّل النص فقط)">
           <div className="space-y-2">
             {draft.tour.map((t, i) => (
-              <div key={t.target} className="rounded-lg border border-line p-2 space-y-1.5">
-                <div className="text-[10px] text-faint">{i + 1}. {t.target}</div>
+              <div key={`${i}-${t.target}`} ref={i === focusTourStep ? focusRef : null}
+                   className={`rounded-lg border p-2 space-y-1.5 ${i === focusTourStep ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300' : 'border-line'}`}>
+                <div className="text-[10px] text-faint">{i + 1}. {t.target}
+                  {i === focusTourStep && <span className="text-amber-700 font-semibold"> — أغلب الناس بيقفوا قبل الخطوة دي: وضّح النص</span>}
+                </div>
                 <TField value={t.text} rows={2} required
                         onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? { ...x, text: v } : x)))} />
               </div>

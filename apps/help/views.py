@@ -89,7 +89,9 @@ def module_detail(request, key):
         return Response({'detail': 'not found'}, status=404)
     ov = _overrides()
     return Response({
-        **{k: v for k, v in m.items() if k != 'screens'},
+        **{k: v for k, v in m.items() if k not in ('screens', 'flows')},
+        'flows': [{'id': f"flow:{m['key']}.{f['key']}", 'title': f['title'], 'summary': f.get('summary'),
+                   'roles': f.get('roles'), 'steps': f['steps']} for f in m.get('flows') or []],
         'screens': [_brief(registry.effective(screens[k], ov.get(k)), modules) for k in m['screens']],
     })
 
@@ -101,10 +103,15 @@ def _screen_payload(request, key, s, modules, screens, override):
     workflows = m.get('workflows') or []
     if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
         workflows = [w for w in workflows if w.get('key') in s['workflows']]
+    all_ov = {o.screen_key: o for o in HelpOverride.objects.filter(
+        screen_key__in=[key, s.get('tour_continue') or ''])}
     payload = {
         **{k: v for k, v in eff.items() if k != 'workflows'},
+        'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
-                   'summary': m.get('summary'), 'workflows': workflows},
+                   'summary': m.get('summary'), 'workflows': workflows,
+                   'flows': [{'id': f"flow:{m['key']}.{f['key']}", 'title': f['title'], 'summary': f.get('summary'),
+                              'roles': f.get('roles'), 'steps': f['steps']} for f in m.get('flows') or []]},
         'siblings': [_brief(registry.effective(screens[k], None), modules)
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],
@@ -432,16 +439,20 @@ def ask(request):
 def tour_event(request):
     """The frontend reports a finished or abandoned «اعرض لي» tour:
     {screen_key, reached (steps seen), done (bool)} — for the trainers' usage report."""
-    _, screens = registry.load()
-    key = str(request.data.get('screen_key', ''))
-    s = screens.get(key)
-    if s is None or not s.get('tour'):
+    modules, screens = registry.load()
+    key = str(request.data.get('screen_key', ''))[:80]
+    if key.startswith('flow:'):
+        f = registry.flows(modules).get(key)
+        total = len(f['steps']) if f else 0
+    else:
+        total = len(registry.tour_flow(key, screens)) if key in screens and screens[key].get('tour') else 0
+    if not total:
         return Response({'detail': 'unknown tour'}, status=400)
     try:
-        reached = max(1, min(int(request.data.get('reached', 1)), len(s['tour'])))
+        reached = max(1, min(int(request.data.get('reached', 1)), total))
     except (TypeError, ValueError):
         reached = 1
-    done = bool(request.data.get('done')) and reached == len(s['tour'])
+    done = bool(request.data.get('done')) and reached == total
     _log(HelpEvent.KIND_TOUR, request, screen_key=key, query='done' if done else '', results=reached)
     return Response({'ok': True}, status=status.HTTP_201_CREATED)
 
@@ -479,18 +490,23 @@ def usage(request):
             t['done'] += 1
         else:
             t['stops'][e['results'] or 1] = t['stops'].get(e['results'] or 1, 0) + 1
+    ov = _overrides()
     tour_rows = []
-    for k, s in screens.items():
-        if not s.get('tour'):
-            continue
+    runs = [(k, s['title'], registry.tour_flow(k, screens, ov)) for k, s in screens.items() if s.get('tour')]
+    runs += [(k, f['title'], [{**st, 'screen': None, 'i': i} for i, st in enumerate(f['steps'])])
+             for k, f in registry.flows(modules).items()]
+    for k, title, steps in runs:
         t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
         stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None
+        # people stop AFTER step `stop`, so the step they did not get past is the next one
+        weak = steps[stop] if stop is not None and stop < len(steps) else None
         tour_rows.append({
-            'screen_key': k, 'title': s['title'], 'steps': len(s['tour']),
+            'screen_key': k, 'title': title, 'steps': len(steps), 'flow': k.startswith('flow:'),
             'runs': t['runs'], 'done': t['done'],
             'done_pct': round(100 * t['done'] / t['runs']) if t['runs'] else None,
-            # the step most people stopped after (the next one is probably unclear / not visible)
             'common_stop': stop,
+            # where to fix it: that step's own screen + index (None for workflow tours)
+            'weak_step': {'screen': weak['screen'], 'i': weak['i']} if weak and weak.get('screen') else None,
         })
     tour_rows.sort(key=lambda r: (r['runs'] > 0, r['done_pct'] if r['done_pct'] is not None else 101))
     return Response({

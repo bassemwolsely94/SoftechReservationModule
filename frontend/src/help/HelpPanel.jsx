@@ -150,6 +150,7 @@ function PanelBody() {
             )}
             <HelpArticle data={data} lang={lang} tab={tab} role={role} showAllRoles={data.can_edit}
                          onOpenScreen={openScreen} />
+            <FlowList flows={data.module?.flows} role={role} lang={lang} onStart={startTour} />
             <div className="mt-6 pt-4 border-t border-line text-[11px] text-faint flex flex-wrap gap-x-3 gap-y-1">
               {data.updated && <span>{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
               {data.override?.updated_by && <span>{label('editedBy', lang)}: {data.override.updated_by}</span>}
@@ -164,7 +165,7 @@ function PanelBody() {
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour)}
+              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour)}
                       className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
                 👆 {lang === 'en' ? 'Show me' : 'اعرض لي'}
               </button>
@@ -181,5 +182,25 @@ function PanelBody() {
         </div>
       )}
     </aside>
+  )
+}
+
+/** «جولات دورة العمل» of the current module — cross-page tours, started on request. */
+export function FlowList({ flows, role, lang, onStart }) {
+  const mine = (flows || []).filter((f) => !f.roles || f.roles.includes(role))
+  if (!mine.length) return null
+  return (
+    <section className="mt-5 space-y-2">
+      <h3 className="text-xs font-bold text-brand-600 tracking-wide">
+        🧭 {lang === 'en' ? 'Workflow tours (across screens)' : 'جولات دورة العمل (بين الشاشات)'}
+      </h3>
+      {mine.map((f) => (
+        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps)}
+                className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
+          <div className="text-sm font-semibold text-content">👆 {pick(f.title, lang)}</div>
+          {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}
+        </button>
+      ))}
+    </section>
   )
 }

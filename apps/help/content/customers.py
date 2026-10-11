@@ -54,7 +54,11 @@ SCREENS = [
                                               'The customers — open one for the full profile.')},
             {'target': 'customers-list-pages', 'text': T('التنقل بين الصفحات.',
                                               'Move between pages.')},
+            {'target': 'customers-list-table', 'wait': '/customers/:id',
+             'text': T('افتح أي عميل — الجولة هتكمّل على ملفه. لو القائمة فاضية اضغط «إنهاء».',
+                       'Open any customer — the tour continues on their profile. If the list is empty, press "End".')},
         ],
+        'tour_continue': 'customers.detail',
         'updated': '2026-10-10',
     },
     {

@@ -15,6 +15,7 @@ import { useHelpIndex } from '../help/useHelpIndex'
 import HelpArticle, { Workflow } from '../help/HelpArticle'
 import HelpEditor from '../help/HelpEditor'
 import HelpFeedback from '../help/HelpFeedback'
+import { FlowList } from '../help/HelpPanel'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
@@ -58,6 +59,7 @@ export default function HelpCenterPage() {
               : 'شرح كل شاشات النظام — دور الشاشة، طريقة الاستخدام، التبويبات، ودورة عمل الموديول. اضغط F1 في أي شاشة لفتح شرحها.'}
           </p>
         </div>
+        <SystemTourButton lang={lang} />
         <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}
@@ -138,6 +140,8 @@ function Crumbs({ lang, go, module, screen }) {
 }
 
 function ModuleView({ moduleKey, lang, go }) {
+  const role = useAuthStore((s) => s.user?.role)
+  const startTour = useHelpStore((s) => s.startTour)
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'module', moduleKey],
     queryFn: () => helpApi.module(moduleKey).then((r) => r.data),
@@ -164,6 +168,11 @@ function ModuleView({ moduleKey, lang, go }) {
           </div>
         </div>
       )}
+      {(data.flows || []).length > 0 && (
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <FlowList flows={data.flows} role={role} lang={lang} onStart={startTour} />
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.screens.map((s) => (
           <button key={s.key} type="button" onClick={() => go({ tab: 'browse', screen: s.key })}
@@ -181,7 +190,10 @@ function ScreenView({ screenKey, lang, go, index }) {
   const role = useAuthStore((s) => s.user?.role)
   const navigate = useNavigate()
   const startTour = useHelpStore((s) => s.startTour)
-  const [editing, setEditing] = useState(false)
+  // ?edit=1&tour_step=N — opened from the trainers' usage report to fix a weak tour step
+  const [params] = useSearchParams()
+  const focusStep = params.get('tour_step') != null ? Number(params.get('tour_step')) : null
+  const [editing, setEditing] = useState(params.get('edit') === '1')
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'screen', screenKey],
     queryFn: () => helpApi.screen(screenKey).then((r) => r.data),
@@ -201,7 +213,7 @@ function ScreenView({ screenKey, lang, go, index }) {
             </Link>
           )}
           {openRoute && data.tour?.length > 0 && (
-            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour), 400) }}
+            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour), 400) }}
                     className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
               👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
             </button>
@@ -213,7 +225,9 @@ function ScreenView({ screenKey, lang, go, index }) {
           )}
         </div>
         {editing
-          ? <HelpEditor data={data} onDone={() => setEditing(false)} />
+          ? (data.can_edit
+              ? <HelpEditor data={data} focusTourStep={focusStep} onDone={() => { setEditing(false); go({ tab: 'browse', screen: screenKey }) }} />
+              : <div className="text-sm text-faint">ليس لديك صلاحية تعديل الشرح</div>)
           : <HelpArticle data={data} lang={lang} role={role} showAllRoles={data.can_edit}
                          onOpenScreen={(k) => go({ tab: 'browse', screen: k })} />}
         {!editing && (
@@ -364,5 +378,23 @@ function Rows({ rows, render, onClick }) {
         </div>
       ))}
     </div>
+  )
+}
+
+/** «🧭 جولة تعريفية بالنظام» — the app-frame tour (general module flow 'system'). */
+function SystemTourButton({ lang }) {
+  const startTour = useHelpStore((s) => s.startTour)
+  const { data } = useQuery({
+    queryKey: ['help', 'module', 'general'],
+    queryFn: () => helpApi.module('general').then((r) => r.data),
+    staleTime: 300_000,
+  })
+  const flow = (data?.flows || []).find((f) => f.id === 'flow:general.system')
+  if (!flow) return null
+  return (
+    <button type="button" onClick={() => startTour(flow.id, flow.steps)}
+            className="text-sm bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
+      🧭 {lang === 'en' ? 'System tour' : 'جولة تعريفية بالنظام'}
+    </button>
   )
 }

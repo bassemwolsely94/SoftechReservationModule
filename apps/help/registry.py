@@ -99,10 +99,17 @@ def _merge_tabs(base_tabs, edited_tabs):
 
 
 def _merge_tour(base_tour, edited_tour):
-    """Like tabs: the steps and their targets follow the code; trainers edit the text."""
-    edited = {t.get('target'): t for t in (edited_tour or []) if isinstance(t, dict)}
-    return [{**t, **({'text': edited[t['target']]['text']} if edited.get(t['target'], {}).get('text') else {})}
-            for t in base_tour or []]
+    """Like tabs: the steps and their targets follow the code; trainers edit the text.
+    Matched by position AND target (a tour may point at the same element twice, e.g.
+    "this is the list" then "open a row"); a step the code moved or replaced keeps the
+    repo text."""
+    edited = [t for t in (edited_tour or []) if isinstance(t, dict)]
+    out = []
+    for i, t in enumerate(base_tour or []):
+        e = edited[i] if i < len(edited) else None
+        ok = e and e.get('target') == t['target'] and (e.get('text') or {}).get('ar', '').strip()
+        out.append({**t, **({'text': e['text']} if ok else {})})
+    return out
 
 
 def effective(screen, override=None):
@@ -219,3 +226,35 @@ def retrieve(question, screens, modules, limit=5, prefer=None):
             scored.append((score, s))
     scored.sort(key=lambda r: -r[0])
     return [s for _, s in scored[:limit]]
+
+
+# ── «اعرض لي» flows ───────────────────────────────────────────────────────────
+# A tour step: {target, text, route?, wait?, nav?}
+#   route — the page the step lives on (router pattern); the runner navigates there when it
+#           has no :params. Screen-tour steps without it live on the page the tour started on.
+#   wait  — the step waits for the user to open that page (e.g. click a row → '/x/:id'),
+#           then continues on it.
+#   nav   — open the side-menu group of this path first (to point at its menu item).
+# A screen may set `tour_continue: '<screen key>'`: after its own steps (the last one should
+# `wait` for that screen), the other screen's tour follows — list → detail as one flow.
+
+def tour_flow(key, screens, overrides=None):
+    """The full tour run from a screen: its own (effective) steps, then the continued
+    screen's steps. Each step carries `screen` and `i` (its index in that screen's own
+    tour) so usage can point a trainer at the exact text to fix."""
+    ov = overrides or {}
+    s = screens[key]
+    out = [{**st, 'screen': key, 'i': i} for i, st in enumerate(effective(s, ov.get(key)).get('tour') or [])]
+    nxt = s.get('tour_continue')
+    if out and nxt in screens:
+        n = screens[nxt]
+        route = n['routes'][0]
+        out += [{**st, 'route': st.get('route') or route, 'screen': nxt, 'i': i}
+                for i, st in enumerate(effective(n, ov.get(nxt)).get('tour') or [])]
+    return out
+
+
+def flows(modules):
+    """{'flow:<module>.<key>': flow} for every module workflow tour."""
+    return {f"flow:{m['key']}.{f['key']}": {**f, 'module': m['key']}
+            for m in modules.values() for f in m.get('flows') or []}

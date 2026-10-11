@@ -101,11 +101,36 @@ must not get wrong → add a quiz question.
 - 30 questions per person per hour. Every question is logged (`HelpEvent kind=ask`, `results=0`
   when unanswered) and listed for trainers — unanswered questions = help that needs writing.
 
+## Cross-page tours (built 2026-10-11)
+
+This is what product tools call a *product tour* / *walkthrough* with *coach marks* (spotlights):
+started only on request, it dims the page, zooms into one real area at a time and explains it.
+
+- **Step fields:** `target`, `text`, and optionally `route` (the page the step lives on — the runner
+  opens it when it has no `:params`), `wait` (the step waits for the user to open that page, e.g.
+  click a row → `/x/:id`, then continues there; «التالي» is replaced by «اضغط على الجزء المعلَّم»),
+  `nav` (open that page's side-menu group first, to point at its menu item).
+- **List → detail:** a screen with `tour_continue: '<detail screen>'` whose last step `wait`s for the
+  detail route runs as one flow (`registry.tour_flow`, sent as `tour_flow`): reservations board,
+  transfers list, demand list, customers list.
+- **Workflow tours** (`MODULE['flows']`, optional `roles`): «جولات دورة العمل» in the panel and on
+  the module page — reservations lifecycle, transfer lifecycle. **System tour** (`general.system`):
+  «🧭 جولة تعريفية بالنظام» on /help — side menu, search, help, notifications, security.
+- **App-frame anchors:** `shell-*` (rail, nav panel, search, help, notifications, security) and
+  generated menu anchors `nav-group-<id>` / `nav-<path>` (Layout `navTourId`); the runner opens a
+  menu group with the `help:nav-show` event.
+- Going to a page the tour does not expect ends it. Zoom-in + soft pulse on each step
+  (`.tour-spot`, off with reduced motion). Trainer text edits merge by position + target.
+- **Test** checks every target (incl. generated menu anchors), that `route`/`wait` are real routes,
+  `nav` a real menu path, and that `tour_continue` follows a last step waiting for that screen.
+
 ## Usage report — help nobody uses (built 2026-10-10)
 
 «للمدربين» → for the selected period: screens whose help nobody opened (those on a role's training
 path first — people should have read them), and «اعرض لي» tours: runs, % finished, the step most
 people stop after (the next step is probably unclear or its button not visible), tours never run.
+A weak step («✏️ صلّح الخطوة») opens `/help?screen=<its screen>&edit=1&tour_step=<i>`: the editor
+scrolls to that step's text and highlights it (workflow tours open their module page).
 The tour runner reports its end once (`POST /api/help/tour-event/` → `HelpEvent kind=tour`,
 `results` = steps reached, `query='done'` when finished); report: `GET /api/help/usage/?days=`.
 
@@ -173,6 +198,8 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
     'related': ['other.screen'],
     'workflows': ['key'],              # optional: only these module workflows
     'tour': [{'target': 'module-screen-btn', 'text': T('…', '…')}],  # optional «اعرض لي»; add data-tour="module-screen-btn" to the element
+    #   step extras: 'route': '/page', 'wait': '/page/:id', 'nav': '/menu-path'
+    'tour_continue': 'module.detail',  # optional: last step waits for its route, then its tour follows
     'updated': 'YYYY-MM-DD',
 }
 ```

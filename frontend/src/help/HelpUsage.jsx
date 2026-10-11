@@ -17,6 +17,12 @@ export default function HelpUsage({ days, go }) {
   const onPath = data.unopened.filter((u) => u.on_paths.length)
   const others = data.unopened.filter((u) => !u.on_paths.length)
   const neverRun = data.tours.filter((t) => !t.runs)
+  // weak step → straight to that step's text in the editor; workflow tours → their module
+  const openFix = (t) => {
+    if (t.weak_step) go({ tab: 'browse', screen: t.weak_step.screen, edit: '1', tour_step: String(t.weak_step.i) })
+    else if (t.flow) go({ tab: 'browse', module: t.screen_key.slice(5).split('.')[0] })
+    else go({ tab: 'browse', screen: t.screen_key })
+  }
   const used = data.tours.filter((t) => t.runs)
   const Screen = ({ u }) => (
     <button type="button" onClick={() => go({ tab: 'browse', screen: u.screen_key })}
@@ -60,9 +66,10 @@ export default function HelpUsage({ days, go }) {
               <span className="col-span-2">كمّلوها</span><span className="col-span-2">بيقفوا بعد</span>
             </div>
             {used.map((t) => (
-              <div key={t.screen_key} onClick={() => go({ tab: 'browse', screen: t.screen_key })}
+              <div key={t.screen_key} onClick={() => openFix(t)} title={t.weak_step ? 'افتح الخطوة الضعيفة في المحرر' : ''}
                    className="grid grid-cols-12 gap-2 py-1.5 cursor-pointer hover:bg-surface-2">
-                <span className="col-span-6 text-content truncate">{pick(t.title, 'ar')}</span>
+                <span className="col-span-6 text-content truncate">{t.flow ? '🧭 ' : ''}{pick(t.title, 'ar')}
+                  {t.weak_step && <span className="text-[10px] text-amber-700"> · ✏️ صلّح الخطوة</span>}</span>
                 <span className="col-span-2 tabnum">{t.runs}</span>
                 <span className={`col-span-2 tabnum ${t.done_pct < 50 ? 'text-red-600' : 'text-emerald-700'}`}>{t.done_pct}%</span>
                 <span className="col-span-2 text-xs text-muted tabnum">{t.common_stop ? `خطوة ${t.common_stop} / ${t.steps}` : '—'}</span>
@@ -77,7 +84,10 @@ export default function HelpUsage({ days, go }) {
           <details className="text-xs">
             <summary className="cursor-pointer text-muted">جولات محدش شغّلها ({neverRun.length})</summary>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {neverRun.map((t) => <Screen key={t.screen_key} u={{ ...t, on_paths: [] }} />)}
+              {neverRun.map((t) => t.flow
+                ? <button key={t.screen_key} type="button" onClick={() => openFix(t)}
+                          className="text-xs border border-line rounded-full px-2.5 py-1 text-content hover:border-brand-300">🧭 {pick(t.title, 'ar')}</button>
+                : <Screen key={t.screen_key} u={{ ...t, on_paths: [] }} />)}
             </div>
           </details>
         )}
