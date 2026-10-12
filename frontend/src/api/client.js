@@ -893,6 +893,7 @@ export const invoicesApi = {
                                     headers: { 'Content-Type': 'multipart/form-data' },
                                   }),
   updateHeader:  (id, data)     => api.patch(`/invoices/invoices/${id}/update-header/`, data),
+  linkVendor:    (id, data)     => api.post(`/invoices/invoices/${id}/link-vendor/`, data),
 
   // Line management
   addLine:       (id, data)     => api.post(`/invoices/invoices/${id}/add-line/`, data),
@@ -925,6 +926,7 @@ export const invoicesApi = {
   // Vendor profiles
   listVendors:   (params)       => api.get('/invoices/vendors/', { params }),
   mainVendors:   ()             => api.get('/invoices/vendors/main/'),
+  linkableVendors: ()           => api.get('/invoices/vendors/linkable/'),
   createVendor:  (data)         => api.post('/invoices/vendors/', data),
 }
 
