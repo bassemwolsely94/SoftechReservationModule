@@ -131,3 +131,24 @@ def glossary_term(request, pk):
     t.save()
     _audit(t.id, HelpRevision.ACTION_SAVE, before, data, profile)
     return Response(_row(t))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def scan(request):
+    """«طبّق القاموس» in the screen editor: POST {screen_key, data: draft} → {'items': [...]}
+    — every avoided word in the draft's Arabic text with its place (path, start, end),
+    sentence and replacement (notecheck.scan). Read-only: the editor applies the ones
+    the trainer accepts to its draft, and nothing changes until they press «حفظ»."""
+    if not _can_edit(_profile(request)):
+        return Response({'detail': 'ليس لديك صلاحية'}, status=403)
+    body = request.data if isinstance(request.data, dict) else {}
+    _, screens = registry.load()
+    s = screens.get(str(body.get('screen_key') or ''))
+    if s is None:
+        return Response({'detail': 'not found'}, status=404)
+    data = body.get('data')
+    if not isinstance(data, dict):
+        return Response({'detail': 'data must be an object'}, status=400)
+    draft = {f: data.get(f) for f in registry.EDITABLE_FIELDS if f in data}
+    return Response({'items': notecheck.scan(draft, terms(), s['module'])})

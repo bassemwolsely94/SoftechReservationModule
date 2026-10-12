@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick, itemText } from './text'
 import NoteHints, { useNoteHints } from './NoteHints'
+import GlossaryApply from './GlossaryApply'
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
 const emptyT = () => ({ ar: '', en: '' })
@@ -168,6 +169,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
         </div>
       )}
 
+      <GlossaryApply screenKey={data.key} draft={draft} setDraft={setDraft} />
       <Field title="العنوان"><TField value={draft.title} onChange={up('title')} rows={1} required /></Field>
       <Field title="دور الشاشة"><TField value={draft.summary} onChange={up('summary')} rows={3} required /></Field>
       <Field title="من يستخدمها"><TField value={draft.audience} onChange={up('audience')} /></Field>

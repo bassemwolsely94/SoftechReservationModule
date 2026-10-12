@@ -108,58 +108,128 @@ def applies(term, module):
     return not mods or (module is not None and module in mods)
 
 
-def find_terms(text, terms):
-    """→ [(term, avoid word, count)] for every avoided word found in `text`. The
-    agreed word itself is never counted (its words are blanked out first)."""
-    toks = normalize(text).split()
-    out = []
+def _strip_marks(ch):
+    return bool(_TASHKEEL.match(ch))
+
+
+def _split_prefix(core, n):
+    """Index in the original word after its first `n` letters (tashkeel skipped)."""
+    seen = 0
+    for i, ch in enumerate(core):
+        if seen == n:
+            return i
+        if not _strip_marks(ch):
+            seen += 1
+    return len(core)
+
+
+def _agreed(term):
+    """The agreed word as written in place, without a leading «ال» (the word in the
+    text keeps its own prefix)."""
+    p = term['preferred'].strip()
+    return p[2:] if normalize(p).startswith('ال') and len(normalize(p)) > 4 else p
+
+
+def occurrences(text, terms):
+    """Every avoided word in `text` with its exact place: [{'term', 'avoid', 'start',
+    'end', 'match', 'replacement'}] in text order. A word keeps what is attached to it
+    («للخزنة» → «للكاشير»); the agreed word itself is never matched. Basis for the
+    hints, «طبّق القاموس» and the note fix — one rule everywhere."""
+    text = str(text or '')
+    toks = []                        # (start, end, normalised core) of each word
+    for m in re.finditer(r'\S+', text):
+        e = _EDGE.match(m.group(0))
+        a = m.start() + len(e.group(1))
+        n = normalize(e.group(2))
+        toks.append((a, a + len(e.group(2)), n if ' ' not in n else ''))
+    out, used = [], set()
     for t in terms:
         pref = bare(t['preferred']).split()
         skip = set()
         for i in range(len(toks)):
-            if pref and any(r == pref[0] for _, r in _cores(toks[i])) and toks[i + 1:i + len(pref)] == pref[1:]:
+            if pref and any(r == pref[0] for _, r in _cores(toks[i][2])) \
+                    and [x[2] for x in toks[i + 1:i + len(pref)]] == pref[1:]:
                 skip.update(range(i, i + len(pref)))
         for a in t.get('avoid') or []:
-            words_a = bare(a).split()
-            if not words_a:
+            wa = bare(a).split()
+            if not wa:
                 continue
-            n = sum(1 for i in range(len(toks))
-                    if i not in skip and any(r == words_a[0] for _, r in _cores(toks[i]))
-                    and toks[i + 1:i + len(words_a)] == words_a[1:])
-            if n:
-                out.append((t, a, n))
-    return out
+            for i in range(len(toks) - len(wa) + 1):
+                span = range(i, i + len(wa))
+                if any(k in skip or k in used for k in span):
+                    continue
+                hit = next((p for p, r in _cores(toks[i][2]) if r == wa[0]), None)
+                if hit is None or [x[2] for x in toks[i + 1:i + len(wa)]] != wa[1:]:
+                    continue
+                start, end = toks[i][0], toks[i + len(wa) - 1][1]
+                cut = start + _split_prefix(text[start:end], len(hit))
+                used.update(span)
+                out.append({'term': t, 'avoid': a, 'start': start, 'end': end, 'match': text[start:end],
+                            'replacement': text[start:cut] + _agreed(t)})
+    return sorted(out, key=lambda o: o['start'])
+
+
+def apply(text, occ):
+    """`text` with the given occurrences replaced (from the end, so places stay right)."""
+    for o in sorted(occ, key=lambda o: -o['start']):
+        text = text[:o['start']] + o['replacement'] + text[o['end']:]
+    return text
+
+
+def find_terms(text, terms):
+    """→ [(term, avoid word, count)] for every avoided word found in `text`."""
+    counts = {}
+    for o in occurrences(text, terms):
+        k = (o['term']['id'] if 'id' in o['term'] else id(o['term']), o['avoid'])
+        counts.setdefault(k, [o['term'], o['avoid'], 0])[2] += 1
+    return [tuple(v) for v in counts.values()]
 
 
 def fix_note(note, terms):
-    """The note with single-word avoided terms replaced by the agreed word, keeping
-    the attached «ال» / «و» / «ب» …; None when nothing could be replaced."""
-    changed = False
-    parts = []
-    for tok in note.split(' '):
-        m = _EDGE.match(tok)
-        lead, core, tail = m.group(1), m.group(2), m.group(3)
-        n = normalize(core)
-        new = None
-        for t in terms:
-            pref_bare = t['preferred'].strip()
-            if normalize(pref_bare).startswith('ال') and len(normalize(pref_bare)) > 4:
-                pref_bare = pref_bare[2:]
-            for a in t.get('avoid') or []:
-                if len(bare(a).split()) != 1 or ' ' in n:
-                    continue
-                hit = next((p for p, r in _cores(n) if r == bare(a)), None)
-                if hit is not None:
-                    new = hit + pref_bare
-                    break
-            if new:
-                break
-        if new:
-            changed = True
-            parts.append(lead + new + tail)
-        else:
-            parts.append(tok)
-    return ' '.join(parts) if changed else None
+    """The note with every avoided word replaced by the agreed word; None if none."""
+    occ = occurrences(note, terms)
+    return apply(note, occ) if occ else None
+
+
+def strings(v, path=()):
+    """(path, Arabic text) for every Arabic text in a help structure — the places
+    «طبّق القاموس» may change (path = keys / indexes down to 'ar')."""
+    if isinstance(v, dict):
+        if isinstance(v.get('ar'), str):
+            yield (*path, 'ar'), v['ar']
+            return
+        for k in v:
+            yield from strings(v[k], (*path, k))
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            yield from strings(x, (*path, i))
+
+
+def _context(text, start, end, width=50):
+    """The sentence around a match, cut to `width` characters each side."""
+    stops = '.!?؟\n'
+    a = max((text.rfind(c, 0, start) for c in stops), default=-1) + 1
+    b = min([x for x in (text.find(c, end) for c in stops) if x != -1] or [len(text)])
+    before, after = text[a:start].lstrip(), text[end:b + 1 if b < len(text) else b].rstrip()
+    if len(before) > width:
+        before = '…' + before[-width:]
+    if len(after) > width:
+        after = after[:width] + '…'
+    return before, after
+
+
+def scan(data, terms, module):
+    """«طبّق القاموس»: every avoided word in a draft, with its place and sentence."""
+    terms = [t for t in terms if applies(t, module)]
+    items = []
+    for path, text in strings(data):
+        for o in occurrences(text, terms):
+            before, after = _context(text, o['start'], o['end'])
+            items.append({'path': list(path), 'start': o['start'], 'end': o['end'], 'match': o['match'],
+                          'replacement': o['replacement'], 'avoid': o['avoid'],
+                          'preferred': o['term']['preferred'], 'why': o['term'].get('why', ''),
+                          'before': before, 'after': after})
+    return items
 
 
 def term_hints(note, after, kind, terms, module):
