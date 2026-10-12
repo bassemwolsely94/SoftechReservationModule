@@ -334,13 +334,14 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'السطر غير موجود'}, status=status.HTTP_404_NOT_FOUND)
         from apps.shortage.matching import find_best_matches
         top_n = min(int(request.query_params.get('top', 8)), 20)
-        name = (line.match_reason or {}).get('name_part') or line.raw_text
+        mr = line.match_reason or {}
+        # a line split into several products searches with the whole written line
+        name = mr.get('variant_of') or mr.get('name_part') or line.raw_text
         vc = _vendor_code(batch)
         matches = find_best_matches(name, top_n=top_n, min_score=0.15, vendor_code=vc)
         # items this supplier actually carries (itemssuppliers mirror) are marked, and win a
         # near-tie (within 0.05) — the score itself is never changed
-        from apps.catalog.supplier_links import carried_item_ids
-        carried = carried_item_ids(vc, [m['item_id'] for m in matches])
+        carried = av.carried_or_offered(vc, [m['item_id'] for m in matches])
         for m in matches:
             m['carried'] = m['item_id'] in carried
         matches.sort(key=lambda m: -(m['score'] + (0.05 if m['carried'] else 0)))
@@ -827,3 +828,37 @@ def supplier_code_report(request):
         resp['Content-Disposition'] = f'attachment; filename="supplier_codes_{days}d.xlsx"'
         return resp
     return Response(rep)
+
+
+# ── Supplier price comparison (apps/supply/comparison.py) ─────────────────────
+#   GET /api/supply/comparison/?days=14               the board (JSON)
+#   GET /api/supply/comparison/?days=14&format=xlsx   Excel
+#   GET /api/supply/comparison/network/<item_id>/     who supplies an item + 12-month buys
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def supplier_comparison(request):
+    from django.http import HttpResponse
+    from . import comparison
+    try:
+        days = max(1, min(60, int(request.query_params.get('days', comparison.OFFER_DAYS))))
+    except (TypeError, ValueError):
+        days = comparison.OFFER_DAYS
+    board = comparison.build_board(days=days)
+    if request.query_params.get('format') == 'xlsx':
+        from django.utils import timezone
+        resp = HttpResponse(comparison.to_excel(board),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = (f'attachment; filename="supplier_comparison_{days}d_'
+                                       f'{timezone.localdate():%Y-%m-%d}.xlsx"')
+        return resp
+    return Response(board)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def supplier_network(request, item_id):
+    from . import comparison
+    net = comparison.supplier_network([int(item_id)]).get(int(item_id))
+    if net is None:
+        return Response({'detail': 'الصنف غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(net)

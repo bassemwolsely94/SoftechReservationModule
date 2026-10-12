@@ -202,6 +202,28 @@ WORKFLOWS = [
             },
         ],
     },
+    # ── Gamification — reward redemption (apps/gamification/rewards.py) ─────
+    {
+        'code':             'gamification_reward',
+        'category':         'hr',
+        'name':             'Reward Redemption',
+        'name_ar':          'طلب مكافأة (نقاط التحفيز)',
+        'description':      'An employee spends gamification points on a catalog reward.',
+        'reject_terminates': True,
+        'sla_hours':        72,
+        'steps': [
+            {
+                'order': 1, 'name': 'Branch Manager Approval', 'name_ar': 'موافقة مدير الفرع',
+                'approver_role': 'supervisor', 'restrict_to_branch': True,
+                'escalation_hours': 24, 'on_reject': 'terminate',
+            },
+            {
+                'order': 2, 'name': 'Management Approval', 'name_ar': 'اعتماد الإدارة',
+                'approver_role': 'admin', 'restrict_to_branch': False,
+                'escalation_hours': 24, 'on_reject': 'terminate',
+            },
+        ],
+    },
     {
         'code':             'batch_quarantine',
         'name':             'Batch Quarantine Authorization',

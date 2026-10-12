@@ -3,7 +3,7 @@ from .models import (
     SeasonalityIndex, ForecastRun, ForecastAccuracy,
     ChannelBucketMap, BeautyClassRule, KpiActualRollup,
     ForecastScenario, ForecastFactor, ForecastResult,
-    BacktestRun, BacktestResult, CallCenterConfig, UnitCountExclusion,
+    BacktestRun, BacktestResult, CallCenterConfig, UnitCountExclusion, ProfitExclusion,
     MetricGuardrail,
 )
 
@@ -98,6 +98,14 @@ class CallCenterConfigAdmin(admin.ModelAdmin):
 
 @admin.register(UnitCountExclusion)
 class UnitCountExclusionAdmin(admin.ModelAdmin):
+    list_display  = ['item', 'note', 'active', 'created_at']
+    list_filter   = ['active']
+    search_fields = ['item__name', 'item__softech_id', 'note']
+    raw_id_fields = ['item']
+
+
+@admin.register(ProfitExclusion)
+class ProfitExclusionAdmin(admin.ModelAdmin):
     list_display  = ['item', 'note', 'active', 'created_at']
     list_filter   = ['active']
     search_fields = ['item__name', 'item__softech_id', 'note']

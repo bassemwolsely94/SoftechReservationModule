@@ -1,5 +1,8 @@
 from django.urls import path
-from .views import sync_status, trigger_sync, sync_logs, branch_health, scheduler_status
+from .views import (
+    sync_status, trigger_sync, sync_logs, branch_health, scheduler_status,
+    data_freshness,
+)
 
 urlpatterns = [
     path('status/', sync_status),
@@ -7,4 +10,5 @@ urlpatterns = [
     path('logs/', sync_logs),
     path('branch-health/', branch_health),
     path('scheduler-status/', scheduler_status),
+    path('freshness/', data_freshness),
 ]

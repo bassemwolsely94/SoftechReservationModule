@@ -1946,6 +1946,26 @@ def _insights_monthly():
     _run_insights('month')
 
 
+def _run_inflation_reminder():
+    """Monthly nudge (~11th, after CAPMAS publishes) to refresh the external Egypt urban
+    inflation figure that grounds the forecast references. Deduped per month."""
+    try:
+        from datetime import date
+        from apps.notifications.models import Notification
+        from apps.forecasting import references as R
+        refs = R.get() or {}
+        asof = refs.get('as_of', '—')
+        infl = float(refs.get('inflation_annual', 0)) * 100
+        Notification.send_to_admins(
+            'system', 'حدّث معدل التضخم للتنبؤ',
+            body=(f'راجع أحدث معدل تضخم حضري من CAPMAS وأدخله في القيم المرجعية للتنبؤ '
+                  f'(صفحة سيناريوهات التنبؤ). القيمة الحالية {infl:.1f}% محدّثة {asof}.'),
+            dedup_key=f'inflation_reminder_{date.today():%Y-%m}')
+        logger.info('[APScheduler] inflation reminder sent')
+    except Exception as exc:
+        logger.error('[APScheduler] inflation reminder failed: %s', exc)
+
+
 def _run_procurement_refresh():
     """Keep procurement.PurchaseLine current so the purchasing insight rules aren't stale.
     Short lookback (the engine upserts) — runs just before the daily insight report."""
@@ -1955,6 +1975,24 @@ def _run_procurement_refresh():
         logger.info('[APScheduler] procurement refresh done')
     except Exception as exc:
         logger.error('[APScheduler] procurement refresh failed: %s', exc)
+
+
+def _run_kpi_refresh():
+    """Rebuild the CURRENT month's branch + call-center KPI rollups so the KPI board,
+    forecast scenarios and sales targets stay fresh. The call-center step also pulls the
+    live Issabel CDR call-count automatically (once DB access is granted). Idempotent."""
+    try:
+        from django.core.management import call_command
+        from datetime import date
+        today = date.today()
+        call_command('build_kpi_rollups', year=today.year, month=today.month, verbosity=0)
+        try:
+            call_command('build_call_center_rollups', year=today.year, month=today.month, verbosity=0)
+        except Exception as cc:
+            logger.warning('[APScheduler] CC rollup step skipped: %s', cc)
+        logger.info('[APScheduler] KPI rollups refreshed for %s-%02d', today.year, today.month)
+    except Exception as exc:
+        logger.error('[APScheduler] KPI refresh failed: %s', exc)
 
 
 def _run_purchase_expiry_sync():
@@ -2097,6 +2135,37 @@ def _run_customer_status_drift():
                         r['open'], r['open_risk'], SD.notify(r))
     except Exception as exc:
         logger.error('[APScheduler] customer status drift failed: %s', exc)
+
+
+def _run_gamification(close_day=False):
+    """Gamification (recognition only): award points for recorded work. Every 30 min scores
+    today; nightly also closes yesterday (penalties for what was left behind, clean day,
+    streak). Reads our own tables only — never SOFTECH. Off with GAMIFICATION_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'GAMIFICATION_ENABLED', True):
+        return
+    try:
+        from apps.gamification import engine as G
+        r = G.run(days=1 if close_day else 0, finalize=close_day)
+        logger.info('[APScheduler] gamification%s: %s', ' day-close' if close_day else '', r)
+    except Exception as exc:
+        logger.error('[APScheduler] gamification failed: %s', exc)
+
+
+def _run_gamification_champions():
+    """1st of the month: crown last month's champions (بطل الشهر) — branch #1 per role,
+    network top 3 per role, branch of the month; bonus points + pinned announcement.
+    Idempotent (a month is crowned once). Off with GAMIFICATION_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'GAMIFICATION_ENABLED', True):
+        return
+    try:
+        from apps.gamification import champions as C
+        cm, created = C.crown(C.previous_month())
+        logger.info('[APScheduler] gamification champions %s: %s (new=%s)',
+                    cm.month, cm.summary, created)
+    except Exception as exc:
+        logger.error('[APScheduler] gamification champions failed: %s', exc)
 
 
 def _run_merge_candidates():
@@ -3053,6 +3122,19 @@ def start_scheduler():
         _reconcile_pos_orders, 'interval', minutes=5, id='pos_reconcile',
         replace_existing=True, max_instances=1, misfire_grace_time=120,
     )
+    # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
+    # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
+    # from the live Issabel CDR automatically once DB access is granted.
+    _scheduler.add_job(
+        _run_kpi_refresh, 'cron', hour=6, minute=30, id='kpi_refresh',
+        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+    )
+    # Monthly reminder (~11th) to refresh the external Egypt inflation figure that
+    # grounds the forecast references (CAPMAS publishes around the 10th).
+    _scheduler.add_job(
+        _run_inflation_reminder, 'cron', day=11, hour=9, minute=0, id='inflation_reminder',
+        replace_existing=True, max_instances=1, misfire_grace_time=86400,
+    )
     # Refresh procurement.PurchaseLine before the insight reports so the purchasing
     # rules (price-creep, supplier concentration, etc.) run on current data.
     _scheduler.add_job(
@@ -3118,6 +3200,21 @@ def start_scheduler():
     _scheduler.add_job(
         _run_merge_candidates, 'cron', day_of_week='sat', hour=5, minute=30, id='customer_merge_candidates',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Gamification — score today every 30 min; close yesterday at 00:20.
+    _scheduler.add_job(
+        _run_gamification, 'interval', minutes=30, id='gamification_score',
+        replace_existing=True, max_instances=1, misfire_grace_time=900,
+    )
+    _scheduler.add_job(
+        _run_gamification, 'cron', hour=0, minute=20, id='gamification_day_close',
+        kwargs={'close_day': True},
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_gamification_champions, 'cron', day=1, hour=1, minute=5,
+        id='gamification_champions', replace_existing=True, max_instances=1,
+        misfire_grace_time=6 * 3600,
     )
     # Gift-coupon lifecycle mirror + misuse digest — 06:20, after the overnight syncs.
     _scheduler.add_job(

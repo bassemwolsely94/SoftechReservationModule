@@ -1,17 +1,22 @@
 """
 Call-count from Issabel CDR  (doc 16, Phase 5)
 ==============================================
-Decoded + validated (2026-07-29) against the owner's Call-Center-KPIs workbook:
+Decoded + validated against the owner's Call-Center-KPIs workbook (CDR Report sheet,
+re-verified 2026-10-08 vs 7 complete months Feb–Aug 2026 — EXACT match):
 
-  outgoing answered calls to customers, counted as UNIQUE customers reached per day:
+  outgoing answered calls, counted as UNIQUE customers reached in the MONTH:
     • disposition == 'ANSWERED'
     • src ∈ call-center agent extensions (e.g. 10, 12, 15)
     • dst → an 11-digit Egyptian mobile: strip the 2-digit GoIP prefix
       (dst like '8201063650014' → last 11 digits '01063650014', must start with '01')
-    • metric = Σ over days of (distinct mobiles reached that day)   ← per-day distinct
+    • metric = COUNT(DISTINCT mobile) over the whole month   ← whole-month distinct
 
-Same logic feeds both the CSV importer and the live MySQL connector, so the number
-matches whether pulled from an export or the DB. May-2026 CSV → 1,905 (sheet ≈ 1,887).
+This is the owner's pivot "Grand Total" (a distinct-count grand total dedupes across
+the whole column, NOT the sum of the per-day/per-extension cells). Our per-(day,ext)
+distinct reproduces the sheet's visible cells exactly, and the whole-month distinct
+reproduces its Grand Total exactly (Feb 677 / May 1,851 / Jul 1,849 / Aug 1,961 …).
+Same logic feeds the CSV importer and the live MySQL connector. Pass per_day_distinct=
+True only for the (larger) sum-of-per-day-distinct variant.
 """
 import re
 
@@ -30,11 +35,12 @@ def extract_mobile(dst: str):
     return tail if tail.startswith('01') else None
 
 
-def count_calls(rows, extensions, *, per_day_distinct=True):
+def count_calls(rows, extensions, *, per_day_distinct=False):
     """
     rows: iterable of dicts with at least src/dst/disposition/calldate.
     extensions: iterable of agent phone extensions (strings).
-    Returns int call-count (unique customers reached), per-day-distinct summed.
+    Default (per_day_distinct=False) = whole-month distinct unique mobiles — matches the
+    owner's CDR-Report Grand Total exactly. per_day_distinct=True = Σ per-day distinct.
     """
     ext = {str(e) for e in extensions}
     if per_day_distinct:
@@ -58,8 +64,8 @@ def count_calls(rows, extensions, *, per_day_distinct=True):
     return len(seen)
 
 
-def count_calls_from_csv(path, extensions, *, per_day_distinct=True):
-    """Parse an Issabel CDR CSV export and return the call-count."""
+def count_calls_from_csv(path, extensions, *, per_day_distinct=False):
+    """Parse an Issabel CDR CSV export and return the call-count (whole-month distinct)."""
     import csv
     with open(path, encoding='utf-8', errors='replace', newline='') as f:
         rows = list(csv.DictReader(f))

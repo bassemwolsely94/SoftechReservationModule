@@ -72,6 +72,7 @@
 | `apps/whatsapp` / `apps/pbx` / `apps/omni` / `apps/social` | Comms stack (CEP / unified inbox) |
 | `apps/hr` / `apps/qa` | Geofenced attendance + branch QA (mobile) |
 | `apps/portal` | External customer PWA (magic-link auth) |
+| `apps/gamification` | Gamification (التحفيز): points ledger, levels/titles, badges, streaks, rankings, executive reports — recognition only ([29_GAMIFICATION.md](29_GAMIFICATION.md)) |
 
 ### Partially Complete Modules
 | App | Missing |

@@ -6,6 +6,7 @@ import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
 import CanDo from '../components/CanDo'
 import TransferModuleTabs from '../components/TransferModuleTabs'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -337,6 +338,11 @@ export default function TransfersPage() {
         </div>
 
       </div> {/* end sticky header */}
+
+      {/* Stock freshness — transfers depend on up-to-date branch stock levels */}
+      <div className="max-w-6xl mx-auto px-6 pt-4">
+        <DataFreshnessBar domains={['stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
+      </div>
 
       {/* ── Requests content ──────────────────────────────────────────────── */}
       {isLoading ? (

@@ -35,6 +35,9 @@ PT10_DEFAULTS = {
 
 BEAUTY_DEFAULTS = [('50', 'Cosmetics'), ('20', 'Others')]
 
+# Items removed from معامل الربحية (SOFTECH itemcode → reason). Owner-editable in admin.
+PROFIT_EXCLUSION_DEFAULTS = [('2', 'DLV — رسوم التوصيل (حصة مندوبى التوصيل)')]
+
 
 class Command(BaseCommand):
     help = 'Seed branch-KPI config (ChannelBucketMap + BeautyClassRule)'
@@ -84,6 +87,19 @@ class Command(BaseCommand):
                 medicine_type=mt, defaults={'label': label, 'active': True})
             b_created += int(was)
 
+        # Profit-metric exclusions (معامل الربحية): the DLV delivery-fee item (itemcode 2)
+        # — pure-margin fee the delivery staff take a daily cut of; owner removes the bias.
+        from apps.forecasting.models import ProfitExclusion
+        from apps.catalog.models import Item
+        p_created = 0
+        for code, note in PROFIT_EXCLUSION_DEFAULTS:
+            it = Item.objects.filter(softech_id=code).first()
+            if it:
+                _, was = ProfitExclusion.objects.get_or_create(
+                    item=it, defaults={'note': note, 'active': True})
+                p_created += int(was)
+
         self.stdout.write(self.style.SUCCESS(
             f'ChannelBucketMap: +{created} created, {updated} reset, {skipped} kept. '
-            f'BeautyClassRule: +{b_created} created.'))
+            f'BeautyClassRule: +{b_created} created. '
+            f'ProfitExclusion: +{p_created} created.'))

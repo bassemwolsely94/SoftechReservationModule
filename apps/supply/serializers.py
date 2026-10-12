@@ -15,7 +15,8 @@ class AvailabilityLineSerializer(serializers.ModelSerializer):
             'id', 'raw_text', 'item', 'item_name', 'item_softech_id',
             'match_score', 'match_reason', 'is_confirmed', 'is_unmatched',
             'supplier_qty', 'price', 'discount_pct', 'foc_qty', 'expiry',
-            'supplier_item_code', 'source', 'notes', 'split_from', 'created_at',
+            'supplier_item_code', 'bonus_buy', 'bonus_tiers', 'quota', 'promo', 'signals',
+            'source', 'notes', 'split_from', 'created_at',
         ]
         read_only_fields = ['match_reason', 'split_from', 'created_at']
 
@@ -25,8 +26,8 @@ class AvailabilityLineUpdateSerializer(serializers.ModelSerializer):
     alias-learning are handled in the view (so the corpus is taught vendor-scoped)."""
     class Meta:
         model = AvailabilityLine
-        fields = ['item', 'supplier_qty', 'price', 'discount_pct', 'foc_qty',
-                  'expiry', 'supplier_item_code', 'notes', 'is_confirmed']
+        fields = ['item', 'supplier_qty', 'price', 'discount_pct', 'foc_qty', 'bonus_buy',
+                  'quota', 'expiry', 'supplier_item_code', 'notes', 'is_confirmed']
 
 
 class AvailabilityBatchSerializer(serializers.ModelSerializer):

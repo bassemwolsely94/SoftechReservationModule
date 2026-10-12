@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import usePosHotkeys from '../hooks/usePosHotkeys'
 import CustomerMomentBar from '../components/CustomerMomentBar'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import CallPopBanner from '../components/CallPopBanner'
 import OffersPanel from '../components/OffersPanel'
 import PicSuggestions from '../components/PicSuggestions'
@@ -558,6 +559,8 @@ function HeaderBand({ P, onOpenCust, onOpenPic }) {
         <span title="تاريخ المستند" className="text-sm">📅</span>
         <input type="date" value={P.docDate} onChange={e => P.setDocDate(e.target.value)} className={`${sel} max-w-[8.5rem]`} title="تاريخ المستند" />
         <div className="flex-1" />
+        {/* Freshness of the mirror data POS prices/stock/customer lookups rely on */}
+        <DataFreshnessBar compact domains={['stock', 'catalog', 'customers']} />
         {P.loyalty?.points_balance != null && <span className="text-emerald-700 tabular-nums" title="نقاط الولاء">🎁 {P.loyalty.points_balance}</span>}
         <button onClick={toggleMore} title="حقول إضافية (خصم فكة · مسلسل · ملاحظات · ما يسدده المريض)"
                 className="h-8 px-2 rounded border text-xs text-gray-500 hover:bg-gray-50 shrink-0">{showMore ? '▾' : '⋯'} تفاصيل</button>

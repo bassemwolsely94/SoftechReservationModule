@@ -251,6 +251,18 @@ class AvailabilityLine(models.Model):
                                             verbose_name='البونص / الكمية المجانية')
     expiry            = models.CharField(max_length=20, blank=True, verbose_name='الصلاحية (كما وردت)')
     supplier_item_code = models.CharField(max_length=40, blank=True, verbose_name='كود المورد للصنف')
+    # Terms as distributors write them in their daily «الوارد» (owner 2026-10-07):
+    #   «25+1» / «18+2 … 36+4 … 106+14» → bonus: buy `bonus_buy` get `foc_qty` (tiers kept)
+    #   «كوته علبه / اثنين / خمسه / كوته 30» → quota = the most one pharmacy may order
+    #   «30t +7free» → promo pack (extra units inside the pack — not a bonus on the order)
+    #   «اخر كميه», «كميات محدوده», «بقاله فتره مكنش موجود», 🔥 … → signals
+    bonus_buy   = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True,
+                                      verbose_name='البونص: اشترِ')
+    bonus_tiers = models.JSONField(default=list, blank=True, verbose_name='شرائح البونص')   # [[buy, free], …]
+    quota       = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True,
+                                      verbose_name='الكوتة (أقصى طلب)')
+    promo       = models.CharField(max_length=60, blank=True, verbose_name='عرض داخل العبوة')
+    signals     = models.JSONField(default=list, blank=True, verbose_name='إشارات التوفر')
 
     source   = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='bulk',
                                 verbose_name='مصدر الإدخال')

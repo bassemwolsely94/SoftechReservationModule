@@ -324,6 +324,10 @@ export const syncApi = {
   logs:         () => api.get('/sync/logs/'),
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
+  // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
+  freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
+  // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').
+  triggerLane:  (lane) => api.post('/sync/trigger/', { lane }),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -406,6 +410,37 @@ export const personalApi = {
   setRevision:   (data) => api.post('/personal/revision/', data),
 }
 
+// ── Gamification (التحفيز) — own data open to all; reports/config gated server-side ──
+export const gamificationApi = {
+  me:          ()            => api.get('/gamification/me/'),
+  leaderboard: (params = {}) => api.get('/gamification/leaderboard/', { params }),
+  branches:    (params = {}) => api.get('/gamification/branches/', { params }),
+  rules:       ()            => api.get('/gamification/rules/'),
+  levels:      ()            => api.get('/gamification/levels/'),
+  badges:      (params = {}) => api.get('/gamification/badges/', { params }),
+  updateRule:  (key, data)   => api.patch(`/gamification/rules/${key}/`, data),
+  updateLevel: (n, data)     => api.patch(`/gamification/levels/${n}/`, data),
+  updateBadge: (key, data)   => api.patch(`/gamification/badges/${key}/`, data),
+  adjust:      (data)        => api.post('/gamification/adjust/', data),
+  run:         (data = {})   => api.post('/gamification/run/', data),
+  report:      (params = {}) => api.get('/gamification/reports/overview/', { params }),
+  exportReport:(params = {}) => api.get('/gamification/reports/export/', { params, responseType: 'blob' }),
+  changes:     ()            => api.get('/gamification/changes/'),
+  // reward catalog
+  rewards:      (params = {}) => api.get('/gamification/rewards/', { params }),
+  createReward: (data)        => api.post('/gamification/rewards/', data),
+  updateReward: (id, data)    => api.patch(`/gamification/rewards/${id}/`, data),
+  wallet:       ()            => api.get('/gamification/wallet/'),
+  redeem:       (data)        => api.post('/gamification/redemptions/', data),
+  redemptions:  (params = {}) => api.get('/gamification/redemptions/', { params }),
+  cancelRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/cancel/`, data),
+  fulfilRedemption: (id, data = {}) => api.post(`/gamification/redemptions/${id}/fulfil/`, data),
+  // monthly champions
+  champions:      (params = {}) => api.get('/gamification/champions/', { params }),
+  crownChampions: (data = {})   => api.post('/gamification/champions/crown/', data),
+  revokeChampion: (id, data)    => api.post(`/gamification/champions/${id}/revoke/`, data),
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export const targetsApi = {
@@ -418,6 +453,10 @@ export const targetsApi = {
 // Branch-KPI forecasting (doc 16)
 export const kpiApi = {
   board: (params = {}) => api.get('/forecasting/kpi-board/', { params }),
+  // Legacy-format target workbook (one sheet per model: a,b,avg) — forecast targets + achieved.
+  exportSheet: (params = {}) => api.get('/forecasting/kpi-board/export/', { params, responseType: 'blob' }),
+  // On-demand rebuild of the current month's branch + CC rollups (background).
+  refresh: () => api.post('/forecasting/kpi-board/refresh/'),
 }
 
 // Forecast scenarios (doc 16, Phase 3)
@@ -434,6 +473,17 @@ export const forecastApi = {
   // backtest — model accuracy on history
   backtestList:  ()      => api.get('/forecasting/backtest/'),
   backtestRun:   (data={})=> api.post('/forecasting/backtest/run/', data),
+  // full-scenario Excel export (per-KPI branch rows + totals + factors)
+  exportScenario:(id)    => api.get(`/forecasting/scenarios/${id}/export/`, { responseType: 'blob' }),
+  // grounded reference values (seasonality/benchmark/growth/inflation)
+  references:        ()      => api.get('/forecasting/references/'),
+  computeReferences: (data={})=> api.post('/forecasting/references/', data),
+  applyReferences:   (id)    => api.post(`/forecasting/scenarios/${id}/apply-references/`),
+  // profit-exclusion list (items removed from معامل الربحية)
+  profitExclusions:     ()        => api.get('/forecasting/profit-exclusions/'),
+  profitExclusionAdd:   (data)    => api.post('/forecasting/profit-exclusions/', data),
+  profitExclusionSet:   (id, data)=> api.patch(`/forecasting/profit-exclusions/${id}/`, data),
+  profitExclusionDel:   (id)      => api.delete(`/forecasting/profit-exclusions/${id}/`),
 }
 
 // Narrative insights / automated audit (doc 18)
@@ -739,6 +789,10 @@ export const supplyApi = {
   availHistory:   (id)            => api.get(`/supply/availability/${id}/history/`),
   freshness:      ()              => api.get('/supply/freshness/'),
   syncStock:      ()              => api.post('/supply/freshness/sync-stock/'),
+  // «مقارنة الموردين» — cross-supplier comparison of the daily «الوارد» lists (read-only)
+  comparison:      (days)        => api.get('/supply/comparison/', { params: { days } }),
+  comparisonExcel: (days)        => api.get('/supply/comparison/', { params: { days, format: 'xlsx' }, responseType: 'blob' }),
+  supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
   supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
   supplierCodeReportExcel: (days) => api.get('/supply/reports/supplier-codes/',
                                              { params: { days, format: 'xlsx' }, responseType: 'blob' }),

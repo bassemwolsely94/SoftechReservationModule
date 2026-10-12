@@ -48,9 +48,10 @@ class ParseAvailabilityLineTests(TestCase):
         self.assertEqual(p.supplier_qty, 3.0)
 
     def test_foc_n_plus_m(self):
+        # «10+2» is a bonus: buy 10 get 2 (owner 2026-10-07) — not "10 available"
         p = parse_availability_line('Zinnat 250 10+2')
-        self.assertEqual(p.supplier_qty, 10.0)
-        self.assertEqual(p.foc_qty, 2.0)
+        self.assertIsNone(p.supplier_qty)
+        self.assertEqual((p.bonus_buy, p.foc_qty, p.bonus_tiers), (10.0, 2.0, [[10.0, 2.0]]))
         self.assertEqual(p.name_part, 'Zinnat 250')
 
     def test_price_marker(self):
@@ -68,7 +69,7 @@ class ParseAvailabilityLineTests(TestCase):
         p = parse_availability_line('Nexium 20 +2 foc @ 100 egp')
         self.assertEqual(p.foc_qty, 2.0)
         self.assertEqual(p.price, 100.0)
-        self.assertEqual(p.supplier_qty, 20.0)
+        self.assertEqual(p.bonus_buy, 20.0)
         self.assertNotIn('foc', p.name_part.lower())    # keyword stripped from name
 
     def test_expiry_extracted(self):

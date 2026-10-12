@@ -555,6 +555,11 @@ function ItemPicks({ r, batchId, group, saving, onSetItems, locked }) {
   )
 }
 
+const SIGNAL_LABEL = {
+  last_qty: 'آخر كمية', limited: 'كمية محدودة', back_in_stock: 'رجع بعد غياب', scarce_variant: 'التركيز قليل',
+  hot: '🔥', flag: '🚩', quota: 'كوتة', half_quota: 'نصف كوتة',
+}
+
 const TRUST_TONE = (t) => (t >= 90 ? 'bg-emerald-500' : t >= 70 ? 'bg-amber-400' : 'bg-rose-500')
 
 function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, batchId, group, saving, locked, kb }) {
@@ -602,7 +607,17 @@ function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, bat
         <td className="py-1.5 px-2 text-center text-xs tabular-nums">{r.item_id && r.approvals ? r.approvals : '—'}</td>
         <td className="py-1.5 px-2 text-center">{q(r.supplier_qty)}</td>
         <td className="py-1.5 px-2 text-center text-xs">
-          {money(r.price)}{r.foc_qty ? <span className="text-emerald-700"> +{q(r.foc_qty)}</span> : ''}
+          {r.price != null || !r.foc_qty ? money(r.price) : ''}
+          {r.discount_pct ? <span className="text-content/60"> خصم {q(r.discount_pct)}%</span> : ''}
+          {r.bonus_tiers?.length ? (
+            <span className="text-emerald-700" title="بونص: اشترِ + مجاناً"> {r.bonus_tiers.map(([b, f]) => `${q(b)}+${q(f)}`).join(' · ')}</span>
+          ) : r.foc_qty ? <span className="text-emerald-700"> +{q(r.foc_qty)}</span> : ''}
+          {(r.quota != null || r.promo || r.signals?.length > 0) && (
+            <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
+              {r.quota != null && <Chip tone="amber" title="الكوتة: أقصى كمية لكل صيدلية">كوتة {q(r.quota)}</Chip>}
+              {r.promo && <Chip tone="teal" title="عرض داخل العبوة">{r.promo}</Chip>}
+              {(r.signals || []).map(s => <Chip key={s}>{SIGNAL_LABEL[s] || s}</Chip>)}
+            </div>)}
         </td>
         <td className="py-1.5 px-2 text-center text-xs">{money(r.offer_effective_cost)}</td>
         <td className="py-1.5 px-2 text-center">{q(r.required)}</td>
@@ -640,6 +655,8 @@ function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, bat
               <Chip tone="rose" title="اسم الدواء في الرسالة لا يطابق بداية اسم الصنف">قد يكون صنفاً آخر</Chip>)}
             {r.flags.includes('ambiguous') && (
               <Chip tone="amber" title="صنف من علامة تجارية أخرى حصل على درجة مقاربة — اختر يدوياً">أكثر من صنف محتمل</Chip>)}
+            {r.flags.includes('family') && (
+              <Chip tone="amber" title="المورد كتب «بتركيزاته / بأنواعه» — اقترحنا كل أصناف العائلة؛ أبقِ ما يعرضه فعلاً">كل الأنواع — راجع</Chip>)}
             {r.flags.includes('price_above_history') && (
               <Chip tone="amber" title={`أفضل صفقة سابقة ${money(r.better_historical_deal?.effective_cost)} (${r.better_historical_deal?.date || ''})`}>
                 أغلى من السابق {r.better_historical_deal?.gap_pct}%
