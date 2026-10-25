@@ -99,7 +99,8 @@ def _merge_tabs(base_tabs, edited_tabs):
 
 
 def _merge_tour(base_tour, edited_tour):
-    """Like tabs: the steps and their targets follow the code; trainers edit the text.
+    """Like tabs: the steps and their targets follow the code; trainers edit the text
+    (`text` = the one-line headline, `more` = the longer explanation under it).
     Matched by position AND target (a tour may point at the same element twice, e.g.
     "this is the list" then "open a row"); a step the code moved or replaced keeps the
     repo text."""
@@ -108,7 +109,11 @@ def _merge_tour(base_tour, edited_tour):
     for i, t in enumerate(base_tour or []):
         e = edited[i] if i < len(edited) else None
         ok = e and e.get('target') == t['target'] and (e.get('text') or {}).get('ar', '').strip()
-        out.append({**t, **({'text': e['text']} if ok else {})})
+        step = {**t, **({'text': e['text']} if ok else {})}
+        # the longer explanation («more»): the trainer's when they wrote one
+        if ok and isinstance(e.get('more'), dict) and (e['more'].get('ar') or '').strip():
+            step['more'] = e['more']
+        out.append(step)
     return out
 
 

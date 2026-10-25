@@ -215,7 +215,7 @@ function ScreenView({ screenKey, lang, go, index }) {
             </Link>
           )}
           {openRoute && data.tour?.length > 0 && (
-            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes), 400) }}
+            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title), 400) }}
                     className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
               👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
             </button>
@@ -398,7 +398,7 @@ function SystemTourButton({ lang }) {
   const flow = (data?.flows || []).find((f) => f.id === 'flow:general.system')
   if (!flow) return null
   return (
-    <button type="button" onClick={() => startTour(flow.id, flow.steps)} data-tour="general-help-center-system-tour"
+    <button type="button" onClick={() => startTour(flow.id, flow.steps, [], flow.title)} data-tour="general-help-center-system-tour"
             className="text-sm bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
       🧭 {lang === 'en' ? 'System tour' : 'جولة تعريفية بالنظام'}
     </button>

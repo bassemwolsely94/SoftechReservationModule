@@ -497,7 +497,7 @@ thead th {
   from { transform: translateY(8px); opacity: 0; }
   to   { transform: translateY(0);   opacity: 1; }
 }
-.tour-spot { animation: tour-zoom 420ms cubic-bezier(.2,.8,.2,1), tour-pulse 1.8s ease-in-out 420ms 2; }
+.tour-spot { animation: tour-zoom 420ms cubic-bezier(.2,.8,.2,1), tour-pulse 1.8s ease-in-out 420ms 3; }
 .tour-card { animation: tour-card-in 260ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .tour-spot, .tour-card { animation: none; }

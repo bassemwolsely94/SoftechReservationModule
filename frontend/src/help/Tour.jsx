@@ -7,6 +7,9 @@
  *   wait  — the step waits for the user to open that page (e.g. click a row → detail)
  *   nav   — open that page's side-menu group first, to point at its menu item
  *
+ * Each step has a one-line headline (`text`) and, under it, the longer explanation
+ * (`more`: what the button does, when to use it, what happens next, what to watch for).
+ *
  * Calm by design: started only on request, nothing blocks the page (the dimmed mask
  * ignores clicks, so the highlighted button can be pressed for real), Esc / «إنهاء»
  * ends it, and going to a page the tour does not expect ends it. A step whose element
@@ -19,8 +22,8 @@ import useLangStore from '../store/langStore'
 import useHelpStore from './helpStore'
 import { pick } from './text'
 
-const CARD_W = 320
-const PAD = 6
+const CARD_W = 400
+const PAD = 8
 
 const on = (pattern, path) => !!pattern && !!matchPath({ path: pattern, end: true }, path)
 
@@ -50,6 +53,8 @@ function TourBody({ tour }) {
   const isFlow = tour.key.startsWith('flow:')
   const [rect, setRect] = useState(null)
   const [tick, setTick] = useState(0)
+  const cardRef = useRef(null)
+  const [cardH, setCardH] = useState(220)
   const step = tour.steps[tour.i]
   const last = tour.i === tour.steps.length - 1
 
@@ -116,39 +121,69 @@ function TourBody({ tour }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [tour.i, last, endTour, tourStep, step.wait])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the card's real height (the explanation makes steps differ) for placing it
+  useLayoutEffect(() => {
+    if (cardRef.current) setCardH(cardRef.current.offsetHeight)
+  }, [tour.i, rect?.width, lang])
+
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const w = Math.min(CARD_W, vw - 24)
   let cardStyle
   if (rect && rect.height > vh * 0.6) {
     // a big element (a whole table/board): keep the card out of its way, bottom corner
-    cardStyle = { bottom: 24, left: 24, width: CARD_W }
+    cardStyle = { bottom: 16, left: 12, width: w }
   } else if (rect) {
-    const below = rect.top + rect.height + 12
-    const top = below + 180 < vh ? below : Math.max(12, rect.top - 12 - 180)
-    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - CARD_W / 2), vw - CARD_W - 12)
-    cardStyle = { top, left, width: CARD_W }
+    const below = rect.top + rect.height + PAD + 10
+    const above = rect.top - PAD - 10 - cardH
+    const top = below + cardH < vh - 8 ? below : above > 8 ? above : Math.max(8, vh - cardH - 8)
+    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - w / 2), vw - w - 12)
+    cardStyle = { top, left, width: w }
   } else {
-    cardStyle = { bottom: 24, left: Math.max(12, vw / 2 - CARD_W / 2), width: CARD_W }
+    cardStyle = { bottom: 16, left: Math.max(12, vw / 2 - w / 2), width: w }
   }
+  const more = pick(step.more, lang)
+  const pct = Math.round(((tour.i + 1) / tour.steps.length) * 100)
 
   return (
     <div className="fixed inset-0 z-[90] pointer-events-none" dir={en ? 'ltr' : 'rtl'} aria-live="polite">
       {rect ? (
-        <div key={tour.i} className="tour-spot absolute rounded-lg ring-2 ring-brand-400 transition-all duration-200"
+        <div key={tour.i} className="tour-spot absolute rounded-xl ring-4 ring-brand-500 transition-all duration-200"
              style={{
                top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2,
-               boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.45)',
-             }} />
+               boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.55), 0 0 24px 4px rgba(59, 130, 246, 0.45)',
+             }}>
+          <span className="absolute -top-3 -start-3 h-7 w-7 rounded-full bg-brand-600 text-white text-sm font-bold grid place-items-center shadow-lg tabnum">
+            {tour.i + 1}
+          </span>
+        </div>
       ) : (
         <div className="absolute inset-0 bg-slate-900/30" />
       )}
-      <div key={`card-${tour.i}`} className="tour-card absolute pointer-events-auto rounded-xl bg-surface border border-line shadow-xl p-4 space-y-3" style={cardStyle}>
-        <div className="flex items-center gap-2 text-[11px] text-faint">
-          <span className="font-bold text-brand-600">{en ? 'Show me' : 'اعرض لي'}</span>
-          <span className="tabnum">{tour.i + 1} / {tour.steps.length}</span>
-          <button type="button" onClick={endTour} className="ms-auto hover:text-content">{en ? 'End ✕' : 'إنهاء ✕'}</button>
+      <div key={`card-${tour.i}`} ref={cardRef}
+           className="tour-card absolute pointer-events-auto rounded-2xl bg-surface border-2 border-brand-300 shadow-2xl p-4 space-y-3"
+           style={cardStyle}>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[11px] text-faint">
+            <span className="font-bold text-brand-600 shrink-0">👆 {en ? 'Show me' : 'اعرض لي'}</span>
+            {tour.title && <span className="truncate text-muted">· {pick(tour.title, lang)}</span>}
+            <button type="button" onClick={endTour} className="ms-auto shrink-0 hover:text-content">{en ? 'End ✕' : 'إنهاء ✕'}</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+              <div className="h-full bg-brand-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[11px] text-muted tabnum shrink-0">
+              {en ? `Step ${tour.i + 1} of ${tour.steps.length}` : `خطوة ${tour.i + 1} من ${tour.steps.length}`}
+            </span>
+          </div>
         </div>
-        <p className="text-sm text-content leading-7 whitespace-pre-line">{pick(step.text, lang)}</p>
+        <p className="text-[15px] font-bold text-content leading-7 whitespace-pre-line">{pick(step.text, lang)}</p>
+        {more && (
+          <div className="text-[13px] text-muted leading-6 whitespace-pre-line border-s-4 border-brand-200 ps-3 max-h-[38vh] overflow-y-auto">
+            {more}
+          </div>
+        )}
         {!rect && (
           <p className="text-[11px] text-amber-700 leading-5">
             {en
@@ -170,10 +205,13 @@ function TourBody({ tour }) {
             </span>
           ) : (
             <button type="button" onClick={() => (last ? finish() : tourStep(tour.i + 1))}
-                    className="ms-auto text-xs bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700">
-              {last ? (en ? 'Done' : 'تمام') : (en ? 'Next' : 'التالي')}
+                    className="ms-auto text-sm font-semibold bg-brand-600 text-white rounded-lg px-5 py-1.5 hover:bg-brand-700">
+              {last ? (en ? 'Done ✓' : 'تمام ✓') : (en ? 'Next ←' : 'التالي ←')}
             </button>
           )}
+        </div>
+        <div className="text-[10px] text-faint">
+          {en ? 'Enter = next · Esc = end · you can press the highlighted part for real' : 'Enter = التالي · Esc = إنهاء · تقدر تضغط الجزء المعلَّم فعلاً'}
         </div>
       </div>
     </div>
@@ -184,5 +222,5 @@ function TourBody({ tour }) {
 export async function startScreenTour(screenKey) {
   const { data } = await helpApi.screen(screenKey, { log: '0' })
   const steps = data.tour_flow?.length ? data.tour_flow : data.tour
-  useHelpStore.getState().startTour(data.key, steps, data.routes)
+  useHelpStore.getState().startTour(data.key, steps, data.routes, data.title)
 }

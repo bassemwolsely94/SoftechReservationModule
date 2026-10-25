@@ -201,6 +201,9 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
                 </div>
                 <TField value={t.text} rows={2} required
                         onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? { ...x, text: v } : x)))} />
+                <div className="text-[10px] text-faint">الشرح الإضافي تحت السطر (إيه بيعمل الزر، إمتى تستخدمه، وبعدها إيه — اختياري)</div>
+                <TField value={t.more} rows={3}
+                        onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? { ...x, more: v } : x)))} />
               </div>
             ))}
           </div>

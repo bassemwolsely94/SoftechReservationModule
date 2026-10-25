@@ -262,6 +262,8 @@ def _validate_edit(data):
             for i, t in enumerate(data['tour']):
                 if not isinstance(t, dict) or not isinstance(t.get('target'), str) or not _is_t(t.get('text')):
                     errors.append(f'tour[{i}]: نص الخطوة مطلوب')
+                elif t.get('more') is not None and not _is_t(t['more'], required=False):
+                    errors.append(f'tour[{i}]: الشرح الإضافي: صيغة غير صالحة')
     if 'faq' in data:
         if not isinstance(data['faq'], list):
             errors.append('faq: يجب أن تكون قائمة')
@@ -421,6 +423,7 @@ def manual(request):
             out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
                                 'summary': m['summary'], 'workflows': m.get('workflows') or []})
         item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item['buttons'] = [{'text': t['text'], 'more': t.get('more')} for t in eff.get('tour') or []]
         item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
                     steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
                     tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])

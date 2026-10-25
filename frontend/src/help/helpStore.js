@@ -8,7 +8,7 @@
  *                             the page's tabs; the innermost one wins, and closing the
  *                             drawer falls back to the page tab.
  *   lang                    — help reading language; independent of the UI language
- *   tour                    — a running «اعرض لي» tour: { key, steps, i } (not persisted)
+ *   tour                    — a running «اعرض لي» tour: { key, steps, routes, title, i } (not persisted)
  *   seen                    — screen key → 'updated' date the user last read, for the
  *                             "new" dot (per browser; a convenience, not a record)
  */
@@ -28,7 +28,7 @@ const useHelpStore = create(
       tour: null,
 
       // routes: the screen's own pages (list + detail…) — moving between them keeps a screen tour going
-      startTour(key, steps, routes = []) { if (steps?.length) set({ tour: { key, steps, routes, i: 0 }, isOpen: false }) },
+      startTour(key, steps, routes = [], title = null) { if (steps?.length) set({ tour: { key, steps, routes, title, i: 0 }, isOpen: false }) },
       tourStep(i) { const t = get().tour; if (t) set({ tour: { ...t, i: Math.max(0, Math.min(i, t.steps.length - 1)) } }) },
       endTour() { set({ tour: null }) },
       open(key = null, tab = null) { set({ isOpen: true, forcedKey: key, forcedTab: tab }) },
