@@ -1,6 +1,6 @@
 # 30 — SOFTECH Load Reduction (connections & duplicate reads)
 
-**Status:** 🔍 AUDIT DONE (2026-10-12), code-grounded · plan awaiting owner approval · nothing changed yet.
+**Status:** ✅ PHASE 1 BUILT (2026-10-25) · Phase 2 waits on the read-only probe (§3) · Phase 3 not started.
 **Goal:** keep SOFTECH smooth by pulling each piece of data **once**, pulling only what
 **changed**, and opening **as few connections as possible** — without making any screen
 or report less fresh than it is today.
@@ -44,15 +44,15 @@ connection per branch (legitimate).
 
 ## 3. Plan
 
-### Phase 1 — quick wins (no change in data freshness, low risk)
+### Phase 1 — quick wins (no change in data freshness, low risk) — ✅ BUILT 2026-10-25
 | Step | Change | Fixes |
 |------|--------|-------|
-| 1.0 | **Measure first:** timing + row count + caller for every SOFTECH query and login (in `CursorWrapper` / `_connect_with_retry`), rolled up per job; «حمل SOFTECH» panel on `/sync`. | baseline for all steps |
-| 1.1 | Remove the duplicate POS job registrations and duplicate function definitions. | F7 |
-| 1.2 | Points sync: one connection for all chunks. | F6 |
-| 1.3 | ERP matcher: check the `InTransitTransfer` cache first; one shared connection per poll cycle for whatever still needs SOFTECH. | F4 |
-| 1.4 | Transit sync: stop re-reading documents in a final state (received + reconciled); fetch issued lines once per document. | F3 |
-| 1.5 | Live item search: cache each pattern's result for a few minutes; minimum query length. | F10 |
+| 1.0 | ✅ **Measure first:** `apps/sync/softech_load.py` — every login and query through `config/sybase.py` counted (time, rows, failures) per job/command/web + calling function, saved hourly in `SoftechLoadStat` (30 days). `GET /api/sync/softech-load/` (admin) + «حمل SOFTECH» panel on `/sync`. Not counted: raw `conn._conn` statements of writers (their logins are). | baseline for all steps |
+| 1.1 | ✅ One registration each (`pos_orders_flush`, `pos_orders_reconcile`); the shadowed first definitions removed; `test_scheduler_jobs`. | F7 |
+| 1.2 | ✅ One connection for all chunks; reconnect once on a dropped link. | F6 |
+| 1.3 | ✅ One shared connection per poll cycle; a dropped link is retried once and never recorded as "not found" (left pending). ⏸ Cache-first **not done**: the cache lacks the line `trans_time` and the SOFTECH user name the match stores. | F4 |
+| 1.4 | ✅ Final documents (received + receipt recorded + no discrepancy, or force-closed) answered from the cache between full passes; full pass every 24 h / after restart / `--full`. Mismatches and open documents re-read every run. | F3 |
+| 1.5 | ✅ Per-pattern cache: 3 min (found) / 1 min (nothing found); min length was already 2. | F10 |
 
 ### Phase 2 — pull only what changed (needs a read-only probe first)
 | Step | Change | Fixes |
