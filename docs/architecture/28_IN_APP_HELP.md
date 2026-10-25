@@ -47,6 +47,13 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   and `term_text` (avoided words in the help text being edited, ×count). Trainers' GET adds `uses`:
   how many screens' current help still use an avoided word (first 8, click → editor). Hints only — the
   glossary never rewrites text.
+- **«📖 طبّق القاموس»** in the screen help editor (`GlossaryApply.jsx`; pure draft edits in
+  `glossaryEdits.js`): `POST /api/help/glossary/scan/ {screen_key, data: draft}` (help/edit, read-only)
+  → every avoided word in the draft's Arabic text with `path` (keys down to `'ar'`), `start`/`end`,
+  `match`, `replacement` (prefix kept) and its sentence (`before`/`after`) — same matcher as the hints
+  (`notecheck.occurrences`). The trainer replaces or skips each one (or «استبدل الباقي»); a replacement
+  only happens if the text at that place is still the scanned word (else «افحص تاني»), later places in
+  the same text shift. Only the draft changes — the normal «حفظ» records it in `HelpRevision`.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.

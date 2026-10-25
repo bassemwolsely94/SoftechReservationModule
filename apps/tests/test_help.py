@@ -1424,3 +1424,57 @@ class GlossaryTests(TestCase):
         self.assertEqual(n.find_terms('خزنات', T), [])            # another word, not a prefix form
         self.assertEqual(n.fix_note('اتغيّر «الخزنة».', T), 'اتغيّر «الكاشير».')
         self.assertIsNone(n.fix_note('مفيش حاجة', T))
+
+
+class GlossaryApplyTests(TestCase):
+    """«طبّق القاموس»: the server lists every avoided word in a screen draft with its
+    place, sentence and replacement; it changes nothing (the editor applies accepted
+    ones to its draft and the normal save records them)."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('ga_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('ga_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+        self.t.post('/api/help/glossary/', {'preferred': 'الكاشير', 'avoid': ['الخزنة']}, format='json')
+        self.t.post('/api/help/glossary/', {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع'],
+                                            'modules': ['reservations']}, format='json')
+
+    def test_unit_places_and_apply(self):
+        from apps.help import notecheck as n
+        T = [{'preferred': 'الكاشير', 'avoid': ['الخزنة']}, {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع']}]
+        txt = 'روح للخزنة وادفع. بعدها الطلب يتأكد، وأمر بيع جديد. الكاشير هنا!'
+        occ = n.occurrences(txt, T)
+        self.assertEqual([(o['match'], o['replacement']) for o in occ],
+                         [('للخزنة', 'للكاشير'), ('الطلب', 'الحجز'), ('وأمر بيع', 'وحجز')])
+        self.assertTrue(all(txt[o['start']:o['end']] == o['match'] for o in occ))
+        self.assertEqual(n.apply(txt, occ), 'روح للكاشير وادفع. بعدها الحجز يتأكد، وحجز جديد. الكاشير هنا!')
+
+    def test_scan_screen_draft(self):
+        from apps.help.models import HelpOverride, HelpRevision
+        url = '/api/help/glossary/scan/'
+        draft = {'title': {'ar': 'لوحة الحجوزات', 'en': ''},
+                 'steps': [{'text': {'ar': 'افتح الطلب من الجدول. ثم ادفع في الخزنة', 'en': 'order'}, 'roles': ['x']}],
+                 'faq': [{'q': {'ar': 'فين الطلب؟', 'en': ''}, 'a': {'ar': 'في الكاشير', 'en': ''}}]}
+        self.assertEqual(self.ph.post(url, {'screen_key': 'reservations.board', 'data': draft}, format='json').status_code, 403)
+        r = self.t.post(url, {'screen_key': 'reservations.board', 'data': draft}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        items = r.json()['items']
+        self.assertEqual([(i['path'], i['match'], i['replacement']) for i in items], [
+            (['steps', 0, 'text', 'ar'], 'الطلب', 'الحجز'),
+            (['steps', 0, 'text', 'ar'], 'الخزنة', 'الكاشير'),
+            (['faq', 0, 'q', 'ar'], 'الطلب', 'الحجز'),
+        ])
+        first = items[0]
+        self.assertEqual((first['before'], first['after']), ('افتح ', ' من الجدول.'))
+        self.assertEqual(items[1]['before'], 'ثم ادفع في ')
+        # «طلب» is only avoided in reservations
+        r = self.t.post(url, {'screen_key': 'purchasing.supply', 'data': draft}, format='json')
+        self.assertEqual([i['match'] for i in r.json()['items']], ['الخزنة'])
+        # read-only: nothing saved
+        self.assertFalse(HelpOverride.objects.exists())
+        self.assertFalse(HelpRevision.objects.exclude(screen_key__startswith='glossary:').exists())
+        self.assertEqual(self.t.post(url, {'screen_key': 'nope', 'data': {}}, format='json').status_code, 404)
+        self.assertEqual(self.t.post(url, {'screen_key': 'reservations.board', 'data': []}, format='json').status_code, 400)
