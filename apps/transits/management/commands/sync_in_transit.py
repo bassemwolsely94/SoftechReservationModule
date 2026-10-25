@@ -94,6 +94,21 @@ _QUERY_ITEMS_LEGACY = """
 NEAR_EXPIRY_DAYS = 45   # keep in sync with InTransitTransfer.has_near_expiry
 
 
+# Documents in a final state (fully received without a mismatch, or force-closed)
+# are not re-read from SOFTECH on every run (doc 30 F3) — only once per
+# FINAL_RECHECK_HOURS (the first run after a scheduler restart is always full), so
+# a late correction in SOFTECH is still picked up the same day. Mismatches and
+# anything still open are re-read on every run, as before.
+FINAL_RECHECK_HOURS = 24
+_last_full_pass = None   # monotonic seconds; per process (the scheduler)
+
+
+def _full_pass_due(now=None) -> bool:
+    import time
+    now = time.monotonic() if now is None else now
+    return _last_full_pass is None or now - _last_full_pass >= FINAL_RECHECK_HOURS * 3600
+
+
 class Command(BaseCommand):
     help = (
         'Sync SOFTECH inter-branch transfers (doccode=125) into InTransitTransfer cache. '
@@ -115,6 +130,11 @@ class Command(BaseCommand):
                  'header scan so it can use the docdate index (stktransm has '
                  'no index on docnumber alone)',
         )
+        parser.add_argument(
+            '--full', action='store_true',
+            help='Re-read every document in the window from SOFTECH, including '
+                 'final (received / force-closed) ones — otherwise done once a day',
+        )
 
     def handle(self, *args, **options):
         days   = options['days']
@@ -135,8 +155,13 @@ class Command(BaseCommand):
             self.stderr.write(f'SOFTECH connection failed: {exc}')
             return
 
+        global _last_full_pass
+        import time
+        full = bool(options.get('full')) or bool(single) or _full_pass_due()
         try:
-            stats = self._sync(conn, days, single, single_date)
+            stats = self._sync(conn, days, single, single_date, full=full)
+            if full and not single:
+                _last_full_pass = time.monotonic()
         finally:
             try:
                 conn.close()
@@ -147,7 +172,9 @@ class Command(BaseCommand):
         msg = (
             f'[sync_in_transit] Done in {elapsed:.1f}s — '
             f'created={stats["created"]}, updated={stats["updated"]}, '
-            f'skipped={stats["skipped"]}, errors={stats["errors"]}'
+            f'skipped={stats["skipped"]}, errors={stats["errors"]}, '
+            f'final_not_reread={stats.get("final_cached", 0)}'
+            + (' (full pass)' if full else '')
         )
         self.stdout.write(msg)
         logger.info(msg)
@@ -158,8 +185,10 @@ class Command(BaseCommand):
         from config.sybase import get_sybase_connection
         return get_sybase_connection()
 
-    def _sync(self, conn, days: int, single_doc: str, single_date: str = '') -> dict:
-        """Main sync loop. Returns stats dict."""
+    def _sync(self, conn, days: int, single_doc: str, single_date: str = '',
+              full: bool = True) -> dict:
+        """Main sync loop. Returns stats dict. `full=False` answers final documents
+        from the cache instead of SOFTECH (see FINAL_RECHECK_HOURS)."""
         from django.db import transaction
         from apps.branches.models import Branch
         from apps.transits.models import (
@@ -168,7 +197,7 @@ class Command(BaseCommand):
         )
         from apps.transfers.models import TransferRequest
 
-        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
+        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'final_cached': 0}
 
         # ── Build branch lookup: softech_branch_id → Branch ──────────────────
         branch_map = {
@@ -226,6 +255,17 @@ class Command(BaseCommand):
 
         logger.info('[sync_in_transit] %d headers fetched from SOFTECH', len(rows))
 
+        # Final documents in the window: answered from the cache unless this is a
+        # full pass. received = SOFTECH receipt recorded and no discrepancy.
+        finals = {}
+        if not full:
+            for tt in (InTransitTransfer.objects
+                       .filter(Q(transit_status='force_closed')
+                               | (Q(transit_status='received', has_discrepancy=False)
+                                  & ~Q(erp_receipt_doc_number='') & ~Q(items_snapshot=[])))
+                       .filter(issue_date__gte=since)):
+                finals[(tt.erp_doc_number, tt.erp_supplying_branch_code)] = tt
+
         # (doc_num, supply_code) keys handled by the header-window loop below —
         # so the wide re-check pass afterwards can skip them (no double work).
         processed_keys: set = set()
@@ -260,26 +300,43 @@ class Command(BaseCommand):
                 # Authoritative destination from the 125 header itself
                 recv_code  = str(hdr[7] or '').strip() if len(hdr) > 7 else ''
 
-                # ── Detect receipt: the 25-doc at the destination whose
-                #    docnumber2 points back at this 125 ─────────────────────────
-                received_date, receipt_doc = self._detect_receipt(
-                    conn, doc_num, supply_code, recv_code, issue_date
-                )
+                final = finals.get((doc_num, supply_code))
+                if final is not None and recv_code in ('', final.erp_receiving_branch_code):
+                    # Final and unchanged header → no receipt / line queries; the
+                    # upsert below only refreshes local computed fields.
+                    stats['final_cached'] += 1
+                    received_date = final.erp_received_date
+                    receipt_doc = final.erp_receipt_doc_number
+                    items_data = final.items_snapshot
+                    item_count, total_qty = final.item_count, final.total_quantity
+                    received_items = []
+                    t_status = final.transit_status
+                else:
+                    t_status = None
 
-                # ── Get line items (issued / 125 side) ────────────────────────
-                items_data, item_count, total_qty = self._fetch_items(
-                    conn, doc_num, supply_code, branch_map, doccode='125'
-                )
-
-                # ── Reconcile against the receipt (25) document's own lines ───
-                received_items = []
-                if received_date and receipt_doc:
-                    received_items, _, _ = self._fetch_items(
-                        conn, receipt_doc, recv_code, branch_map, doccode='25'
+                if t_status is None:
+                    # ── Detect receipt: the 25-doc at the destination whose
+                    #    docnumber2 points back at this 125 ─────────────────────
+                    received_date, receipt_doc = self._detect_receipt(
+                        conn, doc_num, supply_code, recv_code, issue_date
                     )
 
+                    # ── Get line items (issued / 125 side) ────────────────────
+                    items_data, item_count, total_qty = self._fetch_items(
+                        conn, doc_num, supply_code, branch_map, doccode='125'
+                    )
+
+                    # ── Reconcile against the receipt (25) document's own lines
+                    received_items = []
+                    if received_date and receipt_doc:
+                        received_items, _, _ = self._fetch_items(
+                            conn, receipt_doc, recv_code, branch_map, doccode='25'
+                        )
+
                 # ── Determine transit status ──────────────────────────────────
-                if received_date and receipt_doc:
+                if t_status is not None:
+                    pass   # final document answered from the cache
+                elif received_date and receipt_doc:
                     # Only reconcile when we actually fetched the 25-side lines;
                     # an empty fetch must NOT be read as "everything missing".
                     if received_items:
