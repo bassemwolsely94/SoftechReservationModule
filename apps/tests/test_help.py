@@ -9,6 +9,7 @@ Two kinds of tests:
 """
 import importlib
 import re
+import unittest
 from pathlib import Path
 
 from django.apps import apps as django_apps
@@ -209,7 +210,7 @@ class HelpContentCoverageTests(SimpleTestCase):
             self.assertTrue(steps, where)
             for i, st in enumerate(steps):
                 w = f'{where}[{i}]'
-                self.assertTrue({'target', 'text'} <= set(st) <= {'target', 'text', 'route', 'wait', 'nav'}, w)
+                self.assertTrue({'target', 'text'} <= set(st) <= {'target', 'text', 'more', 'route', 'wait', 'nav'}, w)
                 if st['target'] not in anchors:
                     bad.append(f'{w}: {st["target"]}')
                 for f in ('route', 'wait'):
@@ -584,6 +585,32 @@ class TrainingEditTests(TestCase):
         self.assertEqual(tour[1]['text'], base[1]['text'])
         bad = c.put('/api/help/screens/reservations.board/', {'data': {'tour': [{'target': 'x'}]}}, format='json')
         self.assertEqual(bad.status_code, 400)
+
+    def test_tour_explanation_editable(self):
+        """`more` (the longer explanation under a step's headline): the trainer's when they
+        wrote one, else the repo's; a wrong shape is refused."""
+        c = self._client('admin', 'tr_more')
+        _, screens = registry.load()
+        base = screens['reservations.board']['tour']
+        edited = [{'target': base[0]['target'], 'text': base[0]['text'],
+                   'more': {'ar': 'شرح المدرب الأطول', 'en': 'Trainer explanation'}},
+                  {'target': base[1]['target'], 'text': base[1]['text'], 'more': {'ar': '', 'en': ''}}]
+        r = c.put('/api/help/screens/reservations.board/', {'data': {'tour': edited}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        tour = r.json()['tour']
+        self.assertEqual(tour[0]['more']['ar'], 'شرح المدرب الأطول')
+        self.assertEqual(tour[1].get('more'), base[1].get('more'))          # empty → repo text kept
+        bad = [{'target': base[0]['target'], 'text': base[0]['text'], 'more': 'نص'}]
+        self.assertEqual(c.put('/api/help/screens/reservations.board/', {'data': {'tour': bad}},
+                               format='json').status_code, 400)
+        # workflow tours too
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        cur = c.get(url).json()['current']
+        cur['steps'][1]['more'] = {'ar': 'شرح أطول للوحة', 'en': 'Longer board text'}
+        self.assertEqual(c.put(url, {'data': cur}, format='json').status_code, 200)
+        f = next(x for x in c.get('/api/help/modules/reservations/').json()['flows']
+                 if x['id'] == 'flow:reservations.lifecycle')
+        self.assertEqual(f['steps'][1]['more']['ar'], 'شرح أطول للوحة')
 
     def test_path_edit_applies_and_reverts(self):
         from apps.help.content import onboarding
@@ -1101,6 +1128,13 @@ class ChangeNoteTests(TestCase):
         self.c = APIClient()
         self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
         self.key = 'reservations.board'
+        # start from a screen without a developer note (the trainer's note is what is tested)
+        from unittest import mock
+        _, screens = registry.load()
+        patcher = mock.patch.dict(screens[self.key])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        screens[self.key].pop('change_note', None)
 
     def _note(self):
         idx = {s['key']: s for s in self.c.get('/api/help/').json()['screens']}
@@ -1478,3 +1512,30 @@ class GlossaryApplyTests(TestCase):
         self.assertFalse(HelpRevision.objects.exclude(screen_key__startswith='glossary:').exists())
         self.assertEqual(self.t.post(url, {'screen_key': 'nope', 'data': {}}, format='json').status_code, 404)
         self.assertEqual(self.t.post(url, {'screen_key': 'reservations.board', 'data': []}, format='json').status_code, 400)
+
+
+@unittest.skip('turned on when every module\'s tour explanations are written (batch in progress)')
+class TourExplanationTests(SimpleTestCase):
+    def setUp(self):
+        self.modules, self.screens = registry.load()
+
+    def test_every_tour_step_is_explained(self):
+        """Every «اعرض لي» step and every workflow-tour step carries a longer explanation
+        (`more`, shown under the headline), and every module has a desktop module tour."""
+        short, no_flow = [], []
+        for key, s in self.screens.items():
+            for i, st in enumerate(s.get('tour') or []):
+                m = st.get('more') or {}
+                if len((m.get('ar') or '').strip()) < 60 or not (m.get('en') or '').strip():
+                    short.append(f'{key}.tour[{i}]')
+        for mk, m in self.modules.items():
+            flows = m.get('flows') or []
+            if not any(not f.get('mobile') for f in flows):
+                no_flow.append(mk)
+            for f in flows:
+                for i, st in enumerate(f['steps']):
+                    mo = st.get('more') or {}
+                    if len((mo.get('ar') or '').strip()) < 60 or not (mo.get('en') or '').strip():
+                        short.append(f'{mk}.flows.{f["key"]}[{i}]')
+        self.assertEqual(short, [], 'Tour steps without a longer explanation (`more`)')
+        self.assertEqual(no_flow, [], 'Modules without a desktop module / workflow tour')

@@ -40,10 +40,10 @@ MODULE = {
                  'text': T('١) «+ برنامج جديد»: الاسم والفترة ودورة الاحتساب.',
                            '1) "+ New program": name, period and calculation cycle.'),
                  'more': T('اختار تاريخ البداية والنهاية ودورة الاحتساب (أسبوعي/شهري/مخصص).\n'
-                           '• لو مورد راعي البرنامج، سجّل اسمه ونسبة مساهمته — بتظهر في حساب العائد.\n'
+                           '• لو مورد راعي البرنامج، سجّل اسمه ونسبة مساهمته — بيتحفظوا مع البرنامج ويتنسخوا معاه.\n'
                            '• بعد الإنشاء بتتنقل لتبويب «القواعد» على طول.',
                            'Choose the start and end dates and the calculation cycle (weekly/monthly/custom).\n'
-                           '• If a supplier sponsors the program, record its name and share — it shows in the return calculation.\n'
+                           '• If a supplier sponsors the program, record its name and share — they are saved with the program and copied with it.\n'
                            '• After creating it you move straight to the "Rules" tab.')},
                 {'target': 'incentives-programs-list', 'route': '/incentives',
                  'text': T('أو اختار برنامج موجود من القائمة.',

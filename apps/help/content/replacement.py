@@ -1,5 +1,7 @@
 from . import T
 
+CHANGE_NOTE = T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour')
+
 MODULE = {
     'key': 'replacement', 'group': 'inventory', 'icon': '🔁',
     'title': T('بدل الروشتة وشراء أدوية العملاء', 'Prescription replacement & customer buy-back'),
@@ -30,6 +32,119 @@ MODULE = {
             {'key': 'reversed', 'label': T('معكوسة', 'Reversed'), 'desc': T('عُكست بقيود عكسية (الدفتر لا يُعدَّل أبداً).', 'Reversed with counter-entries (the ledger is never edited).')},
         ],
     }],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول بدل الروشتة', 'A tour of the Prescription replacement module'),
+            'summary': T('من قائمة حالات البدل ومؤشراتها، لتسجيل حالة جديدة (المريض والروشتة والأصناف)، لمساحة عمل الحالة: الرصيد والمتبقي وشريط التقدم والمستندات — '
+                         'وإزاي الحالة بتربط مستندات SOFTECH ببعض.',
+                         'From the list of replacement cases and its indicators, to recording a new case (patient, prescription and items), to the case workspace: balance, remaining, '
+                         'progress rail and documents — and how a case ties SOFTECH documents together.'),
+            'roles': ['admin', 'supervisor', 'purchasing', 'quality_manager', 'pharmacist'],
+            'steps': [
+                {'target': 'nav-replacement', 'nav': '/replacement',
+                 'text': T('نبدأ من «بدل الروشتة» في القائمة.',
+                           'Start at "Prescription replacement" in the menu.'),
+                 'more': T('البدل: عميل بيرجّع أدوية روشتته أو بيبيع لنا أدوية، فياخد «رصيد» يصرفه منتجات أو نقدي.\n'
+                           '• في SOFTECH الرصيد بيتسجّل فاتورة شراء على مورد افتراضي وبيتصرف بسند.\n'
+                           '• الموديول ده بيجمع كل مستندات الحالة الواحدة في مكان واحد ويكشف اللي ناقص.',
+                           'A replacement: a customer returns prescription medicines or sells us medicines and gets a "balance" to spend on products or cash.\n'
+                           '• In SOFTECH the balance is a purchase invoice on a virtual supplier, paid out by a voucher.\n'
+                           '• This module brings all of one case\'s documents together and flags what is missing.')},
+                {'target': 'replacement-cases-kpis', 'route': '/replacement',
+                 'text': T('المؤشرات: عدد الحالات وقيمة الأرصدة وإزاي اتصرفت.',
+                           'The indicators: number of cases, balance value and how it was spent.'),
+                 'more': T('• منتجات / نقداً / «صرف غير مصنّف» (سندات محتاجة تأكيد فواتير المنتجات).\n'
+                           '• «رصيد قائم فعلاً» = فلوس لسه للعملاء.\n'
+                           '• «يُحتمل سداده بسند غير مربوط» = غالباً اتدفع بس SOFTECH مربطش السند.\n'
+                           '• كل الأرقام بيحسبها السيرفر.',
+                           '• Products / cash / "unclassified" (vouchers needing product-invoice confirmation).\n'
+                           '• "Truly open balance" = money still owed to customers.\n'
+                           '• "Probably paid by an unlinked voucher" = likely paid, but SOFTECH never linked the voucher.\n'
+                           '• All figures are computed by the server.')},
+                {'target': 'replacement-cases-filters', 'route': '/replacement',
+                 'text': T('بحث بأي رقم، وفلاتر الفرع والمورد والحالة.',
+                           'Search by any number, and branch, supplier and status filters.'),
+                 'more': T('البحث بياخد رقم حالة أو PIC أو اسم أو موبايل أو أي رقم مستند أو كود صنف.\n'
+                           '• «برصيد فقط» و«باستثناءات فقط» بيوصلوك للحالات اللي محتاجة شغل.',
+                           'The search takes a case number, PIC, name, mobile, any document number or item code.\n'
+                           '• "With balance only" and "With exceptions only" take you to the cases that need work.')},
+                {'target': 'replacement-cases-new', 'route': '/replacement',
+                 'text': T('«➕ حالة جديدة» لتسجيل حالة بدل تشغيلية.',
+                           '"➕ New case" records a live replacement case.'),
+                 'more': T('الحالات القديمة متبنية من SOFTECH للقراءة بس؛ الحالة الجديدة بتمشي: تسجيل ← حساب ← اعتماد ← تنفيذ المستندات.\n'
+                           '• الإنشاء مسموح لأدوار وموظفين معيّنين، والسيرفر بيتحقق.\n'
+                           '• الخطوات الجاية بتوريك صفحة الحالة الجديدة.',
+                           'Old cases are rebuilt from SOFTECH read-only; a new case goes: record → calculate → approve → execute documents.\n'
+                           '• Creating is allowed only for certain roles and employees, and the server checks.\n'
+                           '• The next steps show the new case page.')},
+                {'target': 'replacement-new-type', 'route': '/replacement/new',
+                 'text': T('الفرع ونوع الحالة وطريقة التسوية.',
+                           'Branch, case type and settlement mode.'),
+                 'more': T('النوع: «روشتة تأمين من صرفنا»، «أدوية تأمين من خارج صرفنا»، أو «عميل غير تأمين يبيع أدوية».\n'
+                           '• التسوية: منتجات، نقدي، أو مختلط.\n'
+                           '• في روشتة التأمين تقدر تعلّم «الصنف ناقص / لا يمكن توفيره».',
+                           'Type: "our own insurance prescription", "insurance meds not dispensed by us" or "non-insurance customer selling meds".\n'
+                           '• Settlement: products, cash or mixed.\n'
+                           '• For an insurance prescription you can tick "item short / cannot be supplied".')},
+                {'target': 'replacement-new-patient', 'route': '/replacement/new',
+                 'text': T('كود المريض PIC ← روشتات التعاقد ← الأصناف وكمياتها.',
+                           'Patient PIC → contract prescriptions → items and quantities.'),
+                 'more': T('«عرض روشتات التعاقد للمريض» بيجيب فواتير التعاقد بتاعته في آخر 60 يوم.\n'
+                           '• اختار الفاتورة، علّم الأصناف اللي راجعة، واكتب كمية البدل (مش أكتر من كمية الروشتة).\n'
+                           '• لو مفيش فواتير تقدر تضيف الأصناف يدوي تحت.',
+                           '"Show patient\'s contract prescriptions" brings their contract invoices from the last 60 days.\n'
+                           '• Pick the invoice, tick the items being returned, and enter the replacement quantity (no more than the prescription quantity).\n'
+                           '• If there are no invoices you can add items manually below.')},
+                {'target': 'replacement-new-create', 'route': '/replacement/new',
+                 'text': T('«إنشاء الحالة» — والفلوس بيحسبها السيرفر بعدين.',
+                           '"Create case" — the server works out the money later.'),
+                 'more': T('الزر بيشتغل بعد اختيار الفرع وصنف واحد على الأقل، وجنبه عدد الأصناف وقيمة الجمهور التقريبية.\n'
+                           '• مفيش أي قيمة مالية بتتكتب هنا؛ الرصيد بيتحسب بـ «احسب» في صفحة الحالة.\n'
+                           '• (في الجولة مش هننشئ حالة.)',
+                           'The button works once a branch and at least one item are set; next to it are the item count and the approximate public value.\n'
+                           '• No money value is typed here; the balance is computed with "Calculate" on the case page.\n'
+                           '• (In this tour we will not create a case.)')},
+                {'target': 'replacement-cases-table', 'route': '/replacement', 'wait': '/replacement/:id',
+                 'text': T('افتح أي حالة من الجدول. لو الجدول فاضي اضغط «إنهاء».',
+                           'Open any case from the table. If the table is empty, press "End".'),
+                 'more': T('كل صف: رقم الحالة، المريض وPIC، المورد ونسبة الخصم، فاتورة الشراء، الرصيد وطريقة صرفه، والمتبقي بالأحمر لو لسه فيه.\n'
+                           '• «الثقة» = قد إيه الربط بين المستندات مؤكد.',
+                           'Each row: case number, patient and PIC, supplier and discount rate, purchase invoice, balance and how it was spent, and the remaining in red if any.\n'
+                           '• "Confidence" = how certain the link between documents is.')},
+                {'target': 'replacement-detail-header', 'route': '/replacement/:id',
+                 'text': T('رأس الحالة: الحالة والنوع والمريض والقيم.',
+                           'Case header: status, type, patient and values.'),
+                 'more': T('شارة «📜 تاريخية» = متبنية من SOFTECH للقراءة، و«🟢 حالة تشغيلية» = اتعملت من هنا وليها سير عمل.\n'
+                           '• تحت: سعر الجمهور، قيمة التعاقد، والخصم المطبّق.',
+                           'A "📜 Historical" badge = rebuilt from SOFTECH read-only; "🟢 Live case" = created here with a workflow.\n'
+                           '• Below: public price, contract value and the applied discount.')},
+                {'target': 'replacement-detail-balance', 'route': '/replacement/:id',
+                 'text': T('«الرصيد» و«المتبقي» منه.',
+                           'The "Balance" and its "Remaining".'),
+                 'more': T('المتبقي بالأحمر = رصيد لسه للعميل ماتصرفش؛ بالأخضر = اتصرف كله.\n'
+                           '• الرصيد بيحسبه السيرفر بالقاعدة، ومحدش بيكتبه بإيده.',
+                           'Remaining in red = balance still owed to the customer; in green = fully spent.\n'
+                           '• The balance is computed by the server by rule; nobody types it in.')},
+                {'target': 'replacement-detail-rail', 'route': '/replacement/:id',
+                 'text': T('شريط التقدم: الروشتة ← التعاقد ← الشراء ← الصرف ← استهلاك الرصيد ← المطابقة.',
+                           'The progress rail: prescription → contract → purchase → redemption → balance use → reconciliation.'),
+                 'more': T('كل خطوة ✓ لما مستندها يتلاقي ويتربط، و○ لسه.\n'
+                           '• أول ○ في الشريط بيقولك الحالة واقفة فين.',
+                           'Each step gets ✓ once its document is found and linked, ○ otherwise.\n'
+                           '• The first ○ on the rail tells you where the case is stuck.')},
+                {'target': 'replacement-detail-tabs', 'route': '/replacement/:id',
+                 'text': T('التبويبات: سير العمل، المستندات، الأصناف، دفتر الرصيد، الاستثناءات، والمطابقة.',
+                           'Tabs: workflow, documents, items, balance ledger, exceptions and reconciliation.'),
+                 'more': T('• «سير العمل» للحالات التشغيلية بس: «احسب» ← «إرسال للاعتماد» ← اعتماد من شخص غير منشئ الحالة ← تنفيذ المستندات.\n'
+                           '• «المستندات»: أكّد أو ارفض الربط المقترح.\n'
+                           '• «دفتر الرصيد» للإضافة بس: أي تصحيح بيبقى قيد عكسي.',
+                           '• "Workflow" for live cases only: "Calculate" → "Submit for approval" → approval by someone other than the creator → execute documents.\n'
+                           '• "Documents": confirm or reject a proposed link.\n'
+                           '• The "Balance ledger" is append-only: any correction is a counter-entry.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -48,20 +163,57 @@ SCREENS = [
         'tips': [T('«سندات تحتاج تأكيد فواتير المنتجات» = سندات صرف يُقترح ربطها بفواتير منتجات؛ أكّدها من صفحة الحالة.', '"Vouchers needing product-invoice confirmation" = vouchers proposed to link to product invoices; confirm them on the case page.')],
         'related': ['replacement.new', 'replacement.detail', 'finance.reconciliation'],
         'tour': [
-            {'target': 'replacement-cases-new', 'text': T('«➕ حالة جديدة».',
-                                              '"➕ New case".')},
-            {'target': 'replacement-cases-kpis', 'text': T('ملخص الحالات والأرصدة القائمة.',
-                                              'A summary of cases and open balances.')},
-            {'target': 'replacement-cases-exceptions', 'text': T('الاستثناءات المفتوحة — محتاجة مراجعة.',
-                                              'Open exceptions — they need review.')},
+            {'target': 'replacement-cases-new', 'text': T('«➕ حالة جديدة» لتسجيل حالة بدل تشغيلية.',
+                                              '"➕ New case" records a live replacement case.'),
+             'more': T('بيفتح صفحة تسجيل الحالة: النوع والمريض والروشتة والأصناف.\n'
+                       '• الإنشاء مسموح لأدوار وموظفين معيّنين بس، والسيرفر بيتحقق.\n'
+                       '• القيم المالية مش بتتكتب — بتتحسب في صفحة الحالة بعد الإنشاء.',
+                       'Opens the case entry page: type, patient, prescription and items.\n'
+                       '• Creating is allowed only for certain roles and employees, and the server checks.\n'
+                       '• Money values are not typed — they are computed on the case page after creation.')},
+            {'target': 'replacement-cases-kpis', 'text': T('ملخص الحالات والأرصدة وإزاي اتصرفت.',
+                                              'A summary of cases, balances and how they were spent.'),
+             'more': T('• «صرف غير مصنّف»: سندات محتاجة تأكيد فواتير المنتجات من صفحة الحالة.\n'
+                       '• «رصيد قائم فعلاً»: لسه للعملاء.\n'
+                       '• «قائم — يُحتمل سداده بسند غير مربوط»: غالباً اتدفع بس السند مش مربوط في SOFTECH — راجعه من «سداد الموردين».\n'
+                       '• الأرقام بتتبع الفلاتر.',
+                       '• "Unclassified": vouchers needing product-invoice confirmation on the case page.\n'
+                       '• "Truly open balance": still owed to customers.\n'
+                       '• "Open — probably paid by an unlinked voucher": likely paid but the voucher is not linked in SOFTECH — check it in "Supplier payments".\n'
+                       '• The numbers follow the filters.')},
+            {'target': 'replacement-cases-exceptions', 'text': T('الاستثناءات المفتوحة — اضغط نوع عشان تفلتر بيه.',
+                                              'Open exceptions — click a type to filter by it.'),
+             'more': T('كل شارة نوع استثناء وعدده، ولونها بيوضح الدرجة (معلومة، تحذير، مرتفع، حرج).\n'
+                       '• الضغط عليها يعرض الحالات اللي فيها الاستثناء ده بس، والضغط تاني يلغي الفلتر.\n'
+                       '• الشريط ده بيظهر بس لو فيه استثناءات مفتوحة.',
+                       'Each badge is an exception type and its count; its colour shows severity (info, warning, high, critical).\n'
+                       '• Clicking it shows only cases with that exception; clicking again clears the filter.\n'
+                       '• This strip only appears when there are open exceptions.')},
             {'target': 'replacement-cases-filters', 'text': T('بحث وفلاتر: الفرع، المورد، الحالة، برصيد، باستثناءات.',
-                                              'Search and filters: branch, supplier, status, with balance, with exceptions.')},
-            {'target': 'replacement-cases-table', 'text': T('الحالات — افتح أي حالة لتفاصيلها.',
-                                              'The cases — open one for its details.')},
+                                              'Search and filters: branch, supplier, status, with balance, with exceptions.'),
+             'more': T('البحث بأي رقم: حالة، PIC، اسم، موبايل، رقم مستند، أو كود صنف.\n'
+                       '• المورد: الموردين الافتراضيين بنسبهم (25%، 30%، 40%، 50%، عام).\n'
+                       '• الحالة: رصيد قائم، مستهلكة (تحتاج مراجعة)، أو مطابقة.',
+                       'Search by any number: case, PIC, name, mobile, document number or item code.\n'
+                       '• Supplier: the virtual suppliers with their rates (25%, 30%, 40%, 50%, general).\n'
+                       '• Status: open balance, used (needs review) or reconciled.')},
+            {'target': 'replacement-cases-table', 'text': T('الحالات — اضغط أي صف لفتح مساحة عمله.',
+                                              'The cases — click any row to open its workspace.'),
+             'more': T('كل صف: الرقم، المريض، الفرع، المورد والخصم، فاتورة الشراء، الرصيد، المصروف منتجات/نقدي/غير مصنّف، المتبقي، الوضع، والثقة.\n'
+                       '• المتبقي بالأحمر = لسه فيه رصيد.\n'
+                       '• عمود ⚠ = عدد الاستثناءات المفتوحة.',
+                       'Each row: number, patient, branch, supplier and discount, purchase invoice, balance, spent as products/cash/unclassified, remaining, state and confidence.\n'
+                       '• Remaining in red = balance still open.\n'
+                       '• The ⚠ column = number of open exceptions.')},
             {'target': 'replacement-cases-pager', 'text': T('التنقل بين الصفحات.',
-                                              'Move between pages.')},
+                                              'Move between pages.'),
+             'more': T('كل صفحة فيها 50 حالة، وجنبها رقم الصفحة وإجمالي عدد الحالات.\n'
+                       '• أي تغيير في الفلاتر بيرجعك لأول صفحة.',
+                       'Each page holds 50 cases, with the page number and the total case count.\n'
+                       '• Any filter change takes you back to page one.')},
         ],
-        'updated': '2026-10-10',
+        'change_note': CHANGE_NOTE,
+        'updated': '2026-10-25',
     },
     {
         'key': 'replacement.new',
@@ -74,17 +226,46 @@ SCREENS = [
         'related': ['replacement.detail'],
         'tour': [
             {'target': 'replacement-new-type', 'text': T('اختر الفرع ونوع الحالة وطريقة التسوية (منتجات/نقدي/مختلط).',
-                                              'Pick the branch, case type and settlement mode (products/cash/mixed).')},
+                                              'Pick the branch, case type and settlement mode (products/cash/mixed).'),
+             'more': T('النوع: «روشتة تأمين من صرفنا»، «أدوية تأمين من خارج صرفنا»، أو «عميل غير تأمين يبيع أدوية».\n'
+                       '• الفرع بيتحط فرعك تلقائي وتقدر تغيّره.\n'
+                       '• في روشتة التأمين بيظهر اختيار «الصنف ناقص / لا يمكن توفيره».',
+                       'Type: "our own insurance prescription", "insurance meds not dispensed by us" or "non-insurance customer selling meds".\n'
+                       '• The branch defaults to yours and you can change it.\n'
+                       '• For an insurance prescription, an "item short / cannot be supplied" option appears.')},
             {'target': 'replacement-new-patient', 'text': T('اكتب كود المريض PIC ثم «عرض روشتات التعاقد للمريض» واختر الروشتة والأصناف وكمياتها.',
-                                              'Enter the patient PIC, then «Show patient\'s contract prescriptions» and pick the prescription, items and quantities.')},
+                                              'Enter the patient PIC, then «Show patient\'s contract prescriptions» and pick the prescription, items and quantities.'),
+             'more': T('بيجيب فواتير التعاقد للمريض في آخر 60 يوم؛ اختار الفاتورة، وعلّم الأصناف الراجعة.\n'
+                       '• «كمية البدل» مش ممكن تزيد عن «كمية الروشتة».\n'
+                       '• لو مفيش فواتير بتظهر رسالة، وتقدر تضيف الأصناف يدوي في القسم اللي بعده.',
+                       'Brings the patient\'s contract invoices from the last 60 days; pick the invoice and tick the returned items.\n'
+                       '• "Replacement qty" cannot exceed "Prescription qty".\n'
+                       '• If there are none, a message says so and you can add items manually in the next section.')},
             {'target': 'replacement-new-extra-items', 'text': T('إضافة أصناف أخرى بالبحث (بدون روشتة أو من خارج صرفنا) مع الكمية.',
-                                              'Add other items by search (no prescription or not dispensed by us) with quantity.')},
+                                              'Add other items by search (no prescription or not dispensed by us) with quantity.'),
+             'more': T('ابحث عن الصنف واختاره، بيتضاف بكمية 1 وتقدر تعدّلها.\n'
+                       '• «حذف» يشيل الصنف من القائمة.\n'
+                       '• نفس الصنف مش بيتضاف مرتين.',
+                       'Search and pick the item; it is added with quantity 1, which you can change.\n'
+                       '• "Delete" removes the item from the list.\n'
+                       '• The same item is not added twice.')},
             {'target': 'replacement-new-refs', 'text': T('رقم الروشتة ورقم الموافقة والملاحظات (اختيارية).',
-                                              'Prescription number, approval number and notes (optional).')},
+                                              'Prescription number, approval number and notes (optional).'),
+             'more': T('أرقام مرجعية بتساعد المراجع يلاقي المستندات بسرعة بعدين.\n'
+                       '• اكتب في الملاحظات أي حاجة غير عادية في الحالة.',
+                       'Reference numbers that help the reviewer find the documents quickly later.\n'
+                       '• Write anything unusual about the case in the notes.')},
             {'target': 'replacement-new-create', 'text': T('«إنشاء الحالة» بعد اختيار الفرع وصنف واحد على الأقل؛ القيم المالية يحسبها السيرفر لاحقاً.',
-                                              '«Create case» once a branch and at least one item are set; the server calculates money values later.')},
+                                              '«Create case» once a branch and at least one item are set; the server calculates money values later.'),
+             'more': T('جنبه عدد الأصناف وقيمة الجمهور التقريبية (للمعلومة بس).\n'
+                       '• بعد الإنشاء بتتفتح صفحة الحالة كمسودة: هناك «احسب» ثم «إرسال للاعتماد».\n'
+                       '• لو فيه مشكلة (زي صلاحية) بتظهر رسالة بالأحمر.',
+                       'Next to it are the item count and the approximate public value (for information only).\n'
+                       '• After creation the case page opens as a draft: there you "Calculate" then "Submit for approval".\n'
+                       '• If there is a problem (such as permission) a red message appears.')},
         ],
-        'updated': '2026-10-11',
+        'change_note': CHANGE_NOTE,
+        'updated': '2026-10-25',
     },
     {
         'key': 'replacement.detail',
@@ -108,16 +289,45 @@ SCREENS = [
         'related': ['replacement.cases'],
         'tour': [
             {'target': 'replacement-detail-header', 'text': T('رأس الحالة: الرقم والحالة والنوع، المريض، الفرع والتعاقد، وقيم السعر والخصم.',
-                                              'Case header: number, status and type, patient, branch and contract, and price and discount values.')},
+                                              'Case header: number, status and type, patient, branch and contract, and price and discount values.'),
+             'more': T('• «📜 تاريخية»: متبنية من SOFTECH للقراءة بس.\n'
+                       '• «🟢 حالة تشغيلية v…»: اتعملت من هنا، والرقم بعد v هو نسختها — لو حد عدّلها قبلك هيظهر تعارض، أعد تحميل الصفحة.\n'
+                       '• «🔒 مقفلة»: مفيش تعديل عليها.',
+                       '• "📜 Historical": rebuilt from SOFTECH, read-only.\n'
+                       '• "🟢 Live case v…": created here; the number after v is its version — if someone changed it before you, a conflict shows; reload the page.\n'
+                       '• "🔒 Locked": it can no longer be edited.')},
             {'target': 'replacement-detail-balance', 'text': T('«الرصيد» المستحق و«المتبقي» منه؛ المتبقي بالأحمر يعني أنه لم يُستهلك بعد.',
-                                              'The «Balance» due and the «Remaining»; red remaining means it is not used up yet.')},
+                                              'The «Balance» due and the «Remaining»; red remaining means it is not used up yet.'),
+             'more': T('الرصيد بيحسبه السيرفر بالقاعدة ومحدش بيكتبه بإيده.\n'
+                       '• تحت الرأس شارات المصروف: منتجات، نقدي، غير مصنّف، وأي استثناء مفتوح.',
+                       'The balance is computed by the server by rule; nobody types it in.\n'
+                       '• Under the header are badges for what was spent: products, cash, unclassified, plus any open exception.')},
             {'target': 'replacement-detail-rail', 'text': T('شريط التقدم: الروشتة، فاتورة التعاقد، الشراء، الصرف، استهلاك الرصيد، والمطابقة.',
-                                              'The progress rail: prescription, contract invoice, purchase, redemption, balance use and reconciliation.')},
+                                              'The progress rail: prescription, contract invoice, purchase, redemption, balance use and reconciliation.'),
+             'more': T('✓ أخضر = المستند اتلاقى واتربط، ○ رمادي = لسه.\n'
+                       '• «استهلاك الرصيد» بيتعلّم لما المتبقي يبقى صفر.\n'
+                       '• أول ○ بيقولك الحالة واقفة فين.',
+                       'Green ✓ = the document was found and linked; grey ○ = not yet.\n'
+                       '• "Balance use" is ticked when the remaining reaches zero.\n'
+                       '• The first ○ tells you where the case is stuck.')},
             {'target': 'replacement-detail-tabs', 'text': T('التبويبات: سير العمل (للحالات التشغيلية فقط)، المستندات، الأصناف، دفتر الرصيد، الاستثناءات، والمطابقة.',
-                                              'Tabs: workflow (live cases only), documents, items, balance ledger, exceptions and reconciliation.')},
+                                              'Tabs: workflow (live cases only), documents, items, balance ledger, exceptions and reconciliation.'),
+             'more': T('• «سير العمل»: «احسب» ← «إرسال للاعتماد» ← اعتماد من معتمد مختص (منشئ الحالة مايعتمدهاش) ← تنفيذ المستندات ← «ترحيل».\n'
+                       '• «المستندات»: أكّد أو ارفض الربط المقترح.\n'
+                       '• «دفتر الرصيد» مابيتعدلش؛ التصحيح قيد عكسي.',
+                       '• "Workflow": "Calculate" → "Submit for approval" → approval by an authorized approver (not the creator) → execute documents → "Post".\n'
+                       '• "Documents": confirm or reject a proposed link.\n'
+                       '• The "Balance ledger" is never edited; a correction is a counter-entry.')},
             {'target': 'replacement-detail-rebuild', 'text': T('«⟳ إعادة البناء» يعيد بناء الحالة من بيانات SOFTECH بالقراءة فقط.',
-                                              '«⟳ Rebuild» rebuilds the case from SOFTECH data, read-only.')},
+                                              '«⟳ Rebuild» rebuilds the case from SOFTECH data, read-only.'),
+             'more': T('بيقرا مستندات الحالة من جديد من نسخة SOFTECH عندنا ويحدّث الربط — مابيكتبش أي حاجة في SOFTECH.\n'
+                       '• محتاج صلاحية تعديل، ولازم فاتورة الشراء تكون ظهرت في النسخة.\n'
+                       '• استخدمه لما مستند جديد يتسجّل في SOFTECH ومش ظاهر هنا.',
+                       'Reads the case documents again from our copy of SOFTECH and refreshes the links — it writes nothing to SOFTECH.\n'
+                       '• Needs edit permission, and the purchase invoice must already be in the copy.\n'
+                       '• Use it when a new document was recorded in SOFTECH and does not show here.')},
         ],
-        'updated': '2026-10-11',
+        'change_note': CHANGE_NOTE,
+        'updated': '2026-10-25',
     },
 ]

@@ -660,9 +660,9 @@ SCREENS = [
             {'target': 'analytics-referral-stats-apply', 'text': T('«تطبيق» يعيد تحميل الإحصاءات للفترة المحددة.',
                                               '«تطبيق» (Apply) reloads the statistics for the chosen period.'),
              'more': T('بيحسب في السيرفر من طلبات نقطة البيع اللي ليها طبيب مُحيل.\n'
-                       '• بيحسب بس الطلبات اللي اتبعتت أو اترحّلت لـ SOFTECH — المسودات والملغي مش داخلين.',
+                       '• بيحسب بس الطلبات المؤكدة (في انتظار الترحيل أو اترحّلت لـ SOFTECH) — المسودات والملغي مش داخلين.',
                        'It computes on the server from POS orders that have a referring doctor.\n'
-                       '• Only orders sent or posted to SOFTECH count — drafts and cancelled orders are excluded.')},
+                       '• Only committed orders count (queued for posting or posted to SOFTECH) — drafts and cancelled orders are excluded.')},
             {'target': 'analytics-referral-stats-summary', 'text': T('عدد الأطباء المُحيلين، عدد الطلبات، وإجمالي الصافي.',
                                               'Number of referring doctors, number of orders, and total net value.'),
              'more': T('ملخص سريع للفترة: كام طبيب بعتلنا مرضى، كام طلب، وقيمتهم الصافية.\n'
