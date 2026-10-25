@@ -30,13 +30,19 @@ MODULE = {
                            '• "Create and open" makes the document and opens it straight away to add lines.')},
                 {'target': 'commerce-documents-table', 'route': '/commerce',
                  'text': T('كل المستندات: الرقم، النوع، الجهة، التاريخ، الحالة، البنود، والإجمالي.', 'All documents: number, type, client, date, status, lines and total.'),
-                 'more': T('ارجع هنا لأي مستند قديم عشان تعدّله أو تصدّره تاني.',
-                           'Come back here for any earlier document to edit or export it again.')},
+                 'more': T('دي قائمة كل المستندات اللي اتعملت، الأحدث تاريخاً فوق.\n'
+                           '• ارجع هنا لأي مستند قديم عشان تفتحه وتراجعه أو تكمّل عليه.\n'
+                           '• عمود «الحالة» بيوضح حالة كل مستند (زي «draft» للمسودة).',
+                           'This is the list of every document created, newest date first.\n'
+                           '• Come back here to open any earlier document, review it or carry on with it.\n'
+                           '• The "Status" column shows each document\'s status (e.g. "draft").')},
                 {'target': 'commerce-documents-table', 'route': '/commerce', 'wait': '/commerce/documents/:id',
                  'text': T('افتح أي مستند — الجولة هتكمّل جوّاه. لو القائمة فاضية اضغط «إنهاء».',
                            'Open any document — the tour continues inside it. If the list is empty, press "End".'),
-                 'more': T('اضغط على أي صف (أو «فتح ←») يفتح محرر المستند.',
-                           'Click any row (or "Open ←") to open the document editor.')},
+                 'more': T('اضغط على أي صف (أو «فتح ←») يفتح محرر المستند، والجولة هتكمّل هناك لوحدها.\n'
+                           '• لو لسه مفيش مستندات، ابدأ واحد جديد الأول وبعدين ارجع للجولة.',
+                           'Click any row (or "Open ←") to open the document editor; the tour carries on there by itself.\n'
+                           '• If there are no documents yet, start a new one first and then come back to the tour.')},
                 {'target': 'commerce-editor-header', 'route': '/commerce/documents/:id',
                  'text': T('نوع المستند ورقمه والجهة والتاريخ ونسبة الضريبة.', 'The document type and number, client, date and VAT rate.'),
                  'more': T('لو المستند «شبكة توزيع» هتلاقي جدول فيه الأصناف صفوف وفروع الجهة أعمدة، وكل خلية كمية الفرع.\n'

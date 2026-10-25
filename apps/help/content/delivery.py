@@ -27,7 +27,7 @@ MODULE = {
              'next': ['assigned', 'cancelled']},
             {'key': 'assigned', 'label': T('تم التكليف', 'Assigned'), 'desc': T('كُلِّف سائق وينتظر قبوله.', 'A driver is assigned and must accept.'),
              'next': ['driver_accepted', 'cancelled']},
-            {'key': 'driver_accepted', 'label': T('السائق قبل الطلب', 'Driver accepted'), 'desc': T('السائق قبل وسيستلم من الفرع (يُطلب منه تفعيل الموقع).', 'The driver accepted and will collect from the branch (location required).'),
+            {'key': 'driver_accepted', 'label': T('السائق قبل الطلب', 'Driver accepted'), 'desc': T('السائق قبل وسيستلم من الفرع (الموقع بيتطلب عند «انطلقت» لو نطاق الفرع مفعّل).', 'The driver accepted and will collect from the branch (location is checked at "Set off" when the branch geofence is on).'),
              'next': ['out_for_delivery', 'cancelled']},
             {'key': 'out_for_delivery', 'label': T('في الطريق', 'Out for delivery'), 'desc': T('السائق في الطريق للعميل.', 'The driver is on the way.'),
              'next': ['delivered', 'partial_delivery', 'customer_unavailable', 'failed']},
@@ -295,7 +295,7 @@ SCREENS = [
                      'The driver\'s phone screen: today\'s orders in route order, with a call button and map, and the steps: accept → out → delivered with proof of delivery.'),
         'audience': T('السائقون (والمشرف للمتابعة).', 'Drivers (and supervisors to follow).'),
         'steps': [
-            T('«قبول الطلب» لكل طلب مكلَّف به — يطلب تفعيل الموقع لتأكيد الاستلام من الفرع.', '"Accept" each assigned order — location must be on to confirm pickup from the branch.'),
+            T('«قبول الطلب» لكل طلب مكلَّف به، وبعد الاستلام من الفرع «انطلقت 🚚» — ولو نطاق الفرع مفعّل، «انطلقت» محتاجة تفعيل الموقع وإنك تكون جنب الفرع.', '"Accept" each assigned order, then "Set off 🚚" after collecting from the branch — when the branch geofence is on, "Set off" needs your location on and you near the branch.'),
             T('«انطلقت» عند الخروج للعميل.', '"Out" when leaving for the customer.'),
             T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
               'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),

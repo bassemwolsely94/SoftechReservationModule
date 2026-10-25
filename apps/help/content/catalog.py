@@ -605,7 +605,7 @@ SCREENS = [
             {'key': 'customer', 'title': T('👤 توصيات العملاء', '👤 Customer recommendations'), 'body': T('ابحث عن عميل لترى توصياته الشخصية.', 'Search a customer to see their personal recommendations.')},
             {'key': 'history', 'title': T('🕓 سجل التشغيل', '🕓 Run history'), 'body': T('مرات تشغيل المحرك ونتائجها.', 'Engine runs and their results.')},
         ],
-        'steps': [{'text': T('«تشغيل المحرك» مع فترة الرصد والحد الأدنى للدعم والثقة.', '"Run engine" with the look-back period and minimum support and confidence.'), 'roles': ['admin', 'purchasing']}],
+        'steps': [{'text': T('«تشغيل المحرك» مع فترة الرصد والحد الأدنى للدعم والثقة.', '"Run engine" with the look-back period and minimum support and confidence.'), 'roles': ['admin', 'supervisor']}],
         'related': ['catalog.intelligence'],
         'tour': [
             {'target': 'catalog-recommendations-header', 'text': T('«محرك التوصيات الذكية»: اقترانات الأصناف والتوصيات الشخصية للعملاء.',

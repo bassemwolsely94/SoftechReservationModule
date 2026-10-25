@@ -9,7 +9,6 @@ Two kinds of tests:
 """
 import importlib
 import re
-import unittest
 from pathlib import Path
 
 from django.apps import apps as django_apps
@@ -1175,7 +1174,12 @@ class ChangeNoteTests(TestCase):
         p = StaffProfile.objects.get(user__username='cn_admin')
         p.user.date_joined = timezone.now() - timezone.timedelta(days=60)
         p.user.save(update_fields=['date_joined'])
-        items = {x['key']: x for x in self.c.get('/api/help/whats-new/').json()['items']}
+        # only this screen counts as changed (the card shows 20 items at most)
+        from apps.help import onboarding_views
+        real = onboarding_views._versions()
+        only = {k: (v if k == self.key else '2000-01-01') for k, v in real.items()}
+        with mock.patch('apps.help.onboarding_views._versions', return_value=only):
+            items = {x['key']: x for x in self.c.get('/api/help/whats-new/').json()['items']}
         self.assertEqual(items[self.key]['change_note']['ar'], 'عمود جديد')
 
 
@@ -1514,7 +1518,6 @@ class GlossaryApplyTests(TestCase):
         self.assertEqual(self.t.post(url, {'screen_key': 'reservations.board', 'data': []}, format='json').status_code, 400)
 
 
-@unittest.skip('turned on when every module\'s tour explanations are written (batch in progress)')
 class TourExplanationTests(SimpleTestCase):
     def setUp(self):
         self.modules, self.screens = registry.load()

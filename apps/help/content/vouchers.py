@@ -106,7 +106,7 @@ SCREENS = [
              'body': T('صرف قسيمة لعميل بالخطوات الأربع (الهاتف ← الرمز ← التحقق ← المستند). لو القسيمة مقصورة على أصناف، أكّد وجود صنف منها في الطلب.',
                        'Redeem a voucher for a customer in four steps (phone → code → verify → document). If it is limited to items, confirm one of them is in the order.')},
             {'key': 'documents', 'title': T('🏪 وثائق POS', '🏪 POS documents'),
-             'body': T('البحث عن مستند صرف، تعليمه «مُستخدَم» عند تنفيذ البيع، طباعته أو إرساله واتساب.', 'Find a redemption document, mark it "used" when the sale is done, print it or send it on WhatsApp.')},
+             'body': T('البحث عن مستند صرف، تفعيله بـ«✅ تفعيل الوثيقة (POS)» عند تنفيذ البيع، أو إرساله واتساب.', 'Find a redemption document, activate it with "✅ Activate document (POS)" when the sale is done, or send it on WhatsApp.')},
             {'key': 'report', 'title': T('📊 تقارير', '📊 Reports'), 'body': T('تقرير استخدام القسائم: عدد مرات الصرف والقيمة لكل قسيمة.', 'Voucher usage report: redemptions and value per voucher.')},
             {'key': 'coupons', 'title': T('🎟️ كوبونات الهدايا', '🎟️ Gift coupons'),
              'body': T('كوبونات الهدايا الورقية: ابحث بالسريال لترى تاريخه (شراء ← صرف لعميل ← تحويل لفرع ← استخدام)، و«اختبار فحص الكوبون في POS» لمعرفة هل سيُقبل.',
