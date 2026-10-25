@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
 import { format } from 'date-fns'
@@ -123,6 +124,100 @@ function BranchHealthPanel({ data, onProbe, probing }) {
           <p className="text-[11px] text-gray-400 mt-2">
             تُعتبر النقطة «منقطعة باستمرار» بعد فشل {chronic_threshold} محاولات متتالية.
           </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── SOFTECH load (doc 30): what we ask of SOFTECH, per job / code / server ──
+const LOAD_PERIODS = [[1, 'آخر ساعة'], [24, 'آخر 24 ساعة'], [168, 'آخر 7 أيام']]
+const LOAD_GROUPS = [['by_scope', 'حسب المهمة', 'scope'], ['by_caller', 'حسب الكود', 'caller'], ['by_node', 'حسب السيرفر', 'label']]
+const n0 = v => (v || 0).toLocaleString('en-US')
+const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `${n0(Math.round((ms || 0) / 1000))} ث`
+
+function scopeLabel(s) {
+  if (!s) return '—'
+  if (s === 'web') return 'الشاشات (طلبات المستخدمين)'
+  if (s.startsWith('job:')) return `مهمة مجدولة · ${s.slice(4)}`
+  if (s.startsWith('cmd:')) return `أمر يدوي · ${s.slice(4)}`
+  return s
+}
+
+function SoftechLoadPanel() {
+  const [hours, setHours] = useState(24)
+  const [group, setGroup] = useState('by_scope')
+  const { data, isLoading } = useQuery({
+    queryKey: ['softechLoad', hours],
+    queryFn: () => syncApi.softechLoad(hours).then(r => r.data),
+    refetchInterval: 60_000,
+  })
+  const t = data?.totals || {}
+  const [, , key] = LOAD_GROUPS.find(g => g[0] === group)
+  const rows = (data?.[group] || []).slice(0, 15)
+  const tile = (label, value, sub) => (
+    <div className="bg-gray-50 rounded-xl px-3 py-2">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-black text-gray-800 tabnum">{value}</div>
+      {sub && <div className="text-[11px] text-gray-400">{sub}</div>}
+    </div>
+  )
+  const seg = (options, value, onChange) => (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+      {options.map(([k, label]) => (
+        <button key={k} onClick={() => onChange(k)}
+          className={`px-2.5 py-1 text-xs font-bold rounded-md ${value === k ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+  return (
+    <div data-tour="admin-sync-softech-load">
+      <SectionTitle icon="📊">حمل SOFTECH — ما نطلبه من السيرفر</SectionTitle>
+      <div className="card space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {seg(LOAD_PERIODS, hours, setHours)}
+          {seg(LOAD_GROUPS, group, setGroup)}
+        </div>
+        {isLoading ? <SkeletonCard lines={3} /> : !data?.totals?.connects && !data?.totals?.queries ? (
+          <div className="text-sm text-gray-500">
+            {data?.enabled === false ? 'القياس متوقف (SOFTECH_LOAD_TELEMETRY=False).' : 'لا توجد قراءات بعد في هذه الفترة — تظهر خلال دقيقة من أول اتصال.'}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {tile('اتصالات (تسجيل دخول)', n0(t.connects), t.connect_failures ? `${n0(t.connect_failures)} فاشلة` : null)}
+              {tile('استعلامات', n0(t.queries), t.query_errors ? `${n0(t.query_errors)} فاشلة` : null)}
+              {tile('صفوف مسحوبة', n0(t.rows))}
+              {tile('زمن الاستعلامات', secs(t.query_ms), t.max_query_ms ? `أبطأ واحد ${secs(t.max_query_ms)}` : null)}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-100">
+                    <th className="text-right py-1.5">{LOAD_GROUPS.find(g => g[0] === group)[1].replace('حسب ', '')}</th>
+                    <th className="text-center">اتصالات</th>
+                    <th className="text-center">استعلامات</th>
+                    <th className="text-center">صفوف</th>
+                    <th className="text-center">الزمن</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-b border-gray-50">
+                      <td className="py-1.5 font-medium text-gray-700 max-w-[22rem] truncate" dir={group === 'by_caller' ? 'ltr' : undefined}
+                          title={r[key]}>{group === 'by_scope' ? scopeLabel(r.scope) : r[key]}</td>
+                      <td className="text-center tabnum">{n0(r.connects)}{r.connect_failures ? <span className="text-red-500"> ({n0(r.connect_failures)}✕)</span> : null}</td>
+                      <td className="text-center tabnum">{n0(r.queries)}</td>
+                      <td className="text-center tabnum">{n0(r.rows)}</td>
+                      <td className="text-center tabnum">{secs(r.query_ms)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -284,6 +379,9 @@ export default function SyncPage() {
           onProbe={() => probeMutation.mutate()}
           probing={probeMutation.isPending}
         />
+
+        {/* What we ask of SOFTECH (doc 30) */}
+        <SoftechLoadPanel />
 
         {/* Logs */}
         <div data-tour="admin-sync-logs">

@@ -1893,6 +1893,11 @@ def _write_heartbeat():
         )
     except Exception as exc:
         logger.debug('[scheduler] heartbeat write failed: %s', exc)
+    try:
+        from apps.sync import softech_load
+        softech_load.flush()   # save SOFTECH load counts at least once a minute
+    except Exception as exc:
+        logger.debug('[scheduler] softech load flush failed: %s', exc)
 
 
 def _run_segment_customers():
@@ -2862,6 +2867,14 @@ def start_scheduler():
     _slow_min = int(getattr(_dj_settings, 'SYNC_SLOW_MINUTES', 60))
 
     _scheduler = BackgroundScheduler(timezone='Africa/Cairo')
+    # File everything each job asks of SOFTECH under its job id (doc 30 telemetry).
+    from apps.sync import softech_load as _sl
+    _add_job = _scheduler.add_job
+
+    def _scoped_add_job(func, *args, **kwargs):
+        name = kwargs.get('id') or getattr(func, '__name__', 'job')
+        return _add_job(_sl.scoped(func, f'job:{name}'), *args, **kwargs)
+    _scheduler.add_job = _scoped_add_job
     # FAST lane — stock + sales + reactive hooks (cheap, high-frequency).
     _scheduler.add_job(
         run_fast_sync,

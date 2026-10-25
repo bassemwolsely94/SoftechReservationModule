@@ -422,6 +422,9 @@ SYBASE_SYNC_QUERY_TIMEOUT = config('SYBASE_SYNC_QUERY_TIMEOUT', default=300, cas
 # rarely. See apps/sync/tasks.py run_fast_sync / run_slow_sync.
 SYNC_FAST_MINUTES = config('SYNC_FAST_MINUTES', default=5, cast=int)
 SYNC_SLOW_MINUTES = config('SYNC_SLOW_MINUTES', default=60, cast=int)
+# SOFTECH load telemetry (doc 30): count logins / queries / rows per job and caller,
+# saved hourly in SoftechLoadStat and shown on /sync. Off under tests (they turn it on).
+SOFTECH_LOAD_TELEMETRY = config('SOFTECH_LOAD_TELEMETRY', default=not _RUNNING_TESTS, cast=bool)
 # Module SOFTECH writes are attributed to each approver's OWN real usercode
 # (synced from the SOFTECH users table). Repairs preserve the item's original
 # editor. No fabricated/service ERP user is used — every write maps to a real

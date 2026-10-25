@@ -324,6 +324,7 @@ export const syncApi = {
   logs:         () => api.get('/sync/logs/'),
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
+  softechLoad:  (hours = 24) => api.get('/sync/softech-load/', { params: { hours } }),
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
   // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').

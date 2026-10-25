@@ -265,13 +265,22 @@ def _branch_host(db_host, db_port):
     return host, (int(port) if port else db_port)
 
 
+def _load():
+    """Telemetry hooks (apps/sync/softech_load.py) — imported lazily, never fatal."""
+    from apps.sync import softech_load
+    return softech_load
+
+
 def _connect_with_retry(driver, jdbc_url, props, label=''):
     """driver.connect() with bounded retries for the flaky branch link."""
     last_exc = None
     for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
+        t0, failed = time.monotonic(), False
         try:
             return _guard(driver.connect(jdbc_url, props))
         except Exception as exc:
+            failed = True
+            _load().record_connect(label, (time.monotonic() - t0) * 1000, False)
             last_exc = exc
             logger.warning(
                 '[sybase] connect attempt %d/%d failed%s: %s',
@@ -280,6 +289,9 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
             )
             if attempt < SYBASE_CONNECT_ATTEMPTS:
                 time.sleep(SYBASE_CONNECT_RETRY_DELAY)
+        finally:
+            if not failed:
+                _load().record_connect(label, (time.monotonic() - t0) * 1000, True)
     raise last_exc
 
 
@@ -308,7 +320,7 @@ def get_sybase_connection(charset=None):
         pass
     jdbc_url = 'jdbc:sybase:Tds:' + host + ':' + str(port) + '/SOFTECHDB9'
     driver = SybDriver()
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ'))
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ'), node='HQ')
 
 
 def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=None):
@@ -351,7 +363,8 @@ def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=N
         pass
     jdbc_url = f'jdbc:sybase:Tds:{db_host}:{db_port}/{db_name}'
     driver   = SybDriver()
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=f'branch {db_host}'))
+    label = f'branch {db_host}'
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=label), node=label)
 
 
 def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
@@ -386,7 +399,10 @@ def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
             DriverManager.setLoginTimeout(lt)
         except Exception:
             pass
-        conn = SybDriver().connect(jdbc_url, props)   # single attempt (no retry)
+        try:
+            conn = SybDriver().connect(jdbc_url, props)   # single attempt (no retry)
+        finally:
+            _load().record_connect(f'probe {host}', (time.time() - t0) * 1000, conn is not None)
         stmt = conn.createStatement()
         _apply_query_timeout(stmt, lt)
         rs = stmt.execute('SELECT 1')
@@ -503,8 +519,9 @@ def _convert_date(val):
 
 
 class CursorWrapper:
-    def __init__(self, java_conn):
+    def __init__(self, java_conn, node=''):
         self._conn      = java_conn
+        self._node      = node
         self._rs        = None
         self._stmt      = None
         # Cached column-type list — populated lazily after execute(); persists
@@ -531,7 +548,15 @@ class CursorWrapper:
         """
         self._col_types = None   # reset cached metadata for the new result set
         self._rs        = None   # default: no result set until confirmed
+        t0 = time.monotonic()
+        try:
+            self._execute(sql, params, timeout)
+        except Exception:
+            _load().record_query(self._node, (time.monotonic() - t0) * 1000, False)
+            raise
+        _load().record_query(self._node, (time.monotonic() - t0) * 1000, True)
 
+    def _execute(self, sql, params, timeout):
         if params:
             # PreparedStatement: driver substitutes ? at the JDBC level
             self._stmt = self._conn.prepareStatement(sql)
@@ -633,32 +658,37 @@ class CursorWrapper:
         """
         if self._rs is None:
             return []
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
         rows = []
         for _ in range(size):
             if not self._rs.next():
                 break
             rows.append(self._convert_row(col_types))
+        _load().record_fetch(self._node, len(rows), (time.monotonic() - t0) * 1000)
         return rows
 
     def fetchall(self):
         """Fetch all remaining rows from the current result set."""
         if self._rs is None:
             return []
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
         rows = []
         while self._rs.next():
             rows.append(self._convert_row(col_types))
+        _load().record_fetch(self._node, len(rows), (time.monotonic() - t0) * 1000)
         return rows
 
     def fetchone(self):
         """Fetch the next single row, or None if exhausted or absent."""
         if self._rs is None:
             return None
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
-        if self._rs.next():
-            return self._convert_row(col_types)
-        return None
+        row = self._convert_row(col_types) if self._rs.next() else None
+        _load().record_fetch(self._node, 1 if row is not None else 0, (time.monotonic() - t0) * 1000)
+        return row
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -670,11 +700,12 @@ class CursorWrapper:
 
 
 class ConnectionWrapper:
-    def __init__(self, java_conn):
+    def __init__(self, java_conn, node=''):
         self._conn = java_conn
+        self.node  = node
 
     def cursor(self):
-        return CursorWrapper(self._conn)
+        return CursorWrapper(self._conn, self.node)
 
     # ── Real transaction control (opt-in; used only by audited writeback paths) ──
     # Reads remain autocommit. A caller that needs atomicity wraps its statements:
@@ -773,8 +804,9 @@ class SoftechConnector:
 
         jdbc_url = f'jdbc:sybase:Tds:{host}:{port}/SOFTECHDB9'
         driver = SybDriver()
-        java_conn = _connect_with_retry(driver, jdbc_url, props, label=f'profile {self._profile}')
-        self._conn = ConnectionWrapper(java_conn)
+        label = 'HQ' if host == settings.SYBASE_HOST else f'profile {self._profile}'
+        java_conn = _connect_with_retry(driver, jdbc_url, props, label=label)
+        self._conn = ConnectionWrapper(java_conn, node=label)
         logger.debug('[SoftechConnector] connected profile=%s host=%s', self._profile, host)
         return self
 

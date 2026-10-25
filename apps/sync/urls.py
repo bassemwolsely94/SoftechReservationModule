@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     sync_status, trigger_sync, sync_logs, branch_health, scheduler_status,
-    data_freshness,
+    data_freshness, softech_load,
 )
 
 urlpatterns = [
@@ -11,4 +11,5 @@ urlpatterns = [
     path('branch-health/', branch_health),
     path('scheduler-status/', scheduler_status),
     path('freshness/', data_freshness),
+    path('softech-load/', softech_load),
 ]
