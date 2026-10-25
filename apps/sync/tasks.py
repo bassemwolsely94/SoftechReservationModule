@@ -2666,34 +2666,6 @@ def _sync_crm_delivery_orders():
         logger.error('[APScheduler] crm_delivery_sync failed: %s', exc)
 
 
-def _reconcile_pos_orders():
-    """
-    APScheduler job — reconcile pushed Indirect-POS orders vs the branch DBs every
-    5 minutes (read-only settlement detection). Delegates to reconcile_pos_orders.
-    Non-fatal: errors are logged but never crash the scheduler.
-    """
-    try:
-        from django.core.management import call_command
-        call_command('reconcile_pos_orders', verbosity=0)
-        logger.info('[APScheduler] pos_orders_reconcile completed')
-    except Exception as exc:
-        logger.error('[APScheduler] pos_orders_reconcile failed: %s', exc)
-
-
-def _flush_pos_orders():
-    """
-    APScheduler job — retry POS orders queued while the branch/SOFTECH was unreachable.
-    Idempotent + serial-allocated-at-write, so retries can never duplicate a document.
-    No-op unless POS_WRITER_ENABLED. Non-fatal.
-    """
-    try:
-        from django.core.management import call_command
-        call_command('flush_pos_orders', verbosity=0)
-        logger.info('[APScheduler] pos_orders_flush completed')
-    except Exception as exc:
-        logger.error('[APScheduler] pos_orders_flush failed: %s', exc)
-
-
 def _sync_insurance_cache():
     """Daily insurance cache sync — motalba + companiesitems last-90-days mirror."""
     try:
@@ -3125,16 +3097,8 @@ def start_scheduler():
         misfire_grace_time=30,
     )
 
-    # POS writeback resilience — flush orders queued during a SOFTECH/branch outage,
-    # then reconcile pushed→settled. Both are no-ops when POS_WRITER_ENABLED is off.
-    _scheduler.add_job(
-        _flush_pos_orders, 'interval', minutes=2, id='pos_flush_queued',
-        replace_existing=True, max_instances=1, misfire_grace_time=60,
-    )
-    _scheduler.add_job(
-        _reconcile_pos_orders, 'interval', minutes=5, id='pos_reconcile',
-        replace_existing=True, max_instances=1, misfire_grace_time=120,
-    )
+    # (POS flush + reconcile are registered once above as pos_orders_flush /
+    #  pos_orders_reconcile — a second copy here made them run twice; doc 30 F7.)
     # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
     # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
     # from the live Issabel CDR automatically once DB access is granted.
