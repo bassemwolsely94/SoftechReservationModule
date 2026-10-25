@@ -1742,10 +1742,57 @@ def _poll_erp_matches():
         'supplying_branch', 'requesting_branch',
     )
 
+    # One SOFTECH login for the whole cycle (doc 30 F4 — was one per transfer).
+    # If the shared connection drops, reconnect and retry that transfer once, so a
+    # lost link is never recorded as "document not found".
+    from config.sybase import get_sybase_connection
+    shared = {'conn': None}
+
+    def _conn():
+        if shared['conn'] is None:
+            shared['conn'] = get_sybase_connection()
+        return shared['conn']
+
+    def _drop():
+        if shared['conn'] is not None:
+            try:
+                shared['conn'].close()
+            except Exception:
+                pass
+        shared['conn'] = None
+
+    try:
+        return _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                                      ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage)
+    finally:
+        _drop()
+
+
+def _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                           ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage):
     checked = 0
     for tr in pending_qs:
         try:
-            result = ERPMatcher(tr).run()
+            try:
+                conn = _conn()
+            except Exception as exc:
+                logger.warning(f'_poll_erp_matches: SOFTECH not reachable, stopping cycle: {exc}')
+                break
+            matcher = ERPMatcher(tr, conn=conn)
+            result = matcher.run()
+            if matcher.shared_conn_failed:
+                _drop()
+                try:
+                    matcher = ERPMatcher(tr, conn=_conn())
+                except Exception as exc:
+                    logger.warning(f'_poll_erp_matches: reconnect failed, stopping cycle: {exc}')
+                    break
+                result = matcher.run()
+                if matcher.shared_conn_failed:
+                    _drop()
+                    logger.warning(f'_poll_erp_matches: SOFTECH error on retry for TR {tr.request_number}; '
+                                   f'left pending for the next cycle')
+                    continue
             apply_match_result(tr, result)
 
             match_status = result['status']
