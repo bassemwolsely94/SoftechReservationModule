@@ -458,6 +458,11 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
                         results.append(exp_r)
                         already_ids.add(exp_r['softech_id'])
 
+        if request.query_params.get('network') == '1':
+            from apps.catalog.pos_search import enrich_rows, stock_as_of
+            enrich_rows(results, branch_id)
+            return Response({'results': results, 'count': len(results),
+                             'stock_as_of': stock_as_of()})
         return Response({'results': results, 'count': len(results)})
 
 
