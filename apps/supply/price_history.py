@@ -285,20 +285,23 @@ def to_excel(board) -> bytes:
     def buy(b):
         return (b or {}).get('name', ''), (b or {}).get('discount_pct'), (b or {}).get('date', '')
 
+    from apps.catalog import item_columns as IC
+    items = IC.load_items(codes=[r['code'] for r in board['items']])
     rows = []
     for r in board['items']:
         ln, ld, ldt = buy(r['last'])
         bn, bd, bdt = buy(r['best'])
         wn, wd, _ = buy(r['best_warehouse'])
-        rows.append([r['code'], r['name'], r['producer'], r['public_price'], r['monthly_rate'], r['n_suppliers'],
+        rows.append([r['code'], r['name'], *IC.item_cells(items.get(r['code'])), r['monthly_rate'], r['n_suppliers'],
                      r['state_label'], r['paid_pct'], ln, ld, ldt, bn, bd, bdt, r['gap_pct'], r['saving_month'], wn, wd,
                      ' · '.join(f"{c['name']} {c['discount_pct']}% ({c['date']})" for c in r['suppliers'])])
     sheet(wb.active, 'الأصناف',
-          ['الكود', 'الصنف', 'الشركة المنتجة', 'سعر الجمهور الحالي', 'معدل البيع/شهر', 'عدد الموردين', 'الحالة',
+          ['الكود', 'الصنف', *IC.ITEM_HEADS, 'معدل البيع/شهر', 'عدد الموردين', 'الحالة',
            'متوسط خصمنا الفعلي %', 'آخر شراء من', 'خصمه %', 'تاريخه', 'الأفضل', 'خصمه %', 'تاريخه', 'الفرق (نقطة %)',
            'التوفير/شهر',
            'أفضل مخزن', 'خصمه %', 'كل الموردين (آخر خصم)'],
-          rows, [9, 34, 18, 11, 10, 9, 14, 10, 22, 8, 11, 22, 8, 11, 9, 11, 18, 8, 80])
+          rows, [9, 34, *IC.ITEM_WIDTHS, 10, 9, 14, 10, 22, 8, 11, 22, 8, 11, 9, 11, 18, 8, 80])
+    IC.style_columns(wb.active, 3)
     sheet(wb.create_sheet(), 'الموردين',
           ['المورد', 'الفئة', 'أصناف اشترينا منه', 'الأفضل في', 'أرخص من آخر شراء في', 'متوسط آخر خصم %',
            'قيمة المشتريات'],
@@ -318,6 +321,7 @@ def to_excel(board) -> bytes:
         f'• متوسط خصمنا الفعلي = متوسط خصم كل مشترياتنا من الموردين المعتمدين آخر {board["stale_days"]} يوماً، مرجَّحاً بالكمية.',
         f'• «يوجد أرخص» = آخر خصم لدى أفضل مورد (شراء خلال آخر {board["stale_days"]} يوماً) أعلى من متوسط خصمنا الفعلي بأكثر من {board["better_pct"]:g} نقطة. التوفير/شهر = الفرق × سعر الجمهور الحالي × معدل البيع الشهري للشبكة.',
         f'• آخر شراء أقدم من {board["stale_days"]} يوماً = سعر قديم؛ والشراء بسعر جمهور مختلف عن الحالي معلَّم «سعر قديم».',
+        IC.ITEM_NOTE,
         '• للقراءة فقط — لا يكتب شيئاً في SOFTECH.',
     ], start=1):
         notes.cell(i, 1, t).font = Font(name='Arial', size=11 if i > 1 else 13, bold=(i == 1))

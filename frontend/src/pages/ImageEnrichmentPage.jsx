@@ -137,7 +137,7 @@ function CandidateCard({ c, onApprove, onReject, loading }) {
       )}
 
       {/* Image preview */}
-      <div style={{flexShrink:0}}>
+      <div style={{flexShrink:0}} data-tour="catalog-images-watermark">
         <img src={imgUrl} alt={c.item_name}
              style={{width:120,height:120,objectFit:'contain',borderRadius:8,
                      border:'1.5px solid #e2e8f0',background:'#f8fafc'}}
@@ -177,8 +177,8 @@ function CandidateCard({ c, onApprove, onReject, loading }) {
 
         {/* Actions */}
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>
-          <button style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>
+          <button data-tour="catalog-images-approve" style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>
+          <button data-tour="catalog-images-reject" style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>
           {c.source_page_url && (
             <a href={c.source_page_url} target="_blank" rel="noreferrer"
                style={{...btn('#6b7280',true,true),textDecoration:'none'}}>
@@ -214,7 +214,7 @@ function DashboardTab() {
 
   return (
     <div>
-      <div data-tour="catalog-images-stats" style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}} data-tour="catalog-images-stats">
         {stats.map(s=>(
           <div key={s.label} style={{...card,flex:1,minWidth:120,textAlign:'center',margin:0}}>
             <div style={{fontSize:26,fontWeight:700,color:s.color}}>{s.value}</div>
@@ -280,7 +280,7 @@ function ReviewQueueTab({ onGallery }) {
   return (
     <div>
       {/* Filters row */}
-      <div data-tour="catalog-images-review-filters" style={{...card, padding:'14px 20px'}}>
+      <div style={{...card, padding:'14px 20px'}} data-tour="catalog-images-review-filters">
         <div style={{display:'flex',gap:16,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:13,fontWeight:600}}>فلتر العرض</div>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
@@ -363,7 +363,7 @@ function BatchLaunchTab({ meta }) {
           <div style={{fontSize:12,fontWeight:600,marginBottom:4,color:'#374151'}}>
             حد الموافقة التلقائية: {Math.round(threshold*100)}%
           </div>
-          <input type="range" min={0.5} max={1.0} step={0.05} value={threshold}
+          <input data-tour="catalog-images-batch-threshold" type="range" min={0.5} max={1.0} step={0.05} value={threshold}
                  onChange={e=>setThreshold(+e.target.value)} style={{width:'100%'}}/>
           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#94a3b8',marginTop:2}}>
             <span>50% — أقل تحفظاً (موافقة أسرع)</span>
@@ -379,7 +379,7 @@ function BatchLaunchTab({ meta }) {
         </div>
 
         <div style={{marginTop:12}}>
-          <button style={btn('#2563eb')} onClick={launch} disabled={loading}>
+          <button data-tour="catalog-images-batch-launch" style={btn('#2563eb')} onClick={launch} disabled={loading}>
             {loading ? 'جارٍ الإطلاق…' : `🚀 إطلاق لـ ${filters.limit} منتج`}
           </button>
         </div>
@@ -451,7 +451,7 @@ function ReviseTab({ meta }) {
         </div>
 
         <div style={{marginTop:12}}>
-          <button style={btn('#dc2626')} onClick={launch} disabled={loading}>
+          <button data-tour="catalog-images-revise" style={btn('#dc2626')} onClick={launch} disabled={loading}>
             {loading ? 'جارٍ الإطلاق…' : `🔄 مراجعة ${filters.limit} منتج (بما فيها ذات الصور)`}
           </button>
         </div>
@@ -670,7 +670,7 @@ function ItemImageManager({ item, onClose }) {
       </div>
 
       {/* Sub-tabs */}
-      <div style={{display:'flex', gap:0, borderBottom:'1px solid #e2e8f0', padding:'0 8px',
+      <div data-tour="catalog-images-gallery-panels" style={{display:'flex', gap:0, borderBottom:'1px solid #e2e8f0', padding:'0 8px',
                    background:'#fff', flexShrink:0}}>
         {panelTab('approved',   '🖼️ الصور المعتمدة', images.length)}
         {panelTab('candidates', '🔍 المرشحون', pendingCount)}
@@ -1010,7 +1010,7 @@ function GalleryTab({ initialItemId = '' }) {
                      borderBottom:'1px solid #e2e8f0', flexShrink:0}}>
           <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>🖼️ إدارة صور المنتجات</div>
           {/* Search input */}
-          <input placeholder="ابحث باسم المنتج أو الكود…" value={q}
+          <input data-tour="catalog-images-gallery-search" placeholder="ابحث باسم المنتج أو الكود…" value={q}
                  onChange={e => setQ(e.target.value)}
                  style={{...input, marginBottom:8}}/>
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:8}}>

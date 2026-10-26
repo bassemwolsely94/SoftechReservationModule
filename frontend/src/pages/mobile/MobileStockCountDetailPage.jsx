@@ -12,6 +12,7 @@ import { stockCountApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -81,9 +82,9 @@ export default function MobileStockCountDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/stock-count')} className="text-sm text-gray-500">→ الرجوع للجلسات</button>
+      <button onClick={() => navigate('/m/stock-count')} className="text-sm text-gray-500">{ba()} الرجوع للجلسات</button>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="stockcount-mobile-progress">
         <div className="flex items-center justify-between gap-2">
           <h1 className="font-bold text-base text-gray-900">{s.name || s.title || `جرد #${s.id}`}</h1>
           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{s.status_label || s.status}</span>
@@ -101,7 +102,7 @@ export default function MobileStockCountDetailPage() {
 
       {/* Live count entry */}
       {canCount ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5" data-tour="stockcount-mcount-scan">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5" data-tour="stockcount-mobile-count">
           <h2 className="font-semibold text-gray-700 text-sm">📷 جرد صنف (مسح/بحث)</h2>
           <ItemSearchWidget selected={item} onSelect={(it) => { setItem(it); setError(''); setTimeout(() => qtyRef.current?.focus(), 50) }} onClear={() => setItem(null)} />
           {item && (
@@ -111,7 +112,7 @@ export default function MobileStockCountDetailPage() {
                 <input ref={qtyRef} type="number" min="0" inputMode="decimal" className="input-field w-full"
                   value={qty} onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCount() }} />
               </div>
-              <button onClick={submitCount} disabled={busy} data-tour="stockcount-mcount-save" className="btn-primary px-5 py-2.5 disabled:opacity-50">
+              <button onClick={submitCount} disabled={busy} data-tour="stockcount-mobile-save" className="btn-primary px-5 py-2.5 disabled:opacity-50">
                 {busy ? '...' : 'تسجيل'}
               </button>
             </div>
@@ -144,7 +145,7 @@ export default function MobileStockCountDetailPage() {
       {!['draft', 'snapshot_taken', 'exported'].includes(s.status) && (
         <>
           <input className="input-field w-full" placeholder="بحث في الأصناف..." value={search} onChange={e => setSearch(e.target.value)} />
-          <div className="flex gap-2" data-tour="stockcount-mcount-variance-filters">
+          <div className="flex gap-2" data-tour="stockcount-mobile-filters">
             {FILTERS.map(f => (
               <button key={f.v} onClick={() => setVariance(f.v)}
                 className={`flex-1 px-2 py-1.5 rounded-full text-xs font-medium ${variance === f.v ? 'bg-brand-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{f.l}</button>

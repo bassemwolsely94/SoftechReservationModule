@@ -12,6 +12,7 @@ import useHelpStore from '../help/helpStore'
 import { useHelpIndex } from '../help/useHelpIndex'
 import { Workflow } from '../help/HelpArticle'
 import { pick, itemText, label } from '../help/text'
+import { fa } from '../utils/flowArrow'
 
 const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
   'quality_manager', 'viewer', 'admin']
@@ -58,7 +59,7 @@ export default function HelpManualPage() {
 
       {/* controls — not printed */}
       <div className="no-print sticky top-0 z-10 bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap items-center gap-3 text-sm">
-        <a href="/help" className="text-brand-600 hover:underline" data-tour="general-help-manual-back">→ {label('guide', lang)}</a>
+        <a href="/help" className="text-brand-600 hover:underline" data-tour="general-help-manual-back">{fa()} {label('guide', lang)}</a>
         <select value={role} onChange={(e) => set('role', e.target.value)} data-tour="general-help-manual-role" className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by role —' : '— حسب الدور —'}</option>
           {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r][en ? 1 : 0]}</option>)}

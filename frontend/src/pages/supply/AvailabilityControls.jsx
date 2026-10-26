@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi, supplyApi } from '../../api/client'
-import { Chip, btnGhost, btnPrimary, errText, fmtDate, inputCls } from './supplyUi'
+import { Chip, btnGhost, btnPrimary, errText, fmtDate, inputCls, SortTh, useSort } from './supplyUi'
 import ProgressBar from '../../components/ProgressBar'
 
 export function fmtAge(min) {
@@ -28,7 +28,9 @@ const FRESH = [
   ['stock', 'الأرصدة', 'آخر مزامنة لأرصدة الفروع (stkbal)'],
   ['sales', 'المبيعات', 'آخر مزامنة لحركات البيع (stktrans)'],
   ['items', 'بيانات الأصناف', 'آخر مزامنة لكتالوج الأصناف والباركود'],
+  ['purchases', 'المشتريات', 'آخر تحديث لفواتير الشراء المحفوظة من SOFTECH'],
 ]
+const DEFAULT_DOMAINS = ['rates', 'stock', 'sales', 'items']
 
 export function useFreshness() {
   return useQuery({
@@ -37,16 +39,17 @@ export function useFreshness() {
     // poll fast only while a sync / engine run is in flight
     refetchInterval: (query) => {
       const d = query?.state?.data
-      return d && (d.engine_running || d.sync_running) ? 8000 : 120000
+      return d && (d.engine_running || d.sync_running || d.purchases_running) ? 8000 : 120000
     },
   })
 }
 
-export function FreshnessBar({ onRefreshed }) {
+// domains = which freshness chips (and their refresh buttons) a screen shows
+export function FreshnessBar({ onRefreshed, domains = DEFAULT_DOMAINS }) {
   const qc = useQueryClient()
   const fq = useFreshness()
   const d = fq.data
-  const busy = !!(d && (d.engine_running || d.sync_running))
+  const busy = !!(d && (d.engine_running || d.sync_running || d.purchases_running))
   const wasBusy = useRef(false)
   useEffect(() => {                     // a sync / run just finished → re-analyse with fresh data
     if (wasBusy.current && !busy) onRefreshed?.()
@@ -56,34 +59,44 @@ export function FreshnessBar({ onRefreshed }) {
   const stockM = useMutation({ mutationFn: () => supplyApi.syncStock(), onSuccess: after })
   const engineM = useMutation({ mutationFn: () => purchasingApi.triggerRun({}), onSuccess: after })
   const itemsM = useMutation({ mutationFn: () => purchasingApi.syncItems(), onSuccess: after })
+  const purchasesM = useMutation({ mutationFn: () => supplyApi.refreshPurchases(), onSuccess: after })
   if (!d) return null
-  const err = stockM.error || engineM.error || itemsM.error
+  const show = k => domains.includes(k)
+  const err = stockM.error || engineM.error || itemsM.error || purchasesM.error
   // a button was just pressed but the job hasn't shown up in the next poll yet
-  const starting = (stockM.isPending || engineM.isPending || itemsM.isPending) && !busy
+  const starting = (stockM.isPending || engineM.isPending || itemsM.isPending || purchasesM.isPending) && !busy
   return (
     <div className="space-y-1.5">
     <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
       <span className="text-content/60">البيانات:</span>
-      {FRESH.map(([k, label, title]) => (
+      {FRESH.filter(([k]) => show(k) && d[k]).map(([k, label, title]) => (
         <span key={k} title={`${title}${d[k]?.at ? ` — ${fmtDate(d[k].at)}` : ''}`}
           className={`px-2 py-0.5 rounded-full border whitespace-nowrap ${d[k]?.stale
             ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-line bg-surface text-content/70'}`}>
           {d[k]?.stale ? '⚠ ' : ''}{label} {fmtAge(d[k]?.age_min)}
-          {k === 'rates' && d.rates?.data_through ? ` · حتى ${d.rates.data_through}` : ''}
+          {(k === 'rates' || k === 'purchases') && d[k]?.data_through ? ` · حتى ${d[k].data_through}` : ''}
         </span>
       ))}
-      {d.can?.sync_stock && (
+      {d.can?.sync_stock && (show('stock') || show('sales')) && (
         <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || stockM.isPending} onClick={() => stockM.mutate()}
           title="سحب الأرصدة والمبيعات من SOFTECH الآن (قراءة فقط)">⟳ الأرصدة والمبيعات</button>)}
-      {d.can?.run_engine && (
+      {d.can?.run_engine && show('rates') && (
         <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || engineM.isPending} onClick={() => engineM.mutate()}
           title="تشغيل سريع لمحرك الاحتياج — يحدّث معدلات البيع والفجوة لكل فرع">▶ تحديث معدلات البيع</button>)}
-      {d.can?.sync_items && (
+      {d.can?.refresh_purchases && show('purchases') && (
+        <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
+          disabled={busy || purchasesM.isPending} onClick={() => purchasesM.mutate()}
+          title="سحب فواتير الشراء الجديدة من SOFTECH الآن (قراءة فقط) — كل الأيام منذ آخر تحديث">⟳ المشتريات</button>)}
+      {d.can?.sync_items && show('items') && (
         <button type="button" className="underline text-content/70 hover:text-primary disabled:opacity-40"
           disabled={busy || itemsM.isPending} onClick={() => itemsM.mutate()}
           title="مزامنة الأصناف الجديدة والأسعار والباركود">⟳ الأصناف</button>)}
+      {d.rates?.sales_pulled === false && !busy && (
+        <span className="px-2 py-0.5 rounded-full border border-rose-300 bg-rose-50 text-rose-700"
+          title="آخر تشغيل للمحرك لم يستطع سحب المبيعات الجديدة من SOFTECH، فحسب المعدلات على مبيعات قديمة">
+          ⚠ آخر تشغيل لم يسحب مبيعات جديدة — أعد التشغيل</span>)}
       {busy && <span className="text-primary">سيُعاد التحليل تلقائياً عند الانتهاء</span>}
       {err && <span className="text-rose-600">{errText(err)}</span>}
     </div>
@@ -145,14 +158,24 @@ function fmtVal(v) {
 function History({ batchId }) {
   const hq = useQuery({ queryKey: ['supply-avail-history', batchId],
     queryFn: () => supplyApi.availHistory(batchId).then(r => r.data) })
-  if (hq.isLoading) return <div className="text-xs text-content/50 p-2">جارٍ تحميل السجل…</div>
   const rows = hq.data || []
+  const grid = useSort(rows, { at: r => r.at, user: r => r.user, event: r => EVENT_LABEL[r.event] || r.label,
+                               note: r => r.note })
+  if (hq.isLoading) return <div className="text-xs text-content/50 p-2">جارٍ تحميل السجل…</div>
   return (
     <div className="rounded-lg border border-line bg-surface max-h-72 overflow-auto">
       <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-surface text-content/60">
+          <tr className="border-b border-line">
+            <SortTh k="at" {...grid} className="px-2 py-1 text-start font-medium">الوقت</SortTh>
+            <SortTh k="user" {...grid} className="px-2 py-1 text-start font-medium">المستخدم</SortTh>
+            <SortTh k="event" {...grid} className="px-2 py-1 text-start font-medium">الحدث</SortTh>
+            <SortTh k="note" {...grid} className="px-2 py-1 text-start font-medium">التفاصيل</SortTh>
+          </tr>
+        </thead>
         <tbody>
-          {rows.length === 0 && <tr><td className="p-2 text-content/50">لا توجد أحداث بعد.</td></tr>}
-          {rows.map(r => (
+          {rows.length === 0 && <tr><td colSpan={4} className="p-2 text-content/50">لا توجد أحداث بعد.</td></tr>}
+          {grid.sorted.map(r => (
             <tr key={r.id} className="border-b border-line/60 align-top">
               <td className="px-2 py-1 whitespace-nowrap text-content/60">{fmtDate(r.at)}</td>
               <td className="px-2 py-1 whitespace-nowrap">{r.user}</td>
@@ -198,7 +221,7 @@ export function LockBar({ batch, onChanged }) {
           : <Chip>مسودة — قابلة للتعديل</Chip>}
         {!mode && (batch.is_locked
           ? <button type="button" className={btnGhost} onClick={() => setMode('unlock')}>🔓 فتح للتعديل</button>
-          : <button type="button" className={btnGhost} onClick={() => setMode('lock')}
+          : <button data-tour="purchasing-supply-lock-list" type="button" className={btnGhost} onClick={() => setMode('lock')}
               title="تثبيت المطابقات والفروع — لا تعديل حتى تُفتح بسبب مكتوب">🔒 إقفال القائمة</button>)}
         {mode && (
           <>
@@ -216,6 +239,9 @@ export function LockBar({ batch, onChanged }) {
         <button type="button" className="underline text-content/60 hover:text-primary"
           onClick={() => setShowHistory(s => !s)}>{showHistory ? 'إخفاء السجل' : 'السجل'}</button>
         {m.isError && <span className="text-rose-600">{errText(m.error)}</span>}
+        {batch.is_locked && lockM.data?.data?.duplicates_merged > 0 && (
+          <span className="text-emerald-700" title="الأسطر المكررة لنفس الصنف دُمجت في سطر واحد — تعود عند فتح القائمة">
+            دُمج {lockM.data.data.duplicates_merged} سطر مكرر — سطر واحد لكل صنف</span>)}
       </div>
       {showHistory && <History batchId={batch.id} />}
     </div>

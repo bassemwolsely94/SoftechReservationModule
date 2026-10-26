@@ -101,7 +101,7 @@ function RecoverModal({ row, onConfirm, onClose, busy }) {
         </p>
         <div className="flex gap-2 justify-end mt-5">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={() => onConfirm(revenue === '' ? null : Number(revenue))} disabled={busy}
+          <button onClick={() => onConfirm(revenue === '' ? null : Number(revenue))} disabled={busy} data-tour="demand-recovery-recover-confirm"
             className="text-sm px-4 py-2 rounded-lg text-white font-semibold disabled:opacity-50"
             style={{ background: GREEN }}>
             {busy ? 'جارٍ...' : 'تأكيد الاسترداد'}
@@ -163,13 +163,13 @@ function RecoveryRow({ row, onAction }) {
               حجز
             </button>
           </CanDo>
-          <button onClick={() => onAction('opt_out', row)}
+          <button onClick={() => onAction('opt_out', row)} data-tour="demand-recovery-opt-out"
             className="px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600"
             title="رفض العميل التواصل بخصوص هذا الصنف">
             🔕
           </button>
           <CanDo module="demand" action="approve">
-            <button onClick={() => onAction('disqualify', row)}
+            <button onClick={() => onAction('disqualify', row)} data-tour="demand-recovery-disqualify"
               className="px-2 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-600"
               title="استبعاد من قائمة الاسترداد (يتطلب اعتماد)">
               🚫
@@ -246,7 +246,7 @@ export default function DemandRecoveryPage() {
               عملاء طلبوا أصنافاً نفدت ثم عادت للمخزون — تواصل معهم لاسترداد البيعة
             </p>
           </div>
-          <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm">
+          <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
             📊 لوحة الطلب الضائع
           </button>
         </div>

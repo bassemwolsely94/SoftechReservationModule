@@ -5,6 +5,7 @@
  * in case the item's SOFTECH packqty is missing/wrong. Shared desktop + mobile. */
 import { useState } from 'react'
 import { stripsToQty, qtyToStrips } from '../hooks/usePosOrder'
+import { fa } from '../utils/flowArrow'
 
 export default function UnitsQtyModal({ P, i, onClose, onApply }) {
   const line = P.lines[i]
@@ -47,7 +48,7 @@ export default function UnitsQtyModal({ P, i, onClose, onApply }) {
         </div>
         <div className="mt-3 rounded-lg bg-gray-50 border p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">الكمية <span className="font-mono">Q</span> (عبوات) → SOFTECH</span>
+            <span className="text-xs text-gray-500">الكمية <span className="font-mono">Q</span> (عبوات) {fa()} SOFTECH</span>
             <span className="font-bold text-xl tabular-nums" style={{ color: '#022871' }}>{qty.toFixed(5)}</span>
           </div>
           <div className="text-[11px] text-gray-500 mt-1">

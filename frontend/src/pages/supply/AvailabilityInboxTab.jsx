@@ -18,12 +18,21 @@ import OrderPanel from './OrderPanel'
 import { FreshnessBar, LockBar, ScopeBar } from './AvailabilityControls'
 import ColumnMapper from './ColumnMapper'
 import SupplierCodeReport from './SupplierCodeReport'
-import { Chip, btnGhost, btnPrimary, errText, fmtDate, inputCls, money, pct, q } from './supplyUi'
+import { Chip, btnGhost, btnPrimary, downloadBlob, errText, fmtDate, inputCls, money, pct, q } from './supplyUi'
 import { wildcardMatch } from '../../utils/wildcard'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../../hooks/useGridKeyboard'
 
 const SOURCES = [['whatsapp', 'واتساب'], ['text', 'نص'], ['email', 'بريد'], ['manual', 'يدوي']]
 const PLACEHOLDER = 'الصق رسالة/رسائل الواتساب هنا كما هي — سطر لكل صنف\nمثال:\nRecormon 4000 available 10\nكريون ٢٥٠٠٠ متاح ٢٠\nZinnat 250 10+2 @ 90'
+
+// warnings the shared matching core adds (apps/supply/line_matching.py — same labels as «طلبات واتساب»)
+const STRICT_FLAGS = [
+  ['choose_variant', 'اختر النسخة', 'amber', 'أكثر من نسخة من المنتج (تركيز / حجم / شكل) تناسب ما كتبه المورد — اختر النسخة'],
+  ['word_mismatch', 'النوع مختلف', 'rose', 'كلمة النوع المكتوبة (اكسترا / ادفانس / فورت / بلس …) غير موجودة في اسم الصنف'],
+  ['engines_disagree', 'المحركان مختلفان', 'rose', 'محركا المطابقة اختارا صنفين مختلفين — راجع'],
+  ['pack_not_found', 'حجم العبوة غير موجود', 'amber', 'حجم العبوة المكتوب غير موجود في أي نسخة من الصنف'],
+  ['low_score', 'تطابق ضعيف', 'amber', 'درجة التطابق أقل من الحد'],
+]
 
 function rows(data) { return Array.isArray(data) ? data : (data?.results || []) }
 
@@ -265,8 +274,16 @@ function BatchReview({ batchId }) {
     queryFn: () => supplyApi.availGet(batchId).then(r => r.data) })
   const anQ = useQuery({ queryKey: ['supply-avail-analysis', batchId],
     queryFn: () => supplyApi.availAnalysis(batchId).then(r => r.data) })
+  const xlsM = useMutation({ mutationFn: () => supplyApi.availExport(batchId),
+    onSuccess: (res) => downloadBlob(res.data, `availability_${batchId}.xlsx`) })
 
-  const refresh = () => {
+  // The row order stays put while you match (tick / untick / pick items) — it is taken again
+  // only on a confirm button, a column click, a lock / scope change, or «↻ إعادة الترتيب»
+  // (owner 2026-10-12: re-sorting after every pick made the list jump).
+  const [orderStamp, setOrderStamp] = useState(0)
+  const resort = () => setOrderStamp(n => n + 1)
+  const refresh = (again = true) => {
+    if (again) resort()
     qc.invalidateQueries({ queryKey: ['supply-avail-analysis', batchId] })
     qc.invalidateQueries({ queryKey: ['supply-avail', batchId] })
     qc.invalidateQueries({ queryKey: ['supply-avail-list'] })
@@ -276,6 +293,7 @@ function BatchReview({ batchId }) {
   const confirmPickedM = useMutation({
     mutationFn: (ids) => supplyApi.availConfirm(batchId, ids), onSuccess: refresh })
   const reanalyse = useCallback(() => {
+    setOrderStamp(n => n + 1)
     qc.invalidateQueries({ queryKey: ['supply-avail-analysis', batchId] })
     qc.invalidateQueries({ queryKey: ['supply-avail-history', batchId] })
     qc.invalidateQueries({ queryKey: ['supply-avail', batchId] })
@@ -297,36 +315,69 @@ function BatchReview({ batchId }) {
   }
   const lineM = useMutation({
     mutationFn: ({ lid, data }) => supplyApi.availLine(batchId, lid, data),
-    onSuccess: (res) => (res.data?.rows ? swapRows(res.data.rows, null) : refresh()) })
+    onSuccess: (res) => (res.data?.rows ? swapRows(res.data.rows, null) : refresh(false)) })
   // one supplier line → one or several items (several split the line into sibling rows)
   const itemsM = useMutation({
     mutationFn: ({ lid, ids }) => supplyApi.availItems(batchId, lid, ids),
-    onSuccess: (res) => (res.data?.rows ? swapRows(res.data.rows, res.data.group_id) : refresh()) })
+    onSuccess: (res) => (res.data?.rows ? swapRows(res.data.rows, res.data.group_id) : refresh(false)) })
 
   const summary = anQ.data?.summary || {}
   const all = anQ.data?.lines || []
   const [sort, setSort] = useState(null)            // {key, dir: 1|-1} — null = default order
   const onSort = (key) => setSort(s => (!s || s.key !== key) ? { key, dir: 1 }
     : s.dir === 1 ? { key, dir: -1 } : null)       // asc → desc → default
-  const visible = useMemo(() => {
-    const s = search.trim().toLowerCase()
-    const out = all
-      .filter(r => filter === 'all' ? true
-        : (filter === r.state || r.flags.includes(filter)))
-      .filter(r => !s || wildcardMatch([r.raw_text, r.item_name], s) || (r.item_softech_id || '').includes(s))
+  // The order the rows WOULD have now (all rows, the chosen sort).
+  const liveOrder = useMemo(() => {
     const byDefault = (a, b) => (Number(b.flags.includes('urgent')) - Number(a.flags.includes('urgent')))
       || (STATE_ORDER[a.state] - STATE_ORDER[b.state])
       || ((b.residual_gap || 0) - (a.residual_gap || 0))
-    if (!sort) return out.sort(byDefault)
+    if (!sort) return [...all].sort(byDefault).map(r => r.line_id)
     const col = SORT_COLS[sort.key]
-    return out.sort((a, b) => {
+    return [...all].sort((a, b) => {
       const va = col(a), vb = col(b)
       const ea = va === null || va === undefined || va === '', eb = vb === null || vb === undefined || vb === ''
       if (ea || eb) return ea === eb ? byDefault(a, b) : (ea ? 1 : -1)      // blanks always last
       const c = typeof va === 'string' ? va.localeCompare(vb, 'ar') : va - vb
       return (c * sort.dir) || byDefault(a, b)
-    })
-  }, [all, filter, search, sort])
+    }).map(r => r.line_id)
+  }, [all, sort])
+  // The order SHOWN: frozen at the last re-sort point; a row added since (a split / a new
+  // item ticked) sits right after its group, so nothing jumps while you work.
+  const frozen = useRef({ stamp: null, ids: [] })
+  const members = useRef({ key: null, ids: new Set(), groups: new Set() })
+  const stamp = `${orderStamp}|${sort?.key || ''}|${sort?.dir || ''}`
+  if (frozen.current.stamp !== stamp || (frozen.current.ids.length === 0 && liveOrder.length > 0)) {
+    frozen.current = { stamp, ids: liveOrder }
+  }
+  const visible = useMemo(() => {
+    const rank = new Map(frozen.current.ids.map((id, i) => [id, i]))
+    const groupRank = new Map()
+    for (const r of all) if (rank.has(r.line_id) && !groupRank.has(r.group_id)) groupRank.set(r.group_id, rank.get(r.line_id))
+    const pos = (r, i) => (rank.has(r.line_id) ? rank.get(r.line_id)
+      : (groupRank.has(r.group_id) ? groupRank.get(r.group_id) + 0.5 : 1e9) + i / 1e6)
+    const s = search.trim().toLowerCase()
+    const matches = r => (filter === 'all' || filter === r.state || r.flags.includes(filter))
+      && (!s || wildcardMatch([r.raw_text, r.item_name], s) || (r.item_softech_id || '').includes(s))
+    // a row in view stays in view until the next re-sort, even if un-matching / confirming it
+    // moves it out of the current filter (it would otherwise vanish under your cursor)
+    const memberKey = `${stamp}|${filter}|${s}`
+    if (members.current.key !== memberKey) {
+      const ids = new Set(all.filter(matches).map(r => r.line_id))
+      members.current = { key: memberKey, ids, groups: new Set(all.filter(r => ids.has(r.line_id)).map(r => r.group_id)) }
+    }
+    const kept = r => members.current.ids.has(r.line_id) || members.current.groups.has(r.group_id)
+    return all
+      .map((r, i) => [r, pos(r, i)])
+      .filter(([r]) => matches(r) || kept(r))
+      .sort((a, b) => a[1] - b[1])
+      .map(([r]) => r)
+  }, [all, filter, search, stamp, liveOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the shown order differs from the order the rows would have now → offer to re-sort
+  const orderStale = useMemo(() => {
+    const shown = new Set(frozen.current.ids)
+    const now = liveOrder.filter(id => shown.has(id))
+    return now.length !== frozen.current.ids.length || now.some((id, i) => id !== frozen.current.ids[i])
+  }, [liveOrder, stamp]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickedRows = all.filter(r => picked[r.line_id] && r.item_id)
   // select-all works on what is VISIBLE (current filter + search), matched rows only
@@ -386,17 +437,25 @@ function BatchReview({ batchId }) {
             </button>
           )
         })}
+        {orderStale && (
+          <button type="button" onClick={resort}
+            className="text-xs px-2.5 py-1 rounded-full border border-primary/50 text-primary hover:bg-primary/5"
+            title="الترتيب ثابت أثناء المطابقة حتى لا تقفز الأسطر — اضغط لإعادة الترتيب الآن (يتم تلقائياً عند التأكيد)">
+            ↻ إعادة الترتيب</button>)}
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث…"
           className={`${inputCls} text-xs w-40 mr-auto`} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <button type="button" className={btnGhost} onClick={() => confirmAllM.mutate()}
+        <button data-tour="purchasing-supply-confirm-clear" type="button" className={btnGhost} onClick={() => confirmAllM.mutate()}
           disabled={confirmAllM.isPending || locked}
           title="تأكيد كل المطابقات عالية الثقة دفعة واحدة — يتعلّمها النظام لهذا المورد">
           ✓ تأكيد المطابقات الواضحة
         </button>
         <button type="button" className={btnGhost} onClick={pickNeeded}>تحديد المطلوب فقط</button>
+        <button type="button" className={btnGhost} onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+          title="كل أسطر القائمة مع التحليل و«بيانات الصنف» (التصنيف، المورد الرئيسي، الشركة المنتجة، الأسعار)">
+          {xlsM.isPending ? '…' : '⬇ Excel'}</button>
         {Object.keys(picked).length > 0 && (
           <button type="button" className="text-content/50 hover:text-primary" onClick={() => setPicked({})}>إلغاء التحديد</button>)}
         {confirmAllM.data && <span className="text-emerald-700">أُكّد {confirmAllM.data.data.confirmed} سطر</span>}
@@ -468,7 +527,7 @@ function BatchReview({ batchId }) {
               title="تأكيد مطابقة الأسطر المحددة غير المؤكدة — يتعلّمها النظام لهذا المورد">
               ✓ تأكيد المحدد ({pickedUnconfirmed.length})</button>)}
           <button type="button" className="text-content/50 hover:text-primary text-xs" onClick={() => setPicked({})}>إلغاء التحديد</button>
-          <button type="button" className={`${btnPrimary} mr-auto`} onClick={() => setOrdering(true)}>
+          <button data-tour="purchasing-supply-build-order" type="button" className={`${btnPrimary} mr-auto`} onClick={() => setOrdering(true)}>
             بناء طلب الشراء ←
           </button>
         </div>
@@ -655,6 +714,12 @@ function Row({ r, picked, onPick, expanded, onToggle, onConfirm, onSetItems, bat
               <Chip tone="rose" title="اسم الدواء في الرسالة لا يطابق بداية اسم الصنف">قد يكون صنفاً آخر</Chip>)}
             {r.flags.includes('ambiguous') && (
               <Chip tone="amber" title="صنف من علامة تجارية أخرى حصل على درجة مقاربة — اختر يدوياً">أكثر من صنف محتمل</Chip>)}
+            {/* strict flags from the shared matching core (owner 2026-10-25) */}
+            {STRICT_FLAGS.filter(([f]) => r.flags.includes(f)).map(([f, label, tone, title]) => (
+              <Chip key={f} tone={tone} title={title}>{label}</Chip>))}
+            {r.merged?.length > 0 && (
+              <Chip tone="teal" title={`عند الإقفال دُمجت أسطر لنفس الصنف في هذا السطر حتى لا يُطلب مرتين:\n${r.merged.map(m => m.raw_text).join('\n')}`}>
+                دُمج {r.merged.length} مكرر</Chip>)}
             {r.flags.includes('family') && (
               <Chip tone="amber" title="المورد كتب «بتركيزاته / بأنواعه» — اقترحنا كل أصناف العائلة؛ أبقِ ما يعرضه فعلاً">كل الأنواع — راجع</Chip>)}
             {r.flags.includes('price_above_history') && (

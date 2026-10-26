@@ -67,3 +67,23 @@ class SuggestionShapeTests(SimpleTestCase):
         s = d._sug('new_no_rate', 'X', 'Item', '100', ['130', '150'], 2, {}, 5, 0, 'r')
         self.assertEqual([t['qty'] for t in s['to_branches']], [2, 2])
         self.assertEqual(s['total_qty'], 4)
+
+
+class PositionTests(SimpleTestCase):
+    """Owner 2026-10-25: each move shows the holding and the designated branch's current
+    stock and sales rate — live stock where SOFTECH holds a maximum, else the engine run's."""
+
+    def test_live_where_a_ceiling_exists_else_engine(self):
+        ceilings = {'130': {'X': (7.0, 2.0)}}
+        bmap = {'130': (5.0, 1.33, 0), '170': (16.0, 43.67, 0)}
+        self.assertEqual(d._position('X', '130', ceilings, bmap), {'stock': 7.0, 'rate': 1.33, 'max': 2.0, 'live': True})
+        self.assertEqual(d._position('X', '170', ceilings, bmap), {'stock': 16.0, 'rate': 43.67, 'max': None, 'live': False})
+        self.assertEqual(d._position('X', '160', ceilings, bmap), {'stock': 0.0, 'rate': 0.0, 'max': None, 'live': False})
+
+    def test_suggestion_carries_both_sides(self):
+        pos = {'130': {'stock': 7.0, 'rate': 1.33, 'max': 2.0, 'live': True},
+               '170': {'stock': 17.0, 'rate': 43.67, 'max': 65.6, 'live': True}}
+        s = d._sug('over_piled', 'X', 'Item', '130', ['170'], 5, {}, 24, 45, 'r', per_qty={'170': 5}, positions=pos)
+        self.assertEqual(s['from_position']['stock'], 7.0)
+        self.assertEqual((s['to_branches'][0]['qty'], s['to_branches'][0]['stock'], s['to_branches'][0]['rate']),
+                         (5, 17.0, 43.67))

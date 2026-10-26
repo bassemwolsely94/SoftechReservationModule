@@ -210,7 +210,7 @@ function QAScoreModal({ call, onClose }) {
             className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
             إلغاء
           </button>
-          <button onClick={() => mutation.mutate({ ...scores, notes })}
+          <button data-tour="callcenter-analytics-score-save" onClick={() => mutation.mutate({ ...scores, notes })}
             disabled={mutation.isLoading}
             className="flex-1 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium
                        hover:bg-indigo-700 disabled:opacity-50 transition-colors">
@@ -255,7 +255,7 @@ function KpiTab() {
           {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />)}
         </div>
       ) : (
-        <div data-tour="callcenter-analytics-kpis" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-tour="callcenter-analytics-kpis">
           <KpiCard icon="📞" label="مكالمات اليوم"    value={fmt(s.today)}                color="indigo" />
           <KpiCard icon="✅" label="نسبة الإجابة"     value={fmtP(answeredPct)}           color="emerald"
                    sub={`${fmt(s.answered)} مكالمة`} />
@@ -269,7 +269,7 @@ function KpiTab() {
       )}
 
       {/* Two-column: Purpose + Sentiment */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-tour="callcenter-analytics-breakdown">
 
         {/* Purpose breakdown */}
         <div className="rounded-xl border border-gray-100 bg-white p-4">
@@ -386,7 +386,7 @@ function CallsTab() {
   return (
     <div dir="rtl">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
+      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100" data-tour="callcenter-analytics-call-filters">
         <div className="relative flex-1 min-w-40">
           <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 pointer-events-none text-sm">🔍</span>
           <input data-tour="callcenter-analytics-calls-search" value={search} onChange={handleSearch}
@@ -533,7 +533,7 @@ function AgentTab() {
   return (
     <div dir="rtl" className="p-4">
       <h3 className="font-bold text-gray-800 mb-4 text-sm">أداء المندوبين — آخر 30 يوم</h3>
-      <div className="space-y-3">
+      <div className="space-y-3" data-tour="callcenter-analytics-agents">
         {agents.map((agent, i) => {
           const name = [
             agent['handled_by__user__first_name'],
@@ -587,7 +587,7 @@ function CasesBoardTab() {
   return (
     <div dir="rtl">
       {/* Filter strip */}
-      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
+      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100" data-tour="callcenter-analytics-case-filters">
         {Object.entries(CASE_STATUS_META).map(([k, v]) => (
           <button key={k} onClick={() => setStatusF(k)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
@@ -705,7 +705,7 @@ export default function CallCenterAnalyticsPage() {
 
       {/* Tab bar */}
       <div data-tour="callcenter-analytics-tabs" className="bg-white border-b border-gray-100 px-6">
-        <div className="flex gap-1 -mb-px">
+        <div className="flex gap-1 -mb-px" data-tour="callcenter-analytics-tabs">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors

@@ -171,7 +171,11 @@ SCREENS = [
             {'target': 'finance-cheques-schedule', 'text': T('بعد اختيار خطة: جدول الشيكات بالاستحقاق والمبلغ والحالة، و«تعديل» للخطط النشطة.',
                                               'After picking a plan: the cheque schedule with due date, amount and status, and «تعديل» (Edit) for active plans.')},
         ],
-        'updated': '2026-10-11',
+        'tips': [
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
+              'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'finance.payments',
@@ -226,7 +230,11 @@ SCREENS = [
             {'target': 'finance-payment-audit-match', 'text': T('«تشغيل المطابقة» يظهر للكشوف المعلقة ليطابق سطورها بالمدفوعات المسجلة.',
                                               '«تشغيل المطابقة» (Run matching) appears for pending statements to match their lines to recorded payments.')},
         ],
-        'updated': '2026-10-11',
+        'tips': [
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول المالية): العرض يحتاج «عرض»، «حل الاستثناء» و«تجاهل» يحتاجوا «اعتماد»، الإسناد يحتاج «إسناد» أو «اعتماد»، ورفع كشف يحتاج «إضافة».',
+              'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'finance.reconciliation',

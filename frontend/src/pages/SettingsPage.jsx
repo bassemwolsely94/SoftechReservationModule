@@ -24,6 +24,7 @@ import {
 } from '../theme/theme'
 import { useThemeMode } from '../theme/useThemeMode'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 // Most labels come from the DB (Arabic), English shown as sub-labels where provided.
@@ -916,7 +917,7 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
 
         {/* Generated scale strip */}
         <div className="mt-5">
-          <div className="text-[11px] text-gray-400 mb-1.5">{t ? 'Generated palette (brand-50 → brand-900)' : 'التدرج المُولّد (brand-50 ← brand-900)'}</div>
+          <div className="text-[11px] text-gray-400 mb-1.5">{t ? `Generated palette (brand-50 ${fa()} brand-900)` : 'التدرج المُولّد (brand-50 ← brand-900)'}</div>
           <div className="flex rounded-lg overflow-hidden border border-gray-100 h-8">
             {Object.entries(scale).map(([step, rgb]) => (
               <div key={step} title={`brand-${step}`} className="flex-1" style={{ background: `rgb(${rgb})` }} />

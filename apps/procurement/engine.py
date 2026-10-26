@@ -67,6 +67,22 @@ def _date(val):
 
 # ── Stage 1: Sync purchase lines ──────────────────────────────────────────────
 
+def purchases_query(lookback_days: int, today=None) -> str:
+    """QUERY_PURCHASES_INCREMENTAL bounded by a LITERAL date window [today − N, tomorrow) on
+    both tables. The bound `DATEADD(day, -?, GETDATE())` took 14.7 s for 8 days on server
+    100 vs 1.6 s with literals (2026-10-24, same as the sales sync), and cut the first day
+    at the current time of day. Dates are built here from integers — never user text."""
+    today = today or timezone.localdate()
+    start = (today - _dt.timedelta(days=int(lookback_days))).isoformat()
+    end = (today + _dt.timedelta(days=1)).isoformat()
+    q = QUERY_PURCHASES_INCREMENTAL
+    old_where = 'WHERE sm.docdate >= DATEADD(day, -?, GETDATE())'
+    old_join = 'AND st.docdate    = sm.docdate'
+    assert q.count(old_where) == 1 and q.count(old_join) == 1
+    q = q.replace(old_where, f"WHERE sm.docdate >= '{start}' AND sm.docdate < '{end}'")
+    return q.replace(old_join, f"{old_join} AND st.docdate >= '{start}' AND st.docdate < '{end}'")
+
+
 def sync_purchase_lines(run: ProcurementEngineRun, lookback_days: int = DEFAULT_LOOKBACK) -> int:
     """
     Pull purchase lines from SOFTECH (doccode 10/120) and upsert into PurchaseLine.
@@ -84,7 +100,7 @@ def sync_purchase_lines(run: ProcurementEngineRun, lookback_days: int = DEFAULT_
     try:
         conn = get_sybase_connection()
         cur  = conn.cursor()
-        cur.execute(QUERY_PURCHASES_INCREMENTAL, [lookback_days])
+        cur.execute(purchases_query(lookback_days))
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -1259,29 +1275,30 @@ def run_procurement_engine(lookback_days: int = DEFAULT_LOOKBACK, triggered_by: 
     )
     logger.info(f'[ProcurementEngine] Starting run #{run.pk} (lookback={lookback_days}d)')
 
-    try:
-        # ── Existing pipeline ───────────────────────────────────────────────
-        sync_purchase_lines(run, lookback_days)
-
+    stages = [
+        ('سحب فواتير الشراء من SOFTECH', lambda: sync_purchase_lines(run, lookback_days)),
         # v2 Stage 1.5 — FOC detection, return type, effective cost
-        enrich_purchase_lines(run, lookback_days)
-
-        sync_supplier_profiles(run)
-
+        ('البونص ونوع المرتجع والتكلفة الفعلية', lambda: enrich_purchase_lines(run, lookback_days)),
+        ('بيانات الموردين', lambda: sync_supplier_profiles(run)),
         # v2 Stage 2.5 — supplier segmentation
-        classify_supplier_segments(run)
-
-        compute_supplier_metrics(run)
-
+        ('تصنيف الموردين', lambda: classify_supplier_segments(run)),
+        ('مؤشرات الموردين', lambda: compute_supplier_metrics(run)),
         # v2 Stage 3.5 — enhanced scoring (FOC + tax dimensions)
-        compute_enhanced_scores(run)
-
-        build_supplier_item_mapping(run)
-        compute_snapshot(run)
-        compute_buyer_performance(run)
-        generate_alerts(run)
+        ('تقييم الموردين', lambda: compute_enhanced_scores(run)),
+        ('ربط الأصناف بالموردين', lambda: build_supplier_item_mapping(run)),
+        ('ملخص اليوم', lambda: compute_snapshot(run)),
+        ('أداء المشترين', lambda: compute_buyer_performance(run)),
+        ('التنبيهات', lambda: generate_alerts(run)),
+    ]
+    try:
+        for i, (label, fn) in enumerate(stages):
+            run.progress = {'step': i, 'steps': len(stages) + 1, 'message': label}
+            run.save(update_fields=['progress'])
+            fn()
 
         # v2 Stage 7.5 — advanced alerts (FOC, tax, expiry, patient, warehouse)
+        run.progress = {'step': len(stages), 'steps': len(stages) + 1, 'message': 'تنبيهات متقدمة'}
+        run.save(update_fields=['progress'])
         adv_alerts = generate_advanced_alerts(run)
         run.alerts_generated = (run.alerts_generated or 0) + adv_alerts
         run.save(update_fields=['alerts_generated'])

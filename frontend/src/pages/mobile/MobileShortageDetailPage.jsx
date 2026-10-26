@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { shortageApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 const STATUS_CLASS = {
   open: 'bg-orange-100 text-orange-700', submitted: 'bg-blue-100 text-blue-700', resolved: 'bg-green-100 text-green-700',
@@ -36,7 +37,7 @@ function ItemRow({ it, onDelete }) {
           )}
         </div>
       </div>
-      <button onClick={() => onDelete(it.id)} className="text-gray-400 hover:text-red-500 text-sm shrink-0">🗑</button>
+      <button data-tour="shortage-mobile-item-delete" onClick={() => onDelete(it.id)} className="text-gray-400 hover:text-red-500 text-sm shrink-0">🗑</button>
     </div>
   )
 }
@@ -177,7 +178,7 @@ export default function MobileShortageDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/shortage')} className="text-sm text-gray-500">→ الرجوع للقوائم</button>
+      <button onClick={() => navigate('/m/shortage')} className="text-sm text-gray-500">{ba()} الرجوع للقوائم</button>
 
       {/* Header */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
@@ -193,7 +194,7 @@ export default function MobileShortageDetailPage() {
       {/* Quick add (open lists only) */}
       {isOpen && (
         <div data-tour="shortage-mobile-quick-add" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
-          <div className="flex gap-2">
+          <div data-tour="shortage-mobile-quick-add" className="flex gap-2">
             <input
               ref={nameRef}
               className="input-field flex-1"
@@ -211,7 +212,7 @@ export default function MobileShortageDetailPage() {
             />
           </div>
           <div className="flex items-center justify-between">
-            <button onClick={() => setShowBulk(v => !v)} className="text-xs text-brand-600 font-medium">
+            <button data-tour="shortage-mobile-paste" onClick={() => setShowBulk(v => !v)} className="text-xs text-brand-600 font-medium">
               {showBulk ? '× إخفاء اللصق' : '📋 لصق قائمة'}
             </button>
             <button onClick={addOne} disabled={adding || !name.trim()}
@@ -221,7 +222,7 @@ export default function MobileShortageDetailPage() {
           </div>
 
           {/* Voice + photo capture */}
-          <div className="flex gap-2 pt-1">
+          <div data-tour="shortage-mobile-capture" className="flex gap-2 pt-1">
             {SpeechRec && (
               <button
                 onClick={listening ? stopVoice : startVoice}
@@ -268,7 +269,7 @@ export default function MobileShortageDetailPage() {
       {items.length === 0 ? (
         <div className="text-center text-sm text-gray-400 py-8">لا توجد أصناف بعد — ابدأ بالإضافة</div>
       ) : (
-        <div className="space-y-2">
+        <div data-tour="shortage-mobile-items" className="space-y-2">
           {items.map(it => <ItemRow key={it.id} it={it} onDelete={removeItem} />)}
         </div>
       )}

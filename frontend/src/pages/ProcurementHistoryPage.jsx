@@ -119,7 +119,7 @@ export default function ProcurementHistoryPage() {
       </div>
 
       {/* Summary bar (totals over the full match set) */}
-      <div data-tour="purchasing-history-totals" className="grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div data-tour="purchasing-history-summary" className="grid grid-cols-2 md:grid-cols-6 gap-2">
         <StatCard label="سطور مطابقة" value={s ? fmt(s.line_count, 0) : '…'} sub={s ? `${fmt(s.invoices, 0)} فاتورة` : ''} />
         <StatCard label="صافي المشتريات" value={s ? `${fmtK(s.paid_value)}` : '…'} sub="ج.م" />
         <StatCard label="بونص (وحدات)" value={s ? fmt(s.bonus_units, 0) : '…'} sub={s ? `${fmt(s.foc_lines, 0)} سطر FOC` : ''} tone="text-emerald-600" />
@@ -132,7 +132,7 @@ export default function ProcurementHistoryPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
 
         {/* Row 1 — line-level lookups + ordering (dimensions live in the top bar) */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div data-tour="purchasing-history-lookups" className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">بحث عام</label>
             <input data-tour="purchasing-history-search" name="q" value={filters.q} onChange={onInput} placeholder="اسم/كود صنف، فاتورة..."
@@ -173,20 +173,20 @@ export default function ProcurementHistoryPage() {
             { label: 'مشتريات فقط', value: 'false' },
             { label: 'مرتجعات فقط', value: 'true' },
           ].map(opt => (
-            <button key={opt.value} onClick={() => set('is_return', opt.value)}
+            <button data-tour="purchasing-history-movement" key={opt.value} onClick={() => set('is_return', opt.value)}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 filters.is_return === opt.value ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-300 hover:border-brand-400'}`}>
               {opt.label}
             </button>
           ))}
           <span className="text-gray-300 mx-1">|</span>
-          <button onClick={() => set('is_foc', filters.is_foc === 'true' ? '' : 'true')}
+          <button data-tour="purchasing-history-foc-only" onClick={() => set('is_foc', filters.is_foc === 'true' ? '' : 'true')}
             className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
               filters.is_foc === 'true' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}>
             🎁 بونص فقط
           </button>
           {RETURN_TYPES.map(rt => (
-            <button key={rt.code}
+            <button data-tour="purchasing-history-return-type" key={rt.code}
               onClick={() => set('return_type', filters.return_type === rt.code ? '' : rt.code)}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 filters.return_type === rt.code ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-300 hover:border-red-400'}`}>
@@ -195,8 +195,8 @@ export default function ProcurementHistoryPage() {
           ))}
           <div className="flex-1" />
           <span className="text-xs text-gray-400">{activeCount > 0 ? `${activeCount} فلتر نشط` : ''}</span>
-          <button onClick={handleReset} className="px-3 py-1 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">إعادة ضبط</button>
-          <button data-tour="purchasing-history-apply" onClick={handleSearch} className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700">بحث</button>
+          <button data-tour="purchasing-history-reset" onClick={handleReset} className="px-3 py-1 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">إعادة ضبط</button>
+          <button data-tour="purchasing-history-search" onClick={handleSearch} className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700">بحث</button>
         </div>
       </div>
 

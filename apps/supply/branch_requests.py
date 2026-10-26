@@ -31,48 +31,30 @@ from apps.shortage.matching import (_normalize, find_best_matches, head_mismatch
                                     learn_alias, looks_non_drug, score_match)
 
 # ── text normalisation ──────────────────────────────────────────────────────────
-_AR_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')
-_INVISIBLE = dict.fromkeys(map(ord, '‎‏‪‫‬‭‮﻿'), None)
 
 
 def _clean(text: str) -> str:
-    t = str(text or '').translate(_INVISIBLE).translate(_AR_DIGITS)
-    return t.replace(' ', ' ').replace(' ', ' ').replace('\r', '')
+    from .line_matching import fold                     # one folding for both screens
+    return fold(text)
+
 
 
 # ── 1. messages ─────────────────────────────────────────────────────────────────
-_T = r'\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APap]\.?[Mm]\.?|\s?[صم])?'
-_D = r'\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4}'
-_HEADERS = [
-    re.compile(rf'^\[(?P<time>{_T}),\s*(?P<date>{_D})\]\s*(?P<rest>.*)$'),        # Desktop copy
-    re.compile(rf'^\[(?P<date>{_D}),?\s+(?P<time>{_T})\]\s*(?P<rest>.*)$'),        # iOS export
-    re.compile(rf'^(?P<date>{_D}),?\s+(?P<time>{_T})\s+[-–]\s+(?P<rest>.*)$'),     # Android export
-]
 _SYSTEM = ('end-to-end encrypted', 'تم تشفير', '<media omitted>', 'image omitted', 'تم حذف هذه الرسالة',
            'this message was deleted', 'created group', 'added', 'joined using')
-
-
-def _split_sender(rest: str):
-    """'Branch: Nozha #2 ElAdib …: THIOTACID …' → (sender, text). Sender names may hold
-    ': ' themselves, so take the LAST ': ' in the first 90 chars."""
-    head = rest[:90]
-    i = head.rfind(': ')
-    if i <= 0:
-        return '', rest
-    return rest[:i].strip(), rest[i + 2:]
 
 
 def split_messages(text: str) -> list[dict]:
     """Chat paste → messages. Lines without a header continue the previous message; a paste
     with no headers at all is split on blank lines (one block = one message)."""
+    from .line_matching import header                   # one header reader for both screens
     lines = _clean(text).split('\n')
     msgs, cur, any_header = [], None, False
     for ln in lines:
-        m = next((r.match(ln.strip()) for r in _HEADERS if r.match(ln.strip())), None)
-        if m:
+        h = header(ln.strip(), sender_rule='last')     # a branch sender name may hold ': '
+        if h:
             any_header = True
-            sender, body = _split_sender(m.group('rest'))
-            cur = {'sender': sender, 'time': f'{m.group("date")} {m.group("time")}'.strip(), 'lines': [body]}
+            cur = {'sender': h['sender'], 'time': f"{h['date']} {h['time']}".strip(), 'lines': [h['body']]}
             msgs.append(cur)
         elif cur is not None:
             cur['lines'].append(ln)
@@ -380,7 +362,7 @@ def _cand(item, score, stock, rate):
             'branch_stock': stock.get(item.id), 'network_rate': rate.get(item.id, 0.0)}
 
 
-def resolve(frag: dict, branch=None) -> dict:
+def resolve(frag: dict, branch=None, matches=None) -> dict:
     """Fragment → {item, score, flags, candidates, kind}. Never auto-picks between versions
     of the same product; flags anything a person must look at."""
     from apps.catalog.models import Item
@@ -399,7 +381,9 @@ def resolve(frag: dict, branch=None) -> dict:
             flags.append('strips')
         return {'item': items[ids[0]], 'extra_ids': ids[1:], 'score': group['score'],
                 'flags': flags, 'candidates': cands, 'kind': 'item'}
-    matches = find_best_matches(text, top_n=6, min_score=0.30)
+    # `matches` = an already-run search (line_matching shares one search between both engines)
+    if matches is None:
+        matches = find_best_matches(text, top_n=6, min_score=0.30)
     # The quantity rule has exceptions: in "كارفيد 25 علبة" the 25 may be the strength.
     # Also match WITH the number; keep whichever reads better (the qty_maybe_strength flag
     # below then tells the reviewer).
@@ -529,7 +513,8 @@ def _make_line(req, pos, msg_i, msg, frag, *, from_ocr=False):
         return L(request=req, position=pos, msg_index=msg_i, msg_sender=msg.get('sender', ''),
                  msg_time=msg.get('time', ''), from_ocr=from_ocr, raw_text=frag['raw'][:500],
                  kind=L.KIND_NOTE, flags=[frag.get('note', 'remark')])
-    r = resolve(frag, req.branch)
+    from .line_matching import BRANCH, match_text       # one core for both screens (doc 31)
+    r = match_text(frag['text'], source=BRANCH, branch=req.branch, frag=frag)
     flags = r['flags'] + (['ocr'] if from_ocr else [])
     ln = L(request=req, position=pos, msg_index=msg_i, msg_sender=msg.get('sender', ''),
            msg_time=msg.get('time', ''), from_ocr=from_ocr, raw_text=frag['raw'][:500],

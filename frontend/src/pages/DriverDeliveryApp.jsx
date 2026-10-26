@@ -150,17 +150,17 @@ function PodModal({ stop, onClose, onDone }) {
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
         <h3 className="font-black text-gray-900 mb-3">إثبات التسليم — {stop.customer_name}</h3>
         <label className="block text-xs font-semibold text-gray-600 mb-1">اسم المستلِم</label>
-        <input className="input-field mb-2" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="من استلم الطلب؟" />
+        <input className="input-field mb-2" data-tour="delivery-driver-pod-recipient" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="من استلم الطلب؟" />
         <label className="block text-xs font-semibold text-gray-600 mb-1">المبلغ المحصَّل</label>
-        <input className="input-field mb-2" type="number" value={cash} onChange={e => setCash(e.target.value)} dir="ltr" />
+        <input className="input-field mb-2" data-tour="delivery-driver-pod-cash" type="number" value={cash} onChange={e => setCash(e.target.value)} dir="ltr" />
         <label className="block text-xs font-semibold text-gray-600 mb-1">صورة (اختياري)</label>
-        <input className="mb-2 text-xs" type="file" accept="image/*" capture="environment" onChange={e => setPhoto(e.target.files?.[0] || null)} />
+        <input className="mb-2 text-xs" data-tour="delivery-driver-pod-photo" type="file" accept="image/*" capture="environment" onChange={e => setPhoto(e.target.files?.[0] || null)} />
         <label className="block text-xs font-semibold text-gray-600 mb-1">ملاحظة</label>
         <input className="input-field mb-3" value={note} onChange={e => setNote(e.target.value)} placeholder="مثال: سُلّم للبواب" />
         {err && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-2">📍 {err}</div>}
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={submit} disabled={busy} className="btn-primary text-sm px-4 disabled:opacity-50">{busy ? 'جارٍ…' : 'تأكيد التسليم'}</button>
+          <button onClick={submit} disabled={busy} data-tour="delivery-driver-pod-confirm" className="btn-primary text-sm px-4 disabled:opacity-50">{busy ? 'جارٍ…' : 'تأكيد التسليم'}</button>
         </div>
         <p className="text-[10px] text-gray-400 mt-2 text-center">سيُسجَّل موقعك الحالي تلقائياً كإثبات.</p>
       </div>

@@ -169,7 +169,7 @@ export default function FocAnalysisPage() {
         <div className="grid md:grid-cols-2 gap-4">
 
           {/* Top FOC suppliers */}
-          <div data-tour="purchasing-foc-suppliers" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-generous" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">🎁 أكثر الموردين كرمًا (أعلى بونص)</h3>
             {focQ.isLoading ? (
               <div className="animate-pulse space-y-2">
@@ -230,7 +230,7 @@ export default function FocAnalysisPage() {
           </div>
 
           {/* Effective cost comparison */}
-          <div data-tour="purchasing-foc-cost" className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-cost-compare" className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">⚖️ مقارنة التكلفة: الاسمية vs الفعلية</h3>
             {foc?.overall && (
               <div className="grid grid-cols-3 gap-4">
@@ -330,7 +330,7 @@ export default function FocAnalysisPage() {
           </div>
 
           {/* Top items returned as expired */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-damaged-items" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">📦 أكثر الأصناف إرجاعًا كتالف</h3>
             {expiryQ.isLoading ? (
               <div className="animate-pulse space-y-2">
@@ -421,7 +421,7 @@ export default function FocAnalysisPage() {
           </div>
 
           {/* Top suppliers by tax burden */}
-          <div className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-tax-suppliers" className="md:col-span-2 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">🏆 أعلى الموردين من حيث العبء الضريبي</h3>
             {taxQ.isLoading ? (
               <div className="animate-pulse space-y-2">

@@ -21,6 +21,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.purchasing.models import SalesRatePush
+from apps.supply.permissions import CanOperateSupply
 from . import rate_writer
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,16 @@ def _detail_payload(p):
 @permission_classes([IsAuthenticated])
 def push_detail(request, pk):
     return Response(_detail_payload(get_object_or_404(SalesRatePush, pk=pk)))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def push_export(request, pk):
+    """One rate batch as Excel, with «بيانات الصنف» (apps/supply/tab_exports.py). Read-only.
+    Same access as the other /supply exports (the detail view's IsAuthenticated-only is a known gap)."""
+    from apps.supply.tab_exports import rate_push_excel, xlsx_response
+    p = get_object_or_404(SalesRatePush, pk=pk)
+    return xlsx_response(rate_push_excel(p), f'sales_rates_{p.pk}.xlsx')
 
 
 @api_view(['POST'])

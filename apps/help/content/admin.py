@@ -128,7 +128,12 @@ SCREENS = [
             {'target': 'admin-settings-dropdowns', 'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
                                               'In "Dropdowns": the options used in screens, such as reservation channels.')},
         ],
-        'updated': '2026-10-11',
+        'tips': [
+            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
+            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
+              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'admin.sync',

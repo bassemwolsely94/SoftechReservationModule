@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoicesApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useGridKeyboard from '../hooks/useGridKeyboard'
+import SoftechGrid from './invoices/SoftechGrid'
+import BundleWorkbench from './invoices/BundleWorkbench'
+import ItemSearchInput from '../components/ItemSearchInput'
 
 // ── Download helper ────────────────────────────────────────────────────────────
 function triggerDownload(data, filename, mime) {
@@ -70,7 +73,9 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
   const [saving,      setSaving]      = useState(false)
 
   const fetchMatches = async () => {
-    if (matches.length) { setShowMatches(s => !s); return }
+    // Always re-fetch on open (don't cache): after the name is edited, the
+    // auto-suggestions must reflect the NEW name, not a stale list.
+    if (showMatches) { setShowMatches(false); return }
     setLoadingM(true)
     try {
       const r = await invoicesApi.lineMatches(invoiceId, line.id)
@@ -79,6 +84,14 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
     } finally {
       setLoadingM(false)
     }
+  }
+
+  // Free-text / item-code search pick (ItemSearchInput → updateLine).
+  const pickItem = async (item) => {
+    await invoicesApi.updateLine(invoiceId, line.id, { item: item.item_id, is_confirmed: true })
+    learnWithApproval(invoiceId, line.id, onNotify)
+    setShowMatches(false)
+    onUpdated()
   }
 
   const save = async () => {
@@ -255,9 +268,14 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
       {/* Match picker */}
       {showMatches && (
         <div className="border-t border-gray-100 bg-white p-3">
-          <div className="text-xs font-semibold text-gray-500 mb-2">اختر الصنف المطابق:</div>
+          {/* Free-text / item-code search — type a name or a SofTech code to re-match. */}
+          <div className="mb-3">
+            <div className="text-xs font-semibold text-gray-500 mb-1">ابحث بالاسم أو كود الصنف:</div>
+            <ItemSearchInput onSelect={pickItem} placeholder="ابحث بالاسم أو الكود… (مثال: strepsils أو 34192)" />
+          </div>
+          <div className="text-xs font-semibold text-gray-500 mb-2">اقتراحات تلقائية:</div>
           {matches.length === 0 ? (
-            <div className="text-xs text-gray-400">لا توجد نتائج</div>
+            <div className="text-xs text-gray-400">لا توجد اقتراحات — استخدم البحث بالأعلى</div>
           ) : (
             <div className="space-y-1">
               {matches.map(m => (
@@ -386,7 +404,10 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
   const [toast,        setToast]        = useState(null)
   const [anomalies,    setAnomalies]    = useState(null)   // null = not fetched yet
   const [showAnomalies,setShowAnomalies]= useState(false)
+  const [recon,        setRecon]        = useState(null)   // 3-way reconciliation result
+  const [poResult,     setPoResult]     = useState(null)   // PO match result / {linked:false}
   const [exporting,    setExporting]    = useState(null)   // 'excel' | 'csv' | null
+  const [viewMode,     setViewMode]     = useState('cards') // 'cards' | 'grid'
   const pollRef = useRef(null)
 
   const showToast = (msg, type = 'success') => {
@@ -517,9 +538,41 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
   const [pushing, setPushing]               = useState(false)
   const [preview, setPreview]               = useState(null)   // dry-run plan (opens the modal)
+  const [dupInfo, setDupInfo]               = useState(null)   // duplicate check {is_duplicate, ...}
+  const [dupChecking, setDupChecking]       = useState(false)
+  const [showDupPanel, setShowDupPanel]     = useState(false)
   const [previewVal, setPreviewVal]         = useState(null)   // {ok,errors,warnings} for the same invoice
   const [ackWarnings, setAckWarnings]       = useState(false)  // user accepted the warnings
   const [previewLoading, setPreviewLoading] = useState(false)
+
+  const [confirmingGreen, setConfirmingGreen] = useState(false)
+  const confirmGreen = async () => {
+    setConfirmingGreen(true)
+    try {
+      const { data } = await invoicesApi.confirmGreen(invoiceId)
+      showToast(data.detail || `تم تأكيد ${data.confirmed} سطراً`, data.still_review ? 'info' : 'success')
+      load()
+    } catch (e) {
+      showToast(e?.response?.data?.detail || 'تعذّر التأكيد الجماعي', 'error')
+    } finally {
+      setConfirmingGreen(false)
+    }
+  }
+
+  // Standalone thorough duplicate check (also auto-runs inside openPreview before push).
+  const runDupCheck = async () => {
+    setDupChecking(true)
+    setShowDupPanel(true)
+    try {
+      const { data } = await invoicesApi.duplicateCheck(invoiceId)
+      setDupInfo(data)
+      if (!data.is_duplicate && !data.likely_duplicate) showToast('✓ لا يوجد تكرار على SofTech')
+    } catch (e) {
+      showToast(e?.response?.data?.detail || 'تعذّر فحص التكرار', 'error')
+    } finally {
+      setDupChecking(false)
+    }
+  }
 
   const openPreview = async () => {
     setPreviewLoading(true)
@@ -531,6 +584,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
       ])
       if (p.data?.plan) {
         setPreview(p.data.plan)
+        setDupInfo(p.data.duplicates || null)
         setPreviewVal(v?.data || null)
         setAckWarnings(false)
       } else {
@@ -565,7 +619,12 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
       setPreview(null)
       load()
     } catch (e) {
-      showToast(e?.response?.data?.detail || 'فشل الترحيل', 'error')
+      if (e?.response?.status === 409 && e?.response?.data?.duplicate && !force) {
+        const ok = window.confirm((e.response.data.detail || 'فاتورة مكرّرة') + '\n\nهل تريد الترحيل رغم ذلك؟')
+        if (ok) { setPushing(false); return handlePush(true) }
+      } else {
+        showToast(e?.response?.data?.detail || 'فشل الترحيل', 'error')
+      }
     } finally {
       setPushing(false)
     }
@@ -657,6 +716,36 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             </div>
 
             <div className="p-6 overflow-auto space-y-4">
+              {dupInfo && (dupInfo.is_duplicate || dupInfo.likely_duplicate) && (
+                <div className={`rounded-xl px-4 py-3 text-sm ${dupInfo.is_duplicate ? 'bg-red-50 border border-red-300 text-red-800' : 'bg-amber-50 border border-amber-300 text-amber-800'}`}>
+                  <div className="font-bold mb-1">{dupInfo.is_duplicate ? '⛔ فاتورة مكرّرة' : '⚠ تكرار محتمل — راجع'}</div>
+                  {dupInfo.softech_match && (
+                    <div>سبق حفظها في SOFTECH برقم مستند <b className="font-mono">{dupInfo.softech_match.docnumber}</b>
+                      {dupInfo.softech_match.docdate ? ` بتاريخ ${String(dupInfo.softech_match.docdate).slice(0,10)}` : ''}
+                      {dupInfo.softech_match.docvalue ? ` — الإجمالي ${Number(dupInfo.softech_match.docvalue).toFixed(2)}` : ''}.</div>
+                  )}
+                  {(dupInfo.pg_duplicates || []).length > 0 && (
+                    <div>مُدخلة من قبل في هذا النظام: {dupInfo.pg_duplicates.map(d => `#${d.id} (${d.status})`).join('، ')}.</div>
+                  )}
+                  {(dupInfo.candidates || []).length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <div className="text-xs font-semibold">مستندات SofTech مشابهة (بعدّة عوامل):</div>
+                      {dupInfo.candidates.map(c => (
+                        <div key={c.docnumber} className="text-xs bg-white/60 rounded px-2 py-1">
+                          <b className="font-mono">#{c.docnumber}</b>
+                          <span className={`ms-1.5 px-1 rounded ${c.score >= 0.75 ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>تطابق {Math.round(c.score * 100)}%</span>
+                          {c.docvalue != null && <span className="ms-1.5">إجمالي {Number(c.docvalue).toFixed(2)}</span>}
+                          {c.item_count ? <span className="ms-1.5">· {c.item_count} صنف</span> : null}
+                          {c.save_date && <span className="ms-1.5 text-gray-500">· حُفظت {String(c.save_date).slice(0,10)}</span>}
+                          <div className="text-[11px] text-gray-600">{(c.factors || []).join(' · ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {dupInfo.softech_error && <div className="text-[11px] text-gray-500 mt-1">تعذّر فحص SofTech بالكامل: {dupInfo.softech_error}</div>}
+                  <div className="text-xs mt-1">راجع قبل الترحيل — الترحيل محمي ضد التكرار، وستحتاج «تأكيد» إضافياً للمتابعة.</div>
+                </div>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   ['الفرع', preview.branchcode],
@@ -743,7 +832,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">
                 إلغاء
               </button>
-              <button
+              <button data-tour="invoices-main-push-confirm"
                 onClick={() => handlePush((previewVal?.warnings?.length || 0) > 0)}
                 disabled={pushing || (previewVal?.errors?.length > 0)
                           || ((previewVal?.warnings?.length > 0) && !ackWarnings)}
@@ -786,6 +875,22 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
               </button>
             )}
 
+            {/* 3-way financial reconciliation */}
+            {lines.length > 0 && (
+              <button onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
+                className="px-3 py-1.5 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg text-xs font-medium hover:bg-indigo-100">
+                ⚖ المطابقة المالية
+              </button>
+            )}
+
+            {/* PO / goods-received (separate advisory check) */}
+            {lines.length > 0 && (
+              <button onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
+                className="px-3 py-1.5 border border-gray-300 text-gray-600 bg-gray-50 rounded-lg text-xs font-medium hover:bg-gray-100">
+                🔗 أمر الشراء
+              </button>
+            )}
+
             {/* Export buttons */}
             {lines.length > 0 && (
               <>
@@ -801,13 +906,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             )}
 
             {inv.source_image_url && editable && (
-              <button onClick={handleRerunOcr} disabled={rerunning}
+              <button data-tour="invoices-main-ocr" onClick={handleRerunOcr} disabled={rerunning}
                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
                 {rerunning ? '...' : '🔄 إعادة OCR'}
               </button>
             )}
             {editable && (
-              <button onClick={handleConfirm}
+              <button data-tour="invoices-main-confirm" onClick={handleConfirm}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
                 ✓ تأكيد الفاتورة
               </button>
@@ -815,14 +920,28 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* SOFTECH writeback — validate + preview + push */}
             {['review', 'confirmed', 'push_failed', 'queued'].includes(inv.status) && lines.length > 0 && (
-              <button onClick={handleValidate} disabled={validating}
+              <button data-tour="invoices-main-validate" onClick={handleValidate} disabled={validating}
                 title="فحص قواعد SOFTECH (حد الائتمان، الأصناف المسموحة، حدود السعر، الصلاحية…)"
                 className="px-3 py-1.5 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg text-sm font-medium hover:bg-indigo-100 disabled:opacity-50">
                 {validating ? '...' : '🛡 فحص التحقق'}
               </button>
             )}
+            {editable && lines.some(l => l.item && !l.is_confirmed) && (
+              <button data-tour="invoices-main-confirm-ready" onClick={confirmGreen} disabled={confirmingGreen}
+                title="تأكيد كل السطور الجاهزة (مطابقة ≥85% ولها سعر) دفعة واحدة — تبقى فقط السطور التي تحتاج مراجعة"
+                className="px-3 py-1.5 border border-green-300 text-green-700 bg-green-50 rounded-lg text-sm font-medium hover:bg-green-100 disabled:opacity-50">
+                {confirmingGreen ? '...' : '✓ تأكيد الجاهزة'}
+              </button>
+            )}
+            {inv.status !== 'finalized' && (
+              <button data-tour="invoices-main-dupcheck" onClick={runDupCheck} disabled={dupChecking}
+                title="فحص شامل على SofTech: رقم الفاتورة، الإجمالي، الأصناف، عددها، التاريخ وتاريخ الحفظ — قبل الترحيل لتجنّب التكرار"
+                className="px-3 py-1.5 border border-rose-300 text-rose-700 bg-rose-50 rounded-lg text-sm font-medium hover:bg-rose-100 disabled:opacity-50">
+                {dupChecking ? '...' : '🔎 فحص التكرار'}
+              </button>
+            )}
             {['confirmed', 'push_failed', 'queued'].includes(inv.status) && (
-              <button onClick={openPreview} disabled={previewLoading || pushing}
+              <button data-tour="invoices-main-push" onClick={openPreview} disabled={previewLoading || pushing}
                 title="معاينة ثم ترحيل الفاتورة إلى SOFTECH كمستند شراء نهائي"
                 className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
                 {previewLoading ? 'جارٍ التحضير...' : (inv.status === 'push_failed' ? '↻ إعادة الترحيل' : '⇪ ترحيل إلى ERP')}
@@ -834,13 +953,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                   title="رقم المستند في SOFTECH">
                   ✓ مُرحّلة — مستند #{inv.softech_docnumber}
                 </span>
-                <button onClick={handleReconcile} disabled={reconciling}
+                <button data-tour="invoices-main-verify" onClick={handleReconcile} disabled={reconciling}
                   title="التحقق من وجود المستند في SOFTECH"
                   className="px-2.5 py-1 border border-indigo-200 text-indigo-600 rounded-lg text-xs font-medium hover:bg-indigo-50 disabled:opacity-50">
                   {reconciling ? '...' : '🔄 تحقق'}
                 </button>
                 {inv.doc_kind === 'purchase' && (
-                  <button onClick={handleCreateReturn} disabled={returning}
+                  <button data-tour="invoices-main-return" onClick={handleCreateReturn} disabled={returning}
                     title="إنشاء مرتجع مورد لهذه الفاتورة"
                     className="px-2.5 py-1 border border-orange-200 text-orange-600 rounded-lg text-xs font-medium hover:bg-orange-50 disabled:opacity-50">
                     {returning ? '...' : '↩ إنشاء مرتجع'}
@@ -992,6 +1111,62 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           </div>
         )}
 
+        {/* 3-way financial reconciliation panel */}
+        {recon && (
+          <div className="mb-5 bg-indigo-50 border border-indigo-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold text-indigo-800 text-sm">⚖ المطابقة المالية (ثلاثية)</div>
+              <button onClick={() => setRecon(null)} className="text-indigo-500 hover:text-indigo-700 text-xs">إغلاق</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+              {[['المقروء من الفاتورة', recon.ocr_total], ['إجمالي أسطرنا', recon.reconstructed_total],
+                ['المُسجَّل في SOFTECH', recon.softech_total]].map(([lbl, v], i) => (
+                <div key={i} className="bg-white rounded-xl p-2 border border-indigo-100">
+                  <div className="text-gray-400">{lbl}</div>
+                  <div className="font-bold text-gray-800 tabular-nums">{v != null ? Number(v).toFixed(2) : '—'}</div>
+                </div>
+              ))}
+            </div>
+            {(recon.flags || []).length === 0
+              ? <div className="text-green-600 text-xs">✓ الإجماليات متطابقة</div>
+              : <div className="space-y-1">{recon.flags.map((f, i) => (
+                  <div key={i} className={`text-xs rounded-lg px-3 py-2 ${f.severity === 'error' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{f.message}</div>
+                ))}</div>}
+            {!recon.checked_softech && <div className="text-[11px] text-gray-400 mt-2">تعذّر قراءة إجمالي SOFTECH (قد يكون الخادم غير متاح).</div>}
+          </div>
+        )}
+
+        {/* PO / goods-received advisory match */}
+        {poResult && (
+          <div className="mb-5 bg-gray-50 border border-gray-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold text-gray-700 text-sm">🔗 مطابقة أمر الشراء (استرشادية)</div>
+              <button onClick={() => setPoResult(null)} className="text-gray-400 hover:text-gray-600 text-xs">إغلاق</button>
+            </div>
+            {poResult.linked === false ? (
+              <div className="text-xs text-gray-500">لا يوجد أمر شراء مرتبط بهذه الفاتورة. اربط أمر شراء من API/الإدارة لتفعيل المطابقة.</div>
+            ) : (
+              <>
+                <div className="flex gap-3 text-xs mb-2">
+                  <span className="text-green-600">مطابق: {poResult.summary?.matched}</span>
+                  <span className="text-amber-600">فرق كمية: {poResult.summary?.qty_mismatch}</span>
+                  <span className="text-amber-600">فرق سعر: {poResult.summary?.price_mismatch}</span>
+                  <span className="text-red-600">ناقص: {poResult.summary?.missing}</span>
+                  <span className="text-blue-600">زائد: {poResult.summary?.extra}</span>
+                </div>
+                <div className="max-h-48 overflow-auto space-y-1">
+                  {(poResult.lines || []).filter(l => l.status !== 'ok').map((l, i) => (
+                    <div key={i} className="text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100 flex justify-between">
+                      <span>{l.item_name}</span>
+                      <span className="tabular-nums text-gray-500">طلب {l.po_qty}→فاتورة {l.inv_qty} · سعر {l.po_price}→{l.inv_price}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* OCR image preview */}
         {inv.source_image_url && (
           <div className="mb-4 flex items-start gap-4">
@@ -1006,11 +1181,64 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           </div>
         )}
 
+        {showDupPanel && dupInfo && (
+          <div className={`mb-3 rounded-xl px-4 py-3 text-sm ${dupInfo.is_duplicate ? 'bg-red-50 border border-red-300 text-red-800' : dupInfo.likely_duplicate ? 'bg-amber-50 border border-amber-300 text-amber-800' : 'bg-green-50 border border-green-300 text-green-800'}`}>
+            <div className="flex items-center justify-between">
+              <div className="font-bold">
+                {dupInfo.is_duplicate ? '⛔ فاتورة مكرّرة — سبق حفظها' : dupInfo.likely_duplicate ? '⚠ تكرار محتمل — راجع المستندات المشابهة' : '✓ لا يوجد تكرار على SofTech'}
+              </div>
+              <button onClick={() => setShowDupPanel(false)} className="text-xs opacity-60 hover:opacity-100">إغلاق ✕</button>
+            </div>
+            {dupInfo.softech_match && (
+              <div className="mt-1">سبق حفظها في SOFTECH برقم مستند <b className="font-mono">{dupInfo.softech_match.docnumber}</b>
+                {dupInfo.softech_match.docdate ? ` بتاريخ ${String(dupInfo.softech_match.docdate).slice(0,10)}` : ''}
+                {dupInfo.softech_match.docvalue ? ` — الإجمالي ${Number(dupInfo.softech_match.docvalue).toFixed(2)}` : ''}.</div>
+            )}
+            {(dupInfo.pg_duplicates || []).length > 0 && (
+              <div className="mt-1">مُدخلة من قبل في هذا النظام: {dupInfo.pg_duplicates.map(d => `#${d.id} (${d.status})`).join('، ')}.</div>
+            )}
+            {(dupInfo.candidates || []).length > 0 && (
+              <div className="mt-2 space-y-1">
+                <div className="text-xs font-semibold">مستندات SofTech مشابهة (بعدّة عوامل):</div>
+                {dupInfo.candidates.map(c => (
+                  <div key={c.docnumber} className="text-xs bg-white/60 rounded px-2 py-1">
+                    <b className="font-mono">#{c.docnumber}</b>
+                    <span className={`ms-1.5 px-1 rounded ${c.score >= 0.75 ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>تطابق {Math.round(c.score * 100)}%</span>
+                    {c.docvalue != null && <span className="ms-1.5">إجمالي {Number(c.docvalue).toFixed(2)}</span>}
+                    {c.item_count ? <span className="ms-1.5">· {c.item_count} صنف</span> : null}
+                    {c.save_date && <span className="ms-1.5 text-gray-500">· حُفظت {String(c.save_date).slice(0,10)}</span>}
+                    <div className="text-[11px] text-gray-600">{(c.factors || []).join(' · ')}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {dupInfo.checked_softech === false && <div className="text-[11px] text-gray-500 mt-1">لم يُفحص SofTech (تحقق من الاتصال/إعدادات المورد).</div>}
+            {dupInfo.softech_error && <div className="text-[11px] text-gray-500 mt-1">تعذّر فحص SofTech بالكامل: {dupInfo.softech_error}</div>}
+          </div>
+        )}
+
+        {lines.length > 0 && (
+          <div data-tour="invoices-main-view" className="flex items-center gap-1 mb-3 text-sm">
+            <span className="text-gray-400 text-xs ml-1">العرض:</span>
+            <button onClick={() => setViewMode('cards')}
+              className={`px-2.5 py-1 rounded-lg ${viewMode === 'cards' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+              بطاقات
+            </button>
+            <button onClick={() => setViewMode('grid')}
+              className={`px-2.5 py-1 rounded-lg ${viewMode === 'grid' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+              title="جدول مطابق لشاشة SofTech مع تعديل مباشر">
+              ⊞ جدول SofTech
+            </button>
+          </div>
+        )}
+
         {lines.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <div className="text-4xl mb-3">📄</div>
             <div>لا توجد سطور. أضف يدوياً أو قم برفع صورة للفاتورة.</div>
           </div>
+        ) : viewMode === 'grid' ? (
+          <SoftechGrid invoiceId={invoiceId} editable={editable} onChanged={load} />
         ) : (
           <div className="max-w-3xl">
             {editable && <div className="text-[11px] text-gray-400 mb-1">⌨ ↑↓ تنقل · Enter تأكيد والتالي · M اقتراحات المطابقة</div>}
@@ -1059,10 +1287,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
 function CreateInvoiceModal({ branches, onClose, onCreated }) {
   const fileRef = useRef()
-  const [form, setForm] = useState({ branch: '', supplier_name: '', invoice_number: '', invoice_date: '' })
+  const [form, setForm] = useState({ branch: '', vendor: '', invoice_number: '' })
+  const [vendors, setVendors] = useState([])
   const [file, setFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
+
+  useEffect(() => { invoicesApi.listVendors({ main: 1 }).then(r => setVendors(r.data.results || r.data)).catch(() => {}) }, [])
 
   const submit = async () => {
     if (!form.branch) { setError('اختر الفرع'); return }
@@ -1095,31 +1326,27 @@ function CreateInvoiceModal({ branches, onClose, onCreated }) {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-600 block mb-1">اسم المورد</label>
-            <input value={form.supplier_name}
-              onChange={e => setForm(f => ({ ...f, supplier_name: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-              placeholder="مثال: شركة الحكمة" />
+            <label className="text-xs text-gray-600 block mb-1">المورد</label>
+            <select value={form.vendor}
+              onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+              <option value="">— اختر المورد —</option>
+              {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+            <div className="text-[11px] text-gray-400 mt-1">يُحسِّن المطابقة ويُفعّل قالب الأعمدة. التاريخ ورقم الفاتورة يُقرآن تلقائياً من الصورة.</div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-600 block mb-1">رقم الفاتورة</label>
-              <input value={form.invoice_number}
-                onChange={e => setForm(f => ({ ...f, invoice_number: e.target.value }))}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600 block mb-1">التاريخ</label>
-              <input type="date" value={form.invoice_date}
-                onChange={e => setForm(f => ({ ...f, invoice_date: e.target.value }))}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-            </div>
+          <div>
+            <label className="text-xs text-gray-600 block mb-1">رقم الفاتورة (اختياري)</label>
+            <input value={form.invoice_number}
+              onChange={e => setForm(f => ({ ...f, invoice_number: e.target.value }))}
+              placeholder="يُقرأ من الصورة إن تُرك فارغاً"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
           </div>
 
           {/* Image upload */}
           <div>
             <label className="text-xs text-gray-600 block mb-1">صورة الفاتورة (OCR)</label>
-            <div
+            <div data-tour="invoices-main-new-upload"
               onClick={() => fileRef.current?.click()}
               className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors
                 ${file ? 'border-brand-400 bg-brand-50' : 'border-gray-300 hover:border-brand-300'}`}
@@ -1143,7 +1370,7 @@ function CreateInvoiceModal({ branches, onClose, onCreated }) {
         </div>
         {error && <div className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div className="flex gap-2 mt-5">
-          <button onClick={submit} disabled={saving}
+          <button data-tour="invoices-main-new-create" onClick={submit} disabled={saving}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? (file ? 'جاري الرفع والمعالجة...' : 'جاري الإنشاء...') : 'إنشاء الفاتورة'}
           </button>
@@ -1165,6 +1392,29 @@ export default function InvoicePage() {
   const [activeId,     setActiveId]     = useState(null)
   const [filterBranch, setFilterBranch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterAttention, setFilterAttention] = useState('')   // '' | '1' | 'clean'
+  const [selected,     setSelected]     = useState(() => new Set())  // batch push selection
+  const [pushingBatch, setPushingBatch] = useState(false)
+  const [batchResult,  setBatchResult]  = useState(null)
+  const [tab,          setTab]          = useState('invoices')       // 'invoices' | 'bundles'
+
+  const PUSHABLE = new Set(['confirmed', 'queued', 'push_failed'])
+  const toggleSelect = (id) => setSelected(s => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const runBatchPush = async () => {
+    const ids = [...selected]
+    if (!ids.length) return
+    setPushingBatch(true); setBatchResult(null)
+    try {
+      const r = await invoicesApi.pushBatch(ids)
+      setBatchResult(r.data)
+      setSelected(new Set())
+      loadInvoices()
+    } catch (e) {
+      setBatchResult({ error: e.response?.data?.detail || 'فشل ترحيل الدفعة' })
+    } finally { setPushingBatch(false) }
+  }
 
   const loadInvoices = useCallback(async () => {
     setLoading(true)
@@ -1172,12 +1422,13 @@ export default function InvoicePage() {
       const params = {}
       if (filterBranch) params.branch = filterBranch
       if (filterStatus) params.status = filterStatus
+      if (filterAttention) params.attention = filterAttention
       const r = await invoicesApi.list(params)
       setInvoices(r.data.results || r.data)
     } finally {
       setLoading(false)
     }
-  }, [filterBranch, filterStatus])
+  }, [filterBranch, filterStatus, filterAttention])
 
   useEffect(() => { branchesApi.list().then(r => setBranches(r.data.results || r.data)) }, [])
   useEffect(() => { loadInvoices() }, [loadInvoices])
@@ -1213,22 +1464,49 @@ export default function InvoicePage() {
             + فاتورة جديدة
           </button>
         </div>
-        <div data-tour="invoices-main-filters" className="flex gap-3 mt-4 flex-wrap">
-          <BranchSelect
-            size="sm"
-            value={filterBranch}
-            onChange={setFilterBranch}
-            branches={branches}
-            allLabel="كل الفروع"
-            className="w-52"
-          />
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-            <option value="">كل الحالات</option>
-            {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.dot} {c.label}</option>)}
-          </select>
+        {/* Tabs: single invoices vs multi-invoice PDF bundles */}
+        <div data-tour="invoices-main-tabs" className="flex gap-2 mt-4">
+          <button onClick={() => setTab('invoices')}
+            className={`px-4 py-1.5 rounded-xl text-sm font-medium ${tab === 'invoices' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            🧾 الفواتير
+          </button>
+          <button onClick={() => setTab('bundles')}
+            className={`px-4 py-1.5 rounded-xl text-sm font-medium ${tab === 'bundles' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            📑 حزم (PDF متعدد)
+          </button>
         </div>
+        {tab === 'invoices' && (
+          <div data-tour="invoices-main-filters" className="flex gap-3 mt-4 flex-wrap">
+            <BranchSelect
+              size="sm"
+              value={filterBranch}
+              onChange={setFilterBranch}
+              branches={branches}
+              allLabel="كل الفروع"
+              className="w-52"
+            />
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
+              <option value="">كل الحالات</option>
+              {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.dot} {c.label}</option>)}
+            </select>
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-0.5">
+              {[['', 'الكل'], ['1', '⚠ تحتاج مراجعة'], ['clean', '✓ نظيفة']].map(([v, lbl]) => (
+                <button key={v} onClick={() => setFilterAttention(v)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium ${filterAttention === v ? 'bg-white shadow text-brand-700' : 'text-gray-500'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {tab === 'bundles' && (
+        <BundleWorkbench branches={branches} onOpenInvoice={(id) => setActiveId(id)} />
+      )}
+      {tab === 'invoices' && (<>
+      {/* ── invoices list below ── */}
 
       {/* List */}
       <div className="flex-1 overflow-auto p-6">
@@ -1251,8 +1529,17 @@ export default function InvoicePage() {
                 ? Math.round((inv.confirmed_count / inv.line_count) * 100)
                 : 0
               return (
-                <button key={inv.id} onClick={() => setActiveId(inv.id)}
-                  className="bg-white rounded-2xl border border-gray-200 p-5 text-right hover:border-brand-300 hover:shadow-md transition-all">
+                <div key={inv.id} data-tour="invoices-main-card" role="button" tabIndex={0}
+                  onClick={() => setActiveId(inv.id)}
+                  onKeyDown={e => { if (e.key === 'Enter') setActiveId(inv.id) }}
+                  className={`relative bg-white rounded-2xl border p-5 text-right cursor-pointer hover:border-brand-300 hover:shadow-md transition-all ${selected.has(inv.id) ? 'border-brand-500 ring-2 ring-brand-200' : 'border-gray-200'}`}>
+                  {PUSHABLE.has(inv.status) && (
+                    <label data-tour="invoices-main-batch-select" onClick={e => e.stopPropagation()}
+                      className="absolute top-3 left-3 flex items-center cursor-pointer" title="تحديد للترحيل كدفعة">
+                      <input type="checkbox" checked={selected.has(inv.id)}
+                        onChange={() => toggleSelect(inv.id)} className="w-4 h-4 accent-brand-600" />
+                    </label>
+                  )}
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="font-bold text-gray-900 text-sm">{inv.supplier_name || 'مورد غير محدد'}</div>
@@ -1265,9 +1552,24 @@ export default function InvoicePage() {
                       {cfg.dot} {cfg.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                  <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
                     <span>{inv.line_count} سطر</span>
                     <span className="text-green-600">{inv.confirmed_count} مُأكَّد</span>
+                    {inv.attention_count > 0 && (
+                      <span className="text-amber-600">⚠ {inv.attention_count} تحتاج مراجعة</span>
+                    )}
+                    {inv.dup_check?.is_duplicate && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium"
+                        title={`سبق حفظها على SofTech${inv.dup_check.softech_docnumber ? ` (مستند #${inv.dup_check.softech_docnumber})` : ''}`}>
+                        ⛔ مكرّرة
+                      </span>
+                    )}
+                    {!inv.dup_check?.is_duplicate && inv.dup_check?.likely_duplicate && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium"
+                        title={`تكرار محتمل (تطابق ${Math.round((inv.dup_check.best_score || 0) * 100)}%)`}>
+                        ⚠ تكرار محتمل
+                      </span>
+                    )}
                   </div>
                   {inv.line_count > 0 && (
                     <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -1290,12 +1592,60 @@ export default function InvoicePage() {
                       </span>
                     )}
                   </div>
-                </button>
+                </div>
               )
             })}
           </div>
         )}
       </div>
+
+      {/* Batch push action bar */}
+      {selected.size > 0 && (
+        <div className="shrink-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between gap-3">
+          <div className="text-sm text-gray-600">
+            تم تحديد <b>{selected.size}</b> فاتورة للترحيل
+            <button onClick={() => setSelected(new Set())} className="mr-3 text-xs text-gray-400 hover:text-gray-600">إلغاء التحديد</button>
+          </div>
+          <button data-tour="invoices-main-batch-push" onClick={runBatchPush} disabled={pushingBatch}
+            className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium text-sm hover:bg-brand-700 disabled:opacity-50">
+            {pushingBatch ? 'جارٍ الترحيل…' : `⇪ ترحيل المحدد (${selected.size})`}
+          </button>
+        </div>
+      )}
+
+      {/* Batch result panel */}
+      {batchResult && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setBatchResult(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" dir="rtl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="font-bold text-gray-900">نتيجة ترحيل الدفعة</div>
+              <button onClick={() => setBatchResult(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            {batchResult.error ? (
+              <div className="p-5 text-red-600">{batchResult.error}</div>
+            ) : (
+              <>
+                <div className="px-5 py-3 text-sm flex gap-4 border-b border-gray-100">
+                  <span className="text-green-600">نجح: <b>{batchResult.succeeded}</b></span>
+                  <span className="text-red-600">فشل: <b>{batchResult.failed}</b></span>
+                  <span className="text-gray-500">الإجمالي: {batchResult.total}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+                  {batchResult.results.map(r => (
+                    <div key={r.id} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm ${r.ok ? 'bg-green-50' : r.skipped ? 'bg-gray-50' : 'bg-red-50'}`}>
+                      <span className="text-gray-700 truncate">#{r.id} {r.supplier || ''}</span>
+                      <span className={`text-xs ${r.ok ? 'text-green-700' : r.skipped ? 'text-gray-500' : 'text-red-600'}`}>
+                        {r.docnumber ? `ERP #${r.docnumber}` : r.mode === 'dry_run' ? 'معاينة (الترحيل غير مُفعّل)' : r.disabled ? 'الترحيل غير مُفعّل' : (r.error || (r.ok ? 'تم' : 'فشل'))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      </>)}
     </div>
   )
 }

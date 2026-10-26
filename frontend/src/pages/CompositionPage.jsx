@@ -117,7 +117,7 @@ function CandidateRow({ cand, classes, onApprove, onReject, onNonDrug, onSetClas
             <span className={`rounded px-1.5 text-[11px] ${confColor(cand.confidence)}`}>{Math.round(cand.confidence * 100)}%</span>
             {st.label && <span className={`rounded px-1.5 text-[11px] ${st.cls}`}>{st.label}</span>}
             {cand.item_count > 0 && (
-              <button onClick={() => setShowItems(s => !s)} className="text-[11px] text-primary hover:underline">
+              <button data-tour="chronic-composition-items" onClick={() => setShowItems(s => !s)} className="text-[11px] text-primary hover:underline">
                 {cand.item_count} صنف {showItems ? '▲' : '▼'}
               </button>
             )}
@@ -132,7 +132,7 @@ function CandidateRow({ cand, classes, onApprove, onReject, onNonDrug, onSetClas
                 </span>
               ))}
               {comps.length === 0 && <span className="text-xs text-muted">لا مادة فعّالة مُستخرَجة</span>}
-              <button onClick={() => setEditing(true)} className="text-[11px] text-primary hover:underline ms-1">✎ تعديل</button>
+              <button data-tour="chronic-composition-edit" onClick={() => setEditing(true)} className="text-[11px] text-primary hover:underline ms-1">✎ تعديل</button>
             </div>
           )}
           {editing && (
@@ -146,19 +146,19 @@ function CandidateRow({ cand, classes, onApprove, onReject, onNonDrug, onSetClas
         </div>
 
         <div data-tour="chronic-composition-row-actions" className="flex flex-wrap items-center gap-1.5">
-          <select value={selectedClass || ''} onChange={e => onSetClass(cand.id, e.target.value ? Number(e.target.value) : '')}
+          <select data-tour="chronic-composition-class" value={selectedClass || ''} onChange={e => onSetClass(cand.id, e.target.value ? Number(e.target.value) : '')}
             className="rounded border border-line bg-surface px-2 py-1 text-xs text-content max-w-[210px]" title="Class / التصنيف">
             <option value="">— no class / بدون —</option>
             {classes.map(c => <option key={c.id} value={c.id}>{classLabel(c)}</option>)}
           </select>
-          <button onClick={() => onApprove(cand.id, selectedClass || undefined)}
+          <button data-tour="chronic-composition-approve" onClick={() => onApprove(cand.id, selectedClass || undefined)}
             className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700">اعتماد</button>
-          <select value="" onChange={e => e.target.value && onNonDrug(cand.id, e.target.value)}
+          <select data-tour="chronic-composition-non-drug" value="" onChange={e => e.target.value && onNonDrug(cand.id, e.target.value)}
             className="rounded border border-line bg-surface px-2 py-1 text-xs text-muted" title="non-drug">
             <option value="">غير دوائي…</option>
             {NON_DRUG.map(n => <option key={n.key} value={n.key}>{n.label}</option>)}
           </select>
-          <button onClick={() => onReject(cand.id)}
+          <button data-tour="chronic-composition-reject" onClick={() => onReject(cand.id)}
             className="rounded border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50">رفض</button>
         </div>
       </div>
@@ -220,7 +220,7 @@ export default function CompositionPage() {
       </div>
 
       {/* Action toolbar — full-width buttons so nothing can be clipped off-edge */}
-      <button onClick={() => setShowNewClass(s => !s)}
+      <button data-tour="chronic-composition-new-class" onClick={() => setShowNewClass(s => !s)}
         style={{ backgroundColor: '#022871' }}
         className="block w-full rounded-lg px-4 py-3 text-center text-base font-bold text-white hover:opacity-90">
         ＋ إضافة تصنيف جديد

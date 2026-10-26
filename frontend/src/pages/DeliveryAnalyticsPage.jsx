@@ -33,7 +33,7 @@ function DriverPerformanceTab({ dateFrom, dateTo, branchId }) {
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="overflow-x-auto rounded-xl border border-gray-200" data-tour="delivery-analytics-drivers">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs">
             <tr>
@@ -327,7 +327,7 @@ export default function DeliveryAnalyticsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center gap-3" data-tour="delivery-analytics-period">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center gap-3" data-tour="delivery-analytics-filters">
         {[
           {l:'اليوم',f:_today(),t:_today()},
           {l:'٧ أيام',f:_daysAgo(7),t:_today()},

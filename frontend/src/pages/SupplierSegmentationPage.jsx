@@ -73,7 +73,7 @@ function OverrideModal({ seg, catList, onClose, onSave }) {
         <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">⚠️ سيتم تعطيل التصنيف التلقائي لهذا المورد ويبقى ثابتًا عند إعادة التشغيل.</p>
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
-          <button onClick={() => onSave({ supplier_category: category, notes })} className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700">حفظ التعديل</button>
+          <button data-tour="purchasing-segments-save" onClick={() => onSave({ supplier_category: category, notes })} className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700">حفظ التعديل</button>
         </div>
       </div>
     </div>
@@ -167,7 +167,7 @@ export default function SupplierSegmentationPage() {
       )}
 
       {/* Supplier list */}
-      <div data-tour="purchasing-segments-list" className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div data-tour="purchasing-segments-table" className="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">
             قائمة الموردين

@@ -2018,13 +2018,29 @@ def _run_inflation_reminder():
         logger.error('[APScheduler] inflation reminder failed: %s', exc)
 
 
+def _run_seasonality_refresh():
+    """Seasonality (owner 2026-10-25): once a month has closed, pull it from SOFTECH (SELECT
+    only) and recompute the index — checked every 6 h so a machine that was asleep catches
+    up (apps/purchasing/seasonality.py)."""
+    try:
+        from apps.purchasing import seasonality
+        run = seasonality.scheduled_tick()
+        if run is not None:
+            logger.info('[APScheduler] seasonality %s (%s months, %s items)', run.status, run.months_pulled, run.items)
+    except Exception as exc:
+        logger.error('[APScheduler] seasonality refresh failed: %s', exc)
+
+
 def _run_procurement_refresh():
     """Keep procurement.PurchaseLine current so the purchasing insight rules aren't stale.
-    Short lookback (the engine upserts) — runs just before the daily insight report."""
+    Catch-up (owner 2026-10-24): checked every 30 min, runs only when the last success is
+    older than 20 h and pulls every day since it — a 06:45-only cron was skipped whenever
+    the machine was asleep, and purchases froze at 18-10 (apps/procurement/refresh.py)."""
     try:
-        from django.core.management import call_command
-        call_command('run_procurement_engine', days=14, triggered_by='scheduler', verbosity=0)
-        logger.info('[APScheduler] procurement refresh done')
+        from apps.procurement import refresh
+        run = refresh.scheduled_tick()
+        if run is not None:
+            logger.info('[APScheduler] procurement refresh %s (%s days)', run.status, run.period_days)
     except Exception as exc:
         logger.error('[APScheduler] procurement refresh failed: %s', exc)
 
@@ -2820,6 +2836,28 @@ def _escalate_overdue_approvals():
         logger.error('[APScheduler] escalate_overdue_approvals failed: %s', exc)
 
 
+def _escalate_breached_cases():
+    """Every hour — customer cases past their SLA deadline → escalated + notify. Non-fatal."""
+    try:
+        from apps.callcenter.sla import backfill_missing_sla, escalate_breached_cases
+        backfilled = backfill_missing_sla()
+        count = escalate_breached_cases()
+        if count or backfilled:
+            logger.info('[APScheduler] escalate_breached_cases: %d escalated, %d backfilled',
+                        count, backfilled)
+    except Exception as exc:
+        logger.error('[APScheduler] escalate_breached_cases failed: %s', exc)
+
+
+def _whisper_tick():
+    """Every 15 min — launch the nightly Whisper runner (own process) when in its window."""
+    try:
+        from apps.callcenter.whisper import maybe_launch_runner
+        maybe_launch_runner()
+    except Exception as exc:
+        logger.error('[APScheduler] whisper tick failed: %s', exc)
+
+
 def _run_forecast_job():
     """
     Daily at 02:30 Cairo (after customer segmentation, before near-expiry scan).
@@ -3112,6 +3150,28 @@ def start_scheduler():
         misfire_grace_time=300,
     )
 
+    # Customer-case SLA escalation — every hour
+    _scheduler.add_job(
+        _escalate_breached_cases,
+        'interval',
+        hours=1,
+        id='escalate_breached_cases',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
+    # Whisper nightly transcription — checks every 15 min, runs only inside its window
+    _scheduler.add_job(
+        _whisper_tick,
+        'interval',
+        minutes=15,
+        id='whisper_tick',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
     # Sales forecast engine — daily at 02:30 Cairo (after segmentation at 02:00)
     _scheduler.add_job(
         _run_forecast_job,
@@ -3153,8 +3213,12 @@ def start_scheduler():
     # Refresh procurement.PurchaseLine before the insight reports so the purchasing
     # rules (price-creep, supplier concentration, etc.) run on current data.
     _scheduler.add_job(
-        _run_procurement_refresh, 'cron', hour=6, minute=45, id='procurement_refresh',
-        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+        _run_procurement_refresh, 'interval', minutes=30, id='procurement_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
+    )
+    _scheduler.add_job(
+        _run_seasonality_refresh, 'interval', hours=6, id='seasonality_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     # Incrementally mirror new purchase-expiry entries (main suppliers) right after
     # the procurement refresh — keeps the near-expiry physical audit report current.

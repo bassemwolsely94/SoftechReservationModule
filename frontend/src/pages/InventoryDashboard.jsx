@@ -114,12 +114,15 @@ export default function InventoryDashboard() {
           <p className="text-sm text-gray-500 mt-0.5">نواقص · فائض · راكد · نوع الدواء · توزيع الفروع</p>
           {data?.run_date && <p className="text-xs text-gray-400 mt-0.5">آخر تشغيل: {data.run_date}</p>}
         </div>
-        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary">
-          تحديث
-        </RefreshButton>
+        <div data-tour="catalog-inventory-refresh">
+          <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary">
+            تحديث
+          </RefreshButton>
+        </div>
       </div>
 
       {/* Shared filter panel — show only inventory-relevant filters */}
+      <div data-tour="catalog-inventory-filters">
       <AnalyticsFilterPanel
         filters={filters}
         onChange={setFilters}
@@ -141,9 +144,10 @@ export default function InventoryDashboard() {
           showMedicineTypes:   true,
         }}
       />
+      </div>
 
       {/* ABC class filter — inventory-specific, added inline */}
-      <div data-tour="catalog-inventory-abc-filter" className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-2">
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-2" data-tour="catalog-inventory-abc">
         <span className="text-xs text-gray-500 font-medium">فئة ABC:</span>
         {(opts?.abc_classes || [
           { code: 'A', label: 'فئة A' }, { code: 'B', label: 'فئة B' },
@@ -172,11 +176,13 @@ export default function InventoryDashboard() {
       </div>
 
       {/* Item operational filters — insurance, level, store_classif, nosale, trans, FMI, points */}
-      <ItemOperationalFiltersBar
-        filters={itemFilters}
-        onChange={setItemFilters}
-        options={itemFilterOpts || {}}
-      />
+      <div data-tour="catalog-inventory-item-filters">
+        <ItemOperationalFiltersBar
+          filters={itemFilters}
+          onChange={setItemFilters}
+          options={itemFilterOpts || {}}
+        />
+      </div>
 
       {isLoading && <div className="flex justify-center h-40 items-center"><div className="text-brand-600 animate-pulse">جارٍ التحميل…</div></div>}
       {isError   && <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center text-red-600">تعذّر تحميل بيانات المخزون</div>}
@@ -184,7 +190,7 @@ export default function InventoryDashboard() {
       {data && (
         <>
           {/* KPIs */}
-          <div data-tour="catalog-inventory-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-tour="catalog-inventory-kpis">
             <KpiCard label="إجمالي الأصناف"       value={fmt(data.total_items)}       color="brand" icon="📦" />
             <KpiCard label="أصناف ناقصة"           value={fmt(data.shortage_items)}
               sub={`قيمة الفجوة: ${fmt(data.shortage_value)} جم`}                    color="red"   icon="⚠️" />
@@ -204,7 +210,7 @@ export default function InventoryDashboard() {
 
           {/* Tab bar */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div data-tour="catalog-inventory-tabs" className="flex border-b border-gray-100 overflow-x-auto">
+            <div className="flex border-b border-gray-100 overflow-x-auto" data-tour="catalog-inventory-tabs">
               {TAB_CONFIG.map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px
@@ -219,7 +225,7 @@ export default function InventoryDashboard() {
               ))}
             </div>
 
-            <div data-tour="catalog-inventory-tab-content" className="p-0">
+            <div className="p-0" data-tour="catalog-inventory-table">
 
               {activeTab === 'shortages' && (
                 <div>

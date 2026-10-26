@@ -68,7 +68,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = CallLog.objects.select_related(
             'customer', 'handled_by__user', 'branch',
-            'reservation', 'followup_task', 'case',
+            'reservation', 'followup_task', 'case', 'pbx_session',
         ).prefetch_related('address_updates', 'attachments', 'items__item')
 
         profile = _profile(self.request)
@@ -92,20 +92,56 @@ class CallLogViewSet(viewsets.ModelViewSet):
             return CallLogCreateSerializer
         return CallLogDetailSerializer
 
-    def perform_create(self, serializer):
-        profile = _profile(self.request)
-        call = serializer.save(
-            handled_by=profile,
-            branch=profile.branch if profile else None,
-        )
+    def create(self, request, *args, **kwargs):
+        """
+        One CallLog per PBX call: if this save matches a PBX session on the
+        agent's extension, merge into the PBX's log (or attach to the live
+        session) instead of creating a duplicate row.
+        """
+        from django.db import transaction
+        from apps.pbx.linking import find_session_for_agent_call
 
+        profile = _profile(request)
+        session = find_session_for_agent_call(
+            profile, request.data.get('phone_number', ''),
+            request.data.get('pbx_session_id') or None,
+        )
+        existing = session.call_log if session else None
+
+        serializer = CallLogCreateSerializer(
+            instance=existing, data=request.data, partial=existing is not None)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            if existing is not None:
+                # PBX facts win for duration/recording; agent owns the rest
+                call = serializer.save(
+                    handled_by=profile, source='merged',
+                    duration_seconds=existing.duration_seconds or serializer.validated_data.get('duration_seconds', 0),
+                    recording_url=existing.recording_url or serializer.validated_data.get('recording_url', ''),
+                )
+            else:
+                call = serializer.save(
+                    handled_by=profile,
+                    branch=profile.branch if profile else None,
+                    source='manual',
+                )
+                if session is not None:
+                    session.call_log = call
+                    session.save(update_fields=['call_log', 'updated_at'])
+        self._after_create(call, profile, merged=existing is not None)
+
+        data = CallLogDetailSerializer(call, context={'request': request}).data
+        return Response(data, status=201)
+
+    def _after_create(self, call, profile, merged=False):
         # Audit log (non-blocking)
         try:
             from apps.audit.models import AuditLog
             AuditLog.log(
-                'call_log_created',
+                'call_log_merged' if merged else 'call_log_created',
                 user=profile,
-                note=f'Call log created: {call.phone_number}',
+                note=(f'Call log {"merged into PBX log" if merged else "created"}: '
+                      f'{call.phone_number} (#{call.pk})'),
             )
         except Exception:
             pass
@@ -345,7 +381,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         # Recent calls for this number (regardless of which customer is selected)
         recent = CallLog.objects.filter(
             phone_number__endswith=tail
-        ).select_related('handled_by__user').order_by('-called_at')[:5]
+        ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
         result['recent_calls'] = CallLogListSerializer(recent, many=True).data
 
         return Response(result)
@@ -415,6 +451,26 @@ class CallLogViewSet(viewsets.ModelViewSet):
             return Response({'detail': f'فشل تشغيل التلخيص: {public_error(request, e)}'}, status=500)
 
         return Response({'queued': True, 'call_id': call.pk})
+
+    @action(detail=True, methods=['post'], url_path='transcribe')
+    def transcribe(self, request, pk=None):
+        """
+        POST /api/callcenter/calls/{id}/transcribe/
+        Recording → voice_transcript → AI summary, in the background.
+        """
+        call = self.get_object()
+        from apps.callcenter.serializers import call_has_recording
+        from apps.pbx.recordings import ensure_recording
+        ensure_recording(getattr(call, 'pbx_session', None))
+        if not call_has_recording(call):
+            return Response({'detail': 'لا يوجد تسجيل لهذه المكالمة'}, status=400)
+        if call.voice_transcript and not request.data.get('force'):
+            return Response({'detail': 'تم تفريغ هذه المكالمة من قبل'}, status=409)
+
+        from threading import Thread
+        from apps.omni.transcription import transcribe_call_log
+        Thread(target=transcribe_call_log, args=(call.pk,), daemon=True).start()
+        return Response({'queued': True, 'call_id': call.pk}, status=202)
 
     # ── Case management from call ─────────────────────────────────────────────
 
@@ -599,10 +655,18 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='pending-callbacks')
     def pending_callbacks(self, request):
-        qs = CallLog.objects.filter(
-            status='callback',
-            callback_due__lte=timezone.now(),
-        ).select_related('customer', 'handled_by__user').order_by('callback_due')
+        """
+        GET /api/callcenter/calls/pending-callbacks/
+        ?mode=overdue  (default) — only callbacks past their due time
+        ?mode=all      — all scheduled callbacks, sorted by callback_due
+        """
+        mode = request.query_params.get('mode', 'overdue')
+        qs = CallLog.objects.filter(status='callback').select_related(
+            'customer', 'handled_by__user', 'pbx_session'
+        )
+        if mode != 'all':
+            qs = qs.filter(callback_due__lte=timezone.now())
+        qs = qs.order_by('callback_due')
 
         profile = _profile(request)
         if profile and profile.role not in ('admin', 'call_center', 'supervisor'):

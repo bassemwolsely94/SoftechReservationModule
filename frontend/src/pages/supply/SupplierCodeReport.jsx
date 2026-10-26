@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
 import ProgressBar from '../../components/ProgressBar'
-import { btnGhost, downloadBlob, errText, fmtDate, inputCls } from './supplyUi'
+import { btnGhost, downloadBlob, errText, fmtDate, inputCls, SortTh, useSort } from './supplyUi'
 
 function Tile({ label, value, sub, tone = '' }) {
   return (
@@ -20,6 +20,10 @@ function Tile({ label, value, sub, tone = '' }) {
   )
 }
 
+const SUP_COLS = [['supplier', 'المورد'], ['lines', 'الأسطر'], ['with_code', 'بها كود'], ['matched', 'مطابقة بالكود'],
+  ['by_mapping', 'مؤكدة'], ['by_mirror', 'SOFTECH'], ['ambiguous', 'غامض'], ['unknown', 'غير معروف'],
+  ['newly_matchable', 'يمكن مطابقتها'], ['conflicts', 'تعارض'], ['by_barcode', 'باركود'], ['mirror_codes', 'أكواد بالنسخة']]
+
 export default function SupplierCodeReport({ onClose }) {
   const [days, setDays] = useState(365)
   const rq = useQuery({ queryKey: ['supply-code-report', days],
@@ -30,6 +34,8 @@ export default function SupplierCodeReport({ onClose }) {
   })
   const d = rq.data
   const t = d?.totals
+  const grid = useSort(d?.suppliers || [], Object.fromEntries(SUP_COLS.map(([k]) =>
+    [k, k === 'supplier' ? (s => s.supplier) : (s => s[k])])))
   return (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -67,13 +73,12 @@ export default function SupplierCodeReport({ onClose }) {
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-surface text-content/60">
                 <tr>
-                  {['المورد', 'الأسطر', 'بها كود', 'مطابقة بالكود', 'مؤكدة', 'SOFTECH', 'غامض', 'غير معروف',
-                    'يمكن مطابقتها', 'تعارض', 'باركود', 'أكواد بالنسخة'].map(h =>
-                    <th key={h} className="px-2 py-1.5 font-medium text-center whitespace-nowrap">{h}</th>)}
+                  {SUP_COLS.map(([k, h]) =>
+                    <SortTh key={k} k={k} {...grid} className="px-2 py-1.5 font-medium text-center whitespace-nowrap">{h}</SortTh>)}
                 </tr>
               </thead>
               <tbody>
-                {d.suppliers.map(s => (
+                {grid.sorted.map(s => (
                   <tr key={s.vendor_id} className="border-t border-line text-center tabular-nums">
                     <td className="px-2 py-1 text-start whitespace-nowrap">{s.supplier} <span className="text-content/40">{s.personcode}</span></td>
                     <td className="px-2 py-1">{s.lines}</td>

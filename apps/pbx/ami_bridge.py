@@ -101,8 +101,45 @@ def _normalize_caller_num(caller_num: str, gateway_ext: str) -> str:
     return num or caller_num
 
 
+class AMILoginError(ConnectionError):
+    pass
+
+
+HEARTBEAT_SECONDS = 30
+_last_event_touch = 0.0
+
+
+async def _record_status(**fields):
+    from asgiref.sync import sync_to_async
+    from apps.pbx.models import PBXBridgeStatus
+    try:
+        await sync_to_async(PBXBridgeStatus.record)(**fields)
+    except Exception as exc:
+        logger.warning('bridge status write failed: %s', exc)
+
+
+async def _touch_last_event():
+    """Throttled: at most one DB write per heartbeat interval."""
+    global _last_event_touch
+    import time
+    from django.utils import timezone
+    if time.monotonic() - _last_event_touch >= HEARTBEAT_SECONDS:
+        _last_event_touch = time.monotonic()
+        await _record_status(last_event_at=timezone.now())
+
+
+async def _heartbeat(ami):
+    from django.utils import timezone
+    while True:
+        await ami._send_action({'Action': 'Ping'})
+        await _record_status(state='connected', last_heartbeat_at=timezone.now())
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+
+
 class AMIConnection:
     """Asyncio-based AMI TCP client."""
+
+    banner = ''
 
     def __init__(self, host: str, port: int, user: str, secret: str):
         self.host   = host
@@ -113,10 +150,12 @@ class AMIConnection:
         self._writer: asyncio.StreamWriter | None = None
 
     async def connect(self):
-        self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+        self._reader, self._writer = await asyncio.wait_for(
+            asyncio.open_connection(self.host, self.port), timeout=10)
         # Read AMI banner
         banner = await self._reader.readline()
-        logger.info('AMI banner: %s', banner.decode().strip())
+        self.banner = banner.decode(errors='replace').strip()
+        logger.info('AMI banner: %s', self.banner)
         # Login
         await self._send_action({
             'Action': 'Login',
@@ -125,7 +164,7 @@ class AMIConnection:
         })
         response = await self._read_event()
         if response.get('Response') != 'Success':
-            raise ConnectionError(f'AMI login failed: {response}')
+            raise AMILoginError(response.get('Message', '') or str(response))
         logger.info('AMI login successful as %s', self.user)
 
     async def _send_action(self, fields: dict):
@@ -138,6 +177,9 @@ class AMIConnection:
         event: dict = {}
         while True:
             raw = await self._reader.readline()
+            if not raw:
+                # EOF: Asterisk closed the socket — must reconnect, not spin
+                raise ConnectionError('AMI closed the connection (EOF)')
             line = raw.decode('utf-8', errors='replace').rstrip('\r\n')
             if not line:
                 break
@@ -155,6 +197,8 @@ class AMIConnection:
                     await handler(event)
             except asyncio.CancelledError:
                 break
+            except (ConnectionError, OSError):
+                raise  # run_bridge reconnects
             except Exception as exc:
                 logger.error('AMI read error: %s', exc)
                 await asyncio.sleep(5)
@@ -172,7 +216,11 @@ async def handle_event(event: dict):
     Dispatch AMI event to the appropriate handler.
     Runs in asyncio context — uses sync_to_async for Django ORM calls.
     """
+    if 'Event' not in event:
+        return  # action responses (e.g. heartbeat Ping) aren't PBX events
+
     event_type = event.get('Event', 'Other')
+    await _touch_last_event()
 
     # Persist raw event
     await _save_raw_event(event, event_type)
@@ -417,15 +465,18 @@ async def _on_cdr(event: dict):
     unique_id    = event.get('UniqueID', '') or event.get('Uniqueid', '')
     disposition  = event.get('Disposition', '')
     userfield    = event.get('UserField', '')
-    recording    = event.get('Filename', '')
+    # Issabel puts the MixMonitor file in RecordingFile; older builds used Filename
+    recording    = (event.get('RecordingFile') or event.get('Recordingfile')
+                    or event.get('Filename') or '')
 
     @sync_to_async
     def _update():
-        CallSession.objects.filter(unique_id=unique_id).update(
-            cdr_disposition=disposition,
-            cdr_userfield=userfield,
-            recording_path=recording,
-        )
+        fields = {'cdr_disposition': disposition, 'cdr_userfield': userfield}
+        if recording:   # never wipe a path found earlier
+            from apps.pbx.recordings import relative_path
+            from django.utils import timezone
+            fields['recording_path'] = relative_path(recording, timezone.localtime()) or recording[:500]
+        CallSession.objects.filter(unique_id=unique_id).update(**fields)
 
     await _update()
 
@@ -520,22 +571,50 @@ async def run_bridge():
     user   = os.environ.get('AMI_USER', getattr(settings, 'AMI_USER', ''))
     secret = os.environ.get('AMI_SECRET', getattr(settings, 'AMI_SECRET', ''))
 
+    from django.utils import timezone
+
     if not user or not secret:
         logger.error('AMI_USER / AMI_SECRET not configured — bridge cannot start')
+        await _record_status(state='not_configured', host=host, port=port,
+                             last_error='AMI_USER / AMI_SECRET غير مضبوطة في env',
+                             last_error_at=timezone.now())
         return
 
+    reconnects = 0
     while True:
         # Load extension registry before connecting
         from asgiref.sync import sync_to_async
         await sync_to_async(_load_extension_registry)()
 
         ami = AMIConnection(host, port, user, secret)
+        heartbeat = None
+        await _record_status(state='connecting', host=host, port=port)
         try:
             await ami.connect()
             logger.info('AMI bridge connected to %s:%d', host, port)
+            now = timezone.now()
+            await _record_status(state='connected', banner=ami.banner[:100],
+                                 connected_since=now, last_heartbeat_at=now,
+                                 reconnect_count=reconnects)
+            heartbeat = asyncio.create_task(_heartbeat(ami))
             await ami.listen(handle_event)
+        except AMILoginError as exc:
+            # Wrong credentials won't fix themselves — back off longer
+            logger.error('AMI login failed: %s — retrying in 60s', exc)
+            await _record_status(state='auth_failed', last_error=f'Login: {exc}',
+                                 last_error_at=timezone.now())
+            await asyncio.sleep(60)
         except Exception as exc:
             logger.error('AMI bridge disconnected: %s — reconnecting in 10s', exc)
+            await _record_status(state='disconnected',
+                                 last_error=f'{type(exc).__name__}: {exc}'[:500],
+                                 last_error_at=timezone.now())
             await asyncio.sleep(10)
         finally:
-            await ami.close()
+            if heartbeat:
+                heartbeat.cancel()
+            try:
+                await ami.close()
+            except Exception:
+                pass  # socket already broken
+        reconnects += 1

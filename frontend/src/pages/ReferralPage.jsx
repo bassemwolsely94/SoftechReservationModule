@@ -69,7 +69,7 @@ function LeadRow({ lead, onInvite, onValidate, onShowEvents }) {
       <td className="px-3 py-2">
         <div data-tour="loyalty-referral-row-actions" className="flex items-center gap-1.5">
           {lead.status === 'pending' && (
-            <button
+            <button data-tour="loyalty-referral-invite"
               onClick={() => onInvite(lead)}
               className="px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded text-xs"
             >
@@ -77,14 +77,14 @@ function LeadRow({ lead, onInvite, onValidate, onShowEvents }) {
             </button>
           )}
           {lead.status === 'registered' && (
-            <button
+            <button data-tour="loyalty-referral-validate"
               onClick={() => onValidate(lead)}
               className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-xs"
             >
               تحقق
             </button>
           )}
-          <button
+          <button data-tour="loyalty-referral-events"
             onClick={() => onShowEvents(lead)}
             className="px-2 py-1 bg-gray-50 text-gray-600 hover:bg-gray-100 rounded text-xs"
           >
@@ -122,7 +122,7 @@ function ValidateModal({ lead, onClose }) {
           className="w-full border border-gray-200 rounded px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-400"
         />
         <div className="flex gap-2">
-          <button
+          <button data-tour="loyalty-referral-validate-confirm"
             onClick={() => mut.mutate()}
             disabled={mut.isPending}
             className="flex-1 bg-blue-600 text-white rounded px-4 py-2 text-sm disabled:opacity-50"
@@ -200,7 +200,7 @@ function LeadQueueTab() {
   return (
     <>
       {/* Status tabs */}
-      <div data-tour="loyalty-referral-status-filter" className="flex gap-1 mb-4 overflow-x-auto" dir="rtl">
+      <div className="flex gap-1 mb-4 overflow-x-auto" dir="rtl" data-tour="loyalty-referral-status">
         {STATUS_TABS.map(t => (
           <button
             key={t.key}
@@ -215,7 +215,7 @@ function LeadQueueTab() {
         ))}
       </div>
 
-      <div data-tour="loyalty-referral-table" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="loyalty-referral-leads">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
@@ -254,7 +254,7 @@ function LeadQueueTab() {
               هل تريد إرسال دعوة واتساب إلى <strong>{inviteLead.lead_name}</strong> ({inviteLead.lead_phone})؟
             </p>
             <div className="flex gap-2">
-              <button
+              <button data-tour="loyalty-referral-invite-send"
                 onClick={() => inviteMut.mutate(inviteLead)}
                 disabled={inviteMut.isPending}
                 className="flex-1 bg-green-600 text-white rounded px-4 py-2 text-sm disabled:opacity-50"
@@ -290,7 +290,7 @@ function MyCodeTab() {
 
   return (
     <div className="max-w-md mx-auto text-center py-8" dir="rtl">
-      <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
+      <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm" data-tour="loyalty-referral-mycode">
         {/* QR SVG */}
         {data.qr_code && (
           <div
@@ -339,7 +339,7 @@ export default function ReferralPage() {
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
       <div className="flex items-center justify-between mb-6">
         <h1 data-tour="loyalty-referral-header" className="text-xl font-bold text-gray-800">نظام الإحالات</h1>
-        <div data-tour="loyalty-referral-tabs" className="flex gap-2">
+        <div className="flex gap-2" data-tour="loyalty-referral-tabs">
           {[
             { key: 'leads', label: 'قائمة الإحالات' },
             { key: 'mycode', label: 'كودي' },

@@ -129,7 +129,7 @@ function SchedulesPanel({ schedules, onRun }) {
             </span>
           </div>
           {s.is_active && (
-            <button
+            <button data-tour="tasks-dashboard-schedules-run"
               onClick={() => onRun(s.id)}
               className="text-xs text-brand-600 hover:underline px-2"
             >
@@ -205,8 +205,7 @@ export default function TaskDashboardPage() {
           <p className="text-sm text-gray-500 mt-0.5">نظرة عامة على المهام التشغيلية</p>
         </div>
         <div className="flex items-center gap-3">
-          <select
-            data-tour="tasks-dashboard-branch"
+          <select data-tour="tasks-dashboard-branch"
             className="border rounded-lg px-3 py-1.5 text-sm text-right"
             value={branch}
             onChange={e => setBranch(e.target.value)}
@@ -220,7 +219,7 @@ export default function TaskDashboardPage() {
           >
             ← المهام
           </button>
-          <button
+          <button data-tour="tasks-dashboard-manage"
             onClick={() => navigate('/tasks/schedules')}
             className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700"
           >
@@ -232,7 +231,7 @@ export default function TaskDashboardPage() {
       <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
 
         {/* ── KPI cards row ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" data-tour="tasks-dashboard-kpis">
+        <div data-tour="tasks-dashboard-kpis" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <KpiCard
             label="إجمالي المهام"
             value={total}
@@ -267,7 +266,7 @@ export default function TaskDashboardPage() {
 
         {/* ── Priority alerts row ── */}
         {(priorityCounts.critical > 0 || priorityCounts.urgent > 0) && (
-          <div className="flex gap-3 flex-wrap">
+          <div data-tour="tasks-dashboard-priority" className="flex gap-3 flex-wrap">
             {[['critical', '🔴'], ['urgent', '🟠']].map(([key, emoji]) => (
               priorityCounts[key] > 0 && (
                 <button
@@ -285,7 +284,7 @@ export default function TaskDashboardPage() {
         <div className="grid grid-cols-3 gap-4" data-tour="tasks-dashboard-breakdown">
 
           {/* ── Status distribution ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div data-tour="tasks-dashboard-status" className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="font-semibold text-gray-700 text-sm mb-4 text-right">توزيع الحالات</h3>
             <StatusBar counts={statusCounts} total={total} />
           </div>
@@ -314,7 +313,7 @@ export default function TaskDashboardPage() {
           </div>
 
           {/* ── By branch ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div data-tour="tasks-dashboard-by-branch" className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="font-semibold text-gray-700 text-sm mb-4 text-right">حسب الفرع</h3>
             {data?.by_branch?.length > 0 ? (
               <div className="space-y-2">
@@ -337,7 +336,7 @@ export default function TaskDashboardPage() {
         <div className="grid grid-cols-2 gap-4">
 
           {/* ── Upcoming due soon ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="tasks-dashboard-due-soon">
+          <div data-tour="tasks-dashboard-due-soon" className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-700 text-sm">المهام المستحقة قريباً</h3>
               <button onClick={() => navigate('/tasks?overdue=1')} className="text-xs text-brand-600 hover:underline">عرض الكل</button>
@@ -354,7 +353,7 @@ export default function TaskDashboardPage() {
           </div>
 
           {/* ── Recent activity ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div data-tour="tasks-dashboard-recent" className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-700 text-sm">آخر النشاطات</h3>
               <button onClick={() => navigate('/tasks')} className="text-xs text-brand-600 hover:underline">عرض الكل</button>
@@ -372,7 +371,7 @@ export default function TaskDashboardPage() {
         </div>
 
         {/* ── Schedules ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="tasks-dashboard-schedules">
+        <div data-tour="tasks-dashboard-schedules" className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-700 text-sm">الجداول التلقائية النشطة</h3>
             <button onClick={() => navigate('/tasks/schedules')} className="text-xs text-brand-600 hover:underline">إدارة الجداول</button>

@@ -9,6 +9,7 @@ import TransferModuleTabs from '../components/TransferModuleTabs'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -56,7 +57,7 @@ function KanbanCard({ r, onClick }) {
       </div>
       <div className="text-xs text-gray-700 mb-1 leading-snug">
         <span className="font-semibold">{r.requesting_branch_name}</span>
-        <span className="text-gray-400 mx-1">→</span>
+        <span className="text-gray-400 mx-1">{fa()}</span>
         <span className="text-gray-500">{r.supplying_branch_name || '—'}</span>
       </div>
       {r.notes && (
@@ -76,7 +77,7 @@ function KanbanCard({ r, onClick }) {
 
 function KanbanView({ requests, navigate }) {
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 px-6 pt-2 min-h-[60vh]" style={{ scrollbarWidth: 'thin' }}>
+    <div className="flex gap-4 overflow-x-auto pb-4 px-6 pt-2 min-h-[60vh]" style={{ scrollbarWidth: 'thin' }} data-tour="transfers-list-kanban">
       {KANBAN_COLS.map(statusKey => {
         const s     = STATUS[statusKey]
         const cards = requests.filter(r => r.status === statusKey)
@@ -234,7 +235,7 @@ export default function TransfersPage() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
 
         {/* Module switcher (requests ⇄ in-transit, separate pages) */}
-        <TransferModuleTabs active="requests" />
+        <div data-tour="transfers-list-module-tabs"><TransferModuleTabs active="requests" /></div>
 
         {/* Row 1: title + view toggle + new button */}
         <div className="px-6 py-4">
@@ -294,7 +295,7 @@ export default function TransfersPage() {
         </div>
 
         {/* Row 3: search + branch + date filters */}
-        <div className="flex gap-2 mt-2 flex-wrap items-center">
+        <div className="flex gap-2 mt-2 flex-wrap items-center" data-tour="transfers-list-filters">
           <input className="input-field w-48 text-xs" placeholder="🔍 بحث برقم الطلب..." data-tour="transfers-list-search"
             value={filters.search}
             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />

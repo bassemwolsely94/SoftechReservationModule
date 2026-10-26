@@ -96,7 +96,7 @@ export default function IngredientSearchPage() {
             <option value="approved">معتمد فقط</option>
             <option value="parsed">مقترح فقط</option>
           </select>
-          <button onClick={reset} className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:bg-bg">مسح</button>
+          <button data-tour="chronic-ingredient-search-clear" onClick={reset} className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:bg-bg">مسح</button>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export default function IngredientSearchPage() {
                   <tr key={r.id} className="border-t border-line hover:bg-bg">
                     <td className="px-3 py-2">
                       {r.item
-                        ? <Link to={`/products/${r.item}`} className="text-primary hover:underline">{r.item_name}</Link>
+                        ? <Link data-tour="chronic-ingredient-search-item" to={`/products/${r.item}`} className="text-primary hover:underline">{r.item_name}</Link>
                         : <span className="text-content">{r.item_name || '—'}</span>}
                       <span className="block text-[11px] text-muted">#{r.item_softech_id}</span>
                     </td>
@@ -134,7 +134,7 @@ export default function IngredientSearchPage() {
                     <td className="px-3 py-2 text-content">{r.dosage_form || '—'}</td>
                     <td className="px-3 py-2 text-content">{r.class_name || r.class_name_ar || '—'}</td>
                     <td className="px-3 py-2">
-                      <span className={`rounded px-1.5 text-[11px] ${r.source === 'approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      <span data-tour="chronic-ingredient-search-badge" className={`rounded px-1.5 text-[11px] ${r.source === 'approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                         {r.source === 'approved' ? 'معتمد' : 'مقترح'}
                       </span>
                     </td>

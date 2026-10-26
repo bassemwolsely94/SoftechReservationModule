@@ -7,6 +7,7 @@ import BranchSelect from '../components/BranchSelect'
 import CanDo from '../components/CanDo'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -123,7 +124,7 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin, pen
 
       {/* Quick status buttons */}
       {transitions.length > 0 && (
-        <div className="flex gap-1 mt-2 flex-wrap" onClick={e => e.stopPropagation()}>
+        <div className="flex gap-1 mt-2 flex-wrap" onClick={e => e.stopPropagation()} data-tour="reservations-board-quickmove">
           {transitions.map(s => {
             const tc = COLUMNS.find(c => c.key === s)
             return (
@@ -135,7 +136,7 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin, pen
                 className={`text-xs border rounded px-2 py-0.5 transition-opacity bg-white
                   ${isBusy ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80'}`}
               >
-                {isBusy ? '...' : `→ ${tc?.label}`}
+                {isBusy ? '...' : `${fa()} ${tc?.label}`}
               </button>
             )
           })}
@@ -498,6 +499,7 @@ export default function ReservationsKanban() {
           {/* Priority filter */}
           <select
             aria-label="تصفية حسب الأولوية"
+            data-tour="reservations-board-priority"
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-300"
             value={filterPriority}
             onChange={e => setFilterPriority(e.target.value)}
@@ -521,7 +523,7 @@ export default function ReservationsKanban() {
           </select>
 
           {/* Date range */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500" data-tour="reservations-board-dates">
             <span>من</span>
             <input
               type="date"

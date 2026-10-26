@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { incentivesApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ function ProgramProgressCard({ prog }) {
           <div>
             <div className="text-lg font-bold">{prog.program_name}</div>
             <div className="text-sm opacity-75 mt-0.5">
-              {prog.period_start} → {prog.period_end}
+              {prog.period_start} {fa()} {prog.period_end}
             </div>
           </div>
           <div className="text-left">
@@ -179,7 +180,7 @@ function ProgramProgressCard({ prog }) {
 
         {/* Top items */}
         {prog.top_items?.length > 0 && (
-          <div>
+          <div data-tour="incentives-mine-top-items">
             <div className="text-xs font-semibold text-gray-500 mb-2">أعلى الأصناف تحقيقاً</div>
             <div className="space-y-1.5">
               {prog.top_items.map(item => (
@@ -215,7 +216,7 @@ function ProgramProgressCard({ prog }) {
 
         {/* Rule breakdown (collapsed) */}
         {prog.rule_breakdown?.length > 1 && (
-          <details className="text-xs">
+          <details data-tour="incentives-mine-rules" className="text-xs">
             <summary className="text-gray-500 cursor-pointer">تفاصيل القواعد</summary>
             <div className="mt-2 space-y-1">
               {prog.rule_breakdown.map(rb => (

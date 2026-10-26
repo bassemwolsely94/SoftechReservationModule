@@ -103,7 +103,7 @@ export default function SupplierCategoriesPage() {
       <section data-tour="purchasing-categories-list" className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-800">الفئات ({cats.length})</h2>
-          <button data-tour="purchasing-categories-new" onClick={() => setCatModal({ color: 'gray', sort_order: 100, is_active: true })}
+          <button data-tour="purchasing-categories-new-category" onClick={() => setCatModal({ color: 'gray', sort_order: 100, is_active: true })}
             className="text-sm px-3 py-1.5 rounded-lg border border-brand-500 text-brand-700 hover:bg-brand-50">
             + فئة جديدة
           </button>
@@ -132,7 +132,7 @@ export default function SupplierCategoriesPage() {
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
                     <button onClick={() => setCatModal(c)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
-                    <button onClick={() => { if (confirm(`حذف الفئة "${c.name_ar}"؟`)) delCat.mutate(c.id) }}
+                    <button data-tour="purchasing-categories-delete-category" onClick={() => { if (confirm(`حذف الفئة "${c.name_ar}"؟`)) delCat.mutate(c.id) }}
                       className="text-red-500 hover:underline text-xs">حذف</button>
                   </td>
                 </tr>
@@ -173,7 +173,7 @@ export default function SupplierCategoriesPage() {
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
                     <button onClick={() => setRuleModal(r)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
-                    <button onClick={() => { if (confirm('حذف القاعدة؟')) delRule.mutate(r.id) }}
+                    <button data-tour="purchasing-categories-delete-rule" onClick={() => { if (confirm('حذف القاعدة؟')) delRule.mutate(r.id) }}
                       className="text-red-500 hover:underline text-xs">حذف</button>
                   </td>
                 </tr>
@@ -223,7 +223,7 @@ export default function SupplierCategoriesPage() {
             {saveCat.isError && <p className="text-xs text-red-500">تعذّر الحفظ — تأكد من الكود.</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setCatModal(null)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 text-gray-600">إلغاء</button>
-              <button onClick={() => saveCat.mutate(catModal)} disabled={saveCat.isPending || !catModal.name_ar || !catModal.code}
+              <button data-tour="purchasing-categories-save-category" onClick={() => saveCat.mutate(catModal)} disabled={saveCat.isPending || !catModal.name_ar || !catModal.code}
                 className="px-4 py-2 rounded-lg text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50">حفظ</button>
             </div>
           </div>
@@ -264,7 +264,7 @@ export default function SupplierCategoriesPage() {
             {saveRule.isError && <p className="text-xs text-red-500">تعذّر الحفظ — قد توجد قاعدة بنفس النوع/التصنيف.</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setRuleModal(null)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 text-gray-600">إلغاء</button>
-              <button onClick={() => saveRule.mutate(ruleModal)} disabled={saveRule.isPending || !ruleModal.ptcode || !ruleModal.category}
+              <button data-tour="purchasing-categories-save-rule" onClick={() => saveRule.mutate(ruleModal)} disabled={saveRule.isPending || !ruleModal.ptcode || !ruleModal.category}
                 className="px-4 py-2 rounded-lg text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50">حفظ</button>
             </div>
           </div>

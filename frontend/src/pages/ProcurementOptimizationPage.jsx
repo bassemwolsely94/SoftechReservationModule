@@ -40,7 +40,7 @@ function OptimizationTab({ days }) {
       <div data-tour="purchasing-optimization-suppliers" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Top suppliers to use */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div data-tour="purchasing-optimization-recommended" className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="font-semibold text-emerald-700 mb-3">✅ الموردون الموصى بهم</h3>
           <div className="space-y-2">
             {(data.top_suppliers || []).map(s => (
@@ -66,7 +66,7 @@ function OptimizationTab({ days }) {
         </div>
 
         {/* Suppliers to avoid */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div data-tour="purchasing-optimization-avoid" className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="font-semibold text-red-700 mb-3">⚠️ الموردون المحذورون</h3>
           <div className="space-y-2">
             {(data.avoid_suppliers || []).map(s => (
@@ -195,7 +195,7 @@ function MappingTab() {
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+      <div data-tour="purchasing-optimization-mapping-table" className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
         <div className="px-4 py-2 border-b border-gray-200 text-xs text-gray-500">
           {data.length} خريطة مورد-صنف
         </div>
@@ -365,7 +365,7 @@ function AlertsTab() {
                   )}
                 </div>
                 {!a.is_resolved && (
-                  <button
+                  <button data-tour="purchasing-optimization-alert-resolve"
                     onClick={() => handleResolve(a.id)}
                     disabled={resolving === a.id}
                     className="shrink-0 px-3 py-1 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"

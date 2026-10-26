@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { transfersApi } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${Number(n || 0).toFixed(1)}%`
@@ -85,7 +86,7 @@ function AnalyticsPanel({ days }) {
   return (
     <div className="space-y-6">
       {/* KPI row */}
-      <div data-tour="analytics-transfers-kpis" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" data-tour="analytics-transfers-kpis">
         <KpiCard label="إجمالي الطلبات"     value={fmt(kpis.total)}           icon="🔀" color="brand" />
         <KpiCard label="نسبة الإكمال"        value={fmtPct(kpis.completion_rate)} icon="✅" color="green"
                  sub={`${fmt(kpis.completed)} طلب مكتمل`} />
@@ -97,7 +98,7 @@ function AnalyticsPanel({ days }) {
 
       <div className="grid sm:grid-cols-2 gap-6">
         {/* Top transferred items */}
-        <div data-tour="analytics-transfers-top-items" className="card">
+        <div className="card" data-tour="analytics-transfers-top-items">
           <div className="text-sm font-bold text-gray-700 mb-4">أكثر الأصناف تحويلاً</div>
           {top_items.length === 0
             ? <div className="text-xs text-gray-400 text-center py-6">لا توجد بيانات</div>
@@ -114,14 +115,14 @@ function AnalyticsPanel({ days }) {
         </div>
 
         {/* Branch flow */}
-        <div data-tour="analytics-transfers-routes" className="card">
+        <div className="card" data-tour="analytics-transfers-routes">
           <div className="text-sm font-bold text-gray-700 mb-4">أكثر مسارات التحويل نشاطاً</div>
           {branch_flow.length === 0
             ? <div className="text-xs text-gray-400 text-center py-6">لا توجد بيانات</div>
             : branch_flow.map((flow, i) => (
               <BarRow
                 key={i}
-                label={`${flow['requesting_branch__name_ar'] || '—'} → ${flow['supplying_branch__name_ar'] || '—'}`}
+                label={`${flow['requesting_branch__name_ar'] || '—'} ${fa()} ${flow['supplying_branch__name_ar'] || '—'}`}
                 value={flow.count}
                 max={maxFlow}
                 color="bg-blue-500"
@@ -133,7 +134,7 @@ function AnalyticsPanel({ days }) {
 
       {/* Rejection by supplying branch */}
       {rejection_by_branch.length > 0 && (
-        <div className="card">
+        <div className="card" data-tour="analytics-transfers-rejections">
           <div className="text-sm font-bold text-gray-700 mb-4">معدل الرفض حسب الفرع المصدر</div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -199,7 +200,7 @@ function DiscrepancyReport() {
   )
 
   return (
-    <div className="card p-0 overflow-hidden">
+    <div className="card p-0 overflow-hidden" data-tour="analytics-transfers-discrepancy">
       <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
         <span className="text-sm font-bold text-red-800">تقرير التباينات</span>
         <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">{discrepancies.length}</span>
@@ -286,7 +287,7 @@ export default function TransfersAnalyticsPage() {
         </div>
 
         {/* Tabs */}
-        <div data-tour="analytics-transfers-tabs" className="flex gap-1 mt-3">
+        <div className="flex gap-1 mt-3" data-tour="analytics-transfers-tabs">
           {TABS.map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${

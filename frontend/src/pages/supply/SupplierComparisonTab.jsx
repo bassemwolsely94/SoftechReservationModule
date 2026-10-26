@@ -10,7 +10,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
 import ProgressBar from '../../components/ProgressBar'
 import { wildcardMatch } from '../../utils/wildcard'
-import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q } from './supplyUi'
+import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, useSort } from './supplyUi'
 
 const STATE = {
   buy: ['اشترِ', 'emerald'], compare: ['قارن يدوياً', 'amber'], not_needed: ['غير مطلوب', 'gray'],
@@ -81,6 +81,10 @@ function OfferCell({ c }) {
 // Who supplies the item: SOFTECH's main supplier + who we really bought from (12 months).
 function NetworkPanel({ r }) {
   const b = r.network?.bought || []
+  const bg = useSort(b, {
+    name: x => x.name, tier: x => x.tier, last: x => x.last?.date, disc: x => x.last?.discount_pct,
+    best: x => x.best?.discount_pct, cost: x => x.cost_now, qty: x => x.qty_12m,
+  })
   return (
     <div className="grid md:grid-cols-[16rem_1fr] gap-3 text-xs">
       <div className="space-y-1">
@@ -102,12 +106,16 @@ function NetworkPanel({ r }) {
         {b.length === 0 ? <div className="text-content/50">لا مشتريات مسجلة.</div> : (
           <table className="w-full bg-surface rounded border border-line">
             <thead className="bg-surface-2 text-content/60">
-              <tr><th className="px-2 py-1 text-right">المورد</th><th className="px-2 py-1">النوع</th><th className="px-2 py-1">آخر شراء</th>
-                <th className="px-2 py-1">الخصم الفعلي</th><th className="px-2 py-1">أفضل خصم</th><th className="px-2 py-1">تكلفته اليوم</th>
-                <th className="px-2 py-1">كمية 12 شهر</th></tr>
+              <tr><SortTh k="name" {...bg} className="px-2 py-1 text-right">المورد</SortTh>
+                <SortTh k="tier" {...bg} className="px-2 py-1">النوع</SortTh>
+                <SortTh k="last" {...bg} className="px-2 py-1">آخر شراء</SortTh>
+                <SortTh k="disc" {...bg} className="px-2 py-1">الخصم الفعلي</SortTh>
+                <SortTh k="best" {...bg} className="px-2 py-1">أفضل خصم</SortTh>
+                <SortTh k="cost" {...bg} className="px-2 py-1">تكلفته اليوم</SortTh>
+                <SortTh k="qty" {...bg} className="px-2 py-1">كمية 12 شهر</SortTh></tr>
             </thead>
             <tbody>
-              {b.map(x => (
+              {bg.sorted.map(x => (
                 <tr key={x.code} className="border-t border-line">
                   <td className="px-2 py-1">{x.name} <span className="text-content/40">({x.code})</span></td>
                   <td className="px-2 py-1 text-center">{{ distributor: 'موزع', manufacturer: 'شركة', warehouse: 'مخزن', other: 'مورد' }[x.tier]}</td>
@@ -141,6 +149,15 @@ export default function SupplierComparisonTab() {
   const rows = useMemo(() => (d?.rows || []).filter(r =>
     (!state || r.state === state) && (!flag || r.flags.includes(flag))
     && (!search.trim() || wildcardMatch(`${r.item_code} ${r.item_name}`, search))), [d, state, flag, search])
+  const cellOf = (r, key) => r.cells.find(c => c.supplier === key)
+  const bestWh = (r) => Math.max(...r.cells.filter(c => c.tier === 'warehouse' && c.discount_pct != null)
+    .map(c => c.discount_pct), -Infinity)
+  const grid = useSort(rows, {
+    item: r => r.item_name, rate: r => r.monthly_rate, stock: r => r.stock, transit: r => r.in_transit,
+    need: r => r.need, decision: r => r.best?.discount_pct,
+    warehouses: r => (Number.isFinite(bestWh(r)) ? bestWh(r) : null),
+    ...Object.fromEntries(sups.map(x => [`sup:${x.key}`, r => cellOf(r, x.key)?.discount_pct])),
+  })
   const s = d?.summary || {}
   const whCount = (d?.rows || []).filter(r => r.flags.includes('warehouse_cheaper')).length
 
@@ -183,22 +200,22 @@ export default function SupplierComparisonTab() {
               <table className="text-xs w-full">
                 <thead className="bg-surface-2 text-content/70 sticky top-0 z-10">
                   <tr>
-                    <th className="px-2 py-2 text-right min-w-[16rem] sticky right-0 bg-surface-2">الصنف</th>
-                    <th className="px-2 py-2" title="معدل البيع الشهري (كل الفروع)">المعدل</th>
-                    <th className="px-2 py-2">الرصيد</th>
-                    <th className="px-2 py-2">بالطريق</th>
-                    <th className="px-2 py-2 font-bold" title="الاحتياج الصافي للشركة بعد التغطية الداخلية من فروع فوق الهدف">الاحتياج</th>
-                    <th className="px-2 py-2 min-w-[10rem]">القرار</th>
+                    <SortTh k="item" {...grid} className="px-2 py-2 text-right min-w-[16rem] sticky right-0 bg-surface-2">الصنف</SortTh>
+                    <SortTh k="rate" {...grid} className="px-2 py-2" title="معدل البيع الشهري (كل الفروع)">المعدل</SortTh>
+                    <SortTh k="stock" {...grid} className="px-2 py-2">الرصيد</SortTh>
+                    <SortTh k="transit" {...grid} className="px-2 py-2">بالطريق</SortTh>
+                    <SortTh k="need" {...grid} className="px-2 py-2 font-bold" title="الاحتياج الصافي للشركة بعد التغطية الداخلية من فروع فوق الهدف">الاحتياج</SortTh>
+                    <SortTh k="decision" {...grid} className="px-2 py-2 min-w-[10rem]" title="ترتيب بخصم المورد الأفضل">القرار</SortTh>
                     {sups.map(x => (
-                      <th key={x.key} className="px-2 py-2 min-w-[9rem]">{x.name}
-                        <div className="text-[10px] font-normal text-content/45">{x.tier_label} · {x.items} صنف</div></th>))}
+                      <SortTh key={x.key} k={`sup:${x.key}`} {...grid} className="px-2 py-2 min-w-[9rem]" title="ترتيب بخصم هذا المورد">{x.name}
+                        <div className="text-[10px] font-normal text-content/45">{x.tier_label} · {x.items} صنف</div></SortTh>))}
                     {(d.warehouses || []).length > 0 && (
-                      <th className="px-2 py-2 min-w-[10rem]">المخازن<div className="text-[10px] font-normal text-content/45">
-                        {d.warehouses.map(w => w.name).join('، ')}</div></th>)}
+                      <SortTh k="warehouses" {...grid} className="px-2 py-2 min-w-[10rem]">المخازن<div className="text-[10px] font-normal text-content/45">
+                        {d.warehouses.map(w => w.name).join('، ')}</div></SortTh>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(r => {
+                  {grid.sorted.map(r => {
                     const by = Object.fromEntries(r.cells.map(c => [c.supplier, c]))
                     const wh = r.cells.filter(c => c.tier === 'warehouse')
                       .sort((a, b) => (a.effective_cost ?? 1e12) - (b.effective_cost ?? 1e12))

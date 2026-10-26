@@ -87,6 +87,7 @@ function SaveBar({ dirty, saving, onSave, onReset }) {
           إلغاء
         </button>
         <button
+          data-tour="catalog-intel-save"
           onClick={onSave}
           disabled={saving}
           className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2 rounded-xl disabled:opacity-50 transition-colors"
@@ -195,7 +196,7 @@ function EnrichmentSection({ data, softech_id }) {
   return (
     <>
       {/* Score */}
-      <div className="flex items-center gap-4 mb-5 p-4 bg-gray-50 rounded-xl">
+      <div className="flex items-center gap-4 mb-5 p-4 bg-gray-50 rounded-xl" data-tour="catalog-intel-completeness">
         <div className="flex-1">
           <p className="text-xs text-gray-500 mb-1">نسبة اكتمال البيانات</p>
           <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
@@ -445,7 +446,7 @@ function ClinicalSection({ data, softech_id }) {
   return (
     <div className="space-y-6">
       {/* Chronic tag */}
-      <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+      <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl" data-tour="catalog-intel-chronic">
         <span className="text-2xl">🏥</span>
         <div className="flex-1">
           <p className="text-sm font-semibold text-gray-700">تصنيف مزمن</p>
@@ -491,6 +492,7 @@ function ClinicalSection({ data, softech_id }) {
                   </div>
                 </div>
                 <button
+                  data-tour="catalog-intel-ingredient-delete"
                   onClick={() => delMut.mutate(ing.map_id)}
                   disabled={delMut.isPending}
                   className="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
@@ -505,6 +507,7 @@ function ClinicalSection({ data, softech_id }) {
         {/* Add ingredient search */}
         <div className="relative">
           <input
+            data-tour="catalog-intel-ingredient-add"
             type="text"
             value={searchQ}
             onChange={e => handleSearch(e.target.value)}
@@ -810,7 +813,7 @@ export default function ItemIntelPage() {
 
           {/* Sidebar nav */}
           <aside className="w-52 shrink-0 space-y-1 sticky top-20 self-start">
-            <div data-tour="catalog-intel-sections" className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
+            <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1" data-tour="catalog-intel-sections">
               {SECTIONS.map(s => (
                 <button
                   key={s.key}
@@ -827,7 +830,7 @@ export default function ItemIntelPage() {
             </div>
 
             {/* Quick meta */}
-            <div data-tour="catalog-intel-quick-meta" className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2">
+            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2" data-tour="catalog-intel-meta">
               <p className="text-xs font-semibold text-gray-500 mb-2">معلومات سريعة</p>
               <div className="flex items-center gap-2">
                 <AbcBadge cls={data.demand_network?.abc_class} />
@@ -848,7 +851,7 @@ export default function ItemIntelPage() {
             </div>
 
             {/* Links */}
-            <div data-tour="catalog-intel-links" className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1">
+            <div className="bg-white rounded-2xl border border-gray-100 p-3 space-y-1" data-tour="catalog-intel-links">
               <Link to={`/products/${id}`} className="flex items-center gap-2 text-xs text-gray-500 hover:text-brand-600 px-3 py-2 rounded-lg hover:bg-gray-50">
                 🔍 صفحة المنتج
               </Link>
@@ -859,7 +862,7 @@ export default function ItemIntelPage() {
           </aside>
 
           {/* Content area */}
-          <div data-tour="catalog-intel-content" className="flex-1 min-w-0 space-y-6">
+          <div className="flex-1 min-w-0 space-y-6" data-tour="catalog-intel-content">
             {activeSection === 'softech' && (
               <SectionCard title="بيانات SOFTECH (للقراءة فقط)" icon="🔗"
                 actions={<span className="text-xs text-gray-400">مصدر: SOFTECH ERP — لا يمكن التعديل</span>}>

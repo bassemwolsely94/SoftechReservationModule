@@ -97,7 +97,7 @@ function MarginTab({ days, setDays }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Histogram */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div data-tour="purchasing-margins-histogram" className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="font-semibold text-gray-700 mb-4">توزيع الهامش</h3>
           {(data.histogram || []).map(h => (
             <HistogramBar key={h.range} bucket={h.range} count={h.count} maxCount={maxBucket} />
@@ -105,7 +105,7 @@ function MarginTab({ days, setDays }) {
         </div>
 
         {/* Low margin items */}
-        <div data-tour="purchasing-margins-low" className="bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto max-h-80">
+        <div data-tour="purchasing-margins-low-items" className="bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto max-h-80">
           <h3 className="font-semibold text-gray-700 mb-3">أدنى هوامش (أصناف)</h3>
           <table className="w-full text-xs">
             <thead>
@@ -133,7 +133,7 @@ function MarginTab({ days, setDays }) {
       </div>
 
       {/* By Supplier */}
-      <div data-tour="purchasing-margins-suppliers" className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
+      <div data-tour="purchasing-margins-by-supplier" className="bg-white border border-gray-200 rounded-xl p-5 overflow-x-auto">
         <h3 className="font-semibold text-gray-700 mb-3">الهوامش حسب المورد</h3>
         <table className="w-full text-sm">
           <thead>
@@ -213,7 +213,7 @@ function PriceControlTab() {
       {loading ? (
         <div className="py-12 text-center text-brand-600 animate-pulse">جارٍ التحميل…</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+        <div data-tour="purchasing-margins-price-table" className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
           <div className="px-4 py-3 border-b border-gray-200">
             <span className="text-sm text-gray-600">
               {(data?.items || []).length} صنف بتذبذب سعر ≥ {minDrift}%

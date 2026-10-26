@@ -60,11 +60,13 @@ def _summary(p, names=None):
         'pushed_at': p.pushed_at, 'error': p.error,
         'origin_isr': p.origin_isr, 'notes': p.notes,
         'origin_request_id': p.origin_request_id, 'origin_donor': p.origin_donor,
+        'params': p.params or {},
     }
 
 
 def _detail(p):
     d = _summary(p)
+    d['stat_labels'] = _stat_labels()
     d['lines'] = p.lines_snapshot or []
     return d
 
@@ -94,23 +96,54 @@ def isr_propose(request):
     branchcode = str(request.data.get('branch') or '').strip()
     if not branchcode:
         return Response({'detail': 'حدد الفرع.'}, status=http.HTTP_400_BAD_REQUEST)
+    if not _can_write(request):
+        return Response({'detail': 'غير مصرح لك بإنشاء طلبات التوريد.'}, status=http.HTTP_403_FORBIDDEN)
     max_lines = request.data.get('max_lines') or None
     from_hq = bool(request.data.get('from_hq'))   # HQ→branch vs branch self-request
+    # owner 2026-10-24: SOFTECH's rule by default; 'engine' = the old engine-gap rule
+    rule = 'engine' if request.data.get('rule') == 'engine' else 'softech'
     cov = request.data.get('coverage_months')
     try:
         cov = float(cov) if cov not in (None, '', 0, '0') else None
     except (TypeError, ValueError):
         cov = None
     try:
-        p = isr_writer.create_proposal(branchcode, created_by=request.user, from_hq=from_hq,
-                                       max_lines=(int(max_lines) if max_lines else None),
-                                       coverage_months=cov)
+        p, plan = isr_writer.create_proposal(branchcode, created_by=request.user, from_hq=from_hq,
+                                             max_lines=(int(max_lines) if max_lines else None),
+                                             coverage_months=cov, rule=rule, rule_data=request.data,
+                                             return_plan=True)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
+    except Exception:                              # server 100 unreachable etc. — details to the log only
+        logger.exception('isr propose failed for %s', branchcode)
+        return Response({'detail': 'تعذّر قراءة SOFTECH (سيرفر 100) — حاول مرة أخرى بعد قليل.'},
+                        status=http.HTTP_503_SERVICE_UNAVAILABLE)
     if p is None:
+        if rule == 'softech':
+            return Response({'detail': 'لا توجد أصناف مطلوبة بهذه الإعدادات.', 'stats': plan.get('stats'),
+                             'stat_labels': _stat_labels()}, status=http.HTTP_400_BAD_REQUEST)
         return Response({'detail': 'لا توجد أصناف ناقصة (gap>0) لهذا الفرع في آخر تشغيل.'},
                         status=http.HTTP_400_BAD_REQUEST)
     return Response(_detail(p), status=http.HTTP_201_CREATED)
+
+
+def _stat_labels():
+    from apps.purchasing.isr_softech import STAT_LABELS
+    return STAT_LABELS
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def isr_filter_options(request):
+    """Choices for the SOFTECH-style filters on «طلب توريد جديد» (catalog, PG only)."""
+    from django.core.cache import cache
+    from apps.purchasing import isr_softech
+    data = cache.get('isr_filter_options')
+    if data is None:
+        data = isr_softech.filter_options()
+        cache.set('isr_filter_options', data, 60 * 30)
+    return Response({**data, 'stat_labels': isr_softech.STAT_LABELS, 'defaults': isr_softech.SCREEN_DEFAULTS,
+                     'min_pack_fraction': isr_softech.MIN_PACK_FRACTION})
 
 
 @api_view(['GET'])
@@ -144,6 +177,20 @@ def isr_transfer_preview(request):
     return Response({'run_id': run.id, 'pairs': pairs})
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def isr_transfer_export(request):
+    """Excel of the inter-branch recommendations — one pair (?from=&to=) or all. READ-ONLY."""
+    from django.http import HttpResponse
+    from apps.purchasing.supply_exports import transfer_pairs_excel
+    a, b = request.query_params.get('from') or None, request.query_params.get('to') or None
+    resp = HttpResponse(transfer_pairs_excel(from_code=a, to_code=b),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    name = f'transfer_{a}_to_{b}' if a and b else 'transfers_all'
+    resp['Content-Disposition'] = f'attachment; filename="{name}_{timezone.localdate():%Y-%m-%d}.xlsx"'
+    return resp
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def isr_transfer(request):
@@ -151,15 +198,24 @@ def isr_transfer(request):
     pairs from the latest transfer-recommendation run."""
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك بتوليد التوزيعات.'}, status=http.HTTP_403_FORBIDDEN)
+    skipped = []
     try:
         created = isr_writer.generate_transfers_from_run(
             from_branch=(request.data.get('from') or None),
             to_branch=(request.data.get('to') or None),
             max_pairs=(int(request.data['max_pairs']) if request.data.get('max_pairs') else None),
-            created_by=request.user)
+            created_by=request.user, skipped=skipped)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
-    return Response({'created': created, 'count': len(created)}, status=http.HTTP_201_CREATED)
+    return Response({'created': created, 'count': len(created), 'skipped': skipped},
+                    status=http.HTTP_201_CREATED)
+
+
+def _categories(params):
+    """category=a,b · category=a&category=b · category[]=a (axios array style) → ['a','b'] | None."""
+    raw = params.getlist('category') + params.getlist('category[]')
+    cats = [c.strip() for v in raw for c in str(v).split(',') if c.strip()]
+    return cats or None
 
 
 @api_view(['GET'])
@@ -167,13 +223,38 @@ def isr_transfer(request):
 def distribution_preview(request):
     """L3 توزيعة suggestions from the latest run: summary + sample. READ-ONLY."""
     from apps.purchasing import distribution
-    cats = request.query_params.getlist('category') or None
+    cats = _categories(request.query_params)
     try:
-        sugs = distribution.analyze(categories=cats, limit=int(request.query_params.get('limit', 300)))
-        summ = distribution.summary()
+        limit = int(request.query_params.get('limit', 300))
+    except (TypeError, ValueError):
+        limit = 300
+    try:
+        # ONE analysis: the counts per category and the filtered list come from the same
+        # suggestions (it used to analyse twice — slow, and the list could disagree)
+        every = distribution.analyze()
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
-    return Response({'summary': summ, 'suggestions': sugs, 'can_write': _can_write(request)})
+    summ = distribution.summarize(every)
+    sugs = [x for x in every if not cats or x['category'] in cats]
+    from apps.purchasing.rate_writer import _latest_run
+    run = _latest_run()
+    if request.query_params.get('format') == 'xlsx':
+        # the screen's filters (categories + search) → the same rows in Excel, all of them
+        from django.http import HttpResponse
+        from apps.catalog.wildcard import text_matches
+        from apps.purchasing.supply_exports import CAT_LABELS, distribution_excel
+        q = request.query_params.get('q', '').strip()
+        rows = [x for x in sugs if not q or text_matches(f"{x['itemcode']} {x['item_name']}", q)]
+        flt = {'الفئات': '، '.join(CAT_LABELS.get(c, c) for c in cats) if cats else 'الكل', 'بحث': q}
+        resp = HttpResponse(distribution_excel(rows, filters=flt, run=run),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f'attachment; filename="distribution_{timezone.localdate():%Y-%m-%d}.xlsx"'
+        return resp
+    return Response({'summary': summ, 'suggestions': sugs[:limit], 'filtered_total': len(sugs),
+                     'can_write': _can_write(request),
+                     # where the stock / rate next to each move come from (shown on screen)
+                     'positions_source': {'run_id': run.pk if run else None,
+                                          'run_at': (run.finished_at or run.started_at) if run else None}})
 
 
 @api_view(['POST'])
@@ -184,12 +265,14 @@ def distribution_generate(request):
         return Response({'detail': 'غير مصرح لك بتوليد التوزيعة.'}, status=http.HTTP_403_FORBIDDEN)
     cats = request.data.get('categories') or None
     limit = int(request.data['limit']) if request.data.get('limit') else None
+    skipped = []
     try:
         created = isr_writer.create_distribution_proposals(
-            categories=cats, limit=limit, created_by=request.user)
+            categories=cats, limit=limit, created_by=request.user, skipped=skipped)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
-    return Response({'created': created, 'count': len(created)}, status=http.HTTP_201_CREATED)
+    return Response({'created': created, 'count': len(created), 'skipped': skipped},
+                    status=http.HTTP_201_CREATED)
 
 
 @api_view(['POST'])
@@ -201,12 +284,18 @@ def isr_approve(request, pk):
     if p.status != IsrPush.STATUS_PROPOSED:
         return Response({'detail': f'لا يمكن اعتماد طلب حالته {p.get_status_display()}.'},
                         status=http.HTTP_400_BAD_REQUEST)
+    from apps.purchasing.isr_guards import duplicate_pushed
+    dup = duplicate_pushed(p)
     p.status = IsrPush.STATUS_APPROVED
     p.approved_by = request.user
     p.approved_at = timezone.now()
     p.notes = request.data.get('notes', p.notes)
     p.save(update_fields=['status', 'approved_by', 'approved_at', 'notes'])
-    return Response(_summary(p))
+    out = _summary(p)
+    if dup is not None:                       # warn at sign-off; the push itself refuses it
+        out['warning'] = (f'تنبيه: نفس الأصناف والكميات رُحِّلت لنفس المسار بالطلب #{dup.pk} '
+                          f'(ISR {dup.isrdocnumber}) — الترحيل سيُرفض إلا بسبب مكتوب.')
+    return Response(out)
 
 
 @api_view(['POST'])
@@ -214,13 +303,33 @@ def isr_approve(request, pk):
 def isr_push(request, pk):
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك بالترحيل إلى SOFTECH.'}, status=http.HTTP_403_FORBIDDEN)
+    from apps.purchasing.isr_guards import GuardError
     p = get_object_or_404(IsrPush, pk=pk)
     try:
-        isr_writer.push_isr_record(p, executed_by=request.user)
+        isr_writer.push_isr_record(p, executed_by=request.user,
+                                   force_reason=str(request.data.get('force_reason') or ''))
     except isr_writer.WriterDisabled as exc:
         return Response({'detail': str(exc), 'gated': True}, status=http.HTTP_409_CONFLICT)
+    except GuardError as exc:                 # duplicate / feeder-first — nothing was written
+        return Response({'detail': str(exc), 'code': exc.code, 'other': exc.other},
+                        status=http.HTTP_409_CONFLICT)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=http.HTTP_400_BAD_REQUEST)
+    return Response(_detail(p))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def isr_cancel(request, pk):
+    """Cancel an unpushed draft — reason required, audited (isr_guards.cancel)."""
+    from apps.purchasing.isr_guards import GuardError, cancel
+    if not _can_write(request):
+        return Response({'detail': 'غير مصرح لك بإلغاء طلبات التوريد.'}, status=http.HTTP_403_FORBIDDEN)
+    p = get_object_or_404(IsrPush, pk=pk)
+    try:
+        cancel(p, user=request.user, reason=str(request.data.get('reason') or ''))
+    except GuardError as exc:
+        return Response({'detail': str(exc), 'code': exc.code}, status=http.HTTP_400_BAD_REQUEST)
     return Response(_detail(p))
 
 

@@ -16,6 +16,7 @@ import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
 import MobileChatter from '../../components/MobileChatter'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
+import { ba } from '../../utils/flowArrow'
 
 // Mirror of the backend transition graph. Keep in sync with views.py.
 const TRANSITIONS = {
@@ -108,11 +109,11 @@ export default function MobileReservationDetailPage() {
 
       {/* Back */}
       <button onClick={() => navigate('/m/reservations')} className="text-sm text-gray-500 flex items-center gap-1">
-        → الرجوع للقائمة
+        {ba()} الرجوع للقائمة
       </button>
 
       {/* Header card */}
-      <div data-tour="reservations-mdetail-header" className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="reservations-detail-header" className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h1 className="font-bold text-base text-gray-900 leading-snug">{r.item_name}</h1>
           <span className="text-xs text-gray-400 shrink-0">#{r.id}</span>
@@ -127,7 +128,7 @@ export default function MobileReservationDetailPage() {
       </div>
 
       {/* Info card */}
-      <div data-tour="reservations-mdetail-items" className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
+      <div data-tour="reservations-detail-customer" className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
         <Row label="العميل">{r.customer_name || '—'}</Row>
         {r.contact_phone && (
           <Row label="الهاتف">
@@ -143,7 +144,7 @@ export default function MobileReservationDetailPage() {
 
       {/* Stock availability */}
       {Array.isArray(r.stock_by_branch) && r.stock_by_branch.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div data-tour="reservations-detail-stock" className="bg-white rounded-2xl border border-gray-200 p-4">
           <h2 className="font-semibold text-gray-700 text-sm mb-2">📦 توفر المخزون</h2>
           <div className="space-y-1.5">
             {r.stock_by_branch.slice(0, 6).map(s => (
@@ -188,7 +189,7 @@ export default function MobileReservationDetailPage() {
 
       {/* Status actions */}
       {allowed.length > 0 ? (
-        <div data-tour="reservations-mdetail-status" className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div data-tour="reservations-detail-status" className="bg-white rounded-2xl border border-gray-200 p-4">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">تغيير الحالة</h2>
           <div className="grid grid-cols-2 gap-2">
             {allowed.map(s => (

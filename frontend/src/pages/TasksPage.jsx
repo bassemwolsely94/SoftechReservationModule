@@ -86,7 +86,7 @@ function StatusBadge({ status }) {
 function TaskCard({ task, onClick }) {
   const due = fmtRelative(task.due_date)
   return (
-    <div
+    <div data-tour="tasks-list-card"
       onClick={() => onClick(task.id)}
       className="bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:shadow-md hover:border-brand-300 transition-all group"
     >
@@ -133,7 +133,7 @@ function TaskCard({ task, onClick }) {
 function TaskRow({ task, onClick }) {
   const due = fmtRelative(task.due_date)
   return (
-    <tr
+    <tr data-tour="tasks-list-row"
       onClick={() => onClick(task.id)}
       className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
     >
@@ -246,7 +246,7 @@ function NewTaskModal({ onClose, onCreated, branches, staff }) {
             </div>
           </div>
 
-          <div>
+          <div data-tour="tasks-list-new-assignee">
             <label className="block text-xs font-medium text-gray-600 mb-1 text-right">تعيين إلى</label>
             <select className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)}>
               <option value="">— اختر موظف —</option>
@@ -266,7 +266,7 @@ function NewTaskModal({ onClose, onCreated, branches, staff }) {
         </div>
         <div className="flex gap-2 p-4 border-t justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button
+          <button data-tour="tasks-list-new-submit"
             onClick={submit}
             disabled={loading}
             className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 font-medium"
@@ -397,7 +397,7 @@ export default function TasksPage() {
               ))}
             </div>
 
-            <button
+            <button data-tour="tasks-list-dashboard"
               onClick={() => navigate('/tasks/dashboard')}
               className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
             >
@@ -438,7 +438,7 @@ export default function TasksPage() {
           <option value="">كل الفروع</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <label className="flex items-center gap-1.5 text-sm text-red-600 cursor-pointer">
+        <label data-tour="tasks-list-overdue" className="flex items-center gap-1.5 text-sm text-red-600 cursor-pointer">
           <input type="checkbox" checked={filters.overdue === '1'} onChange={e => setFilter('overdue', e.target.checked ? '1' : '')} />
           متأخرة فقط
         </label>

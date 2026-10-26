@@ -12,6 +12,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { pbxApi } from '../api/client'
+import useAuthStore from '../store/authStore'
+import useHelpTab from '../help/useHelpTab'
+import PbxConfigTab, { PbxStatusBadge } from '../components/pbx/PbxConfigTab'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const fmtDuration = (seconds) => {
@@ -53,7 +56,7 @@ const StateBadge = ({ state }) => {
 function CustomerCard({ customer, onClose }) {
   if (!customer) return null
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col overflow-hidden" dir="rtl">
+    <div data-tour="callcenter-pbx-customer" className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col overflow-hidden" dir="rtl">
       <div className="flex items-center justify-between px-4 py-3 bg-green-600 text-white">
         <div>
           <p className="font-bold text-lg">{customer.name || 'عميل غير معروف'}</p>
@@ -193,6 +196,10 @@ export default function PbxLivePage() {
   const [customerCard, setCustomerCard] = useState(null)  // { customer, session_id }
   const wsRef = useRef(null)
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const canConfigure = ['admin', 'supervisor'].includes(user?.role)
+  const [tab, setTab] = useState('live')
+  useHelpTab(tab)
 
   // Recent sessions (last 50)
   const { data: historyData } = useQuery({
@@ -283,18 +290,37 @@ export default function PbxLivePage() {
     <div className="flex flex-col h-full" dir="rtl">
       {/* Header */}
       <div data-tour="callcenter-pbx-header" className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-800">لوحة المكالمات الحية</h1>
-        <div data-tour="callcenter-pbx-status" className="flex items-center gap-2 text-sm">
-          <span className={`w-2 h-2 rounded-full ${
-            wsStatus === 'connected' ? 'bg-green-500' :
-            wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'
-          }`} />
-          <span className="text-gray-500">
-            {wsStatus === 'connected' ? 'متصل' : wsStatus === 'connecting' ? 'جاري الاتصال...' : 'غير متصل'}
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-gray-800">لوحة المكالمات الحية</h1>
+          {canConfigure && (
+            <div data-tour="callcenter-pbx-tabs" className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 text-xs">
+              {[{ id: 'live', label: '📞 المكالمات' }, { id: 'config', label: '⚙️ إعدادات السنترال' }].map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    tab === t.id ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-sm" data-tour="callcenter-pbx-status">
+          <PbxStatusBadge />
+          <span className="flex items-center gap-1.5" title="اتصال المتصفح بالسيرفر (للإشعارات اللحظية)">
+            <span className={`w-2 h-2 rounded-full ${
+              wsStatus === 'connected' ? 'bg-green-500' :
+              wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'
+            }`} />
+            <span className="text-gray-500 text-xs">
+              التحديث اللحظي: {wsStatus === 'connected' ? 'متصل' : wsStatus === 'connecting' ? 'جاري الاتصال...' : 'غير متصل'}
+            </span>
           </span>
         </div>
       </div>
 
+      {tab === 'config' && canConfigure ? (
+        <div className="flex-1 overflow-auto p-6"><PbxConfigTab /></div>
+      ) : (
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Active calls */}
         <section data-tour="callcenter-pbx-active">
@@ -344,6 +370,7 @@ export default function PbxLivePage() {
           </div>
         </section>
       </div>
+      )}
 
       {/* Customer context slide-in */}
       {customerCard && (

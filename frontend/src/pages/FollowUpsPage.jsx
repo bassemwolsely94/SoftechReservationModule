@@ -33,6 +33,7 @@ import RefreshButton from '../components/RefreshButton'
 import ModuleNotificationBell from '../components/ModuleNotificationBell'
 import CanDo from '../components/CanDo'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -735,7 +736,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
           {/* WA button: if collapsed → expand so user can select items first;
               if already expanded → build message with selection (or all) */}
           {activeTaskIds.length > 0 && c.phone_available && canSeePhone && (
-            <button
+            <button data-tour="followups-tasks-group-whatsapp"
               disabled={building}
               onClick={() => {
                 if (!expanded) {
@@ -921,7 +922,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
                     )}
                     {p.indication && (r.last_sale_date || r.due_date) && <span className="text-gray-300">·</span>}
                     {r.last_sale_date && <span>صُرف: <strong className="text-gray-600">{r.last_sale_date}</strong></span>}
-                    {r.last_sale_date && r.due_date && <span className="text-gray-300">→</span>}
+                    {r.last_sale_date && r.due_date && <span className="text-gray-300">{fa()}</span>}
                     {r.due_date && (
                       <span>استحقاق: <strong className={isOverdue2 ? 'text-red-600' : 'text-gray-700'}>{r.due_date}</strong></span>
                     )}
@@ -1048,7 +1049,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
   const currentAssignees = task.assignments_list || []
 
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-3 space-y-3" data-tour="followups-tasks-assign">
       {/* Current assignees */}
       {currentAssignees.length > 0 && (
         <div className="space-y-1">
@@ -1932,7 +1933,7 @@ function QuickActionModal({ task, onClose, onDone }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl mt-0.5">✕</button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4" data-tour="followups-tasks-outcome">
           {/* Product summary */}
           <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-100 rounded-xl">
             <div className="text-2xl flex-shrink-0">💊</div>
@@ -2308,6 +2309,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2 text-orange-600">
                     🔀 إزالة التكرار
                   </button>
+                  <div data-tour="followups-tasks-generate">
                   <RefreshButton
                     loading={regenerating}
                     size="sm"
@@ -2321,7 +2323,7 @@ export default function FollowUpsPage() {
                         qc.invalidateQueries(['followup-dashboard'])
                         const parts = []
                         if (result.tasks_created)    parts.push(`${result.tasks_created} مهمة جديدة`)
-                        if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} → فائت`)
+                        if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} ${fa()} فائت`)
                         if (result.tasks_auto_closed) parts.push(`${result.tasks_auto_closed} مُغلق آلياً`)
                         if (parts.length) alert('تم: ' + parts.join(' · '))
                       } catch (e) {
@@ -2330,6 +2332,7 @@ export default function FollowUpsPage() {
                     }}>
                     🔄 توليد المهام
                   </RefreshButton>
+                  </div>
                 </>
               )}
             </div>
@@ -2546,7 +2549,7 @@ export default function FollowUpsPage() {
       {viewMode === 'list' && selectedIds.length > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none" dir="rtl">
           <div className="max-w-7xl mx-auto px-4 pb-4 pointer-events-auto">
-            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" data-tour="followups-tasks-bulk">
 
               {/* Inline preset picker — shown when apply_preset is active */}
               {showBatchPreset && (

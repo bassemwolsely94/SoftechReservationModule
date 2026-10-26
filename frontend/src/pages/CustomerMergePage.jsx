@@ -37,7 +37,7 @@ function Row({ r, me, onAct, busy }) {
   const open = r.status === 'proposed' || r.status === 'marked'
   const ownMark = r.status === 'marked' && r.marked_by_id === me
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+    <div className="bg-white rounded-xl border border-gray-200 px-4 py-3" data-tour="customers-merge-row">
       <div className="flex flex-wrap items-start gap-4">
         <CodeCard title="الكود المكرر (يُغلق)" pic={r.old_pic} name={r.old_name} card={f.old} />
         <div className="self-center text-gray-400">←</div>
@@ -53,15 +53,15 @@ function Row({ r, me, onAct, busy }) {
       {open && (
         <div className="flex flex-wrap items-center gap-2 mt-3 text-sm" data-tour="customers-merge-actions">
           {r.status === 'proposed' && (
-            <button disabled={busy} onClick={() => onAct(r.id, 'mark')} className="px-3 py-1 rounded-lg bg-gray-900 text-white disabled:opacity-50">تعليم للدمج</button>
+            <button data-tour="customers-merge-mark" disabled={busy} onClick={() => onAct(r.id, 'mark')} className="px-3 py-1 rounded-lg bg-gray-900 text-white disabled:opacity-50">تعليم للدمج</button>
           )}
           {r.status === 'marked' && (
-            <button disabled={busy || ownMark} title={ownMark ? 'يعتمده مراجع آخر' : ''} onClick={() => onAct(r.id, 'approve')}
+            <button data-tour="customers-merge-approve" disabled={busy || ownMark} title={ownMark ? 'يعتمده مراجع آخر' : ''} onClick={() => onAct(r.id, 'approve')}
               className="px-3 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">اعتماد</button>
           )}
-          <button disabled={busy} onClick={() => onAct(r.id, 'swap')} className="px-3 py-1 rounded-lg border border-gray-300">اجعل {r.old_pic} الرئيسي</button>
+          <button data-tour="customers-merge-swap" disabled={busy} onClick={() => onAct(r.id, 'swap')} className="px-3 py-1 rounded-lg border border-gray-300">اجعل {r.old_pic} الرئيسي</button>
           {!rejecting ? (
-            <button disabled={busy} onClick={() => setRejecting(true)} className="px-3 py-1 rounded-lg text-red-600">ليس نفس العميل</button>
+            <button data-tour="customers-merge-reject" disabled={busy} onClick={() => setRejecting(true)} className="px-3 py-1 rounded-lg text-red-600">ليس نفس العميل</button>
           ) : (
             <span className="flex items-center gap-2">
               <input autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="السبب"
@@ -128,17 +128,17 @@ export default function CustomerMergePage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select value={strength} onChange={e => setStrength(e.target.value)} data-tour="customers-merge-strength" className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+        <select data-tour="customers-merge-strength" value={strength} onChange={e => setStrength(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           {STRENGTHS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود" data-tour="customers-merge-search"
+        <input data-tour="customers-merge-search" value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود"
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40" />
         <span className="flex-1" />
         {status === 'proposed' && (
-          <button disabled={busy} onClick={() => bulk('mark')} className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm">تعليم القوية (حتى 100)</button>
+          <button data-tour="customers-merge-bulk-mark" disabled={busy} onClick={() => bulk('mark')} className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm">تعليم القوية (حتى 100)</button>
         )}
         {status === 'marked' && (
-          <button disabled={busy} onClick={() => bulk('approve')} className="px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-sm">اعتماد القوية التي علّمها غيري (حتى 100)</button>
+          <button data-tour="customers-merge-bulk-approve" disabled={busy} onClick={() => bulk('approve')} className="px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-sm">اعتماد القوية التي علّمها غيري (حتى 100)</button>
         )}
       </div>
 

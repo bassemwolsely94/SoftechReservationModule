@@ -42,6 +42,7 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import MatrixPermission, matrix_allows
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
@@ -102,7 +103,12 @@ def _parse_date(value, field_name='date') -> date:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveProgramViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_actions = {
+        'simulate': ('view',), 'calculate': ('edit',), 'finalize': ('finalize',),
+        'clone': ('create',), 'export_settlements': ('export',),
+    }
 
     def get_queryset(self):
         qs = IncentiveProgram.objects.annotate(rule_count=Count('rules'))
@@ -168,6 +174,9 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         force = bool(request.data.get('force', False))
+        if force and not matrix_allows(self._get_profile(), 'incentives', 'finalize'):
+            return Response({'detail': 'إعادة الاحتساب الإجباري تفتح التسويات المعتمدة — تحتاج صلاحية «إنهاء» الحوافز'},
+                            status=status.HTTP_403_FORBIDDEN)
 
         try:
             from .engine import calculate as run_calculate
@@ -1037,7 +1046,11 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveRuleViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_actions = {'add_item': ('edit',), 'import_items': ('edit',),
+                    'remove_item': ('edit', 'delete'), 'clear_items': ('edit', 'delete')}
+    rbac_delete = ('edit', 'delete')
     serializer_class   = IncentiveRuleSerializer
 
     def get_queryset(self):
@@ -1203,9 +1216,12 @@ class IncentiveRuleViewSet(viewsets.ModelViewSet):
 class AdjustmentEntryViewSet(viewsets.ModelViewSet):
     """
     Manual +/- adjustments to incentive totals.
-    Any authenticated user can view; only admin/manager can create/update/delete.
+    Matrix module 'incentives': view to read, create / edit to add or change,
+    edit or delete to remove.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_delete = ('edit', 'delete')
     serializer_class   = AdjustmentEntrySerializer
 
     def get_queryset(self):
@@ -1250,7 +1266,8 @@ class AdjustmentEntryViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveTransactionViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveTransactionSerializer
 
     def get_queryset(self):
@@ -1274,7 +1291,8 @@ class IncentiveTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveSettlementSerializer
 
     def get_queryset(self):
@@ -1349,7 +1367,8 @@ class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveCalculationLogViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveCalculationLogSerializer
 
     def get_queryset(self):
@@ -1427,7 +1446,8 @@ class SuggestItemsView(APIView):
       max_results          int   default=30
       include_tags         str   comma-separated: near_expiry,slow_moving,high_margin
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
 
     def get(self, request):
         params = request.query_params
@@ -1581,7 +1601,8 @@ class NearExpiryStockView(viewsets.ViewSet):
       total_items        — total distinct item codes
       total_qty          — total quantity across all batches
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
 
     def list(self, request):
         params = request.query_params

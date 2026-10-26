@@ -94,6 +94,7 @@ function ProductCard({ product, onClick, onCompareToggle, isCompared, pickZone }
                     hover:shadow-md hover:border-brand-200 transition-all duration-150 group">
       {/* Compare checkbox */}
       <button
+        data-tour="catalog-products-compare"
         onClick={e => { e.stopPropagation(); onCompareToggle(product) }}
         title="إضافة للمقارنة"
         className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
@@ -188,6 +189,7 @@ function ProductRow({ product, onClick, onCompareToggle, isCompared, pickZone })
                     hover:bg-brand-50 hover:border-brand-200 transition-colors duration-100">
       {/* Compare */}
       <button
+        data-tour="catalog-products-compare"
         onClick={() => onCompareToggle(product)}
         className={`w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center transition-all
           ${isCompared ? 'bg-brand-600 border-brand-600 text-white' : 'border-gray-300 hover:border-brand-400'}`}
@@ -470,7 +472,7 @@ function ComparePanel({ items, onRemove, onClear, onNavigate }) {
   ]
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t-2 border-brand-400 shadow-2xl" dir="rtl">
+    <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t-2 border-brand-400 shadow-2xl" dir="rtl" data-tour="catalog-products-compare-panel">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-brand-600 text-white">
         <div className="flex items-center gap-3">
@@ -796,6 +798,7 @@ export default function ProductCatalogPage() {
 
               {/* Export */}
               <button
+                data-tour="catalog-products-export"
                 onClick={handleExport}
                 disabled={exporting}
                 className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200
@@ -835,7 +838,7 @@ export default function ProductCatalogPage() {
               </button>
 
               {/* View mode */}
-              <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden" data-tour="catalog-products-view">
                 {[['grid', '⊞'], ['list', '≡']].map(([mode, icon]) => (
                   <button
                     key={mode}
@@ -874,7 +877,7 @@ export default function ProductCatalogPage() {
 
           {/* Filter sidebar */}
           {showFilters && viewTab !== 'bundles' && (
-            <aside className="w-60 shrink-0">
+            <aside className="w-60 shrink-0" data-tour="catalog-products-filter-panel">
               <FilterPanel
                 filters={filters}
                 onChange={f => { setFilters(f); setPage(1) }}

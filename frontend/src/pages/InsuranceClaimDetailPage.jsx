@@ -17,6 +17,7 @@ import DataTable from '../components/DataTable'
 import { wildcardMatch } from '../utils/wildcard'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -499,7 +500,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                           {catBadge(l.item_category)}
                           {hasDrift && v.cat_changed && (
                             <span className="text-[10px] text-amber-600 mr-1" title={`التصنيف الحالى فى الكتالوج: ${v.current_category_label}`}>
-                              → {v.current_category_label}
+                              {fa()} {v.current_category_label}
                             </span>
                           )}
                           {hasSoftClass && (
@@ -815,7 +816,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
           {sup.is_manually_edited && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded mr-1">مُعدَّل يدوياً</span>}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-mono text-gray-600">{fmt(sup.gross_before)} → <span className="font-semibold">{fmt(sup.net_after)}</span></span>
+          <span className="text-sm font-mono text-gray-600">{fmt(sup.gross_before)} {fa()} <span className="font-semibold">{fmt(sup.net_after)}</span></span>
           <Btn variant="secondary" onClick={() => setShowLines(s => !s)}>{showLines ? '▲' : '▼'} بنود</Btn>
           <Btn variant="warning" onClick={openEdit}>تعديل</Btn>
           <Btn variant={excluded ? 'secondary' : 'danger'} onClick={toggleExclude}>
@@ -2119,7 +2120,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
                     <label key={x.rx_id} className="text-xs flex items-center gap-2 border-b border-gray-100 py-1 cursor-pointer">
                       <input type="checkbox" checked={approved.has(x.rx_id)} onChange={() => toggle(x.rx_id)} />
                       <span className="flex-1"><span className="font-mono">#{x.docnumber}</span> · {x.patient}</span>
-                      <span className="font-mono text-gray-500">صافينا {fmt(x.our_net)} → سوفتك {fmt(x.softech_net)}
+                      <span className="font-mono text-gray-500">صافينا {fmt(x.our_net)} {fa()} سوفتك {fmt(x.softech_net)}
                         <span className={x.diff >= 0 ? 'text-emerald-600' : 'text-red-600'}> ({x.diff >= 0 ? '+' : ''}{fmt(x.diff)})</span>
                       </span>
                     </label>
@@ -2761,7 +2762,7 @@ function ActivityTab({ claimId }) {
     if (b?.net != null && a?.net != null) {
       const d = Number(a.net) - Number(b.net)
       return <span className={d > 0.005 ? 'text-green-600' : d < -0.005 ? 'text-red-600' : 'text-gray-400'}>
-        {' '}({fmt(b.net)} → {fmt(a.net)}{Math.abs(d) > 0.005 ? `, ${d > 0 ? '+' : ''}${fmt(d)}` : ''})
+        {' '}({fmt(b.net)} {fa()} {fmt(a.net)}{Math.abs(d) > 0.005 ? `, ${d > 0 ? '+' : ''}${fmt(d)}` : ''})
       </span>
     }
     return null
@@ -3024,7 +3025,7 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
     setBusy(true); setMsg(null)
     try {
       const { data } = await insuranceApi.dateEditApply(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate, confirm: true })
-      setMsg({ ok: `تم توحيد التاريخ (الإيصال + المطالبة): ${data.old_date} → ${data.new_date}. اطبع الإيصال الآن ثم استرجع تاريخ الإيصال من السجل بالأسفل (يبقى تاريخ المطالبة مصححاً).` })
+      setMsg({ ok: `تم توحيد التاريخ (الإيصال + المطالبة): ${data.old_date} ${fa()} ${data.new_date}. اطبع الإيصال الآن ثم استرجع تاريخ الإيصال من السجل بالأسفل (يبقى تاريخ المطالبة مصححاً).` })
       setPv(null); loadRuns()
     } catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّر التطبيق' }) }
     finally { setBusy(false) }
@@ -3055,7 +3056,7 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
       </div>
       {pv && (
         <div className="mt-2 text-xs text-gray-700">
-          التاريخ الحالى: <span className="font-mono">{pv.current_date}</span> → الجديد: <span className="font-mono">{pv.new_date || '—'}</span>
+          التاريخ الحالى: <span className="font-mono">{pv.current_date}</span> {fa()} الجديد: <span className="font-mono">{pv.new_date || '—'}</span>
           {' · '}الفرع {pv.branch_reachable ? <span className="text-green-600">متصل</span> : <span className="text-red-600">غير متاح</span>}
           {!pv.write_enabled && <span className="text-amber-600"> · الكتابة معطّلة</span>}
         </div>
@@ -3067,7 +3068,7 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
           <div className="text-xs font-medium text-gray-600 mb-1">سجل تعديلات التاريخ</div>
           {runs.map(r => (
             <div key={r.id} className="text-xs flex items-center justify-between border-b border-gray-100 py-1">
-              <span><span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} → {r.new_date}
+              <span><span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} {fa()} {r.new_date}
                 {r.status === 'reverted' && <span className="text-gray-400"> · مُسترجَع</span>}
                 {r.status === 'failed' && <span className="text-red-500"> · فشل</span>}
               </span>
@@ -3342,12 +3343,12 @@ function SoftechRepriceTab({ claimId, claim }) {
             <div key={i} className="border-b border-gray-100 pb-2">
               <div className="font-medium">صنف {l.itemcode} <span className="text-xs text-gray-400">(ض {l.vat_rate}%, كمية {l.transqty})</span></div>
               {Object.entries(l.changes).map(([f, ch]) => (
-                <div key={f} className="text-xs text-gray-600 flex gap-2"><span className="w-40">{f}</span><span className="font-mono">{ch.old} → <b className="text-gray-900">{ch.new}</b></span></div>
+                <div key={f} className="text-xs text-gray-600 flex gap-2"><span className="w-40">{f}</span><span className="font-mono">{ch.old} {fa()} <b className="text-gray-900">{ch.new}</b></span></div>
               ))}
             </div>
           ))}
           <div className="text-xs text-gray-700 grid grid-cols-2 gap-1 max-w-md">
-            {Object.entries(pv.header).map(([f, ch]) => <div key={f}><span className="text-gray-400">{f}</span> {ch.old} → <b>{ch.new}</b></div>)}
+            {Object.entries(pv.header).map(([f, ch]) => <div key={f}><span className="text-gray-400">{f}</span> {ch.old} {fa()} <b>{ch.new}</b></div>)}
             <div><span className="text-gray-400">docvalue2 (تكلفة)</span> {pv.docvalue2_cost} (ثابت)</div>
             <div><span className="text-gray-400">التحصيل الجديد</span> {pv.tender_new}</div>
             <div><span className="text-gray-400">صافى Δ</span> <b>{pv.net_delta}</b></div>
@@ -3576,7 +3577,7 @@ function ReadinessTab({ claimId }) {
                             ? <><span className="font-mono">{it.item_code}</span> — {it.item_name}
                                 {it.category_label ? <span className="text-gray-500"> · {it.category_label}</span> : null}
                                 {it.lines > 1 ? <span className="text-gray-400"> ×{it.lines}</span> : null}</>
-                            : <span className="font-mono">#{it.docnumber}{it.claim ? ` → ${it.claim}` : ''}{it.patient ? ` (${it.patient})` : ''}</span>}
+                            : <span className="font-mono">#{it.docnumber}{it.claim ? ` ${fa()} ${it.claim}` : ''}{it.patient ? ` (${it.patient})` : ''}</span>}
                         </span>
                       ))}
                       {c.items.length > 50 && <span className="text-[11px] text-gray-500">+{c.items.length - 50}…</span>}
@@ -3636,7 +3637,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
     setBusy(code); setMsg(null)
     try {
       const { data: res } = await insuranceApi.applyReviewDecision(claimId, code, cat)
-      setMsg(`تم تصنيف ${code}: ${res.lines_updated} بند · الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
+      setMsg(`تم تصنيف ${code}: ${res.lines_updated} بند · الصافى ${fmt(res.net_before)} ${fa()} ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
       load(); onRefresh && onRefresh()
     } catch (e) {
       setMsg(e.response?.data?.error || 'تعذّر تطبيق التصنيف')
@@ -3842,7 +3843,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
     setReviewBusy(code); setReviewMsg(null)
     try {
       const { data: res } = await insuranceApi.applyReviewDecision(claimId, code, cat)
-      setReviewMsg(`تم تصنيف ${code}: ${res.lines_updated} بند · الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
+      setReviewMsg(`تم تصنيف ${code}: ${res.lines_updated} بند · الصافى ${fmt(res.net_before)} ${fa()} ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
       await reload(); await loadHistory(); await loadReview()
       onRefresh && onRefresh()
     } catch (e) {
@@ -3856,7 +3857,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
     try {
       const { data: res } = await insuranceApi.applyOverrides(claimId)
       setOvMsg(`تم تصويب ${res.lines_updated} بند في ${res.prescriptions_updated} روشتة · `
-        + `الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
+        + `الصافى ${fmt(res.net_before)} ${fa()} ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`)
       await reload(); await loadHistory(); await loadOverrides()
       onRefresh && onRefresh()
     } catch (e) {
@@ -3911,7 +3912,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
         ...(ids ? { line_ids: ids } : {}),
       })
       let msg = `تم التحديث: ${res.lines_updated} بند في ${res.prescriptions_updated} روشتة · `
-        + `الصافى ${fmt(res.net_before)} → ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`
+        + `الصافى ${fmt(res.net_before)} ${fa()} ${fmt(res.net_after)} (${res.net_delta > 0 ? '+' : ''}${fmt(res.net_delta)})`
       if (res.skipped_count) {
         const codes = (res.skipped || []).slice(0, 8)
           .map(s => `${s.itemcode || s.line_id} (${s.error})`).join('، ')
@@ -3996,7 +3997,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
               <span className={ovPreview.net_delta < 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>
                 {ovPreview.net_delta > 0 ? '+' : ''}{fmt(ovPreview.net_delta)}
               </span>{' '}
-              ({fmt(ovPreview.net_before)} → {fmt(ovPreview.net_projected)})
+              ({fmt(ovPreview.net_before)} {fa()} {fmt(ovPreview.net_projected)})
             </div>
             <button onClick={applyOverrides} disabled={ovApplying}
               className="px-3 py-2 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-50">
@@ -4228,7 +4229,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
                 {data.category_moves.map((m, i) => (
                   <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
                     <span className="font-medium">{m.from_label}</span>
-                    <span className="text-gray-400 mx-1">→</span>
+                    <span className="text-gray-400 mx-1">{fa()}</span>
                     <span className="font-bold text-amber-700">{m.to_label}</span>
                     <span className="text-gray-400 mx-2">·</span>
                     <span>{m.count} بند</span>

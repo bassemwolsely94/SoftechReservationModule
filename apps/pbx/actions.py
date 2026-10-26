@@ -102,6 +102,57 @@ class AMIActionClient:
         self._send(fields)
         return self._read_block()
 
+    def action_list(self, fields: dict, complete_event: str, max_items: int = 5000) -> list[dict]:
+        """List actions (SIPpeers, PJSIPShowContacts…): collect events until complete_event."""
+        action_id = f"elr-{id(self)}-{fields.get('Action')}"
+        self._send({**fields, 'ActionID': action_id})
+        items = []
+        for _ in range(max_items + 10):
+            block = self._read_block()
+            if block.get('ActionID') != action_id:
+                continue  # unrelated live events on the same socket
+            if block.get('Response') == 'Error':
+                raise AMIActionError(block.get('Message', 'AMI error'))
+            if block.get('Event') == complete_event:
+                return items
+            if 'Event' in block:
+                items.append(block)
+        raise AMIActionError(f'{complete_event} not received')
+
+
+def originate_call(caller_ext: str, destination: str, caller_id_name: str = '') -> dict:
+    """
+    Dial `destination` (external phone number) from the agent's extension.
+    Asterisk calls the agent's extension first (Local leg), then bridges to
+    the destination number via the configured outbound trunk/context.
+
+    Configuration (.env):
+        AMI_DIAL_CONTEXT  — dialplan context for outbound calls
+                            (Issabel default: from-internal)
+        AMI_CHANNEL_TECH  — SIP or PJSIP (default SIP)
+
+    Raises AMIActionError on failure.
+    """
+    tech    = getattr(settings, 'AMI_CHANNEL_TECH', 'SIP')
+    context = getattr(settings, 'AMI_DIAL_CONTEXT', getattr(settings, 'AMI_SPY_CONTEXT', 'from-internal'))
+    name    = caller_id_name or 'ElRezeiky'
+
+    with AMIActionClient() as client:
+        resp = client.action({
+            'Action':      'Originate',
+            'Channel':     f'{tech}/{caller_ext}',
+            'Context':     context,
+            'Exten':       destination,
+            'Priority':    '1',
+            'CallerID':    f'{name} <{caller_ext}>',
+            'Async':       'true',
+            'Timeout':     '30000',
+        })
+    if resp.get('Response') != 'Success':
+        raise AMIActionError(resp.get('Message', 'فشل بدء المكالمة'))
+    logger.info('Originate: ext %s → %s', caller_ext, destination)
+    return resp
+
 
 def originate_chanspy(supervisor_ext: str, target_ext: str, mode: str = 'listen') -> dict:
     """

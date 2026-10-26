@@ -8,7 +8,9 @@
  *                             the page's tabs; the innermost one wins, and closing the
  *                             drawer falls back to the page tab.
  *   lang                    — help reading language; independent of the UI language
- *   tour                    — a running «اعرض لي» tour: { key, steps, i } (not persisted)
+ *   tour                    — a running «اعرض لي» tour or module journey:
+ *                             { key, steps, i, journey, title } (not persisted). A journey's
+ *                             key is 'journey:<module>.<key>' and it survives navigation.
  *   seen                    — screen key → 'updated' date the user last read, for the
  *                             "new" dot (per browser; a convenience, not a record)
  */
@@ -27,8 +29,13 @@ const useHelpStore = create(
       seen: {},
       tour: null,
 
-      // routes: the screen's own pages (list + detail…) — moving between them keeps a screen tour going
-      startTour(key, steps, routes = []) { if (steps?.length) set({ tour: { key, steps, routes, i: 0 }, isOpen: false }) },
+      // opts: the screen's own pages (list + detail…) as an array — moving between them keeps
+      // a screen tour going — or { routes, journey, title } (journeys move across screens)
+      startTour(key, steps, opts = {}) {
+        const { routes = [], journey = false, title = null } = Array.isArray(opts) ? { routes: opts } : opts
+        if (steps?.length) set({ tour: { key, steps, routes, i: 0, journey, title }, isOpen: false })
+      },
+      startJourney(j) { get().startTour(`journey:${j.id}`, j.steps, { journey: true, title: j.title }) },
       tourStep(i) { const t = get().tour; if (t) set({ tour: { ...t, i: Math.max(0, Math.min(i, t.steps.length - 1)) } }) },
       endTour() { set({ tour: null }) },
       open(key = null, tab = null) { set({ isOpen: true, forcedKey: key, forcedTab: tab }) },

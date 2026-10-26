@@ -77,7 +77,7 @@ export default function OmniWallboardPage() {
       )}
 
       {/* KPI row */}
-      <div data-tour="omni-wallboard-kpis" className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3" data-tour="omni-wallboard-kpis">
         <Kpi label="مكالمات جارية" value={live_calls.length} accent="text-green-600" />
         <Kpi label="مكالمات اليوم" value={today.total} />
         <Kpi label="مُجابة" value={today.answered} accent="text-green-600" />
@@ -90,10 +90,10 @@ export default function OmniWallboardPage() {
       </div>
 
       {/* Live calls */}
-      <div data-tour="omni-wallboard-live" className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden" data-tour="omni-wallboard-calls">
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-bold text-gray-700 text-sm">☎️ المكالمات الحية</h2>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400" data-tour="omni-wallboard-whatsapp">
             واتساب: {accounts.connected}/{accounts.total} متصل ·
             غير مقروء {conversations.wa_unread}
           </span>
@@ -134,10 +134,10 @@ export default function OmniWallboardPage() {
                     <td className="px-4 py-2 text-left whitespace-nowrap">
                       {c.state === 'answered' && c.agent_ext ? (
                         <>
-                          <button onClick={() => spy(c.agent_ext, 'listen')}
+                          <button data-tour="omni-wallboard-listen" onClick={() => spy(c.agent_ext, 'listen')}
                                   className="text-xs text-gray-500 hover:text-indigo-600 ml-2"
                                   title="استماع صامت">🎧 استماع</button>
-                          <button onClick={() => spy(c.agent_ext, 'whisper')}
+                          <button data-tour="omni-wallboard-whisper" onClick={() => spy(c.agent_ext, 'whisper')}
                                   className="text-xs text-gray-500 hover:text-indigo-600"
                                   title="همس للعامل دون سماع العميل">🗣️ همس</button>
                         </>
@@ -153,7 +153,7 @@ export default function OmniWallboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Queues today */}
-        <div data-tour="omni-wallboard-queues" className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden" data-tour="omni-wallboard-queues">
           <h2 className="font-bold text-gray-700 text-sm px-4 py-2.5 border-b border-gray-100">
             📋 القوائم اليوم
           </h2>
@@ -188,7 +188,7 @@ export default function OmniWallboardPage() {
         </div>
 
         {/* Agents */}
-        <div data-tour="omni-wallboard-agents" className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200" data-tour="omni-wallboard-agents">
           <h2 className="font-bold text-gray-700 text-sm px-4 py-2.5 border-b border-gray-100">
             👥 العمال
           </h2>

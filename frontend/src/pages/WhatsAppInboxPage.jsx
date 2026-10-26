@@ -58,7 +58,7 @@ function ConversationRow({ conv, selected, onClick }) {
         </div>
         <div className="flex flex-col items-end shrink-0">
           <span className="text-xs text-gray-400">{fmtDt(conv.last_message_at)}</span>
-          <span className={`mt-1 w-2 h-2 rounded-full ${windowOpen ? 'bg-green-400' : 'bg-red-400'}`}
+          <span data-tour="omni-whatsapp-inbox-dot" className={`mt-1 w-2 h-2 rounded-full ${windowOpen ? 'bg-green-400' : 'bg-red-400'}`}
                 title={windowOpen ? 'نافذة مفتوحة' : 'نافذة مغلقة'} />
         </div>
       </div>
@@ -183,6 +183,7 @@ function MessageThread({ conv }) {
             </select>
             <div className="flex gap-2">
               <button
+                data-tour="omni-whatsapp-inbox-send-template"
                 onClick={() => sendTemplate.mutate()}
                 disabled={!selectedTemplate || sendTemplate.isPending}
                 className="flex-1 bg-green-600 text-white rounded px-3 py-2 text-sm disabled:opacity-50"
@@ -205,6 +206,7 @@ function MessageThread({ conv }) {
               className="flex-1 border border-gray-200 rounded-full px-4 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-400 focus:outline-none focus:border-green-400"
             />
             <button
+              data-tour="omni-whatsapp-inbox-send"
               onClick={() => sendText.mutate()}
               disabled={!windowOpen || !text.trim() || sendText.isPending}
               className="w-9 h-9 bg-green-600 text-white rounded-full flex items-center justify-center text-sm disabled:opacity-40"
@@ -213,6 +215,7 @@ function MessageThread({ conv }) {
             </button>
             {windowOpen && (
               <button
+                data-tour="omni-whatsapp-inbox-template"
                 onClick={() => setTemplateMode(true)}
                 className="text-xs text-gray-400 hover:text-gray-600 px-1"
                 title="إرسال قالب"

@@ -96,7 +96,7 @@ def matching_availability(item_id):
     """Fresh, trustworthy supplier offers for this item from the availability inbox."""
     since = timezone.now() - timedelta(days=AVAILABILITY_FRESH_DAYS)
     lines = (AvailabilityLine.objects
-             .filter(item_id=item_id, created_at__gte=since,
+             .filter(item_id=item_id, created_at__gte=since, duplicate_of__isnull=True,
                      batch__status__in=[AvailabilityBatch.STATUS_OPEN, AvailabilityBatch.STATUS_REVIEWED])
              .filter(Q(is_confirmed=True) | Q(match_score__gte=AUTO_MATCH_SINGLE))
              .select_related('batch', 'batch__supplier'))

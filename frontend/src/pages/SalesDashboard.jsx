@@ -248,21 +248,25 @@ export default function SalesDashboard() {
       </div>
 
       {/* Sales data freshness */}
-      <DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
+      <div data-tour="analytics-sales-freshness"><DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} /></div>
 
+      <div data-tour="analytics-sales-filters">
       <AnalyticsFilterPanel
         filters={filters} onChange={setFilters} options={opts || {}}
         config={{ showDocCodes: true, showPersons: true, showChannels: true,
                   showMedicineTypes: true, showDaysOfWeek: true, showHours: true,
                   showPersonsMain: true }}
       />
+      </div>
 
       {/* Item operational filters — insurance, level, store_classif, nosale, trans, FMI, points */}
+      <div data-tour="analytics-sales-item-filters">
       <ItemOperationalFiltersBar
         filters={itemFilters}
         onChange={setItemFilters}
         options={itemFilterOpts || {}}
       />
+      </div>
 
       {isLoading && <div className="flex justify-center h-40 items-center"><div className="text-brand-600 animate-pulse">جارٍ التحميل…</div></div>}
       {isError   && <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-center text-red-600">تعذّر تحميل البيانات</div>}
@@ -287,7 +291,7 @@ export default function SalesDashboard() {
           </div>
 
           {/* KPIs row 2 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="analytics-sales-returns">
             <KpiCard label="فواتير مبيعات"  value={fmt(s.sales_count)}   sub={`${fmt(s.sales_revenue)} جم`}   color="green" icon="✅" />
             <KpiCard label="مردودات"         value={fmt(s.returns_count)} sub={`${fmt(s.returns_revenue)} جم`} color="red"   icon="↩️" />
             <KpiCard label="معدل الإرجاع"   value={fmtPct(s.return_rate_pct)}

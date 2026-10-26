@@ -1,6 +1,7 @@
 /** PriceHistoryModal (#8) — full change timeline for one item (system of record). */
 import { useQuery } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
+import { fa } from '../../utils/flowArrow'
 
 const FIELD_LABEL = {
   pack_price: 'سعر العبوة', unit_price: 'سعر الوحدة', pack_price_tax: 'شامل الضريبة',
@@ -55,7 +56,7 @@ export default function PriceHistoryModal({ softechId, itemName, onClose }) {
                       <span key={k} className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 rounded px-2 py-0.5 text-xs">
                         <span className="text-gray-500">{FIELD_LABEL[k] || k}:</span>
                         {ev.old_values?.[k] != null && <span className="text-red-400 line-through">{parseFloat(ev.old_values[k]).toFixed(2)}</span>}
-                        <span className="text-gray-300">→</span>
+                        <span className="text-gray-300">{fa()}</span>
                         <span className="font-semibold text-emerald-600">{parseFloat(v).toFixed(2)}</span>
                       </span>
                     ))}

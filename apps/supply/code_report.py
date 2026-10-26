@@ -204,16 +204,34 @@ def to_excel(rep) -> bytes:
             s['by_mirror'], s['ambiguous'], s['unknown'], s['newly_matchable'], s['agrees'], s['conflicts'],
             s['by_barcode'], s['mirror_links'], s['mirror_codes']] for s in rep['suppliers']],
           [28, 11] + [12] * 13)
-    sheet(wb.create_sheet('تعارضات'), 'الكود يشير لصنف غير الصنف المؤكد — راجعها في SOFTECH',
-          ['المصدر', 'رقم السطر', 'المورد', 'الكود', 'نص السطر', 'الصنف المؤكد', 'صنف الكود', 'مصدر الكود'],
-          [[SOURCE_LABELS[c['source']], c['line_id'], c['supplier'], c['code'], c['text'], c['confirmed_item'],
-            c['code_item'], 'مطابقة سابقة' if c['via'] == 'mapping' else 'نسخة SOFTECH'] for c in rep['conflicts']],
-          [18, 10, 24, 12, 40, 36, 36, 14])
-    sheet(wb.create_sheet('يمكن مطابقتها'), 'أسطر غير مطابقة يحدد كودها الصنف الآن',
-          ['المصدر', 'رقم السطر', 'المورد', 'الكود', 'نص السطر', 'صنف الكود'],
-          [[SOURCE_LABELS[c['source']], c['line_id'], c['supplier'], c['code'], c['text'], c['code_item']]
+    # «بيانات الصنف» (live) for the item the line points to: the confirmed one on a conflict,
+    # the code's item on a matchable line
+    from apps.catalog import item_columns as IC
+    items = IC.load_items(ids=[c.get('confirmed_item_id') for c in rep['conflicts']]
+                          + [c.get('code_item_id') for c in rep['newly_matchable']])
+
+    def code_of(item_id):
+        it = items.get(item_id)
+        return it.softech_id if it else ''
+    ws_c = wb.create_sheet('تعارضات')
+    sheet(ws_c, 'الكود يشير لصنف غير الصنف المؤكد — راجعها في SOFTECH',
+          ['المصدر', 'رقم السطر', 'المورد', 'الكود', 'نص السطر', 'كود الصنف المؤكد', 'الصنف المؤكد',
+           *IC.ITEM_HEADS, 'كود صنف الكود', 'صنف الكود', 'مصدر الكود'],
+          [[SOURCE_LABELS[c['source']], c['line_id'], c['supplier'], c['code'], c['text'],
+            code_of(c.get('confirmed_item_id')), c['confirmed_item'],
+            *IC.item_cells(items.get(c.get('confirmed_item_id'))),
+            code_of(c.get('code_item_id')) or '', c['code_item'],
+            'مطابقة سابقة' if c['via'] == 'mapping' else 'نسخة SOFTECH'] for c in rep['conflicts']],
+          [18, 10, 24, 12, 40, 9, 36, *IC.ITEM_WIDTHS, 9, 36, 14])
+    IC.style_columns(ws_c, 8, header_row=2)
+    ws_m = wb.create_sheet('يمكن مطابقتها')
+    sheet(ws_m, 'أسطر غير مطابقة يحدد كودها الصنف الآن',
+          ['المصدر', 'رقم السطر', 'المورد', 'الكود', 'نص السطر', 'كود الصنف', 'صنف الكود', *IC.ITEM_HEADS],
+          [[SOURCE_LABELS[c['source']], c['line_id'], c['supplier'], c['code'], c['text'],
+            code_of(c.get('code_item_id')), c['code_item'], *IC.item_cells(items.get(c.get('code_item_id')))]
            for c in rep['newly_matchable']],
-          [18, 10, 24, 12, 40, 36])
+          [18, 10, 24, 12, 40, 9, 36, *IC.ITEM_WIDTHS])
+    IC.style_columns(ws_m, 8, header_row=2)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

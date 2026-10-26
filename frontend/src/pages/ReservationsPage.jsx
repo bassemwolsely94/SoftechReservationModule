@@ -327,10 +327,10 @@ export default function ReservationsPage() {
             <div className="text-gray-500 font-medium">لا توجد حجوزات مطابقة للفلاتر</div>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" data-tour="reservations-list-table">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="px-3 py-3">
+                <th className="px-3 py-3" data-tour="reservations-list-select">
                   <input
                     type="checkbox"
                     checked={allSelected}

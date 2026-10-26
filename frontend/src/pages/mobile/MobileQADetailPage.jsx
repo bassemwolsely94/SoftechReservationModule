@@ -8,6 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { qaApi } from '../../api/client'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 const RESULTS = [
   { v: 'pass', l: 'مطابق', on: 'bg-green-600 text-white', off: 'text-green-700 border-green-300' },
@@ -61,7 +62,7 @@ export default function MobileQADetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/qa')} className="text-sm text-gray-500">→ الرجوع للمراجعات</button>
+      <button onClick={() => navigate('/m/qa')} className="text-sm text-gray-500">{ba()} الرجوع للمراجعات</button>
 
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex items-center justify-between gap-2">

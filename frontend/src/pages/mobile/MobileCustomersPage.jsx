@@ -138,6 +138,7 @@ export default function MobileCustomersPage() {
                         <div className="text-[11px] text-gray-400">{toLatin(rw.points_cost)} نقطة</div>
                       </div>
                       <button
+                        data-tour="customers-mobile-redeem"
                         onClick={() => redeem(rw)}
                         disabled={!afford || redeeming === rw.id}
                         className="shrink-0 text-xs font-medium rounded-lg px-3 py-1.5 disabled:opacity-40 bg-brand-600 text-white"

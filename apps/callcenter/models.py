@@ -17,6 +17,8 @@ Features:
   - Quality scoring per call (AHT, FCR, CSAT, custom rubric)
   - SOFTECH read-only: zero writes to Sybase
 """
+import datetime
+
 from django.db import models
 from django.utils import timezone
 
@@ -207,6 +209,16 @@ class CallLog(models.Model):
     callback_due = models.DateTimeField(
         null=True, blank=True,
         verbose_name='موعد معاودة الاتصال',
+    )
+
+    SOURCE_CHOICES = [
+        ('manual', 'تسجيل الموظف'),
+        ('pbx',    'السنترال تلقائياً'),
+        ('merged', 'السنترال + الموظف'),
+    ]
+    source = models.CharField(
+        max_length=10, choices=SOURCE_CHOICES, default='manual', db_index=True,
+        verbose_name='مصدر السجل',
     )
 
     class Meta:
@@ -593,6 +605,9 @@ class CustomerCase(models.Model):
         return f'{self.case_number} | {self.customer.name} | {self.get_status_display()}'
 
     def save(self, *args, **kwargs):
+        if self.pk is None and self.sla_due is None:
+            from apps.callcenter.sla import default_sla_due
+            self.sla_due = default_sla_due(self.priority)
         if not self.case_number:
             super().save(*args, **kwargs)
             self.case_number = f'CASE-{self.pk:06d}'
@@ -866,3 +881,74 @@ class CallItem(models.Model):
         if self.item:
             return self.item.softech_id or ''
         return self.manual_item_code
+
+
+# ── Transcripts (per engine, side by side) ─────────────────────────────────────
+
+class CallTranscript(models.Model):
+    """
+    One transcript per (call, engine). Gemini runs right after the call; Whisper
+    runs in the nightly CPU window. Human corrections are the learning signal.
+    """
+    ENGINE_CHOICES = [('gemini', 'Gemini'), ('whisper', 'Whisper')]
+    STATUS_CHOICES = [
+        ('pending', 'في الانتظار'),
+        ('running', 'قيد التفريغ'),
+        ('done',    'تم'),
+        ('failed',  'فشل'),
+        ('skipped', 'تم التخطي'),
+    ]
+    MAX_ATTEMPTS = 3
+
+    call_log = models.ForeignKey(CallLog, on_delete=models.CASCADE, related_name='transcripts')
+    engine   = models.CharField(max_length=10, choices=ENGINE_CHOICES)
+    status   = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', db_index=True)
+    text     = models.TextField(blank=True)
+    model_name = models.CharField(max_length=50, blank=True)
+    audio_seconds      = models.FloatField(null=True, blank=True)
+    processing_seconds = models.FloatField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    error    = models.TextField(blank=True)
+
+    corrected_text = models.TextField(blank=True, verbose_name='النص بعد التصحيح')
+    corrected_by   = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                       null=True, blank=True, related_name='+')
+    corrected_at   = models.DateTimeField(null=True, blank=True)
+
+    created_at  = models.DateTimeField(auto_now_add=True)
+    started_at  = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'تفريغ مكالمة'
+        constraints = [models.UniqueConstraint(fields=['call_log', 'engine'],
+                                               name='uniq_transcript_per_engine')]
+        indexes = [models.Index(fields=['engine', 'status', 'created_at'])]
+
+    def __str__(self):
+        return f'{self.engine} #{self.call_log_id} [{self.status}]'
+
+
+class WhisperQueueControl(models.Model):
+    """Single row: pause/stop switches and the nightly window for the Whisper runner."""
+    paused         = models.BooleanField(default=False, verbose_name='موقوف مؤقتاً')
+    stop_requested = models.BooleanField(default=False, verbose_name='طلب إيقاف التشغيل الحالي')
+    window_start   = models.TimeField(default=datetime.time(2, 0))
+    window_end     = models.TimeField(default=datetime.time(6, 0))
+    model_size     = models.CharField(max_length=20, default='medium')
+    cpu_threads    = models.PositiveSmallIntegerField(default=0, help_text='0 = نصف أنوية المعالج')
+
+    run_started_at  = models.DateTimeField(null=True, blank=True)
+    run_finished_at = models.DateTimeField(null=True, blank=True)
+    run_processed   = models.PositiveIntegerField(default=0)
+    run_note        = models.CharField(max_length=255, blank=True)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'تحكم طابور Whisper'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

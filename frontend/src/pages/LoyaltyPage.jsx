@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { loyaltyApi } from '../api/client'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
+import { fa } from '../utils/flowArrow'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const TIER_COLOR = {
@@ -163,7 +164,7 @@ function AdjustModal({ customerId, onClose }) {
         </p>
 
         <label className="block text-sm text-gray-600 mb-1">النقاط (موجب = إضافة، سالب = خصم)</label>
-        <input
+        <input data-tour="loyalty-program-adjust-points"
           type="number"
           value={points}
           onChange={e => setPoints(e.target.value)}
@@ -188,7 +189,7 @@ function AdjustModal({ customerId, onClose }) {
         )}
 
         <div className="flex gap-2">
-          <button
+          <button data-tour="loyalty-program-adjust-softech"
             onClick={() => mut.mutate()}
             disabled={!points || delta === 0 || !reason.trim() || mut.isPending}
             className="flex-1 bg-green-600 text-white rounded px-4 py-2 text-sm disabled:opacity-50 hover:bg-green-700"
@@ -217,7 +218,7 @@ function SoftechLog({ customerId }) {
   const logs = data?.results || data || []
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl" data-tour="loyalty-program-adjust-log">
       <div className="px-4 py-3 border-b border-gray-100">
         <h3 className="font-semibold text-gray-800 text-sm">سجل تعديلات SOFTECH</h3>
       </div>
@@ -238,7 +239,7 @@ function SoftechLog({ customerId }) {
               <p className={`font-bold ${log.delta > 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {log.delta > 0 ? '+' : ''}{log.delta?.toLocaleString()}
               </p>
-              <p className="text-xs text-gray-400">→ {log.balance_after?.toLocaleString()}</p>
+              <p className="text-xs text-gray-400">{fa()} {log.balance_after?.toLocaleString()}</p>
               {!log.success && <p className="text-xs text-red-500">✗ فشل</p>}
             </div>
           </div>
@@ -295,7 +296,7 @@ function PendingRedemptions() {
   const tiers = data?.results || data || []
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" dir="rtl" data-tour="loyalty-program-tiers">
       <div className="px-4 py-3 border-b border-gray-100">
         <h3 className="font-semibold text-gray-800 text-sm">درجات الولاء</h3>
       </div>

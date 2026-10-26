@@ -45,7 +45,7 @@ export default function MobileNewShortagePage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="shortage-mobile-form" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 text-sm">🚨 قائمة نواقص جديدة</h2>
         {canPickBranch ? (
           <div>

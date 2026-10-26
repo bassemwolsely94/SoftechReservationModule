@@ -31,7 +31,7 @@ function toLatin(s) {
 
 function ListCard({ l, onOpen }) {
   return (
-    <button onClick={onOpen}
+    <button data-tour="shortage-mobile-card" onClick={onOpen}
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="font-bold text-sm text-gray-900 line-clamp-1">{l.title || `نواقص ${l.branch_name || ''}`}</span>

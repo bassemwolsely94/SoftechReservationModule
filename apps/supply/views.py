@@ -92,9 +92,12 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = AvailabilityBatch.objects.select_related('supplier', 'operator__user').annotate(
-            line_count=Count('lines', distinct=True),
-            matched_count=Count('lines', filter=Q(lines__item__isnull=False), distinct=True),
-            confirmed_count=Count('lines', filter=Q(lines__is_confirmed=True), distinct=True),
+            # rows merged as duplicates when the list was locked don't count
+            line_count=Count('lines', filter=Q(lines__duplicate_of__isnull=True), distinct=True),
+            matched_count=Count('lines', filter=Q(lines__item__isnull=False, lines__duplicate_of__isnull=True),
+                                distinct=True),
+            confirmed_count=Count('lines', filter=Q(lines__is_confirmed=True, lines__duplicate_of__isnull=True),
+                                  distinct=True),
         )
         supplier = self.request.query_params.get('supplier')
         status_q = self.request.query_params.get('status')
@@ -294,6 +297,16 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
         ids = [int(b) for b in raw.split(',') if b.strip().isdigit()] if raw is not None else None
         return Response(av.analyze_batch(self.get_object(), branch_ids=ids))
 
+    @action(detail=True, methods=['get'], url_path='export')
+    def export(self, request, pk=None):
+        """The review grid as Excel (same branch scope as analysis) + «بيانات الصنف». Read-only."""
+        from .tab_exports import availability_excel, xlsx_response
+        raw = request.query_params.get('branches')
+        ids = [int(b) for b in raw.split(',') if b.strip().isdigit()] if raw is not None else None
+        batch = self.get_object()
+        return xlsx_response(availability_excel(batch, av.analyze_batch(batch, branch_ids=ids)),
+                             f'availability_{batch.pk}.xlsx')
+
     @action(detail=True, methods=['post'], url_path='confirm-matches')
     def confirm_matches(self, request, pk=None):
         """Bulk confirm: {line_ids?: [...]} — omitted = all high-confidence auto-matches."""
@@ -448,13 +461,21 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
         if batch.is_locked:
             return Response({'detail': 'القائمة مقفلة بالفعل.'}, status=status.HTTP_409_CONFLICT)
         note = str(request.data.get('note') or '').strip()[:255]
-        batch.locked_at, batch.locked_by, batch.lock_note = timezone.now(), _staff(request), note
-        batch.save(update_fields=['locked_at', 'locked_by', 'lock_note', 'updated_at'])
-        summary = batch.lines.aggregate(n=Count('id'), confirmed=Count('id', filter=Q(is_confirmed=True)))
+        from django.db import transaction
+        with transaction.atomic():
+            batch.locked_at, batch.locked_by, batch.lock_note = timezone.now(), _staff(request), note
+            batch.save(update_fields=['locked_at', 'locked_by', 'lock_note', 'updated_at'])
+            # one row per item from now on — an item is never sent to the supplier twice
+            merged = av.collapse_duplicates(batch)
+        summary = batch.lines.filter(duplicate_of__isnull=True).aggregate(
+            n=Count('id'), confirmed=Count('id', filter=Q(is_confirmed=True)))
         _audit(request, batch, 'locked', action='supply_availability_locked', note=note,
                extra={'lines': summary['n'], 'confirmed': summary['confirmed'],
-                      'branch_scope': batch.branch_scope or []})
-        return Response(AvailabilityBatchSerializer(self.get_queryset().get(pk=batch.pk)).data)
+                      'branch_scope': batch.branch_scope or [],
+                      'duplicates_merged': merged})
+        out = AvailabilityBatchSerializer(self.get_queryset().get(pk=batch.pk)).data
+        out['duplicates_merged'] = sum(len(m['removed']) for m in merged)
+        return Response(out)
 
     @action(detail=True, methods=['post'])
     def unlock(self, request, pk=None):
@@ -467,11 +488,14 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST)
         was = {'locked_at': batch.locked_at.isoformat(),
                'locked_by': getattr(batch.locked_by, 'full_name', '') if batch.locked_by_id else ''}
-        batch.locked_at = batch.locked_by = None
-        batch.lock_note = ''
-        batch.save(update_fields=['locked_at', 'locked_by', 'lock_note', 'updated_at'])
+        from django.db import transaction
+        with transaction.atomic():
+            batch.locked_at = batch.locked_by = None
+            batch.lock_note = ''
+            batch.save(update_fields=['locked_at', 'locked_by', 'lock_note', 'updated_at'])
+            restored = av.restore_duplicates(batch)       # merged rows come back for editing
         _audit(request, batch, 'unlocked', action='supply_availability_unlocked', note=reason,
-               extra={'was': was})
+               extra={'was': was, 'duplicates_restored': restored})
         return Response(AvailabilityBatchSerializer(self.get_queryset().get(pk=batch.pk)).data)
 
     @action(detail=True, methods=['get'])
@@ -522,7 +546,7 @@ class SupplyCaseViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SupplyCaseSerializer
 
     def get_queryset(self):
-        if self.action in ('list', 'summary'):
+        if self.action in ('list', 'summary', 'export'):
             bucket = self.request.query_params.get('bucket') or None
             branch = self.request.query_params.get('branch') or None
             if self.request.query_params.get('include_closed') == '1':
@@ -541,6 +565,21 @@ class SupplyCaseViewSet(viewsets.ReadOnlyModelViewSet):
     def summary(self, request):
         branch = request.query_params.get('branch') or None
         return Response(case_svc.queue_summary(branch_id=branch))
+
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        """The queue as filtered on screen (bucket / branch / include_closed) as Excel. Read-only."""
+        from django.utils import timezone
+        from .tab_exports import cases_excel, xlsx_response
+        try:
+            qs = self.get_queryset()
+        except ValueError as exc:            # unknown bucket
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        qp = request.query_params
+        filters = {'الفئة': qp.get('bucket'), 'الفرع': qp.get('branch'),
+                   'يشمل المغلقة': 'نعم' if qp.get('include_closed') == '1' else ''}
+        return xlsx_response(cases_excel(qs, filters=filters),
+                             f'supply_cases_{timezone.localdate():%Y%m%d}.xlsx')
 
     @action(detail=True, methods=['get'])
     def recommendation(self, request, pk=None):
@@ -695,7 +734,7 @@ class SupplyDecisionViewSet(viewsets.ReadOnlyModelViewSet):
 # ═══════════════════════════════════════════════════════════════════════════════
 from rest_framework.decorators import api_view, permission_classes  # noqa: E402
 
-FRESH_LIMITS_MIN = {'stock': 30, 'sales': 30, 'items': 24 * 60, 'rates': 36 * 60}
+FRESH_LIMITS_MIN = {'stock': 30, 'sales': 30, 'items': 24 * 60, 'rates': 36 * 60, 'purchases': 26 * 60}
 
 
 def _age(dt):
@@ -726,6 +765,15 @@ def _engine_progress(run):
             'elapsed_s': _elapsed(run.started_at)}
 
 
+def _purchases_progress(pf):
+    if not pf.get('running'):
+        return None
+    pr = pf.get('progress') or {}
+    pct = round(100 * pr['step'] / pr['steps']) if pr.get('steps') else None
+    return {'kind': 'purchases', 'label': 'تحديث المشتريات من SOFTECH', 'pct': pct,
+            'message': pr.get('message') or 'جارٍ التحديث…', 'elapsed_s': _elapsed(pf.get('started_at'))}
+
+
 def _run_branches(run) -> list:
     if run is None:
         return []
@@ -753,23 +801,31 @@ def freshness(request):
     live_sync = (SyncRun.objects.filter(status='running', started_at__gte=timezone.now() - timedelta(minutes=15))
                  .order_by('-started_at').first())
     syncing = live_sync is not None
+    from apps.procurement import refresh as purchases_refresh
+    pf = purchases_refresh.freshness()
     rates_at = (run.finished_at or run.started_at) if run else None
     out = {
         'rates': {'at': rates_at, 'age_min': _age(rates_at), 'run_id': run.pk if run else None,
-                  'data_through': run.data_through_date if run else None},
+                  'data_through': run.data_through_date if run else None,
+                  # False = that run could not pull new sales from SOFTECH (it re-used old ones)
+                  'sales_pulled': bool(run.softech_available) if run else None},
         'stock': {'at': last.get('stkbal'), 'age_min': _age(last.get('stkbal'))},
         'sales': {'at': last.get('stktrans'), 'age_min': _age(last.get('stktrans'))},
         'items': {'at': last.get('items'), 'age_min': _age(last.get('items'))},
+        # saved purchase invoices (procurement.PurchaseLine) — price comparison / history
+        'purchases': {'at': pf['at'], 'age_min': _age(pf['at']), 'data_through': pf['data_through']},
         # the branches the sales-rate engine covers — what a list can be scoped to
         'branches': _run_branches(run),
-        'engine_running': bool(active), 'sync_running': syncing,
+        'engine_running': bool(active), 'sync_running': syncing, 'purchases_running': pf['running'],
         # what the loading bar shows: pct when the job reports it, else steps, else
         # indeterminate (pct None) — plus the current phase message and elapsed time
-        'progress': [p for p in (_sync_progress(live_sync), _engine_progress(active)) if p],
+        'progress': [p for p in (_sync_progress(live_sync), _engine_progress(active),
+                                 _purchases_progress(pf)) if p],
         'limits_min': FRESH_LIMITS_MIN,
         'can': {'sync_stock': can_supply_write(request.user),
                 'run_engine': can_run_engine(request.user),
-                'sync_items': getattr(_staff(request), 'role', '') in ('admin', 'pharmacist')},
+                'sync_items': getattr(_staff(request), 'role', '') in ('admin', 'pharmacist'),
+                'refresh_purchases': can_supply_write(request.user)},
     }
     for k, lim in FRESH_LIMITS_MIN.items():
         age = out[k]['age_min']
@@ -809,6 +865,21 @@ def freshness_sync_stock(request):
                     status=status.HTTP_202_ACCEPTED)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def freshness_refresh_purchases(request):
+    """Pull the purchase invoices since the last refresh now (SELECT-only on SOFTECH), in the
+    background. Never two at once."""
+    from apps.purchasing.access import can_supply_write
+    from apps.procurement import refresh
+    if not can_supply_write(request.user):
+        return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+    started = refresh.start_background(f'supply:{request.user.username}')
+    logger.info('[supply] purchases refresh requested by %s (started=%s)', request.user.username, started)
+    return Response({'detail': 'بدأ تحديث المشتريات من SOFTECH.' if started else 'يوجد تحديث جارٍ بالفعل.',
+                     'running': True}, status=status.HTTP_202_ACCEPTED)
+
+
 # ── Supplier-code coverage report (apps/supply/code_report.py) ─────────────────
 #   GET /api/supply/reports/supplier-codes/?days=90            JSON
 #   GET /api/supply/reports/supplier-codes/?days=90&format=xlsx  Excel
@@ -828,6 +899,55 @@ def supplier_code_report(request):
         resp['Content-Disposition'] = f'attachment; filename="supplier_codes_{days}d.xlsx"'
         return resp
     return Response(rep)
+
+
+# ── Purchase price comparison (apps/supply/price_history.py) ──────────────────
+#   GET /api/supply/purchase-prices/?days=180[&all=1][&format=xlsx]   the board
+#   GET /api/supply/purchase-prices/item/<code>/                       one item's purchases
+# gzip: the board is ~4 MB of JSON for 180 days (≈ 0.4 MB compressed)
+from django.views.decorators.gzip import gzip_page  # noqa: E402
+
+
+@gzip_page
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def purchase_prices(request):
+    from django.core.cache import cache
+    from django.http import HttpResponse
+    from django.utils import timezone
+    from apps.procurement import refresh
+    from . import price_history
+    try:
+        days = max(30, min(730, int(request.query_params.get('days', price_history.DEFAULT_DAYS))))
+    except (TypeError, ValueError):
+        days = price_history.DEFAULT_DAYS
+    include_single = request.query_params.get('all') in ('1', 'true')
+    last = refresh.last_success()
+    key = f'purchase_prices:{days}:{int(include_single)}:{last.pk if last else 0}:{timezone.localdate()}'
+    board = cache.get(key)
+    if board is None:
+        board = price_history.build(days=days, include_single=include_single)
+        cache.set(key, board, 10 * 60)
+    if request.query_params.get('format') == 'xlsx':
+        qp = request.query_params                 # the screen's filters → the same rows in Excel
+        shown = price_history.filter_board(board, state=qp.get('state', ''), supplier=qp.get('supplier', ''),
+                                           producer=qp.get('producer', ''), q=qp.get('q', ''))
+        resp = HttpResponse(price_history.to_excel(shown),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = (f'attachment; filename="purchase_prices_{days}d_'
+                                       f'{timezone.localdate():%Y-%m-%d}.xlsx"')
+        return resp
+    return Response(board)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def purchase_price_item(request, code):
+    from . import price_history
+    h = price_history.item_history(code)
+    if h is None:
+        return Response({'detail': 'الصنف غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(h)
 
 
 # ── Supplier price comparison (apps/supply/comparison.py) ─────────────────────

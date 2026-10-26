@@ -27,6 +27,7 @@ import InsightsPanel from './pricing/InsightsPanel'
 import PriceHistoryModal from './pricing/PriceHistoryModal'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── Field config ──────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ function ChangeSummary({ oldValues, newValues, executedValues }) {
           }`}>
             <span className="text-gray-400">{field.label}:</span>
             <span className="text-red-500 line-through">{fmt(oldVal)}</span>
-            <span className="text-gray-300">→</span>
+            <span className="text-gray-300">{fa()}</span>
             <span className={`font-semibold ${isDerived ? 'text-slate-600' : 'text-emerald-600'}`}>{fmt(newVal)}</span>
             <span className="text-gray-300">{field.unit}</span>
           </span>
@@ -176,7 +177,7 @@ function CreateModal({ onClose, onCreated }) {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {/* Item search */}
-          <div>
+          <div data-tour="pricing-approvals-create-item">
             <label className="block text-sm font-medium text-gray-700 mb-1">الصنف *</label>
             <ItemSearchWidget
               selected={selectedItem}
@@ -263,7 +264,7 @@ function CreateModal({ onClose, onCreated }) {
               className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">
               إلغاء
             </button>
-            <button type="submit" disabled={createMutation.isPending || !prices}
+            <button data-tour="pricing-approvals-create-send" type="submit" disabled={createMutation.isPending || !prices}
               className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
               {createMutation.isPending ? 'جاري الإرسال…' : 'إرسال الطلب'}
             </button>
@@ -408,7 +409,7 @@ function ReviewModal({ request, action, approverInfo, onClose, onDone }) {
               className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">
               إلغاء
             </button>
-            <button
+            <button data-tour="pricing-approvals-review-confirm"
               onClick={() => mutation.mutate()}
               disabled={mutation.isPending || (isApprove && !approverInfo?.is_linked)}
               className={`px-5 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60 ${
@@ -480,7 +481,7 @@ export default function PricingApprovalsPage() {
                 ⚠ ربط حساب Softech مطلوب للاعتماد
               </div>
             )}
-            <button
+            <button data-tour="pricing-approvals-import"
               onClick={() => setShowImport(true)}
               className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg"
             >
@@ -577,7 +578,7 @@ export default function PricingApprovalsPage() {
                 </thead>
                 <tbody>
                   {requests.map((req, idx) => (
-                    <tr key={req.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <tr key={req.id} data-tour="pricing-approvals-row" className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900 text-sm">{req.item_name}</div>
@@ -631,7 +632,7 @@ export default function PricingApprovalsPage() {
                       <td className="px-4 py-3">
                         <StatusBadge status={req.status} />
                         {req.status === 'executed' && (
-                          <div className="mt-1"><ReplicationBadge requestId={req.id} isAdmin={isAdmin} /></div>
+                          <div data-tour="pricing-approvals-replication-badge" className="mt-1"><ReplicationBadge requestId={req.id} isAdmin={isAdmin} /></div>
                         )}
                         {req.source === 'rollback' && (
                           <div className="text-xs text-purple-600 mt-0.5">↩ تراجع</div>
@@ -641,14 +642,14 @@ export default function PricingApprovalsPage() {
                         <td data-tour="pricing-approvals-review" className="px-4 py-3">
                           {(req.status === 'pending' || req.status === 'failed') && (
                             <div className="flex gap-1.5">
-                              <button
+                              <button data-tour="pricing-approvals-approve"
                                 onClick={() => setReviewTarget({ request: req, action: 'approve' })}
                                 className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs hover:bg-emerald-700"
                               >
                                 اعتماد
                               </button>
                               {req.status === 'pending' && (
-                                <button
+                                <button data-tour="pricing-approvals-reject"
                                   onClick={() => setReviewTarget({ request: req, action: 'reject' })}
                                   className="px-3 py-1 rounded-lg bg-red-100 text-red-700 text-xs hover:bg-red-200 border border-red-200"
                                 >
@@ -658,7 +659,7 @@ export default function PricingApprovalsPage() {
                             </div>
                           )}
                           {req.status === 'executed' && (
-                            <button
+                            <button data-tour="pricing-approvals-rollback"
                               onClick={() => { if (confirm('إنشاء طلب تراجع إلى القيم السابقة؟')) rollback.mutate(req.id) }}
                               disabled={rollback.isPending}
                               className="px-3 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs hover:bg-purple-200 border border-purple-200 disabled:opacity-60"

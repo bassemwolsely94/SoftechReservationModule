@@ -14,6 +14,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.permissions import MatrixPermission
+
 from .audit_serializers import (
     BankStatementImportSerializer,
     BankStatementLineSerializer,
@@ -43,7 +45,10 @@ class BankStatementImportViewSet(viewsets.ModelViewSet):
     """Upload CSV/XLSX bank statements and trigger automatic matching."""
     serializer_class    = BankStatementImportSerializer
     parser_classes      = [MultiPartParser, FormParser]
-    permission_classes  = [IsAuthenticated]
+    permission_classes  = [IsAuthenticated, MatrixPermission]
+    rbac_module         = 'finance'
+    rbac_actions        = {'run_matching': ('edit',)}
+    rbac_delete         = ('delete', 'approve')
 
     def get_queryset(self):
         sp  = _staff(self.request)
@@ -78,7 +83,9 @@ class BankStatementImportViewSet(viewsets.ModelViewSet):
 class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
     """Browse statement lines and perform manual matches."""
     serializer_class   = BankStatementLineSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module        = 'finance'
+    rbac_actions       = {'manual_match': ('edit',)}
 
     def get_queryset(self):
         qs = BankStatementLine.objects.select_related(
@@ -117,7 +124,9 @@ class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
 class PaymentExceptionViewSet(viewsets.ModelViewSet):
     """Triage, assign, and resolve payment exceptions."""
     serializer_class   = PaymentExceptionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module        = 'finance'
+    rbac_actions       = {'resolve': ('approve',), 'dismiss': ('approve',), 'assign': ('assign', 'approve')}
 
     def get_queryset(self):
         qs = PaymentException.objects.select_related(

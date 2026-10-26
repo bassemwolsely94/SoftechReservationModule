@@ -28,6 +28,37 @@ export function TField({ value, onChange, rows = 2, required }) {
   )
 }
 
+/** One «اعرض لي» / journey step: the button name, what it does, when, ⚠ and the hint.
+ *  The step's target (and screen) follow the code; an emptied optional part is dropped
+ *  so the repo's text shows again. */
+const STEP_PARTS = [
+  ['label', 'اسم الزر كما يظهر على الشاشة', 1],
+  ['text', 'ماذا يفعل (مطلوب)', 2, true],
+  ['when', 'متى نستخدمه / ماذا يحدث بعده', 2],
+  ['warn', '⚠ الخطأ المكلف (إرسال لـ SOFTECH، اعتماد، خصم…)', 2],
+  ['open_hint', 'كيف يظهر العنصر (تبويب، اختيار سجل…)', 1],
+]
+const blankT = (v) => !v || !((v.ar || '').trim() || (v.en || '').trim())
+
+export function StepFields({ step, index, onChange }) {
+  return (
+    <div className="rounded-lg border border-line p-2 space-y-1.5">
+      <div className="text-[10px] text-faint">{index + 1}. {step.screen ? `${step.screen} · ` : ''}{step.target}</div>
+      {STEP_PARTS.map(([k, title, rows, required]) => (
+        <div key={k} className="space-y-0.5">
+          <div className="text-[10px] text-muted">{title}</div>
+          <TField value={step[k]} rows={rows} required={required}
+                  onChange={(v) => {
+                    const next = { ...step, [k]: v }
+                    if (!required && blankT(v)) delete next[k]
+                    onChange(next)
+                  }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Field({ title, children }) {
   return (
     <div className="space-y-1.5">
@@ -195,12 +226,12 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
           <div className="space-y-2">
             {draft.tour.map((t, i) => (
               <div key={`${i}-${t.target}`} ref={i === focusTourStep ? focusRef : null}
-                   className={`rounded-lg border p-2 space-y-1.5 ${i === focusTourStep ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300' : 'border-line'}`}>
-                <div className="text-[10px] text-faint">{i + 1}. {t.target}
-                  {i === focusTourStep && <span className="text-amber-700 font-semibold"> — أغلب الناس بيقفوا قبل الخطوة دي: وضّح النص</span>}
-                </div>
-                <TField value={t.text} rows={2} required
-                        onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? { ...x, text: v } : x)))} />
+                   className={i === focusTourStep ? 'rounded-lg ring-2 ring-amber-300 bg-amber-50 space-y-1' : ''}>
+                {i === focusTourStep && (
+                  <div className="text-[10px] text-amber-700 font-semibold px-2 pt-1">أغلب الناس بيقفوا قبل الخطوة دي: وضّح النص</div>
+                )}
+                <StepFields step={t} index={i}
+                            onChange={(v) => up('tour')(draft.tour.map((x, j) => (j === i ? v : x)))} />
               </div>
             ))}
           </div>
