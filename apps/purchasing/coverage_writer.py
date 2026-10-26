@@ -290,7 +290,21 @@ def push_coverage(*, coverage_months, branch_filter=None, item_filter=None,
         entry['written'] = len(eligible)
         entry['verified'] = v
         entry['not_confirmed'] = len(eligible) - v
+    _audit_coverage('softech_coverage_written', plan['branches'], months=cov, target=tgt,
+                    maxqty=also_maxqty)
     return plan
+
+
+def _audit_coverage(action, entries, **extra):
+    """One AuditLog row per committed coverage write / reset (Batch 2, P-16; the top-up keeps
+    its own CoverageTopUp record). CLI-driven: no actor."""
+    from core.softech_audit import audit_softech_write
+    done = [e for e in entries if e.get('written') or e.get('candidates')]
+    audit_softech_write(action, after={
+        'written': sum(e.get('written') or e.get('candidates') or 0 for e in done),
+        'verified': sum(e.get('verified') or 0 for e in done),
+        'branches': {f"{e['branchcode']}{'/' + e['surface'] if e.get('surface') else ''}":
+                     e.get('verified') or 0 for e in done}}, **extra)
 
 
 def _apply_coverage_updates(conn, branchcode, storecode, codes, cov, usercode, also_maxqty):
@@ -358,6 +372,8 @@ def probe_coverage_write(branchcode, itemcode, *, confirm=False, target=TARGET_N
         raise ValueError('probe_coverage_write requires confirm=True (it performs a real write).')
     if not coverage_writer_enabled():
         raise WriterDisabled('COVERAGE_WRITER_ENABLED is off — refusing to probe-write.')
+    from core.softech_switches import require_probes
+    require_probes('purchasing.coverage_writer.probe_coverage_write')    # real DML on SOFTECH (Batch 2, P-7)
     target = (target or TARGET_NODE).lower()
     if target not in (TARGET_NODE, TARGET_HQ):
         raise ValueError("probe target must be 'node' or 'hq'.")
@@ -393,8 +409,11 @@ def probe_coverage_write(branchcode, itemcode, *, confirm=False, target=TARGET_N
             r = cur.fetchone()
             return float(r[0]) if r and r[0] is not None else 0.0
 
-        _set(marker); wrote = _get()
-        _set(original); restored = _get()
+        try:
+            _set(marker); wrote = _get()
+        finally:
+            _set(original)      # ALWAYS restore once the marker was sent (Batch 2, P-13)
+        restored = _get()
         landed = abs(wrote - marker) <= VERIFY_TOL
         clean = abs(restored - original) <= VERIFY_TOL
         logger.info('[coverage_writer] probe branch=%s item=%s original=%s marker=%s wrote=%s restored=%s landed=%s clean=%s',
@@ -709,6 +728,8 @@ def reset_non_stock(*, branch_filter=None, target=TARGET_BOTH, dry_run=True, run
                 if errs:
                     e['error'] = ' | '.join(errs)[:300]
             out['branches'].append(e)
+    if commit:
+        _audit_coverage('softech_coverage_reset', out['branches'], target=target)
     logger.info('[coverage_writer] RESET non-stock %s target=%s candidates=%d verified=%d',
                 out['mode'], target, sum(r['candidates'] for r in out['branches']),
                 sum(r['verified'] for r in out['branches']))

@@ -2830,34 +2830,6 @@ def _drain_wa_queue():
         logger.error('[APScheduler] _drain_wa_queue failed: %s', exc)
 
 
-def _flush_pos_orders():
-    """Retry POS orders queued during a SOFTECH/branch outage. Idempotent + gated."""
-    try:
-        from apps.pos_orders import writer
-        if not writer.writer_enabled():
-            return
-        from apps.pos_orders.models import SoftechSalesOrder
-        qs = (SoftechSalesOrder.objects
-              .filter(status=SoftechSalesOrder.STATUS_QUEUED)
-              .select_related('branch').order_by('created_at')[:50])
-        for order in qs:
-            try:
-                writer.push_order(order, dry_run=False)
-            except Exception as exc:
-                logger.warning('[APScheduler] pos flush order %s: %s', order.pk, exc)
-    except Exception as exc:
-        logger.error('[APScheduler] _flush_pos_orders failed: %s', exc)
-
-
-def _reconcile_pos_orders():
-    """Flip pushed → settled by reading the branch DB (read-only)."""
-    try:
-        from apps.pos_orders.reconcile import run_reconcile
-        run_reconcile()
-    except Exception as exc:
-        logger.error('[APScheduler] _reconcile_pos_orders failed: %s', exc)
-
-
 def start_scheduler():
     global _scheduler
     if _scheduler and _scheduler.running:
@@ -3121,16 +3093,8 @@ def start_scheduler():
         misfire_grace_time=30,
     )
 
-    # POS writeback resilience — flush orders queued during a SOFTECH/branch outage,
-    # then reconcile pushed→settled. Both are no-ops when POS_WRITER_ENABLED is off.
-    _scheduler.add_job(
-        _flush_pos_orders, 'interval', minutes=2, id='pos_flush_queued',
-        replace_existing=True, max_instances=1, misfire_grace_time=60,
-    )
-    _scheduler.add_job(
-        _reconcile_pos_orders, 'interval', minutes=5, id='pos_reconcile',
-        replace_existing=True, max_instances=1, misfire_grace_time=120,
-    )
+    # (POS flush + reconcile are registered ONCE, above, as pos_orders_flush /
+    # pos_orders_reconcile — a second copy here made two jobs push the same queue. Batch 2, P-11.)
     # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
     # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
     # from the live Issabel CDR automatically once DB access is granted.

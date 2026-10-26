@@ -1,5 +1,6 @@
 import datetime as _dt
 import logging
+import re
 import threading
 
 from rest_framework import viewsets, mixins, status, generics
@@ -73,6 +74,9 @@ def purchase_expiry_candidates(request):
                         status=status.HTTP_400_BAD_REQUEST)
 
     branches   = _branch_list(request.data) or None
+    if any(not re.fullmatch(r'[0-9A-Za-z\-]{1,20}', b) for b in (branches or [])):
+        return Response({'detail': 'أكواد الفروع يجب أن تكون أرقاماً أو حروفاً فقط'},
+                        status=status.HTTP_400_BAD_REQUEST)
     categories = request.data.get('categories') or None
     only_in_stock = request.data.get('only_in_stock', True)
     if isinstance(only_in_stock, str):

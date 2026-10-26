@@ -153,8 +153,10 @@ class SoftechReadOnlyError(RuntimeError):
     """Raised when a write is attempted while SOFTECH_READ_ONLY is on."""
 
 
-_SQL_LITERAL_RE  = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"")
-_SQL_COMMENT_RE  = re.compile(r'--[^\n]*|/\*.*?\*/', re.S)
+# Literals and comments in ONE left-to-right pass: whichever starts first wins, so a '--'
+# or '/*' inside a quoted string can't swallow the rest of the statement (and a quote inside
+# a comment can't open a fake literal).
+_SQL_LITERAL_OR_COMMENT_RE = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|--[^\n]*|/\*.*?\*/", re.S)
 _SQL_READ_STARTS = frozenset({
     'SELECT', 'SET', 'DECLARE', 'USE', 'PRINT',
     'BEGIN', 'COMMIT', 'ROLLBACK', 'SAVE', 'IF', 'WHILE',
@@ -173,8 +175,9 @@ def softech_read_only() -> bool:
 
 def is_read_only_sql(sql) -> bool:
     """True when `sql` is a plain read that is safe under SOFTECH_READ_ONLY."""
-    text = _SQL_COMMENT_RE.sub(' ', str(sql or ''))
-    text = _SQL_LITERAL_RE.sub("''", text).strip().lstrip('(').strip()
+    text = _SQL_LITERAL_OR_COMMENT_RE.sub(
+        lambda m: "''" if m.group(0)[0] in '\'"' else ' ', str(sql or ''))
+    text = text.strip().lstrip('(').strip()
     if not text:
         return False
     first = re.split(r'[\s(;]+', text, maxsplit=1)[0].upper()
@@ -194,30 +197,38 @@ def _refuse_if_write(sql):
 
 
 class _ReadOnlyStatement:
-    """java.sql.Statement proxy: checks every SQL string it is handed."""
+    """java.sql.Statement / PreparedStatement proxy: checks every SQL string it is handed
+    (a prepared statement's SQL was checked at prepare time, so its no-argument execute()
+    passes) and never hands out the raw connection."""
 
-    def __init__(self, stmt):
+    def __init__(self, stmt, conn=None):
         self._stmt = stmt
+        self._conn = conn            # the guarded connection proxy this statement came from
 
-    def execute(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.execute(sql, *args)
+    def _call(self, method, args):
+        if args and isinstance(args[0], str):
+            _refuse_if_write(args[0])
+        return getattr(self._stmt, method)(*args)
 
-    def executeQuery(self, sql):
-        _refuse_if_write(sql)
-        return self._stmt.executeQuery(sql)
+    def execute(self, *args):
+        return self._call('execute', args)
 
-    def executeUpdate(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.executeUpdate(sql, *args)
+    def executeQuery(self, *args):
+        return self._call('executeQuery', args)
 
-    def executeLargeUpdate(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.executeLargeUpdate(sql, *args)
+    def executeUpdate(self, *args):
+        return self._call('executeUpdate', args)
 
-    def addBatch(self, sql):
-        _refuse_if_write(sql)
-        return self._stmt.addBatch(sql)
+    def executeLargeUpdate(self, *args):
+        return self._call('executeLargeUpdate', args)
+
+    def addBatch(self, *args):
+        return self._call('addBatch', args)
+
+    def getConnection(self):
+        if self._conn is None:
+            raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
+        return self._conn
 
     def __getattr__(self, name):
         return getattr(self._stmt, name)
@@ -234,11 +245,19 @@ class _ReadOnlyJavaConnection:
             pass
 
     def createStatement(self, *args):
-        return _ReadOnlyStatement(self._jc.createStatement(*args))
+        return _ReadOnlyStatement(self._jc.createStatement(*args), self)
 
     def prepareStatement(self, sql, *args):
         _refuse_if_write(sql)
-        return self._jc.prepareStatement(sql, *args)
+        return _ReadOnlyStatement(self._jc.prepareStatement(sql, *args), self)
+
+    def setReadOnly(self, flag):
+        if not flag:
+            raise SoftechReadOnlyError('SOFTECH is in read-only mode; it cannot be switched off per connection.')
+        self._jc.setReadOnly(True)
+
+    def unwrap(self, *args):
+        raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
 
     def prepareCall(self, sql, *args):
         _refuse_if_write(f'EXEC {sql}')   # callable statements are procedures — never reads
@@ -755,6 +774,11 @@ class SoftechConnector:
 
         host = os.environ.get(f'{prefix}HOST') or settings.SYBASE_HOST
         port = os.environ.get(f'{prefix}PORT') or getattr(settings, 'SYBASE_PORT', '5000')
+        if getattr(settings, 'SOFTECH_BRANCH_HOST_OVERRIDE', ''):
+            # Staging: HQ is the box's own SYBASE_HOST — never a real SOFTECH_<PROFILE>_HOST
+            # that may have been copied from .env.example.
+            host = settings.SYBASE_HOST
+            port = getattr(settings, 'SYBASE_PORT', '5000')
 
         _ensure_jvm()
         jpype.imports.registerDomain('com')
@@ -831,22 +855,29 @@ class SoftechConnector:
         cur.execute(sql, params or [])
         return cur.fetchall()
 
-    # ── Transaction helpers (PostgreSQL-side only — never Sybase) ─────────────
-    # SOFTECH is read-only. These helpers exist only for the rare case where
-    # a subclass needs to wrap multiple PostgreSQL writes that depend on a
-    # Sybase read result.  They are no-ops on the Sybase connection itself.
+    # ── Transaction helpers — REAL, on the Sybase connection ───────────────────
+    # These used to be no-ops ("SOFTECH is read-only"), but DML does run through this
+    # connector (rehearsals, diagnostics): code that called begin_transaction() …
+    # rollback() believed it was rolling back while every statement autocommitted —
+    # probe_ap_writeback --rehearse committed real cheques rows (Batch 2, P-12).
+    # They now delegate to ConnectionWrapper: autocommit off → one transaction.
 
     def begin_transaction(self):
-        """No-op on Sybase (read-only). Provided for interface completeness."""
-        logger.debug('[SoftechConnector] begin_transaction — no-op on Sybase')
+        """Start ONE transaction on the Sybase connection (autocommit off)."""
+        self._require_conn().begin()
 
     def commit(self):
-        """No-op on Sybase (read-only)."""
-        logger.debug('[SoftechConnector] commit — no-op on Sybase')
+        """Commit the open transaction and restore autocommit."""
+        self._require_conn().commit()
 
     def rollback(self):
-        """No-op on Sybase (read-only)."""
-        logger.debug('[SoftechConnector] rollback — no-op on Sybase')
+        """Roll back the open transaction and restore autocommit."""
+        self._require_conn().rollback()
+
+    def _require_conn(self):
+        if self._conn is None:
+            raise RuntimeError('SoftechConnector: not connected — call connect() first')
+        return self._conn
 
     # ── Health check ──────────────────────────────────────────────────────────
 

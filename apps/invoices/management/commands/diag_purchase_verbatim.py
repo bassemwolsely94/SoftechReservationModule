@@ -36,6 +36,8 @@ class Command(BaseCommand):
         parser.add_argument('--profile', default='prod')
 
     def handle(self, *args, **o):
+        from core.softech_switches import command_require_probes
+        command_require_probes('diag_purchase_verbatim')    # writes to SOFTECH (Batch 2, P-7)
         from django.conf import settings
         from config.sybase import SoftechConnector, get_branch_connection
 

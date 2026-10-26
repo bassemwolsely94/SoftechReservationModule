@@ -110,7 +110,7 @@ def _write_softech(itemcode: str, on_shortage: bool, suspend):
             pass
 
 
-def push_item(item) -> bool:
+def push_item(item, actor=None) -> bool:
     """
     Best-effort push of this item's desired state (item.in_shortage) to SOFTECH.
     Updates the item's sync-state fields. Returns True if SOFTECH now matches.
@@ -120,6 +120,7 @@ def push_item(item) -> bool:
         # Writer disabled → treat as "local only"; don't mark unsynced forever.
         return False
     on_shortage, suspend = _desired_state(item)
+    was_suspended = item.shortage_supply_suspended
     try:
         _write_softech(item.softech_id, on_shortage, suspend)
     except Exception as exc:
@@ -129,6 +130,10 @@ def push_item(item) -> bool:
         logger.warning('[SHORTAGE-WRITE] queued %s (SOFTECH unavailable): %s',
                        item.softech_id, str(exc)[:120])
         return False
+    from core.softech_audit import audit_softech_write          # who / state written (Batch 2, P-16)
+    audit_softech_write('softech_shortage_written', actor=actor, obj=item,
+                        before={'supply_suspended_by_us': was_suspended},
+                        after={'on_shortage': on_shortage, 'suspend': suspend}, softech_id=item.softech_id)
     # remember whether أوامر التوريد is currently suspended by us (for later restore)
     if suspend is True:
         item.shortage_supply_suspended = True

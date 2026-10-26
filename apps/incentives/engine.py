@@ -99,7 +99,7 @@ JOIN SOFTECHDB9.dbo.stktrans d
    AND d.branchcode = m.branchcode
    AND d.docdate    = m.docdate
 JOIN SOFTECHDB9.dbo.items i ON i.itemcode = d.itemcode
-WHERE m.doccode = '{doc_code}'
+WHERE m.doccode = ?
   AND m.docdate >= '{start} 00:00:00'
   AND m.docdate <  DATEADD(day, 1, CONVERT(DATETIME, '{end}'))
   {person_filter}
@@ -128,7 +128,7 @@ JOIN SOFTECHDB9.dbo.stktrans d
    AND d.branchcode = m.branchcode
    AND d.docdate    = m.docdate
 JOIN SOFTECHDB9.dbo.items i ON i.itemcode = d.itemcode
-WHERE m.doccode = '{doc_code}'
+WHERE m.doccode = ?
   AND m.docdate >= '{start} 00:00:00'
   AND m.docdate <  DATEADD(day, 1, CONVERT(DATETIME, '{end}'))
   {person_filter}
@@ -163,29 +163,53 @@ ORDER BY m.docdate, m.docnumber, d.itemcode"""
 
 # ── Sybase helpers ────────────────────────────────────────────────────────────
 
+_MAX_BOUND_CODES = 400   # bound parameters per statement (proven live elsewhere)
+
+
+def _marks(values) -> str:
+    """'?, ?, ?' — one bound-parameter marker per value, for an IN (...) list."""
+    return ', '.join('?' for _ in values)
+
+
+def _unique_persons(person_codes) -> list:
+    """De-duplicated usercodes, in first-seen order — the one count both helpers use."""
+    return list(dict.fromkeys(str(c) for c in (person_codes or [])))
+
+
+def _bound_persons(person_codes) -> list:
+    """Usercodes to bind in the SQL filter — none over _MAX_BOUND_CODES, where the
+    SQL filter is dropped and _keep_persons() filters the rows instead."""
+    codes = _unique_persons(person_codes)
+    return codes if len(codes) <= _MAX_BOUND_CODES else []
+
+
+def _keep_persons(rows, person_codes):
+    """Python-side usercode filter (column 1 in every template) for very long code lists."""
+    codes = _unique_persons(person_codes)
+    if len(codes) <= _MAX_BOUND_CODES:
+        return rows
+    keep = set(codes)
+    return [r for r in rows if _to_str(r[1]) in keep]
+
 def _fetch_rows(doc_code: str, start: date, end: date,
                 person_codes=None, use_returns_template=False) -> list:
     """Open one Sybase connection, run the query, return all rows, close."""
     from config.sybase import get_sybase_connection
 
-    person_filter = ''
-    if person_codes:
-        quoted = ', '.join(f"'{c}'" for c in person_codes)
-        person_filter = f'AND m.usercode IN ({quoted})'
-
+    persons = _bound_persons(person_codes)
+    person_filter = f'AND m.usercode IN ({_marks(persons)})' if persons else ''
     template = _RETURNS_SQL_TEMPLATE if use_returns_template else _SALES_SQL_TEMPLATE
-    sql = template.format(
-        doc_code=doc_code,
-        start=start.strftime('%Y-%m-%d'),
-        end=end.strftime('%Y-%m-%d'),
-        person_filter=person_filter,
-    )
+    # Dates stay literals (ASE 12.5 plans bound date ranges on stktrans badly), built
+    # only from real dates; doc code and usercodes are bound.
+    sql = template.format(person_filter=person_filter,
+                          start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'))
+    params = [str(doc_code)] + persons
 
     conn = get_sybase_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
-        return cur.fetchall()
+        cur.execute(sql, params)
+        return _keep_persons(cur.fetchall(), person_codes)
     finally:
         conn.close()
 
@@ -195,22 +219,19 @@ def _fetch_cross_period_returns(period_end: date, person_codes=None) -> list:
     from config.sybase import get_sybase_connection
 
     lookforward_end = period_end + timedelta(days=_CROSS_PERIOD_DAYS)
-    person_filter = ''
-    if person_codes:
-        quoted = ', '.join(f"'{c}'" for c in person_codes)
-        person_filter = f'AND m.usercode IN ({quoted})'
-
+    persons = _bound_persons(person_codes)
+    person_filter = f'AND m.usercode IN ({_marks(persons)})' if persons else ''
     sql = _CROSS_PERIOD_RETURNS_SQL.format(
-        period_end=period_end.strftime('%Y-%m-%d'),
-        lookforward_end=lookforward_end.strftime('%Y-%m-%d'),
         person_filter=person_filter,
-    )
+        period_end=period_end.strftime('%Y-%m-%d'),
+        lookforward_end=lookforward_end.strftime('%Y-%m-%d'))
+    params = persons
 
     conn = get_sybase_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
-        return cur.fetchall()
+        cur.execute(sql, params)
+        return _keep_persons(cur.fetchall(), person_codes)
     finally:
         conn.close()
 
@@ -651,56 +672,54 @@ def fetch_near_expiry_stock(
     today = date.today()
     cutoff_date = today + timedelta(days=expiry_within_days)
 
-    # ── Location filter — use storecode (branchcode is always 0) ──────────────
-    store_filter = ''
-    if store_codes:
-        quoted = ', '.join(f"'{c}'" for c in store_codes)
-        store_filter = f"AND sbe.storecode IN ({quoted})"
-
-    # ── Quarantine exclusion (default) ────────────────────────────────────────
-    quarantine_filter = ''
-    if not include_quarantine:
-        quoted = ', '.join(f"'{c}'" for c in sorted(EXCLUDED_STORE_CODES))
-        quarantine_filter = f"AND sbe.storecode NOT IN ({quoted})"
-
-    item_filter = ''
-    if item_codes:
-        quoted = ', '.join(f"'{c}'" for c in item_codes)
-        item_filter = f"AND sbe.itemcode IN ({quoted})"
-
-    qty_filter = '' if include_zero_qty else 'AND sbe.itemqty > 0'
+    # Every value is a bound parameter. Location filter uses storecode (branchcode is always 0).
+    stores = [str(c) for c in (store_codes or [])]
+    quarantine = [] if include_quarantine else sorted(EXCLUDED_STORE_CODES)   # 102/103/105
+    qty_sql = '' if include_zero_qty else 'AND sbe.itemqty > 0'
+    store_sql = f'AND sbe.storecode IN ({_marks(stores)})' if stores else ''
+    quarantine_sql = f'AND sbe.storecode NOT IN ({_marks(quarantine)})' if quarantine else ''
+    fixed_params = stores + [str(c) for c in quarantine]
 
     safe_limit = max(1, min(int(limit or _NEAR_EXPIRY_STOCK_LIMIT), 10000))
 
-    sql = f"""
-        SET ROWCOUNT {safe_limit}
-        SELECT
-            sbe.itemcode,
-            sbe.itemexpirydate,
-            sbe.itemqty,
-            sbe.branchcode,
-            sbe.storecode,
-            sbe.batchno,
-            i.itemname
-        FROM SOFTECHDB9.dbo.stkbalexpiry sbe
-        JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode
-        WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'
-          AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'
-          {qty_filter}
-          {store_filter}
-          {quarantine_filter}
-          {item_filter}
-        ORDER BY sbe.itemexpirydate ASC, sbe.itemcode
-        SET ROWCOUNT 0
-    """
+    # Item lists are chunked (bound-parameter cap); each chunk keeps the ROWCOUNT limit
+    # and the merged rows are re-sorted most-urgent-first and cut to the same limit.
+    codes = [str(c) for c in (item_codes or [])]
+    chunks = [codes[i:i + _MAX_BOUND_CODES] for i in range(0, len(codes), _MAX_BOUND_CODES)] or [None]
 
+    rows = []
     conn = get_sybase_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
-        rows = cur.fetchall()
+        cur.execute(f'SET ROWCOUNT {safe_limit}')     # int, clamped above
+        try:
+            for chunk in chunks:
+                item_sql = f'AND sbe.itemcode IN ({_marks(chunk)})' if chunk else ''
+                cur.execute(f"""
+                    SELECT
+                        sbe.itemcode,
+                        sbe.itemexpirydate,
+                        sbe.itemqty,
+                        sbe.branchcode,
+                        sbe.storecode,
+                        sbe.batchno,
+                        i.itemname
+                    FROM SOFTECHDB9.dbo.stkbalexpiry sbe
+                    JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode
+                    WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'
+                      AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'
+                      {qty_sql} {store_sql} {quarantine_sql}
+                      {item_sql}
+                    ORDER BY sbe.itemexpirydate ASC, sbe.itemcode
+                """, fixed_params + (chunk or []))
+                rows.extend(cur.fetchall())
+        finally:
+            cur.execute('SET ROWCOUNT 0')             # the session setting outlives this query
     finally:
         conn.close()
+    if len(chunks) > 1:
+        rows.sort(key=lambda r: (_to_date(r[1]) or date.max, _to_str(r[0])))
+        rows = rows[:safe_limit]
 
     quarantine_set = set(EXCLUDED_STORE_CODES)
     results = []

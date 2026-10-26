@@ -71,7 +71,7 @@ SCREENS = [
             {'key': 'name_review', 'title': T('مراجعة الأسماء', 'Name review'), 'body': T('اقتراحات آمنة من سجل نفس الجهة لإكمال الاسم رباعياً أو تصحيح إملائه. الاسم حقل طباعة فقط لا يؤثر على الإجماليات وقابل للتراجع؛ الأسماء متعددة الاحتمالات تُختار يدوياً.', 'Safe suggestions from the same payer\'s history to complete the name to four parts or fix spelling. The name is print-only, does not affect totals and is reversible; ambiguous names are chosen manually.')},
             {'key': 'discrepancy', 'title': T('فحص الفروقات', 'Discrepancy check'), 'body': T('البنود التي تغيّر تصنيفها أو سعرها في الكتالوج منذ التجميد، وتطبيق «تصويبات تصنيف الأصناف» على هذه المطالبة. التحديث يعدّل القيم المجمّدة وقابل للتراجع.', 'Lines whose class or price changed in the catalog since freezing, and applying the "item class corrections" to this claim. Updating changes frozen values and is reversible.')},
             {'key': 'revision', 'title': T('مراجعة الفروق', 'Difference review'), 'body': T('كل بند عليه علامة فرق (قيمة قد تخالف SOFTECH، فرق عن الكتالوج، تصنيف يخالف SOFTECH) لتعتمده بنداً بنداً — اعتماد تسجيلي يوثّق أنك راجعت ولا يغيّر القيم.', 'Every line flagged with a difference (value may differ from SOFTECH, catalog difference, class differs from SOFTECH) for you to approve one by one — a recording approval that documents your review and changes no values.')},
-            {'key': 'softech_reprice', 'title': T('تعديلات سوفتك', 'SOFTECH repricing'), 'body': T('تطبيق سعر صحيح لصنف على إيصالات المطالبة داخل SOFTECH نفسه (الرئيسي + الفرع)؛ كل إيصال عملية مستقلة بمعاينة وتأكيد وقابلة للتراجع من سجل العمليات.', 'Apply a correct item price on the claim\'s receipts inside SOFTECH itself (HQ + branch); each receipt is a separate operation with preview and confirmation, reversible from the operations log.')},
+            {'key': 'softech_reprice', 'title': T('تعديلات سوفتك', 'SOFTECH repricing'), 'body': T('تطبيق سعر صحيح لصنف على إيصالات المطالبة داخل SOFTECH نفسه (الرئيسي + الفرع)؛ كل إيصال عملية مستقلة بمعاينة وتأكيد وقابلة للتراجع من سجل العمليات. تعديل تاريخ إيصال تاريخه معدّل بالفعل يُرفض — تراجع عن العملية السابقة أولاً.', 'Apply a correct item price on the claim\'s receipts inside SOFTECH itself (HQ + branch); each receipt is a separate operation with preview and confirmation, reversible from the operations log. A receipt whose date is already changed is refused a new date — revert the earlier operation first.')},
             {'key': 'readiness', 'title': T('الجاهزية للإصدار', 'Readiness to issue'), 'body': T('درجة الجاهزية والأخطاء التي تمنع الإصدار والتحذيرات، مثل الأسماء غير الرباعية (فردي = خطورة أعلى، ثنائي، ثلاثي) وتوزيعها بالفرع. «إعادة الفحص» بعد الإصلاح.', 'The readiness score, errors blocking issue and warnings, such as names not in four parts (single = highest risk, two, three) and their distribution by branch. "Re-check" after fixing.')},
             {'key': 'activity', 'title': T('سجل النشاط', 'Activity log'), 'body': T('كل تعديل على المطالبة: من، متى، لماذا، والقيمة قبل وبعد.', 'Every change on the claim: who, when, why, and the value before and after.')},
         ],
@@ -95,7 +95,7 @@ SCREENS = [
             {'target': 'insurance-claim-issue', 'text': T('«إصدار المطالبة» بعد المراجعة.',
                                               '"Issue claim" after reviewing.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-26',
     },
     {
         'key': 'insurance.print',

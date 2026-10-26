@@ -104,3 +104,31 @@ def require_module(module: str, action: str = 'view'):
             return func(self_or_request, *args, **kwargs)
         return wrapper
     return decorator
+
+
+# ── Per-action matrix checks (with the empty-matrix safety net) ───────────────
+
+def matrix_allows(profile, module: str, *actions) -> bool:
+    """True when the RoleModuleAccess matrix grants any of `actions` on `module`.
+
+    Admins always pass (as StaffProfile.can_do). If the matrix was never seeded
+    (RoleModuleAccess empty) nothing is denied — the same safety net as
+    core.middleware.module_access — so a fresh install does not lock everyone but
+    admins out; the gap is logged instead."""
+    if profile is None or not profile.is_active:
+        return False
+    if profile.role == 'admin':
+        return True
+    from core.middleware import module_access
+    if not module_access._grants()[1]:
+        import logging
+        logging.getLogger('elrezeiky.rbac').error('RBAC matrix empty — %s.%s not enforced', module, actions)
+        return True
+    return any(profile.can_do(module, a) for a in actions)
+
+
+def deny_unless(request, module: str, *actions):
+    """For function views: None when the matrix allows any of `actions`, else a 403."""
+    if matrix_allows(_get_profile(request), module, *actions):
+        return None
+    return Response({'detail': 'ليس لديك صلاحية لهذا الإجراء'}, status=status.HTTP_403_FORBIDDEN)

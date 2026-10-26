@@ -31,6 +31,7 @@ API endpoints:
 import csv
 import io
 import logging
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -64,6 +65,9 @@ from .serializers import (
 )
 
 logger = logging.getLogger('elrezeiky.incentives')
+
+# SOFTECH store / item codes: letters, digits and dashes only.
+_SOFTECH_CODE = re.compile(r'^[0-9A-Za-z\-]{1,20}$')
 
 _EXPIRY_BUCKETS = ['0-30', '31-60', '61-90', '91-180', '181+']
 
@@ -1598,6 +1602,16 @@ class NearExpiryStockView(viewsets.ViewSet):
 
         item_codes_raw = params.get('item_codes', '').strip()
         item_codes = [c.strip() for c in item_codes_raw.split(',') if c.strip()] or None
+
+        # Shape checks — SOFTECH store / item codes are letters, digits and dashes only.
+        # (The query binds every value; this refuses junk early.)
+        codes = (store_codes or []) + (item_codes or [])
+        if any(not _SOFTECH_CODE.match(c) for c in codes):
+            return Response({'detail': 'أكواد المخازن والأصناف يجب أن تكون أرقاماً أو حروفاً فقط'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if len(store_codes or []) > 100 or len(item_codes or []) > 2000:
+            return Response({'detail': 'عدد الأكواد كبير جداً (حد أقصى 100 مخزن و 2000 صنف)'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         include_quarantine = params.get('include_quarantine', '').lower() == 'true'
 

@@ -695,6 +695,12 @@ def probe_invoice(invoice: SupplierInvoice, *, confirm=False, usercode=None, hea
     """
     if not confirm:
         raise ValueError('probe_invoice requires confirm=True (executes real DML, then rolls back).')
+    # Real INSERTs on SOFTECH (production triggers fire, locks are held until the rollback):
+    # only where the environment deliberately allows rehearsals. Covers every caller —
+    # invoice «probe», coupon «batch-probe», clone_purchase.
+    if not getattr(settings, 'SOFTECH_PROBES_ENABLED', False):
+        raise ValueError('اختبارات الإدخال مع التراجع على SOFTECH معطّلة '
+                         '(SOFTECH_PROBES_ENABLED=False) — شغّلها عمداً عند الحاجة فقط.')
     host = branch_host(invoice)
     if not host:
         raise ValueError('No branch db_host and no SYBASE_HOST fallback configured.')

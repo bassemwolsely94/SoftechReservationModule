@@ -32,6 +32,7 @@ logger = logging.getLogger('elrezeiky.customers')
 
 DB = 'SOFTECHDB9.dbo'
 REASON = 'B7 removed from points'   # ASCII: the jConnect link writes Arabic into vf1 as '?'
+LOCK_KEY = 7_301_009       # pg advisory lock: one live removal run at a time (Batch 2, P-15)
 
 
 def write_enabled():
@@ -159,6 +160,18 @@ def _audit(rec, user):
 
 
 def run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None):
+    """A live run holds LOCK_KEY: two runs read the same balance and both debited it (P-15)."""
+    kw = dict(pics=pics, user=user, commit=commit, limit=limit, users=users, conn=conn)
+    if not commit:
+        return _run(**kw)
+    from apps.vouchers.coupon_dashboard import pg_lock
+    with pg_lock(LOCK_KEY) as got:
+        if not got:
+            raise ValueError('another points-removal run is in progress')
+        return _run(**kw)
+
+
+def _run(*, pics=None, user=None, commit=False, limit=None, users=('19',), conn=None):
     from config.sybase import get_sybase_connection
     from .models import PointsRemoval as R
     limit = min(int(limit or batch_max()), batch_max())

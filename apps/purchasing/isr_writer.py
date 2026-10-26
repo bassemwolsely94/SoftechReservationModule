@@ -38,6 +38,9 @@ logger = logging.getLogger('elrezeiky.purchasing')
 _EXCLUDED_STORES = {'102', '103', '105'}
 
 
+LOCK_ISR_PUSH = 7_301_006   # pg advisory lock, × 1e6 + IsrPush pk: one push of a draft at a time (P-15)
+
+
 class WriterDisabled(RuntimeError):
     """Raised if a real SOFTECH ISR write is attempted while the gate is off."""
 
@@ -299,31 +302,15 @@ def push_isr(branchcode, *, run=None, dry_run=True, positive_only=True,
         plan.update(mode='empty', wrote_to_softech=False)
         return plan
 
-    if not writer_enabled() or dry_run:
-        plan.update(mode='dry_run', wrote_to_softech=False)
-        logger.info('[isr_writer] DRY-RUN branch=%s (enabled=%s) — %d lines',
-                    branchcode, writer_enabled(), plan['line_count'])
-        return plan
-
-    from apps.branches.models import Branch
-    from config.sybase import get_branch_connection
-    branch = Branch.objects.get(softech_branch_id=str(branchcode))
-    usercode = _service_usercode()
-    conn = None
-    try:
-        conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
-                                     branch.db_name or 'SOFTECHDB9')
-        w = _write_isr(conn, branchcode, branchcode, plan["lines"], usercode, do_commit=True)
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-    plan.update(mode='commit', wrote_to_softech=bool(w['verified']), readback=w,
-                isrdocnumber=w['isrdocnumber'])
-    logger.info('[isr_writer] COMMIT branch=%s isr=%s verified=%s (%d/%d lines)',
-                branchcode, w['isrdocnumber'], w['verified'], w['lines_found'], w['lines_expected'])
+    if not dry_run:
+        # The direct write had no IsrPush record, no duplicate guard and no audit — every run
+        # wrote a NEW ISR (Batch 2, P-15). ISRs reach SOFTECH only as recorded drafts:
+        # create_proposal → approve → push_isr_record (/supply, generate_isr --auto-approve).
+        raise WriterDisabled('push_isr writes no ISR any more — push a recorded draft (/supply or '
+                             'generate_isr --auto-approve).')
+    plan.update(mode='dry_run', wrote_to_softech=False)
+    logger.info('[isr_writer] DRY-RUN branch=%s (enabled=%s) — %d lines',
+                branchcode, writer_enabled(), plan['line_count'])
     return plan
 
 
@@ -331,7 +318,20 @@ def push_isr(branchcode, *, run=None, dry_run=True, positive_only=True,
 def push_isr_record(isr_push, *, executed_by=None):
     """Write an APPROVED IsrPush's stored line snapshot to SOFTECH (stockisrm header
     israpp=1 + stockisr lines), record the allocated isrdocnumber, update the record.
-    Gate + status checked before any SOFTECH connection."""
+    Gate + status checked before any SOFTECH connection. One push of a draft at a time:
+    an advisory lock per draft, and the status is re-read inside it — a caller's stale
+    APPROVED copy never writes a second ISR (Batch 2, P-15)."""
+    if not writer_enabled():
+        raise WriterDisabled('ISR_WRITER_ENABLED is off — refusing to push ISR.')
+    from apps.vouchers.coupon_dashboard import pg_lock
+    with pg_lock(LOCK_ISR_PUSH * 1_000_000 + isr_push.pk) as got:
+        if not got:
+            raise ValueError('هذا الطلب قيد الترحيل من عملية أخرى — لم يُرحَّل مرة ثانية.')
+        isr_push.refresh_from_db()
+        return _push_isr_record(isr_push, executed_by=executed_by)
+
+
+def _push_isr_record(isr_push, *, executed_by=None):
     from apps.purchasing.models import IsrPush
     from apps.branches.models import Branch
     from config.sybase import get_branch_connection
@@ -369,6 +369,11 @@ def push_isr_record(isr_push, *, executed_by=None):
         isr_push.readback = w
         isr_push.error = f'verify/commit failed: {w}'[:300]
     isr_push.save(update_fields=['status', 'isrdocnumber', 'pushed_at', 'readback', 'error'])
+    if isr_push.status == IsrPush.STATUS_PUSHED:                # who pushed it (Batch 2, P-16)
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_isr_pushed', actor=executed_by, obj=isr_push,
+                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines)},
+                            route=f'{isr_push.branchcode}→{isr_push.dest_branchcode or isr_push.branchcode}')
     logger.info('[isr_writer] push_isr_record %s → isr=%s status=%s',
                 isr_push.pk, w.get('isrdocnumber'), isr_push.status)
     return isr_push
@@ -608,6 +613,10 @@ def approve_isr(branchcode, isrdocnumber, *, executed_by=None):
             conn.close()
         except Exception:
             pass
+    from core.softech_audit import audit_softech_write          # Batch 2, P-16
+    audit_softech_write('softech_isr_approved', actor=executed_by, before={'israpp': 1 if already else 0},
+                        after={'israpp': 1 if approved else 0}, branchcode=str(branchcode),
+                        isrdocnumber=int(isrdocnumber))
     logger.info('[isr_writer] approve isr=%s branch=%s approved=%s (was %s)',
                 isrdocnumber, branchcode, approved, 'approved' if already else 'pending')
     return {'ok': bool(approved), 'isrdocnumber': int(isrdocnumber),
@@ -617,6 +626,8 @@ def approve_isr(branchcode, isrdocnumber, *, executed_by=None):
 def probe_approve_isr(branchcode, isrdocnumber, *, confirm=False):
     """Rehearse the approval with ZERO residue: read israpp, set 1, readback, then
     RESTORE the original israpp. Ignores the gate (always restores). confirm=True."""
+    from core.softech_switches import require_probes
+    require_probes('purchasing.isr_writer.probe_approve_isr')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_approve_isr requires confirm=True (real UPDATE, then restores).')
     from apps.branches.models import Branch
@@ -635,13 +646,17 @@ def probe_approve_isr(branchcode, isrdocnumber, *, confirm=False):
             return res
         orig = int(row[0] or 0)
         res['original_israpp'] = orig
-        cur.execute("UPDATE stockisrm SET israpp=1 WHERE branchcode=? AND isrdocnumber=?",
-                    [str(branchcode), int(isrdocnumber)])
-        cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
-                    [str(branchcode), int(isrdocnumber)])
-        res['write_landed'] = int(cur.fetchone()[0] or 0) == 1
-        cur.execute("UPDATE stockisrm SET israpp=? WHERE branchcode=? AND isrdocnumber=?",
-                    [orig, str(branchcode), int(isrdocnumber)])
+        try:
+            cur.execute("UPDATE stockisrm SET israpp=1 WHERE branchcode=? AND isrdocnumber=?",
+                        [str(branchcode), int(isrdocnumber)])
+            cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
+                        [str(branchcode), int(isrdocnumber)])
+            res['write_landed'] = int(cur.fetchone()[0] or 0) == 1
+        finally:
+            # ALWAYS put the original israpp back — a failed readback must not leave a
+            # pending ISR approved in SOFTECH (Batch 2, P-13).
+            cur.execute("UPDATE stockisrm SET israpp=? WHERE branchcode=? AND isrdocnumber=?",
+                        [orig, str(branchcode), int(isrdocnumber)])
         cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
                     [str(branchcode), int(isrdocnumber)])
         res['restored'] = int(cur.fetchone()[0] or 0) == orig
@@ -663,6 +678,8 @@ def probe_isr_write(branchcode, *, sample_n=3, confirm=False):
     INSERTs + verify, then ROLLBACK. Reveals the allocated isrdocnumber and whether
     the inserts land (trigger behaviour) before any live commit. Requires confirm=True.
     """
+    from core.softech_switches import require_probes
+    require_probes('purchasing.isr_writer.probe_isr_write')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_isr_write requires confirm=True (real INSERTs, then rolls back).')
     plan = build_plan(branchcode, max_lines=sample_n)

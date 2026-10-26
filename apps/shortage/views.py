@@ -794,6 +794,9 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         """Single-supplier purchase order carrying THAT supplier's own item codes."""
         from .export import export_supplier_po
         sl = self.get_object()
+        # SOFTECH personcodes are digits/letters only; also keeps the filename header clean.
+        if not re.fullmatch(r'[0-9A-Za-z\-]{1,20}', suppcode or ''):
+            return Response({'detail': 'كود المورد غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
         supplier_name = request.query_params.get('name', '')
         resp = HttpResponse(
             export_supplier_po(sl, suppcode, supplier_name),

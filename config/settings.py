@@ -413,14 +413,18 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
     for _k in ('SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST'):
         os.environ.pop(_k, None)
 
-# Per-feature switches for the SOFTECH writes that had none (default ON = today's
-# behaviour). Set one to False to stop that single write in production without
-# the all-or-nothing SOFTECH_READ_ONLY. Checked in the view AND in the writer, so
-# scheduled jobs and management commands obey them too.
-PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # approved price/discount + classification UPDATE items
-REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=True, cast=bool)       # restamp/push items to branches (manual + scheduled)
-LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # manual purchase-points INSERT picpoints
-PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=True, cast=bool)   # stktransm.comments / cheques.chequenote
+# Per-feature switches for these SOFTECH writes. Like every other SOFTECH writer they
+# default OFF: a write runs only where the environment deliberately turns it on
+# (.env / production env — see .env.example). Checked in the view AND in the writer,
+# so scheduled jobs and management commands obey them too.
+PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=False, cast=bool)   # approved price/discount + classification UPDATE items
+REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=False, cast=bool)      # restamp/push items to branches (manual + scheduled)
+LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=False, cast=bool)   # manual purchase-points INSERT picpoints
+PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=False, cast=bool)  # stktransm.comments / cheques.chequenote
+# SOFTECH rehearsals and diagnostics (core/softech_switches.py): invoice «probe», coupon
+# «batch-probe», clone_purchase, every writer probe_* and every diagnostic command mode that
+# writes — real DML rolled back or restored; production triggers still fire, locks are held.
+SOFTECH_PROBES_ENABLED          = config('SOFTECH_PROBES_ENABLED', default=False, cast=bool)
 
 # Roles allowed to manually add/deduct customer loyalty points (POST
 # /api/loyalty/customers/<id>/adjust/ — purchase points write SOFTECH picpoints).
@@ -428,6 +432,10 @@ LOYALTY_ADJUST_ROLES = frozenset(
     r.strip() for r in config('LOYALTY_ADJUST_ROLES', default='admin,supervisor,call_center').split(',')
     if r.strip()
 )
+# Purchase-points safety: largest manual adjustment per request (±), and how long an
+# identical adjustment (customer, points, reason) is refused as a probable double post.
+LOYALTY_MAX_MANUAL_ADJUST         = config('LOYALTY_MAX_MANUAL_ADJUST', default=1000, cast=int)
+LOYALTY_DUPLICATE_WINDOW_SECONDS  = config('LOYALTY_DUPLICATE_WINDOW_SECONDS', default=120, cast=int)
 # Default per-statement timeout (seconds) for INTERACTIVE queries — bounds an
 # HTTP request against a slow/blocked Sybase read. jConnect enforces this as a
 # socket read-timeout (fires as JZ0T3 on fetch), so keep it snappy.

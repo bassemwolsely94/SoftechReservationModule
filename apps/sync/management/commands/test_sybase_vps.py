@@ -76,6 +76,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if options.get('write_test'):    # this mode writes to SOFTECH (Batch 2, P-7)
+            from core.softech_switches import command_require_probes
+            command_require_probes('test_sybase_vps --write-test')
         report = Report()
         report.h('Sybase / SOFTECH VPS Connection Diagnostic')
         report.info(f'Date: {time.strftime("%Y-%m-%d %H:%M:%S")}')

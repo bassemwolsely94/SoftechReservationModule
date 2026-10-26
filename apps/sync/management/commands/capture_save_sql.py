@@ -63,6 +63,9 @@ class Command(BaseCommand):
                             help='print monitoring config + candidate SPIDs and stop (no capture)')
 
     def handle(self, *args, **o):
+        if o.get('enable_monitoring'):    # this mode writes to SOFTECH (Batch 2, P-7)
+            from core.softech_switches import command_require_probes
+            command_require_probes('capture_save_sql --enable-monitoring')
         from config.sybase import SoftechConnector
         self._out_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..',
                                       'docs', 'architecture',

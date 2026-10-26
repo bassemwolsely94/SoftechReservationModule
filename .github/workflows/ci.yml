@@ -50,8 +50,16 @@ jobs:
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
 
-      - name: Run tests
-        run: python manage.py test --noinput --verbosity 2
+      - name: Run tests (with coverage)
+        run: |
+          coverage run manage.py test --noinput --verbosity 2
+          coverage report --skip-covered | tail -40
+
+      - name: Static security scan (bandit, new findings only)
+        run: bandit -r apps core config -x apps/tests,migrations -ll -q -b apps/tests/security/bandit-baseline.json
+
+      - name: Dependency advisories (pip-audit, known ones listed)
+        run: python apps/tests/security/pip_audit_check.py
 
   frontend-build:
     name: Frontend build (Vite)
@@ -71,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency advisories (npm audit, known ones listed)
+        run: node ../apps/tests/security/npm_audit_check.cjs
 
       - name: Build
         run: npm run build

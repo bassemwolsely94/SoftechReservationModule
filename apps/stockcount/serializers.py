@@ -1,8 +1,13 @@
 """
 apps/stockcount/serializers.py  — v2
 """
+import re
+
 from rest_framework import serializers
 from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
+
+_CODE = re.compile(r'^[0-9A-Za-z\-]{1,20}$')     # SOFTECH branch / item codes
+_DOCCODE = re.compile(r'^[0-9]{1,4}$')
 
 
 # ── Snapshot ──────────────────────────────────────────────────────────────────
@@ -99,4 +104,11 @@ class StockCountSessionCreateSerializer(serializers.ModelSerializer):
                 )
         if not data.get('branch_code'):
             raise serializers.ValidationError('كود الفرع مطلوب')
+        # Shape checks (the SOFTECH queries bind every value; these just refuse junk early).
+        if not _CODE.match(str(data['branch_code'])):
+            raise serializers.ValidationError('كود الفرع يجب أن يكون أرقاماً أو حروفاً فقط')
+        if any(not _DOCCODE.match(str(d)) for d in (data.get('doccodes') or [])):
+            raise serializers.ValidationError('أكواد المستند يجب أن تكون أرقاماً')
+        if any(not _CODE.match(str(c)) for c in (data.get('item_codes_filter') or [])):
+            raise serializers.ValidationError('أكواد الأصناف يجب أن تكون أرقاماً أو حروفاً فقط')
         return data

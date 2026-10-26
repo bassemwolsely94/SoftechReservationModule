@@ -21,6 +21,8 @@ class Command(BaseCommand):
         parser.add_argument('--profile', default='prod')
 
     def handle(self, *args, **o):
+        from core.softech_switches import command_require_probes
+        command_require_probes('diag_newqty')    # writes to SOFTECH (Batch 2, P-7)
         from django.conf import settings
         from config.sybase import get_branch_connection
         from apps.invoices import writer as W

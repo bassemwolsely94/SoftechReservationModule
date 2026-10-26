@@ -74,6 +74,20 @@ class OrderSerializer(serializers.ModelSerializer):
             'store_code':         {'required': False},
         }
 
+    def validate_claim(self, claim):
+        """examdate (تاريخ الكشف) is written into SOFTECH as a datetime — accept only a real
+        YYYY-MM-DD date (normalised), never free text."""
+        exam = (claim or {}).get('examdate')
+        if exam:
+            import datetime as _dt
+            try:
+                claim['examdate'] = _dt.date.fromisoformat(str(exam).strip()[:10]).isoformat()
+                if len(str(exam).strip()) > 10 and str(exam).strip()[10:].strip() not in ('', '00:00:00'):
+                    raise ValueError
+            except ValueError:
+                raise serializers.ValidationError({'examdate': 'تاريخ الكشف يجب أن يكون تاريخاً (YYYY-MM-DD)'})
+        return claim
+
     def create(self, validated):
         lines = validated.pop('lines', [])
         payments = validated.pop('payments', [])
@@ -88,7 +102,7 @@ class OrderSerializer(serializers.ModelSerializer):
                     'comment', 'hi_typecode')
             raw = {k: claim[k] for k in keep if claim.get(k)}
             if claim.get('examdate'):
-                raw['examdate'] = {'__dt__': f"{claim['examdate']} 00:00:00"}
+                raw['examdate'] = {'__dt__': f"{claim['examdate']} 00:00:00"}   # ISO date (validate_claim)
             if raw:
                 validated['source_companies_raw'] = raw
         # default the SOFTECH branchcode/store from the Branch if not given

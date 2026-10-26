@@ -24,3 +24,8 @@ PyJWT>=2.8.0
 pywebpush>=2.0.0
 python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
 JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT
+
+# Security suite tooling (CI only — docs/security/TEST_SUITE.md)
+coverage>=7.4
+bandit>=1.7.8
+pip-audit>=2.7

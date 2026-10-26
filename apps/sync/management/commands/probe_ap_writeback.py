@@ -59,6 +59,9 @@ class Command(BaseCommand):
                             help='second gate — acknowledges real INSERTs (always rolled back) will run')
 
     def handle(self, *args, **o):
+        if o.get('rehearse'):    # this mode writes to SOFTECH (Batch 2, P-7)
+            from core.softech_switches import command_require_probes
+            command_require_probes('probe_ap_writeback --rehearse')
         from config.sybase import SoftechConnector
 
         lines = []

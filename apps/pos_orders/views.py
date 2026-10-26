@@ -319,6 +319,7 @@ def push_order(request, pk):
     except ValueError as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     result['live'] = (not dry)
+    _audit_pos(request, 'softech_pos_order_pushed', order, result)
     # Out-of-stock rejection (we don't write حجز) → 400 with the OOS lines (matches native منع الصرف).
     if result.get('stock_errors'):
         return Response({**result, 'detail': 'أصناف غير متوفرة بالرصيد — لا يمكن الإرسال.',
@@ -351,11 +352,24 @@ def push_order(request, pk):
 @permission_classes([CanPushPosOrders])
 def cancel_order(request, pk):
     order = SoftechSalesOrder.objects.get(pk=pk)
+    before = order.status
     try:
         writer.cancel_order(order)
     except (ValueError, writer.WriterDisabled) as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    from core.softech_audit import audit_softech_write          # who cancelled (Batch 2, P-16)
+    audit_softech_write('softech_pos_order_cancelled', actor=request.user, obj=order,
+                        before={'status': before}, after={'status': order.status})
     return Response(OrderSerializer(order).data)
+
+
+def _audit_pos(request, action, order, result, **extra):
+    """Who pushed this sale into SOFTECH (Batch 2, P-16) — only when it really wrote. Kept in
+    the views: the checkout writer (push_order) is not touched."""
+    if isinstance(result, dict) and result.get('wrote_to_softech'):
+        from core.softech_audit import audit_softech_write
+        audit_softech_write(action, actor=request.user, obj=order,
+                            after={'docnumber': result.get('docnumber'), 'mode': result.get('mode')}, **extra)
 
 
 def build_order_whatsapp_message(order):
@@ -1166,6 +1180,7 @@ def flush_now(request):
             res = writer.push_order(order, dry_run=False)
         except Exception as e:
             failed += 1; results.append({'id': order.pk, 'error': str(e)}); continue
+        _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
         if res.get('queued'):
             queued += 1
         elif res.get('ok') or res.get('already_pushed'):

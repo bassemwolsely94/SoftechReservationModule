@@ -4,7 +4,8 @@ apps/tests/test_softech_write_switches.py
 Per-feature switches for the SOFTECH writes that had none:
   PRICING_SOFTECH_WRITE_ENABLED, REPLICATION_REPAIR_ENABLED,
   LOYALTY_SOFTECH_WRITE_ENABLED, PERSONAL_COMMENT_WRITE_ENABLED.
-Default ON (unchanged behaviour). OFF must stop the write BEFORE any SOFTECH
+Default OFF (security suite Batch 2, P-5 — on only where the env turns them on).
+OFF must stop the write BEFORE any SOFTECH
 connection is opened — in the view and in the writer itself (scheduled jobs and
 management commands call the writers directly).
 """
@@ -27,11 +28,11 @@ def _no_conn(module):
 
 class DefaultsTests(TestCase):
 
-    def test_switches_default_on(self):
+    def test_switches_default_off(self):
         from django.conf import settings
         for name in ('PRICING_SOFTECH_WRITE_ENABLED', 'REPLICATION_REPAIR_ENABLED',
                      'LOYALTY_SOFTECH_WRITE_ENABLED', 'PERSONAL_COMMENT_WRITE_ENABLED'):
-            self.assertTrue(getattr(settings, name), name)
+            self.assertFalse(getattr(settings, name), name)
 
 
 @override_settings(PRICING_SOFTECH_WRITE_ENABLED=False)

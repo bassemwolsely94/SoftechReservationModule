@@ -751,6 +751,8 @@ def fix_due_before(invoice, allocations: list, *, conn, commit: bool = False, us
     cumulative-paid-after, SOFTECH means owed-before). Reads SOFTECH live (header +
     every link), recomputes with due_chain(), and — only when `commit` — updates just
     the rows that differ, in ONE transaction, verified. Native links are never touched."""
+    if commit and not writer_enabled():          # the writer refuses on its own (Batch 2, P-9)
+        raise ReconWriteError('SOFTECH writer is disabled (AP_RECONCILE_WRITER_ENABLED)')
     from .models import ReconAuditEvent
     ib, dc = invoice.branchcode, invoice.doccode
     dn, dd = _num(invoice.docnumber), _fmt_date(invoice.docdate)

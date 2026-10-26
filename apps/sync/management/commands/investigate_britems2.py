@@ -12,6 +12,15 @@ class Command(BaseCommand):
     help = 'Confirm britems pull mechanism on branches'
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('investigate_britems2')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
@@ -52,6 +61,8 @@ class Command(BaseCommand):
 
         TEST_PHARM = 77.0  # distinctive test value
 
+        guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.britems',
+                     {'itemcode': ITEM, 'branchcode': '160'}, ('pharmacydiscp', 'trans_time'))
         cur = conn_hq.cursor()
         cur.execute("""
             UPDATE SOFTECHDB9.dbo.britems
@@ -159,6 +170,7 @@ class Command(BaseCommand):
 
         # Write new pharmacydiscp to HQ items
         new_pharm = orig_pharm + 1 if orig_pharm != 55 else 56
+        guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': ITEM}, ('pharmacydiscp', 'usercode'))
         cur = conn_hq2.cursor()
         cur.execute('UPDATE SOFTECHDB9.dbo.items SET pharmacydiscp = ? WHERE itemcode = ?', [new_pharm, ITEM])
         conn_hq2.close()
@@ -176,15 +188,10 @@ class Command(BaseCommand):
             pharm_changed = abs(float(bri_after[0] or 0) - float(new_pharm)) < 0.01
             out(f'  britems.pharmacydiscp updated: {pharm_changed}  (expected {new_pharm}, got {bri_after[0]})')
 
-        # Revert HQ items
-        cur = conn_hq3.cursor()
-        cur.execute('UPDATE SOFTECHDB9.dbo.items SET pharmacydiscp = ? WHERE itemcode = ?', [orig_pharm, ITEM])
-        # Revert HQ britems
-        cur.execute('UPDATE SOFTECHDB9.dbo.britems SET pharmacydiscp = ?, trans_time = ? WHERE itemcode = ? AND branchcode = ?',
-                    [bri_before[0] if bri_before else orig_pharm,
-                     bri_before[1] if bri_before else None,
-                     ITEM, '160'])
+        # Revert HQ items, then HQ britems[160] (its step-2 marker included) — the old revert
+        # never undid step 2 and swapped pharmacydiscp/trans_time (Batch 2, P-14)
         conn_hq3.close()
+        guards.restore_all()
         conn_br.close()
         out('  Reverted HQ items and britems')
         out(f'\nComplete: {datetime.datetime.now().isoformat()}')

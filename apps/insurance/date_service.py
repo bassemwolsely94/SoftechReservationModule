@@ -20,6 +20,12 @@ from .models import SoftechDateEditRun
 from .reprice_service import _hq_conn, _open_branch, RepriceError, write_enabled
 
 _DOCCODE = '115'
+LOCK_DATE_EDIT = 7_301_008      # pg advisory lock: one receipt-date apply / revert at a time (P-15)
+
+
+def _lock():
+    from apps.vouchers.coupon_dashboard import pg_lock
+    return pg_lock(LOCK_DATE_EDIT)
 
 
 def _guard(claim, branch, confirm):
@@ -101,6 +107,21 @@ def apply_date_edit(claim, docno, branch, new_date, user=None, confirm=False, do
     """Set the receipt's printed date on HQ + branch (transactional, revertible)."""
     _guard(claim, branch, confirm)
     nd = new_date if isinstance(new_date, date) else datetime.strptime(str(new_date), '%Y-%m-%d').date()
+    with _lock() as got:
+        if not got:
+            raise RepriceError('تعديل تاريخ آخر قيد التنفيذ — أعد المحاولة بعد لحظات.')
+        # A second apply would record the already-changed date as old_date, and its revert
+        # would put the WRONG date back (Batch 2, P-15) — revert the open edit first.
+        open_run = SoftechDateEditRun.objects.filter(
+            docnumber=str(docno), branchcode=str(branch), doccode=doccode,
+            status=SoftechDateEditRun.STATUS_APPLIED).first()
+        if open_run:
+            raise RepriceError(f'تاريخ هذا الإيصال مُعدَّل بالفعل (العملية #{open_run.pk}) — '
+                               'تراجع عنها أولاً ثم طبّق التاريخ الجديد.')
+        return _apply_locked(claim, docno, branch, nd, user, doccode)
+
+
+def _apply_locked(claim, docno, branch, nd, user, doccode):
     nd_str = nd.strftime('%Y%m%d')
 
     hq = _hq_conn(charset='cp1256'); hcur = hq.cursor()
@@ -145,7 +166,16 @@ def apply_date_edit(claim, docno, branch, new_date, user=None, confirm=False, do
 
 
 def revert_date_edit(run, user=None):
-    """Restore the receipt's original printed date on HQ + branch."""
+    """Restore the receipt's original printed date on HQ + branch (under the date-edit lock,
+    the run re-read — Batch 2, P-15)."""
+    with _lock() as got:
+        if not got:
+            raise RepriceError('تعديل تاريخ آخر قيد التنفيذ — أعد المحاولة بعد لحظات.')
+        run.refresh_from_db()
+        return _revert_locked(run, user)
+
+
+def _revert_locked(run, user=None):
     if run.status != SoftechDateEditRun.STATUS_APPLIED:
         raise RepriceError('لا يمكن التراجع إلا عن عملية مُطبَّقة.')
     if not write_enabled():

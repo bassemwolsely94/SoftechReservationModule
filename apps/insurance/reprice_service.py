@@ -19,6 +19,7 @@ See docs/architecture/21_SOFTECH_INSURANCE_REPRICE_WRITEBACK.md.
 from decimal import Decimal
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from .reprice import recompute_line, refoot_header, _d, r2
@@ -36,8 +37,17 @@ _LINE_COLS = ['itemcode', 'transqty', 'itemsaleprice', 'itemsaleprice_tax', 'ite
 _HDR_COLS = ['docvalue', 'docvalue1', 'docvalue2', 'docvalue3', 'cust_branch_code', 'trans_time']
 
 
+# pg advisory lock, × 1e6 + run pk: one rebalance / revert of a run at a time (Batch 2, P-15)
+LOCK_REBALANCE = 7_301_007
+
+
 class RepriceError(Exception):
     pass
+
+
+def _run_lock(run):
+    from apps.vouchers.coupon_dashboard import pg_lock
+    return pg_lock(LOCK_REBALANCE * 1_000_000 + run.pk)
 
 
 def write_enabled() -> bool:
@@ -426,6 +436,14 @@ def rebalance_run(run, user=None, confirm=False):
         raise RepriceError('الكتابة إلى سوفتك معطّلة.')
     if not confirm:
         raise RepriceError('التأكيد مطلوب.')
+    with _run_lock(run) as got:      # Batch 2, P-15: a stale copy / a second click never shifts twice
+        if not got:
+            raise RepriceError('هذه العملية قيد التنفيذ من طلب آخر — أعد المحاولة بعد لحظات.')
+        run.refresh_from_db()
+        return _rebalance_locked(run)
+
+
+def _rebalance_locked(run):
     if run.status != SoftechRepriceRun.STATUS_APPLIED:
         raise RepriceError('إعادة الضبط تتم فقط بعد تطبيق ناجح.')
     if run.rebalanced:
@@ -457,19 +475,22 @@ def rebalance_run(run, user=None, confirm=False):
     edits, updated = [], 0
     hq.begin()
     try:
-        for br, dn, dc, oldbal in rows:
-            newbal = oldbal + delta
-            cur.execute("UPDATE SOFTECHDB9.dbo.stktransm SET personnewbal=? "
-                        "WHERE docnumber=CONVERT(numeric(6),?) AND branchcode=? AND doccode=?",
-                        [float(newbal), dn, br, dc])
-            edits.append(SoftechRepriceEdit(run=run, node='HQ', table='stktransm',
-                         row_key={'docnumber': dn, 'branchcode': br, 'doccode': dc},
-                         field='personnewbal', before=str(oldbal), after=str(newbal)))
-            updated += 1
-        hq.commit()
-        SoftechRepriceEdit.objects.bulk_create(edits, batch_size=500)
-        run.rebalanced = True; run.rebalance_count = updated
-        run.save(update_fields=['rebalanced', 'rebalance_count'])
+        with transaction.atomic():
+            for br, dn, dc, oldbal in rows:
+                newbal = oldbal + delta
+                cur.execute("UPDATE SOFTECHDB9.dbo.stktransm SET personnewbal=? "
+                            "WHERE docnumber=CONVERT(numeric(6),?) AND branchcode=? AND doccode=?",
+                            [float(newbal), dn, br, dc])
+                edits.append(SoftechRepriceEdit(run=run, node='HQ', table='stktransm',
+                             row_key={'docnumber': dn, 'branchcode': br, 'doccode': dc},
+                             field='personnewbal', before=str(oldbal), after=str(newbal)))
+                updated += 1
+            SoftechRepriceEdit.objects.bulk_create(edits, batch_size=500)
+            run.rebalanced = True; run.rebalance_count = updated
+            run.save(update_fields=['rebalanced', 'rebalance_count'])
+            # SOFTECH LAST (P-15): when recording the shift fails nothing reaches SOFTECH; before,
+            # SOFTECH committed first and a failed save let a retry shift the balances again.
+            hq.commit()
     except Exception:
         try: hq.rollback()
         except Exception: pass
@@ -482,7 +503,16 @@ def rebalance_run(run, user=None, confirm=False):
 # ── revert ───────────────────────────────────────────────────────────────────
 
 def revert_run(run, user=None):
-    """Restore every field this run changed, on each node, to its recorded `before`."""
+    """Restore every field this run changed, on each node, to its recorded `before`.
+    Under the run's lock, re-read — never alongside its rebalance (Batch 2, P-15)."""
+    with _run_lock(run) as got:
+        if not got:
+            raise RepriceError('هذه العملية قيد التنفيذ من طلب آخر — أعد المحاولة بعد لحظات.')
+        run.refresh_from_db()
+        return _revert_locked(run, user)
+
+
+def _revert_locked(run, user=None):
     from .importer import _get_connection
     if run.status != SoftechRepriceRun.STATUS_APPLIED:
         raise RepriceError('لا يمكن التراجع إلا عن عملية مُطبَّقة.')

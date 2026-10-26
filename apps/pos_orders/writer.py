@@ -15,7 +15,9 @@ marked block to be implemented + validated against SOFTECH_TEST_HOST later.
 """
 import logging
 import math
+import re
 import uuid
+from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -829,8 +831,21 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False):
 
     seller = (order.seller_usercode
               or getattr(settings, 'POS_DEFAULT_SELLER_USERCODE', '') or '1')
+    # Atomic claim (Batch 2, P-11): ONE conditional UPDATE in PostgreSQL — exactly one caller
+    # (push button, flush job, flush command) can move this order to PUSHING; any other caller
+    # holding the same order gets 0 rows and stops BEFORE touching SOFTECH. A plain save here let
+    # two callers both pass the in-memory status check and both write the pending order.
+    claimed = SoftechSalesOrder.objects.filter(
+        pk=order.pk,
+        status__in=(SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY,
+                    SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_PUSH_FAILED),
+    ).update(status=SoftechSalesOrder.STATUS_PUSHING, updated_at=timezone.now())
+    if not claimed:
+        logger.warning('[pos_orders] order=%s already being pushed by another caller — skipped', order.pk)
+        return {'mode': 'busy', 'wrote_to_softech': False, 'ok': False, 'busy': True,
+                'order_id': order.pk,
+                'detail': 'الطلب قيد الإرسال من عملية أخرى — لم يُكتب مرة ثانية'}
     order.status = SoftechSalesOrder.STATUS_PUSHING
-    order.save(update_fields=['status', 'updated_at'])
 
     conn = None
     try:
@@ -910,6 +925,23 @@ class _Raw:
     """Marks a value as an inline SQL expression (e.g. a date), not a bound param."""
     def __init__(self, sql):
         self.sql = sql
+
+
+# A datetime literal is pasted inside  convert(datetime, '<text>')  (inline INSERTs — the
+# bound INSERT path doesn't land rows on this ASE), so <text> must only ever be a real
+# date / datetime: 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM:SS' or with a fraction (cloned SOFTECH rows).
+_DT_TEXT = re.compile(r'\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2}(\.\d{1,6})?)?')
+
+
+def _dt_literal(text, add_midnight=False):
+    """convert(datetime, '<text>') for a validated date/datetime text; ValueError otherwise."""
+    s = str(text).strip()
+    if not _DT_TEXT.fullmatch(s):
+        raise ValueError('تاريخ غير صالح في بيانات الفاتورة')
+    datetime.strptime(s[:10], '%Y-%m-%d')            # a real calendar date (no 2026-13-45)
+    if add_midnight and len(s) == 10:
+        s += ' 00:00:00'
+    return _Raw(f"convert(datetime, '{s}')")
 
 
 _TODAY_MIDNIGHT = _Raw("convert(datetime, convert(char(8), getdate(), 112))")  # today 00:00
@@ -1213,7 +1245,7 @@ def _raw_value(v):
     """Render a stored source_raw value into an inline SQL literal (handles the
     {'__dt__': 'YYYY-MM-DD HH:MM:SS'} datetime marker)."""
     if isinstance(v, dict) and '__dt__' in v:
-        return _Raw(f"convert(datetime, '{v['__dt__']}')")
+        return _dt_literal(v['__dt__'])
     return _sql_literal(v)
 
 
@@ -1311,10 +1343,11 @@ def _claim_dt(v):
         return None
     if isinstance(v, dict) and '__dt__' in v:
         return _raw_value(v)
-    s = str(v).strip()
-    if len(s) == 10:                       # date only → add midnight
-        s += ' 00:00:00'
-    return _Raw(f"convert(datetime, '{s}')")
+    if isinstance(v, datetime):
+        v = v.strftime('%Y-%m-%d %H:%M:%S')
+    elif isinstance(v, date):
+        v = v.isoformat()
+    return _dt_literal(v, add_midnight=True)   # date only → midnight
 
 
 def _companies_row(order, raw, docnumber):
@@ -1564,6 +1597,8 @@ def probe_order(order: SoftechSalesOrder, *, confirm=False, live=True):
     then ALWAYS rolls back. Nothing is committed. Requires confirm=True.
     Returns a result dict (ok, allocated_docnumber, readback, error).
     """
+    from core.softech_switches import require_probes
+    require_probes('pos_orders.writer.probe_order')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_order requires confirm=True (executes real prod DML, then rolls back).')
     if not order.branch or not order.branch.effective_db_host:
@@ -1667,6 +1702,8 @@ def probe_cancel(host, port, dbname, branchcode, doccode, docnumber, *, confirm=
     actually removing the live row. Zero persistence. Requires confirm=True.
     Returns a result dict (before_counts, after_counts_in_txn, ok).
     """
+    from core.softech_switches import require_probes
+    require_probes('pos_orders.writer.probe_cancel')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_cancel requires confirm=True (executes a real DELETE, then rolls back).')
     from config.sybase import get_branch_connection

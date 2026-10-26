@@ -1042,7 +1042,7 @@ def alignment_apply(request):
         return Response({'detail': 'الحد الأقصى 1000 صنف في المرة'}, status=400)
 
     from .alignment import apply_classification_changes
-    err, results = apply_classification_changes(plan, usercode)
+    err, results = apply_classification_changes(plan, usercode, actor=request.user)
     if err:
         return Response({'detail': err}, status=400)
 
@@ -1081,7 +1081,7 @@ def alignment_tier_create(request):
     kind  = request.data.get('kind', 'store')
     label = request.data.get('label', '')
     code  = request.data.get('code') or None
-    err, result = create_new_tier(kind, label, usercode, code)
+    err, result = create_new_tier(kind, label, usercode, code, actor=request.user)
     if err:
         return Response({'detail': err}, status=400)
     return Response(result)

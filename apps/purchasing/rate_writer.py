@@ -774,6 +774,10 @@ def execute_push(push, *, executed_by=None):
     push.written_count, push.verified_count, push.reverted_count = written, verified, reverted
     push.save(update_fields=['status', 'executed_at', 'written_count',
                              'verified_count', 'reverted_count'])
+    from core.softech_audit import audit_softech_write          # executed_by kept (Batch 2, P-16)
+    audit_softech_write('softech_sales_rates_written', actor=executed_by, obj=push,
+                        after={'written': written, 'verified': verified, 'not_confirmed': reverted},
+                        target=target, branches=sorted(by_branch))
     logger.info('[rate_writer] executed push %d — written=%d verified=%d reverted=%d',
                 push.id, written, verified, reverted)
     return push
@@ -789,6 +793,8 @@ def probe_write(branch_softech_id, itemcode, *, confirm=False):
     teaches for stktrans. Requires confirm=True; ignores the writer gate (it always
     restores). Runs off-peak.
     """
+    from core.softech_switches import require_probes
+    require_probes('purchasing.rate_writer.probe_write')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_write requires confirm=True (real UPDATE, then restores original).')
     from apps.branches.models import Branch
@@ -817,20 +823,10 @@ def probe_write(branch_softech_id, itemcode, *, confirm=False):
         # Marker must differ from the original AT the stored precision (1 dp), else
         # the readback "verifies" a no-op. Use a full 1-dp step.
         marker = round(orig_rate + 0.1, RATE_DECIMALS) if orig_rate < 9999 else round(orig_rate - 0.1, RATE_DECIMALS)
-        cur.execute("UPDATE stkbal SET monthlyqty=?, usercode_mq=?, trans_time_mq=getdate() "
-                    "WHERE branchcode=? AND storecode=? AND itemcode=?",
-                    [marker, _service_usercode(), branch.softech_branch_id, store, str(itemcode)])
-        cur.execute("SELECT monthlyqty FROM stkbal "
-                    "WHERE branchcode=? AND storecode=? AND itemcode=?",
-                    [branch.softech_branch_id, store, str(itemcode)])
-        rb = cur.fetchone()
-        landed = rb is not None and abs(float(rb[0] or 0) - marker) < VERIFY_TOL
-        res['write_landed'] = bool(landed)
-        res['readback'] = float(rb[0]) if rb and rb[0] is not None else None
 
-        # RESTORE the original. usercode_mq/trans_time_mq restored via INLINE literals
-        # (jConnect cannot bind a Python datetime as a parameter); NULL when the row had
-        # none (the native state per fingerprint). monthlyqty binds fine as a float.
+        # RESTORE literals, built BEFORE the marker goes in. usercode_mq/trans_time_mq are
+        # restored via INLINE literals (jConnect cannot bind a Python datetime as a parameter);
+        # NULL when the row had none (the native state per fingerprint). monthlyqty binds fine.
         uc_lit = 'NULL' if not orig_user else "'" + str(orig_user).replace("'", "''") + "'"
         if orig_time is None:
             tt_lit = 'NULL'
@@ -839,9 +835,23 @@ def probe_write(branch_softech_id, itemcode, *, confirm=False):
                 tt_lit = f"convert(datetime, '{orig_time:%Y-%m-%d %H:%M:%S}')"
             except Exception:
                 tt_lit = 'NULL'
-        cur.execute(f"UPDATE stkbal SET monthlyqty=?, usercode_mq={uc_lit}, trans_time_mq={tt_lit} "
-                    f"WHERE branchcode=? AND storecode=? AND itemcode=?",
-                    [orig_rate, branch.softech_branch_id, store, str(itemcode)])
+        try:
+            cur.execute("UPDATE stkbal SET monthlyqty=?, usercode_mq=?, trans_time_mq=getdate() "
+                        "WHERE branchcode=? AND storecode=? AND itemcode=?",
+                        [marker, _service_usercode(), branch.softech_branch_id, store, str(itemcode)])
+            cur.execute("SELECT monthlyqty FROM stkbal "
+                        "WHERE branchcode=? AND storecode=? AND itemcode=?",
+                        [branch.softech_branch_id, store, str(itemcode)])
+            rb = cur.fetchone()
+            landed = rb is not None and abs(float(rb[0] or 0) - marker) < VERIFY_TOL
+            res['write_landed'] = bool(landed)
+            res['readback'] = float(rb[0]) if rb and rb[0] is not None else None
+        finally:
+            # The restore ALWAYS runs once the marker was sent — a failed readback must not
+            # leave the marker in SOFTECH (Batch 2, P-13).
+            cur.execute(f"UPDATE stkbal SET monthlyqty=?, usercode_mq={uc_lit}, trans_time_mq={tt_lit} "
+                        f"WHERE branchcode=? AND storecode=? AND itemcode=?",
+                        [orig_rate, branch.softech_branch_id, store, str(itemcode)])
         cur.execute("SELECT monthlyqty FROM stkbal "
                     "WHERE branchcode=? AND storecode=? AND itemcode=?",
                     [branch.softech_branch_id, store, str(itemcode)])

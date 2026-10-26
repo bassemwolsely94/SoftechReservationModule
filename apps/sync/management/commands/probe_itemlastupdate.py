@@ -19,6 +19,15 @@ class Command(BaseCommand):
     help = 'Investigate itemlastupdate replication-queue table'
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('probe_itemlastupdate')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection
 
         def out(t=''):
@@ -94,6 +103,7 @@ class Command(BaseCommand):
         out(f'  before: posdiscp={orig} | itemlastupdate total={cnt_before} for-item={item_before}')
 
         new = orig + 1
+        guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': ITEM}, ('posdiscp', 'usercode'))
         cur = conn.cursor()
         cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp=?, usercode=? WHERE itemcode=?',
                     [new, '00099', ITEM])
@@ -136,9 +146,7 @@ class Command(BaseCommand):
         cur.close()
 
         # revert
-        cur = conn.cursor()
-        cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp=? WHERE itemcode=?', [orig, ITEM])
-        cur.close()
         conn.close()
+        guards.restore_all()      # posdiscp AND usercode (Batch 2, P-14)
         out(f'\n  reverted posdiscp to {orig}')
         out('\nDONE.')

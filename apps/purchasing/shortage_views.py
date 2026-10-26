@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from apps.catalog.models import Item
+from core.permissions import deny_unless
 from . import shortage as S
 from apps.catalog.wildcard import wq
 
@@ -208,6 +209,11 @@ def shortage_search(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def shortage_flag(request):
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -223,7 +229,7 @@ def shortage_flag(request):
                              'shortage_flagged_at', 'shortage_confirmed_by',
                              'shortage_dismissed', 'shortage_softech_synced'])
     from . import shortage_writer
-    synced = shortage_writer.push_item(item)    # best-effort; queued if SOFTECH offline
+    synced = shortage_writer.push_item(item, actor=request.user)    # best-effort; queued if SOFTECH offline
     logger.info('[SHORTAGE] flag %s (%s) src=%s softech_synced=%s',
                 item.softech_id, item.name, item.shortage_source, synced)
     return Response({'ok': True, 'item_id': item.id, 'softech_synced': synced})
@@ -233,6 +239,11 @@ def shortage_flag(request):
 @permission_classes([IsAuthenticated])
 def shortage_unflag(request):
     """Revert a mistaken confirmation → in_shortage = False."""
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -244,7 +255,7 @@ def shortage_unflag(request):
     item.save(update_fields=['in_shortage', 'shortage_source', 'shortage_flagged_at',
                              'shortage_confirmed_by', 'shortage_softech_synced'])
     from . import shortage_writer
-    synced = shortage_writer.push_item(item)    # clears صنف نواقص + تحذير in SOFTECH
+    synced = shortage_writer.push_item(item, actor=request.user)    # clears صنف نواقص + تحذير in SOFTECH
     logger.info('[SHORTAGE] unflag %s (%s) softech_synced=%s', item.softech_id, item.name, synced)
     return Response({'ok': True, 'item_id': item.id, 'softech_synced': synced})
 
@@ -256,6 +267,11 @@ def shortage_dismiss(request):
     Move an item out of the candidate list with a reason (retrievable).
     Body: { item_id, reason, note?, matching_item_id? }
     """
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -281,7 +297,7 @@ def shortage_dismiss(request):
                              'shortage_dismissed_by', 'in_shortage', 'shortage_softech_synced'])
     if needs_push:
         from . import shortage_writer
-        shortage_writer.push_item(item)     # → موقوف for on_request/obsolete; clears shortage flag
+        shortage_writer.push_item(item, actor=request.user)     # → موقوف for on_request/obsolete; clears shortage flag
     # one OR two matching products (M2M) — accept list or single, cap at 2
     ids = request.data.get('matching_item_ids') or request.data.get('matching_item_id')
     ids = ids if isinstance(ids, list) else ([ids] if ids else [])
@@ -294,6 +310,11 @@ def shortage_dismiss(request):
 @permission_classes([IsAuthenticated])
 def shortage_retrieve(request):
     """Bring a dismissed item back into the candidate pool."""
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -311,7 +332,7 @@ def shortage_retrieve(request):
     item.shortage_matching_items.clear()
     if restore_supply:
         from . import shortage_writer
-        shortage_writer.push_item(item)     # → أوامر التوريد back to normal (itemnomoreuse='0')
+        shortage_writer.push_item(item, actor=request.user)     # → أوامر التوريد back to normal (itemnomoreuse='0')
     logger.info('[SHORTAGE] retrieve %s (%s) restore_supply=%s', item.softech_id, item.name, restore_supply)
     return Response({'ok': True, 'item_id': item.id})
 

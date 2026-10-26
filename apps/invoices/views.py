@@ -34,6 +34,15 @@ from core.errors import public_error
 logger = logging.getLogger('elrezeiky.invoices')
 
 
+def _audit_invoice_push(request, invoice, result, force):
+    """Who pushed this invoice into SOFTECH (Batch 2, P-16) — only when it really wrote."""
+    if isinstance(result, dict) and result.get('wrote_to_softech'):
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_invoice_pushed', actor=request.user, obj=invoice,
+                            after={'docnumber': result.get('docnumber'), 'mode': result.get('mode')},
+                            force=bool(force))
+
+
 def _bank_invoice_sample(invoice, candidates, engine='gemini'):
     """Bank a supplier-invoice OCR image + its line-item names into the in-house corpus
     (module purchasing_invoice) so it feeds the same accuracy/training pipeline. Best-effort."""
@@ -463,7 +472,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                     try:
                         injected = supplier_items.inject_mapping(
                             conn, vcode, line.item.softech_id, code,
-                            commit=True, approved=approve_change)
+                            commit=True, approved=approve_change, actor=request.user)
                     finally:
                         conn.close()
                     if injected.get('committed'):
@@ -601,6 +610,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
         try:
             result = writer.push_final(invoice, dry_run=False, force=force)
+            _audit_invoice_push(request, invoice, result, force)
         except writer.WriterDisabled as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         except ValueError as e:

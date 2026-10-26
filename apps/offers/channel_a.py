@@ -119,6 +119,15 @@ def apply_posdiscp(offer, *, actor=None, commit=False, confirm=False):
 
     results = _write_posdiscp(plan['changes'], usercode)
     written = sum(1 for r in results if r.get('ok'))
+    landed = {r['softech_id'] for r in results if r.get('ok')}
+    if landed:                                             # who / old → new posdiscp (Batch 2, P-16)
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_posdiscp_written', actor=actor, obj=offer,
+                            before={c['softech_id']: c['current_posdiscp'] for c in plan['changes']
+                                    if c['softech_id'] in landed},
+                            after={c['softech_id']: c['new_posdiscp'] for c in plan['changes']
+                                   if c['softech_id'] in landed},
+                            usercode=usercode, failed=len(results) - written)
     return {'applied': True, 'written': written, 'total': len(results),
             'results': results[:500], 'offer_id': offer.id}
 

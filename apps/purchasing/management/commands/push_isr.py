@@ -1,7 +1,7 @@
 """
 python manage.py push_isr --branch 150                 # DRY-RUN plan (stockisr lines the branch needs)
 python manage.py push_isr --branch 150 --probe         # rollback ISR-probe (real INSERT → rollback, 0 residue)
-python manage.py push_isr --branch 150 --commit        # LIVE write (needs ISR_WRITER_ENABLED)
+python manage.py push_isr --branch 150 --commit        # RETIRED (P-15) — ISRs go out as recorded drafts
 python manage.py push_isr --branch 150 --all           # include overstock (signed), not only gap>0
 
 FEATURE 2 Stage-A driver — generate a SOFTECH ISR (طلب توريد, stockisr) from our
@@ -44,7 +44,7 @@ class Command(BaseCommand):
         if o.get('approve'):
             if not isr_writer.writer_enabled():
                 raise CommandError('ISR_WRITER_ENABLED is False — refusing --approve.')
-            res = isr_writer.approve_isr(branch, o['approve'])
+            res = isr_writer.approve_isr(branch, o['approve'])      # audited, no actor (CLI)
             self.stdout.write(self.style.MIGRATE_HEADING(f'\n═══ approve ISR {o["approve"]} — branch {branch} ═══'))
             for k, v in res.items():
                 self.stdout.write(f'  {k}: {v}')
@@ -63,10 +63,11 @@ class Command(BaseCommand):
                 f'verified={res.get("ok")}  (rolled back)'))
             return
 
-        dry_run = not o['commit']
-        if o['commit'] and not isr_writer.writer_enabled():
-            raise CommandError('ISR_WRITER_ENABLED is False — refusing --commit. '
-                               'Validate with --probe first, then enable in settings.')
+        if o['commit']:
+            # Wrote a new ISR on every run: no IsrPush record, no duplicate guard, no audit (P-15).
+            raise CommandError('--commit is retired: ISRs reach SOFTECH only as recorded drafts — '
+                               'approve and push from /supply, or generate_isr --auto-approve.')
+        dry_run = True
 
         plan = isr_writer.push_isr(branch, dry_run=dry_run, positive_only=not o['all_items'],
                                    max_lines=o.get('max_lines'))

@@ -935,28 +935,12 @@ def classify_supplier_segments(run: ProcurementEngineRun) -> int:
 
     total = len(to_create) + len(to_update)
 
-    # Back-fill supplier_category on PurchaseLine (in batches via raw SQL for speed)
-    from django.db import connection
+    # Back-fill supplier_category on PurchaseLine (one bulk UPDATE … CASE)
     seg_map = {
         s.supplier_code: s.supplier_category
         for s in SupplierSegmentation.objects.all()
     }
-
-    if seg_map:
-        # Build CASE expression for batch update
-        cases = ' '.join(
-            f"WHEN '{sc}' THEN '{cat}'"
-            for sc, cat in seg_map.items()
-            if sc and cat
-        )
-        if cases:
-            with connection.cursor() as cur:
-                cur.execute(
-                    f"""
-                    UPDATE procurement_purchaseline
-                       SET supplier_category = CASE supplier_code {cases} ELSE '' END
-                    """
-                )
+    _backfill_purchase_line_categories(seg_map)
 
     # Back-fill on SupplierProfile as well
     for sc, cat in seg_map.items():
@@ -964,6 +948,18 @@ def classify_supplier_segments(run: ProcurementEngineRun) -> int:
 
     logger.info(f'[ProcurementEngine] Stage 2.5 done: {len(to_create)} created, {len(to_update)} updated')
     return total
+
+
+def _backfill_purchase_line_categories(seg_map: dict) -> None:
+    """One UPDATE … CASE supplier_code WHEN … over every PurchaseLine (unmapped → '').
+    Category codes are free text staff type, so they go in as bound values (ORM Case/When),
+    never as SQL text."""
+    from django.db.models import Case, CharField, Value, When
+    whens = [When(supplier_code=sc, then=Value(cat))
+             for sc, cat in seg_map.items() if sc and cat]
+    if whens:
+        PurchaseLine.objects.update(
+            supplier_category=Case(*whens, default=Value(''), output_field=CharField()))
 
 
 # ── v2 Stage: Compute enhanced supplier scores ────────────────────────────────
