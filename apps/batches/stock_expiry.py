@@ -60,7 +60,7 @@ def _node_conn(branch):
     host = (branch.db_host or '').strip()
     if not host:                       # HQ / central
         return get_sybase_connection()
-    return get_branch_connection(host, branch.effective_db_port(),
+    return get_branch_connection(host, branch.effective_db_port,
                                  branch.db_name or 'SOFTECHDB9')
 
 

@@ -677,3 +677,27 @@ class AuditCandidatesTests(TestCase):
             stock_fetcher=stock130, with_stock_age=False,
         )
         self.assertNotIn('A100', {r['item_code'] for r in rows})
+
+
+class NodeConnectionTests(TestCase):
+    """_node_conn must pass Branch.effective_db_port (a property) as a value, not call it —
+    calling it failed every branch node with "'int' object is not callable"."""
+
+    def test_branch_node_gets_int_port(self):
+        from apps.batches.stock_expiry import _node_conn
+        from apps.branches.models import Branch
+        b = Branch.objects.create(softech_branch_id='B77', name='Node', name_ar='فرع',
+                                  db_host=' 10.0.0.7 ', db_port=5001)
+        with patch('config.sybase.get_branch_connection') as gbc:
+            _node_conn(b)
+        gbc.assert_called_once_with('10.0.0.7', 5001, b.db_name or 'SOFTECHDB9')
+
+    def test_hq_without_host_uses_central(self):
+        from apps.batches.stock_expiry import _node_conn
+        from apps.branches.models import Branch
+        b = Branch.objects.create(softech_branch_id='B78', name='HQ', name_ar='الرئيسي', db_host='')
+        with patch('config.sybase.get_sybase_connection') as central, \
+             patch('config.sybase.get_branch_connection') as gbc:
+            _node_conn(b)
+        central.assert_called_once_with()
+        gbc.assert_not_called()
