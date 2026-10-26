@@ -91,7 +91,7 @@ own `branches` table only (not SOFTECH). Editable in the existing branch setting
 
 ## 5. Data model (`apps/stock_audit`)
 
-**`StockLedgerLine`** — read-only mirror, rolling 180 days (setting `stock_audit_window_days`).
+**`StockLedgerLine`** — read-only mirror, rolling **365 days** (setting `stock_audit_window_days`, owner decision 2026-10-26).
 Natural key (docnumbers collide across branch/doctype — see memory "docnumber collisions"):
 `(node_branch, branchcode, doccode, docnumber, docdate, itemcode, trans_time, line_seq)`, where `line_seq` is
 the ordinal of identical rows inside one sync batch. Upsert by that key, so re-runs are idempotent.
@@ -124,21 +124,21 @@ than 50% (then it is reopened with a note). Findings are never deleted; they age
 
 ---
 
-## 6. The 11 checks — exact definitions and default thresholds
+## 6. The checks (10 active; #8 dropped) — exact definitions and default thresholds
 
 All values are editable chain-wide and per branch. EGP values are at **cost** unless stated otherwise.
 "Line" = one `StockLedgerLine`.
 
 | # | Code | Rule (deterministic) | Default params | Severity |
 |---|---|---|---|---|
-| 1 | `sale_below_cost` | doccode 115; **unit price net of VAT** = `transprice / (1 + additionaldiscp/100)` < `newcostprice` (§14 B). Loss % = (cost − price)/cost; loss EGP = (cost − price) × qty. **Excluded:** credit/contract channels and customers in the `excluded_personcodes` list (free packs), excluded items (insights keywords), qty ≤ 0 | `min_loss_pct=5`, `min_loss_egp=20`, `excluded_personcodes=[]` | warning; **critical** ≥ 30% or ≥ 500 EGP (critical also requires the warning floors) |
+| 1 | `sale_below_cost` | doccode 115; **unit price net of VAT** = `transprice / (1 + additionaldiscp/100)` < `newcostprice` (§14 B). Loss % = (cost − price)/cost; loss EGP = (cost − price) × qty. **Excluded:** credit/contract channels and customers in the `excluded_personcodes` list (free packs), excluded items (insights keywords), qty ≤ 0 | `min_loss_pct=5`, `min_loss_egp=20`, `excluded_personcodes=['4785','4283']` | warning; **critical** ≥ 30% or ≥ 500 EGP (critical also requires the warning floors) |
 | 2 | `duplicate_line` | Same branch, doccode, item, qty, price, and **same expiry**, on two lines whose `trans_time` differs by ≤ N min. Not a duplicate: a 115 and a 30 for the same item/qty (a correction); two lines of one document with different expiries | `window_min=20` | warning |
 | 3 | `price_variance_invoice` | doccode 115; per (branch, docnumber, docdate, item): max/min unit price > ratio. Lines with unit price < floor ignored | `ratio=1.10`, `min_price_egp=1` | info; warning > 1.5 |
 | 4 | `cost_fluctuation` | Purchase unit cost (doccode 10 net line cost) per (item, branch) vs the **previous** purchase of the same item at that branch within N days; change either way | `change_pct=20`, `lookback_days=90` | info; warning > 50% |
 | 5 | `stock_adjustment` | doccodes 50 / 150 / 160 (configurable). Flag (item, branch) with ≥ K entries in N days, **or** a single entry ≥ V EGP. Always produces a per-user ranking (no flag needed) | `doccodes=[50,150,160]`, `count=3`, `days=30`, `single_egp=500` | warning; critical ≥ 2,000 EGP |
 | 6 | `frequent_stockout` | `newqty = 0` after a 115/125/150/180 line; medicine (`medicine_type='10'`); count per (item, branch) in N days; only items with `monthly_qty` ≥ M | `count=3`, `days=30`, `min_monthly_qty=1` | info |
 | 7 | `overstock` | **Link only** → existing purchasing coverage screen, pre-filtered to the branch | — | — |
-| 8 | `backdated_entry` | **ON HOLD — see §14 E.** As defined, it found 0 lines in 180 days. Proposed replacement: *late purchase entry* — supplier invoice date (`s_docdate`) vs entry date on doccode 10, > D days (field to verify in Phase 1) | `days=7` | info; warning > 30 days |
+| 8 | ~~`backdated_entry`~~ | **DROPPED** (owner decision 2026-10-26): it found 0 lines in 180 days because SOFTECH sets `docdate` at save time (§14 E). The number is kept, so the other checks keep their numbers | — | — |
 | 9 | `after_hours_entry` | `trans_time` outside the branch's `working_hours` for that weekday, beyond a grace period. `is_24h` branches skipped. Optional doccode filter | `grace_min=30`, `doccodes=all` | info |
 | 10 | `return_without_invoice` | doccode 30: (a) `r_docnumber` empty/0 → no invoice; (b) Σ returned qty for (branch, r_docnumber, r_docdate, item) > sold qty on that 115 invoice. **`r_doccode` is unreliable (0/blank), so matching always assumes 115** (§14 C). If the original is older than the ledger window, look it up once from SOFTECH (read-only) and cache it | — | warning; **critical** when over-returned |
 | 11 | `adjustment_after_count` | A 50/150 line on an item covered by a stock-count session at that branch within H hours **after** `snapshot_at`, where the adjustment **does not match** the counted variance (different direction, or qty differs by > tolerance, or the item counted as OK). Posting the counted result is normal and is not flagged | `hours=48`, `qty_tolerance=0` | warning |
@@ -190,8 +190,11 @@ New `AuditLog` actions: `stock_audit_rule_changed`, `stock_audit_override_change
 
 **Permissions** — new RBAC module `stock_audit`, enforced server-side:
 - admin / supervisor / quality_manager: view all branches, review, export, edit thresholds (edit = admin + quality_manager).
-- pharmacist (branch manager): view + review **own allowed branches only** (scoped by `StaffProfile`
-  branch access) — *to confirm (Q4)*.
+- **Branch managers:** view + review **their own branches only** (scoped by `StaffProfile` branch access),
+  owner decision 2026-10-26. Granted to **named users only**, not to the whole `pharmacist` role: a new
+  `StockAuditAccess` row (staff, level = branch_manager, granted_by, granted_at, revoked_at) inside
+  `apps/stock_audit` (no change to `users`), managed by admin on the settings tab, and every grant/revoke is
+  written to `AuditLog`. **Shift managers:** maybe later, as a second `level` with the same branch scoping.
 - Everyone else: none.
 
 ---
@@ -204,7 +207,7 @@ New `AuditLog` actions: `stock_audit_rule_changed`, `stock_audit_override_change
   2. «المبيعات والأسعار» — checks 1, 2, 3, 4 (a check selector inside the tab).
   3. «تسويات المخزون» — checks 5 and 11 + per-user adjustment ranking.
   4. «توافر المخزون» — check 6 + a link to coverage/overstock (check 7).
-  5. «التوقيت والإدخال» — checks 8 and 9.
+  5. «التوقيت والإدخال» — check 9.
   6. «المرتجعات» — check 10.
   7. «الإعدادات» — thresholds: chain defaults, a branch-override column, "inherited" shown greyed;
      each save logged with before/after values.
@@ -246,22 +249,28 @@ A daily digest of **new critical** findings to quality manager + supervisor via 
 |---|---|---|
 | **0 — Probe** (read-only) | Ledger row counts per node for 180 days; confirm VAT basis for check 1; confirm `r_docnumber` population on 30 lines; sample free-pack personcodes | none |
 | **1 — Ledger** | `apps/stock_audit` + `StockLedgerLine` + `sync_stock_ledger` + freshness domain | Postgres only |
-| **2 — Engine + thresholds** | Rules/overrides/runs/findings models, engine, checks 1, 2, 3, 5, 8 + workbook parity test | Postgres only |
+| **2 — Engine + thresholds** | Rules/overrides/runs/findings models, engine, checks 1, 2, 3, 5 + workbook parity test | Postgres only |
 | **3 — Screen** | `/stock-audit` tabs, review workflow, settings tab, Excel, help | — |
 | **4 — Remaining checks** | Branch working hours (D3), checks 4, 6, 9, 10, 11, link for 7, digest notification | Postgres only |
 | **5 — Monitoring link** | Finding → employee investigation timeline | — |
 
 ---
 
-## 13. Open questions for the owner
+## 13. Owner decisions and open questions
 
-1. **Free-pack / contract customers for check 1** — Phase 0 found two candidates (§14 D): 4785 «FREE PACKS
-   NOVARTIS» and 4283 «ابونا بسطورس». Which should be excluded?
-2. **Branch working hours** — per-weekday hours for each branch, and which branches are 24 h.
-3. **Ledger window** — volume is small (~3k lines/day), so **365 days is recommended** (≈ 1.1M rows). Findings are kept permanently.
-4. **Branch managers** — should pharmacists see and review their own branch's findings, or only management?
-5. **Check 5 doccodes** — include 160 (write-off) by default, as proposed?
-6. **Check 8** — drop it, or replace it with *late purchase entry* (§14 E)?
+Answered 2026-10-26:
+1. **Free packs (check 1):** exclude both 4785 «FREE PACKS NOVARTIS» and 4283 «ابونا بسطورس» (default
+   `excluded_personcodes`, editable on the settings tab).
+3. **Ledger window:** 365 days.
+4. **Access:** management (admin / supervisor / quality manager) for all branches + branch managers for their
+   own branches; shift managers maybe later.
+6. **Check 8:** dropped.
+
+4a. **Branch managers:** named users only (`StockAuditAccess`, §8).
+5. **Check 5 doccodes:** 50 + 150 + 160 (write-off included).
+
+Still open (not blocking Phases 1–3):
+2. **Branch working hours** — per-weekday hours for each branch, and which branches are 24 h (needed by Phase 4, check 9).
 
 ---
 
