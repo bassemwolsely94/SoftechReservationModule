@@ -8,6 +8,7 @@ import PicSuggestions from '../components/PicSuggestions'
 import PicHistoryModal from '../components/PicHistoryModal'
 import PrescriptionOcrModal from '../components/PrescriptionOcrModal'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import PosImageSearch from '../pos/search/PosImageSearch'
 import QuickSellGrid from '../components/QuickSellGrid'
 import StockLookupDrawer from '../components/StockLookupDrawer'
 import BasketIntelPanel from '../components/BasketIntelPanel'
@@ -37,6 +38,10 @@ export default function POSOrderPage() {
   const [guided, setGuided] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showImg, setShowImg] = useState(false)      // F6 full-screen image search
+  const [imgSeed, setImgSeed] = useState('')
+  const openImages = () => { setImgSeed(document.querySelector('#pos-item-search input')?.value || ''); setShowImg(true) }
+  const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0) }
   const [showUnits, setShowUnits] = useState(false)   // Q shortcut → enter qty in strips/units
   const [stockItem, setStockItem] = useState(null)    // §37 network-stock lookup drawer (Find-Stock)
   // side panels collapse so the item grid gets full width (remembered per-device)
@@ -45,11 +50,11 @@ export default function POSOrderPage() {
   const toggleMode = () => setModeOpen(o => { const n = !o; try { localStorage.setItem('pos_mode_open', n ? '1' : '0') } catch { /* private */ } return n })
   const togglePad = () => setPadOpen(o => { const n = !o; try { localStorage.setItem('pos_pad_open', n ? '1' : '0') } catch { /* private */ } return n })
   // keyboard shortcuts are muted while any modal/overlay owns the screen
-  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || !!P.batchModal || !!P.couponModal || !!P.plan
+  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || showImg || !!P.batchModal || !!P.couponModal || !!P.plan
   const histCustomerId = P.picCustomer?.id || P.customer?.id
   // Q → open the units (strips) entry for the selected line
   const openUnits = () => { if (P.selected >= 0 && P.selected < P.lines.length) setShowUnits(true) }
-  usePosHotkeys(P, { enabled: !modalOpen, onOpenUnits: openUnits })
+  usePosHotkeys(P, { enabled: !modalOpen, onOpenUnits: openUnits, onOpenImages: openImages })
   return (
     <div dir="rtl" className="flex flex-col h-[calc(100vh-3.5rem)] bg-gray-100 text-[13px]">
       <style>{`.inp{width:100%;border:1px solid #d1d5db;border-radius:.3rem;padding:.2rem .4rem;font-size:12px}
@@ -67,7 +72,7 @@ export default function POSOrderPage() {
         <div className="flex-1 flex flex-col bg-white overflow-hidden">
           <Tabs P={P} />
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} />}
+            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenImages={openImages} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} />}
             {P.activeTab === 'payment' && <div className="flex-1 min-h-0 overflow-auto"><PaymentTab P={P} /></div>}
             {P.activeTab === 'contract' && <div className="flex-1 min-h-0 overflow-auto"><ContractTab P={P} /></div>}
           </div>
@@ -84,6 +89,8 @@ export default function POSOrderPage() {
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
+      <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
+                      initialQuery={imgSeed} onPick={P.addItem} />
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
@@ -701,7 +708,7 @@ export function orderedIndices(lines, key = 'entry', dir = 'asc') {
 }
 
 /* ───────────────────────── Items tab ───────────────────────── */
-function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
+function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
   // display-only sort of the line grid (canonical P.lines is untouched → prescription order kept)
   const [sortKey, setSortKey] = useState('entry')
   const [sortDir, setSortDir] = useState('asc')
@@ -754,7 +761,9 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور)" /></div>
+          <button onClick={onOpenImages} title="بحث بالصور (F6)" data-tour="pos-order-image-search"
+                  className="px-2 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 self-start mt-1 h-[34px] flex items-center"><Icon name="image" size={16} /></button>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
                   className="px-2 rounded text-white text-xs whitespace-nowrap self-start mt-1" style={{ background: '#022871' }}>📷🎤 ذكي</button>
           {Object.values(P.suggest.map || {}).some(v => v != null) &&
@@ -1109,6 +1118,7 @@ const POS_SHORTCUTS = [
   ['Ctrl+F2/3', 'نقدى / توصيل'],
   ['Ctrl+F1', 'بحث متقدم'],
   ['Ctrl+K', 'بحث شامل'],
+  ['F6', 'بحث بالصور'],
   ['F9', 'معاينة الإرسال'],
   ['F10', 'إرسال فعلي (عند التفعيل)'],
 ]

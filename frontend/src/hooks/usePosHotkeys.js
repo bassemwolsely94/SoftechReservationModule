@@ -9,6 +9,7 @@ import { useEffect } from 'react'
  *    Ctrl+F4 closes the tab, Ctrl+1…8 switch tabs — confirmed clashing on the cashier PCs
  *    2026-10-07. Contract channel and tabs are by mouse until an alternative is chosen.)
  *   F2            → focus the item-search box (add a line — SOFTECH types in the empty row)
+ *   F6            → full-screen image search (PosImageSearch)
  *   F4 / Delete   → delete the selected line
  *   F9            → preview the send (dry-run — never writes to SOFTECH)
  *   F10           → live send to the cashier (only when the writer is enabled)
@@ -23,7 +24,7 @@ const isEditable = (el) => {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }
 
-export default function usePosHotkeys(P, { enabled = true, onOpenUnits } = {}) {
+export default function usePosHotkeys(P, { enabled = true, onOpenUnits, onOpenImages } = {}) {
   useEffect(() => {
     if (!enabled) return
     const onKey = (e) => {
@@ -53,6 +54,11 @@ export default function usePosHotkeys(P, { enabled = true, onOpenUnits } = {}) {
         e.preventDefault()
         P.setActiveTab('items')
         setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0)
+        return
+      }
+      if (k === 'F6' && onOpenImages) {       // image search grid
+        e.preventDefault()
+        onOpenImages()
         return
       }
       if (k === 'F4') {                       // delete the selected line
@@ -85,5 +91,5 @@ export default function usePosHotkeys(P, { enabled = true, onOpenUnits } = {}) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, onOpenUnits, P.selected, P.lines.length, P.busy, P.setCustType, P.setActiveTab, P.removeLine, P.setSelected, P.submit, P.ref])
+  }, [enabled, onOpenUnits, onOpenImages, P.selected, P.lines.length, P.busy, P.setCustType, P.setActiveTab, P.removeLine, P.setSelected, P.submit, P.ref])
 }

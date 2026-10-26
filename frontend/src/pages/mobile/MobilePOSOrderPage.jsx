@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
+import PosImageSearch from '../../pos/search/PosImageSearch'
+import { Icon } from '../../pos/design'
 import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
 import PicHistoryModal from '../../components/PicHistoryModal'
 import CustomerMomentBar from '../../components/CustomerMomentBar'
@@ -28,6 +30,10 @@ export default function MobilePOSOrderPage() {
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
+  const [showImg, setShowImg] = useState(false)   // full-screen image search
+  const [imgSeed, setImgSeed] = useState('')
+  const openImages = () => { setImgSeed(document.querySelector('[data-tour="pos-mobile-search"] input')?.value || ''); setShowImg(true) }
+  const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('[data-tour="pos-mobile-search"] input')?.focus(), 0) }
   const [showHistory, setShowHistory] = useState(false)
   const [guided, setGuided] = useState(false)
   const [unitsIdx, setUnitsIdx] = useState(-1)   // line index whose Q (units) sheet is open
@@ -101,7 +107,11 @@ export default function MobilePOSOrderPage() {
 
       {/* product search + barcode + favorites */}
       <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
-        <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" />
+        <div className="flex gap-2 items-start">
+          <div className="flex-1 min-w-0"><ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" /></div>
+          <button onClick={openImages} title="بحث بالصور" aria-label="بحث بالصور"
+                  className="px-3 py-2 rounded border border-gray-300 bg-white text-gray-600 shrink-0"><Icon name="image" size={18} /></button>
+        </div>
         <div className="flex gap-2">
           <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
                  onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
@@ -378,6 +388,8 @@ export default function MobilePOSOrderPage() {
 
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
+      <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
+                      initialQuery={imgSeed} onPick={P.addItem} />
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}

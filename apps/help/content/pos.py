@@ -118,10 +118,10 @@ MODULE = {
 _TABS = [
     {'key': 'items', 'title': T('الأصناف', 'Items'),
      'body': T('جدول الأصناف بنفس أعمدة SOFTECH: الكود، الصنف، الكمية، العبوة (علبة/شريط)، السعر، الخصم %، الضريبة، الصافي، رصيد متاح، رصيد صلاحية، وتاريخ الصلاحية ورقم الباتش. '
-               'F2 للبحث وإضافة صنف (بالاسم أو الكود أو الباركود)، Q لإدخال الكمية بالشرائط/الوحدات، F4 أو Delete لحذف السطر. اختر التشغيلة من نافذة الباتشات (الأقرب انتهاءً أولاً). '
+               'F2 للبحث وإضافة صنف (بالاسم أو الكود أو الباركود)، F6 «بحث بالصور» لاختيار الصنف من شبكة صور، Q لإدخال الكمية بالشرائط/الوحدات، F4 أو Delete لحذف السطر. اختر التشغيلة من نافذة الباتشات (الأقرب انتهاءً أولاً). '
                'لو ظهر «خصم مقترح» اضغط لتطبيقه. يمكن إضافة الأصناف من صورة الروشتة (OCR) أو من سجل معاملات العميل، ويظهر «يُشترى معه عادةً».',
                'The items grid with the same columns as SOFTECH: code, item, quantity, pack (box/strip), price, discount %, VAT, net, available stock, expiry stock, expiry date and batch. '
-               'F2 to search and add an item (name, code or barcode), Q to enter quantity in strips/units, F4 or Delete to remove the line. Pick the batch in the batch window (nearest expiry first). '
+               'F2 to search and add an item (name, code or barcode), F6 "Image search" to pick from a picture grid, Q to enter quantity in strips/units, F4 or Delete to remove the line. Pick the batch in the batch window (nearest expiry first). '
                'If a "suggested discount" appears, click to apply it. Items can be added from a prescription photo (OCR) or the customer\'s history, and "often bought with" is shown.')},
     {'key': 'payment', 'title': T('السداد', 'Payment'),
      'body': T('طرق السداد: نقدى أو آجل فقط (تفاصيل الفيزا والشيك تُسجل على شاشة الكاشير في SOFTECH). المدفوع يجب أن يساوي الصافي؛ النظام يعرض «متبقٍّ» أو «فكة». خصم الفكة له حد أقصى 0.50 جنيه.',
@@ -195,6 +195,12 @@ SCREENS = [
                        'Green available, amber low, red zero. ↑↓ move, Enter add, → preview, Esc close. "Stock N min ago" turns amber after 30 min.'),
              'open_hint': T('لو الرصيد هنا صفر: «تحويل من …» (تبويب جديد) أو «تسجيل طلب» لو الشبكة صفر (يحتاج عميل بهاتف)، و«حجز».',
                             'Zero stock here: "Transfer from …" (new tab), or "Record demand" if the network is zero (needs a customer with a phone), plus "Reserve".')},
+            {'target': 'pos-order-image-search', 'label': T('بحث بالصور / Image search (F6)', 'Image search (F6)'),
+             'text': T('شبكة صور بملء الشاشة (5 أعمدة): الصورة والاسم والتركيز ورصيد «هنا» وأفضل فرع آخر. صندوق البحث بيبدأ بما كتبته.',
+                       'A full-screen picture grid (5 columns): image, name and strength, «here» stock and the best other branch. Its search box starts with what you typed.'),
+             'when': T('لما الاسم مش كفاية وعايز تميّز الصنف بشكل العبوة.', 'When the name is not enough and you recognise the item by its pack.'),
+             'open_hint': T('اضغط الصنف (أو Enter لأول صنف) فيتضاف ويرجع المؤشر لخانة البحث. Esc للإغلاق.',
+                            'Click an item (or Enter for the first) to add it; focus returns to the search box. Esc closes.')},
             {'target': 'pos-order-lines', 'label': T('جدول الأصناف', 'Item grid'),
              'text': T('عدّل الكمية مكانها، Q للكمية بالشرائط، F4 أو Del للحذف، ↑↓ للتنقل.',
                        'Edit quantities in place, Q for strips, F4 or Del to delete, ↑↓ to move.'),
@@ -266,7 +272,7 @@ SCREENS = [
             {'target': 'pos-mobile-customer', 'label': T('نوع العميل والعميل', 'Customer type and customer'),
              'text': T('اختار النوع والعميل، أو سيبه عميل نقدي.', 'Choose the type and customer, or leave it a cash customer.')},
             {'target': 'pos-mobile-search', 'label': T('بحث · 📷 · 🎤', 'Search · 📷 · 🎤'),
-             'text': T('ابحث بالاسم أو الكود، أو امسح الباركود بالكاميرا، أو قول اسم الصنف.', 'Search by name or code, scan the barcode with the camera, or say the item name.')},
+             'text': T('ابحث بالاسم أو الكود، أو امسح الباركود، أو قول اسم الصنف. 🖼 جنب البحث يفتح شبكة صور.', 'Search by name or code, scan the barcode, or say the item name. 🖼 beside the search opens a picture grid.')},
             {'target': 'pos-mobile-cart', 'label': T('السلة', 'Basket'),
              'text': T('الأصناف اللي ضفتها — عدّل الكمية أو احذف من هنا.', 'The items you added — change the quantity or delete here.')},
             {'target': 'pos-mobile-totals', 'label': T('الإجمالي · الخصم · الصافي', 'Gross · discount · net'),
