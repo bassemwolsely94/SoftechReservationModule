@@ -175,7 +175,7 @@ function BacktestPanel({ canEdit }) {
   )
 }
 
-const REF_LABELS = { cash_delivery: 'نقدى+توصيل', credit: 'آجل', gross_profit: 'ربحية', customer_count: 'عملاء', beauty: 'تجميل', call_count: 'مكالمات' }
+const REF_LABELS = { cash_delivery: 'نقدى+توصيل', credit: 'آجل', gross_profit: 'ربحية', customer_count: 'عملاء', beauty: 'تجميل', call_count: 'مكالمات', pic_count: 'عملاء (PIC)' }
 
 function ReferencesPanel({ canEdit }) {
   const qc = useQueryClient()

@@ -32,7 +32,7 @@ Q2 = Decimal('0.01')
 # Owner-tunable per metric via SystemSetting 'kpi_round_step_<metric>'.
 ROUND_STEP_DEFAULTS = {
     'cash_delivery': 5000, 'credit': 5000, 'gross_profit': 5000,
-    'customer_count': 50, 'beauty': 2500,
+    'customer_count': 50, 'beauty': 2500, 'pic_count': 50,
 }
 
 
@@ -79,7 +79,12 @@ def _shift_month(year, month, delta):
 class ForecastEngine:
     # Metrics generated (mirror the KPI board set). call_count = Call-Center only;
     # branches have no call history so those rows are skipped (see generate()).
-    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty', 'call_count']
+    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty',
+               'call_count', 'pic_count']
+    # Generated for the Call-Center member only: branches have no rollup for these
+    # (the board shows them in the CC block only), so a branch would hit the slow
+    # live resolver and get a target nobody sees.
+    CC_ONLY_METRICS = {'pic_count'}
 
     # Validated v2 defaults: growth_goal + blend weights (w_lm, w_pm, w_yoy).
     DEFAULT_FACTORS = {
@@ -89,6 +94,7 @@ class ForecastEngine:
         'gross_profit':   (Decimal('0.15'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
         'customer_count': (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
         'call_count':     (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
+        'pic_count':      (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
     }
 
     def __init__(self):
@@ -229,6 +235,8 @@ class ForecastEngine:
             f = factors[metric]
             fbench = f.benchmark if f.benchmark is not None else bench   # per-metric YoY, else global
             for mem in members:
+                if metric in self.CC_ONLY_METRICS and mem['key'] != 'CC':
+                    continue
                 base = self._member_actual(mem, by, bm, metric)
                 lmv  = self._member_actual(mem, ly, lm, metric)
                 pmv  = self._member_actual(mem, py, pm, metric)

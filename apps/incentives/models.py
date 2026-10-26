@@ -552,12 +552,16 @@ class SalesTarget(models.Model):
         ('gross_profit',  'معامل الربحية (ج.م)'),
         ('beauty',        'التجميل (ج.م)'),
         ('customer_count', 'عدد العملاء'),
+        ('pic_count',     'عدد العملاء (PIC)'),
+        ('call_count',    'عدد المكالمات'),
     ]
     # Metrics whose actuals come from the KPI channel-bucket resolver (doc 16).
     KPI_RESOLVER_METRICS = {
         'cash_delivery', 'cash', 'delivery', 'regular', 'credit',
-        'insurance', 'gross_profit', 'customer_count', 'beauty',
+        'insurance', 'gross_profit', 'customer_count', 'beauty', 'pic_count',
     }
+    # Metrics with no PurchaseHistory source — actuals read from KpiActualRollup (CDR).
+    ROLLUP_ONLY_METRICS = {'call_count'}
 
     label        = models.CharField(max_length=120, blank=True, verbose_name='الاسم')
     scope_type   = models.CharField(max_length=12, choices=SCOPE_CHOICES, default=SCOPE_BRANCH)
@@ -608,6 +612,15 @@ class SalesTarget(models.Model):
                 start=self.period_start, end=self.period_end,
                 softech_user=softech_user, category_id=category_id,
             ))
+        if self.metric in self.ROLLUP_ONLY_METRICS:
+            from apps.forecasting.models import KpiActualRollup
+            qs = KpiActualRollup.objects.filter(metric=self.metric).filter(
+                year__gte=self.period_start.year, year__lte=self.period_end.year)
+            if self.scope_type == self.SCOPE_BRANCH and self.branch_id:
+                qs = qs.filter(branch_id=self.branch_id)
+            lo = (self.period_start.year, self.period_start.month)
+            hi = (self.period_end.year, self.period_end.month)
+            return float(sum(r.value for r in qs if lo <= (r.year, r.month) <= hi))
 
         ph = self._actuals_qs()
         if self.metric == self.METRIC_ORDERS:

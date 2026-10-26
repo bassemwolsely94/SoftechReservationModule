@@ -276,7 +276,8 @@ class KpiBoardView(APIView):
     # Call-center KPI set (sales / profit / beauty / orders / calls).
     CC_METRICS = [
         KpiActualRollup.M_CASH_DELIVERY, KpiActualRollup.M_GROSS_PROFIT,
-        KpiActualRollup.M_BEAUTY, KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_CALL_COUNT,
+        KpiActualRollup.M_BEAUTY, KpiActualRollup.M_CUSTOMERS,
+        KpiActualRollup.M_PIC_COUNT, KpiActualRollup.M_CALL_COUNT,
     ]
 
     def _call_center_block(self, year, month, cell, m_start, m_end):
@@ -292,13 +293,14 @@ class KpiBoardView(APIView):
         tgt = {t['metric']: (float(t['target_value'] or 0), t['id']) for t in SalesTarget.objects.filter(
             scope_type=SalesTarget.SCOPE_BRANCH, branch=cc, metric__in=self.CC_METRICS,
             period_start__lte=m_end, period_end__gte=m_start).values('id', 'metric', 'target_value')}
-        # CC labels: "customers" here means order count; keep generic labels + is_count.
+        # CC labels: M_CUSTOMERS = order count; M_PIC_COUNT = distinct customers (PIC).
         cc_labels = dict(KpiActualRollup.METRIC_LABELS)
         cc_labels[KpiActualRollup.M_CUSTOMERS] = 'عدد الطلبات'
+        cc_labels[KpiActualRollup.M_PIC_COUNT] = 'عدد العملاء'
+        count_metrics = (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_PIC_COUNT, KpiActualRollup.M_CALL_COUNT)
         return {
             'branch_id': cc.id,
-            'metrics': [{'key': m, 'label': cc_labels.get(m, m),
-                         'is_count': m in (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_CALL_COUNT)}
+            'metrics': [{'key': m, 'label': cc_labels.get(m, m), 'is_count': m in count_metrics}
                         for m in self.CC_METRICS],
             'cells': {m: cell(actual.get(m, 0.0), *tgt.get(m, (0.0, None))) for m in self.CC_METRICS},
         }

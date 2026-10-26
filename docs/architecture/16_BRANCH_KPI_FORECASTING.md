@@ -276,6 +276,11 @@ These reuse the rollup + factor engine; no separate pipeline.
    `{10,12,15}` (calls) decoded from owner files; `CallCenterConfig`, `callcount.py`,
    `config/issabel.py`, `build_call_center_rollups`; CC section on the KPI board. CC targets =
    `SalesTarget` scope=branch on the "Call Center" branch. Validated vs workbook.
+   - 2026-10-26: CC «عدد العملاء» (`pic_count`) + «عدد المكالمات» (`call_count`) added to
+     `SalesTarget.METRIC_CHOICES` (migration incentives/0011 — inline board edit was rejected);
+     `call_count` actual reads `KpiActualRollup` (`ROLLUP_ONLY_METRICS`). The scenario engine now
+     generates `pic_count` — **CC member only** (`ForecastEngine.CC_ONLY_METRICS`; branches have
+     no `pic_count` rollup and the board never shows it for them); round step 50.
 6. **Phase 6 — Salesperson & category scopes.** ✅ BUILT (2026-07-29). Targets + forecast
    per salesperson & category (not new analytics — `apps/analytics` already has those dashboards).
    Resolver `category_id`/`softech_user`; `ForecastScenario.scope_type`; scope-aware commit; UI selector.

@@ -485,3 +485,65 @@ class GuardrailTests(TestCase):
                                        operator='lt', threshold=Decimal('0'))
         res = evaluate_guardrails('chain', date(2026, 5, 1), date(2026, 5, 31))
         self.assertFalse(res['passed'])
+
+
+class KpiBoardCallCenterTargetSaveTests(TestCase):
+    """KPI board inline edit on the call-center «عدد العملاء» (pic_count) and
+    «عدد المكالمات» (call_count) columns — both were rejected by SalesTarget.metric
+    choices, so the edit never saved."""
+
+    def setUp(self):
+        from apps.tests.factories import make_user
+        self.cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False)
+        _, _, self.client = make_user('kpi_admin', role='admin', access_all=True)
+
+    def _post(self, metric, value):
+        return self.client.post('/api/incentives/targets/', {
+            'scope_type': 'branch', 'branch': self.cc.id, 'metric': metric,
+            'period_start': '2026-10-01', 'period_end': '2026-10-31', 'target_value': value,
+        }, format='json')
+
+    def test_pic_count_target_saves_and_shows_on_board(self):
+        KpiActualRollup.objects.create(branch=self.cc, year=2026, month=10,
+                                       metric=KpiActualRollup.M_PIC_COUNT, value=Decimal('399'))
+        r = self._post('pic_count', 500)
+        self.assertEqual(r.status_code, 201, r.content)
+        board = self.client.get('/api/forecasting/kpi-board/?year=2026&month=10').json()
+        cell = board['call_center']['cells']['pic_count']
+        self.assertEqual(cell['target'], 500)
+        self.assertIsNotNone(cell['target_id'])
+
+    def test_call_count_target_saves_and_actual_reads_rollup(self):
+        from apps.incentives.models import SalesTarget
+        KpiActualRollup.objects.create(branch=self.cc, year=2026, month=10,
+                                       metric=KpiActualRollup.M_CALL_COUNT, value=Decimal('1639'))
+        r = self._post('call_count', 2200)
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(SalesTarget.objects.get(pk=r.json()['id']).actual_value(), 1639.0)
+
+
+class ForecastEnginePicCountTests(TestCase):
+    """«اعتمد من سيناريو» generates the Call-Center «عدد العملاء» (pic_count) target,
+    and only for the CC member — branches never get one."""
+
+    def test_pic_count_target_committed_for_cc_only(self):
+        from datetime import date
+        from apps.forecasting.engine import ForecastEngine
+        from apps.forecasting.models import ForecastScenario, ForecastResult
+        from apps.incentives.models import SalesTarget
+        br = Branch.objects.create(softech_branch_id='997', code='997', name='PB', is_operational=True)
+        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False)
+        for b in (br, cc):            # a branch pic_count rollup must still be ignored
+            for (y, m, v) in [(2025, 9, 400), (2026, 8, 450), (2026, 7, 420)]:
+                KpiActualRollup.objects.create(branch=b, year=y, month=m,
+                                               metric='pic_count', value=Decimal(v))
+        sc = ForecastScenario.objects.create(name='p', year=2026, month=9, model='a',
+                                             incentive_threshold=Decimal('0.90'))
+        eng = ForecastEngine()
+        eng.generate(sc)
+        self.assertFalse(ForecastResult.objects.filter(scenario=sc, metric='pic_count')
+                         .exclude(scope_key='CC').exists())
+        eng.commit(sc)
+        t = SalesTarget.objects.get(branch=cc, metric='pic_count', period_start=date(2026, 9, 1))
+        self.assertEqual(float(t.target_value), 500.0)     # 400×1.10÷0.90 = 488.9 → step 50 up
+        self.assertFalse(SalesTarget.objects.filter(branch=br, metric='pic_count').exists())
