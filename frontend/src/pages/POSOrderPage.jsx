@@ -55,7 +55,7 @@ export default function POSOrderPage() {
   const toggleMode = () => setModeOpen(o => { const n = !o; try { localStorage.setItem('pos_mode_open', n ? '1' : '0') } catch { /* private */ } return n })
   const togglePad = () => setPadOpen(o => { const n = !o; try { localStorage.setItem('pos_pad_open', n ? '1' : '0') } catch { /* private */ } return n })
   // keyboard shortcuts are muted while any modal/overlay owns the screen
-  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || showImg || !!P.batchModal || !!P.couponModal || !!P.plan
+  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || showImg || !!altItem || !!P.batchModal || !!P.couponModal || !!P.plan
   const histCustomerId = P.picCustomer?.id || P.customer?.id
   // Q → open the units (strips) entry for the selected line
   const openUnits = () => { if (P.selected >= 0 && P.selected < P.lines.length) setShowUnits(true) }
