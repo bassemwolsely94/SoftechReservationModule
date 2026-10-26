@@ -16,7 +16,7 @@ class CaseListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReplacementCase
         fields = ['id', 'number', 'source_type', 'source_label', 'status', 'status_label',
-                  'settlement_mode', 'mode_label', 'origin', 'branchcode', 'branch_name',
+                  'settlement_mode', 'mode_label', 'origin', 'branch', 'branchcode', 'branch_name',
                   'softech_pic', 'patient_name', 'contract_personcode', 'supplier_personcode',
                   'supplier_name', 'purchase_docnumber', 'purchase_date', 'public_value',
                   'contract_value', 'entitlement', 'applied_deduction_pct', 'supplier_tier_pct',

@@ -651,6 +651,25 @@ differs only on the accepted `storecode2`/`promtype` variant.
 6. Rollback = remove `'130'` from the branch list (instant); posted documents are corrected natively by a
    supplier return, never deleted.
 
+## 22. B2 — balance in Customer 360 / POS, and funding a POS order (built 2026-10-26)
+
+One service, `apps/replacement/redemption.py`; no second balance — every figure is `legs.available()`.
+
+| Piece | Behaviour |
+|---|---|
+| `patient_balance(pic, staff, branch_id)` | Live cases with a posted/linked purchase, products or mixed, available > 0, inside the viewer's branches → `total_available` (redeemable at `branch_id` only) + per-case rows; reconstructed open balances shown as `historical` (count, amount) **for review only** (their patient is a matcher's guess). `None` without the replacement «view» right. |
+| Customer 360 | `GET /customers/{id}/pos-summary/?branch=` adds `replacement` for allowed staff only (owner D14: never printed for the patient). Shown in the Customer-360 drawer («رصيد البدل», branch-labelled, links to the cases) and as a «رصيد بدل» chip in the POS customer strip (`CustomerMomentBar`, desktop + mobile, this branch only). |
+| `fund_order(order, user, case_ids?)` | Cash / delivery POS order, not settled/cancelled, on a PIC; cases: same branch, live, not cash-only, `post` right; oldest first or the named order; top-up ≤ `MAX_TOPUP_PCT` of the pool. Creates one `PostingOperation` per case (`{case}:pos:{order}`, `result.from_pos`) — the same record a workspace product order uses. **The order's lines, prices and tenders are not touched.** Idempotent. `legs.post` refuses a POS-funded op (the POS pushes the order). |
+| `unfund_order(order, reason)` | Cancels the ops (reason required) until the cashier settles; after that a correction is a return (B4). |
+| Verification | Unchanged path: when the cashier settles, the reconciler sets `softech_final_docnumber`; `reconstruct._own_receipts` owns the receipt; the سداد voucher marks the op `posted_verified`. |
+| API | `GET patient-balance/`, `GET patient-orders/` (open fundable orders + who funds them), `POST fund-order/`, `POST unfund-order/` under `/api/replacement/cases/`; orders outside the viewer's branches → 404. |
+| UI | Case workspace → product leg: «تمويل من الرصيد» / «إلغاء التمويل» per open POS order of the patient (no modal). |
+
+Not built (stop-and-ask, CLAUDE.md: checkout): a «fund from بدل» switch inside the POS submit flow itself, which
+would let the cashier fund while selling instead of from the case page.
+
+Tests: `apps/tests/test_replacement_redemption.py` (8). 122 replacement tests + customer pos-summary tests green.
+
 ### 16.3 Owner answers 2026-10-26
 
 | # | Decision |

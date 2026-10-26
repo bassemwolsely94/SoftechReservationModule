@@ -131,7 +131,7 @@ export default function MobilePOSOrderPage() {
           </div>
         )}
         {/* intelligence layer — same as desktop (customer context · suggestions · offers · opportunities) */}
-        {histCustomerId && <CustomerMomentBar customerId={histCustomerId} />}
+        {histCustomerId && <CustomerMomentBar customerId={histCustomerId} branchId={P.branch} />}
         <PicSuggestions P={P} />
         <OffersPanel P={P} />
         <BasketIntelPanel itemCodes={P.lines.map(l => l.softech_itemcode).filter(Boolean)}

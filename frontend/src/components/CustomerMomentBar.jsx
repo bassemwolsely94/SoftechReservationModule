@@ -20,24 +20,27 @@ const SEG = {
   new:     'bg-sky-100 text-sky-700 border-sky-200',
 }
 
-export default function CustomerMomentBar({ customerId }) {
+export default function CustomerMomentBar({ customerId, branchId }) {
   const [s, setS] = useState(null)
   useEffect(() => {
     if (!customerId) { setS(null); return }
     let alive = true
-    customersApi.posSummary(customerId)
+    customersApi.posSummary(customerId, branchId ? { branch: branchId } : {})
       .then(({ data }) => { if (alive) setS(data) })
       .catch(() => { if (alive) setS(null) })
     return () => { alive = false }
-  }, [customerId])
+  }, [customerId, branchId])
 
   if (!s) return null
   const crm = s.crm || {}, health = s.health || {}, loy = s.loyalty || {}
+  // بدل الروشتة balance — present only for staff allowed to see it (server-side); never printed
+  const rep = s.replacement
+  const repHere = rep ? Number(rep.total_available || 0) : 0
   // Stay calm (rule 11): only surface when there's real intelligence — never a bare
   // name strip for an anonymous walk-in.
   const hasSignal = crm.segment || crm.churn_segment || loy.enrolled ||
     health.is_chronic || (health.allergies?.length > 0) || health.pregnancy || health.lactation ||
-    (Number(crm.ltv) > 0)
+    (Number(crm.ltv) > 0) || repHere > 0
   if (!hasSignal) return null
   const days = crm.days_since_last_visit
   const atRisk = ['at_risk', 'dormant'].includes(crm.churn_segment)
@@ -64,6 +67,11 @@ export default function CustomerMomentBar({ customerId }) {
       {crm.ltv != null && Number(crm.ltv) > 0 && <MetricChip icon="trending" label="قيمة العميل" value={money(crm.ltv)} />}
       {days != null && <MetricChip icon="clock" label="آخر زيارة" value={`${days} يوم`} />}
       {dueRepeat && <Badge meaning="repeat" size="sm" label="حان وقت التكرار" title="مرّ وقت كافٍ على آخر شراء" />}
+      {repHere > 0 && (
+        <span title={`${rep.cases.filter((c) => c.redeemable_here).map((c) => c.number).join('، ')} — يُموَّل الطلب من صفحة الحالة (لا يُطبع للعميل)`}>
+          <MetricChip icon="repeat" label="رصيد بدل" value={money(repHere)} tone="ok" />
+        </span>
+      )}
 
       {/* SAFETY — never buried under an upsell (rule 4) */}
       {health.is_chronic && <Badge tone="ok" icon="pill" size="sm" label="مزمن" title="مريض مزمن" />}

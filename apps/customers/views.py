@@ -256,7 +256,19 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='pos-summary')
     def pos_summary(self, request, pk=None):
         from .pos_summary import build_pos_summary
-        return Response(build_pos_summary(self.get_object()))
+        customer = self.get_object()
+        data = build_pos_summary(customer)
+        # بدل الروشتة balance — staff with the replacement «view» right only, never printed for the
+        # patient (owner D14). ?branch= marks what is redeemable at this POS. Non-fatal.
+        try:
+            from apps.replacement.redemption import patient_balance
+            bal = patient_balance(customer.softech_pic, staff=getattr(request.user, 'staff_profile', None),
+                                  branch_id=request.query_params.get('branch') or None)
+            if bal and (bal['cases'] or bal['historical']['count']):
+                data['replacement'] = bal
+        except Exception:
+            pass
+        return Response(data)
 
     # ── GET /api/customers/{id}/receipt/?invoice=  ·  POST .../receipt/ {channel}
     # Unified digital receipt payload + channel delivery (honest stubs).

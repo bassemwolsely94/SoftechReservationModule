@@ -153,7 +153,7 @@ export const customersApi = {
   // Recognize-on-type for the POS customer field (+ duplicate surfacing)
   recognize:  (q, opts = {}) => api.get('/customers/recognize/', { params: { q, ...opts } }),
   // Compact Customer-360 for the POS side-drawer
-  posSummary: (id) => api.get(`/customers/${id}/pos-summary/`),
+  posSummary: (id, params = {}) => api.get(`/customers/${id}/pos-summary/`, { params }),
   // Revalidated repeat-order proposal (never blind-copy). opts: { branch, invoice }
   repeatOrder: (id, opts = {}) => api.get(`/customers/${id}/repeat-order/`, { params: opts }),
   // Digital receipt payload + channel send (whatsapp/sms/email/print; honest stubs)
@@ -2726,6 +2726,10 @@ export const replacementApi = {
   // Phase 1 — live workflow. Every mutating call sends the case `version` (409 = stale screen).
   create:          (data)        => api.post('/replacement/cases/', data),
   patientSales:    (params)      => api.get('/replacement/cases/patient-sales/', { params }),
+  patientBalance:  (params)      => api.get('/replacement/cases/patient-balance/', { params }),
+  patientOrders:   (params)      => api.get('/replacement/cases/patient-orders/', { params }),
+  fundOrder:       (data)        => api.post('/replacement/cases/fund-order/', data),
+  unfundOrder:     (data)        => api.post('/replacement/cases/unfund-order/', data),
   setItems:        (id, data)    => api.post(`/replacement/cases/${id}/items/`, data),
   calculate:       (id, data)    => api.post(`/replacement/cases/${id}/calculate/`, data),
   submit:          (id, data)    => api.post(`/replacement/cases/${id}/submit/`, data),

@@ -760,7 +760,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
       <div className="shrink-0 px-2 pt-2">
         {custId && (
           <div className="mb-2 flex items-start gap-2">
-            <div className="flex-1"><CustomerMomentBar customerId={custId} /></div>
+            <div className="flex-1"><CustomerMomentBar customerId={custId} branchId={P.branch} /></div>
             {onOpenHistory && (
               <button onClick={onOpenHistory} title="سجل معاملات العميل السابقة (كل الفواتير)"
                       className="shrink-0 self-center text-[11px] px-2 py-1 rounded border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 whitespace-nowrap">📜 السجل</button>

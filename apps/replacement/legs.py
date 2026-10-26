@@ -405,6 +405,8 @@ def post(case_id, op_id, *, user, version, force=False, request=None) -> Op:
     op = Op.objects.select_for_update().get(op_id=op_id, case=case)
     if (op.result or {}).get('native'):
         raise ValidationError('هذا المستند مُدخل يدوياً في SOFTECH — لا يُرحّل من المنصة (أعد ربطه إن كان الرقم خطأ).')
+    if (op.result or {}).get('from_pos'):
+        raise ValidationError('طلب نقطة البيع يُرسَل للكاشير من شاشة البيع نفسها — الحالة تموّله فقط.')
     if op.status in (Op.ST_POSTED, Op.ST_VERIFIED):
         return op
     if op.status in (Op.ST_CANCELLED, Op.ST_POSTING):

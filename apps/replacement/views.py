@@ -321,6 +321,83 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         return self._step(request, pk, lambda case_id, **kw: LG.post(case_id, op_id, **kw),
                           force=bool(request.data.get('force')))
 
+    # ── B2: balance in Customer 360 / POS, and funding a POS order from it ────
+    def _call(self, fn, render):
+        """Same error mapping as _do, for services that do not return a case."""
+        try:
+            return Response(render(fn()))
+        except ValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        except PermissionDenied as e:
+            return Response({'detail': str(e) or 'غير مسموح.'}, status=status.HTTP_403_FORBIDDEN)
+
+    def _scoped_order(self, request, order_id):
+        """The POS order, only inside the viewer's branches (404 outside — same rule as cases)."""
+        from apps.pos_orders.models import SoftechSalesOrder
+        qs = SoftechSalesOrder.objects.filter(pk=order_id)
+        staff = _staff(request)
+        ids = staff.accessible_branch_ids if staff and not request.user.is_superuser else None
+        if staff is None and not request.user.is_superuser:
+            return None
+        return (qs if ids is None else qs.filter(branch_id__in=ids)).first()
+
+    @action(detail=False, methods=['get'], url_path='patient-balance')
+    def patient_balance(self, request):
+        """GET ?pic=&branch= — the patient's redeemable بدل balance (live cases) + historical open, for staff."""
+        from . import redemption
+        out = redemption.patient_balance(request.query_params.get('pic'), staff=_staff(request),
+                                         branch_id=request.query_params.get('branch') or None)
+        return Response(out or {'total_available': '0', 'cases': [], 'historical': {'count': 0, 'amount': '0'}})
+
+    @action(detail=False, methods=['get'], url_path='patient-orders')
+    def patient_orders(self, request):
+        """GET ?pic=&branch= — the patient's open POS cash / delivery orders that can still be funded."""
+        from apps.pos_orders.models import SoftechSalesOrder
+        from . import redemption
+        pic = (request.query_params.get('pic') or '').strip()
+        if not pic:
+            return Response({'results': []})
+        qs = SoftechSalesOrder.objects.filter(softech_pic__iexact=pic, channel__in=['cash', 'delivery'],
+                                              status__in=redemption.FUNDABLE_ORDER_STATUSES)
+        if request.query_params.get('branch'):
+            qs = qs.filter(branch_id=request.query_params['branch'])
+        staff = _staff(request)
+        ids = staff.accessible_branch_ids if staff and not request.user.is_superuser else None
+        if ids is not None:
+            qs = qs.filter(branch_id__in=ids)
+        rows = []
+        for o in qs.order_by('-id')[:20]:
+            funded = redemption.order_funding(o)
+            rows.append({'id': o.pk, 'channel': o.channel, 'status': o.status, 'status_label': o.get_status_display(),
+                         'created_at': o.created_at, 'total': str(redemption.order_total(o)),
+                         'lines': o.lines.count(),
+                         'funded_by': [{'case': op.case.number, 'case_id': op.case_id,
+                                        'amount': str(op.expected_value)} for op in funded]})
+        return Response({'results': rows})
+
+    @action(detail=False, methods=['post'], url_path='fund-order')
+    def fund_order(self, request):
+        """POST {order, cases?:[id…]} — fund a POS order from the patient's live balance."""
+        from . import redemption
+        if self._scoped_order(request, request.data.get('order')) is None:
+            return Response({'detail': 'الطلب غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+        return self._call(
+            lambda: redemption.fund_order(int(request.data['order']), user=_staff(request),
+                                          case_ids=request.data.get('cases') or None, request=request),
+            lambda ops: {'funded': [{'case': op.case.number, 'case_id': op.case_id, 'amount': str(op.expected_value),
+                                     'topup': op.result.get('customer_topup', '0')} for op in ops]})
+
+    @action(detail=False, methods=['post'], url_path='unfund-order')
+    def unfund_order(self, request):
+        """POST {order, reason} — release the balance reserved on an unsettled POS order."""
+        from . import redemption
+        if self._scoped_order(request, request.data.get('order')) is None:
+            return Response({'detail': 'الطلب غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+        return self._call(
+            lambda: redemption.unfund_order(int(request.data['order']), user=_staff(request),
+                                            reason=request.data.get('reason', ''), request=request),
+            lambda n: {'released': n})
+
     @action(detail=False, methods=['get'], url_path='patient-sales')
     def patient_sales(self, request):
         """Recent CONTRACT sales of a patient at a branch — to start a case from the prescription.

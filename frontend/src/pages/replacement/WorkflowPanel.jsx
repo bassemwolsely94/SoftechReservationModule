@@ -7,7 +7,7 @@
  * stale screen gets a clear 409 instead of overwriting someone else's change. No modals.
  */
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { replacementApi } from '../../api/client'
 import ItemSearchInput from '../../components/ItemSearchInput'
 import { Chip, errText, money } from '../supply/supplyUi'
@@ -41,6 +41,45 @@ function NativeDocLink({ label, branchcode, busy, onLink }) {
       <input value={d.docnumber} onChange={(e) => setD({ ...d, docnumber: e.target.value })} placeholder="رقم المستند" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32 font-mono" />
       <input type="date" value={d.docdate} onChange={(e) => setD({ ...d, docdate: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
       <Btn kind="ghost" disabled={busy || !d.docnumber || !d.docdate} onClick={() => onLink(d)}>ربط</Btn>
+    </div>
+  )
+}
+
+// B2: the patient's open POS cash / delivery orders → fund one from THIS case's balance. Records the
+// link only; the POS pushes the order and the cashier's voucher verifies it (no change to tenders).
+function PosOrderFunding({ c, busy, onDone }) {
+  const [msg, setMsg] = useState('')
+  const [reason, setReason] = useState('')
+  const orders = useQuery({
+    queryKey: ['replacement-patient-orders', c.softech_pic, c.branch],
+    queryFn: () => replacementApi.patientOrders({ pic: c.softech_pic, branch: c.branch }).then((r) => r.data.results),
+  })
+  const done = (r) => { setMsg(''); orders.refetch(); onDone?.(r) }
+  const fund = useMutation({ mutationFn: (id) => replacementApi.fundOrder({ order: id, cases: [c.id] }), onSuccess: done,
+                             onError: (e) => setMsg(errText(e)) })
+  const unfund = useMutation({ mutationFn: (id) => replacementApi.unfundOrder({ order: id, reason }), onSuccess: done,
+                               onError: (e) => setMsg(errText(e)) })
+  const rows = orders.data || []
+  if (!rows.length) return null
+  return (
+    <div data-tour="replacement-detail-pos-funding" className="space-y-1">
+      <div className="text-xs text-gray-500">أو موّل طلب نقطة بيع مفتوح للمريض من هذا الرصيد:</div>
+      {rows.map((o) => (
+        <div key={o.id} className="flex items-center gap-2 text-sm flex-wrap">
+          <span className="font-mono">#{o.id}</span>
+          <Chip tone="gray">{o.channel === 'delivery' ? 'توصيل' : 'نقدي'} · {o.status_label}</Chip>
+          <span className="tabular-nums">{money(o.total)}</span>
+          {o.funded_by.length
+            ? <>
+                <Chip tone="emerald">مموّل: {o.funded_by.map((f) => `${f.case} ${money(f.amount)}`).join('، ')}</Chip>
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="سبب إلغاء التمويل"
+                       className="border border-gray-300 rounded-lg px-2 py-1 text-xs w-40" />
+                <Btn kind="danger" disabled={busy || unfund.isPending || !reason.trim()} onClick={() => unfund.mutate(o.id)}>إلغاء التمويل</Btn>
+              </>
+            : <Btn kind="ghost" disabled={busy || fund.isPending} onClick={() => fund.mutate(o.id)}>تمويل من الرصيد</Btn>}
+        </div>
+      ))}
+      {msg && <div className="text-xs text-rose-700">{msg}</div>}
     </div>
   )
 }
@@ -217,6 +256,9 @@ export default function WorkflowPanel({ c }) {
               {!!basket.length && <Btn disabled={busy} onClick={() => run(replacementApi.prepareProducts, c.id,
                 { ...v, channel, items: basket.map((b) => ({ item_id: b.item_id, qty: b.qty })) })}>تجهيز فاتورة المنتجات</Btn>}
             </div>
+          )}
+          {c.settlement_mode !== 'cash' && can.post && c.softech_pic && c.purchase_docnumber && (
+            <PosOrderFunding c={c} busy={busy} onDone={() => qc.invalidateQueries({ queryKey: ['replacement-case', String(c.id)] })} />
           )}
           {c.settlement_mode !== 'cash' && can.create && (
             <NativeDocLink label="اربط فاتورة منتجات بيعت في SOFTECH (نقدي/توصيل):" branchcode={c.branchcode} busy={busy}
