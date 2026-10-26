@@ -13,6 +13,9 @@ apps/purchasing/shortage_views.py — REST API for the Market-Shortage screen.
   POST retrieve/       — bring a dismissed item back
   GET  export/         — Excel of a view (candidates|confirmed|dismissed)
   GET  whatsapp/       — plain-text list formatted for WhatsApp
+
+Permissions (shortage_permissions): reads → view, export → export, the four SOFTECH-writing
+POSTs (flag / unflag / dismiss / retrieve) → approve.
 """
 import io
 import logging
@@ -28,6 +31,7 @@ from rest_framework import status
 from apps.catalog.models import Item
 from . import shortage as S
 from apps.catalog.wildcard import wq
+from .shortage_permissions import CanApprove, CanExport, CanView
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,7 @@ def _apply_filters(rows, request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_candidates(request):
     cands = S.compute_shortage_candidates()
     counts = {k: 0 for k in S.TIER_COUNT_KEYS}
@@ -87,7 +91,7 @@ def shortage_candidates(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_deltas(request):
     d = S.compute_deltas()
     return Response({
@@ -99,7 +103,7 @@ def shortage_deltas(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_confirmed(request):
     S.ensure_snapshot()
     recovery = S.recovery_map()
@@ -142,7 +146,7 @@ def shortage_confirmed(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_dismissed(request):
     qs = (Item.objects.filter(shortage_dismissed=True)
           .select_related('shortage_dismissed_by')
@@ -174,7 +178,7 @@ def shortage_dismissed(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_med_types(request):
     """Distinct general-classification options among current candidates + confirmed."""
     cands = S.compute_shortage_candidates()
@@ -190,7 +194,7 @@ def shortage_med_types(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_search(request):
     q = (request.GET.get('q') or '').strip()
     if len(q) < 2:
@@ -206,7 +210,7 @@ def shortage_search(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanApprove])
 def shortage_flag(request):
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
@@ -230,7 +234,7 @@ def shortage_flag(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanApprove])
 def shortage_unflag(request):
     """Revert a mistaken confirmation → in_shortage = False."""
     item = Item.objects.filter(id=request.data.get('item_id')).first()
@@ -250,7 +254,7 @@ def shortage_unflag(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanApprove])
 def shortage_dismiss(request):
     """
     Move an item out of the candidate list with a reason (retrievable).
@@ -291,7 +295,7 @@ def shortage_dismiss(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanApprove])
 def shortage_retrieve(request):
     """Bring a dismissed item back into the candidate pool."""
     item = Item.objects.filter(id=request.data.get('item_id')).first()
@@ -356,7 +360,7 @@ class _FakeReq:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanExport])
 def shortage_export(request):
     import openpyxl
     from openpyxl.styles import Font, PatternFill
@@ -383,7 +387,7 @@ def shortage_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_whatsapp(request):
     """Plain-text list formatted for WhatsApp (confirmed by default; ?view=candidates)."""
     view = request.GET.get('view', 'confirmed')
@@ -412,7 +416,7 @@ _DIRTY_MOLECULES = {'', 'undefined item', 'undefined', 'n/a', 'na', '.', '-'}
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_suggest_matches(request):
     """
     Suggest available substitutes for a shortage item: other stockable/active items
@@ -452,7 +456,7 @@ def shortage_suggest_matches(request):
 
 # ── Tier 3 (#9): shortage trends from snapshot history ────────────────────────
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanView])
 def shortage_trends(request):
     from apps.purchasing.models import ShortageSnapshot
     snaps = list(ShortageSnapshot.objects.order_by('created_at')
