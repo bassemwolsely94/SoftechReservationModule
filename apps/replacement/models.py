@@ -368,6 +368,11 @@ class CaseException(models.Model):
         ('caseless_purchase',       'شراء على مورد البدل بدون حالة مُسجلة أولاً'),
         ('backdated_entry',         'فاتورة الشراء أقدم من تسجيل الحالة'),
         ('undeclared_redemption',   'سند صرف بدون فواتير منتجات مربوطة بالحالة'),
+        ('cash_without_instruction', 'صرف نقدي بدون تعليمات صرف من الحالة'),
+        ('payout_amount_mismatch',  'قيمة سند الصرف تختلف عن تعليمات الصرف النقدي'),
+        ('voucher_by_creator',      'سند الصرف النقدي من منشئ الحالة نفسه'),
+        ('payout_not_executed',     'تعليمات صرف نقدي لم تُنفّذ'),
+        ('payout_not_confirmed',    'صرف نقدي لم يُؤكَّد تسليمه'),
     ]
 
     STATUS_OPEN, STATUS_ACK, STATUS_RESOLVED, STATUS_CLEARED = 'open', 'acknowledged', 'resolved', 'auto_cleared'
@@ -527,6 +532,49 @@ class PostingOperation(models.Model):
         ordering = ['created_at']
         verbose_name = 'عملية ترحيل'
         verbose_name_plural = 'عمليات الترحيل'
+
+
+class CashPayout(models.Model):
+    """B3 (doc 25 §23): one cash handout to the patient from a cash / mixed case. The CASHIER makes the
+    سداد voucher natively (owner Q2 — no voucher writer); this record is the instruction, then the link
+    to that voucher (user, box, time), then the employee's confirmation that the cash was handed over.
+    Covered by the case approval (cash band: supervisor, manager above the threshold, on the whole
+    balance). An open instruction reserves its amount like a product order."""
+    ST_INSTRUCTED, ST_PAID, ST_CONFIRMED, ST_CANCELLED = 'instructed', 'paid', 'confirmed', 'cancelled'
+    STATUS_CHOICES = [(ST_INSTRUCTED, 'تعليمات للكاشير'), (ST_PAID, 'صُرف — بانتظار تأكيد التسليم'),
+                      (ST_CONFIRMED, 'سُلّم وتأكد'), (ST_CANCELLED, 'ملغى')]
+    OPEN = (ST_INSTRUCTED,)
+
+    case    = models.ForeignKey(ReplacementCase, on_delete=models.PROTECT, related_name='payouts')
+    amount  = models.DecimalField(max_digits=12, decimal_places=2)
+    status  = models.CharField(max_length=12, choices=STATUS_CHOICES, default=ST_INSTRUCTED, db_index=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    note    = models.CharField(max_length=300, blank=True)
+    # the native voucher, once the daily check links it
+    voucher = models.ForeignKey('lineage.DocumentRef', null=True, blank=True, on_delete=models.PROTECT,
+                                related_name='cash_payouts')
+    voucher_usercode = models.CharField(max_length=8, blank=True)     # SOFTECH user who made it (the cashier)
+    voucher_box      = models.CharField(max_length=3, blank=True)     # cash box (cheques.bankcode)
+    paid_at          = models.DateTimeField(null=True, blank=True)    # voucher trans_time
+    # the employee who handed the cash over confirms it (owner: "the employee responsible signs it")
+    confirmed_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    reference    = models.CharField(max_length=120, blank=True)       # optional receipt / proof reference
+    cancel_reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'صرف نقدي للبدل'
+        verbose_name_plural = 'صرف نقدي للبدل'
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_payout_positive'),
+            models.UniqueConstraint(fields=['voucher'], condition=models.Q(voucher__isnull=False),
+                                    name='uq_replacement_payout_voucher'),
+        ]
 
 
 class ReconstructionRun(models.Model):

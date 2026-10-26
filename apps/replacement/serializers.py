@@ -191,6 +191,17 @@ class CaseDetailSerializer(CaseListSerializer):
         if live:
             out['available'] = {k: str(v) for k, v in legs.available(obj).items()}
             out['voucher_instruction'] = legs.voucher_instruction(obj)
+            # B3: cash handed to the patient — instruction → native voucher → handover confirmation
+            from .cash import instruction
+            out['payouts'] = [{
+                'id': p.pk, 'amount': str(p.amount), 'status': p.status, 'status_label': p.get_status_display(),
+                'note': p.note, 'requested_by': p.requested_by.full_name if p.requested_by_id else '',
+                'created_at': p.created_at, 'voucher': p.voucher.label if p.voucher_id else '',
+                'voucher_usercode': p.voucher_usercode, 'voucher_box': p.voucher_box, 'paid_at': p.paid_at,
+                'confirmed_by': p.confirmed_by.full_name if p.confirmed_by_id else '', 'confirmed_at': p.confirmed_at,
+                'reference': p.reference, 'cancel_reason': p.cancel_reason,
+                'instruction': instruction(obj, p) if p.status == p.ST_INSTRUCTED else None,
+            } for p in obj.payouts.select_related('voucher', 'requested_by', 'confirmed_by')]
         own = staff is not None and obj.created_by_id == staff.pk
         out['can'] = {a: bool(staff) and authz.allows(staff, a) for a in ('create', 'edit', 'approve', 'post')}
         out['can']['approve'] = out['can']['approve'] and not own          # maker-checker

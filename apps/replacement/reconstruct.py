@@ -580,6 +580,8 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
                      f'بدون حالة مُسجلة أولاً — افتح حالة من «شراء بدون حالة» لاستلامها',
               evidence={'usercode': (inv.usercode or '').strip(), 'docdate': inv.docdate.isoformat()})
     if live:
+        from . import cash as CASH
+        CASH.ageing_issues(case, issue)                                  # B3: instructions not executed / confirmed
         entered = timezone.localtime(case.created_at).date()
         if inv.docdate < entered:
             days = (entered - inv.docdate).days
@@ -694,12 +696,10 @@ def _fund_voucher(case, v_ref, v_cd, pay, amt, tabdeel, sale_matched, code, issu
                   detail=f'فواتير المنتجات أكبر من السند بـ {fund["excess"]} (دفعها المريض)')
     elif case.origin == RC.ORIGIN_LIVE and fund['status'] != 'proposed':
         # no declared receipt behind this voucher: the operator's settlement mode decides
-        if case.settlement_mode == RC.MODE_CASH:
+        if case.settlement_mode in (RC.MODE_CASH, RC.MODE_MIXED):
+            from . import cash as CASH
             product, cash, uncl = D0, amt, D0
-        elif case.settlement_mode == RC.MODE_MIXED:
-            product, cash, uncl = D0, amt, D0
-            issue('undeclared_redemption', X.SEV_INFO, key=key, amount=amt,
-                  detail='سند صرف بدون فواتير منتجات مربوطة — اعتُبر الجزء النقدي من الحالة المختلطة')
+            CASH.match_voucher(case, v_ref, pay, amt, issue)        # B3: instruction ↔ voucher
         else:
             product, cash, uncl = D0, D0, amt
             issue('undeclared_redemption', X.SEV_WARNING, key=key, amount=amt,
@@ -771,11 +771,11 @@ def reset_reconstructed() -> dict:
     if blockers:
         raise RuntimeError('لا يمكن إعادة الضبط: ' + '، '.join(blockers))
     counts = {'cases': RC.objects.count(), 'ledger': E.objects.count(), 'documents': Ref.objects.count()}
-    from .models import PostingOperation, ReplacementCalculation
+    from .models import CashPayout, PostingOperation, ReplacementCalculation
     # explicit list (no CASCADE): only this module's derived tables. Live data (calculations,
-    # operations) can't exist here — reset_blockers refuses whenever a live case exists.
+    # operations, cash payouts) can't exist here — reset_blockers refuses whenever a live case exists.
     tables = [m._meta.db_table for m in (E, CD, X, ReplacementItem, ReplacementCalculation, PostingOperation,
-                                         RC, Edge, Ref)]
+                                         CashPayout, RC, Edge, Ref)]
     with transaction.atomic(), connection.cursor() as cur:
         cur.execute('SET CONSTRAINTS ALL IMMEDIATE')     # flush deferred FK checks first
         # NO 'RESTART IDENTITY': ids must never be reused, or a new case would inherit the

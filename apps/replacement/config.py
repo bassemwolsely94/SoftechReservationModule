@@ -91,6 +91,10 @@ POSTING_ENABLED = False
 # B1 pilot: a live post also needs the case's branch in this list (empty = no branch) — the
 # rollout is per branch (doc 25 §21, pilot 130). Both switches stay OFF until the owner says go.
 POSTING_BRANCHES = ()
+# B3 cash payouts: an instruction not executed by the cashier within N days, or a paid one whose
+# handover nobody confirmed within N days, becomes an exception.
+PAYOUT_EXECUTE_DAYS = 2
+PAYOUT_CONFIRM_DAYS = 1
 # Pre-write guard: the writer's own computed purchase total must equal the approved balance.
 PURCHASE_PRECHECK_TOLERANCE = Decimal('0.05')
 

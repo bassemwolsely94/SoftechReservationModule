@@ -145,6 +145,8 @@ def available(case) -> dict:
     reserved = sum((o.expected_value for o in case.operations.filter(
         kind=Op.KIND_PRODUCT_SALE, status__in=ACTIVE_OPS).exclude(result__has_key='voucher_linked')),
         Decimal('0'))
+    from .cash import reserved as cash_reserved
+    reserved += cash_reserved(case)                  # B3: open cash instructions reserve their amount
     return {'entitlement': case.entitlement, 'balance': native_bal, 'reserved': reserved,
             'available': max(Decimal('0'), native_bal - reserved)}
 

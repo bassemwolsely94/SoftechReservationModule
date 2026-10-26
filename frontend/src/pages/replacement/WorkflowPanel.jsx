@@ -84,6 +84,61 @@ function PosOrderFunding({ c, busy, onDone }) {
   )
 }
 
+// B3: cash handed to the patient. Instruction (reserves the amount) → the cashier makes the سداد voucher
+// natively → the daily check links it → the handing employee confirms. No modal (rule 11).
+const PAYOUT_TONE = { instructed: 'amber', paid: 'sky', confirmed: 'emerald', cancelled: 'gray' }
+function CashPayouts({ c, wf, can, busy, run, v }) {
+  const [amount, setAmount] = useState('')
+  const [why, setWhy] = useState('')
+  const [ref, setRef] = useState('')
+  const rows = wf.payouts || []
+  return (
+    <div data-tour="replacement-detail-cash" className="space-y-2">
+      <div className="text-xs text-gray-500">٤ — الصرف النقدي للمريض (المتاح {money(wf.available?.available)})</div>
+      {can.create && (
+        <div className="flex gap-2 items-center flex-wrap">
+          <input type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)}
+                 placeholder="المبلغ" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32" />
+          <Btn disabled={busy || !(Number(amount) > 0)} onClick={() => { run(replacementApi.requestPayout, c.id, { ...v, amount }); setAmount('') }}>
+            تعليمات صرف للكاشير</Btn>
+        </div>
+      )}
+      {rows.map((p) => (
+        <div key={p.id} className="border border-gray-200 rounded-lg p-2 text-sm space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <b className="tabular-nums">{money(p.amount)}</b>
+            <Chip tone={PAYOUT_TONE[p.status]}>{p.status_label}</Chip>
+            <span className="text-[11px] text-gray-500">{p.requested_by}</span>
+            {p.voucher && <span className="text-[11px] text-gray-600">سند {p.voucher} · مستخدم {p.voucher_usercode || '—'} · خزينة {p.voucher_box || '—'}</span>}
+            {p.confirmed_by && <span className="text-[11px] text-emerald-700">سلّمه {p.confirmed_by}{p.reference ? ` · ${p.reference}` : ''}</span>}
+          </div>
+          {p.instruction && (
+            <div className="bg-sky-50 border border-sky-200 rounded p-2 text-xs space-y-0.5">
+              <div>سند صرف (سداد) للمورد <b>{p.instruction.supplier}</b> {p.instruction.supplier_name} على فاتورة <b className="font-mono">{p.instruction.branch}/{p.instruction.invoice}</b> بمبلغ <b>{money(p.instruction.amount)}</b></div>
+              <div className="text-sky-700">ملاحظة السند: «{p.instruction.note}» — السند يُربط ويُراجع تلقائياً.</div>
+              {can.create && (
+                <div className="flex gap-2 items-center pt-1">
+                  <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="سبب الإلغاء"
+                         className="border border-gray-300 rounded px-2 py-0.5 text-xs w-40" />
+                  <Btn kind="danger" disabled={busy || !why.trim()} onClick={() => run(replacementApi.cancelPayout, c.id, p.id, { ...v, reason: why })}>إلغاء التعليمات</Btn>
+                </div>
+              )}
+            </div>
+          )}
+          {p.status === 'paid' && can.create && (
+            <div className="flex gap-2 items-center">
+              <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="مرجع / إيصال (اختياري)"
+                     className="border border-gray-300 rounded px-2 py-0.5 text-xs w-48" />
+              <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.confirmPayout, c.id, p.id, { ...v, reference: ref })}>
+                أؤكد تسليم المبلغ للمريض</Btn>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const nativeStatus = (o) => (o.kind === 'purchase' ? 'بانتظار ظهورها في المرآة' : 'بانتظار سند الكاشير')
 
 export default function WorkflowPanel({ c }) {
@@ -300,6 +355,9 @@ export default function WorkflowPanel({ c }) {
                 <div>قيمة سند المنتجات: <b>{money(wf.voucher_instruction.amount_for_products)}</b></div>}
               <div className="text-xs text-sky-700">ملاحظة السند: «{wf.voucher_instruction.note}» — سيُربط السند ويُراجع تلقائياً في الليلة.</div>
             </div>
+          )}
+          {['cash', 'mixed'].includes(c.settlement_mode) && c.purchase_docnumber && (
+            <CashPayouts c={c} wf={wf} can={can} busy={busy} run={run} v={v} />
           )}
         </Box>
       )}

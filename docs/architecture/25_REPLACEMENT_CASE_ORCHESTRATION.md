@@ -670,6 +670,25 @@ would let the cashier fund while selling instead of from the case page.
 
 Tests: `apps/tests/test_replacement_redemption.py` (8). 122 replacement tests + customer pos-summary tests green.
 
+## 23. B3 — cash handed to the patient (built 2026-10-27)
+
+Owner Q2: the cashier makes the سداد voucher natively; no voucher writer. `apps/replacement/cash.py` +
+model `CashPayout` (migration 0007, replacement tables only).
+
+| Step | Behaviour |
+|---|---|
+| Instruction | `request_payout(case, amount)` on a live **cash / mixed** case with its purchase linked; amount ≤ `legs.available`; reserves the amount (available() subtracts open instructions). Covered by the case approval (cash band on the whole balance: supervisor, manager > 1,500). Products-only cases refuse — owner rule: supplier return + new purchase at the cash rate (B4). Cancel with a reason while not paid. |
+| Cashier instruction | Supplier, purchase invoice, amount and the voucher note «صرف نقدي من فاتورة رقم …» (internal note only, D14), shown per instruction in the case workspace. |
+| Daily check | A voucher on a live cash/mixed case with no declared product receipt is matched to an open instruction of the same amount (oldest, created on/before the voucher date) → status `paid` with the voucher's SOFTECH user, cash box and time. Exceptions: **`cash_without_instruction`** (HIGH), **`payout_amount_mismatch`** (HIGH, instruction left open), **`voucher_by_creator`** (HIGH: voucher user = case creator's SOFTECH user above `APPROVAL_CASH_MANAGER_ABOVE`), `payout_not_executed` (WARNING after `PAYOUT_EXECUTE_DAYS` = 2), `payout_not_confirmed` (INFO after `PAYOUT_CONFIRM_DAYS` = 1). An existing link is never re-decided. |
+| Handover | The employee who handed the cash confirms (`confirm_payout`, optional reference) → `confirmed`. |
+| API / UI | `POST cases/{id}/payouts/`, `…/payouts/{pid}/cancel/`, `…/payouts/{pid}/confirm/`; workspace section «٤ — الصرف النقدي للمريض» (no modal). |
+
+**Not verifiable yet:** that the voucher was made under the cashier of the *active shift*. No shift / box-closing
+data is mirrored; the voucher's SOFTECH user and cash box are recorded on the payout so the check can be added
+as soon as the shift screens are decoded (D7 — owner screenshots).
+
+Tests: `apps/tests/test_replacement_cash.py` (8). 130 replacement tests green.
+
 ### 16.3 Owner answers 2026-10-26
 
 | # | Decision |

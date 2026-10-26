@@ -321,6 +321,29 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         return self._step(request, pk, lambda case_id, **kw: LG.post(case_id, op_id, **kw),
                           force=bool(request.data.get('force')))
 
+    # ── B3: cash handed to the patient ───────────────────────────────────────
+    @action(detail=True, methods=['post'], url_path='payouts')
+    def request_payout(self, request, pk=None):
+        from . import cash
+        return self._step(request, pk, cash.request_payout, amount=request.data.get('amount'),
+                          note=request.data.get('note', ''))
+
+    @action(detail=True, methods=['post'], url_path=r'payouts/(?P<payout_id>\d+)/cancel')
+    def cancel_payout(self, request, pk=None, payout_id=None):
+        from . import cash
+        self.get_object()                                     # branch scope (404 outside)
+        return self._do(lambda: cash.cancel_payout(int(pk), int(payout_id), user=_staff(request),
+                                                   version=request.data.get('version'),
+                                                   reason=request.data.get('reason', ''), request=request))
+
+    @action(detail=True, methods=['post'], url_path=r'payouts/(?P<payout_id>\d+)/confirm')
+    def confirm_payout(self, request, pk=None, payout_id=None):
+        from . import cash
+        self.get_object()
+        return self._do(lambda: cash.confirm_payout(int(pk), int(payout_id), user=_staff(request),
+                                                    version=request.data.get('version'),
+                                                    reference=request.data.get('reference', ''), request=request))
+
     # ── B2: balance in Customer 360 / POS, and funding a POS order from it ────
     def _call(self, fn, render):
         """Same error mapping as _do, for services that do not return a case."""
