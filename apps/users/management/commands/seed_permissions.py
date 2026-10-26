@@ -33,6 +33,7 @@ ALL_MODULES = [
     'audit', 'sync', 'settings', 'users', 'admin',
     'help',          # in-app help: 'edit' = trainer may rewrite a screen's explanation
     'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
+    'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -231,6 +232,7 @@ PERMISSIONS = {
         'approvals':    {'view', 'approve'},
         'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
         'gamification': RE,   # executive gamification reports
+        'stock_audit':  {'view', 'approve', 'export'},   # review findings, all branches (doc 32)
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -263,6 +265,7 @@ PERMISSIONS = {
         'hr':           RE,                  # view + export; own requests
         'approvals':    {'view', 'approve'}, # batch_quarantine authorization
         'replacement':  RE,                  # بدل الروشتة — audit/read (doc 25)
+        'stock_audit':  {'view', 'approve', 'export', 'edit'},   # review + thresholds (doc 32)
     },
 }
 

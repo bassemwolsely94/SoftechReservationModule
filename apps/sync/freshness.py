@@ -16,6 +16,7 @@ prices may be ~58 min old. Each domain reads from its OWN authoritative run log:
     per-table SyncLog of SUCCESSFUL runs.
   • expiry (FEFO)  → batches.StockExpirySyncRun (its own daily sweep log).
   • purchases      → procurement.ProcurementEngineRun (its own purchase sync log).
+  • stock_audit    → stock_audit.StockLedgerSyncRun (doc 32 stktrans mirror).
 
 Depth:
   • snapshot domains: freshness = age of the last successful sync of that domain.
@@ -40,6 +41,7 @@ DOMAINS = {
     # Custom-source domains — their own run-log model, separate from the main sync.
     'expiry':    {'label_ar': 'صلاحية المخزون',   'source': 'expiry',    'cadence_min': 1440, 'kind': 'snapshot'},
     'purchases': {'label_ar': 'المشتريات والوارد', 'source': 'purchases', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
 }
 
 # A domain is "stale" once its last success is older than this many sync
@@ -82,7 +84,22 @@ def _source_purchases():
     }
 
 
-_SOURCES = {'expiry': _source_expiry, 'purchases': _source_purchases}
+def _source_stock_audit():
+    """Stock-audit ledger freshness (doc 32) — stock_audit.StockLedgerSyncRun. 'partial'
+    still refreshed some days, so it counts as a success (like the expiry sweep)."""
+    from apps.stock_audit.models import StockLedgerSyncRun
+    ok = (StockLedgerSyncRun.objects.filter(status__in=['success', 'partial'])
+          .order_by('-started_at').first())
+    last = StockLedgerSyncRun.objects.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
+_SOURCES = {'expiry': _source_expiry, 'purchases': _source_purchases,
+            'stock_audit': _source_stock_audit}
 
 
 # ── public API ─────────────────────────────────────────────────────────────────

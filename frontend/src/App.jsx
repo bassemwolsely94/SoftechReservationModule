@@ -56,6 +56,7 @@ import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
 import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
+import StockAuditPage from './pages/StockAuditPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -443,6 +444,8 @@ export default function App() {
             {/* invoices + incentives guarded below in Administration section */}
             <Route path="my-incentives" element={<MyIncentivesPage />} />
             <Route path="gamification"  element={<GamificationPage />} />
+            {/* stock-transactions audit (doc 32): management + named branch managers — gated server-side */}
+            <Route path="stock-audit"   element={<StockAuditPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />

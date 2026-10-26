@@ -184,6 +184,7 @@ INSTALLED_APPS = [
     'apps.help',           # In-app help (دليل الاستخدام) — repo content + trainer edits
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
+    'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
 ]
 
 MIDDLEWARE = [
@@ -667,6 +668,11 @@ POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, ca
 # B7 duplicate-code merge queue (apps/customers/duplicates.py) — weekly READ-ONLY rebuild; review roles
 # (maker-checker: the one who marks a pair cannot approve it).
 CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
+
+# Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
+# every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.
+STOCK_AUDIT_ENABLED     = config('STOCK_AUDIT_ENABLED', default=True, cast=bool)
+STOCK_AUDIT_WINDOW_DAYS = config('STOCK_AUDIT_WINDOW_DAYS', default=365, cast=int)
 
 # Gamification (apps/gamification) — points / levels / badges / rankings, recognition only.
 # Scheduler scores today every 30 min and closes yesterday at 00:20. Reads our tables only.

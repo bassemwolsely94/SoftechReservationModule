@@ -2083,6 +2083,24 @@ def _run_stock_expiry_sync():
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
 
 
+def _run_stock_ledger_sync(days=3):
+    """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
+    days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'STOCK_AUDIT_ENABLED', True):
+        return
+    try:
+        from django.core.management import call_command
+        call_command('sync_stock_ledger', days=days, verbosity=0,
+                     triggered_by='scheduler' if days <= 3 else 'scheduler-catchup')
+        logger.info('[APScheduler] stock-ledger sync done (%s days)', days)
+        # checks run right after the mirror refresh (our tables only)
+        from apps.stock_audit.engine import run_stock_audit
+        run_stock_audit(triggered_by='scheduler')
+    except Exception as exc:
+        logger.error('[APScheduler] stock-ledger sync failed: %s', exc)
+
+
 def _run_refill_reminders():
     """Daily WhatsApp refill reminders (template `refill_reminder`). Sends only when
     REFILL_REMINDER_SEND_ENABLED is on; otherwise counts what it would send."""
@@ -3166,6 +3184,16 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;
+    # 03:15 catch-up replaces 7 days + prunes beyond STOCK_AUDIT_WINDOW_DAYS.
+    _scheduler.add_job(
+        _run_stock_ledger_sync, 'cron', hour='8-23/2', minute=10, id='stock_ledger_sync',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
+    )
+    _scheduler.add_job(
+        _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
+        kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
     _scheduler.add_job(

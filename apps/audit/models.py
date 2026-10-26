@@ -107,6 +107,13 @@ class AuditLog(models.Model):
         ('sales_target_deleted',       'هدف بيعي — حذف هدف'),
         ('sales_target_committed',     'هدف بيعي — اعتماد الأهداف من سيناريو'),
 
+        # Stock Transactions Audit (doc 32)
+        ('stock_audit_rule_changed',     'تدقيق المخزون — تعديل حدود فحص'),
+        ('stock_audit_override_changed', 'تدقيق المخزون — تعديل حدود فرع'),
+        ('stock_audit_finding_reviewed', 'تدقيق المخزون — مراجعة ملاحظة'),
+        ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
+        ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

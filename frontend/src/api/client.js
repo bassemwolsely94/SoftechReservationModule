@@ -2685,3 +2685,25 @@ export const replacementApi = {
   rules:           ()            => api.get('/replacement/rules/'),
   grants:          ()            => api.get('/replacement/grants/'),
 }
+
+// ── Stock Transactions Audit (تدقيق حركات المخزون, doc 32) — every rule enforced server-side ──
+export const stockAuditApi = {
+  me:           ()              => api.get('/stock-audit/me/'),
+  summary:      (params = {})   => api.get('/stock-audit/summary/', { params }),
+  findings:     (params = {})   => api.get('/stock-audit/findings/', { params }),
+  finding:      (id)            => api.get(`/stock-audit/findings/${id}/`),
+  review:       (id, data)      => api.post(`/stock-audit/findings/${id}/review/`, data),
+  bulkReview:   (data)          => api.post('/stock-audit/findings/bulk-review/', data),
+  exportFindings: (params = {}) => api.get('/stock-audit/findings/export/', { params, responseType: 'blob' }),
+  byUser:       (params = {})   => api.get('/stock-audit/by-user/', { params }),
+  rules:        ()              => api.get('/stock-audit/rules/'),
+  updateRule:   (code, data)    => api.put(`/stock-audit/rules/${code}/`, data),
+  setOverride:  (code, branch, data) => api.put(`/stock-audit/rules/${code}/overrides/${branch}/`, data),
+  clearOverride:(code, branch)  => api.delete(`/stock-audit/rules/${code}/overrides/${branch}/`),
+  access:       ()              => api.get('/stock-audit/access/'),
+  grant:        (data)          => api.post('/stock-audit/access/', data),
+  revoke:       (id, data = {}) => api.post(`/stock-audit/access/${id}/revoke/`, data),
+  candidates:   (q)             => api.get('/stock-audit/access/candidates/', { params: { q } }),
+  refresh:      ()              => api.post('/stock-audit/refresh/'),
+  runs:         ()              => api.get('/stock-audit/runs/'),
+}
