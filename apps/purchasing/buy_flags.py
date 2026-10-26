@@ -38,10 +38,8 @@ def foc_overbuy_flags(*, today=None, rates=None) -> dict:
     the network monthly rate of the latest demand run; excess = the units beyond
     FOC_COVER_MONTHS of it, valued at the deal's real unit cost.
     """
-    from django.db.models import Min
     from django.utils import timezone
     from apps.procurement.models import PurchaseLine
-    from apps.purchasing.models import ItemMonthlySales
     from apps.supply.comparison import _profiles
     from apps.supply.price_history import _company, _company_tier, _rates
 
@@ -68,8 +66,7 @@ def foc_overbuy_flags(*, today=None, rates=None) -> dict:
         codes[l['item_id']] = l['item_code']
     if not deals:
         return {}
-    first_sale = dict(ItemMonthlySales.objects.filter(item_code__in=set(codes.values()), qty__gt=0)
-                      .values('item_code').annotate(m=Min('month')).values_list('item_code', 'm'))
+    first_sale = _first_sales(set(codes.values()))
     rates = rates if rates is not None else _rates({iid for iid, _d in deals})
 
     out = {}
@@ -92,6 +89,22 @@ def foc_overbuy_flags(*, today=None, rates=None) -> dict:
                 'excess_value': excess}
         if iid not in out or excess > out[iid]['excess_value']:
             out[iid] = deal
+    return out
+
+
+def _first_sales(item_codes) -> dict:
+    """{item_code: earliest sale date} — the earlier of the demand engine's 365-day sales
+    lines and, where the seasonality mirror exists, its 48 months of monthly sales."""
+    from django.db.models import Min
+    from apps.purchasing import models as pm
+    out = dict(pm.SalesTransactionLine.objects.filter(softech_itemcode__in=item_codes, doccode='115')
+               .values('softech_itemcode').annotate(m=Min('doc_date')).values_list('softech_itemcode', 'm'))
+    monthly = getattr(pm, 'ItemMonthlySales', None)
+    if monthly is not None:
+        for code, m in (monthly.objects.filter(item_code__in=item_codes, qty__gt=0)
+                        .values('item_code').annotate(m=Min('month')).values_list('item_code', 'm')):
+            if code not in out or m < out[code]:
+                out[code] = m
     return out
 
 

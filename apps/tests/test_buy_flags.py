@@ -32,13 +32,16 @@ class FocOverbuyTests(TestCase):
     def setUp(self):
         from apps.catalog.models import Item
         from apps.procurement.models import SupplierProfile
-        from apps.purchasing.models import ItemMonthlySales
+        from apps.purchasing.models import SalesTransactionLine
         SupplierProfile.objects.create(supplier_code='D1', supplier_name='RAMCO', classif_code='60')
         SupplierProfile.objects.create(supplier_code='V1', supplier_name='virtual', classif_code='80')
         self.old = Item.objects.create(softech_id='OLD1', name='OLD', pack_price=100)
         self.new = Item.objects.create(softech_id='NEW1', name='NEW', pack_price=100)
-        ItemMonthlySales.objects.create(item_code='OLD1', item=self.old, month=datetime.date(2025, 1, 1), qty=5)
-        ItemMonthlySales.objects.create(item_code='NEW1', item=self.new, month=datetime.date(2026, 9, 1), qty=5)
+        for code, item, day in (('OLD1', self.old, datetime.date(2025, 11, 1)),     # sold for a year
+                                ('NEW1', self.new, datetime.date(2026, 9, 1))):     # a launch
+            SalesTransactionLine.objects.create(softech_branchcode='130', softech_itemcode=code, doccode='115',
+                                                docnumber=f'S-{code}', doc_date=day, item=item, transqty=5,
+                                                net_qty=5)
         self.rates = {self.old.id: 10.0, self.new.id: 10.0}
 
     def flags(self):
