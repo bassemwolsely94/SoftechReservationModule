@@ -88,6 +88,11 @@ AGED_OUTSTANDING_DAYS = 90
 # Master switch for SOFTECH postings from a case. OFF ⇒ every leg returns the writer's dry-run
 # plan only (the invoices / POS writers additionally keep their own gates).
 POSTING_ENABLED = False
+# B1 pilot: a live post also needs the case's branch in this list (empty = no branch) — the
+# rollout is per branch (doc 25 §21, pilot 130). Both switches stay OFF until the owner says go.
+POSTING_BRANCHES = ()
+# Pre-write guard: the writer's own computed purchase total must equal the approved balance.
+PURCHASE_PRECHECK_TOLERANCE = Decimal('0.05')
 
 # How far a role may LOWER a rule's deduction (patient-favourable), in percentage points, when
 # the employee has no personal ReplacementGrant. Raising the deduction is always allowed.

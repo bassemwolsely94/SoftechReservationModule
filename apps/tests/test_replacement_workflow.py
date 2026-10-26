@@ -46,6 +46,8 @@ class _Base(TestCase):
     def setUp(self):
         _, self.maker, self.maker_api = make_user('maker', role='pharmacist', branch=self.branch)
         _, self.sup, self.sup_api = make_user('sup130', role='supervisor', branch=self.branch)
+        self.sup.softech_user_id = '1330'          # a live post carries the poster's SOFTECH user
+        self.sup.save(update_fields=['softech_user_id'])
         _, self.sup2, _ = make_user('sup140', role='supervisor', branch=self.other)
         _, self.admin, self.admin_api = make_user('boss', role='admin', access_all=True)
 
@@ -223,9 +225,11 @@ class ApprovalAndLockingTests(_Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-def _fake_push_final(docnumber=12500, tamper=None):
-    def push(invoice, *, dry_run=True, force=False):
+def _fake_push_final(docnumber=12500, tamper=None, seen=None):
+    def push(invoice, *, dry_run=True, force=False, usercode=None, line_extra=None):
         from django.utils import timezone
+        if seen is not None:
+            seen.append({'dry_run': dry_run, 'usercode': usercode, 'line_extra': line_extra})
         if dry_run:
             return {'mode': 'dry_run', 'wrote_to_softech': False, 'plan': {'ok': True}}
         if tamper:
@@ -246,7 +250,7 @@ class LegTests(_Base):
 
     def test_prepare_purchase_builds_exact_invoice_and_is_idempotent(self):
         c = self.approved()
-        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version)
+        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version, expiries={'100186': '2028-09-09'})
         inv = op.supplier_invoice
         self.assertEqual(inv.vendor.softech_personcode, '4471')
         self.assertEqual(inv.invoice_number, f'9{c.pk:07d}')
@@ -259,16 +263,16 @@ class LegTests(_Base):
         c = self.approved()
         with self.assertRaises(PermissionDenied):
             LG.prepare_purchase(c.pk, user=self.maker, version=c.version)
-        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version)
+        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version, expiries={'100186': '2028-09-09'})
         op = LG.post(c.pk, op.op_id, user=self.sup, version=RC.objects.get(pk=c.pk).version)
         self.assertEqual(op.status, Op.ST_DRY_RUN)
         self.assertEqual(op.supplier_invoice.status, 'confirmed')
         self.assertFalse(E.objects.filter(case_id=c.pk).exists())
 
-    @override_settings(REPLACEMENT_POSTING_ENABLED=True)
+    @override_settings(REPLACEMENT_POSTING_ENABLED=True, REPLACEMENT_POSTING_BRANCHES=('130',))
     def test_live_post_verifies_creates_entitlement_and_never_double_posts(self):
         c = self.approved()
-        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version)
+        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version, expiries={'100186': '2028-09-09'})
         with mock.patch('apps.invoices.writer.push_final', side_effect=_fake_push_final()) as pf:
             op = LG.post(c.pk, op.op_id, user=self.sup, version=RC.objects.get(pk=c.pk).version)
             op2 = LG.post(c.pk, op.op_id, user=self.sup, version=RC.objects.get(pk=c.pk).version)
@@ -282,10 +286,10 @@ class LegTests(_Base):
         with self.assertRaises(ValidationError):                          # posted → no reopen
             W.reopen(c.pk, user=self.sup, version=c.version, reason='x')
 
-    @override_settings(REPLACEMENT_POSTING_ENABLED=True)
+    @override_settings(REPLACEMENT_POSTING_ENABLED=True, REPLACEMENT_POSTING_BRANCHES=('130',))
     def test_post_write_verification_failure_is_an_exception_not_success(self):
         c = self.approved()
-        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version)
+        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version, expiries={'100186': '2028-09-09'})
 
         def tamper(inv):
             l = inv.lines.get()
@@ -316,12 +320,12 @@ class LegTests(_Base):
         self.assertEqual((o.channel, o.cust_branch_code, o.softech_pic), ('contract', '4479', PIC))
         self.assertEqual(o.lines.count(), 1)
 
-    @override_settings(REPLACEMENT_POSTING_ENABLED=True)
+    @override_settings(REPLACEMENT_POSTING_ENABLED=True, REPLACEMENT_POSTING_BRANCHES=('130',))
     def test_nightly_reconstruction_attaches_to_the_live_case(self):
         from apps.finance.recon_models import APInvoice, ReconParty
         from apps.replacement import reconstruct as R
         c = self.approved()
-        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version)
+        op = LG.prepare_purchase(c.pk, user=self.sup, version=c.version, expiries={'100186': '2028-09-09'})
         with mock.patch('apps.invoices.writer.push_final', side_effect=_fake_push_final()):
             LG.post(c.pk, op.op_id, user=self.sup, version=RC.objects.get(pk=c.pk).version)
         c.refresh_from_db()

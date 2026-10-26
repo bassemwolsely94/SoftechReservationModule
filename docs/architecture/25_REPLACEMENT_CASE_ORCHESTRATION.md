@@ -597,6 +597,60 @@ mobile lookup, adoption + claim API. 99 replacement tests + 47 help tests green.
 **Before 2026-11-01:** the scheduler must be running on the server (`replacement_daily_check` 08:40) —
 on the dev box the last rebuild is 2026-10-02.
 
+## 21. B1 — purchase-writer pilot readiness (built 2026-10-26, writes still OFF)
+
+**Golden comparison (read-only):** `manage.py replacement_purchase_golden BR/NO/YYYY-MM-DD …` reads a
+native virtual-supplier purchase (SELECT only, branch + doccode + number + date), rebuilds it through the
+exact case path (`legs.build_purchase_invoice` → `invoices.writer.build_plan`) in a rolled-back PG
+transaction and diffs every column we send. Save-time fields are listed as ignored, not hidden
+(`golden.IGNORED_*`). Reports: `exports/replacement_golden_*.json` (git-ignored).
+
+**Result on live data, 10 documents** (130/12095 Samra + 4471/4470/4469/4472/4069 on 130/140/150/160/170):
+header identical, totals identical (≤ 0.003 rounding). Line differences:
+
+| Field | Lines | Status |
+|---|---|---|
+| `itemexpirydate` — native always carries the box expiry, we sent NULL | 29/29 | **fixed**: expiry per replaced item captured on the purchase leg; required for a live post (the invoices `expiry_required` validation would also block it) |
+| `custdiscp` — native 1.0, we sent 0 | all lines, also on a normal-supplier purchase (130/12561, 4883) | **fixed** (see probe below): the replacement purchase sends `custdiscp=1.0` via the writer's `line_extra` hook (`legs.PURCHASE_LINE_EXTRA`, same mechanism as `vouchers/coupon_push.py`). The shared OCR purchase writer still sends 0 — separate follow-up. |
+| VAT items (14 %): native posts `itemsalestax` 0, sale price = public, full % (e.g. 250 / 50 %); the writer's engine splits the tax out (219.30 / 17.50 / 43 %) | 3 | **fixed — owner option A (2026-10-26)**: a buy-back from a patient carries no input VAT, so VAT lines post in SOFTECH's own buy-back form (tax 0, sale price with tax = public, discount = the rule %). Native evidence: 2,058 of 2,060 taxable virtual-supplier lines in 90 days on all 5 branches are tax 0. Done per line by `legs.purchase_line_extra` through the writer's `line_extra` hook, which now also accepts a function of the line (a dict, as gift coupons use, works unchanged). The pre-write guard checks the posted form (tax 0, public = approved public, % = approved %). Shared OCR pricing untouched. |
+| `storecode2` 1 / `promtype` 2 on item 106911 (150/19087) | 1 | **accepted**: a rare native variant (4 of 871 lines on 130 in 60 days); ours (0 / 1) is the norm |
+
+**Rollback probe — branch 130, 2026-10-26 23:00–23:07 (owner go; branch quiet: 0 documents in the
+previous 30 min).** Samra's purchase rebuilt through the case path (LOKELMA 100186 on 4472, 5,700, expiry
+2028-09-09) inserted into stktransm/stktrans in ONE unchained transaction, read back after the triggers,
+then `rollback tran`. Before = after: purchase counter 12561, stock 0, supplier 4472 balance 3,476,134.25, no
+document beyond the counter; no PG residue.
+1. With the generic template: ok (1/1 lines, err 0) but post-trigger `custdiscp` = 0 → no trigger sets it; the
+   screen sends it. Native distribution on 130 (60 days): 862 lines 1.0 / 9 lines 0.0 (other entry paths).
+2. With `custdiscp=1.0`: post-trigger line **identical** to native 12095 on every column except save-time ones.
+   Header differs only on `table_dumped` (replication timestamp) and `cashiercode` (native: 271 empty / 21 = user
+   / 3 other → empty is the norm).
+
+Golden sample after the `custdiscp` fix: 7 of 10 identical; after VAT option A: **9 of 10 identical**, the 10th
+differs only on the accepted `storecode2`/`promtype` variant.
+
+**Safeguards added:**
+- Per-branch gate: a live post needs `REPLACEMENT_POSTING_ENABLED` **and** the case branch in
+  `REPLACEMENT_POSTING_BRANCHES` (default empty). The UI shows the per-case state.
+- Pre-write guard `legs.precheck_purchase` (dry run and live): supplier = rule supplier, the writer's computed
+  total = approved balance (±0.05), same items / quantities / unit cost, no bonus line, VAT lines in buy-back form (tax 0, approved public and %), and (live)
+  every expiry. On failure nothing is sent; the op fails with a HIGH `posting_failed`.
+- The purchase carries the poster's SOFTECH user (`StaffProfile.softech_user_id`), never the writer default
+  `'1'`; a live post without one is refused. (POS orders already carry `seller_usercode`.)
+- Tests: `apps/tests/test_replacement_pilot.py` (13). 112 replacement tests green.
+
+**Pilot runbook (branch 130) — nothing below happens without the owner's explicit go:**
+1. ~~Resolve `custdiscp`~~ and ~~VAT-item pricing~~ (both done 2026-10-26). Re-run the golden sample on the
+   latest native purchases right before go-live.
+2. Confirm the scheduler runs `replacement_daily_check` on the server (verification of every posted leg).
+3. Map the pilot staff: `softech_user_id` on each StaffProfile, `ReplacementGrant.can_post` for 1–2 people.
+4. Settings on the server: `INVOICE_WRITER_ENABLED=True`, `REPLACEMENT_POSTING_ENABLED=True`,
+   `REPLACEMENT_POSTING_BRANCHES=('130',)`. Leave POS writer settings unchanged.
+5. One supervised case per leg (products, cash): approve → capture expiry → post purchase → check in SOFTECH
+   (doc, stock, supplier balance) → cashier voucher natively → next-day daily check `posted_verified`.
+6. Rollback = remove `'130'` from the branch list (instant); posted documents are corrected natively by a
+   supplier return, never deleted.
+
 ### 16.3 Owner answers 2026-10-26
 
 | # | Decision |

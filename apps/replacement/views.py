@@ -305,7 +305,7 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
 
     @action(detail=True, methods=['post'], url_path='prepare-purchase')
     def prepare_purchase(self, request, pk=None):
-        return self._step(request, pk, LG.prepare_purchase)
+        return self._step(request, pk, LG.prepare_purchase, expiries=request.data.get('expiries') or {})
 
     @action(detail=True, methods=['post'], url_path='prepare-contract-sale')
     def prepare_contract_sale(self, request, pk=None):

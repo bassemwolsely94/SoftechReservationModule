@@ -56,6 +56,7 @@ export default function WorkflowPanel({ c }) {
   const [link, setLink] = useState({ branchcode: c.branchcode, docnumber: '', docdate: '' })
   const [channel, setChannel] = useState('cash')
   const [basket, setBasket] = useState([])
+  const [expiries, setExpiries] = useState({})      // itemcode → 'YYYY-MM-DD' for the purchase leg
   const wf = c.workflow || {}
   const can = wf.can || {}
   const v = { version: c.version }
@@ -157,8 +158,20 @@ export default function WorkflowPanel({ c }) {
           {/* purchase */}
           <div data-tour="replacement-detail-purchase-leg" className="space-y-1">
             <div className="text-xs text-gray-500">١ — فاتورة الشراء من المورد الافتراضي (تُنشئ الرصيد)</div>
-            {!opOf('purchase').length && can.post &&
-              <Btn disabled={busy} onClick={() => run(replacementApi.preparePurchase, c.id, v)}>تجهيز فاتورة الشراء</Btn>}
+            {!opOf('purchase').length && can.post && (
+              <div className="flex gap-2 flex-wrap items-center">
+                {/* the boxes stay in our stock → SOFTECH gets their expiry like a native purchase */}
+                {(c.items || []).filter((i) => i.disposition === 'selected_for_replacement').map((i) => (
+                  <label key={i.itemcode} className="text-xs text-gray-600 flex items-center gap-1">
+                    صلاحية {i.item_name}
+                    <input type="date" value={expiries[i.itemcode] || ''}
+                           onChange={(e) => setExpiries((x) => ({ ...x, [i.itemcode]: e.target.value }))}
+                           className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
+                  </label>
+                ))}
+                <Btn disabled={busy} onClick={() => run(replacementApi.preparePurchase, c.id, { ...v, expiries })}>تجهيز فاتورة الشراء</Btn>
+              </div>
+            )}
             {!opOf('purchase').some((o) => !o.result?.native || o.status === 'posted_verified') && can.create &&
               <NativeDocLink label="أو اربط فاتورة الشراء المُدخلة في SOFTECH:" branchcode={c.branchcode} busy={busy}
                              onLink={(d) => run(replacementApi.linkPurchase, c.id, { ...v, ...d })} />}

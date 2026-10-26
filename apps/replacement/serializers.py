@@ -168,7 +168,7 @@ class CaseDetailSerializer(CaseListSerializer):
         from .workflow import approval_route
         staff = self.context.get('staff')
         live = obj.origin == ReplacementCase.ORIGIN_LIVE
-        out = {'live': live, 'posting_enabled': legs.posting_enabled(),
+        out = {'live': live, 'posting_enabled': legs.posting_enabled(obj),
                'created_by': obj.created_by.full_name if obj.created_by_id else '',
                'approved_by': obj.approved_by.full_name if obj.approved_by_id else '',
                'approved_at': obj.approved_at, 'locked': bool(obj.locked_at)}

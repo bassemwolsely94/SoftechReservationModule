@@ -123,6 +123,14 @@ def _docnumber2(invoice):
 
 
 # ── 2. BUILD PLAN — exact column→value maps + SQL (no SOFTECH contact) ──────────
+def _line_extra_for(line_extra, c) -> dict:
+    """line_extra is either one dict for every line (gift coupons) or a function of the computed
+    entry returning that line's native values (replacement buy-backs: tax-0 form of VAT items)."""
+    if callable(line_extra):
+        return line_extra(c) or {}
+    return line_extra or {}
+
+
 def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, line_extra=None):
     computed, header = compute(invoice)
     if not computed:
@@ -176,7 +184,7 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
             row['r_doccode']   = '10'
         elif (ln.batch_number or '').strip():
             row['item_partno'] = ln.batch_number.strip()
-        row.update(line_extra or {})
+        row.update(_line_extra_for(line_extra, c))
         lines.append(row)
 
     counter = invoice.softech_counter_column
@@ -508,7 +516,7 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
         # dblitemflag = 1-based line number (unique-index component for repeated items)
         line_row = _line_row(invoice, c, _Raw('@dn'), usercode, nq, idx,
                              newcostprice=orig_cost.get(code), r_docdate=r_docdate)
-        line_row.update(line_extra or {})
+        line_row.update(_line_extra_for(line_extra, c))
         stmts.append(_insert_sql('stktrans', line_row))
     inserts = '\n'.join(stmts)
     final = 'commit tran' if do_commit else 'rollback tran'
