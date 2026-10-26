@@ -9,6 +9,7 @@ import PicHistoryModal from '../components/PicHistoryModal'
 import PrescriptionOcrModal from '../components/PrescriptionOcrModal'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import PosImageSearch from '../pos/search/PosImageSearch'
+import PosAlternatives from '../pos/search/PosAlternatives'
 import ContractAssist, { ClaimField } from '../pos/contract/ContractAssist'
 import QuickSellGrid from '../components/QuickSellGrid'
 import StockLookupDrawer from '../components/StockLookupDrawer'
@@ -42,6 +43,8 @@ export default function POSOrderPage() {
   const [showHistory, setShowHistory] = useState(false)
   const [showImg, setShowImg] = useState(false)      // F6 full-screen image search
   const [imgSeed, setImgSeed] = useState('')
+  const [altItem, setAltItem] = useState(null)      // F7 verified-alternatives side panel
+  const closeAlt = () => { setAltItem(null); setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0) }
   const openImages = () => { setImgSeed(document.querySelector('#pos-item-search input')?.value || ''); setShowImg(true) }
   const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0) }
   const [showUnits, setShowUnits] = useState(false)   // Q shortcut → enter qty in strips/units
@@ -93,6 +96,8 @@ export default function POSOrderPage() {
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
       <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
                       initialQuery={imgSeed} onPick={P.addItem} />
+      {altItem && <PosAlternatives item={altItem} branchId={P.branch} onClose={closeAlt}
+                                   onPick={(it) => { P.addItem(it); closeAlt() }} />}
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
@@ -768,7 +773,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور · F7 بدائل)" /></div>
           <button onClick={onOpenImages} title="بحث بالصور (F6)" data-tour="pos-order-image-search"
                   className="px-2 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 self-start mt-1 h-[34px] flex items-center"><Icon name="image" size={16} /></button>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
@@ -1132,6 +1137,7 @@ const POS_SHORTCUTS = [
   ['Ctrl+F1', 'بحث متقدم'],
   ['Ctrl+K', 'بحث شامل'],
   ['F6', 'بحث بالصور'],
+  ['F7', 'بدائل مؤكدة للصنف المحدد في البحث'],
   ['F9', 'معاينة الإرسال'],
   ['F10', 'إرسال فعلي (عند التفعيل)'],
 ]

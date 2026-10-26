@@ -251,6 +251,11 @@ export const itemsApi = {
 
 // ── Offers & promotions (Phase 3 — evaluation only; no SOFTECH write yet) ──────
 
+export const posAlternativesApi = {
+  /** Verified alternatives (approved active ingredients only) — {verified, same[], other[]}. */
+  get: (item, branch) => api.get('/composition/alternatives/', { params: { item, ...(branch ? { branch } : {}) } }),
+}
+
 export const offersApi = {
   // Offer CRUD (OfferViewSet) — write gated to admin/supervisor/purchasing server-side
   list:   (params) => api.get('/offers/', { params }),
@@ -2748,6 +2753,9 @@ export const replacementApi = {
   requestPayout:   (id, data)    => api.post(`/replacement/cases/${id}/payouts/`, data),
   cancelPayout:    (id, pid, data) => api.post(`/replacement/cases/${id}/payouts/${pid}/cancel/`, data),
   confirmPayout:   (id, pid, data) => api.post(`/replacement/cases/${id}/payouts/${pid}/confirm/`, data),
+  requestReversal: (id, data)    => api.post(`/replacement/cases/${id}/reversals/`, data),
+  actReversal:     (id, rid, verb, data) => api.post(`/replacement/cases/${id}/reversals/${rid}/${verb}/`, data),
+  insurerRejection: (id, data)   => api.post(`/replacement/cases/${id}/insurer-rejection/`, data),
   postOperation:   (id, opId, data) => api.post(`/replacement/cases/${id}/operations/${opId}/post/`, data),
   rules:           ()            => api.get('/replacement/rules/'),
   grants:          ()            => api.get('/replacement/grants/'),

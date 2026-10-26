@@ -118,10 +118,10 @@ MODULE = {
 _TABS = [
     {'key': 'items', 'title': T('الأصناف', 'Items'),
      'body': T('جدول الأصناف بنفس أعمدة SOFTECH: الكود، الصنف، الكمية، العبوة (علبة/شريط)، السعر، الخصم %، الضريبة، الصافي، رصيد متاح، رصيد صلاحية، وتاريخ الصلاحية ورقم الباتش. '
-               'F2 للبحث وإضافة صنف (بالاسم أو الكود أو الباركود)، F6 «بحث بالصور» لاختيار الصنف من شبكة صور، Q لإدخال الكمية بالشرائط/الوحدات، F4 أو Delete لحذف السطر. التشغيلة تتوزّع تلقائيًا عند إدخال الكمية — الأقرب انتهاءً أولاً — بدون نافذة: السطر يظهر «N تشغيلات» وتواريخ الصلاحية بخط صغير، ولو المتاح أقل من المطلوب يظهر «ناقص X — حجز الباقي» (لا يُضاف حجز إلا لو ضغطت عليه؛ وحتى تحجزه تظهر الكمية «(متاح Y)» وتنبيه بأن المتاح فقط هو اللي هيتبعت)، و«تغيير التشغيلة» يفتح نافذة الباتشات لتختار يدويًا (ولو غيّرت الفرع أو المخزن يظهر السطر «بدون تشغيلة» وتعيد الاختيار منه). الأصناف المُلزِمة باختيار التشغيلة (مثل Entresto) تفتح النافذة ولازم تختار منها. '
+               'F2 للبحث وإضافة صنف (بالاسم أو الكود أو الباركود)، F6 «بحث بالصور» لاختيار الصنف من شبكة صور، F7 «بدائل مؤكدة»، Q لإدخال الكمية بالشرائط/الوحدات، F4 أو Delete لحذف السطر. التشغيلة تتوزّع تلقائيًا عند إدخال الكمية — الأقرب انتهاءً أولاً — بدون نافذة: السطر يظهر «N تشغيلات» وتواريخ الصلاحية بخط صغير، ولو المتاح أقل من المطلوب يظهر «ناقص X — حجز الباقي» (لا يُضاف حجز إلا لو ضغطت عليه؛ وحتى تحجزه تظهر الكمية «(متاح Y)» وتنبيه بأن المتاح فقط هو اللي هيتبعت)، و«تغيير التشغيلة» يفتح نافذة الباتشات لتختار يدويًا (ولو غيّرت الفرع أو المخزن يظهر السطر «بدون تشغيلة» وتعيد الاختيار منه). الأصناف المُلزِمة باختيار التشغيلة (مثل Entresto) تفتح النافذة ولازم تختار منها. '
                'لو ظهر «خصم مقترح» اضغط لتطبيقه. يمكن إضافة الأصناف من صورة الروشتة (OCR) أو من سجل معاملات العميل، ويظهر «يُشترى معه عادةً».',
                'The items grid with the same columns as SOFTECH: code, item, quantity, pack (box/strip), price, discount %, VAT, net, available stock, expiry stock, expiry date and batch. '
-               'F2 to search and add an item (name, code or barcode), F6 "Image search" to pick from a picture grid, Q to enter quantity in strips/units, F4 or Delete to remove the line. Batches are split automatically when you enter the quantity — nearest expiry first — with no pop-up: the line shows "N batches" and the expiry dates in small text; if stock is short it shows "short X — reserve the rest" (a reservation is added only when you click it; until then the qty shows "(available Y)" and a warning says only the available qty will be sent), and "Change batch" opens the batch window to pick by hand (after a branch or store change the line shows "no batch" and you re-pick there). Items that require a batch choice (e.g. Entresto) still open the window and must be picked there. '
+               'F2 to search and add an item (name, code or barcode), F6 "Image search" to pick from a picture grid, F7 "Verified alternatives", Q to enter quantity in strips/units, F4 or Delete to remove the line. Batches are split automatically when you enter the quantity — nearest expiry first — with no pop-up: the line shows "N batches" and the expiry dates in small text; if stock is short it shows "short X — reserve the rest" (a reservation is added only when you click it; until then the qty shows "(available Y)" and a warning says only the available qty will be sent), and "Change batch" opens the batch window to pick by hand (after a branch or store change the line shows "no batch" and you re-pick there). Items that require a batch choice (e.g. Entresto) still open the window and must be picked there. '
                'If a "suggested discount" appears, click to apply it. Items can be added from a prescription photo (OCR) or the customer\'s history, and "often bought with" is shown.')},
     {'key': 'payment', 'title': T('السداد', 'Payment'),
      'body': T('طرق السداد: نقدى أو آجل فقط (تفاصيل الفيزا والشيك تُسجل على شاشة الكاشير في SOFTECH). المدفوع يجب أن يساوي الصافي؛ النظام يعرض «متبقٍّ» أو «فكة». خصم الفكة له حد أقصى 0.50 جنيه.',
@@ -208,6 +208,13 @@ SCREENS = [
              'when': T('لما الاسم مش كفاية وعايز تميّز الصنف بشكل العبوة.', 'When the name is not enough and you recognise the item by its pack.'),
              'open_hint': T('اضغط الصنف (أو Enter لأول صنف) فيتضاف ويرجع المؤشر لخانة البحث. Esc للإغلاق.',
                             'Click an item (or Enter for the first) to add it; focus returns to the search box. Esc closes.')},
+            {'target': 'pos-order-search', 'label': T('بدائل مؤكدة (F7)', 'Verified alternatives (F7)'),
+             'text': T('اضغط F7 على الصنف المحدد: لوحة جانبية بأصناف نفس المادة الفعّالة المعتمدة، بالسعر والرصيد.',
+                       'Press F7 on the highlighted result: a side panel of items with the same approved active ingredient, with price and stock.'),
+             'when': T('لما الصنف مش متاح. كل بديل «يتطلب تأكيد الصيدلي»، ولا يُستبدل شيء تلقائيًا.',
+                       'When the item is unavailable. Every alternative needs pharmacist confirmation; nothing is replaced automatically.'),
+             'open_hint': T('«إضافة» تضيفه كسطر عادي. «ابحث في DrugEye» يفتح الموقع وينسخ الاسم.',
+                            'Add puts it in as a normal line. "Search in DrugEye" opens the site and copies the name.')},
             {'target': 'pos-order-lines', 'label': T('جدول الأصناف', 'Item grid'),
              'text': T('عدّل الكمية مكانها، Q للكمية بالشرائط، F4 أو Del للحذف، ↑↓ للتنقل.',
                        'Edit quantities in place, Q for strips, F4 or Del to delete, ↑↓ to move.'),
@@ -280,6 +287,11 @@ SCREENS = [
              'text': T('اختار النوع والعميل، أو سيبه عميل نقدي.', 'Choose the type and customer, or leave it a cash customer.')},
             {'target': 'pos-mobile-search', 'label': T('بحث · 📷 · 🎤', 'Search · 📷 · 🎤'),
              'text': T('ابحث بالاسم أو الكود، أو امسح الباركود، أو قول اسم الصنف. 🖼 جنب البحث يفتح شبكة صور.', 'Search by name or code, scan the barcode, or say the item name. 🖼 beside the search opens a picture grid.')},
+            {'target': 'pos-mobile-search', 'label': T('بدائل مؤكدة ⇄', 'Verified alternatives ⇄'),
+             'text': T('اضغط ⇄ على صف النتيجة: ورقة من أسفل بأصناف نفس المادة الفعّالة المعتمدة. كل بديل يتطلب تأكيد الصيدلي.',
+                       'Tap ⇄ on a result row: a bottom sheet of items with the same approved active ingredient. Each needs pharmacist confirmation.'),
+             'open_hint': T('«إضافة» تضيفه كسطر عادي. «ابحث في DrugEye» يفتح الموقع وينسخ الاسم.',
+                            'Add puts it in as a normal line. "Search in DrugEye" opens the site and copies the name.')},
             {'target': 'pos-mobile-cart', 'label': T('السلة', 'Basket'),
              'text': T('الأصناف اللي ضفتها — عدّل الكمية أو احذف من هنا.', 'The items you added — change the quantity or delete here.')},
             {'target': 'pos-mobile-totals', 'label': T('الإجمالي · الخصم · الصافي', 'Gross · discount · net'),
@@ -295,7 +307,7 @@ SCREENS = [
              'warn': T('كتابة فعلية في SOFTECH: الأمر يظهر عند كاشير الفرع. راجع الفرع والعميل والكميات بالمعاينة الأول.', 'A real write to SOFTECH: the order appears at the branch cashier. Check branch, customer and quantities with Preview first.'),
              'open_hint': T('«مُعطّل» يعني الإرسال الفعلي مقفول من الإدارة.', '"Disabled" means real sending is switched off by management.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-27',
     },
     {
         'key': 'pos.exceptions',

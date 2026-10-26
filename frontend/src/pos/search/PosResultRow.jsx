@@ -26,7 +26,7 @@ export function ItemBadges({ item }) {
   )
 }
 
-export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAction, onPreview, index }) {
+export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAction, onPreview, onAlternatives, index }) {
   const nameOf = useBranchNames()
   const here = item.qty_at_branch
   const others = (item.branch_stock || []).filter(b => String(b.branch_id) !== String(hereBranchId))
@@ -76,6 +76,11 @@ export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAc
         {price && <span className="text-xs font-bold text-emerald-700 tabnum">{price}</span>}
         <button type="button" title="معاينة (→)" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPreview?.(item) }}
                 className="text-gray-400 hover:text-brand-600"><Icon name="info" size={14} /></button>
+        {onAlternatives && (
+          <button type="button" title="بدائل مؤكدة (F7)" aria-label="بدائل مؤكدة"
+                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onAlternatives(item) }}
+                  className="text-gray-400 hover:text-brand-600"><Icon name="repeat" size={14} /></button>
+        )}
       </div>
     </div>
   )

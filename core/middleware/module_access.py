@@ -120,6 +120,9 @@ def required(path, method):
     if prefix in EXEMPT_PREFIXES:
         return None
     method = method.upper()
+    # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
+    if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
+        return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)
     safe = method in ('GET', 'HEAD', 'OPTIONS')
     if prefix in READ_OPEN_PREFIXES:
         if safe:

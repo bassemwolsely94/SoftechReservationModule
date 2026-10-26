@@ -3,7 +3,7 @@ from django.urls import path, include
 
 from .views import (
     SoftechIngredientRawViewSet, IngredientParseCandidateViewSet,
-    IngredientClassViewSet, IngredientSearchViewSet,
+    IngredientClassViewSet, IngredientSearchViewSet, PosAlternativesView,
 )
 
 router = DefaultRouter()
@@ -13,5 +13,6 @@ router.register(r'classes',    IngredientClassViewSet,           basename='ai-cl
 router.register(r'search',     IngredientSearchViewSet,          basename='ai-search')
 
 urlpatterns = [
+    path('alternatives/', PosAlternativesView.as_view(), name='pos-alternatives'),
     path('', include(router.urls)),
 ]

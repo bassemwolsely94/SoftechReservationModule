@@ -15,6 +15,9 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.pos_orders.permissions import CanViewPos
 
 from apps.chronic.models import IngredientClass
 from .models import SoftechIngredientRaw, IngredientParseCandidate, ItemMoleculeIndex
@@ -416,3 +419,21 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
             'molecules': base.values('molecule').distinct().count(),
             'approved': base.filter(source='approved').count(),
         })
+
+
+class PosAlternativesView(APIView):
+    """GET /api/composition/alternatives/?item=<id>&branch=<id> — verified alternatives for the POS.
+
+    Approved-composition only (see alternatives.py); gated by the POS view grant.
+    """
+    permission_classes = [IsAuthenticated, CanViewPos]
+
+    def get(self, request):
+        from django.shortcuts import get_object_or_404
+        from apps.catalog.models import Item
+        from .alternatives import alternatives_for
+        raw = request.query_params.get('item')
+        if not raw or not str(raw).isdigit():
+            return Response({'detail': 'item مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
+        item = get_object_or_404(Item, pk=int(raw))
+        return Response(alternatives_for(item.id, branch_id=request.query_params.get('branch') or None))

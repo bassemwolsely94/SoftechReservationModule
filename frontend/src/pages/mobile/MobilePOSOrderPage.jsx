@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PosImageSearch from '../../pos/search/PosImageSearch'
+import PosAlternatives from '../../pos/search/PosAlternatives'
 import { Icon } from '../../pos/design'
 import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
 import PicHistoryModal from '../../components/PicHistoryModal'
@@ -34,6 +35,7 @@ export default function MobilePOSOrderPage() {
   const [showOcr, setShowOcr] = useState(false)
   const [showImg, setShowImg] = useState(false)   // full-screen image search
   const [imgSeed, setImgSeed] = useState('')
+  const [altItem, setAltItem] = useState(null)   // verified-alternatives bottom sheet
   const openImages = () => { setImgSeed(document.querySelector('[data-tour="pos-mobile-search"] input')?.value || ''); setShowImg(true) }
   const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('[data-tour="pos-mobile-search"] input')?.focus(), 0) }
   const [showHistory, setShowHistory] = useState(false)
@@ -110,7 +112,7 @@ export default function MobilePOSOrderPage() {
       {/* product search + barcode + favorites */}
       <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
         <div className="flex gap-2 items-start">
-          <div className="flex-1 min-w-0"><ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" /></div>
+          <div className="flex-1 min-w-0"><ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" /></div>
           <button onClick={openImages} title="بحث بالصور" aria-label="بحث بالصور"
                   className="px-3 py-2 rounded border border-gray-300 bg-white text-gray-600 shrink-0"><Icon name="image" size={18} /></button>
         </div>
@@ -399,6 +401,8 @@ export default function MobilePOSOrderPage() {
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
       <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
                       initialQuery={imgSeed} onPick={P.addItem} />
+      {altItem && <PosAlternatives sheet item={altItem} branchId={P.branch} onClose={() => setAltItem(null)}
+                                   onPick={(it) => { P.addItem(it); setAltItem(null) }} />}
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
@@ -504,7 +508,7 @@ function MGItems({ P }) {
   const [unitsIdx, setUnitsIdx] = useState(-1)
   return (
     <div className="space-y-2 max-w-md mx-auto">
-      <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" />
+      <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
       {!P.lines.length && <div className="text-center text-gray-400 text-sm py-6">أضف الأصناف بالبحث بالأعلى</div>}
       {unitsIdx >= 0 && P.lines[unitsIdx] && (
         <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />

@@ -186,7 +186,7 @@ export default function ItemSearchWidget({
   variant       = 'default',
   branchId      = null,
   onAction      = null,
-  onAlternatives = null,   // eslint-disable-line no-unused-vars
+  onAlternatives = null,   // pos variant: F7 / row button → verified alternatives panel
   customerId    = null,
   sheet         = false,
 }) {
@@ -286,6 +286,11 @@ export default function ItemSearchWidget({
       return
     }
     if (!listOpen) return
+    if (e.key === 'F7' && onAlternatives) {           // F7 (also stops Chrome's caret-browsing prompt)
+      const it = results[Math.min(sel, results.length - 1)]
+      if (it) { e.preventDefault(); e.stopPropagation(); setOpen(false); onAlternatives(it) }
+      return
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(s + 1, results.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(s - 1, 0)) }
     else if (e.key === 'ArrowRight') { e.preventDefault(); setPreviewOn(p => !p) }   // physical → key
@@ -372,7 +377,7 @@ export default function ItemSearchWidget({
       <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 flex-wrap">
         <BarcodeIcon />
         {isPos
-          ? 'اسم · كود · باركود · * أو % لأي حروف · ↑↓ تنقّل · Enter إضافة · → معاينة · Esc إغلاق ·'
+          ? 'اسم · كود · باركود · * أو % لأي حروف · ↑↓ تنقّل · Enter إضافة · → معاينة · F7 بدائل · Esc إغلاق ·'
           : 'اسم · كود · باركود (قارئ ضوئي متوافق) · لا حاجة لـ * (البحث الجزئي تلقائي) ·'}
         <button
           type="button"
@@ -394,6 +399,7 @@ export default function ItemSearchWidget({
               <PosResultRow key={item.softech_id || item.id || i} index={i} item={item}
                 hereBranchId={branchId} selected={i === sel}
                 onAdd={handleSelect} onAction={handleAction}
+                onAlternatives={onAlternatives ? (it) => { setOpen(false); onAlternatives(it) } : null}
                 onPreview={() => { if (sel === i) setPreviewOn(p => !p); else { setSel(i); setPreviewOn(true) } }} />
             )) : (
               <div className="px-4 py-4 text-sm text-gray-400 text-center">

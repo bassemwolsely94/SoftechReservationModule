@@ -10,6 +10,8 @@ import { useEffect } from 'react'
  *    2026-10-07. Contract channel and tabs are by mouse until an alternative is chosen.)
  *   F2            → focus the item-search box (add a line — SOFTECH types in the empty row)
  *   F6            → full-screen image search (PosImageSearch)
+ *   F7            → verified alternatives for the highlighted search row (handled inside
+ *                   ItemSearchWidget, which owns the highlighted row; F7 is free here)
  *   F4 / Delete   → delete the selected line
  *   F9            → preview the send (dry-run — never writes to SOFTECH)
  *   F10           → live send to the cashier (only when the writer is enabled)
