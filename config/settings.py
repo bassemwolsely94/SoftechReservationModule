@@ -50,6 +50,25 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # process refuses to start without a real one. Dev (DEBUG=True) and the test runner
 # fall back to a throwaway per-process key.
 _RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+
+# A test run ignores .env for every SOFTECH write / gate / alert switch (…_ENABLED, …_WRITE,
+# COUPON_GUARD_…, …_AUTO_APPROVE, …_NOTIFY, …) and takes the code default instead — the value
+# the tests are written against. Without this a production .env (writers ON) made every
+# "gate off by default" test fail. Tests that need a gate open use override_settings.
+# SOFTECH_TESTS_ALLOW_LIVE=True keeps .env for a deliberate run against a TEST server.
+if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast=bool):
+    import re as _re
+    _GATE_KEY = _re.compile(r'(_ENABLED|_WRITE|_WRITER|_AUTO_APPROVE|_AUTO_TOPUP|_UPDATE_PATIENTDATA|_NOTIFY)$'
+                            r'|^COUPON_GUARD_')
+    _env_config = config
+
+    def config(key, *args, **kwargs):          # noqa: F811 — test-run wrapper
+        if _GATE_KEY.search(key) and 'default' in kwargs:
+            value, cast = kwargs['default'], kwargs.get('cast')
+            if isinstance(value, str) and cast is bool:
+                return value.strip().lower() in ('1', 'true', 'yes', 'on')
+            return cast(value) if (cast and isinstance(value, str)) else value
+        return _env_config(key, *args, **kwargs)
 if not SECRET_KEY or SECRET_KEY.startswith('change-me'):
     if DEBUG or _RUNNING_TESTS:
         SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()

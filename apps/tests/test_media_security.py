@@ -95,12 +95,15 @@ class SignedMediaTests(SimpleTestCase):
 
     def test_script_capable_upload_is_sandboxed_download(self):
         name = default_storage.save('chatter/2026/10/evil.svg', ContentFile(b'<svg onload="alert(1)"/>'))
+        r = None
         try:
             r = self._get(default_storage.url(name))
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r['Content-Security-Policy'], 'sandbox')
             self.assertTrue(r['Content-Disposition'].startswith('attachment'))
         finally:
+            if r is not None:
+                r.close()          # the FileResponse holds the file open; Windows can't delete it
             default_storage.delete(name)
 
     @override_settings(MEDIA_ACCEL_REDIRECT=True)

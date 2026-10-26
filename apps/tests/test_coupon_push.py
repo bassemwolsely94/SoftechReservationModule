@@ -90,6 +90,11 @@ class _Base(TestCase):
         self.hq = make_branch('المركز الرئيسي', '100')
         self.points = make_item('COUPON FOR POINTS', '102230')
         self.served = make_item('COUPON SERVED TO CUSTOMER', '118639')
+        # The live catalog prices (SOFTECH items): the purchase engine reads the pre-tax
+        # base (itemsaleprice_tax) from the catalog, so the coupon items need theirs.
+        for it, price in ((self.points, 400), (self.served, -50)):
+            it.pack_price = it.pack_price_tax = price
+            it.save(update_fields=['pack_price', 'pack_price_tax'])
         coupons.import_purchase_lines([_line('102230', '27300-KNQ777', '2030-03-10', 63944),
                                        _line('118639', '27300-KNQ777', '2030-03-10', 63945)])
         self.batch = coupons.generate_batch(size=3)
