@@ -158,3 +158,12 @@ class FefoSplitTests(TestCase):
         c.force_authenticate(u)
         r = c.post('/api/pos-orders/fefo-split/', {'batches': [], 'need': 1}, format='json')
         self.assertEqual(r.status_code, 403)
+
+    def test_fefo_split_refuses_role_without_pos_grant(self):
+        from .factories import make_user
+        _, _, viewer = make_user('fefo_viewer', role='viewer')
+        r = viewer.post('/api/pos-orders/fefo-split/', {'batches': [], 'need': 1}, format='json')
+        self.assertEqual(r.status_code, 403)
+        _, _, seller = make_user('fefo_seller', role='salesperson')
+        r = seller.post('/api/pos-orders/fefo-split/', {'batches': [], 'need': 1}, format='json')
+        self.assertEqual(r.status_code, 200)

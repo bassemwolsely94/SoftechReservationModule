@@ -197,6 +197,14 @@ class ApiTests(TestCase):
                     'field-values/?customer=1&column=fileno', 'approval-check/?customer=1&value=1'):
             self.assertEqual(c.get('/api/pos-orders/contract-assist/' + url).status_code, 403, url)
 
+    def test_contract_assist_refuses_role_without_pos_grant(self):
+        _, _, client = make_user('viewer_ch', role='viewer')   # active profile, no pos grant
+        for url in ('config/?customer=1', 'patients/?customer=1&q=a', 'history/?customer=1&patient=a',
+                    'field-values/?customer=1&column=fileno', 'approval-check/?customer=1&value=1'):
+            self.assertEqual(client.get('/api/pos-orders/contract-assist/' + url).status_code, 403, url)
+        _, _, ok = make_user('seller_ch2', role='salesperson')  # has pos
+        self.assertEqual(ok.get('/api/pos-orders/contract-assist/config/?customer=1').status_code, 200)
+
     def test_endpoints_happy_path(self):
         _, _, client = make_user('seller_ch', role='salesperson')
         b = make_branch()

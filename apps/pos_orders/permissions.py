@@ -41,3 +41,23 @@ class CanPushPosOrders(BasePermission):
         except Exception:
             pass
         return p.role in PUSH_ROLES
+
+
+class CanViewPos(BasePermission):
+    """Contract-assist / FEFO helper endpoints — roles with the POS module (`pos`/view).
+
+    RBAC matrix is authoritative; PUSH_ROLES (the operator roles) is only the fallback for a DB
+    where the `pos` rows aren't seeded yet, same as CanPushPosOrders.
+    """
+    def has_permission(self, request, view):
+        p = _profile(request)
+        if not (p and p.is_active):
+            return False
+        if p.role == 'admin':
+            return True
+        try:
+            if p.can_do('pos', 'view'):
+                return True
+        except Exception:
+            pass
+        return p.role in PUSH_ROLES

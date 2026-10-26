@@ -19,7 +19,7 @@ from rest_framework.response import Response
 
 from .models import SoftechSalesOrder, CHANNEL_TO_PTCLASSIF, PAYTYPE_TO_SOFTECH, DOCKIND_TO_DOCCODE
 from .serializers import OrderSerializer
-from .permissions import CanOperatePosOrders, CanPushPosOrders
+from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
@@ -935,7 +935,7 @@ FEFO_SPLIT_MAX_BATCHES = 50
 
 
 @api_view(['POST'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def fefo_split_view(request):
     """
     POST {"batches": [{expiry, batchno, qty}], "need": n} → {"picks": [...], "shortfall": x}
@@ -1353,14 +1353,14 @@ def _int_param(request, name):
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def contract_assist_config(request):
     from . import contract_history as ch
     return Response(ch.entry_config(_assist_customer(request)))
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def contract_assist_patients(request):
     from . import contract_history as ch
     pc = _assist_customer(request)
@@ -1368,7 +1368,7 @@ def contract_assist_patients(request):
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def contract_assist_history(request):
     from . import contract_history as ch
     pc = _assist_customer(request)
@@ -1380,7 +1380,7 @@ def contract_assist_history(request):
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def contract_assist_field_values(request):
     from . import contract_history as ch
     pc = _assist_customer(request)
@@ -1393,7 +1393,7 @@ def contract_assist_field_values(request):
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([CanViewPos])
 def contract_assist_approval_check(request):
     from . import contract_history as ch
     pc = _assist_customer(request)
