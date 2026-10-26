@@ -389,3 +389,35 @@ class PosSelectionEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} {self.item_code} @ {self.occurred_at:%Y-%m-%d %H:%M}'
+
+
+class ContractEntryConfig(models.Model):
+    """Which contract (تعاقد) claim columns change per VISIT vs stay with the patient, and which
+    column carries the approval / prescription number used for the re-use warning.
+    personcode '' = the global default row. Admin-only editing. PG-only; never touches SOFTECH."""
+    personcode = models.CharField(max_length=20, unique=True, blank=True,
+                                  verbose_name="كود حساب التعاقد ('' = الافتراضي)")
+    per_visit_columns = models.JSONField(default=list, blank=True,
+                                         verbose_name='أعمدة تتغير كل زيارة')
+    approval_column = models.CharField(max_length=20, default='roshettano',
+                                       verbose_name='عمود رقم الموافقة / الروشتة')
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'إعداد إدخال التعاقد'
+        verbose_name_plural = 'إعدادات إدخال التعاقد'
+
+    def __str__(self):
+        return self.personcode or 'الافتراضي'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from .contract_fields import SLOT_COLUMN
+        allowed = set(SLOT_COLUMN.values())
+        cols = self.per_visit_columns
+        if not isinstance(cols, list) or any(c not in allowed for c in cols):
+            raise ValidationError({'per_visit_columns': 'أعمدة غير معروفة: يجب أن تكون من أعمدة بيانات التعاقد الـ12'})
+        if self.approval_column not in allowed:
+            raise ValidationError({'approval_column': 'عمود غير معروف'})

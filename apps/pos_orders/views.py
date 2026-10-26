@@ -1285,3 +1285,69 @@ def reference_data(request):
         'default_branch': (sp.branch_id if sp and sp.branch_id else None),   # auto-select the seller's branch
         'note': 'SOFTECH writes are disabled (no test instance). /push returns a dry-run plan.',
     })
+
+
+# ── Contract (تعاقد) fast-entry assist — read-only, PG only (POS Speed Wave) ──────────────────
+def _assist_customer(request):
+    pc = (request.query_params.get('customer') or '').strip()
+    if not pc:
+        raise ValidationError({'customer': 'مطلوب'})
+    return pc
+
+
+def _int_param(request, name):
+    v = request.query_params.get(name)
+    try:
+        return int(v) if v not in (None, '') else None
+    except ValueError:
+        raise ValidationError({name: 'رقم غير صالح'})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_assist_config(request):
+    from . import contract_history as ch
+    return Response(ch.entry_config(_assist_customer(request)))
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_assist_patients(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    return Response({'results': ch.patient_suggest(pc, request.query_params.get('q', ''))})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_assist_history(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    patient = (request.query_params.get('patient') or '').strip()
+    if not patient:
+        raise ValidationError({'patient': 'مطلوب'})
+    return Response({'results': ch.recent_prescriptions(
+        pc, patient, branch_id=_int_param(request, 'branch'))})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_assist_field_values(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    try:
+        vals = ch.field_values(pc, request.query_params.get('column', ''),
+                               request.query_params.get('q', ''))
+    except ValueError:
+        raise ValidationError({'column': 'عمود غير معروف'})
+    return Response({'results': vals})
+
+
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def contract_assist_approval_check(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    matches = ch.approval_reused(pc, request.query_params.get('value', ''),
+                                 exclude_order_id=_int_param(request, 'exclude_order'))
+    return Response({'reused': bool(matches), 'matches': matches})
