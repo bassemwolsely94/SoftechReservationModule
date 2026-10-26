@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { incentivesApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -138,14 +139,14 @@ function ProgramProgressCard({ prog }) {
     : 0
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div data-tour="incentives-mine-program" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-l from-brand-600 to-brand-700 px-6 py-5 text-white">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-lg font-bold">{prog.program_name}</div>
             <div className="text-sm opacity-75 mt-0.5">
-              {prog.period_start} → {prog.period_end}
+              {prog.period_start} {fa()} {prog.period_end}
             </div>
           </div>
           <div className="text-left">
@@ -179,7 +180,7 @@ function ProgramProgressCard({ prog }) {
 
         {/* Top items */}
         {prog.top_items?.length > 0 && (
-          <div>
+          <div data-tour="incentives-mine-top-items">
             <div className="text-xs font-semibold text-gray-500 mb-2">أعلى الأصناف تحقيقاً</div>
             <div className="space-y-1.5">
               {prog.top_items.map(item => (
@@ -196,7 +197,7 @@ function ProgramProgressCard({ prog }) {
         {/* Slab / target progress */}
         {prog.slab_progress?.length > 0 && (
           <div>
-            <button
+            <button data-tour="incentives-mine-slabs"
               className="w-full text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 py-1"
               onClick={() => setExpanded(e => !e)}
             >
@@ -215,7 +216,7 @@ function ProgramProgressCard({ prog }) {
 
         {/* Rule breakdown (collapsed) */}
         {prog.rule_breakdown?.length > 1 && (
-          <details className="text-xs">
+          <details data-tour="incentives-mine-rules" className="text-xs">
             <summary className="text-gray-500 cursor-pointer">تفاصيل القواعد</summary>
             <div className="mt-2 space-y-1">
               {prog.rule_breakdown.map(rb => (
@@ -286,7 +287,7 @@ export default function MyIncentivesPage() {
               {employee?.name} — {asOf ? `حتى ${asOf}` : ''}
             </p>
           </div>
-          <button
+          <button data-tour="incentives-mine-refresh"
             className="btn-secondary text-sm flex items-center gap-1"
             onClick={load}
           >
@@ -296,7 +297,7 @@ export default function MyIncentivesPage() {
 
         {/* Grand total banner */}
         {programs.length > 0 && (
-          <div className="bg-gradient-to-l from-green-600 to-green-700 rounded-2xl p-6 text-white">
+          <div data-tour="incentives-mine-totals" className="bg-gradient-to-l from-green-600 to-green-700 rounded-2xl p-6 text-white">
             <div className="grid grid-cols-2 gap-6 text-center">
               <div>
                 <div className="text-4xl font-bold">{fmt(totalEarned)}</div>

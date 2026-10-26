@@ -125,6 +125,7 @@ import TransfersAnalyticsPage from './pages/TransfersAnalyticsPage'
 // Operations — previously missing routes
 import CallCenterPage from './pages/CallCenterPage'
 import CasesPage from './pages/CasesPage'
+import CallbackQueuePage from './pages/CallbackQueuePage'
 import AuditPage from './pages/AuditPage'
 import FollowUpsPage from './pages/FollowUpsPage'
 import DemandPage from './pages/DemandPage'
@@ -352,6 +353,7 @@ export default function App() {
             {/* ── Call Center & Follow-Ups ─────────────────────────────── */}
             <Route path="callcenter"            element={<CallCenterPage />} />
             <Route path="callcenter/cases"      element={<CasesPage />} />
+            <Route path="callcenter/callbacks"  element={<CallbackQueuePage />} />
             <Route path="callcenter/analytics"  element={<CallCenterAnalyticsPage />} />
             <Route path="followups"             element={<FollowUpsPage />} />
             <Route path="followups/reminders"   element={<RefillRemindersPage />} />

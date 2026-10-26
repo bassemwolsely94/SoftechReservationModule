@@ -37,6 +37,13 @@ class VendorProfile(models.Model):
                                              verbose_name='أسماء بديلة')
     typical_discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0,
                                                 verbose_name='خصم نموذجي %')
+    # Per-distributor OCR extraction hints, tuned per main distributor and learned over
+    # time (code format, FOC/bonus style, tax handling, free-text). Injected into the
+    # extraction prompt when this vendor is known at upload time. See ocr.vendor_prompt_hints.
+    #   { "code_format": "alphanumeric|numeric", "foc_style": "same_line|separate_line|none",
+    #     "tax_note": "...", "notes": "free text" }
+    ocr_profile          = models.JSONField(default=dict, blank=True,
+                                            verbose_name='ملف قراءة الفاتورة (OCR)')
     notes                = models.TextField(blank=True, verbose_name='ملاحظات')
     created_at           = models.DateTimeField(auto_now_add=True)
     updated_at           = models.DateTimeField(auto_now=True)
@@ -87,6 +94,114 @@ class VendorItemMapping(models.Model):
         return f'{self.raw_name_normalized} → {self.item}'
 
 
+# ── Multi-invoice bundle (document stack) ──────────────────────────────────────
+
+class InvoiceBatch(models.Model):
+    """
+    A single uploaded PDF (or image) that may contain MANY separate invoices —
+    the normal case for the main distributors, whose daily PDF is a stack of
+    one-page invoices (a 50-page Ramco PDF observed = ~50 distinct invoices).
+
+    This is purely an INGESTION container upstream of the existing pipeline: it
+    is rendered, probed and split, then fanned out into ordinary SupplierInvoice
+    rows (``invoices`` below) that run the normal OCR/match/review/post flow.
+    It never touches SOFTECH itself — only its child invoices do, through the
+    existing writer. Not a parallel invoice app.
+    """
+    STATUS = [
+        ('pending',    'في الانتظار'),
+        ('processing', 'جاري التقسيم والمعالجة'),
+        ('ready',      'تم التقسيم — قيد المراجعة'),
+        ('failed',     'فشل التقسيم'),
+    ]
+
+    branch       = models.ForeignKey('branches.Branch', on_delete=models.CASCADE,
+                                      related_name='invoice_batches', verbose_name='الفرع')
+    vendor       = models.ForeignKey(VendorProfile, on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name='invoice_batches',
+                                      verbose_name='المورد (افتراضي للحزمة)')
+    doc_kind     = models.CharField(max_length=10, default='purchase',
+                                    choices=[('purchase', 'شراء'), ('return', 'مرتجع')],
+                                    verbose_name='نوع المستند')
+    # OCR engine for extracting the lines of each detected invoice: '' = auto
+    # (Gemini when a key is set, else the free easyOCR engine). See engines.py.
+    OCR_ENGINE = [('', 'تلقائي'), ('gemini', 'Gemini (مدفوع)'),
+                  ('tesseract', 'Tesseract (مجاني)'), ('easyocr', 'easyOCR (مجاني)')]
+    ocr_engine   = models.CharField(max_length=12, blank=True, default='', choices=OCR_ENGINE,
+                                    verbose_name='محرك القراءة')
+    created_by   = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                      null=True, related_name='invoice_batches',
+                                      verbose_name='رُفعت بواسطة')
+    status       = models.CharField(max_length=20, choices=STATUS, default='pending',
+                                    db_index=True, verbose_name='الحالة')
+    source_file  = models.FileField(upload_to='invoice_bundles/', null=True, blank=True,
+                                    verbose_name='ملف الحزمة (PDF)')
+    page_count      = models.PositiveIntegerField(default=0, verbose_name='عدد الصفحات')
+    detected_count  = models.PositiveIntegerField(default=0, verbose_name='عدد الفواتير المكتشفة')
+    processed_count = models.PositiveIntegerField(default=0, verbose_name='تمت معالجتها')
+    # splitter.summarize() output: one entry per detected invoice (pages, doc no.,
+    # type, date, confidence) — the audit trail for how the bundle was divided.
+    split_summary   = models.JSONField(default=list, blank=True, verbose_name='تفاصيل التقسيم')
+    # document-robustness flags for the whole bundle (blank_pages, rotated_pages…)
+    flags           = models.JSONField(default=list, blank=True, verbose_name='ملاحظات المعالجة')
+    error           = models.TextField(blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'حزمة فواتير'
+        verbose_name_plural = 'حزم الفواتير'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'حزمة #{self.id} — {self.detected_count} فاتورة / {self.page_count} صفحة'
+
+
+# ── Purchase Order / GRN (separate, advisory workflow) ──────────────────────────
+
+class PurchaseOrder(models.Model):
+    """A purchase order the pharmacy placed with a supplier. Used ONLY for an
+    optional, advisory goods-received check against the supplier's invoice — it is
+    deliberately decoupled from the SOFTECH posting flow (never gates a post).
+    Low-traffic: most invoices are posted without a PO."""
+    STATUS = [('open', 'مفتوح'), ('received', 'تم الاستلام'),
+              ('closed', 'مغلق'), ('cancelled', 'ملغي')]
+    branch     = models.ForeignKey('branches.Branch', on_delete=models.CASCADE,
+                                   related_name='purchase_orders', verbose_name='الفرع')
+    vendor     = models.ForeignKey(VendorProfile, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='purchase_orders', verbose_name='المورد')
+    po_number  = models.CharField(max_length=50, verbose_name='رقم أمر الشراء')
+    status     = models.CharField(max_length=12, choices=STATUS, default='open', db_index=True,
+                                  verbose_name='الحالة')
+    notes      = models.TextField(blank=True, verbose_name='ملاحظات')
+    created_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                   related_name='purchase_orders', verbose_name='أُنشئ بواسطة')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'أمر شراء'
+        verbose_name_plural = 'أوامر الشراء'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'PO {self.po_number} — {self.vendor.name if self.vendor else "?"}'
+
+
+class PurchaseOrderLine(models.Model):
+    po         = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE,
+                                   related_name='lines', verbose_name='أمر الشراء')
+    item       = models.ForeignKey('catalog.Item', on_delete=models.CASCADE,
+                                   related_name='+', verbose_name='الصنف')
+    quantity   = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='الكمية')
+    unit_price = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name='سعر الوحدة')
+    notes      = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = 'سطر أمر شراء'
+        verbose_name_plural = 'سطور أوامر الشراء'
+
+
 # ── Invoice ────────────────────────────────────────────────────────────────────
 
 class SupplierInvoice(models.Model):
@@ -110,6 +225,22 @@ class SupplierInvoice(models.Model):
 
     branch          = models.ForeignKey('branches.Branch', on_delete=models.CASCADE,
                                          related_name='invoices', verbose_name='الفرع')
+    # When this invoice was carved out of a multi-invoice PDF bundle, the parent
+    # batch and the bundle page numbers it was built from (audit of the split).
+    batch           = models.ForeignKey('InvoiceBatch', on_delete=models.SET_NULL,
+                                         null=True, blank=True, related_name='invoices',
+                                         verbose_name='حزمة المصدر')
+    source_pages    = models.JSONField(default=list, blank=True,
+                                        verbose_name='صفحات الحزمة')
+    # Optional link to a purchase order for the advisory goods-received check
+    # (separate workflow; never affects posting).
+    po              = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name='invoices',
+                                        verbose_name='أمر الشراء')
+    # OCR review flags for this detected invoice (few_lines, low_recall,
+    # low_confidence, no_totals…) — see apps/invoices/preprocess.page_quality.
+    ocr_flags       = models.JSONField(default=list, blank=True,
+                                       verbose_name='تنبيهات القراءة')
     doc_kind        = models.CharField(max_length=10, choices=DOC_KIND, default='purchase',
                                         verbose_name='نوع المستند')
     vendor          = models.ForeignKey(VendorProfile, on_delete=models.SET_NULL,
@@ -163,6 +294,11 @@ class SupplierInvoice(models.Model):
     erp_payload     = models.JSONField(default=dict, blank=True, verbose_name='الحمولة المُرسلة')
     erp_readback    = models.JSONField(default=dict, blank=True, verbose_name='قراءة التحقق')
     erp_error       = models.TextField(blank=True)
+
+    # Cached thorough duplicate-check summary (writer.check_duplicates), run in the
+    # background when the invoice enters review so the LIST can flag re-entries early.
+    dup_check       = models.JSONField(default=dict, blank=True, verbose_name='فحص التكرار')
+    dup_checked_at  = models.DateTimeField(null=True, blank=True)
 
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
@@ -236,6 +372,12 @@ class InvoiceLine(models.Model):
                                                verbose_name='خصم مطابقة %')
     extra_discount_pct   = models.DecimalField(max_digits=6, decimal_places=3, default=0,
                                                verbose_name='خصم إضافي % (خ.ص.د)')
+    # خصم خاص (d3) — a third purchase discount applied AFTER the basic + extra ones
+    # (compound). The SofTech cost = base × (1−d1)(1−d2)(1−d3).
+    special_discount_pct = models.DecimalField(max_digits=6, decimal_places=3, default=0,
+                                               verbose_name='خصم خاص %')
+    # الضريبة من التكلفة — VAT base is the purchase cost (True) or the base price (False)
+    tax_from_cost        = models.BooleanField(default=True, verbose_name='الضريبة من التكلفة')
     unit_price           = models.DecimalField(max_digits=10, decimal_places=3, default=0,
                                                verbose_name='سعر الصيدلي')
     discount_amt         = models.DecimalField(max_digits=10, decimal_places=3, default=0,
@@ -248,12 +390,24 @@ class InvoiceLine(models.Model):
                                                  verbose_name='هامش ربح الصيدلي')
     line_total           = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True,
                                                verbose_name='إجمالي صيدلي')
+    # FOC / free-bonus packs on this line (printed "10+1" or on a separate bonus line).
+    # On push this expands to a 2nd stktrans line at zero cost (see softech_columns.expand_foc).
+    bonus_qty            = models.DecimalField(max_digits=10, decimal_places=3, default=0,
+                                               verbose_name='كمية البونص (هدية)')
 
     match_score     = models.FloatField(null=True, blank=True, verbose_name='نسبة التطابق')
     ocr_confidence  = models.FloatField(null=True, blank=True, verbose_name='ثقة الاستخراج (OCR)')
     # Set at ingest when the Arabic name and the English generic guess resolve to
     # DIFFERENT catalog items — an "uncertain match, please verify" signal.
     match_review    = models.BooleanField(default=False, verbose_name='مطابقة تحتاج مراجعة')
+    # Set when the OCR name matched SEVERAL catalog products — operator must pick one.
+    needs_pick      = models.BooleanField(default=False, verbose_name='يحتاج اختيار صنف')
+    # Per-line retail-price decision when the invoice public price differs from the
+    # item's current catalog price. 'use_new' only flags intent — the master-price
+    # write is a separate, approval-gated SOFTECH step (never automatic here).
+    PRICE_ACTION = [('keep_old', 'إبقاء سعر البيع الحالي'), ('use_new', 'تحديث سعر البيع')]
+    price_action    = models.CharField(max_length=10, choices=PRICE_ACTION, default='keep_old',
+                                       verbose_name='قرار سعر البيع')
     is_confirmed    = models.BooleanField(default=False, verbose_name='مُأكَّد')
     notes           = models.CharField(max_length=300, blank=True, verbose_name='ملاحظات')
     order           = models.PositiveSmallIntegerField(default=0)

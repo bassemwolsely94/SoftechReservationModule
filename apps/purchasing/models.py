@@ -251,7 +251,7 @@ class SupplierLeadTime(models.Model):
     the lead-time estimator (from SOFTECH purchase receipts) or set manually.
     """
     METHOD_CHOICES = [
-        ('order_to_receive', 'أمر → استلام'),   # true lead time (PO date → receipt)
+        ('order_to_receive', 'أمر ← استلام'),   # true lead time (PO date → receipt)
         ('receipt_interval', 'فترة بين التوريدات'),  # cadence proxy
         ('manual',           'يدوى'),
     ]
@@ -1170,6 +1170,9 @@ class IsrPush(models.Model):
     line_count = models.PositiveIntegerField(default=0)
     docvalue   = models.DecimalField(max_digits=16, decimal_places=3, default=0)
     lines_snapshot = models.JSONField(default=list, blank=True)   # reviewed lines (itemcode, itemqty, …)
+    # how the lines were chosen (audit): {'rule': 'softech'|'engine', 'settings': {…filters,
+    # coverage, hq_only, cap_hq…}, 'stats': {what was left out and why}, 'as_of': …}
+    params = models.JSONField(default=dict, blank=True)
 
     created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                     null=True, blank=True, related_name='isr_pushes_created')
@@ -1210,6 +1213,14 @@ class IsrPush(models.Model):
                 condition=models.Q(origin_request__isnull=False,
                                    status__in=['proposed', 'approved', 'pushed']),
                 name='isrpush_one_live_leg_per_request_donor'),
+            # one live GENERAL draft per route (doc 30 phase A, 2026-10-24): #30 / #32 were
+            # copies of the already-pushed #29. A new draft supersedes an older proposed one
+            # (isr_guards); this stops two parallel clicks from both getting through.
+            models.UniqueConstraint(
+                fields=['kind', 'branchcode', 'dest_branchcode'],
+                condition=models.Q(origin_isr__isnull=True, origin_request__isnull=True,
+                                   status__in=['proposed', 'approved']),
+                name='isrpush_one_live_draft_per_route'),
         ]
 
     def __str__(self):
@@ -1249,3 +1260,60 @@ class CoverageTopUp(models.Model):
     def __str__(self):
         return (f'CoverageTopUp {self.pk} | run {self.run_id} | {self.status} | '
                 f'fill {self.filled_count} refresh {self.refreshed_count}')
+
+
+# ── Seasonality (owner 2026-10-25) — apps/purchasing/seasonality.py ──────────────
+# Network monthly sales per item for the last 48 COMPLETE months (MONTHS_BACK), read from SOFTECH invoice by
+# invoice so BULK invoices are kept apart; the seasonal index per calendar month from it.
+# Display only — nothing here feeds the rates pushed to SOFTECH (that is an owner decision).
+
+class ItemMonthlySales(models.Model):
+    item_code    = models.CharField(max_length=20, db_index=True)
+    item         = models.ForeignKey('catalog.Item', on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='monthly_sales')
+    month        = models.DateField(db_index=True)                  # first day of the month
+    qty          = models.DecimalField(max_digits=14, decimal_places=3, default=0)   # all sales
+    regular_qty  = models.DecimalField(max_digits=14, decimal_places=3, default=0)   # bulk invoices excluded
+    bulk_qty     = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    invoices     = models.PositiveIntegerField(default=0)
+    bulk_invoices = models.PositiveIntegerField(default=0)
+    pulled_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('item_code', 'month')
+        verbose_name = 'مبيعات صنف شهرية (للموسمية)'
+
+
+class ItemSeasonality(models.Model):
+    item       = models.ForeignKey('catalog.Item', on_delete=models.CASCADE, related_name='seasonality')
+    month      = models.PositiveSmallIntegerField()                 # 1..12
+    index      = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)  # None = not enough data
+    years      = models.PositiveSmallIntegerField(default=0)        # years behind this month's index
+    ratios     = models.JSONField(default=list, blank=True)         # [{'year', 'ratio'}] per year
+    stable     = models.BooleanField(default=False)
+    bulk_qty   = models.DecimalField(max_digits=14, decimal_places=3, default=0)   # excluded in this month
+    note       = models.TextField(blank=True)                       # the remarks column (Arabic)
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('item', 'month')
+        indexes = [models.Index(fields=['month', 'item'])]
+        verbose_name = 'موسمية صنف'
+
+
+class SeasonalityRun(models.Model):
+    STATUS_CHOICES = [('running', 'يعمل'), ('success', 'ناجح'), ('failed', 'فشل')]
+    started_at   = models.DateTimeField(auto_now_add=True)
+    finished_at  = models.DateTimeField(null=True, blank=True)
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES, default='running')
+    months_pulled = models.PositiveIntegerField(default=0)
+    items        = models.PositiveIntegerField(default=0)
+    first_month  = models.DateField(null=True, blank=True)
+    last_month   = models.DateField(null=True, blank=True)
+    progress     = models.JSONField(default=dict, blank=True)
+    triggered_by = models.CharField(max_length=60, blank=True)
+    error        = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        verbose_name = 'تشغيل حساب الموسمية'

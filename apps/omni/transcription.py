@@ -51,15 +51,8 @@ def _resolve_call_audio(log) -> tuple[bytes | None, str]:
 
     if session is not None:
         from apps.pbx import recordings
-        local = recordings.resolve_local_path(session)
-        if local:
-            mime = mimetypes.guess_type(local)[0] or 'audio/wav'
-            with open(local, 'rb') as f:
-                return f.read(), mime
-
-        remote = recordings.resolve_remote_url(session)
-    else:
-        remote = log.recording_url
+        return recordings.load_session_audio(session)
+    remote = log.recording_url
 
     if remote:
         try:
@@ -115,6 +108,14 @@ def transcribe_call_log(call_pk: int) -> None:
 
     CallLog.objects.filter(pk=call_pk).update(voice_transcript=transcript)
     logger.info('transcription: call %s transcribed (%d chars)', call_pk, len(transcript))
+    try:
+        from apps.callcenter.models import CallTranscript
+        CallTranscript.objects.update_or_create(
+            call_log_id=call_pk, engine='gemini',
+            defaults={'text': transcript, 'status': 'done', 'model_name': 'gemini-2.0-flash',
+                      'finished_at': timezone.now()})
+    except Exception:
+        logger.exception('transcription: CallTranscript write failed for call %s', call_pk)
 
     # Chain the existing intent/sentiment/urgency summarizer
     try:
@@ -132,6 +133,36 @@ def transcribe_call_log(call_pk: int) -> None:
         _emit_transcript_event(convo, log, transcript, 'تفريغ المكالمة')
     except Exception:
         logger.exception('transcription: timeline emit failed for call %s', call_pk)
+
+
+def auto_transcribe_after_hangup(call_pk: int) -> None:
+    """
+    Hangup hook for PBX-created CallLogs. Gated by settings (off by default — each
+    call costs a Gemini request):
+      CALLCENTER_AUTO_TRANSCRIBE              bool, default False
+      CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS  skip short calls, default 20
+      CALLCENTER_AUTO_TRANSCRIBE_DELAY        seconds to wait for Asterisk to
+                                              finish writing the file, default 15
+    """
+    import time
+    from django.conf import settings
+    from apps.callcenter.models import CallLog
+
+    if not getattr(settings, 'CALLCENTER_AUTO_TRANSCRIBE', False):
+        return
+    log = CallLog.objects.filter(pk=call_pk).only(
+        'status', 'duration_seconds', 'voice_transcript').first()
+    # Merged logs may carry the agent's status (e.g. 'callback') for an answered call
+    if log is None or log.status in ('no_answer', 'busy') or log.voice_transcript:
+        return
+    if log.duration_seconds < getattr(settings, 'CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS', 20):
+        return
+
+    time.sleep(getattr(settings, 'CALLCENTER_AUTO_TRANSCRIBE_DELAY', 15))
+    # Re-check: a manual transcribe may have run while we waited
+    if CallLog.objects.filter(pk=call_pk).exclude(voice_transcript='').exists():
+        return
+    transcribe_call_log(call_pk)
 
 
 def transcribe_wa_voice(message_pk: int) -> None:

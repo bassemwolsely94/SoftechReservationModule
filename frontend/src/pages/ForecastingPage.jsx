@@ -78,7 +78,7 @@ export default function ForecastingPage() {
           <h1 className="text-2xl font-bold text-gray-900">محرك التنبؤ بالمبيعات</h1>
           <p className="text-sm text-gray-500 mt-1">FEFO forecast · موسمية · دقة التنبؤ</p>
         </div>
-        <button
+        <button data-tour="analytics-forecasting-run"
           onClick={() => triggerRun.mutate()}
           disabled={triggerRun.isPending}
           className="px-5 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2"
@@ -96,7 +96,7 @@ export default function ForecastingPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" data-tour="analytics-forecasting-kpis">
         <KpiCard label="آخر تشغيل" value={latestRun ? new Date(latestRun.started_at).toLocaleDateString('ar-EG') : '—'} />
         <KpiCard
           label="حالة آخر تشغيل"
@@ -112,7 +112,7 @@ export default function ForecastingPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6" data-tour="analytics-forecasting-tabs">
         {[
           { key: 'runs',        label: '🏃 سجل التشغيلات' },
           { key: 'accuracy',    label: '🎯 دقة التنبؤ'    },
@@ -141,7 +141,7 @@ export default function ForecastingPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="analytics-forecasting-runs">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -185,7 +185,7 @@ export default function ForecastingPage() {
         ) : accuracies.length === 0 ? (
           <div className="text-center py-16 text-gray-400">لا توجد بيانات دقة بعد</div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="analytics-forecasting-accuracy">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -224,7 +224,7 @@ export default function ForecastingPage() {
       {tab === 'seasonality' && (
         <div>
           <div className="flex justify-end mb-4">
-            <button
+            <button data-tour="analytics-forecasting-recompute"
               onClick={() => computeSeasonality.mutate()}
               disabled={computeSeasonality.isPending}
               className="px-4 py-2 text-sm border border-brand-600 text-brand-600 rounded-lg hover:bg-brand-50 disabled:opacity-50"
@@ -243,7 +243,7 @@ export default function ForecastingPage() {
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="analytics-forecasting-seasonality">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">

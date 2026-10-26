@@ -54,7 +54,7 @@ export default function ForecastScenarioPage() {
           <p className="text-sm text-gray-500 mt-0.5">اضبط العوامل، احسب النموذج، ثم اعتمد الأهداف للفروع</p>
         </div>
         {canEdit && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm" data-tour="analytics-scenarios-new">
             {showForm ? 'إغلاق' : '+ سيناريو جديد'}
           </button>
         )}
@@ -71,7 +71,7 @@ export default function ForecastScenarioPage() {
 
       <div className="grid md:grid-cols-[280px_1fr] gap-4">
         {/* scenario list */}
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="analytics-scenarios-list">
           {isLoading ? <div className="text-gray-400 text-sm py-8 text-center">جارٍ التحميل…</div>
             : scenarios.length === 0 ? <div className="text-gray-400 text-sm py-8 text-center">لا توجد سيناريوهات</div>
             : scenarios.map(s => {
@@ -127,7 +127,7 @@ function BacktestPanel({ canEdit }) {
           {latest && <span className="text-[11px] text-gray-400 font-normal">— {latest.n_months} شهر</span>}
         </button>
         {canEdit && (
-          <button onClick={() => run.mutate()} disabled={run.isPending}
+          <button data-tour="analytics-scenarios-backtest" onClick={() => run.mutate()} disabled={run.isPending}
             className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40">
             {run.isPending ? 'جارٍ الاختبار…' : 'تشغيل اختبار جديد'}
           </button>
@@ -176,6 +176,12 @@ function BacktestPanel({ canEdit }) {
 }
 
 const REF_LABELS = { cash_delivery: 'نقدى+توصيل', credit: 'آجل', gross_profit: 'ربحية', customer_count: 'عملاء', beauty: 'تجميل', call_count: 'مكالمات', pic_count: 'عملاء (PIC)' }
+// Sortable result columns (field → header). First column is the scope name.
+const RCOLS = [
+  ['scope_label', ''], ['base_value', 'الأساس (العام السابق)'], ['lm_value', 'الشهر السابق'],
+  ['pm_value', 'قبل السابق'], ['model_a', 'Model A'], ['model_b', 'Model B'],
+  ['forecast_value', 'التنبؤ'], ['target_value', 'الهدف'],
+]
 
 function ReferencesPanel({ canEdit }) {
   const qc = useQueryClient()
@@ -197,7 +203,7 @@ function ReferencesPanel({ canEdit }) {
   const pct = v => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-      <button onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
+      <button data-tour="analytics-scenarios-references" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
         <span>{open ? '▾' : '▸'}</span> 📐 القيم المرجعية (موسمية · نمو مرجعي · تضخم)
         {refs.as_of && <span className="text-[11px] text-gray-400 font-normal">— محدّثة {refs.as_of} · تضخم {pct(refs.inflation_annual)}/سنة</span>}
       </button>
@@ -274,7 +280,7 @@ function ProfitExclusionPanel({ canEdit }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-      <button onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
+      <button data-tour="analytics-scenarios-exclusions" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
         <span>{open ? '▾' : '▸'}</span> 🧮 استثناءات معامل الربحية
         <span className="text-[11px] text-gray-400 font-normal">— أصناف تُستبعد من حساب الربحية ({rows.length})</span>
       </button>
@@ -381,6 +387,8 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
   const [knobs, setKnobs] = useState(null)
   const [factorRows, setFactorRows] = useState([])
   const [recalcBusy, setRecalcBusy] = useState(false)
+  const [rSort, setRSort] = useState({ field: 'target_value', dir: 'desc' })
+  const rOnSort = (field) => setRSort(s => s.field === field ? { field, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { field, dir: 'desc' })
   useEffect(() => {
     if (!sc) return
     setKnobs({ model: sc.model, incentive_threshold: sc.incentive_threshold,
@@ -407,8 +415,15 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
   const byMetric = metrics.map(m => ({
     metric: m,
     label: results.find(r => r.metric === m)?.metric_label || m,
-    members: results.filter(r => r.metric === m && r.scope_key !== 'chain')
-      .sort((a, b) => Number(b.target_value) - Number(a.target_value)),
+    members: results.filter(r => r.metric === m && r.scope_key !== 'chain').sort((a, b) => {
+      const f = rSort.field
+      if (f === 'scope_label') {
+        const r = String(a[f] || '').localeCompare(String(b[f] || ''), 'ar')
+        return rSort.dir === 'asc' ? r : -r
+      }
+      const av = Number(a[f] || 0), bv = Number(b[f] || 0)
+      return rSort.dir === 'asc' ? av - bv : bv - av
+    }),
     chain: results.find(r => r.metric === m && r.scope_key === 'chain'),
   }))
 
@@ -417,7 +432,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="font-bold text-gray-900">{sc.name}</div>
-          {canEdit && <button onClick={() => { if (confirm('حذف السيناريو؟')) del.mutate() }} className="text-gray-300 hover:text-red-500 text-sm">حذف</button>}
+          {canEdit && <button data-tour="analytics-scenarios-delete" onClick={() => { if (confirm('حذف السيناريو؟')) del.mutate() }} className="text-gray-300 hover:text-red-500 text-sm">حذف</button>}
         </div>
 
         {/* global knobs */}
@@ -428,16 +443,16 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
 
         {canEdit && (
           <div className="flex gap-2 mt-4 flex-wrap items-center">
-            <button onClick={() => applyRefs.mutate()} disabled={applyRefs.isPending}
+            <button data-tour="analytics-scenarios-apply-references" onClick={() => applyRefs.mutate()} disabled={applyRefs.isPending}
                     title="تطبيق القيم المرجعية (الموسمية + النمو المرجعي + التضخم) على عوامل هذا السيناريو"
                     className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
               {applyRefs.isPending ? '…' : '📐 تطبيق المرجعية'}
             </button>
-            <button onClick={recalc} disabled={recalcBusy} className="btn-primary text-sm disabled:opacity-40">
+            <button data-tour="analytics-scenarios-calculate" onClick={recalc} disabled={recalcBusy} className="btn-primary text-sm disabled:opacity-40">
               {recalcBusy ? 'جارٍ الحساب…' : '⚙️ حفظ واحسب التنبؤ'}
             </button>
             {sc.status !== 'draft' && (
-              <button onClick={() => { if (confirm('اعتماد الأهداف للفروع؟')) commit.mutate() }} disabled={commit.isPending}
+              <button data-tour="analytics-scenarios-approve" onClick={() => { if (confirm('اعتماد الأهداف للفروع؟')) commit.mutate() }} disabled={commit.isPending}
                 className="text-sm px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
                 {commit.isPending ? 'جارٍ الاعتماد…' : '✅ اعتماد الأهداف'}
               </button>
@@ -449,7 +464,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
 
       {/* results — per KPI: branch rows then total */}
       {sc.status !== 'draft' && results.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4" data-tour="analytics-scenarios-results">
           <div className="flex items-center justify-between mb-1">
             <div className="font-bold text-gray-800 text-sm">
               النتائج حسب {SCOPES[sc.scope_type] || 'الفروع'} ثم الإجمالى
@@ -463,15 +478,14 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
                 <div className="text-sm font-bold text-gray-800 bg-gray-50 rounded-t-lg px-3 py-1.5 border border-gray-100">{label}</div>
                 <table className="w-full text-xs border-x border-b border-gray-100">
                   <thead>
-                    <tr className="text-gray-400 bg-gray-50/50">
-                      <th className="text-right py-1.5 px-3">{SCOPES[sc.scope_type] || 'الفرع'}</th>
-                      <th className="text-center">الأساس (العام السابق)</th>
-                      <th className="text-center">الشهر السابق</th>
-                      <th className="text-center">قبل السابق</th>
-                      <th className="text-center">Model A</th>
-                      <th className="text-center">Model B</th>
-                      <th className="text-center">التنبؤ</th>
-                      <th className="text-center">الهدف</th>
+                    <tr className="text-gray-400 bg-gray-50/50 select-none">
+                      {RCOLS.map(([f, label], i) => (
+                        <th key={f} onClick={() => rOnSort(f)}
+                          className={`py-1.5 cursor-pointer hover:text-gray-700 ${i === 0 ? 'text-right px-3' : 'text-center'}`}>
+                          {i === 0 ? (SCOPES[sc.scope_type] || 'الفرع') : label}
+                          {rSort.field === f ? (rSort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -541,7 +555,7 @@ function GlobalKnobs({ value, onChange, canEdit }) {
     </label>
   )
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 pb-3 border-b border-gray-50">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 pb-3 border-b border-gray-50" data-tour="analytics-scenarios-knobs">
       <label className="text-xs text-gray-500">النموذج
         <select disabled={!canEdit} className="input-field mt-0.5" value={value.model} onChange={e => set('model', e.target.value)}>
           {Object.entries(MODELS).map(([k, x]) => <option key={k} value={k}>{x}</option>)}
@@ -564,7 +578,7 @@ const FACTOR_COLS = [
 function FactorTable({ rows, onChange, canEdit }) {
   const upd = (i, k, val) => onChange(rows.map((r, j) => j === i ? { ...r, [k]: val } : r))
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-tour="analytics-scenarios-factors">
       <table className="w-full text-xs">
         <thead>
           <tr className="text-gray-400 border-b border-gray-100">

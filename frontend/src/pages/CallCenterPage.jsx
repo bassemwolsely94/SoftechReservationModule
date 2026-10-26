@@ -11,7 +11,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { callCenterApi, branchesApi, followupsApi, itemsApi, recommendationsApi } from '../api/client'
+import { callCenterApi, branchesApi, followupsApi, itemsApi, recommendationsApi, pbxApi } from '../api/client'
+import useScreenPop from '../hooks/useScreenPop'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
@@ -987,7 +988,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
   const unconvertedCount = dbItems.filter(i => i.converted_to === 'none').length
 
   return (
-    <div className="card">
+    <div className="card" data-tour="callcenter-operator-items">
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">
           📦 الأصناف ({allItems.length})
@@ -1119,7 +1120,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
 
       {/* Convert buttons — only after call is saved and items exist */}
       {savedCallId && unconvertedCount > 0 && !convertResult && (
-        <div className="border-t border-gray-100 pt-3 space-y-1.5">
+        <div className="border-t border-gray-100 pt-3 space-y-1.5" data-tour="callcenter-operator-convert">
           <div className="text-xs text-gray-400 mb-1.5">تحويل ({unconvertedCount} صنف)</div>
           <button
             onClick={() => setShowConvert(showConvert === 'reservation' ? null : 'reservation')}
@@ -1309,6 +1310,15 @@ export default function CallCenterPage() {
   const qc         = useQueryClient()
   const [tab, setTab]           = useState('operator')  // 'operator' | 'manager'
   useHelpTab(tab)
+
+  // Overdue-callbacks count for badge on nav link
+  const { data: _overdueCallbacks = [] } = useQuery({
+    queryKey: ['callbacks', 'overdue'],
+    queryFn:  () => callCenterApi.pendingCallbacks('overdue').then(r => r.data),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+  const overdueCallbackCount = _overdueCallbacks.length
   const [searchMode, setSearchMode] = useState('phone') // 'phone' | 'name'
   const [phone, setPhone]       = useState('')
   const [searchPhone, setSearchPhone]         = useState('')
@@ -1325,6 +1335,60 @@ export default function CallCenterPage() {
   const [aiDone, setAiDone]             = useState(false)
   const [flashCase, setFlashCase]       = useState(null)
   const [selectedCaseId, setSelectedCaseId] = useState(null)   // for CaseChatPanel overlay
+  const [dialLoading, setDialLoading]       = useState(false)
+  const [transcribing, setTranscribing]     = useState({})   // callId → true
+
+  // Poll the saved call until Gemini writes its result (~ a few seconds)
+  const { data: aiResult } = useQuery({
+    queryKey: ['cc-ai-result', savedCallId],
+    queryFn:  () => callCenterApi.get(savedCallId).then(r => r.data),
+    enabled:  !!savedCallId && aiDone,
+    refetchInterval: (q) => (q.state.data?.ai_processed_at || q.state.dataUpdateCount > 20 ? false : 3000),
+  })
+
+  async function handleTranscribe(callId) {
+    setTranscribing(t => ({ ...t, [callId]: true }))
+    try {
+      await callCenterApi.transcribe(callId)
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['cc-lookup'] }), 20_000)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'فشل بدء التفريغ')
+      setTranscribing(t => ({ ...t, [callId]: false }))
+    }
+  }
+
+  // ── Screen-pop: auto-fill phone when Asterisk rings ──────────────────────
+  const { screenPop, dismissPop } = useScreenPop()
+  useEffect(() => {
+    if (!screenPop) return
+    const incoming = screenPop.caller_id || ''
+    if (!incoming) return
+    // Only auto-fill if the operator isn't mid-call
+    if (!savedCallId) {
+      let p = incoming.trim().replace(/\s+/g, '')
+      if (p.startsWith('+20'))  p = '0' + p.slice(3)
+      if (p.startsWith('0020')) p = '0' + p.slice(4)
+      setPhone(p)
+      setSearchPhone(p)
+      setSelectedCustomerId(null)
+      setLogForm(f => ({ ...f, direction: 'inbound' }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenPop])
+
+  async function handleDial(destination) {
+    if (!destination) return
+    setDialLoading(true)
+    try {
+      const name = customer?.name || ''
+      await pbxApi.dial({ destination, caller_id_name: name })
+      setLogForm(f => ({ ...f, direction: 'outbound' }))
+    } catch (e) {
+      alert('فشل بدء المكالمة: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setDialLoading(false)
+    }
+  }
 
   // Debounced auto-search
   useEffect(() => {
@@ -1374,6 +1438,7 @@ export default function CallCenterPage() {
         phone_number: searchPhone,
         caller_name:  customer?.name || '',
         customer:     customer?.id || null,
+        pbx_session_id: screenPop?.session_id || null,
       })
       qc.invalidateQueries({ queryKey: ['cc-calls'] })
       setSavedCallId(data.id)
@@ -1418,6 +1483,14 @@ export default function CallCenterPage() {
             <Link to="/callcenter/cases" className="btn-secondary text-xs py-1.5 px-3">
               🗂️ الحالات
             </Link>
+            <Link to="/callcenter/callbacks" data-tour="callcenter-operator-callbacks" className="btn-secondary text-xs py-1.5 px-3 relative">
+              🔄 المعاودة
+              {overdueCallbackCount > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 bg-red-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center leading-none">
+                  {overdueCallbackCount > 9 ? '9+' : overdueCallbackCount}
+                </span>
+              )}
+            </Link>
             {isManager && (
               <div className="flex bg-gray-100 rounded-xl p-0.5 text-xs">
                 {[{ id: 'operator', label: '📱 موظف' }, { id: 'manager', label: '📊 مدير' }].map(t => (
@@ -1442,6 +1515,25 @@ export default function CallCenterPage() {
         ) : (
 
         <>
+          {/* ── Screen-pop banner — fires when Asterisk sends an incoming_call event ── */}
+          {screenPop && (
+            <div data-tour="callcenter-operator-screenpop" className="mb-4 flex items-center gap-3 bg-green-50 border border-green-300
+              rounded-2xl px-4 py-3 shadow-sm animate-pulse-once" dir="rtl">
+              <span className="text-2xl">📲</span>
+              <div className="flex-1">
+                <div className="font-black text-green-800 text-sm">
+                  مكالمة واردة — {screenPop.caller_id}
+                </div>
+                <div className="text-xs text-green-600">
+                  {screenPop.queue ? `طابور: ${screenPop.queue}` : ''}
+                  {screenPop.customer?.name ? ` · ${screenPop.customer.name}` : ''}
+                </div>
+              </div>
+              <button onClick={dismissPop}
+                className="text-green-600 hover:text-green-800 text-lg font-bold">✕</button>
+            </div>
+          )}
+
           {/* My Queue — always visible; collapses automatically when no cases */}
           <MyQueuePanel onOpenCase={setSelectedCaseId} />
 
@@ -1488,6 +1580,13 @@ export default function CallCenterPage() {
                 <button data-tour="callcenter-operator-search" onClick={handleSearch} disabled={phone.length < 8}
                   className="btn-primary text-sm px-6 py-2.5 disabled:opacity-50">
                   🔍 بحث
+                </button>
+                <button data-tour="callcenter-operator-dial"
+                  onClick={() => handleDial(normalizePhone(phone))}
+                  disabled={phone.length < 8 || dialLoading}
+                  title="اتصل بهذا الرقم من هاتفك"
+                  className="btn-secondary text-sm px-4 py-2.5 disabled:opacity-50 flex items-center gap-1.5">
+                  {dialLoading ? '...' : '📞 اتصل'}
                 </button>
                 <button onClick={() => { setPhone(''); setSearchPhone(''); setSavedCallId(null); setAiDone(false) }}
                   className="btn-secondary text-sm">
@@ -1580,6 +1679,15 @@ export default function CallCenterPage() {
                           <span className="font-mono text-gray-600 text-sm" dir="ltr">
                             {customer.phone}
                           </span>
+                          <button
+                            onClick={() => handleDial(customer.phone)}
+                            disabled={dialLoading}
+                            title="اتصل بالعميل الآن"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs
+                              bg-green-100 text-green-700 border border-green-200 hover:bg-green-200
+                              disabled:opacity-50 transition-colors font-semibold">
+                            {dialLoading ? '...' : '📞 اتصل'}
+                          </button>
                           {/* PIC code — always visible, prominent */}
                           <span className={`badge font-mono font-bold text-xs ${
                             customer.softech_pic
@@ -1838,21 +1946,38 @@ export default function CallCenterPage() {
                     <div className="space-y-2">
                       {data.recent_calls.map(c => (
                         <div key={c.id}
-                          className="flex items-center gap-3 text-sm border-b border-gray-50 pb-2 last:pb-0 last:border-0">
-                          <span className="text-gray-400 tabular-nums text-xs shrink-0">
-                            {c.called_at
-                              ? toLatinDigits(format(new Date(c.called_at), 'd MMM HH:mm', { locale: ar }))
-                              : '—'}
-                          </span>
-                          <span className="flex-1 text-gray-600 truncate">
-                            {c.summary || c.purpose_label}
-                          </span>
-                          {c.ai_sentiment && (
-                            <span className="text-xs shrink-0">
-                              {c.ai_sentiment === 'positive' ? '😊' : c.ai_sentiment === 'negative' ? '😟' : '😐'}
+                          className="text-sm border-b border-gray-50 pb-2 last:pb-0 last:border-0">
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 tabular-nums text-xs shrink-0">
+                              {c.called_at
+                                ? toLatinDigits(format(new Date(c.called_at), 'd MMM HH:mm', { locale: ar }))
+                                : '—'}
                             </span>
+                            <span className="flex-1 text-gray-600 truncate">
+                              {c.summary || c.purpose_label}
+                            </span>
+                            {c.ai_sentiment && (
+                              <span className="text-xs shrink-0">
+                                {c.ai_sentiment === 'positive' ? '😊' : c.ai_sentiment === 'negative' ? '😟' : '😐'}
+                              </span>
+                            )}
+                            {c.has_recording && !c.has_transcript && (
+                              <button
+                                onClick={() => handleTranscribe(c.id)}
+                                disabled={!!transcribing[c.id]}
+                                title="تفريغ التسجيل وتلخيصه"
+                                className="text-xs text-brand-600 hover:underline shrink-0 disabled:opacity-50">
+                                {transcribing[c.id] ? '⏳ جارٍ التفريغ' : '📝 تفريغ'}
+                              </button>
+                            )}
+                            <span className="text-xs text-gray-400 shrink-0">{c.handled_by_name}</span>
+                          </div>
+                          {c.ai_summary && (
+                            <div className="text-xs text-gray-500 mt-1 line-clamp-2">🤖 {c.ai_summary}</div>
                           )}
-                          <span className="text-xs text-gray-400 shrink-0">{c.handled_by_name}</span>
+                          {c.ai_next_action && (
+                            <div className="text-xs text-indigo-600 mt-0.5 truncate">➜ {c.ai_next_action}</div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1908,13 +2033,32 @@ export default function CallCenterPage() {
                             🔔 جدولة متابعة
                           </button>
                         )}
-                        <button
+                        <button data-tour="callcenter-operator-ai"
                           onClick={handleAiSummarize}
                           disabled={aiLoading || aiDone}
                           className="w-full text-sm btn-secondary text-right px-3 py-2 disabled:opacity-50">
                           {aiLoading ? '⏳ جارٍ التلخيص...' : aiDone ? '✅ تم التلخيص بـ AI' : '🤖 تلخيص AI'}
                         </button>
                       </div>
+
+                      {aiDone && (
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 dark:bg-indigo-900/20 dark:border-indigo-800 px-3 py-2 text-sm space-y-1">
+                          {!aiResult?.ai_processed_at ? (
+                            <div className="text-xs text-gray-500">⏳ في انتظار نتيجة الذكاء الاصطناعي…</div>
+                          ) : (
+                            <>
+                              <div className="text-gray-800 dark:text-gray-100">{aiResult.ai_summary}</div>
+                              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                                {aiResult.ai_sentiment_label && <span>{aiResult.ai_sentiment_label}</span>}
+                                {aiResult.ai_urgency && <span>الأهمية {aiResult.ai_urgency}/5</span>}
+                              </div>
+                              {aiResult.ai_next_action && (
+                                <div className="text-xs text-indigo-700 dark:text-indigo-300">➜ {aiResult.ai_next_action}</div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       <button onClick={() => { setSavedCallId(null); setAiDone(false); setFlashCase(null) }}
                         className="btn-secondary text-sm w-full mt-1">
@@ -1983,7 +2127,7 @@ export default function CallCenterPage() {
 
                 {/* Quick actions — available as soon as we have a customer, even before saving */}
                 {customer && !savedCallId && (
-                  <div className="card">
+                  <div className="card" data-tour="callcenter-operator-quick">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
                       إجراءات سريعة
                     </div>

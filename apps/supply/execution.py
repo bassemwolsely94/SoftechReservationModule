@@ -234,6 +234,16 @@ def _resolve_lines(lines) -> list:
                     'offer': offer, 'reason': (raw.get('reason') or '').strip()})
     if not out:
         raise ExecutionError('لا توجد أصناف بكمية أكبر من صفر.')
+    # An item is never sent to a supplier twice in one order (owner 2026-10-12) — two rows of
+    # a supplier list matched to the same item would otherwise double the quantity ordered.
+    seen, dups = set(), []
+    for ln in out:
+        key = (ln['item'].id, ln['branch_id'])
+        if key in seen:
+            dups.append(' '.join((ln['item'].name or '').split()))
+        seen.add(key)
+    if dups:
+        raise ExecutionError('صنف مكرر في الطلب — اتركه مرة واحدة: ' + '، '.join(dict.fromkeys(dups)))
     return out
 
 

@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { targetsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { fa } from '../utils/flowArrow'
 
 const PACE = {
   ahead:  { label: 'متقدّم',  cls: 'bg-emerald-100 text-emerald-700' },
@@ -38,7 +39,7 @@ export default function TargetsPage() {
           <p className="text-sm text-gray-500 mt-0.5">حدّد الهدف وتابع التحقيق لحظياً مقابل المبيعات الفعلية</p>
         </div>
         {canEdit && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm" data-tour="analytics-targets-new">
             {showForm ? 'إغلاق' : '+ هدف جديد'}
           </button>
         )}
@@ -58,25 +59,25 @@ export default function TargetsPage() {
             const pct = Math.min(a.pct || 0, 100)
             const isMoney = t.metric === 'net_revenue'
             return (
-              <div key={t.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+              <div key={t.id} className="bg-white rounded-2xl border border-gray-100 p-4" data-tour="analytics-targets-card">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="font-bold text-gray-900 text-sm">{t.label || t.scope_label}</div>
                     <div className="text-xs text-gray-400">
                       {t.scope_label}{t.branch_name ? ` · ${t.branch_name}` : ''}{t.softech_user ? ` · مندوب ${t.softech_user}` : ''}{t.category_name ? ` · ${t.category_name}` : ''} · {t.metric_label}
                     </div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">{t.period_start} → {t.period_end} · باقٍ {a.days_left} يوم</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">{t.period_start} {fa()} {t.period_end} · باقٍ {a.days_left} يوم</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pace.cls || 'bg-gray-100 text-gray-500'}`}>{pace.label || '—'}</span>
-                    {canEdit && <button onClick={() => del.mutate(t.id)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>}
+                    <span data-tour="analytics-targets-pace" className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pace.cls || 'bg-gray-100 text-gray-500'}`}>{pace.label || '—'}</span>
+                    {canEdit && <button onClick={() => del.mutate(t.id)} className="text-gray-300 hover:text-red-500 text-xs" data-tour="analytics-targets-delete">✕</button>}
                   </div>
                 </div>
                 <div className="flex items-baseline justify-between text-sm mb-1">
                   <span className="font-black text-gray-900">{fmt(a.actual)}{isMoney ? ' ج.م' : ''}</span>
                   <span className="text-gray-400 text-xs">من {fmt(a.target)}{isMoney ? ' ج.م' : ''} · {a.pct}%</span>
                 </div>
-                <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden relative">
+                <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden relative" data-tour="analytics-targets-progress">
                   <div className={`h-full rounded-full ${a.pace === 'behind' || a.pace === 'missed' ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
                   {/* expected-to-date marker */}
                   {a.target > 0 && (
@@ -119,14 +120,14 @@ function TargetForm({ onDone }) {
     (f.scope_type !== 'branch' || f.branch) && (f.scope_type !== 'salesperson' || f.softech_user)
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-3">
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-3" data-tour="analytics-targets-form">
       <input className="input-field" placeholder="اسم الهدف" value={f.label} onChange={e => set('label', e.target.value)} />
-      <select className="input-field" value={f.scope_type} onChange={e => set('scope_type', e.target.value)}>
+      <select className="input-field" value={f.scope_type} onChange={e => set('scope_type', e.target.value)} data-tour="analytics-targets-scope">
         <option value="chain">الشبكة كاملة</option>
         <option value="branch">فرع</option>
         <option value="salesperson">مندوب</option>
       </select>
-      <select className="input-field" value={f.metric} onChange={e => set('metric', e.target.value)}>
+      <select className="input-field" value={f.metric} onChange={e => set('metric', e.target.value)} data-tour="analytics-targets-metric">
         <option value="net_revenue">صافي المبيعات</option>
         <option value="orders">عدد الفواتير</option>
       </select>
@@ -142,7 +143,7 @@ function TargetForm({ onDone }) {
       <input className="input-field" type="date" value={f.period_start} onChange={e => set('period_start', e.target.value)} />
       <input className="input-field" type="date" value={f.period_end} onChange={e => set('period_end', e.target.value)} />
       <input className="input-field" type="number" placeholder="القيمة المستهدفة" value={f.target_value} onChange={e => set('target_value', e.target.value)} />
-      <button onClick={submit} disabled={!valid || create.isPending} className="btn-primary text-sm disabled:opacity-40">
+      <button onClick={submit} disabled={!valid || create.isPending} className="btn-primary text-sm disabled:opacity-40" data-tour="analytics-targets-save">
         {create.isPending ? 'جارٍ الحفظ…' : 'حفظ الهدف'}
       </button>
     </div>

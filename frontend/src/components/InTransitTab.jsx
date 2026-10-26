@@ -22,6 +22,7 @@ import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -278,7 +279,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             </div>
             <div className="text-sm text-gray-600">
               <span className="font-semibold">{transit.supplying_branch_name}</span>
-              <span className="text-gray-400 mx-2">→</span>
+              <span className="text-gray-400 mx-2">{fa()}</span>
               <span className="font-semibold">{transit.receiving_branch_name}</span>
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
@@ -327,6 +328,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           )}
           <div className="flex-1" />
           <button
+            data-tour="transfers-transits-picking"
             onClick={() => handleExportSheet('picking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة التجميع — بمسار مخزن المصدر (Excel)'}
@@ -336,6 +338,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             {exporting === 'picking' ? 'جارٍ التصدير...' : 'ورقة التجميع'}
           </button>
           <button
+            data-tour="transfers-transits-stocking"
             onClick={() => handleExportSheet('stocking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة الترصيص — بترتيب أرفف الفرع المستلم (Excel)'}
@@ -347,7 +350,7 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-6 gap-4">
+        <div className="flex border-b border-gray-100 px-6 gap-4" data-tour="transfers-transits-detail-tabs">
           {[
             { key: 'items',    label: `الأصناف (${transit.item_count})` },
             ...(hasRecon ? [{ key: 'recon', label: `مطابقة 125↔25${reconCount ? ` (${reconCount})` : ''}` }] : []),
@@ -676,6 +679,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             {/* Mark Received (receiving branch or admin) */}
             {(isAdmin || isReceivingBranch) && (
               <button
+                data-tour="transfers-transits-receive"
                 onClick={() => markReceived.mutate('')}
                 disabled={markReceived.isPending}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
@@ -695,6 +699,7 @@ function DetailPanel({ transit, onClose, onAction }) {
                   onChange={e => setCloseReason(e.target.value)}
                 />
                 <button
+                  data-tour="transfers-transits-force-close"
                   onClick={() => forceClose.mutate()}
                   disabled={closeReason.trim().length < 10 || forceClose.isPending}
                   className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2 rounded-xl text-sm border border-red-200 transition-colors disabled:opacity-40"
@@ -844,6 +849,7 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
               <th className="px-3 py-3 w-8">
                 <input
                   type="checkbox"
+                  data-tour="transfers-transits-select"
                   className="accent-brand-600 cursor-pointer"
                   title="تحديد الكل (لتصدير ورقة تجميع موحدة)"
                   checked={items.length > 0 && items.every(i => checkedIds.has(i.id))}
@@ -1165,6 +1171,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         {checkedIds.size > 0 && (
           <>
             <button
+              data-tour="transfers-transits-bulk-sheets"
               onClick={() => exportSheetBulk('picking')}
               disabled={!!exporting}
               title="بمسار مخزن المصدر"
@@ -1189,6 +1196,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
           </>
         )}
         <Link
+          data-tour="transfers-transits-pick-zones"
           to="/pick-zones"
           className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           title="إدارة مناطق التجميع وقواعد التصنيف"
@@ -1206,6 +1214,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         </button>
         {isAdmin && (
           <button
+            data-tour="transfers-transits-sync"
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
             className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"

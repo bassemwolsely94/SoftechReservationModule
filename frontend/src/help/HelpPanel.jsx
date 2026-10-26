@@ -44,7 +44,7 @@ export default function HelpPanel() {
 }
 
 function PanelBody() {
-  const { close, open, forcedKey, forcedTab, markSeen, startTour } = useHelpStore()
+  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney } = useHelpStore()
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -169,6 +169,12 @@ function PanelBody() {
                 👆 {lang === 'en' ? 'Show me' : 'اعرض لي'}
               </button>
             )}
+            {data && !term && (data.module?.journeys || []).map((j) => (
+              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)}
+                      className="text-xs border border-brand-300 text-brand-700 dark:text-brand-300 rounded-lg px-3 py-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/30">
+                🧭 {pick(j.title, lang)}
+              </button>
+            ))}
             {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>

@@ -65,9 +65,12 @@ def _set_progress(run, phase, pct, message):
         pass
 
 
-def backfill_sales(run=None) -> dict:
+def backfill_sales(run=None, since=None) -> dict:
     """
-    Chunked date-bounded sales backfill from the last synced day → today.
+    Chunked date-bounded sales backfill from the last synced day → today (or from
+    `since` when given — the demand engine's own sales step passes its lookback).
+    Bounded windows stay fast (7 days ≈ 2 s); the open-ended «last N days» query takes
+    over 5 minutes on HQ and timed out every engine run (owner bug 2026-10-24).
     If `run` is given, live progress is written to run.progress each chunk.
     Returns {rows_upserted, chunks, start, end, latest}.
     """
@@ -80,7 +83,9 @@ def backfill_sales(run=None) -> dict:
 
     latest = SalesTransactionLine.objects.aggregate(mx=Max('doc_date'))['mx']
     today  = datetime.date.today()
-    if latest:
+    if since is not None:
+        start = since
+    elif latest:
         start = latest - datetime.timedelta(days=OVERLAP_DAYS)
     else:
         start = today - datetime.timedelta(days=MAX_BACKFILL_DAYS)
@@ -104,7 +109,9 @@ def backfill_sales(run=None) -> dict:
         while cursor_start < end:
             cursor_end = min(cursor_start + datetime.timedelta(days=CHUNK_DAYS), end)
             cur = conn.cursor()
-            cur.execute(QUERY_SALES_RANGE, [cursor_start.isoformat(), cursor_end.isoformat()])
+            from django.conf import settings as _s
+            cur.execute(QUERY_SALES_RANGE, [cursor_start.isoformat(), cursor_end.isoformat()],
+                        timeout=int(getattr(_s, 'SYBASE_SYNC_QUERY_TIMEOUT', 300)))
             rows = cur.fetchall()
             cur.close()
 

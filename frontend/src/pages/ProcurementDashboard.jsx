@@ -107,7 +107,7 @@ function AlertRow({ alert, onResolve }) {
         <p className="text-xs opacity-75 truncate">{alert.message}</p>
       </div>
       {!alert.is_resolved && (
-        <button
+        <button data-tour="purchasing-overview-alert-resolve"
           onClick={handleResolve}
           disabled={resolving}
           className="shrink-0 text-xs underline opacity-60 hover:opacity-100"
@@ -202,7 +202,7 @@ export default function ProcurementDashboard() {
           <RefreshButton loading={loading} onClick={load}>
             🔄 تحديث
           </RefreshButton>
-          <button
+          <button data-tour="purchasing-overview-run-engine"
             onClick={handleTrigger}
             disabled={triggering || data?.engine_running}
             className="px-4 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded-lg disabled:opacity-50 transition-colors"
@@ -214,7 +214,7 @@ export default function ProcurementDashboard() {
 
       {/* Engine status */}
       {run && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-xs text-gray-600 flex flex-wrap gap-4">
+        <div data-tour="purchasing-overview-status" className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-xs text-gray-600 flex flex-wrap gap-4">
           <span>آخر تشغيل: <strong>{new Date(run.started_at).toLocaleString('en-GB')}</strong></span>
           <span className={`font-semibold ${run.status === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
             {run.status === 'success' ? '✅ ناجح' : '❌ فشل'}
@@ -229,7 +229,7 @@ export default function ProcurementDashboard() {
 
       {/* KPI cards — 30d */}
       {snap && (
-        <div>
+        <div data-tour="purchasing-overview-kpis-30">
           <h2 className="text-sm font-semibold text-gray-500 mb-3">آخر 30 يوم</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard label="صافي المشتريات" value={`${fmt(snap.net_purchase_value_30d)} ج.م`} trend={Number(snap.purchase_growth_pct_mom)} color="brand" />
@@ -244,7 +244,7 @@ export default function ProcurementDashboard() {
 
       {/* KPI cards — 365d */}
       {snap && (
-        <div>
+        <div data-tour="purchasing-overview-kpis-365">
           <h2 className="text-sm font-semibold text-gray-500 mb-3">آخر 365 يوم</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <KpiCard label="إجمالي المشتريات" value={`${fmt(snap.net_purchase_value_365d)} ج.م`} color="brand" />
@@ -260,13 +260,13 @@ export default function ProcurementDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Monthly Trend */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div data-tour="purchasing-overview-trend" className="lg:col-span-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <h3 className="font-semibold text-gray-700 mb-3">اتجاه المشتريات الشهري</h3>
           <TrendChart data={trend} />
         </div>
 
         {/* Alerts Summary */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+        <div data-tour="purchasing-overview-alerts" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-700">التنبيهات المفتوحة</h3>
             <button
@@ -308,7 +308,7 @@ export default function ProcurementDashboard() {
       </div>
 
       {/* Top Suppliers */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <div data-tour="purchasing-overview-top-suppliers" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-700">أفضل الموردين (حسب الدرجة)</h3>
           <button
@@ -379,7 +379,7 @@ export default function ProcurementDashboard() {
       </div>
 
       {/* Quick nav */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div data-tour="purchasing-overview-quicknav" className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { to: '/procurement/suppliers',   icon: '🏭', label: 'أداء الموردين' },
           { to: '/procurement/margins',     icon: '📊', label: 'تحليل الهوامش' },

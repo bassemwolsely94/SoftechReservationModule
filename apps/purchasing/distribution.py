@@ -339,20 +339,37 @@ def analyze(run=None, *, categories=None, limit=None, use_age=True, ceilings=Non
         out.append(_sug(cat, code, name, source, tgts, qty_each, ops, net_stock, net_avg, reason,
                         n_selling_ops=n_selling_ops, n_ops=len(op_codes),
                         age_days=age_days, is_new_age=is_new_age, signals=signals,
-                        per_qty=per_qty))
+                        per_qty=per_qty,
+                        positions={b: _position(code, b, ceilings, bmap) for b in [source, *tgts]}))
         if limit and len(out) >= limit:
             break
     return out
 
 
+def _position(code, bc, ceilings, bmap):
+    """A branch's stock + sales rate for an item, shown next to each move (owner 2026-10-25).
+    Stock is LIVE from the branch's own server where SOFTECH holds a maximum for the item
+    (the same read the over-piled check uses), else the engine run's stock; HQ is never read
+    live here. The rate is the engine run's monthly sales at that branch."""
+    live = ceilings.get(bc, {}).get(code)
+    eng = bmap.get(bc)
+    stock = live[0] if live else (eng[0] if eng else 0.0)
+    return {'stock': round(float(stock), 1), 'rate': round(float(eng[1]), 2) if eng else 0.0,
+            'max': round(float(live[1]), 1) if live else None, 'live': bool(live)}
+
+
 def _sug(category, code, name, src, tgts, qty_each, ops, net_stock, net_avg, reason,
          *, n_selling_ops=0, n_ops=0, age_days=None, is_new_age=False, signals=None,
-         per_qty=None):
+         per_qty=None, positions=None):
     per_qty = per_qty or {t: int(qty_each) for t in tgts}
+    positions = positions or {}
+    blank = {'stock': None, 'rate': None, 'max': None, 'live': False}
     return {
         'category': category, 'itemcode': code, 'item_name': name,
         'from_branch': src, 'from_name': ops.get(src, src),
-        'to_branches': [{'code': t, 'name': ops.get(t, t), 'qty': int(per_qty.get(t, qty_each))}
+        'from_position': positions.get(src, blank),
+        'to_branches': [{'code': t, 'name': ops.get(t, t), 'qty': int(per_qty.get(t, qty_each)),
+                         **positions.get(t, blank)}
                         for t in tgts],
         'qty_each': int(qty_each), 'total_qty': sum(int(per_qty.get(t, qty_each)) for t in tgts),
         'reason': reason, 'network_stock': round(net_stock, 1), 'network_avg': round(net_avg, 2),
@@ -364,7 +381,11 @@ def _sug(category, code, name, src, tgts, qty_each, ops, net_stock, net_avg, rea
 
 def summary(run=None):
     """Counts per category (for a dashboard tile)."""
-    sugs = analyze(run=run)
+    return summarize(analyze(run=run))
+
+
+def summarize(sugs):
+    """Counts per category of an already computed suggestion list."""
     by_cat = defaultdict(lambda: {'count': 0, 'qty': 0})
     for s in sugs:
         by_cat[s['category']]['count'] += 1

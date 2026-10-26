@@ -10,6 +10,7 @@ import { demandApi } from '../../api/client'
 import { demandBadgeClass } from './demandStatus'
 import MobileChatter from '../../components/MobileChatter'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -47,7 +48,7 @@ export default function MobileDemandDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/demand')} data-tour="demand-mobile-detail-back" className="text-sm text-gray-500">→ الرجوع للقائمة</button>
+      <button onClick={() => navigate('/m/demand')} data-tour="demand-mobile-detail-back" className="text-sm text-gray-500">{ba()} الرجوع للقائمة</button>
 
       {/* Header */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="demand-mobile-detail-header">
@@ -91,7 +92,9 @@ export default function MobileDemandDetailPage() {
       )}
 
       {/* Notes / logs */}
-      <MobileChatter messages={notes} onSend={sendNote} title="💬 الملاحظات" />
+      <div data-tour="demand-mobile-detail-notes">
+        <MobileChatter messages={notes} onSend={sendNote} title="💬 الملاحظات" />
+      </div>
     </div>
   )
 }

@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { offersApi } from '../api/client'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import { useToast } from '../components/ui'
+import { fa, ba } from '../utils/flowArrow'
 
 const TYPES = [
   { v: 'percent', l: 'خصم نسبة مئوية' }, { v: 'fixed', l: 'خصم مبلغ ثابت' },
@@ -102,10 +103,10 @@ export default function OffersPage() {
           <h1 className="text-lg font-bold text-content">العروض والتخفيضات</h1>
           <p className="text-xs text-faint">محرّك عروض مرن — تُطبَّق عبر نقطة البيع؛ التنفيذ في سوفتك مُقيَّد بمفتاح.</p>
         </div>
-        <button className="btn-primary" onClick={() => setEditing({ ...BLANK })}>+ عرض جديد</button>
+        <button className="btn-primary" data-tour="pos-offers-new" onClick={() => setEditing({ ...BLANK })}>+ عرض جديد</button>
       </div>
 
-      <div className="card p-0 overflow-x-auto">
+      <div className="card p-0 overflow-x-auto" data-tour="pos-offers-table">
         <table className="data-table">
           <thead><tr>
             <th>الاسم</th><th>النوع</th><th>الحالة</th><th>الأولوية</th><th>مصدر القيمة</th><th>أصناف</th><th></th>
@@ -167,18 +168,19 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
   return (
     <div className="page-body max-w-4xl">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onCancel} className="text-sm text-muted hover:text-content">→ رجوع للقائمة</button>
+        <button onClick={onCancel} className="text-sm text-muted hover:text-content">{ba()} رجوع للقائمة</button>
         <div className="flex gap-2">
-          {o.id && <button onClick={remove} className="btn-danger text-xs">حذف</button>}
+          {o.id && <button onClick={remove} data-tour="pos-offers-delete" className="btn-danger text-xs">حذف</button>}
           <button onClick={onDone} className="btn-secondary text-xs">تم</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? '…' : 'حفظ العرض'}</button>
+          <button onClick={save} disabled={saving} data-tour="pos-offers-save" className="btn-primary">{saving ? '…' : 'حفظ العرض'}</button>
         </div>
       </div>
 
       {/* Contradiction warnings (saved offers) */}
-      {o.id && <WarningsPanel offerId={o.id} refreshKey={checkKey} />}
+      {o.id && <div data-tour="pos-offers-warnings"><WarningsPanel offerId={o.id} refreshKey={checkKey} /></div>}
 
       {/* Basics */}
+      <div data-tour="pos-offers-basics">
       <Section title="الأساسيات" icon="📝">
         <Grid>
           <Field label="الاسم (عربي)"><input className="input-field" value={o.name_ar} onChange={e => set('name_ar', e.target.value)} /></Field>
@@ -196,6 +198,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
         </Grid>
         <p className="text-[11px] text-faint mt-2">💡 {TYPE_HELP[t]}</p>
       </Section>
+      </div>
 
       {/* Type params */}
       <Section title="إعدادات النوع" icon="⚙️">
@@ -218,6 +221,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
       </Section>
 
       {/* Magnitude source */}
+      <div data-tour="pos-offers-value-source">
       <Section title="مصدر قيمة الخصم" icon="🔑">
         <div className="flex gap-2">
           {[['item_card', 'من كارت الصنف (posdiscp)'], ['offer', 'من العرض (يتطلب موافقة)']].map(([v, l]) => (
@@ -231,8 +235,10 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
             : 'قيمة العرض تتجاوز كارت الصنف — تتطلّب موافقة وقد تسبّب بيعًا بالخسارة، انتبه للتحذيرات.'}
         </p>
       </Section>
+      </div>
 
       {/* Flexible selector */}
+      <div data-tour="pos-offers-items">
       <Section title="اختيار الأصناف (مرن)" icon="🎯">
         <label className="flex items-center gap-2 text-sm mb-2">
           <input type="checkbox" checked={o.target_all} onChange={e => set('target_all', e.target.checked)} /> كل الأصناف
@@ -251,12 +257,13 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
         </label>
         <MatchReview o={o} set={set} />
       </Section>
+      </div>
 
       {/* Channel A — flat-rate posdiscp (saved percent offers only) */}
-      {o.id && t === 'percent' && <PosdiscpPanel offerId={o.id} />}
+      {o.id && t === 'percent' && <div data-tour="pos-offers-softech-posdiscp"><PosdiscpPanel offerId={o.id} /></div>}
 
       {/* Channel B — native SOFTECH promo table (gift / spend / single-item percent) */}
-      {o.id && ['gift', 'spend_threshold', 'percent'].includes(t) && <PromoPanel offerId={o.id} />}
+      {o.id && ['gift', 'spend_threshold', 'percent'].includes(t) && <div data-tour="pos-offers-softech-promo"><PromoPanel offerId={o.id} /></div>}
 
       {/* Eligibility */}
       <Section title="الأهلية" icon="👥">
@@ -269,6 +276,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
       </Section>
 
       {/* Controls */}
+      <div data-tour="pos-offers-controls">
       <Section title="ضوابط" icon="🎚️">
         <Grid>
           <Field label="الأولوية" help="عند تداخل عرضين على نفس الصنف يُطبَّق الأعلى أولوية؛ لا تكرّر نفس الأولوية لعرضين متعارضين.">
@@ -286,6 +294,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
           <Field label="ينتهي"><input type="datetime-local" className="input-field" value={dtLocal(o.ends_at)} onChange={e => set('ends_at', e.target.value || null)} /></Field>
         </Grid>
       </Section>
+      </div>
     </div>
   )
 }
@@ -659,7 +668,7 @@ function PosdiscpPanel({ offerId }) {
         <div className="mt-2 text-xs">
           <div className="font-bold text-content">سيتغيّر posdiscp لـ {plan.summary.to_change} صنف (نسبة {plan.target_percent}%)، {plan.summary.unchanged} دون تغيير.</div>
           <div className="text-faint mt-1 line-clamp-3">
-            {(plan.changes || []).slice(0, 15).map(c => `${c.name}: ${c.current_posdiscp}%→${c.new_posdiscp}%`).join(' · ') || '—'}
+            {(plan.changes || []).slice(0, 15).map(c => `${c.name}: ${c.current_posdiscp}%${fa()}${c.new_posdiscp}%`).join(' · ') || '—'}
           </div>
           {plan.summary.to_change > 0 &&
             <ApplyLive label={`تطبيق فعلي على ${plan.summary.to_change} صنف`}
@@ -698,7 +707,7 @@ function PromoPanel({ offerId }) {
             </div>
           ))}
           {(plan.extra_items || []).length > 0 && (
-            <div className="text-faint">+ {plan.extra_items.length} صنف تحفيز إضافي → specialoffersitems</div>)}
+            <div className="text-faint">+ {plan.extra_items.length} صنف تحفيز إضافي {fa()} specialoffersitems</div>)}
           {(plan.notes || []).map((n, i) => <div key={i} className="text-[10px] text-amber-600">⚠ {n}</div>)}
           <ApplyLive label="كتابة العرض في سوفتك (specialoffers)"
                      onApply={() => offersApi.promoApply(offerId, true)} />

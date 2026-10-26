@@ -12,9 +12,10 @@ import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost } from './supplyUi'
+import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, SortTh, useSort } from './supplyUi'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import ProgressBar from '../../components/ProgressBar'
+import { fa } from '../../utils/flowArrow'
 
 const RETURN_TONE = { proposed: 'amber', approved: 'blue', pushed: 'emerald', failed: 'rose', cancelled: 'gray' }
 
@@ -43,6 +44,15 @@ async function blobErr(err) {
 export const BASIS_OPTIONS = [
   ['min', 'الأقل من الاثنين'], ['recommended', 'الموصى بها'], ['requested', 'المطلوبة'],
 ]
+// owner 2026-10-24: an item the requesting branch never sold is no longer shipped as asked —
+// the server sizes it from the network's rate, else a seed, and flags it for review.
+const noSalesTitle = (l) => {
+  if (!l.no_sales_basis) return ''
+  const how = l.no_sales_basis === 'network'
+    ? `متوسط بيع باقي الفروع ${q(l.network_rate)}/شهر × تغطية الفرع الطالب`
+    : `لا يبيعه أي فرع — بذرة ${q(l.seed)} (${Number(l.price) >= 300 ? 'سعره ≥ 300' : 'سعره < 300'})`
+  return `الفرع لا يبيع هذا الصنف — ${how}، ولا تتجاوز المطلوبة (${q(l.qty)}). راجِعها قبل الصرف.`
+}
 export const DEFAULT_SETTINGS = { coverage: 1, fill: 1.5, basis: 'min' }   // donors keep 1 month
 export const settingsBody = (st) => ({
   coverage: Number(st.coverage) || 1, fill_coverage: Number(st.fill) || 1.5, basis: st.basis || 'min',
@@ -57,7 +67,7 @@ export function PlanSettings({ value, onChange }) {
   return (
     <>
       <label className="flex flex-col gap-1 text-xs text-content/70"
-        title="الاحتياج = هذه الشهور × معدل بيع الفرع الطالب − رصيده − الرصيد بالطريق؛ إذا كان موجباً يُقرَّب لأعلى (عبوة على الأقل) وإلا صفر. الكمية الموصى بها = الاحتياج (صنف لا يبيعه الفرع = الكمية المطلوبة).">
+        title="الاحتياج = هذه الشهور × معدل بيع الفرع الطالب − رصيده − الرصيد بالطريق؛ إذا كان موجباً يُقرَّب لأعلى (عبوة على الأقل) وإلا صفر. الكمية الموصى بها = الاحتياج. صنف لا يبيعه الفرع: هذه الشهور × متوسط بيع باقي الفروع، وإن لم يبعه أحد فبذرة (عبوة إذا سعره ≥ 300 وإلا عبوتان) — ولا تتجاوز المطلوبة، وتُعلَّم «للمراجعة».">
         تغطية الفرع الطالب (شهور)
         <input type="number" step="0.25" min="0.25" max="12" value={value.fill}
           onChange={set('fill')} className={`${inputCls} w-24`} />
@@ -126,7 +136,7 @@ export default function IsrFulfilmentTab() {
             placeholder="261609, 2615043" className={`${inputCls} font-mono`} />
         </label>
         <PlanSettings value={settings} onChange={setSettings} />
-        <button type="submit" disabled={busy || !isrText.trim()} className={btnPrimary}>
+        <button data-tour="purchasing-supply-isrfill-analyze" type="submit" disabled={busy || !isrText.trim()} className={btnPrimary}>
           {busy ? 'جاري التحليل…' : 'تحليل'}
         </button>
         {plan && (
@@ -135,7 +145,7 @@ export default function IsrFulfilmentTab() {
               className={btnGhost} title="إعادة قراءة الأرصدة الحالية من SOFTECH">
               تحديث من SOFTECH
             </button>
-            <button type="button" disabled={exportM.isPending || busy} onClick={() => exportM.mutate()}
+            <button data-tour="purchasing-supply-isrfill-export" type="button" disabled={exportM.isPending || busy} onClick={() => exportM.mutate()}
               className={btnGhost}>
               {exportM.isPending ? 'جاري التصدير…' : 'تصدير Excel'}
             </button>
@@ -177,6 +187,10 @@ function RecentPicker({ selected, onToggle, collapsed }) {
     enabled: show, staleTime: 60_000,
   })
   const rows = recentQ.data?.results || []
+  const grid = useSort(rows, {
+    isr: r => r.isr, branch: r => r.branch, date: r => r.date, lines: r => r.lines, qty: r => r.qty,
+    value: r => r.value, user: r => r.user_name || r.user, status: r => (r.approved ? 1 : 0),
+  })
   return (
     <div className="rounded-lg border border-line">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-surface-2">
@@ -206,19 +220,21 @@ function RecentPicker({ selected, onToggle, collapsed }) {
             <table className="w-full text-sm">
               <thead className="text-xs text-content/60 sticky top-0 bg-surface">
                 <tr>
-                  {['', 'رقم الطلب', 'الفرع', 'التاريخ', 'الأصناف', 'الكمية', 'القيمة', 'المستخدم', 'الحالة'].map(h =>
-                    <th key={h} className="px-2 py-1.5 font-medium text-center">{h}</th>)}
+                  <th className="px-2 py-1.5" />
+                  {[['isr', 'رقم الطلب'], ['branch', 'الفرع'], ['date', 'التاريخ'], ['lines', 'الأصناف'], ['qty', 'الكمية'],
+                    ['value', 'القيمة'], ['user', 'المستخدم'], ['status', 'الحالة']].map(([k, h]) =>
+                    <SortTh key={k} k={k} {...grid} className="px-2 py-1.5 font-medium text-center">{h}</SortTh>)}
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => {
+                {grid.sorted.map(r => {
                   const on = selected.includes(r.isr)
                   return (
                     <tr key={r.isr} onClick={() => onToggle(r.isr)}
                       className={`border-t border-line text-center cursor-pointer hover:bg-surface-2 ${on ? 'bg-primary/5' : ''}`}>
                       <td className="px-2 py-1"><input type="checkbox" readOnly checked={on} /></td>
                       <td className="px-2 py-1 font-mono">{r.isr}</td>
-                      <td className="px-2 py-1 whitespace-nowrap">{bl(r.branch)}{r.for_branch !== r.branch ? ` ⟶ ${bl(r.for_branch)}` : ''}</td>
+                      <td className="px-2 py-1 whitespace-nowrap">{bl(r.branch)}{r.for_branch !== r.branch ? ` ${fa()} ${bl(r.for_branch)}` : ''}</td>
                       <td className="px-2 py-1">{r.date}</td>
                       <td className="px-2 py-1">{r.lines}</td>
                       <td className="px-2 py-1">{q(r.qty)}</td>
@@ -243,6 +259,13 @@ function RecentPicker({ selected, onToggle, collapsed }) {
 export function PlanView({ plan, setPlan, isrText, coverageChanged }) {
   const bl = useBranchLabels()
   const t = plan.totals
+  const T = (k) => (r) => r.totals[k]
+  const grid = useSort(plan.isrs, {
+    isr: r => r.isr, branch: r => r.branch, items: T('items'), requested: T('requested'),
+    recommended: T('recommended'), planned: T('planned'), from_branches: T('from_branches'), from_hq: T('from_hq'),
+    shortage: T('shortage'), full_branches: T('full_branches'), full_all: T('full_all'),
+    over_ceiling: T('over_ceiling'), value_branches: T('value_branches'), value_shortage: T('value_shortage'),
+  })
   return (
     <div className="space-y-4">
       <div className="text-xs text-content/60 flex flex-wrap gap-x-4 gap-y-1">
@@ -261,18 +284,32 @@ export function PlanView({ plan, setPlan, isrText, coverageChanged }) {
           {plan.notices.map(m => <div key={m}>{m}</div>)}
         </div>
       )}
+      {t.no_sales_network + t.no_sales_seed > 0 && (
+        // owner 2026-10-24: the starter/network rule must be stated where it is applied
+        <div className="text-sm text-amber-900 bg-amber-50 border border-amber-300 rounded p-2.5 space-y-1">
+          <div className="font-semibold">
+            ⓘ {t.no_sales_network + t.no_sales_seed} سطر لا يبيعه الفرع الطالب — لم يُصرف بالكمية المطلوبة
+            <span className="font-normal"> ({t.no_sales_network} حسب بيع باقي الفروع · {t.no_sales_seed} كمية بدء
+            · المطلوب {q(t.no_sales_asked)} ← {plan.plan_label} {q(t.no_sales_planned)})</span>
+          </div>
+          <div className="text-xs leading-5">{plan.no_sales_rule}</div>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full text-sm">
           <thead className="bg-surface-2 text-content/70 text-xs">
             <tr>
-              {['الطلب', 'الفرع', 'الأصناف', 'المطلوب', 'الموصى بها', plan.plan_label, 'من فائض الفروع', 'من الرئيسي', 'نقص (شراء)',
-                'مغطى من الفروع', 'مغطى بالكامل', 'يتجاوز الحد', 'قيمة المنقول', 'قيمة النقص'].map(h =>
-                <th key={h} className="px-2 py-2 text-center font-medium whitespace-nowrap">{h}</th>)}
+              {[['isr', 'الطلب'], ['branch', 'الفرع'], ['items', 'الأصناف'], ['requested', 'المطلوب'],
+                ['recommended', 'الموصى بها'], ['planned', plan.plan_label], ['from_branches', 'من فائض الفروع'],
+                ['from_hq', 'من الرئيسي'], ['shortage', 'نقص (شراء)'], ['full_branches', 'مغطى من الفروع'],
+                ['full_all', 'مغطى بالكامل'], ['over_ceiling', 'يتجاوز الحد'], ['value_branches', 'قيمة المنقول'],
+                ['value_shortage', 'قيمة النقص']].map(([k, h]) =>
+                <SortTh key={k} k={k} {...grid} className="px-2 py-2 text-center font-medium whitespace-nowrap">{h}</SortTh>)}
             </tr>
           </thead>
           <tbody>
-            {plan.isrs.map(r => (
+            {grid.sorted.map(r => (
               <tr key={r.isr} className="border-t border-line text-center">
                 <td className="px-2 py-1.5 font-mono">{r.isr}</td>
                 <td className="px-2 py-1.5">{r.branch} <span className="text-content/50 text-xs">{r.branch_name || bl.nameOf(r.branch)}</span></td>
@@ -356,11 +393,11 @@ function ReturnsBar({ r, returns, canWrite, isrText, settings, setPlan }) {
       {returns.map(x => (
         <Chip key={x.id} tone={RETURN_TONE[x.status] || 'gray'}
           title={x.isrdocnumber ? `SOFTECH ISR ${x.isrdocnumber}` : ''}>
-          فرع {bl(x.donor)} ⟶ {bl('100')} · {q(x.qty)} · #{x.id} {x.status_label}
+          فرع {bl(x.donor)} {fa()} {bl('100')} · {q(x.qty)} · #{x.id} {x.status_label}
         </Chip>
       ))}
       {pending.length > 0 && canWrite && (
-        <button onClick={() => createM.mutate()} disabled={createM.isPending} className={btnPrimary}
+        <button data-tour="purchasing-supply-isrfill-returns" onClick={() => createM.mutate()} disabled={createM.isPending} className={btnPrimary}
           title="ينشئ طلب توريد مقترح من كل فرع مانح إلى الرئيسي بالكمية المخططة؛ الرئيسي يصرف الطلب الأصلي بإذن الصرف">
           {createM.isPending ? 'جاري الإنشاء…'
             : `إنشاء مقترحات الإرجاع (${q(pendingQty)} من ${pending.length} فرع)`}
@@ -393,6 +430,13 @@ function IsrSection({ r, returns, canWrite, isrText, settings, setPlan, fallback
         : filter === 'full' ? l.full_overall
           : filter === 'over' ? l.req.over_ceiling : true)
   const toggle = (code) => setOpen(s => { const n = new Set(s); n.has(code) ? n.delete(code) : n.add(code); return n })
+  const grid = useSort(lines, {
+    name: l => l.name, qty: l => l.qty, recommended: l => l.recommended, plan_qty: l => l.plan_qty,
+    stock: l => l.req.stock, rate: l => l.req.rate, ceiling: l => l.req.ceiling, after: l => l.req.after,
+    excess: l => l.network.excess, from_branches: l => l.from_branches, hq_stock: l => l.hq_stock,
+    from_hq: l => l.from_hq, shortage: l => l.shortage, network: l => l.network.rate,
+    value_shortage: l => l.value_shortage,
+  })
 
   return (
     <section className="rounded-lg border border-line">
@@ -425,25 +469,25 @@ function IsrSection({ r, returns, canWrite, isrText, settings, setPlan, fallback
         <table className="w-full text-sm">
           <thead className="text-content/70 text-xs">
             <tr className="border-b border-line">
-              <th className="px-2 py-2 text-start font-medium">الصنف</th>
-              <th className="px-2 py-2 font-medium">المطلوب</th>
-              <th className="px-2 py-2 font-medium" title="تغطية الطالب × معدل بيعه − رصيده − بالطريق؛ موجب → مقرّب لأعلى (عبوة على الأقل)، وإلا صفر">الموصى بها</th>
-              <th className="px-2 py-2 font-medium" title="الكمية التي تُوزَّع على الفروع / الرئيسي / النقص">{planLabel}</th>
-              <th className="px-2 py-2 font-medium" title="رصيد الفرع الطالب الحالي">رصيد الطالب</th>
-              <th className="px-2 py-2 font-medium">معدل البيع</th>
-              <th className="px-2 py-2 font-medium">الحد الأقصى</th>
-              <th className="px-2 py-2 font-medium">بعد التوريد</th>
-              <th className="px-2 py-2 font-medium" title="فائض الفروع الأخرى فوق حدها الأقصى">فائض الفروع</th>
-              <th className="px-2 py-2 font-medium">من الفروع</th>
-              <th className="px-2 py-2 font-medium">رصيد الرئيسي</th>
-              <th className="px-2 py-2 font-medium">من الرئيسي</th>
-              <th className="px-2 py-2 font-medium">نقص</th>
-              <th className="px-2 py-2 font-medium" title="معدل بيع كل الفروع / شهور تغطية رصيد الفروع">الشبكة</th>
-              <th className="px-2 py-2 font-medium">قيمة النقص</th>
+              <SortTh k="name" {...grid} className="px-2 py-2 text-start font-medium">الصنف</SortTh>
+              <SortTh k="qty" {...grid} className="px-2 py-2 font-medium">المطلوب</SortTh>
+              <SortTh k="recommended" {...grid} className="px-2 py-2 font-medium" title={`تغطية الطالب × معدل بيعه − رصيده − بالطريق؛ موجب ${fa()} مقرّب لأعلى (عبوة على الأقل)، وإلا صفر`}>الموصى بها</SortTh>
+              <SortTh k="plan_qty" {...grid} className="px-2 py-2 font-medium" title="الكمية التي تُوزَّع على الفروع / الرئيسي / النقص">{planLabel}</SortTh>
+              <SortTh k="stock" {...grid} className="px-2 py-2 font-medium" title="رصيد الفرع الطالب الحالي">رصيد الطالب</SortTh>
+              <SortTh k="rate" {...grid} className="px-2 py-2 font-medium">معدل البيع</SortTh>
+              <SortTh k="ceiling" {...grid} className="px-2 py-2 font-medium">الحد الأقصى</SortTh>
+              <SortTh k="after" {...grid} className="px-2 py-2 font-medium">بعد التوريد</SortTh>
+              <SortTh k="excess" {...grid} className="px-2 py-2 font-medium" title="فائض الفروع الأخرى فوق حدها الأقصى">فائض الفروع</SortTh>
+              <SortTh k="from_branches" {...grid} className="px-2 py-2 font-medium">من الفروع</SortTh>
+              <SortTh k="hq_stock" {...grid} className="px-2 py-2 font-medium">رصيد الرئيسي</SortTh>
+              <SortTh k="from_hq" {...grid} className="px-2 py-2 font-medium">من الرئيسي</SortTh>
+              <SortTh k="shortage" {...grid} className="px-2 py-2 font-medium">نقص</SortTh>
+              <SortTh k="network" {...grid} className="px-2 py-2 font-medium" title="معدل بيع كل الفروع / شهور تغطية رصيد الفروع">الشبكة</SortTh>
+              <SortTh k="value_shortage" {...grid} className="px-2 py-2 font-medium">قيمة النقص</SortTh>
             </tr>
           </thead>
           <tbody>
-            {lines.map(l => {
+            {grid.sorted.map(l => {
               const gives = l.donors.filter(d => d.give > 0)
               const isOpen = open.has(l.code)
               return (
@@ -455,9 +499,9 @@ function IsrSection({ r, returns, canWrite, isrText, settings, setPlan, fallback
                       <span className="font-mono text-xs text-content/60 me-1">{l.code}</span>{l.name}
                     </td>
                     <td className="px-2 py-1.5">{q(l.qty)}</td>
-                    <td className="px-2 py-1.5" title={l.no_sales ? 'الفرع لا يبيع هذا الصنف — الموصى بها = المطلوبة' : `حتى ${q(l.fill_ceiling)} (${q(l.req.rate)}/شهر)`}>
+                    <td className="px-2 py-1.5" title={noSalesTitle(l) || `حتى ${q(l.fill_ceiling)} (${q(l.req.rate)}/شهر)`}>
                       {q(l.recommended)}
-                      {l.no_sales && <div><Chip tone="gray">بلا مبيعات</Chip></div>}
+                      {l.no_sales_basis && <div><Chip tone="amber">بدون مبيعات — {l.no_sales_basis === 'network' ? 'حسب الشبكة' : 'بذرة'}</Chip></div>}
                     </td>
                     <td className={`px-2 py-1.5 font-semibold ${l.plan_qty !== l.qty ? 'text-primary' : ''}`}>{q(l.plan_qty)}</td>
                     <td className="px-2 py-1.5">

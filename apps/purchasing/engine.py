@@ -74,7 +74,6 @@ Incremental architecture:
   7. Bulk upsert persist (module 11)
 """
 
-import io
 import math
 import logging
 import datetime
@@ -770,21 +769,11 @@ class DemandEngine:
         Fetch the last `lookback_days` of stktrans from SOFTECH and upsert
         into SalesTransactionLine.  Then purge rows older than ROLLING_WINDOW_DAYS.
 
-        Optimisations vs the previous implementation:
-          1. fetchmany(5 000)    — streams Sybase rows in chunks, avoids fetchall()
-             memory spike on large result sets (100k-5M rows for full backfill).
-          2. COPY staging        — buffers rows in io.BytesIO (tab-separated text),
-             flushes to a temp staging table using cursor.copy_expert() then
-             upserts via a single INSERT … SELECT … ON CONFLICT statement.
-          3. SQL FK resolution   — item_id / branch_id are resolved inside the
-             INSERT … SELECT via LEFT JOIN catalog_item / branches_branch, removing
-             the Python dict lookup loop entirely and eliminating silent data loss
-             when new items appear in SOFTECH before the PG catalog is updated.
+        Pulled in date-bounded windows (apps/purchasing/catchup.backfill_sales) — the
+        open-ended single query timed out on HQ (owner bug 2026-10-24).
 
         Returns: (rows_synced, rows_purged)
         """
-        from apps.purchasing.queries import QUERY_SALES_INCREMENTAL
-
         from datetime import date, timedelta
         sync_from = date.today() - timedelta(days=lookback_days)
         logger.info(
@@ -792,203 +781,23 @@ class DemandEngine:
             lookback_days, sync_from,
         )
 
-        # ── 1. Connect to Sybase and start streaming ──────────────────────────
+        # ── 1. Bounded-window pull (owner bug 2026-10-24) ─────────────────────
+        # The open-ended «last N days» GROUP BY now takes > 5 min on HQ, so every run
+        # timed out here and silently re-used stale sales. Pull in date-bounded windows
+        # instead (the catch-up's proven path, 7 days ≈ 2 s) and upsert the same table.
         try:
-            from config.sybase import get_sybase_connection
-            syb_conn   = get_sybase_connection()
-            syb_cursor = syb_conn.cursor()
-            syb_cursor.execute(QUERY_SALES_INCREMENTAL, (lookback_days,))
+            from apps.purchasing.catchup import backfill_sales
+            res = backfill_sales(run=None, since=sync_from)
             self._softech_ok = True
-            logger.info('[DemandEngine] SOFTECH connected — streaming from %s', sync_from)
+            rows_purged = self._purge_old_rows()
+            logger.info('[DemandEngine] SOFTECH sales pulled in %d window(s): %d rows, latest %s',
+                        res['chunks'], res['rows_upserted'], res['latest'])
+            return res['rows_upserted'], rows_purged
         except Exception as exc:
             logger.warning('[DemandEngine] SOFTECH unavailable: %s — skipping sync', exc)
             self._softech_ok = False
             rows_purged = self._purge_old_rows()
             return 0, rows_purged
-
-        # ── 2. Create PG staging table ────────────────────────────────────────
-        with connection.cursor() as pg:
-            pg.execute("""
-                CREATE TEMP TABLE IF NOT EXISTS _stl_staging (
-                    softech_branchcode VARCHAR(20),
-                    softech_itemcode   VARCHAR(50),
-                    doccode            VARCHAR(10),
-                    docnumber          VARCHAR(50),
-                    doc_date           DATE,
-                    transqty           NUMERIC(14,3),
-                    net_qty            NUMERIC(14,3),
-                    net_revenue        NUMERIC(18,3)
-                )
-            """)
-            pg.execute("TRUNCATE _stl_staging")   # clear any leftovers from a previous run
-
-        # ── 3. Stream Sybase rows → BytesIO buffer → COPY → upsert ───────────
-        rows_synced   = 0
-        total_fetched = 0
-        buf      = io.BytesIO()
-        buf_rows = 0
-
-        def _flush_buffer(buf: io.BytesIO, buf_rows: int) -> int:
-            """
-            COPY buf into _stl_staging, then INSERT…ON CONFLICT into the main table.
-            Returns the number of rows upserted (pg.rowcount after INSERT).
-            """
-            if buf_rows == 0:
-                return 0
-            buf.seek(0)
-            with connection.cursor() as pg:
-                pg.execute("TRUNCATE _stl_staging")
-                pg.copy_expert(
-                    "COPY _stl_staging "
-                    "(softech_branchcode, softech_itemcode, doccode, docnumber, "
-                    "doc_date, transqty, net_qty, net_revenue) "
-                    "FROM STDIN WITH (FORMAT text)",   # text = tab-delimited
-                    buf
-                )
-                # Safety-net dedup: aggregate staging rows with GROUP BY + SUM before
-                # inserting into the main table.
-                #
-                # Primary dedup happens at Sybase source (QUERY_SALES_INCREMENTAL now
-                # uses GROUP BY + SUM(transqty) to collapse expiry-batch split lines
-                # into one pre-totalled row per item per document).  This CTE is a
-                # defensive second pass that handles any edge-case duplicates that
-                # could still arrive (e.g. a Sybase driver quirk re-sending a row).
-                #
-                # Using SUM — not DISTINCT ON / MAX — is critical: if two staging rows
-                # genuinely represent different batch lines that were not aggregated at
-                # source, SUM gives the correct total quantity; MAX would silently
-                # discard real sales.
-                pg.execute("""
-                    WITH dedup AS (
-                        SELECT
-                            softech_branchcode,
-                            softech_itemcode,
-                            doccode,
-                            docnumber,
-                            doc_date,
-                            SUM(transqty)    AS transqty,
-                            SUM(net_qty)     AS net_qty,
-                            SUM(net_revenue) AS net_revenue
-                        FROM _stl_staging
-                        GROUP BY
-                            softech_branchcode, softech_itemcode,
-                            doccode, docnumber, doc_date
-                    )
-                    INSERT INTO purchasing_salestransactionline
-                        (softech_branchcode, softech_itemcode, doccode, docnumber,
-                         doc_date, item_id, branch_id, transqty, net_qty, net_revenue, synced_at)
-                    SELECT
-                        d.softech_branchcode,
-                        d.softech_itemcode,
-                        d.doccode,
-                        d.docnumber,
-                        d.doc_date,
-                        ci.id   AS item_id,
-                        br.id   AS branch_id,
-                        d.transqty,
-                        d.net_qty,
-                        d.net_revenue,
-                        NOW()
-                    FROM dedup d
-                    LEFT JOIN catalog_item ci
-                        ON  ci.softech_id = d.softech_itemcode
-                        -- include discontinued (no_more_use) items so their sales
-                        -- resolve to an item_id and appear in purchasing
-                        AND (ci.is_active = TRUE OR ci.no_more_use = TRUE)
-                    LEFT JOIN branches_branch br
-                        ON  br.softech_branch_id = d.softech_branchcode
-                        AND br.is_active         = TRUE
-                    ON CONFLICT ON CONSTRAINT unique_stktrans_line
-                    DO UPDATE SET
-                        transqty    = EXCLUDED.transqty,
-                        net_qty     = EXCLUDED.net_qty,
-                        net_revenue = EXCLUDED.net_revenue,
-                        -- Prefer resolved FK; keep existing value if new row has no match
-                        item_id   = COALESCE(EXCLUDED.item_id,
-                                             purchasing_salestransactionline.item_id),
-                        branch_id = COALESCE(EXCLUDED.branch_id,
-                                             purchasing_salestransactionline.branch_id),
-                        synced_at = NOW()
-                """)
-                return pg.rowcount
-
-        # Stream Sybase in chunks of SYBASE_FETCH_BATCH rows
-        while True:
-            chunk = syb_cursor.fetchmany(SYBASE_FETCH_BATCH)
-            if not chunk:
-                break
-
-            for row in chunk:
-                branchcode = str(row[0] or '').strip()
-                itemcode   = str(row[1] or '').strip()
-                doccode    = str(row[2] or '').strip()
-                docnumber  = str(row[3] or '').strip()
-                docdate          = row[4]
-                transqty         = float(row[5] or 0)
-                transprice_total = float(row[6] or 0) if len(row) > 6 else 0.0
-
-                if not branchcode or not itemcode or transqty <= 0:
-                    continue
-
-                # Normalise datetime → date
-                if hasattr(docdate, 'date'):
-                    doc_date = docdate.date()
-                elif isinstance(docdate, datetime.date):
-                    doc_date = docdate
-                else:
-                    continue
-
-                is_sale = doccode == '115'
-                net_qty     =  transqty         if is_sale else -transqty
-                net_revenue =  transprice_total  if is_sale else -transprice_total
-
-                # Tab-separated text format; replace any embedded tabs to be safe
-                line = (
-                    f"{branchcode.replace(chr(9), ' ')}\t"
-                    f"{itemcode.replace(chr(9), ' ')}\t"
-                    f"{doccode}\t"
-                    f"{docnumber.replace(chr(9), ' ')}\t"
-                    f"{doc_date}\t"
-                    f"{transqty:.3f}\t"
-                    f"{net_qty:.3f}\t"
-                    f"{net_revenue:.3f}\n"
-                )
-                buf.write(line.encode('utf-8'))
-                buf_rows += 1
-
-            total_fetched += len(chunk)
-
-            # Flush to PG when buffer reaches the chunk threshold
-            if buf_rows >= PG_COPY_CHUNK:
-                rows_synced += _flush_buffer(buf, buf_rows)
-                buf      = io.BytesIO()
-                buf_rows = 0
-                logger.debug('[DemandEngine] Streamed %d Sybase rows, upserted %d so far',
-                             total_fetched, rows_synced)
-
-        try:
-            syb_conn.close()
-        except Exception:
-            pass  # non-critical
-
-        # Flush remaining rows
-        rows_synced += _flush_buffer(buf, buf_rows)
-
-        # Cleanup staging table (also auto-dropped at session end)
-        try:
-            with connection.cursor() as pg:
-                pg.execute("DROP TABLE IF EXISTS _stl_staging")
-        except Exception:
-            pass
-
-        logger.info(
-            '[DemandEngine] Sync complete: %d Sybase rows fetched, %d PG rows upserted',
-            total_fetched, rows_synced,
-        )
-
-        # ── 4. Purge rolling window ───────────────────────────────────────────
-        rows_purged = self._purge_old_rows()
-        return rows_synced, rows_purged
 
     def _purge_old_rows(self) -> int:
         """Delete SalesTransactionLine rows older than ROLLING_WINDOW_DAYS."""

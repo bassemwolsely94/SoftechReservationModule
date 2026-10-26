@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { customersApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 const LABEL_OPTIONS = [
   { value: 'home',     label: '🏠 المنزل' },
@@ -133,7 +134,7 @@ function LocationForm({ initial = {}, onSave, onCancel, saving }) {
           placeholder="https://maps.google.com/..."
           value={form.google_maps_link} onChange={f('google_maps_link')} />
         <p className="text-xs text-gray-400 mt-0.5">
-          افتح الموقع في خرائط جوجل → Share → انسخ الرابط هنا
+          افتح الموقع في خرائط جوجل {fa()} Share {fa()} انسخ الرابط هنا
         </p>
       </div>
 

@@ -43,6 +43,13 @@ def _snap():
     }
 
 
+
+# SimpleTestCase classes below must not reach the database. Branch / user labels come
+# from apps.finance.recon_labels, whose 10-minute cache was only warm by luck (filled by
+# an earlier DB test); pin it empty so labels fall back to the bare code.
+_NO_LABELS = mock.patch('apps.finance.recon_labels._maps',
+                        new=lambda: {'at': 0.0, 'branches': {}, 'users': {}})
+
 class CeilingAndParseTests(SimpleTestCase):
     def test_branch_column_order(self):
         self.assertEqual(F.branch_column_order(['150', '130', '170', '140', '160']),
@@ -65,7 +72,8 @@ class CeilingAndParseTests(SimpleTestCase):
             F.parse_isr_numbers(' '.join(str(i) for i in range(F.MAX_ISRS + 1)))
 
 
-class ComputeTests(SimpleTestCase):
+@_NO_LABELS
+class ComputeTests(TestCase):   # the workbook reads «بيانات الصنف» live
     def test_plan_cascade_hq_and_shortage(self):
         p = F.compute(_snap(), 1.5)
         r = p['isrs'][0]
@@ -110,7 +118,8 @@ class ComputeTests(SimpleTestCase):
         self.assertFalse(a['req']['over_ceiling'])                   # 12 after vs max 12
 
 
-class WorkbookTests(SimpleTestCase):
+@_NO_LABELS
+class WorkbookTests(TestCase):   # the workbook reads «بيانات الصنف» live
     def test_sheets_coverage_cell_and_formulas(self):
         wb = F.build_workbook(_snap(), 2)
         self.assertEqual(wb.sheetnames, ['ملخص', 'ISR 261609', 'الشرح'])
@@ -167,11 +176,13 @@ class FulfilmentApiTests(TestCase):
     def test_plan_then_replan_reuses_snapshot_then_export(self):
         self.c.force_authenticate(_user('18', group=19))
         with mock.patch.object(F, 'collect', return_value=_snap()) as col:
-            r1 = self.c.post(self.URL, {'isrs': '261609', 'coverage': 1.5}, format='json')
+            r1 = self.c.post(self.URL, {'isrs': '261609', 'coverage': 1.5, 'basis': 'requested'},
+                             format='json')
             self.assertEqual(r1.status_code, 200)
             self.assertEqual(r1.data['totals']['shortage'], 7)
             tok = r1.data['token']
-            r2 = self.c.post(self.URL, {'isrs': '261609', 'coverage': 3, 'token': tok}, format='json')
+            r2 = self.c.post(self.URL, {'isrs': '261609', 'coverage': 3, 'token': tok, 'basis': 'requested'},
+                             format='json')
             self.assertEqual(r2.data['totals']['shortage'], 9)       # B 6 + C 3
             self.assertEqual(col.call_count, 1)                      # no second SOFTECH read
             self.c.post(self.URL, {'isrs': '261609', 'token': tok, 'refresh': True}, format='json')
@@ -239,7 +250,8 @@ class DonorReturnTests(TestCase):
         self.assertEqual(c.post(url, {'isrs': '261609'}, format='json').status_code, 403)
         c.force_authenticate(_user('18', group=19))
         with mock.patch.object(F, 'collect', return_value=_snap()) as col:
-            r = c.post(url, {'isrs': '261609', 'coverage': 1.5, 'isr': '261609', 'token': 'old'}, format='json')
+            r = c.post(url, {'isrs': '261609', 'coverage': 1.5, 'isr': '261609', 'token': 'old',
+                             'basis': 'requested'}, format='json')
         self.assertEqual(r.status_code, 201)
         self.assertEqual(col.call_count, 1)                           # never a cached snapshot
         self.assertTrue(r.data['plan']['isrs'][0]['user'])
@@ -256,7 +268,8 @@ def _conn(rows):
     return conn
 
 
-class UnreachableBranchFallbackTests(SimpleTestCase):
+@_NO_LABELS
+class UnreachableBranchFallbackTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """A branch server that is down (e.g. 170, JZ006 timeout on 2026-10-04) must not
     leave its stock blank: use server 100's copy, and say so in Arabic."""
 
@@ -394,7 +407,8 @@ class RecentPickerTests(TestCase):
         self.assertEqual((r.status_code, r.data['days']), (200, 7))
 
 
-class FillCoverageTests(SimpleTestCase):
+@_NO_LABELS
+class FillCoverageTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: a separate, deterministic fill coverage for the REQUESTING branch —
     show requested + recommended, ship per the chosen basis (default: the smaller)."""
 
@@ -403,16 +417,45 @@ class FillCoverageTests(SimpleTestCase):
         self.assertEqual(F.recommended_qty(4.0, 2.0, 1.0, 3.0), 10.0)     # may exceed the request
         self.assertEqual(F.recommended_qty(4.0, 9.0, 10.0, 1.5), 0.0)     # already above target
         self.assertEqual(F.recommended_qty(0.9, 0.3, 5.0, 1.5), 2.0)      # 1.35 − 0.3 = 1.05 → up → 2
-        self.assertEqual(F.recommended_qty(0, 0, 7.0, 1.5), 7.0)          # no sales → as requested
+        # owner 2026-10-24: no sales at the requester → the network's rate, else a seed — never
+        # more than requested (was: ship the requested qty as is)
+        self.assertEqual(F.recommended_qty(0, 0, 7.0, 1.5), 2.0)                       # seed: 2 packs
+        self.assertEqual(F.recommended_qty(0, 0, 7.0, 1.5, price=450), 1.0)            # dear (≥ 300) → 1
+        self.assertEqual(F.recommended_qty(0, 1, 7.0, 1.5), 1.0)                       # seed − stock
+        self.assertEqual(F.recommended_qty(0, 3, 7.0, 1.5), 0.0)                       # already has the seed
+        self.assertEqual(F.recommended_qty(0, 0, 7.0, 1.5, network=2.0), 3.0)          # 1.5 × 2
+        self.assertEqual(F.recommended_qty(0, 0, 2.0, 1.5, network=5.0), 2.0)          # capped at requested
+        self.assertEqual(F.recommended_qty(0, 1, 7.0, 1.5, network=0.4), 0.0)          # 0.6 − 1 < 0
+        self.assertEqual(F.seed_qty(299.99), 2.0)
+        self.assertEqual(F.seed_qty(300), 1.0)
+        self.assertEqual((F.no_sales_basis(1.2, 3), F.no_sales_basis(0, 3), F.no_sales_basis(0, 0)),
+                         (None, 'network', 'seed'))
 
     def test_basis_and_plan(self):
         r = F.compute(_snap(), 1.5, 1.5, 'min')['isrs'][0]
         a, b, c = r['lines']
         self.assertEqual((a['qty'], a['recommended'], a['plan_qty']), (10.0, 4.0, 4.0))
         self.assertEqual((a['from_branches'], a['shortage']), (4, 0.0))     # 150 gives 4, not 10
-        self.assertTrue(b['no_sales'] and b['plan_qty'] == 15.0)             # no sales → requested
+        # B: no sales at 160; network = (130: 0 + 140: 1 + 150: 0) / 3 → 1.5 × ⅓ = 0.5 → 1 pack
+        self.assertEqual((b['no_sales'], b['no_sales_basis'], b['review']), (True, 'network', True))
+        self.assertEqual((b['recommended'], b['plan_qty']), (1.0, 1.0))
+        self.assertEqual(b['network_rate'], 0.33)                            # shown rounded
+        # C: nobody sells it → seed 2 packs (price 3 < 300), under the 3 requested
+        self.assertEqual((c['no_sales_basis'], c['recommended'], c['plan_qty']), ('seed', 2.0, 2.0))
+        self.assertEqual((a['no_sales_basis'], a['review']), (None, False))
         self.assertEqual(r['totals']['requested'], 28.0)
-        self.assertEqual((r['totals']['recommended'], r['totals']['planned']), (22.0, 22.0))
+        self.assertEqual((r['totals']['recommended'], r['totals']['planned']), (7.0, 7.0))
+        # stated where it is applied (owner 2026-10-24): counts + the rule in words
+        t = r['totals']
+        self.assertEqual((t['no_sales_network'], t['no_sales_seed'], t['no_sales_asked'], t['no_sales_planned']),
+                         (1, 1, 18.0, 3.0))
+        plan = F.compute(_snap(), 1.5, 1.5, 'min')
+        self.assertIn('عبوة واحدة إذا كان سعر الجمهور 300', plan['no_sales_rule'])
+        self.assertEqual(plan['totals']['no_sales_seed'], 1)
+        with mock.patch('apps.finance.recon_labels.branch_name', return_value=''):
+            wb = F.build_workbook(_snap(), 1.5, 1.5, 'min')
+        self.assertIn('كمية بدء', wb['ملخص']['A8'].value)
+        self.assertIn('كمية بدء', ' '.join(str(c.value) for c in wb['الشرح']['A']))
         req = F.compute(_snap(), 1.5, 1.5, 'requested')['isrs'][0]['lines'][0]
         self.assertEqual((req['plan_qty'], req['from_branches']), (10.0, 10))   # the original plan
         rec = F.compute(_snap(), 1.5, 3.0, 'recommended')['isrs'][0]['lines'][0]
@@ -441,7 +484,7 @@ class FillCoverageTests(SimpleTestCase):
         self.assertTrue(any('C6' in str(dv.sqref) for dv in s.data_validations.dataValidation))
         ws = wb['ISR 261609']
         heads = [c.value for c in ws[ws.max_row - 3] if c.value] + \
-                [ws.cell(r, c).value for r in range(1, 6) for c in range(1, 10)]
+                [ws.cell(r, c).value for r in range(1, 6) for c in range(1, 25)]   # + «بيانات الصنف»
         self.assertIn('الكمية الموصى بها (تغطية الطلب)', heads)
         self.assertIn(F.plan_label_formula(), heads)          # header follows C6
         formulas = ' '.join(str(c.value) for row in ws.iter_rows() for c in row if isinstance(c.value, str))
@@ -449,7 +492,8 @@ class FillCoverageTests(SimpleTestCase):
         self.assertIn(F.BASIS_REF, formulas)
 
 
-class CoverageNeedTests(SimpleTestCase):
+@_NO_LABELS
+class CoverageNeedTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: «الاحتياج» follows the coverage settings (requester: fill coverage,
     donors: donor coverage) — never the engine's own gap, never negative."""
 
@@ -482,7 +526,8 @@ class CoverageNeedTests(SimpleTestCase):
         self.assertTrue(f.startswith('=MAX(0,ROUNDUP(') and F.FILL_REF in f)
 
 
-class InTransitTests(SimpleTestCase):
+@_NO_LABELS
+class InTransitTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: count what is already on the way (doccode-125 transfers not yet
     received, issued within the engine's window — 14 days) so we never buy / move it twice."""
 
@@ -519,7 +564,7 @@ class InTransitTests(SimpleTestCase):
         from openpyxl.utils import get_column_letter as L
         need = ws.cell(6, heads['الاحتياج (حتى تغطية الطالب)']).value
         self.assertIn(f'-{L(heads["بالطريق (لم يُستلم)"])}6', need)               # need nets transit
-        rec = ws.cell(6, 5).value
+        rec = ws.cell(6, heads['الكمية الموصى بها (تغطية الطلب)']).value
         self.assertIn(f'{L(heads["الاحتياج (حتى تغطية الطالب)"])}6', rec)         # recommended = need
         self.assertIn('بالطريق للفروع', heads)
 
@@ -552,7 +597,8 @@ class InTransitWindowTests(TestCase):
         self.assertEqual(by_branch_code(['A'], max_age=0)[0]['160']['A'], 7.0)   # 0 = no age limit
 
 
-class RequesterCeilingTests(SimpleTestCase):
+@_NO_LABELS
+class RequesterCeilingTests(TestCase):   # the workbook reads «بيانات الصنف» live
     """Owner 2026-10-05: the requesting branch's maximum uses ITS coverage (C5), and
     «يتجاوز الحد الأقصى؟» only when something is supplied and stock + transit + supplied > max."""
 
@@ -575,4 +621,93 @@ class RequesterCeilingTests(SimpleTestCase):
         rc = heads.index('الحد الأقصى') + 1                                      # the requester's (first)
         self.assertIn(F.FILL_REF, ws.cell(6, rc).value)
         rx = heads.index('يتجاوز الحد الأقصى؟') + 1
-        self.assertTrue(ws.cell(6, rx).value.startswith('=IF(AND(F6>0,'))      # F = supplied qty
+        from openpyxl.utils import get_column_letter as L
+        pl = L(heads.index(F.plan_label_formula()) + 1)                        # the supplied qty
+        self.assertTrue(ws.cell(6, rx).value.startswith(f'=IF(AND({pl}6>0,'))
+
+
+def _multi_snap():
+    """Three requests: 160 twice (2616021: X 6 + Y 2; 2616022: X 4), 130 once (2613010: X 5).
+       X: 160 has 1 @ rate 4 (cover 0.25 → served first); 130 has 6 @ rate 2 (cover 3; it
+          REQUESTS X, so it never donates); donors 150 (9 @ rate 2 → max 2, excess 7) and
+          140 (3, no sales → excess 3) = pool 10; HQ 2.5 → 2 whole packs."""
+    return {
+        'isr_numbers': ['2616021', '2616022', '2613010'],
+        'isrs': [
+            {'isr': '2616021', 'branch': '160', 'for_branch': '100', 'date': '2026-10-01', 'approved': 1,
+             'value': 70.0, 'user': '11', 'lines': [{'code': 'X', 'qty': 6.0, 'cost': 10.0},
+                                                    {'code': 'Y', 'qty': 2.0, 'cost': 5.0}]},
+            {'isr': '2616022', 'branch': '160', 'for_branch': '100', 'date': '2026-10-03', 'approved': 1,
+             'value': 44.0, 'user': '11', 'lines': [{'code': 'X', 'qty': 4.0, 'cost': 11.0}]},
+            {'isr': '2613010', 'branch': '130', 'for_branch': '100', 'date': '2026-10-02', 'approved': 1,
+             'value': 50.0, 'user': '12', 'lines': [{'code': 'X', 'qty': 5.0, 'cost': 10.0}]},
+        ],
+        'branches': ['160', '130', '150', '140', '170'],
+        'branch_names': {},
+        'stock': {'160': {'X': 1.0}, '130': {'X': 6.0}, '150': {'X': 9.0}, '140': {'X': 3.0},
+                  '100': {'X': 2.5}},
+        'eng': {'X|160': [4.0, 0.0], 'X|130': [2.0, 0.0], 'X|150': [2.0, 0.0]},
+        'names': {'X': 'ITEM X', 'Y': 'ITEM Y'},
+        'down': [], 'run_id': 90, 'taken_at': '2026-10-18T10:00:00',
+    }
+
+
+@_NO_LABELS
+class CompiledTests(TestCase):   # the workbook reads «بيانات الصنف» live
+    """«تجميعي» (owner 2026-10-18): every item once, same-branch requests merged (need counted
+    once), shared pool served lowest-coverage first, requesters never donate the item."""
+
+    def test_shared_pool_priority_and_merge(self):
+        p = F.compile_items(_multi_snap(), 1, 1.5, 'requested')
+        x = p['items'][0]
+        self.assertEqual(x['code'], 'X')                                  # repeated items first
+        self.assertEqual(x['requesters'], ['160', '130'])                 # lowest cover first
+        self.assertEqual(x['isrs'], ['2616021', '2616022', '2613010'])
+        r160, r130 = x['rows']['160'], x['rows']['130']
+        self.assertEqual((r160['requested'], r160['plan'], r160['priority']), (10.0, 10.0, 1))
+        self.assertEqual((r160['from_branches'], r160['from_hq'], r160['shortage']), (10.0, 0.0, 0.0))
+        self.assertEqual((r130['from_branches'], r130['from_hq'], r130['shortage']), (0.0, 2.0, 3.0))
+        self.assertEqual(r130['excess'], 0)                               # a requester never donates
+        self.assertNotIn('130', x['donors'])
+        self.assertEqual(x['pool'], 10)
+        self.assertEqual({b: x['rows'][b]['give'] for b in x['donors']}, {'150': 7, '140': 3, '170': 0})
+        self.assertEqual((x['from_branches'], x['from_hq'], x['shortage']), (10.0, 2.0, 3.0))
+        self.assertTrue(x['contested'])
+        self.assertEqual(x['cost'], 11.0)                                 # latest request's cost
+        self.assertEqual(p['items'][1]['n_branches'], 1)
+        self.assertEqual(p['totals']['shared'], 1)
+
+    def test_need_counted_once_for_a_branch_with_two_requests(self):
+        x = F.compile_items(_multi_snap(), 1, 1.5, 'min')['items'][0]
+        # 160: need = 1.5 × 4 − 1 = 5 → plan min(10, 5) = 5 (not 5 per request)
+        self.assertEqual((x['rows']['160']['recommended'], x['rows']['160']['plan']), (5.0, 5.0))
+
+    def test_hq_fills_a_requester_alone_when_what_is_left_covers_it(self):
+        s = _multi_snap()
+        s['stock']['100']['X'] = 12.0
+        x = F.compile_items(s, 1, 1.5, 'requested')['items'][0]
+        self.assertEqual((x['rows']['160']['from_hq'], x['rows']['160']['from_branches']), (10.0, 0.0))
+        # 2 left at HQ < 5 → 130 draws on the pool first, then HQ
+        self.assertEqual((x['rows']['130']['from_branches'], x['rows']['130']['from_hq']), (5.0, 0.0))
+
+    def test_compiled_sheet_layout_and_formulas(self):
+        wb = F.build_workbook(_multi_snap(), 1, 1.5, 'requested')
+        self.assertEqual(wb.sheetnames[:2], ['ملخص', F.COMPILED_TITLE])
+        ws = wb[F.COMPILED_TITLE]
+        groups = [str(ws.cell(4, c).value) for c in range(1, ws.max_column + 1) if ws.cell(4, c).value]
+        order = [g.split()[1] for g in groups if g.startswith('فرع ')]
+        self.assertEqual(order, ['130', '140', '150', '160', '170'])
+        heads = [ws.cell(5, c).value for c in range(1, ws.max_column + 1)]
+        self.assertEqual(ws.cell(6, 1).value, 'X')
+        self.assertEqual(ws.cell(6, heads.index('عدد الفروع الطالبة') + 1).value, 2)
+        self.assertEqual(ws.cell(6, 1).fill.fgColor.rgb[-6:], 'FCE4D6')        # repeated item tinted
+        self.assertNotEqual(ws.cell(7, 1).fill.fgColor.rgb[-6:], 'FCE4D6')
+        row6 = [ws.cell(6, c).value for c in range(1, ws.max_column + 1)]
+        self.assertTrue(any(isinstance(v, str) and F.FILL_REF in v for v in row6))
+        self.assertTrue(any(isinstance(v, str) and F.COV_REF in v for v in row6))
+        # the summary carries the de-duplicated totals
+        summary_text = [wb['ملخص'].cell(r, 1).value for r in range(1, 40)]
+        self.assertTrue(any(isinstance(t, str) and 'بعد التجميع' in t for t in summary_text))
+
+    def test_single_request_has_no_compiled_sheet(self):
+        self.assertNotIn(F.COMPILED_TITLE, F.build_workbook(_snap(), 1.5).sheetnames)

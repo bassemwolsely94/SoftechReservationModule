@@ -197,7 +197,7 @@ function CreateSessionModal({ onClose, onCreate }) {
         {/* Presets */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>بدء سريع:</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} data-tour="stockcount-sessions-presets">
             {PRESETS.map(p => (
               <button key={p.key} onClick={() => applyPreset(p)} style={{
                 padding: '6px 14px', borderRadius: 20, border: '1px solid #e5e7eb',
@@ -289,7 +289,7 @@ function CreateSessionModal({ onClose, onCreate }) {
               style={{ padding: '8px 20px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
               إلغاء
             </button>
-            <button type="submit" disabled={saving}
+            <button type="submit" disabled={saving} data-tour="stockcount-sessions-create"
               style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
               {saving ? 'جاري الإنشاء...' : 'إنشاء الجلسة'}
             </button>
@@ -441,14 +441,14 @@ function SnapshotTab({ session, onRefresh }) {
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        <button onClick={handlePreview} disabled={loading} style={{
+        <button onClick={handlePreview} disabled={loading} data-tour="stockcount-sessions-preview" style={{
           padding: '10px 24px', borderRadius: 6, border: '1px solid #2563eb',
           color: '#2563eb', background: '#fff', cursor: 'pointer', fontWeight: 600,
         }}>
           {loading ? 'جاري الاستعلام...' : '🔍 معاينة الأصناف'}
         </button>
         {canSnap && (
-          <button onClick={handleSnapshot} disabled={snapping} style={{
+          <button onClick={handleSnapshot} disabled={snapping} data-tour="stockcount-sessions-snapshot" style={{
             padding: '10px 24px', borderRadius: 6, border: 'none',
             background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
           }}>
@@ -571,7 +571,7 @@ function CountTab({ session, onRefresh }) {
         <p style={{ color: '#6b7280', fontSize: 14, margin: '0 0 12px' }}>
           احفظ الملف، أدخل الكميات المعدودة في عمود "الكمية المعدودة" (العمود الأصفر)، ثم ارفع الملف في الخطوة التالية.
         </p>
-        <button onClick={handleDownload} disabled={downloading || !hasSnapshot} style={{
+        <button onClick={handleDownload} disabled={downloading || !hasSnapshot} data-tour="stockcount-sessions-download" style={{
           padding: '10px 24px', borderRadius: 6, border: '1px solid #059669',
           color: '#059669', background: '#fff', cursor: 'pointer', fontWeight: 600,
           opacity: !hasSnapshot ? 0.5 : 1,
@@ -595,7 +595,7 @@ function CountTab({ session, onRefresh }) {
             border: '1px dashed #d1d5db', borderRadius: 6, padding: '10px 16px',
             cursor: 'pointer', flex: 1, minWidth: 200,
           }} />
-          <button onClick={handleUpload} disabled={uploading || !hasSnapshot} style={{
+          <button onClick={handleUpload} disabled={uploading || !hasSnapshot} data-tour="stockcount-sessions-upload" style={{
             padding: '10px 24px', borderRadius: 6, border: 'none',
             background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
             opacity: !hasSnapshot ? 0.5 : 1,
@@ -718,7 +718,7 @@ function VarianceTab({ session, onRefresh }) {
       )}
 
       {/* Filters + actions */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }} data-tour="stockcount-sessions-variance-filter">
         {[
           { key: '',        label: 'الكل' },
           { key: 'surplus', label: 'زيادة فقط' },
@@ -741,14 +741,14 @@ function VarianceTab({ session, onRefresh }) {
           style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', width: 140 }}
         />
         <div style={{ marginRight: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={handleAdjExport} disabled={exporting} style={{
+          <button onClick={handleAdjExport} disabled={exporting} data-tour="stockcount-sessions-export" style={{
             padding: '8px 18px', borderRadius: 6, border: '1px solid #059669',
             color: '#059669', background: '#fff', cursor: 'pointer', fontWeight: 600,
           }}>
             {exporting ? 'جاري...' : '📋 تصدير للتسوية'}
           </button>
           {session.status === 'variance_ready' && (
-            <button onClick={handleClose} disabled={closing} style={{
+            <button onClick={handleClose} disabled={closing} data-tour="stockcount-sessions-close" style={{
               padding: '8px 18px', borderRadius: 6, border: 'none',
               background: '#1f2937', color: '#fff', cursor: 'pointer', fontWeight: 600,
             }}>

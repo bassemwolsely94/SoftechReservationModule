@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reconciliationApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -55,7 +56,7 @@ function Remaining({ value, after, returnCredit = 0, compact = false }) {
   const rc = Number(returnCredit || 0)
   const netLine = rc > 0.005 && (
     <span className="block text-[10px] text-sky-800" title="حقل محسوب: المتبقي − الرصيد المفتوح للمرتجعات التي تشير لهذه الفاتورة">
-      ↩ مرتجع مفتوح {money(rc)} → ƒ الصافي {Math.max(shown - rc, 0) <= 1 ? '✓ صفر' : money(shown - rc)}
+      ↩ مرتجع مفتوح {money(rc)} {fa()} ƒ الصافي {Math.max(shown - rc, 0) <= 1 ? '✓ صفر' : money(shown - rc)}
     </span>
   )
   if (shown <= 1) {

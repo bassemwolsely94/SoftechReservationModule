@@ -157,7 +157,7 @@ export default function MobileNewReservationPage() {
       )}
 
       {/* Customer */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="reservations-new-customer">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">
           👤 العميل <span className="text-xs text-gray-400 font-normal">(اختياري)</span>
         </h2>
@@ -165,7 +165,7 @@ export default function MobileNewReservationPage() {
       </div>
 
       {/* Item */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="reservations-new-item">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الصنف *</h2>
         {manualMode ? (
           <div className="space-y-2">
@@ -237,7 +237,7 @@ export default function MobileNewReservationPage() {
         {/* Channel */}
         <div>
           <label className="label">قناة الطلب</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2" data-tour="reservations-new-channel">
             {CHANNELS.map(c => (
               <button
                 key={c.value}
@@ -257,7 +257,7 @@ export default function MobileNewReservationPage() {
         </div>
 
         {/* Contact */}
-        <div>
+        <div data-tour="reservations-new-contact">
           <label className="label">اسم التواصل *</label>
           <input className="input-field w-full" value={form.contact_name} onChange={e => upd('contact_name', e.target.value)} />
         </div>
@@ -303,6 +303,7 @@ export default function MobileNewReservationPage() {
         <button onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
         <button
           onClick={() => submit(false)}
+          data-tour="reservations-new-submit"
           disabled={submitting}
           className="btn-primary flex-1 py-3 text-base disabled:opacity-50"
         >

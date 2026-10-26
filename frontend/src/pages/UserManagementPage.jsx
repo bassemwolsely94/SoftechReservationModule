@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
+import { fa } from '../utils/flowArrow'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -515,7 +516,7 @@ function ActivityLogModal({ user, onClose }) {
                     {log.note && <p className="text-gray-500 text-xs mt-0.5">{log.note}</p>}
                     {log.old_value && log.new_value && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {JSON.stringify(log.old_value)} → {JSON.stringify(log.new_value)}
+                        {JSON.stringify(log.old_value)} {fa()} {JSON.stringify(log.new_value)}
                       </p>
                     )}
                     {log.ip_address && <p className="text-xs text-gray-400">{log.ip_address}</p>}

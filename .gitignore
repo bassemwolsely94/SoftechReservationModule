@@ -51,3 +51,11 @@ scratch/
 reconciliation.xlsx
 .envdocs/architecture/softech_gift_vouchers_investigation.txt
 docs/architecture/softech_gift_vouchers_docs.txt
+
+.pbx_known_hosts
+
+# OCR benchmark output (benchmark_vs_softech) + local Tesseract models (27 MB)
+/diff*.csv
+ocr_tessdata/
+# superpowers plan workspaces (ledgers, briefs)
+.superpowers/

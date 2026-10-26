@@ -180,21 +180,78 @@ class HelpContentCoverageTests(SimpleTestCase):
             for g in [self.modules[s['module']].get('group')]:
                 self.assertIn(g, [k for k, _, _ in registry.GROUPS], key)
 
-    def test_tour_targets_exist_in_the_frontend(self):
-        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
-        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+    def _anchors(self):
         src = Path(settings.BASE_DIR) / 'frontend' / 'src'
         anchors = set()
         for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
             anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        return anchors
+
+    def _check_rich_step(self, where, st, allowed):
+        """Rich-step rules for modules out of TOUR_PENDING: only known keys, every text
+        part bilingual and short, and a ⚠ warning on costly buttons."""
+        self.assertLessEqual(set(st), allowed, f'{where}: unknown step keys')
+        for k in registry.TOUR_TEXT_KEYS:
+            if k in st:
+                for lang in ('ar', 'en'):
+                    self.assertTrue((st[k].get(lang) or '').strip(), f'{where}.{k}: missing {lang}')
+                    self.assertLessEqual(len(st[k][lang]), registry.TOUR_LIMITS[k],
+                                         f'{where}.{k}.{lang}: longer than {registry.TOUR_LIMITS[k]}')
+        words = set(st['target'].split('-')) & registry.TOUR_WARN_WORDS
+        if words:
+            self.assertIn('warn', st, f'{where}: anchor says {sorted(words)} — add a ⚠ warn')
+
+    def test_tour_targets_exist_in_the_frontend(self):
+        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
+        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+        anchors = self._anchors()
         missing = []
         for key, s in self.screens.items():
             for i, st in enumerate(s.get('tour') or []):
-                self.assertEqual(set(st), {'target', 'text'}, f'{key}.tour[{i}]')
+                self.assertLessEqual(set(st), registry.TOUR_STEP_KEYS, f'{key}.tour[{i}]')
+                self.assertIn('text', st, f'{key}.tour[{i}]')
                 if st['target'] not in anchors:
                     missing.append(f'{key}: {st["target"]}')
         self.assertEqual(missing, [], 'Tour targets with no data-tour anchor in frontend/src')
         self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
+
+    def test_rich_tours_in_finished_modules(self):
+        """Modules out of TOUR_PENDING: every screen has a tour of rich steps."""
+        self.assertLessEqual(registry.TOUR_PENDING, set(self.modules), 'TOUR_PENDING has unknown modules')
+        for key, s in self.screens.items():
+            if s['module'] in registry.TOUR_PENDING:
+                continue
+            self.assertTrue(s.get('tour'), f'{key}: no «اعرض لي» tour')
+            for i, st in enumerate(s['tour']):
+                self._check_rich_step(f'{key}.tour[{i}]', st, registry.TOUR_STEP_KEYS)
+
+    def test_journeys_valid(self):
+        """Module journeys: real screens and anchors, one shell, valid roles / perms, and a
+        hint wherever the user must open a record (no param-free route to go to)."""
+        from apps.users.models import MODULE_CHOICES, ROLE_CHOICES
+        anchors = self._anchors()
+        roles = {r for r, _ in ROLE_CHOICES}
+        perms = {m for m, _ in MODULE_CHOICES}
+        for jid, j in registry.journeys().items():
+            self.assertIn(j.get('shell', 'desktop'), ('desktop', 'mobile'), jid)
+            self.assertLessEqual(set(j.get('roles') or []), roles, f'{jid}: unknown role')
+            self.assertGreaterEqual(len(j['steps']), 3, f'{jid}: a journey needs at least 3 steps')
+            for i, st in enumerate(j['steps']):
+                where = f'{jid}.steps[{i}]'
+                self.assertIn(st.get('screen'), self.screens, f'{where}: unknown screen')
+                self.assertIn(st['target'], anchors, f'{where}: no data-tour anchor')
+                routes = registry.journey_routes(j, self.screens[st['screen']])
+                self.assertTrue(routes, f'{where}: screen has no {j.get("shell", "desktop")} route')
+                if all(':' in r for r in routes):
+                    self.assertIn('open_hint', st, f'{where}: record page — add open_hint')
+                if 'perm' in st:
+                    self.assertIn(st['perm'], perms, f'{where}: unknown RBAC module')
+                self._check_rich_step(where, st, registry.JOURNEY_STEP_KEYS)
+
+    def test_finished_modules_have_journeys(self):
+        for key, m in self.modules.items():
+            if key not in registry.TOUR_PENDING:
+                self.assertTrue(m.get('journeys'), f'{key}: no journey (رحلة عمل)')
 
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
@@ -723,3 +780,84 @@ class HelpUsageTests(TestCase):
         pos = next(u for u in r['unopened'] if u['screen_key'] == 'pos.order')
         self.assertIn('pharmacist', pos['on_paths'])
         self.assertTrue(any(t['runs'] == 0 for t in r['tours']))
+
+
+class JourneyApiTests(TestCase):
+    """Journeys are served with the module / screen help (role-filtered), edited by
+    trainers like screen help (versioned, revertible), and counted in the usage report."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.jid = next(iter(registry.journeys()))
+        self.j = registry.journeys()[self.jid]
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c
+
+    def test_module_and_screen_payload_carry_journeys(self):
+        c = self._client('admin', 'jr_admin')
+        m = c.get(f'/api/help/modules/{self.j["module"]}/').json()
+        row = next(x for x in m['journeys'] if x['id'] == self.jid)
+        self.assertEqual(len(row['steps']), len(self.j['steps']))
+        for st in row['steps']:
+            self.assertIn('routes', st)
+            self.assertTrue(st['route'] is None or ':' not in st['route'])
+        screen = self.j['steps'][0]['screen']
+        sp = c.get(f'/api/help/screens/{screen}/?log=0').json()
+        self.assertIn(self.jid, [x['id'] for x in sp['module']['journeys']])
+
+    def test_role_filter(self):
+        limited = [(jid, j) for jid, j in registry.journeys().items() if j.get('roles')]
+        if not limited:
+            self.skipTest('no role-limited journey')
+        jid, j = limited[0]
+        other = next(r for r in ('viewer', 'delivery', 'purchasing', 'pharmacist') if r not in j['roles'])
+        c = self._client(other, 'jr_other')
+        ids = [x['id'] for x in c.get(f'/api/help/modules/{j["module"]}/').json()['journeys']]
+        self.assertNotIn(jid, ids)
+
+    def test_edit_and_revert(self):
+        t = self._client('admin', 'jr_tr')
+        learner = self._client('pharmacist', 'jr_ph')
+        url = f'/api/help/journeys/{self.jid}/'
+        steps = [dict(st) for st in self.j['steps']]
+        steps[0] = {**steps[0], 'text': {'ar': 'نص المدرب', 'en': 'Trainer text'}}
+        steps[1] = {**steps[1], 'target': 'moved-elsewhere', 'text': {'ar': 'لا يطبق', 'en': 'not applied'}}
+        self.assertEqual(learner.put(url, {'data': {'steps': steps}}, format='json').status_code, 403)
+        r = t.put(url, {'data': {'steps': steps}, 'note': 'أوضح'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        got = r.json()['steps']
+        self.assertEqual(got[0]['text']['ar'], 'نص المدرب')
+        self.assertEqual(got[1]['text'], self.j['steps'][1]['text'])          # target mismatch → ignored
+        self.assertEqual(got[0]['target'], self.j['steps'][0]['target'])
+        self.assertTrue(HelpRevision.objects.filter(screen_key=f'journey:{self.jid}').exists())
+        long = [{**steps[0], 'warn': {'ar': 'x' * 200, 'en': 'x'}}]
+        self.assertEqual(t.put(url, {'data': {'steps': long}}, format='json').status_code, 400)
+        r = t.delete(url, {'note': 'رجوع'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['steps'][0]['text'], self.j['steps'][0]['text'])
+        self.assertEqual(t.get('/api/help/journeys/nope.x/').status_code, 404)
+
+    def test_old_tour_override_keeps_new_fields(self):
+        """A trainer edit saved before rich steps (text only) keeps the repo's label/when/warn."""
+        _, screens = registry.load()
+        key, s = next((k, s) for k, s in screens.items() if any('when' in st for st in s.get('tour') or []))
+        st = next(x for x in s['tour'] if 'when' in x)
+        ov = HelpOverride(screen_key=key, data={'tour': [{'target': st['target'], 'text': {'ar': 'م', 'en': 'm'}}]})
+        eff = next(x for x in registry.effective(s, ov)['tour'] if x['target'] == st['target'])
+        self.assertEqual(eff['text']['ar'], 'م')
+        self.assertEqual(eff['when'], st['when'])
+
+    def test_journey_tour_event_and_usage(self):
+        c = self._client('admin', 'jr_ev')
+        n = len(self.j['steps'])
+        r = c.post('/api/help/tour-event/', {'screen_key': f'journey:{self.jid}', 'reached': 99, 'done': True}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(HelpEvent.objects.get(screen_key=f'journey:{self.jid}').results, n)
+        self.assertEqual(c.post('/api/help/tour-event/', {'screen_key': 'journey:nope.x'}, format='json').status_code, 400)
+        rows = c.get('/api/help/usage/').json()['tours']
+        row = next(x for x in rows if x['screen_key'] == f'journey:{self.jid}')
+        self.assertEqual((row['kind'], row['runs'], row['done']), ('journey', 1, 1))

@@ -111,7 +111,11 @@ SCREENS = [
             T('التواريخ التي تقع في إجازة أو عطلة تُرحَّل تلقائياً ويظهر التاريخ الأصلي. ثم «إنشاء الخطة» و«تفعيل الخطة».', 'Dates falling on a holiday or weekend shift automatically and show the original date. Then "Create plan" and "Activate plan".'),
             T('حدّث حالة كل شيك: لم يُصدر ← صادر ← مُقدَّم للبنك ← تمّ الصرف (أو ارتدّ/رُفض).', 'Update each cheque: not issued → issued → presented → cleared (or bounced/rejected).'),
         ],
-        'updated': '2026-10-10',
+        'tips': [
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
+              'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'finance.payments',
@@ -138,7 +142,11 @@ SCREENS = [
             {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة بعدد السطور والمطابق ونسبة المطابقة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements with line count, matched and match rate; "Upload statement" and "Run matching".')},
         ],
         'related': ['finance.payments'],
-        'updated': '2026-10-10',
+        'tips': [
+            T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول المالية): العرض يحتاج «عرض»، «حل الاستثناء» و«تجاهل» يحتاجوا «اعتماد»، الإسناد يحتاج «إسناد» أو «اعتماد»، ورفع كشف يحتاج «إضافة».',
+              'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'finance.reconciliation',

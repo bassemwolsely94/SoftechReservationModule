@@ -101,7 +101,7 @@ function RecoverModal({ row, onConfirm, onClose, busy }) {
         </p>
         <div className="flex gap-2 justify-end mt-5">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={() => onConfirm(revenue === '' ? null : Number(revenue))} disabled={busy}
+          <button onClick={() => onConfirm(revenue === '' ? null : Number(revenue))} disabled={busy} data-tour="demand-recovery-recover-confirm"
             className="text-sm px-4 py-2 rounded-lg text-white font-semibold disabled:opacity-50"
             style={{ background: GREEN }}>
             {busy ? 'جارٍ...' : 'تأكيد الاسترداد'}
@@ -145,31 +145,31 @@ function RecoveryRow({ row, onAction }) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 justify-end flex-wrap">
           {row.wa_link && (
-            <button onClick={() => onAction('whatsapp', row)}
+            <button onClick={() => onAction('whatsapp', row)} data-tour="demand-recovery-whatsapp"
               className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
               style={{ background: GREEN }} title="فتح واتساب وتسجيل التواصل">
               واتساب
             </button>
           )}
-          <button onClick={() => onAction('recover', row)}
+          <button onClick={() => onAction('recover', row)} data-tour="demand-recovery-recover"
             className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
             style={{ background: BRAND }} title="تأكيد استرداد البيعة">
             استرداد
           </button>
           <CanDo module="reservations" action="create">
-            <button onClick={() => onAction('reserve', row)}
+            <button onClick={() => onAction('reserve', row)} data-tour="demand-recovery-reserve"
               className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
               style={{ background: BLUE }} title="تحويل إلى حجز للعميل">
               حجز
             </button>
           </CanDo>
-          <button onClick={() => onAction('opt_out', row)}
+          <button onClick={() => onAction('opt_out', row)} data-tour="demand-recovery-opt-out"
             className="px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600"
             title="رفض العميل التواصل بخصوص هذا الصنف">
             🔕
           </button>
           <CanDo module="demand" action="approve">
-            <button onClick={() => onAction('disqualify', row)}
+            <button onClick={() => onAction('disqualify', row)} data-tour="demand-recovery-disqualify"
               className="px-2 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-600"
               title="استبعاد من قائمة الاسترداد (يتطلب اعتماد)">
               🚫
@@ -246,7 +246,7 @@ export default function DemandRecoveryPage() {
               عملاء طلبوا أصنافاً نفدت ثم عادت للمخزون — تواصل معهم لاسترداد البيعة
             </p>
           </div>
-          <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm">
+          <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
             📊 لوحة الطلب الضائع
           </button>
         </div>
@@ -256,7 +256,7 @@ export default function DemandRecoveryPage() {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
         {/* ROI tiles */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="demand-recovery-kpis">
           <KpiTile icon="💰" label="إيراد مُسترَد (٣٠ يوم)"
             value={`${egp(kpis?.recovered_revenue_30d)} ج.م`}
             sub={`${toLatin(kpis?.recovered_count_30d ?? 0)} بيعة مُستردة`}
@@ -289,7 +289,7 @@ export default function DemandRecoveryPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" data-tour="demand-recovery-queue">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <span className="text-sm font-bold text-gray-700">
                 {toLatin(queue.length)} فرصة استرداد

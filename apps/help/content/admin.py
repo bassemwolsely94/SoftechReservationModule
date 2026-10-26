@@ -99,8 +99,12 @@ SCREENS = [
             {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'), 'body': T('إعدادات رموز التحقق وحدود القيم.', 'OTP settings and value limits.')},
             {'key': 'dropdowns', 'title': T('📝 القوائم المنسدلة', '📝 Dropdowns'), 'body': T('خيارات القوائم المنسدلة في الشاشات (قنوات الحجز، أولويات الحجز، حالات التحويل…): أضف خياراً (تسمية عربية، قيمة، أيقونة) أو عطّله.', 'The dropdown options used in screens (reservation channels, priorities, transfer statuses…): add an option (Arabic label, value, icon) or disable it.')},
         ],
-        'tips': [T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.')],
-        'updated': '2026-10-10',
+        'tips': [
+            T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
+            T('كل تعديل بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الإعدادات): القراءة متاحة للكل، لكن تعديل الإعدادات والقوائم وبيانات الصيدلية يحتاج «تعديل» (أو «إضافة» / «حذف» للقوائم).',
+              'Every change is checked on the server (Permissions Matrix, settings module): anyone can read, but changing settings, dropdown lists and the pharmacy profile needs "edit" (or "create" / "delete" for list options).'),
+        ],
+        'updated': '2026-10-26',
     },
     {
         'key': 'admin.sync',

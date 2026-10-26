@@ -30,22 +30,22 @@ export default function ReferralStatsPage() {
         <p className="text-xs text-faint">أداء الأطباء المُحيلين من مبيعات نقطة البيع المُرحَّلة.</p>
       </div>
 
-      <div className="card mb-3 flex flex-wrap items-end gap-3">
+      <div className="card mb-3 flex flex-wrap items-end gap-3" data-tour="analytics-referral-stats-dates">
         <label className="text-xs text-muted">من تاريخ
           <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="input-field mt-0.5" /></label>
         <label className="text-xs text-muted">إلى تاريخ
           <input type="date" value={to} onChange={e => setTo(e.target.value)} className="input-field mt-0.5" /></label>
-        <button onClick={load} disabled={loading} className="btn-primary">{loading ? '…' : 'تطبيق'}</button>
+        <button onClick={load} disabled={loading} className="btn-primary" data-tour="analytics-referral-stats-apply">{loading ? '…' : 'تطبيق'}</button>
       </div>
 
       {/* summary */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-3 gap-3 mb-3" data-tour="analytics-referral-stats-summary">
         <Stat label="أطباء مُحيلون" value={sum.doctors ?? '—'} />
         <Stat label="عدد الطلبات" value={sum.orders ?? '—'} />
         <Stat label="إجمالي الصافي" value={sum.total_net != null ? money(sum.total_net) : '—'} />
       </div>
 
-      <div className="card p-0 overflow-x-auto">
+      <div className="card p-0 overflow-x-auto" data-tour="analytics-referral-stats-table">
         <table className="data-table">
           <thead><tr>
             <th>الطبيب</th><th>الكود</th><th>عدد الطلبات</th><th>إجمالي الصافي</th><th>عدد المرضى</th><th>آخر إحالة</th>

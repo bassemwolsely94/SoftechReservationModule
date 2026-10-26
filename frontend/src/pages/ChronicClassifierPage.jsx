@@ -235,7 +235,7 @@ function ItemClassifier() {
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border border-gray-200 p-3 flex gap-3 items-center flex-shrink-0">
+        <div data-tour="chronic-classifier-search" className="bg-white rounded-xl border border-gray-200 p-3 flex gap-3 items-center flex-shrink-0">
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
@@ -317,6 +317,7 @@ function ItemClassifier() {
                   </td>
                   <td className="px-3 py-3 text-left" onClick={e => e.stopPropagation()}>
                     <button
+                      data-tour="chronic-classifier-classify"
                       onClick={() => openPanel(item)}
                       className="text-xs text-brand-600 hover:text-brand-800 font-medium ml-2"
                     >
@@ -324,6 +325,7 @@ function ItemClassifier() {
                     </button>
                     {item.is_classified && (
                       <button
+                        data-tour="chronic-classifier-unclassify"
                         onClick={() => {
                           if (window.confirm('إزالة تصنيف هذا الصنف؟'))
                             unclassifyMut.mutate({ itemId: item.id })
@@ -408,7 +410,7 @@ function ItemClassifier() {
             )}
 
             {/* Mode toggle */}
-            <div className="flex gap-2">
+            <div data-tour="chronic-classifier-mode" className="flex gap-2">
               <button
                 onClick={() => setMode('existing')}
                 className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
@@ -497,7 +499,7 @@ function ItemClassifier() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div data-tour="chronic-classifier-chronic" className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="is_chronic_chk"
@@ -564,6 +566,7 @@ function ItemClassifier() {
               </div>
             )}
             <button
+              data-tour="chronic-classifier-save"
               onClick={handleClassify}
               disabled={
                 classifyMut.isPending ||
@@ -665,6 +668,7 @@ function IngredientsManager() {
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-brand-400 flex-shrink-0"
         />
         <button
+          data-tour="chronic-classifier-new-ingredient"
           onClick={() => {
             setShowForm(true)
             setForm({ name:'', name_ar:'', name_scientific:'', atc_code:'', is_chronic:false, chronic_class:'', notes:'' })
@@ -792,6 +796,7 @@ function IngredientsManager() {
                   بروتوكولات المتابعة ({ingDetail.followup_protocols?.length || 0})
                 </div>
                 <button
+                  data-tour="chronic-classifier-new-protocol"
                   onClick={() => setShowProtForm(p => !p)}
                   className="text-xs text-brand-600 hover:text-brand-800 font-medium"
                 >
@@ -1136,6 +1141,7 @@ function TaskGenerator() {
         {/* Actions */}
         <div className="flex gap-3">
           <button
+            data-tour="chronic-classifier-preview"
             onClick={() => { setResult(null); previewMut.mutate(payload) }}
             disabled={previewMut.isPending}
             className="flex-1 border border-brand-600 text-brand-600 rounded-lg py-2.5 text-sm font-medium hover:bg-brand-50 disabled:opacity-40 transition-colors"
@@ -1143,6 +1149,7 @@ function TaskGenerator() {
             {previewMut.isPending ? 'جارٍ المعاينة...' : '👁 معاينة (بدون حفظ)'}
           </button>
           <button
+            data-tour="chronic-classifier-generate"
             onClick={() => {
               if (window.confirm('سيتم إنشاء مهام المتابعة فعلياً في قاعدة البيانات. هل أنت متأكد؟'))
                 generateMut.mutate(payload)
@@ -1571,6 +1578,7 @@ function AIEnrichmentTab() {
                 <div className="flex items-center gap-2">
                   {/* Generate button */}
                   <button
+                    data-tour="chronic-classifier-extract"
                     onClick={() => generateMut.mutate({ itemPk: selected.item_id, overwrite: false })}
                     disabled={generateMut.isPending}
                     className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors"
@@ -1630,7 +1638,7 @@ function AIEnrichmentTab() {
                 <div className="text-sm font-semibold text-orange-800">
                   {pendingCount} اقتراح معلّق
                 </div>
-                <div className="flex gap-1.5">
+                <div data-tour="chronic-classifier-bulk-accept" className="flex gap-1.5">
                   {[['≥ 90%', 0.90], ['≥ 80%', 0.80], ['≥ 70%', 0.70]].map(([lbl, conf]) => (
                     <button
                       key={conf}
@@ -1723,7 +1731,7 @@ export default function ChronicClassifierPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-shrink-0">
+      <div data-tour="chronic-classifier-tabs" className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-shrink-0">
         {TABS.map(t => (
           <button
             key={t.id}

@@ -24,6 +24,7 @@ import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import RefreshButton from '../components/RefreshButton'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -558,7 +559,7 @@ function FlowMatrix({ matrix }) {
             <span className="w-24 text-right font-medium text-brand-700 truncate flex-shrink-0">
               {row.from}
             </span>
-            <span className="text-gray-400 flex-shrink-0">→</span>
+            <span className="text-gray-400 flex-shrink-0">{fa()}</span>
             <span className="w-24 text-gray-600 truncate flex-shrink-0">{row.to}</span>
             <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
               <div

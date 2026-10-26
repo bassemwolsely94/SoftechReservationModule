@@ -18,6 +18,7 @@ import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
+import Journeys from '../help/Journeys'
 import HelpUsage from '../help/HelpUsage'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
@@ -86,7 +87,7 @@ export default function HelpCenterPage() {
 
           {isLoading && <div className="text-faint text-sm">{label('loading', lang)}</div>}
           {index && tab === 'browse' && !moduleKey && !screenKey && <Browse index={index} lang={lang} go={go} />}
-          {index && tab === 'browse' && moduleKey && !screenKey && <ModuleView moduleKey={moduleKey} lang={lang} go={go} />}
+          {index && tab === 'browse' && moduleKey && !screenKey && <ModuleView moduleKey={moduleKey} lang={lang} go={go} canEdit={index.can_edit} />}
           {index && tab === 'browse' && screenKey && <ScreenView screenKey={screenKey} lang={lang} go={go} index={index} />}
           {index && tab === 'path' && !quizKey && <MyPath lang={lang} go={go} canPreview={index.can_edit} />}
           {index && tab === 'path' && quizKey && <Quiz moduleKey={quizKey} lang={lang} onBack={() => go({ tab: 'path' })} />}
@@ -137,7 +138,7 @@ function Crumbs({ lang, go, module, screen }) {
   )
 }
 
-function ModuleView({ moduleKey, lang, go }) {
+function ModuleView({ moduleKey, lang, go, canEdit }) {
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'module', moduleKey],
     queryFn: () => helpApi.module(moduleKey).then((r) => r.data),
@@ -164,6 +165,7 @@ function ModuleView({ moduleKey, lang, go }) {
           </div>
         </div>
       )}
+      <Journeys journeys={data.journeys} lang={lang} canEdit={canEdit} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.screens.map((s) => (
           <button key={s.key} type="button" onClick={() => go({ tab: 'browse', screen: s.key })}

@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
 import OrderPanel from './OrderPanel'
 import { CASE_STATUS_TONE, Chip, TRANSITION_LABEL, btnGhost, btnPrimary, errText, fmtDate,
-         inputCls, newKey, q } from './supplyUi'
+         downloadBlob, inputCls, newKey, q, SortTh, useSort } from './supplyUi'
 
 const BUCKETS = [
   ['', 'كل المفتوح', 'total'], ['urgent', 'عاجل', 'urgent'], ['zero_stock', 'رصيد صفر', 'zero_stock'],
@@ -56,6 +56,8 @@ export default function SupplyCasesTab() {
     queryFn: () => supplyApi.cases({ bucket: bucket || undefined, page }).then(r => r.data),
     placeholderData: prev => prev })
 
+  const xlsM = useMutation({ mutationFn: () => supplyApi.casesExcel({ bucket: bucket || undefined }),
+    onSuccess: (res) => downloadBlob(res.data, `supply_cases${bucket ? `_${bucket}` : ''}.xlsx`) })
   const sweepM = useMutation({
     mutationFn: () => supplyApi.casesSweep().then(r => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['supply-cases'] })
@@ -63,6 +65,11 @@ export default function SupplyCasesTab() {
   })
 
   const list = rows(listQ.data)
+  const grid = useSort(list, {
+    item: c => c.item_name, branch: c => c.branch_name, status: c => c.status_display,
+    required: c => Number(c.required_qty), buy: c => Number(c.residual_gap), internal: c => Number(c.internal_cover),
+    waiting: c => Number(c.customer_demand), stock: c => Number(c.current_stock), days: c => c.days_open,
+  })
   const total = listQ.data?.count ?? list.length
   const s = summaryQ.data || {}
 
@@ -81,6 +88,11 @@ export default function SupplyCasesTab() {
           title="يحدّث إشارات الطلب ثم يقيّم كل الحالات الآن (يعمل تلقائياً يومياً 08:00)">
           {sweepM.isPending ? 'جارٍ التقييم…' : '↻ تقييم الآن'}
         </button>
+        <button type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+          className={`${btnGhost} text-xs`}
+          title="كل حالات الفئة المختارة (كل الصفحات) مع «بيانات الصنف»">
+          {xlsM.isPending ? '…' : '⬇ Excel'}
+        </button>
       </div>
       {sweepM.data && (
         <div className="text-xs text-content/60">
@@ -94,22 +106,22 @@ export default function SupplyCasesTab() {
           <table className="w-full text-sm">
             <thead className="text-[11px] text-content/60 border-b border-line bg-primary/5">
               <tr>
-                <th className="text-right py-2 px-2">الصنف</th>
-                <th className="text-right py-2 px-2">الفرع</th>
-                <th className="text-right py-2 px-2">الحالة</th>
-                <th className="py-2 px-2">الاحتياج</th>
-                <th className="py-2 px-2">للشراء</th>
-                <th className="py-2 px-2">داخلي</th>
-                <th className="py-2 px-2">منتظرون</th>
-                <th className="py-2 px-2">الرصيد</th>
-                <th className="py-2 px-2">أيام</th>
+                <SortTh k="item" {...grid} className="text-right py-2 px-2">الصنف</SortTh>
+                <SortTh k="branch" {...grid} className="text-right py-2 px-2">الفرع</SortTh>
+                <SortTh k="status" {...grid} className="text-right py-2 px-2">الحالة</SortTh>
+                <SortTh k="required" {...grid} className="py-2 px-2">الاحتياج</SortTh>
+                <SortTh k="buy" {...grid} className="py-2 px-2">للشراء</SortTh>
+                <SortTh k="internal" {...grid} className="py-2 px-2">داخلي</SortTh>
+                <SortTh k="waiting" {...grid} className="py-2 px-2">منتظرون</SortTh>
+                <SortTh k="stock" {...grid} className="py-2 px-2">الرصيد</SortTh>
+                <SortTh k="days" {...grid} className="py-2 px-2">أيام</SortTh>
               </tr>
             </thead>
             <tbody>
               {listQ.isLoading && <tr><td colSpan={9} className="text-center py-6 text-content/50">جارٍ التحميل…</td></tr>}
               {!listQ.isLoading && list.length === 0 && (
                 <tr><td colSpan={9} className="text-center py-6 text-content/50">لا توجد حالات هنا 👌</td></tr>)}
-              {list.map(c => (
+              {grid.sorted.map(c => (
                 <tr key={c.id} onClick={() => setSelected(c.id)}
                   className={`border-b border-line/60 cursor-pointer ${selected === c.id ? 'bg-primary/10' : 'hover:bg-primary/5'}`}>
                   <td className="py-1.5 px-2">
@@ -248,7 +260,7 @@ function CaseDetail({ id, onChanged }) {
         <div className="space-y-2 border-t border-line pt-3">
           <div className="flex flex-wrap gap-2">
             {Number(c.internal_cover) > 0 && c.branch && (
-              <button type="button" className={btnPrimary} onClick={() => setPlanOpen(v => !v)}>
+              <button data-tour="purchasing-supply-cases-approve-transfer" type="button" className={btnPrimary} onClick={() => setPlanOpen(v => !v)}>
                 اعتماد التحويل الداخلي ({q(c.internal_cover)})
               </button>)}
             {Number(c.residual_gap) > 0 && (

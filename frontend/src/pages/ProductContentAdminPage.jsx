@@ -25,6 +25,7 @@ function SaveBar({ onSave, saving, dirty }) {
                     bg-white border border-gray-200 shadow-xl rounded-2xl px-6 py-3">
       <span className="text-sm text-amber-600 font-medium">⚠ يوجد تغييرات غير محفوظة</span>
       <button
+        data-tour="catalog-content-admin-save"
         onClick={onSave}
         disabled={saving}
         className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2
@@ -106,6 +107,7 @@ function MediaTab({ product, productId }) {
     <div>
       {/* Upload zone */}
       <div
+        data-tour="catalog-content-admin-upload"
         onClick={() => fileInputRef.current?.click()}
         className="border-2 border-dashed border-brand-200 hover:border-brand-400 rounded-xl p-8
                    text-center cursor-pointer transition-colors bg-brand-50 hover:bg-brand-100 mb-6"
@@ -187,6 +189,7 @@ function MediaTab({ product, productId }) {
               <div className="flex items-center gap-2 shrink-0">
                 {!m.is_primary && (
                   <button
+                    data-tour="catalog-content-admin-primary"
                     onClick={() => updateMutation.mutate({ mediaId: m.id, data: { is_primary: true } })}
                     className="text-xs text-gray-400 hover:text-brand-500 border border-gray-200 rounded-lg px-2 py-1 transition-colors"
                     title="جعلها رئيسية"
@@ -195,6 +198,7 @@ function MediaTab({ product, productId }) {
                   </button>
                 )}
                 <button
+                  data-tour="catalog-content-admin-approve-media"
                   onClick={() => updateMutation.mutate({ mediaId: m.id, data: { approved: !m.approved } })}
                   className={`text-xs border rounded-lg px-2 py-1 transition-colors
                     ${m.approved
@@ -204,6 +208,7 @@ function MediaTab({ product, productId }) {
                   {m.approved ? 'إلغاء الاعتماد' : 'اعتماد'}
                 </button>
                 <button
+                  data-tour="catalog-content-admin-delete-media"
                   onClick={() => {
                     if (window.confirm('حذف هذه الصورة نهائياً؟')) {
                       deleteMutation.mutate(m.id)
@@ -267,7 +272,7 @@ function ContentTab({ productId, initialContent }) {
           <input value={form.display_name_en || ''} onChange={e => set('display_name_en', e.target.value)} className={inputCls} dir="ltr" />
         </FieldRow>
         <FieldRow label="وصف مختصر" hint="يظهر في بطاقة المنتج وواتساب">
-          <textarea value={form.short_description || ''} onChange={e => set('short_description', e.target.value)} className={textareaCls} rows={3} />
+          <textarea data-tour="catalog-content-admin-short-desc" value={form.short_description || ''} onChange={e => set('short_description', e.target.value)} className={textareaCls} rows={3} />
         </FieldRow>
         <FieldRow label="وصف تفصيلي">
           <textarea value={form.long_description || ''} onChange={e => set('long_description', e.target.value)} className={textareaCls} rows={5} />
@@ -282,7 +287,7 @@ function ContentTab({ productId, initialContent }) {
           <textarea value={form.storage || ''} onChange={e => set('storage', e.target.value)} className={textareaCls} rows={3} />
         </FieldRow>
         <FieldRow label="موانع الاستخدام">
-          <textarea value={form.contraindications || ''} onChange={e => set('contraindications', e.target.value)} className={textareaCls} rows={3} />
+          <textarea data-tour="catalog-content-admin-contraindications" value={form.contraindications || ''} onChange={e => set('contraindications', e.target.value)} className={textareaCls} rows={3} />
         </FieldRow>
         <FieldRow label="الفوائد والاستخدامات">
           <textarea value={form.benefits || ''} onChange={e => set('benefits', e.target.value)} className={textareaCls} rows={4} />
@@ -380,6 +385,7 @@ function AttributesTab({ productId, initialAttributes }) {
         </FieldRow>
         <FieldRow label="يحتاج وصفة طبية">
           <select
+            data-tour="catalog-content-admin-rx"
             value={form.prescription_required == null ? '' : String(form.prescription_required)}
             onChange={e => set('prescription_required', e.target.value === '' ? null : e.target.value === 'true')}
             className={inputCls}
@@ -433,6 +439,7 @@ function SeoTab({ productId, initialSeo }) {
         <FieldRow label="Slug (رابط المنتج)" hint="حروف إنجليزية وأرقام وشرطة فقط">
           <div className="relative">
             <input
+              data-tour="catalog-content-admin-slug"
               value={form.slug || ''}
               onChange={e => set('slug', e.target.value)}
               className={inputCls}
@@ -577,7 +584,7 @@ export default function ProductContentAdminPage() {
 
       <div className="max-w-4xl mx-auto px-6 py-6">
         {/* Tab bar */}
-        <div className="flex gap-2 mb-6 overflow-x-auto">
+        <div className="flex gap-2 mb-6 overflow-x-auto" data-tour="catalog-content-admin-tabs">
           {ADMIN_TABS.map(tab => (
             <button
               key={tab.key}

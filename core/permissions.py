@@ -127,6 +127,36 @@ def matrix_allows(profile, module: str, *actions) -> bool:
     return any(profile.can_do(module, a) for a in actions)
 
 
+class MatrixPermission(BasePermission):
+    """Checks the matrix per request. The view names its module and, optionally,
+    the actions each viewset action needs:
+
+        permission_classes = [IsAuthenticated, MatrixPermission]
+        rbac_module  = 'incentives'
+        rbac_actions = {'finalize': ('finalize',), 'export_settlements': ('export',)}
+
+    Anything not listed: GET/HEAD/OPTIONS → view, POST → create, PUT/PATCH → edit,
+    DELETE → delete (or the view's `rbac_delete` tuple). An empty tuple means the
+    action is open to every logged-in user (e.g. a lookup other screens read)."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        needed = (getattr(view, 'rbac_actions', None) or {}).get(getattr(view, 'action', None))
+        if needed is None:
+            if request.method in SAFE_METHODS:
+                needed = ('view',)
+            elif request.method == 'POST':
+                needed = ('create',)
+            elif request.method in ('PUT', 'PATCH'):
+                needed = ('edit',)
+            else:
+                needed = getattr(view, 'rbac_delete', ('delete',))
+        if not needed:
+            return True
+        return matrix_allows(_get_profile(request), view.rbac_module, *needed)
+
+
 def deny_unless(request, module: str, *actions):
     """For function views: None when the matrix allows any of `actions`, else a 403."""
     if matrix_allows(_get_profile(request), module, *actions):

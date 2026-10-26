@@ -13,6 +13,7 @@ import CanDo from '../components/CanDo'
 import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import { fa } from '../utils/flowArrow'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -202,6 +203,7 @@ function ActionButtons({ tr, onAction, loading }) {
       <CanDo module="transfers" action="edit">
         {tr.can_submit && (
           <button
+            data-tour="transfers-detail-submit"
             onClick={() => onAction('submit')}
             disabled={loading}
             className="btn-primary text-sm disabled:opacity-50"
@@ -229,6 +231,7 @@ function ActionButtons({ tr, onAction, loading }) {
       <CanDo module="transfers" action="approve">
         {tr.can_reject && !showRejectForm && (
           <button
+            data-tour="transfers-detail-reject"
             onClick={() => setShowRejectForm(true)}
             className="btn-danger text-sm"
           >
@@ -260,7 +263,7 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Revision */}
       {tr.can_request_revision && !showRevisionForm && (
-        <button onClick={() => setShowRevisionForm(true)}
+        <button data-tour="transfers-detail-revision" onClick={() => setShowRevisionForm(true)}
           className="btn-secondary text-sm">
           ✏️ طلب تعديل
         </button>
@@ -288,7 +291,7 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Send to ERP */}
       {tr.can_send_to_erp && !showErpForm && (
-        <button onClick={() => setShowErpForm(true)}
+        <button data-tour="transfers-detail-send-erp" onClick={() => setShowErpForm(true)}
           className="text-sm px-4 py-2 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors">
           🚀 إرسال للـ ERP
         </button>
@@ -314,7 +317,7 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Dispatch — record delivery person name */}
       {tr.can_dispatch && !showDispatchForm && (
-        <button onClick={() => setShowDispatchForm(true)}
+        <button data-tour="transfers-detail-dispatch" onClick={() => setShowDispatchForm(true)}
           className="text-sm px-4 py-2 rounded-lg font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50"
           disabled={loading}>
           🚚 تسجيل الإرسال
@@ -348,7 +351,7 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Complete — opens received-quantity form */}
       {tr.can_complete && (
-        <button onClick={openCompleteForm}
+        <button data-tour="transfers-detail-receive" onClick={openCompleteForm}
           className="text-sm px-4 py-2 rounded-lg font-semibold bg-green-600 hover:bg-green-700 text-white transition-colors">
           🏁 تأكيد الاستلام
         </button>
@@ -356,7 +359,7 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Cancel */}
       {tr.can_cancel && (
-        <button onClick={() => { if (window.confirm('هل تريد إلغاء هذا الطلب؟')) onAction('cancel') }}
+        <button data-tour="transfers-detail-cancel" onClick={() => { if (window.confirm('هل تريد إلغاء هذا الطلب؟')) onAction('cancel') }}
           className="btn-ghost text-sm text-gray-400 hover:text-red-500">
           إلغاء الطلب
         </button>
@@ -456,7 +459,7 @@ function ERPMatchPanel({ tr, onRefresh }) {
   }
 
   return (
-    <div className="card border-2 animate-fade-in"
+    <div className="card border-2 animate-fade-in" data-tour="transfers-detail-erp-match"
       style={{ borderColor: cfg.border }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
@@ -1333,7 +1336,7 @@ export default function TransferDetailPage() {
               ))}
             </div>
             <div className="text-xs text-gray-400 mt-0.5">
-              {tr.requesting_branch_name} → {tr.supplying_branch_name}
+              {tr.requesting_branch_name} {fa()} {tr.supplying_branch_name}
               · {tr.created_by_name}
               · {timeAgo(tr.created_at)}
             </div>

@@ -69,9 +69,11 @@ export default function ExceptionCenterPage() {
           <p className="text-sm text-gray-500">الأوامر التى تحتاج مراجعة: فشل الإرسال، العالقة، والمتأخرة عن التحصيل.</p>
         </div>
         <div className="flex items-center gap-2">
-          <MetricChip icon="repeat" label="إجمالى الاستثناءات" value={data?.total_count ?? '—'} />
-          <MetricChip icon="trending" label="قيمة معرّضة للخطر" value={money(data?.total_value_at_risk)}
-                      tone={data?.total_value_at_risk > 0 ? 'warn' : 'ok'} />
+          <div className="flex items-center gap-2" data-tour="pos-exceptions-metrics">
+            <MetricChip icon="repeat" label="إجمالى الاستثناءات" value={data?.total_count ?? '—'} />
+            <MetricChip icon="trending" label="قيمة معرّضة للخطر" value={money(data?.total_value_at_risk)}
+                        tone={data?.total_value_at_risk > 0 ? 'warn' : 'ok'} />
+          </div>
           <select value={branch} onChange={e => setBranch(e.target.value)} data-tour="pos-exceptions-branch"
                   className="px-2 py-1.5 rounded border text-sm bg-white">
             <option value="">كل الفروع</option>
@@ -158,7 +160,7 @@ export default function ExceptionCenterPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">
                       <button onClick={() => setDetailId(o.id)} data-tour="pos-exceptions-details"
                               className="text-xs px-2 py-1 rounded border hover:bg-gray-100 ml-1">تفاصيل</button>
-                      <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }}
+                      <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }} data-tour="pos-exceptions-cancel"
                               disabled={cancel.isPending}
                               className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 disabled:opacity-50">
                         إلغاء
@@ -314,14 +316,14 @@ function LostSalesPanel({ branch }) {
   })
   if (!branch) {
     return (
-      <section className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-500 flex items-center gap-2">
+      <section className="border rounded-lg p-4 bg-gray-50 text-sm text-gray-500 flex items-center gap-2" data-tour="pos-exceptions-lost">
         <Icon name="search" size={16} /> اختر فرعًا بالأعلى لعرض «المبيعات غير المخزنة» (الأصناف المطلوبة ولم تُبَع + الإلغاءات).
       </section>
     )
   }
   const s = data?.summary
   return (
-    <section className="border rounded-lg overflow-hidden">
+    <section className="border rounded-lg overflow-hidden" data-tour="pos-exceptions-lost">
       <header className="flex items-center justify-between px-3 py-2 bg-amber-50 border-b border-amber-200">
         <div className="flex items-center gap-2">
           <Badge tone="warn" icon="alert" label="المبيعات غير المخزنة — فرص ضائعة" />

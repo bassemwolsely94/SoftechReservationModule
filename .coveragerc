@@ -1,0 +1,11 @@
+# Coverage for the backend suite (CI: coverage run manage.py test). No floor yet —
+# the first full green run sets it in Batch 7 of the security suite.
+[run]
+source = apps, core, config
+omit =
+    */migrations/*
+    apps/tests/*
+    */management/commands/*
+
+[report]
+skip_empty = True

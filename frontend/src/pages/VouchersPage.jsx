@@ -17,6 +17,7 @@ import ItemSearchWidget from '../components/ItemSearchWidget'
 import GiftCouponsTab from './vouchers/GiftCouponsTab'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
@@ -351,7 +352,7 @@ function CreateVoucherModal({ onClose, onCreate }) {
         <div className="px-5 py-4 border-t shrink-0">
           <ErrorBox msg={error} />
           <div className="flex gap-2 mt-3">
-            <Btn variant="primary" size="lg" onClick={submit} disabled={saving} className="flex-1">
+            <Btn data-tour="vouchers-main-create-submit" variant="primary" size="lg" onClick={submit} disabled={saving} className="flex-1">
               {saving ? 'جاري الإنشاء...' : '✓ إنشاء القسيمة'}
             </Btn>
             <Btn variant="ghost" size="lg" onClick={onClose} className="flex-1">إلغاء</Btn>
@@ -587,7 +588,7 @@ function VouchersList({ onRedeem }) {
                     </td>
                     <td className="px-3 py-2.5 text-xs text-gray-500">
                       <div>{v.valid_from}</div>
-                      {v.valid_until && <div className="text-gray-400">→ {v.valid_until}</div>}
+                      {v.valid_until && <div className="text-gray-400">{fa()} {v.valid_until}</div>}
                     </td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${sc.color}`}>
@@ -601,13 +602,13 @@ function VouchersList({ onRedeem }) {
                       <div className="flex items-center gap-1.5 justify-end flex-wrap">
                         {v.status === 'active' && (
                           <>
-                            <Btn size="sm" variant="primary" onClick={() => onRedeem(v)}>
+                            <Btn data-tour="vouchers-main-redeem" size="sm" variant="primary" onClick={() => onRedeem(v)}>
                               استرداد
                             </Btn>
-                            <Btn size="sm" variant="outline" onClick={() => setAssignTarget(v)}>
+                            <Btn data-tour="vouchers-main-assign" size="sm" variant="outline" onClick={() => setAssignTarget(v)}>
                               📱 تخصيص
                             </Btn>
-                            <Btn size="sm" variant="danger" onClick={() => handleCancel(v)}>
+                            <Btn data-tour="vouchers-main-cancel" size="sm" variant="danger" onClick={() => handleCancel(v)}>
                               إلغاء
                             </Btn>
                           </>
@@ -873,7 +874,7 @@ function RedemptionFlow({ voucher, onClose }) {
                   ← تعديل الهاتف
                 </Btn>
                 {eligibility.eligible && (
-                  <Btn variant="primary" size="lg" onClick={handleSendOtp}
+                  <Btn data-tour="vouchers-main-otp-send" variant="primary" size="lg" onClick={handleSendOtp}
                     disabled={loading} className="flex-1">
                     {loading ? '...' : '📤 إرسال OTP عبر واتساب'}
                   </Btn>
@@ -981,7 +982,7 @@ function RedemptionFlow({ voucher, onClose }) {
                 <Btn variant="ghost" size="sm" onClick={handleResend} disabled={loading} className="flex-1">
                   🔄 رمز جديد
                 </Btn>
-                <Btn variant="success" size="lg" onClick={handleVerify}
+                <Btn data-tour="vouchers-main-otp-verify" variant="success" size="lg" onClick={handleVerify}
                   disabled={loading || otpCode.length !== 6} className="flex-1">
                   {loading ? '...' : '✓ تحقق من الرمز'}
                 </Btn>
@@ -1151,7 +1152,7 @@ function DocumentsTab() {
           placeholder="REF-XXXXXXXX"
           dir="ltr"
         />
-        <Btn variant="primary" size="lg" onClick={lookup} disabled={loading}>
+        <Btn data-tour="vouchers-main-doc-lookup" variant="primary" size="lg" onClick={lookup} disabled={loading}>
           {loading ? '...' : '🔍 بحث'}
         </Btn>
       </div>
@@ -1223,7 +1224,7 @@ function DocumentsTab() {
                   ✅ تم تفعيل الوثيقة — خصم: {Number(success.discount_applied).toFixed(2)} ج.م
                 </div>
               ) : (
-                <Btn variant="success" size="lg" onClick={markUsed}
+                <Btn data-tour="vouchers-main-doc-use" variant="success" size="lg" onClick={markUsed}
                   disabled={markLoading} className="flex-1">
                   {markLoading ? '...' : '✅ تفعيل الوثيقة (POS)'}
                 </Btn>
@@ -1280,7 +1281,7 @@ function ReportTab() {
         <Field label="إلى تاريخ">
           <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
         </Field>
-        <div className="pt-5">
+        <div className="pt-5" data-tour="vouchers-main-report">
           <RefreshButton loading={loading} onClick={load} variant="primary">
             📊 تحديث التقرير
           </RefreshButton>
@@ -1478,7 +1479,7 @@ function QuickLookupRedeem({ onFound }) {
         />
       </Field>
       <ErrorBox msg={error} />
-      <Btn variant="primary" size="lg" onClick={lookup} disabled={loading} className="w-full mt-4">
+      <Btn data-tour="vouchers-main-quick-redeem" variant="primary" size="lg" onClick={lookup} disabled={loading} className="w-full mt-4">
         {loading ? '...' : '🔍 بحث واسترداد'}
       </Btn>
     </div>

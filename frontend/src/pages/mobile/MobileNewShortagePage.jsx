@@ -45,7 +45,7 @@ export default function MobileNewShortagePage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="shortage-mobile-form" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 text-sm">🚨 قائمة نواقص جديدة</h2>
         {canPickBranch ? (
           <div>
@@ -72,7 +72,7 @@ export default function MobileNewShortagePage() {
 
       <div className="flex gap-2.5">
         <button onClick={() => navigate('/m/shortage')} className="btn-secondary px-5">إلغاء</button>
-        <button onClick={create} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
+        <button data-tour="shortage-mobile-create" onClick={create} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
           {busy ? 'جارٍ الإنشاء...' : 'إنشاء وبدء التسجيل'}
         </button>
       </div>

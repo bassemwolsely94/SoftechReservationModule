@@ -69,6 +69,7 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
                 return value.strip().lower() in ('1', 'true', 'yes', 'on')
             return cast(value) if (cast and isinstance(value, str)) else value
         return _env_config(key, *args, **kwargs)
+
 if not SECRET_KEY or SECRET_KEY.startswith('change-me'):
     if DEBUG or _RUNNING_TESTS:
         SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()
@@ -565,6 +566,35 @@ POS_DISCOUNT_AUTHORITY = config('POS_DISCOUNT_AUTHORITY', default=True, cast=boo
 # writer only PREPARES + builds a dry-run plan; nothing is sent to SOFTECH. Flip
 # to True ONLY after validating the live path against SOFTECH_TEST_HOST (the final
 # insert fires SOFTECH's stock-receive + weighted-avg-cost + supplier-balance triggers).
+# Structured-OCR engine for supplier invoices: 'auto' (Gemini if GEMINI_API_KEY
+# set, else the best free local engine — Tesseract+Arabic, then easyOCR),
+# 'gemini', 'tesseract' or 'easyocr'. Lets the pharmacy run invoice extraction at
+# zero API cost. See apps/invoices/engines.py.
+INVOICE_OCR_ENGINE      = config('INVOICE_OCR_ENGINE', default='auto')
+# In 'auto' mode, run the free engine first and escalate to Gemini only when the
+# free result's quality score (fraction of lines with a name + a plausible price)
+# is below this threshold. Higher = escalate more often (more accuracy, more cost).
+INVOICE_OCR_ESCALATE_THRESHOLD = config('INVOICE_OCR_ESCALATE_THRESHOLD', default=0.6, cast=float)
+# PDF render resolution. 300 DPI is Tesseract's sweet spot for printed Arabic;
+# raise for tiny print, lower for speed. Applies to the invoice-bundle renderer.
+INVOICE_PDF_DPI         = config('INVOICE_PDF_DPI', default=300, cast=int)
+# Pre-enhance scanned pages before free OCR (autocontrast + deskew + upscale).
+INVOICE_OCR_ENHANCE     = config('INVOICE_OCR_ENHANCE', default=True, cast=bool)
+# Extra, opt-in image-perfecting steps (applied by preprocess.enhance_for_ocr AFTER
+# the base enhance). Each is off by default — turn on and A/B via the benchmark,
+# since the best combination is scan-quality dependent and they cost time.
+INVOICE_OCR_EQUALIZE    = config('INVOICE_OCR_EQUALIZE', default=False, cast=bool)   # histogram equalize (uneven lighting)
+INVOICE_OCR_SHARPEN     = config('INVOICE_OCR_SHARPEN', default=False, cast=bool)    # unsharp mask (soft/blurry scans)
+INVOICE_OCR_BINARIZE    = config('INVOICE_OCR_BINARIZE', default=False, cast=bool)   # Sauvola adaptive binarization (faint/shadowed scans)
+# Field voting: also run RapidOCR and prefer its digits for the numeric columns
+# (slower — adds a second OCR pass — but more accurate prices). Off by default.
+INVOICE_OCR_FIELD_VOTING = config('INVOICE_OCR_FIELD_VOTING', default=False, cast=bool)
+# Tesseract (free local OCR). The binary path and a tessdata dir that contains
+# ara.traineddata (+ eng). On Windows the binary is usually at
+# 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'. Leave TESSDATA_PREFIX blank
+# to use the binary's bundled tessdata (must already include Arabic).
+TESSERACT_CMD             = config('TESSERACT_CMD', default='')
+TESSERACT_TESSDATA_PREFIX = config('TESSERACT_TESSDATA_PREFIX', default='')
 INVOICE_WRITER_ENABLED  = config('INVOICE_WRITER_ENABLED', default=False, cast=bool)
 INVOICE_WRITER_PROFILE  = config('INVOICE_WRITER_PROFILE', default='test')   # test|prod
 INVOICE_DEFAULT_USERCODE = config('INVOICE_DEFAULT_USERCODE', default='')    # fallback buyer usercode
@@ -742,6 +772,22 @@ AMI_HOST   = config('AMI_HOST', default='127.0.0.1')
 AMI_PORT   = config('AMI_PORT', default=5038, cast=int)
 AMI_USER   = config('AMI_USER', default='')
 AMI_SECRET = config('AMI_SECRET', default='')
+AMI_DIAL_CONTEXT = config('AMI_DIAL_CONTEXT', default='')
+# Recordings over SFTP (read-only download of single files from the monitor dir)
+PBX_RECORDINGS_ROOT          = config('PBX_RECORDINGS_ROOT', default='/var/spool/asterisk/monitor')
+PBX_RECORDINGS_SFTP_HOST     = config('PBX_RECORDINGS_SFTP_HOST', default='')
+PBX_RECORDINGS_SFTP_PORT     = config('PBX_RECORDINGS_SFTP_PORT', default=22, cast=int)
+PBX_RECORDINGS_SFTP_USER     = config('PBX_RECORDINGS_SFTP_USER', default='')
+PBX_RECORDINGS_SFTP_PASSWORD = config('PBX_RECORDINGS_SFTP_PASSWORD', default='')
+PBX_RECORDINGS_SFTP_KEY_FILE = config('PBX_RECORDINGS_SFTP_KEY_FILE', default='')
+
+# ── Call transcription ────────────────────────────────────────────────────────
+CALLCENTER_AUTO_TRANSCRIBE             = config('CALLCENTER_AUTO_TRANSCRIBE', default=False, cast=bool)
+CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS = config('CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS', default=20, cast=int)
+WHISPER_ENABLED     = config('WHISPER_ENABLED', default=False, cast=bool)
+WHISPER_MIN_SECONDS = config('WHISPER_MIN_SECONDS', default=20, cast=int)
+WHISPER_MODEL_DIR   = config('WHISPER_MODEL_DIR', default='')
+WHISPER_EXTRA_TERMS = [t.strip() for t in config('WHISPER_EXTRA_TERMS', default='').split(',') if t.strip()]
 
 # ── Frontend base URL ─────────────────────────────────────────────────────────
 FRONTEND_BASE_URL = config('FRONTEND_BASE_URL', default='https://app.elrezeiky.com')
@@ -781,6 +827,26 @@ GEMINI_RPM     = config('GEMINI_RPM',      default=10, cast=float)   # free tier
 # Provider 2 — Gemini secondary account (second Google account / Gemini Pro)
 GEMINI_API_KEY_2 = config('GEMINI_API_KEY_2', default='')
 GEMINI_MODEL_2   = config('GEMINI_MODEL_2',   default='gemini-2.5-flash')
+#
+# Mistral vision OCR (paid; never hits the Gemini free-tier daily cap). Registered
+# as the 'mistral' engine; active only when this key is set + `mistralai` installed.
+MISTRAL_API_KEY  = config('MISTRAL_API_KEY',  default='')
+MISTRAL_OCR_MODEL = config('MISTRAL_OCR_MODEL', default='pixtral-12b-latest')
+#
+# Generic self-hosted / OpenAI-compatible VLM OCR endpoint. Point this at a served
+# vision model (PaddleOCR-VL, Qwen2.5-VL, Nanonets-OCR2, …) via vLLM / Ollama / HF
+# TGI / any /v1/chat/completions server, and it registers as the 'vlm' engine for
+# A/B in the benchmark (--engine vlm). Empty URL = engine disabled.
+VLM_OCR_URL      = config('VLM_OCR_URL',   default='')     # e.g. http://gpu-box:8000/v1/chat/completions
+VLM_OCR_MODEL    = config('VLM_OCR_MODEL', default='')     # the served model id
+VLM_OCR_KEY      = config('VLM_OCR_KEY',   default='')     # bearer token if the server needs one
+#
+# PaddleOCR box sidecar — PaddlePaddle has NO Python 3.14 wheel, so PaddleOCR
+# PP-OCRv5 runs in a SEPARATE Python ≤3.12 venv as a tiny local HTTP server
+# (see ocr_sidecar/). Set this URL and the `paddleocr` engine reads boxes from it
+# and feeds them through the SAME band/template pipeline as Tesseract. Empty = the
+# in-process paddleocr is used instead (only works where paddlepaddle is installable).
+PADDLE_OCR_URL   = config('PADDLE_OCR_URL', default='')     # e.g. http://127.0.0.1:8077/boxes
 #
 # Provider 3 — OpenAI fallback (https://platform.openai.com/api-keys)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')

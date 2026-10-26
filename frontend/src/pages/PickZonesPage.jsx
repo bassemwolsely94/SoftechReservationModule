@@ -27,6 +27,7 @@ import { pickZonesApi, branchesApi } from '../api/client'
 import ItemSearchInput from '../components/ItemSearchInput'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const toLatin = s =>
   s == null ? '' : String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660))
@@ -135,7 +136,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
   const currentThreshold = threshold ?? settings?.price_threshold ?? ''
 
   return (
-    <div className="card mb-4">
+    <div className="card mb-4" data-tour="transfers-pick-zones-settings">
       <div className="font-bold text-gray-800 text-sm mb-3">⚙️ إعدادات التصنيف</div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
@@ -161,7 +162,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
             )}
           </div>
           <div className="text-[10px] text-gray-400 mt-1">
-            الصنف بسعر أعلى أو يساوي هذا الحد → منطقة الغوالي
+            الصنف بسعر أعلى أو يساوي هذا الحد {fa()} منطقة الغوالي
           </div>
         </div>
 
@@ -224,7 +225,7 @@ function ZoneRow({ zone, canEdit, showToast }) {
   }
 
   return (
-    <tr className={`border-b border-gray-50 ${zone.is_active ? '' : 'opacity-50 bg-gray-50'}`}>
+    <tr data-tour="transfers-pick-zones-zone-row" className={`border-b border-gray-50 ${zone.is_active ? '' : 'opacity-50 bg-gray-50'}`}>
       <td className="px-3 py-2 w-24">
         <input type="number" className="input-field text-sm w-20 text-center" disabled={!canEdit}
           value={form.sort_key}
@@ -270,7 +271,7 @@ function ZoneRow({ zone, canEdit, showToast }) {
               حفظ
             </button>
           )}
-          <button onClick={confirmDelete} disabled={remove.isPending}
+          <button data-tour="transfers-pick-zones-delete-zone" onClick={confirmDelete} disabled={remove.isPending}
             className="text-xs text-red-500 hover:text-red-700 px-2 py-1" title="حذف المنطقة">
             🗑️
           </button>
@@ -376,7 +377,7 @@ function RuleTester({ branchParam, purpose, showToast }) {
   })
 
   return (
-    <div className="card mb-4 bg-indigo-50/50 border border-indigo-100">
+    <div className="card mb-4 bg-indigo-50/50 border border-indigo-100" data-tour="transfers-pick-zones-tester">
       <div className="font-bold text-gray-800 text-sm mb-2">🧪 اختبار التصنيف الحي</div>
       <div className="flex flex-wrap gap-2 items-center">
         <input className="input-field text-sm flex-1 min-w-56"
@@ -569,7 +570,7 @@ function RulesTab({ zones, branchParam, purpose, canEdit, showToast }) {
                 zones={zones} canEdit={canEdit} onMove={move} showToast={showToast} />
             ))}
             {canEdit && (
-              <tr className="bg-brand-50/40">
+              <tr className="bg-brand-50/40" data-tour="transfers-pick-zones-add-rule">
                 <td className="px-2 py-2 text-center text-xs text-gray-400">جديدة</td>
                 <td className="px-3 py-2">
                   <select className="input-field text-sm w-full" value={add.zone}
@@ -824,7 +825,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
   return (
     <div>
       {canEdit && (
-        <div className="card mb-4">
+        <div className="card mb-4" data-tour="transfers-pick-zones-assign">
           <div className="font-bold text-gray-800 text-sm mb-2">➕ تخصيص صنف لمنطقة</div>
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex-1 min-w-64">
@@ -965,7 +966,7 @@ export default function PickZonesPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Purpose: picking (source warehouse walk) vs stocking (branch shelves) */}
-          <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden" data-tour="transfers-pick-zones-purpose">
             {PURPOSES.map(p => (
               <button
                 key={p.value}
@@ -983,6 +984,7 @@ export default function PickZonesPage() {
           </div>
           <label className="text-xs text-gray-500 font-semibold">الموقع:</label>
           <select
+            data-tour="transfers-pick-zones-location"
             className="input-field text-sm w-52"
             value={branchParam}
             onChange={e => setBranchParam(e.target.value)}
@@ -1015,6 +1017,7 @@ export default function PickZonesPage() {
           </span>
           {canEdit && (
             <button
+              data-tour="transfers-pick-zones-copy"
               onClick={() => copyDefaults.mutate()}
               disabled={copyDefaults.isPending}
               className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg disabled:opacity-50"
@@ -1025,7 +1028,7 @@ export default function PickZonesPage() {
         </div>
       )}
 
-      <div className="flex border-b border-gray-200 gap-5 mb-4">
+      <div className="flex border-b border-gray-200 gap-5 mb-4" data-tour="transfers-pick-zones-tabs">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`pb-2.5 text-sm font-semibold border-b-2 transition-colors ${

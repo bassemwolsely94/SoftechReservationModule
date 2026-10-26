@@ -58,7 +58,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5" dir="rtl">
+    <div data-tour="tasks-schedules-form" className="bg-white rounded-xl border border-gray-200 p-5" dir="rtl">
       <h3 className="font-bold text-gray-800 mb-4 text-right">{initial?.id ? 'تعديل الجدول' : 'جدول جديد'}</h3>
       {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded mb-3">{error}</div>}
 
@@ -67,7 +67,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
           <label className="block text-xs font-medium text-gray-600 mb-1 text-right">اسم الجدول *</label>
           <input className="w-full border rounded-lg px-3 py-2 text-sm text-right" placeholder="مثال: جرد يومي فرع X" value={form.name} onChange={e => set('name', e.target.value)} />
         </div>
-        <div className="col-span-2">
+        <div data-tour="tasks-schedules-title-template" className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1 text-right">قالب عنوان المهمة * <span className="text-gray-400 font-normal">(استخدم {'{date}'} و{'{branch}'})</span></label>
           <input className="w-full border rounded-lg px-3 py-2 text-sm text-right" placeholder="مثال: جرد يومي — {branch} — {date}" value={form.title_template} onChange={e => set('title_template', e.target.value)} />
         </div>
@@ -92,7 +92,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
-        <div>
+        <div data-tour="tasks-schedules-assignee">
           <label className="block text-xs font-medium text-gray-600 mb-1 text-right">تعيين إلى</label>
           <select className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.assign_to} onChange={e => set('assign_to', e.target.value)}>
             <option value="">— اختياري —</option>
@@ -100,7 +100,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
           </select>
         </div>
 
-        <div>
+        <div data-tour="tasks-schedules-frequency">
           <label className="block text-xs font-medium text-gray-600 mb-1 text-right">التكرار</label>
           <select className="w-full border rounded-lg px-3 py-2 text-sm text-right" value={form.frequency} onChange={e => set('frequency', e.target.value)}>
             {Object.entries(FREQ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -134,7 +134,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
           <textarea className="w-full border rounded-lg px-3 py-2 text-sm text-right resize-none" rows={2} placeholder="اختياري..." value={form.description_template} onChange={e => set('description_template', e.target.value)} />
         </div>
 
-        <div className="col-span-2 flex items-center gap-2 justify-end">
+        <div data-tour="tasks-schedules-active" className="col-span-2 flex items-center gap-2 justify-end">
           <label className="text-sm text-gray-600">نشط</label>
           <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} className="w-4 h-4 accent-brand-600" />
         </div>
@@ -142,7 +142,7 @@ function ScheduleForm({ initial, branches, staff, onSave, onCancel }) {
 
       <div className="flex gap-2 mt-4 justify-end">
         <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg">إلغاء</button>
-        <button onClick={submit} disabled={saving} className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 font-medium">
+        <button data-tour="tasks-schedules-save" onClick={submit} disabled={saving} className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 font-medium">
           {saving ? 'جاري الحفظ...' : 'حفظ'}
         </button>
       </div>
@@ -220,7 +220,7 @@ export default function TaskSchedulesPage() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => navigate('/tasks/dashboard')} className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">← لوحة التحكم</button>
-          <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium">+ جدول جديد</button>
+          <button data-tour="tasks-schedules-new" onClick={() => { setEditTarget(null); setShowForm(true) }} className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium">+ جدول جديد</button>
         </div>
       </div>
 
@@ -262,7 +262,7 @@ export default function TaskSchedulesPage() {
             <button onClick={() => setShowForm(true)} className="text-sm text-brand-600 underline">إنشاء أول جدول</button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div data-tour="tasks-schedules-table" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-gray-50 border-b text-xs text-gray-500 font-semibold">
@@ -296,10 +296,10 @@ export default function TaskSchedulesPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         {s.is_active && (
-                          <button onClick={() => runNow(s.id, s.name)} className="text-xs text-brand-600 hover:underline">تشغيل</button>
+                          <button data-tour="tasks-schedules-run" onClick={() => runNow(s.id, s.name)} className="text-xs text-brand-600 hover:underline">تشغيل</button>
                         )}
-                        <button onClick={() => { setShowForm(false); setEditTarget(s) }} className="text-xs text-gray-500 hover:underline">تعديل</button>
-                        <button onClick={() => deleteSchedule(s.id)} className="text-xs text-red-400 hover:underline">حذف</button>
+                        <button data-tour="tasks-schedules-edit" onClick={() => { setShowForm(false); setEditTarget(s) }} className="text-xs text-gray-500 hover:underline">تعديل</button>
+                        <button data-tour="tasks-schedules-delete" onClick={() => deleteSchedule(s.id)} className="text-xs text-red-400 hover:underline">حذف</button>
                       </div>
                     </td>
                   </tr>

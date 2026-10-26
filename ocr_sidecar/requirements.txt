@@ -1,0 +1,12 @@
+# PaddleOCR box sidecar — install in a SEPARATE Python venv (NOT the main 3.14 app
+# venv). See README.md.
+#
+# Using the 2.x stack on purpose: PaddleOCR 3.x + PaddlePaddle 3.x crash on Windows
+# CPU with a oneDNN/PIR executor bug ("ConvertPirAttribute2RuntimeAttribute"). The
+# 2.x line uses the old executor and is stable on Windows CPU. Arabic = PP-OCRv3.
+# (Needs Python 3.10–3.12; if paddlepaddle 2.6 has no wheel for your Python, use 3.11.)
+paddlepaddle==2.6.2         # CPU build; stable on Windows (no PIR/oneDNN crash)
+paddleocr==2.7.3            # PP-OCRv3 pipeline incl. the Arabic model
+flask>=3.0
+pillow>=10.0
+numpy<2                     # paddle 2.6 expects numpy 1.x

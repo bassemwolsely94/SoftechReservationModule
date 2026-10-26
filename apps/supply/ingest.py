@@ -99,7 +99,7 @@ def parse_entry(entry) -> ParsedLine | None:
 
 
 def resolve_line(raw_name: str, *, override_id=None, override_sid: str = '',
-                 threshold: float = AUTO_MATCH_IMPORT, vendor_code: str = '') -> ResolvedLine:
+                 threshold: float = AUTO_MATCH_IMPORT, vendor_code: str = '', matches=None) -> ResolvedLine:
     """Resolve a raw name to a catalog Item.
 
     1. An explicit user pick (PG pk, else SOFTECH itemcode) wins → score 1.0, picked.
@@ -130,8 +130,11 @@ def resolve_line(raw_name: str, *, override_id=None, override_sid: str = '',
     learned = False
     runner_name, runner_score = '', None
     if item_obj is None:
-        matches = find_best_matches(raw_name, top_n=8, min_score=threshold, vendor_code=vendor_code)
-        matches = _prefer_written(raw_name, matches)
+        # `matches` = an already-run catalog search (line_matching shares ONE search between
+        # the inbox and WhatsApp engines); same top-8 / threshold as the call it replaces
+        if matches is None:
+            matches = find_best_matches(raw_name, top_n=8, min_score=threshold, vendor_code=vendor_code)
+        matches = _prefer_written(raw_name, [m for m in matches if m['score'] >= threshold][:8])
         if matches:
             best = matches[0]
             try:
@@ -247,6 +250,49 @@ def _name_numbers(text: str) -> set:
     return {float(x) for x in re.findall(r'\d+(?:\.\d+)?', t)}
 
 
+# Pack COUNTS in a catalog name or a written line — «100TAB», «(3STRIPSX10)», «1JAR»,
+# «48 اقراص» — as opposed to strengths. 2026-10-25: «تي 4ثيرو 100» matched T4-THYRO 50MCG
+# 100TAB with no flag, because "100" was found as the tablet count.
+_COUNT_RE = None
+
+
+def _count_numbers(text: str) -> set:
+    import re
+    global _COUNT_RE
+    if _COUNT_RE is None:
+        _COUNT_RE = re.compile(
+            r'(\d+)\s*(?:tabs?|tablets?|caps?|capsules?|amps?|ampoules?|vials?|sachets?|supp\w*|loz\w*|'
+            r'pcs|pieces?|jars?|strips?|eff\w*|قرص|اقراص|أقراص|كبسول\w*|امبول\w*|أمبول\w*|لبوس|كيس|اكياس|أكياس|'
+            r'شريط|شرائط|برطمان)(?![a-z])'
+            r'|\((\d+)\s*strips?\s*x\s*(\d+)\)', re.IGNORECASE)
+    out = set()
+    for m in _COUNT_RE.finditer(str(text or '')):
+        out.update(float(g) for g in m.groups() if g)
+    return out
+
+
+# Product-type words that tell versions apart («بانادول اكسترا» ≠ PANADOL ADVANCE). A word
+# WRITTEN that the item's name lacks is a reason to look (never the other way round —
+# people leave words out).
+_VARIANT_WORDS = {
+    'EXTRA': ('اكسترا', 'إكسترا', 'extra'), 'ADVANCE': ('ادفانس', 'أدفانس', 'advance'),
+    'FORTE': ('فورت', 'فورتي', 'forte'), 'PLUS': ('بلس', 'plus'), 'COLD': ('كولد', 'cold'),
+    'NIGHT': ('نايت', 'night'), 'JUNIOR': ('جونيور', 'junior'), 'KIDS': ('كيدز', 'kids'),
+    'ZERO': ('زيرو', 'zero'), 'DUO': ('ديو', 'duo'), 'RAPID': ('رابيد', 'rapid'),
+    'OPTIZORB': ('أوبتيزورب', 'اوبتيزورب', 'optizorb'),
+}
+
+
+def _word_mismatch(read_text: str, item_name: str) -> bool:
+    import re
+    words = set(re.findall(r'[A-Za-z]+|[\u0600-\u06FF]+', str(read_text or '').lower()))
+    name = str(item_name or '').upper()
+    for latin, spellings in _VARIANT_WORDS.items():
+        if any(s.lower() in words for s in spellings) and latin not in name:
+            return True
+    return False
+
+
 def _head_word(name: str) -> str:
     import re
     words = re.findall(r'[A-Za-z]{3,}', str(name or '').upper())
@@ -269,7 +315,14 @@ def review_flags(read_text: str, item_name: str, *, runner_up_name: str = '',
 
     flags = []
     raw_nums, item_nums = _name_numbers(read_text), _name_numbers(item_name)
+    raw_strengths = raw_nums - _count_numbers(read_text)        # «48 اقراص» is a count, not a strength
+    counts = _count_numbers(item_name)
+    strengths = item_nums - counts
     if raw_nums and item_nums and not raw_nums <= item_nums:
+        flags.append('strength_mismatch')
+    elif (raw_strengths & counts) - strengths and strengths - raw_nums:
+        # a written number found only as the item's COUNT while one of its strengths was not
+        # written: «تي 4ثيرو 100» vs T4-THYRO 50MCG 100TAB
         flags.append('strength_mismatch')
     rf = extract_components(read_text).form or form_of(read_text)
     itf = {extract_components(item_name).form} | set(forms_of(item_name))
@@ -278,6 +331,8 @@ def review_flags(read_text: str, item_name: str, *, runner_up_name: str = '',
         flags.append('form_mismatch')
     if head_mismatch(read_text, item_name):
         flags.append('head_mismatch')
+    if _word_mismatch(read_text, item_name):
+        flags.append('word_mismatch')
     if (runner_up_name and score is not None and runner_up_score is not None
             and runner_up_score >= score - _AMBIGUITY_MARGIN
             and _head_word(runner_up_name) != _head_word(item_name)):

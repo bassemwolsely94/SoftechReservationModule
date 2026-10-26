@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick, label } from './text'
+import { ba } from '../utils/flowArrow'
 
 const en = (lang) => lang === 'en'
 
@@ -172,7 +173,7 @@ export function Quiz({ moduleKey, lang, onBack }) {
   return (
     <div className="space-y-4">
       <button type="button" onClick={onBack} className="text-xs text-faint hover:text-brand-600">
-        {en(lang) ? '→ Back to my path' : '→ رجوع لمساري التدريبي'}
+        {en(lang) ? `${ba()} Back to my path` : `${ba()} رجوع لمساري التدريبي`}
       </button>
       <div className="rounded-xl border border-line bg-surface p-5 space-y-1">
         <h2 className="text-lg font-bold text-content">📝 {pick(data.title, lang)}</h2>

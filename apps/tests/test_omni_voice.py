@@ -12,6 +12,8 @@ Tests covering:
     playback view auth-less token access, timeline serializer resolution
   - Transcription endpoint: routes CallLog vs WAMessage vs invalid (mocked
     Gemini in the pipeline function)
+  - Auto-transcribe after hangup: settings gate, skip rules, recording check;
+    call-center transcribe endpoint (400 no recording / 202 / 409 repeat)
 """
 from unittest import mock
 
@@ -207,3 +209,71 @@ class TranscribeEndpointTests(TestCase):
         insight = TimelineEvent.objects.filter(event_type='ai_insight').latest('id')
         self.assertEqual(insight.payload['kind'], 'transcript')
         self.assertIn('دواء الضغط', insight.payload['text'])
+
+
+AUTO_ON = dict(CALLCENTER_AUTO_TRANSCRIBE=True,
+               CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS=20,
+               CALLCENTER_AUTO_TRANSCRIBE_DELAY=0)
+
+
+class AutoTranscribeTests(TestCase):
+
+    def _log(self, **kw):
+        defaults = dict(phone_number='01012345678', direction='inbound',
+                        status='answered', duration_seconds=60,
+                        recording_url='http://issabel/recordings/a.wav')
+        defaults.update(kw)
+        return CallLog.objects.create(**defaults)
+
+    def _run(self, log):
+        from apps.omni import transcription
+        with mock.patch.object(transcription, 'transcribe_call_log') as fn:
+            transcription.auto_transcribe_after_hangup(log.pk)
+        return fn
+
+    def test_off_by_default(self):
+        self.assertFalse(self._run(self._log()).called)
+
+    @override_settings(**AUTO_ON)
+    def test_runs_for_answered_call(self):
+        log = self._log()
+        self._run(log).assert_called_once_with(log.pk)
+
+    @override_settings(**AUTO_ON)
+    def test_skips_short_unanswered_and_already_transcribed(self):
+        self.assertFalse(self._run(self._log(duration_seconds=5)).called)
+        self.assertFalse(self._run(self._log(status='no_answer')).called)
+        self.assertFalse(self._run(self._log(voice_transcript='موجود')).called)
+
+    def test_hangup_spawns_only_when_enabled(self):
+        with mock.patch('apps.omni.transcription.auto_transcribe_after_hangup') as fn, \
+             mock.patch('threading.Thread') as thread:
+            thread.side_effect = lambda target, args, daemon: mock.Mock(
+                start=lambda: target(*args))
+            make_session(caller_number='01011111111').complete()
+            self.assertFalse(fn.called)
+            with override_settings(**AUTO_ON):
+                # recording may only be in the CDR later — spawn anyway
+                make_session(caller_number='01022222222').complete()
+            self.assertEqual(fn.call_count, 1)
+
+
+class CallLogTranscribeEndpointTests(TestCase):
+
+    def setUp(self):
+        _, _, self.client_api = make_admin('cl_tr_admin')
+
+    def _url(self, log):
+        return f'/api/callcenter/calls/{log.pk}/transcribe/'
+
+    def test_requires_recording(self):
+        log = CallLog.objects.create(phone_number='01012345678', status='answered')
+        self.assertEqual(self.client_api.post(self._url(log)).status_code, 400)
+
+    def test_queues_and_blocks_repeat(self):
+        log = CallLog.objects.create(phone_number='01012345678', status='answered',
+                                     recording_url='http://issabel/recordings/b.wav')
+        with mock.patch('apps.omni.transcription.transcribe_call_log'):
+            self.assertEqual(self.client_api.post(self._url(log)).status_code, 202)
+        CallLog.objects.filter(pk=log.pk).update(voice_transcript='نص')
+        self.assertEqual(self.client_api.post(self._url(log)).status_code, 409)

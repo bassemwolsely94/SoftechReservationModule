@@ -74,7 +74,7 @@ function RuleModal({ rule, onClose }) {
                placeholder="اسم القاعدة"
                className="w-full border border-gray-200 rounded px-3 py-2 text-sm" />
 
-        <label className="block text-xs text-gray-500">
+        <label className="block text-xs text-gray-500" data-tour="omni-automations-trigger">
           عند حدوث
           <select value={trigger} onChange={e => setTrigger(e.target.value)}
                   className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm mt-1">
@@ -83,7 +83,7 @@ function RuleModal({ rule, onClose }) {
         </label>
 
         {/* Conditions */}
-        <div className="bg-gray-50 rounded p-3 space-y-2">
+        <div className="bg-gray-50 rounded p-3 space-y-2" data-tour="omni-automations-conditions">
           <p className="text-xs font-bold text-gray-500">الشروط (كلها يجب أن تتحقق)</p>
           <input value={keywords} onChange={e => setKeywords(e.target.value)}
                  placeholder="كلمات مفتاحية في النص (افصل بفاصلة)"
@@ -106,7 +106,7 @@ function RuleModal({ rule, onClose }) {
         </div>
 
         {/* Actions */}
-        <div className="bg-indigo-50/50 rounded p-3 space-y-2">
+        <div className="bg-indigo-50/50 rounded p-3 space-y-2" data-tour="omni-automations-actions">
           <p className="text-xs font-bold text-gray-500">الإجراءات (بالترتيب)</p>
           {actions.map((a, i) => {
             const meta = ACTION_TYPES.find(t => t.v === a.type) || ACTION_TYPES[0]
@@ -142,7 +142,7 @@ function RuleModal({ rule, onClose }) {
         {save.isError && <p className="text-red-500 text-xs">فشل الحفظ</p>}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={() => save.mutate()} disabled={!name.trim() || save.isPending}
+          <button data-tour="omni-automations-save" onClick={() => save.mutate()} disabled={!name.trim() || save.isPending}
                   className="flex-1 bg-indigo-600 text-white rounded px-3 py-2 text-sm disabled:opacity-50">
             {save.isPending ? 'جاري الحفظ...' : 'حفظ'}
           </button>
@@ -180,7 +180,7 @@ export default function OmniAutomationsPage() {
           <h1 className="text-xl font-bold text-gray-800">⚙️ قواعد الأتمتة</h1>
           <p className="text-sm text-gray-500 mt-0.5">{rules.length} قاعدة</p>
         </div>
-        <button onClick={() => setModal({})}
+        <button data-tour="omni-automations-new" onClick={() => setModal({})}
                 className="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm">
           + قاعدة جديدة
         </button>
@@ -196,7 +196,7 @@ export default function OmniAutomationsPage() {
       ) : (
         <div className="space-y-2">
           {rules.map(rule => (
-            <div key={rule.id}
+            <div key={rule.id} data-tour="omni-automations-rule"
                  className="bg-white rounded-lg border border-gray-200 p-3 flex items-center justify-between">
               <div className="min-w-0">
                 <p className="font-medium text-gray-800">
@@ -210,13 +210,13 @@ export default function OmniAutomationsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => toggle.mutate({ id: rule.id, is_active: !rule.is_active })}
+                <button data-tour="omni-automations-toggle" onClick={() => toggle.mutate({ id: rule.id, is_active: !rule.is_active })}
                         className={`text-xs px-2 py-1 rounded-full
                           ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                   {rule.is_active ? 'مفعّلة' : 'معطّلة'}
                 </button>
-                <button onClick={() => setModal(rule)} className="text-xs text-gray-500 hover:text-indigo-600">✏️</button>
-                <button onClick={() => { if (confirm('حذف القاعدة؟')) del.mutate(rule.id) }}
+                <button data-tour="omni-automations-edit" onClick={() => setModal(rule)} className="text-xs text-gray-500 hover:text-indigo-600">✏️</button>
+                <button data-tour="omni-automations-delete" onClick={() => { if (confirm('حذف القاعدة؟')) del.mutate(rule.id) }}
                         className="text-xs text-gray-400 hover:text-red-500">🗑️</button>
               </div>
             </div>

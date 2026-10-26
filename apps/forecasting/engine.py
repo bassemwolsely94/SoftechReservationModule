@@ -187,6 +187,13 @@ class ForecastEngine:
 
     # ── actuals lookup (rollup fast-path for a single branch, resolver otherwise) ─
     def _member_actual(self, member, year, month, metric) -> Decimal:
+        """Actual for a signal month, projected to a FULL month when that month is the
+        current in-progress month (so a forecast run mid-month isn't understated by the
+        partial MTD value)."""
+        return self._project_full_month(self._member_actual_raw(member, year, month, metric),
+                                         year, month)
+
+    def _member_actual_raw(self, member, year, month, metric) -> Decimal:
         kw = member['kwargs']
         bids = kw.get('branch_ids')
         # branch fast-path via KpiActualRollup
@@ -202,6 +209,41 @@ class ForecastEngine:
                 return self._cache[key]
         start, end = self.resolver.month_bounds(year, month)
         return self.resolver.resolve(metric, start=start, end=end, **kw)
+
+    @staticmethod
+    def _latest_complete_date(year, month):
+        """Last day of the month with COMPLETE sales data (today excluded as partial)."""
+        from datetime import date
+        from calendar import monthrange
+        from django.db.models import Max
+        from apps.customers.models import PurchaseHistory
+        today = date.today()
+        mstart = date(year, month, 1)
+        mend = date(year, month, monthrange(year, month)[1])
+        if mend < today:
+            return mend
+        if mstart > today:
+            return None
+        return (PurchaseHistory.objects.filter(
+            invoice_date__date__gte=mstart, invoice_date__date__lt=today)
+            .aggregate(m=Max('invoice_date__date'))['m'])
+
+    def _project_full_month(self, value, year, month) -> Decimal:
+        """Scale a current-month MTD actual to a full-month run-rate estimate
+        (value × total_days ÷ elapsed_complete_days). Complete months pass through."""
+        from datetime import date
+        from calendar import monthrange
+        today = date.today()
+        if (year, month) != (today.year, today.month) or not value:
+            return value
+        last = self._latest_complete_date(year, month)
+        if not last:
+            return value
+        total = monthrange(year, month)[1]
+        elapsed = (last - date(year, month, 1)).days + 1
+        if elapsed <= 0 or elapsed >= total:
+            return value
+        return value * Decimal(total) / Decimal(elapsed)
 
     # ── generate ─────────────────────────────────────────────────────────────
     @transaction.atomic

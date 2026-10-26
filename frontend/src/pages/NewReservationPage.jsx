@@ -718,7 +718,7 @@ export default function NewReservationPage() {
           </div>
 
           {/* Priority */}
-          <div>
+          <div data-tour="reservations-new-priority">
             <label className="label flex items-center justify-between">
               <span>الأولوية</span>
               <a href="/settings/dropdowns?key=reservation_priority"
@@ -791,7 +791,7 @@ export default function NewReservationPage() {
           </div>
 
           {/* Image upload */}
-          <div>
+          <div data-tour="reservations-new-image">
             <input type="file" accept="image/*" ref={fileRef} className="hidden"
               onChange={e => setImage(e.target.files[0])} />
             <button

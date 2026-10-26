@@ -73,7 +73,7 @@ function OverrideModal({ seg, catList, onClose, onSave }) {
         <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">⚠️ سيتم تعطيل التصنيف التلقائي لهذا المورد ويبقى ثابتًا عند إعادة التشغيل.</p>
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">إلغاء</button>
-          <button onClick={() => onSave({ supplier_category: category, notes })} className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700">حفظ التعديل</button>
+          <button data-tour="purchasing-segments-save" onClick={() => onSave({ supplier_category: category, notes })} className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700">حفظ التعديل</button>
         </div>
       </div>
     </div>
@@ -135,7 +135,7 @@ export default function SupplierSegmentationPage() {
           {[...Array(8)].map((_, i) => <div key={i} className="h-36 bg-gray-100 rounded-xl animate-pulse" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div data-tour="purchasing-segments-cards" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {categories.map(cat => (
             <div key={cat.category} onClick={() => setActiveCategory(a => a === cat.category ? '' : cat.category)}
               className={`cursor-pointer transition-all rounded-xl ${activeCategory === cat.category ? 'ring-2 ring-brand-500' : ''}`}>
@@ -147,7 +147,7 @@ export default function SupplierSegmentationPage() {
 
       {/* Distribution bar */}
       {totalValue > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div data-tour="purchasing-segments-distribution" className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="text-sm font-medium text-gray-700 mb-2">توزيع قيمة المشتريات</div>
           <div className="flex gap-0.5 h-6 rounded-full overflow-hidden">
             {categories.map(cat => (
@@ -167,14 +167,14 @@ export default function SupplierSegmentationPage() {
       )}
 
       {/* Supplier list */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div data-tour="purchasing-segments-table" className="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">
             قائمة الموردين
             {activeCategory && <span className="text-sm text-brand-600 mr-2">— {meta(activeCategory).name}</span>}
           </h2>
           <div className="flex items-center gap-2">
-            <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="بحث بالاسم أو الكود..." className="input-field text-sm w-48" />
+            <input data-tour="purchasing-segments-search" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="بحث بالاسم أو الكود..." className="input-field text-sm w-48" />
             {activeCategory && <button onClick={() => setActiveCategory('')} className="text-xs text-gray-400 hover:text-gray-600 underline">إلغاء الفلتر</button>}
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function SupplierSegmentationPage() {
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2.5">
-                          <button onClick={() => setEditingSeg(seg)} className="text-xs text-brand-600 hover:text-brand-800 underline">تعديل</button>
+                          <button data-tour="purchasing-segments-edit" onClick={() => setEditingSeg(seg)} className="text-xs text-brand-600 hover:text-brand-800 underline">تعديل</button>
                         </td>
                       )}
                     </tr>

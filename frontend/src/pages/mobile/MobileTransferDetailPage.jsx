@@ -14,6 +14,7 @@ import { transfersApi } from '../../api/client'
 import { transferBadgeClass } from './transferStatus'
 import MobileChatter from '../../components/MobileChatter'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import { fa, ba } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -95,10 +96,10 @@ export default function MobileTransferDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/transfers')} className="text-sm text-gray-500">→ الرجوع للقائمة</button>
+      <button onClick={() => navigate('/m/transfers')} className="text-sm text-gray-500">{ba()} الرجوع للقائمة</button>
 
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="transfers-detail-header">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="font-bold text-base text-gray-900">{t.request_number}</h1>
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${transferBadgeClass(t.status_color)}`}>
@@ -114,14 +115,14 @@ export default function MobileTransferDetailPage() {
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="transfers-detail-items">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">الأصناف ({toLatin((t.items || []).length)})</h2>
         <div className="space-y-1.5">
           {(t.items || []).map(it => (
             <div key={it.id} className="flex items-center justify-between text-sm border-b border-gray-50 last:border-0 pb-1.5 last:pb-0">
               <span className="text-gray-700 break-words flex-1 min-w-0">{it.item_name || it.item?.name || '—'}</span>
               <span className="text-gray-500 shrink-0">
-                {toLatin(it.quantity)}{it.approved_quantity != null ? ` → ${toLatin(it.approved_quantity)}` : ''}
+                {toLatin(it.quantity)}{it.approved_quantity != null ? ` ${fa()} ${toLatin(it.approved_quantity)}` : ''}
               </span>
             </div>
           ))}
@@ -129,11 +130,11 @@ export default function MobileTransferDetailPage() {
       </div>
 
       {/* Chatter (log + composer) */}
-      <MobileChatter messages={chatterMsgs} onSend={sendMessage} title="💬 المحادثة" />
+      <div data-tour="transfers-detail-chatter"><MobileChatter messages={chatterMsgs} onSend={sendMessage} title="💬 المحادثة" /></div>
 
       {/* Actions */}
       {available.length > 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="transfers-detail-actions">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">الإجراءات</h2>
           <div className="grid grid-cols-2 gap-2">
             {available.map(k => (

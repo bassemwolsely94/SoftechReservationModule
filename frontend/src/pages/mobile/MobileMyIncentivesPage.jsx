@@ -35,7 +35,7 @@ export default function MobileMyIncentivesPage() {
       </div>
 
       {/* Totals */}
-      <div className="grid grid-cols-2 gap-3">
+      <div data-tour="incentives-mine-totals" className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-2xl border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-brand-700">{money(earned)}</div>
           <div className="text-[11px] text-gray-400 mt-0.5">المكتسب حتى الآن (ج.م)</div>
@@ -53,7 +53,7 @@ export default function MobileMyIncentivesPage() {
           {programs.map((p, i) => {
             const pct = p.projected_total ? Math.min(100, Math.round((p.earned_to_date / p.projected_total) * 100)) : 0
             return (
-              <div key={p.id || i} className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div key={p.id || i} data-tour="incentives-mine-program" className="bg-white rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="font-semibold text-sm text-gray-800">{p.name}</span>
                   <span className="text-sm font-bold text-brand-700">{money(p.earned_to_date)} ج.م</span>

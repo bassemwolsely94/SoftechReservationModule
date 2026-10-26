@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { customersApi } from '../api/client'
 import { EmptyState, SkeletonTable, PageHeader } from '../components/ui'
+import { fa } from '../utils/flowArrow'
 
 const TYPE_COLOR = {
   blue:  'bg-blue-100 text-blue-700',
@@ -124,6 +125,7 @@ export default function CustomersPage() {
 
           {(debouncedSearch || churnFilter) && (
             <button
+              data-tour="customers-list-clear"
               onClick={() => { setSearch(''); setDebouncedSearch(''); setChurnFilter(''); setPage(1) }}
               className="btn-ghost text-xs"
             >
@@ -174,6 +176,7 @@ export default function CustomersPage() {
                     {customers.map(c => (
                       <tr
                         key={c.id}
+                        data-tour="customers-list-row"
                         onClick={() => navigate(`/customers/${c.id}`)}
                         className={`cursor-pointer ${
                           c.churn_segment === 'critical' ? 'bg-red-50 hover:bg-red-100' :
@@ -326,7 +329,7 @@ export default function CustomersPage() {
                   onClick={() => setPage(p => p + 1)}
                   className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
                 >
-                  التالي →
+                  التالي {fa()}
                 </button>
               </div>
             </div>

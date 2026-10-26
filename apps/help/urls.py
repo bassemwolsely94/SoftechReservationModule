@@ -17,6 +17,7 @@ urlpatterns = [
     path('modules/<str:key>/', views.module_detail, name='help-module'),
     path('screens/<str:key>/', views.screen_detail, name='help-screen'),
     path('screens/<str:key>/revisions/', views.screen_revisions, name='help-screen-revisions'),
+    path('journeys/<str:jid>/', views.journey_detail, name='help-journey'),
     path('onboarding/', ob.my_path, name='help-onboarding'),
     path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
     path('onboarding/team/', ob.team, name='help-onboarding-team'),

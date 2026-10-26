@@ -110,7 +110,7 @@ export default function MobileNewDemandPage() {
           <input className="input-field flex-1 text-sm" placeholder="أو اكتب اسم صنف غير مكوَّد..."
             value={manualName} onChange={e => setManualName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addManual() }} />
-          <button onClick={addManual} disabled={!manualName.trim()}
+          <button onClick={addManual} disabled={!manualName.trim()} data-tour="demand-mobile-new-manual"
             className="btn-secondary text-sm px-4 disabled:opacity-50">إضافة</button>
         </div>
 

@@ -95,7 +95,8 @@ def latest_offers(*, days=OFFER_DAYS, item_ids=None, now=None) -> dict:
     from django.utils import timezone
     from .models import AvailabilityLine
     since = (now or timezone.now()) - timedelta(days=days)
-    qs = (AvailabilityLine.objects.filter(batch__created_at__gte=since, item__isnull=False)
+    qs = (AvailabilityLine.objects.filter(batch__created_at__gte=since, item__isnull=False,
+                                          duplicate_of__isnull=True)
           .select_related('batch', 'batch__supplier', 'item').order_by('batch__created_at', 'id'))
     if item_ids is not None:
         qs = qs.filter(item_id__in=list(item_ids))
@@ -500,6 +501,7 @@ def to_excel(board) -> bytes:
     import io
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
+    from apps.catalog import item_columns as IC
     navy, white = '022871', 'FFFFFF'
     hfont, hfill = Font(name='Arial', bold=True, color=white), PatternFill('solid', fgColor=navy)
     good = PatternFill('solid', fgColor='D9F2E3')
@@ -512,7 +514,8 @@ def to_excel(board) -> bytes:
     ws.append([f'مقارنة عروض الموردين — آخر {board["days"]} يوم · الأفضل = أرخص بأكثر من '
                f'{board["better_pct"]:g}% أو ببونص · التكلفة محسوبة كخصم من سعر الجمهور الحالي'])
     ws['A1'].font = Font(name='Arial', size=12, bold=True, color=navy)
-    heads = ['كود', 'الصنف', 'سعر الجمهور', 'معدل البيع الشهري', 'الرصيد', 'بالطريق', 'الاحتياج',
+    items = IC.load_items(codes=[r['item_code'] for r in board['rows']])
+    heads = ['كود', 'الصنف', *IC.ITEM_HEADS, 'معدل البيع الشهري', 'الرصيد', 'بالطريق', 'الاحتياج',
              'القرار', 'اشترِ من', 'خصم فعلي %', 'الكميات المقترحة'] + \
             [f"{s['name']} ({s['tier_label']})" for s in sups] + ['المخازن', 'اشترينا سابقاً بخصم أفضل من', 'إشارات']
     ws.append(heads)
@@ -525,7 +528,7 @@ def to_excel(board) -> bytes:
         best = r['best'] or {}
         alloc = ' + '.join(f"{a['supplier_name']}: {a['qty']:g}" for a in r['allocation'])
         el = r['bought_elsewhere']
-        row = [r['item_code'], r['item_name'], r['public_price'], r['monthly_rate'], r['stock'], r['in_transit'],
+        row = [r['item_code'], r['item_name'], *IC.item_cells(items.get(r['item_code'])), r['monthly_rate'], r['stock'], r['in_transit'],
                r['need'], STATE_LABELS[r['state']], best.get('supplier_name', ''), best.get('discount_pct'), alloc] + \
               [cell_text(by[s['key']]) if s['key'] in by else '' for s in sups] + \
               [' | '.join(f"{c['supplier_name']}: {cell_text(c)}" for c in wh),
@@ -538,11 +541,16 @@ def to_excel(board) -> bytes:
             c.alignment = Alignment(vertical='top', wrap_text=True)
         for j, s in enumerate(sups):
             if s['key'] in by and by[s['key']].get('verdict') == 'best':
-                ws.cell(rr, 12 + j).fill = good
-    widths = [9, 38, 10, 10, 8, 8, 9, 11, 18, 10, 24] + [30] * len(sups) + [34, 26, 22]
+                ws.cell(rr, 11 + IC.N + j).fill = good
+    widths = [9, 38, *IC.ITEM_WIDTHS, 10, 8, 8, 9, 11, 18, 10, 24] + [30] * len(sups) + [34, 26, 22]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(2, i).column_letter].width = w
     ws.freeze_panes = 'C3'
+    IC.style_columns(ws, 3, header_row=2)
+    notes = wb.create_sheet('الشرح')
+    notes.sheet_view.rightToLeft = True
+    notes.column_dimensions['A'].width = 120
+    notes.cell(1, 1, IC.ITEM_NOTE).font = Font(name='Arial', size=11)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

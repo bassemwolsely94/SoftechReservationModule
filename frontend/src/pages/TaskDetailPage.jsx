@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { fa } from '../utils/flowArrow'
 
 // ── Constants (shared with TasksPage) ─────────────────────────────────────────
 
@@ -396,7 +397,7 @@ function AuditLogPanel({ logs }) {
                   <span className="font-medium">{log.actor_name}</span>
                   {' '}{AUDIT_ACTION_LABELS[log.action] || log.action}
                   {log.old_value && log.new_value && (
-                    <> · <span className="text-gray-400 line-through">{log.old_value}</span> → <span className="text-brand-600">{log.new_value}</span></>
+                    <> · <span className="text-gray-400 line-through">{log.old_value}</span> {fa()} <span className="text-brand-600">{log.new_value}</span></>
                   )}
                 </p>
                 <p className="text-xs text-gray-400">{fmtTime(log.created_at)}</p>
@@ -534,7 +535,7 @@ export default function TaskDetailPage() {
           <div className="flex-1" />
           {/* Actions */}
           {!isDone && (
-            <button
+            <button data-tour="tasks-detail-complete"
               onClick={() => setShowComplete(true)}
               className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
             >
@@ -542,7 +543,7 @@ export default function TaskDetailPage() {
             </button>
           )}
           {isDone && (
-            <button
+            <button data-tour="tasks-detail-reopen"
               onClick={reopenTask}
               className="px-4 py-1.5 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
             >
@@ -550,7 +551,7 @@ export default function TaskDetailPage() {
             </button>
           )}
           {!editMode ? (
-            <button
+            <button data-tour="tasks-detail-edit"
               onClick={startEdit}
               className="px-4 py-1.5 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
             >
@@ -558,7 +559,7 @@ export default function TaskDetailPage() {
             </button>
           ) : (
             <>
-              <button
+              <button data-tour="tasks-detail-save"
                 onClick={saveEdit}
                 disabled={saving}
                 className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
@@ -618,31 +619,39 @@ export default function TaskDetailPage() {
           </div>
 
           {/* Checklist */}
+          <div data-tour="tasks-detail-checklist">
           <Section title="قائمة الأعمال" icon="✅">
             <Checklist taskId={id} items={task.items || []} onRefresh={loadTask} />
           </Section>
+          </div>
 
           {/* Chatter */}
+          <div data-tour="tasks-detail-chatter">
           <Section title="التعليقات والنشاط" icon="💬">
             <Chatter taskId={id} messages={task.messages || []} onRefresh={loadTask} />
           </Section>
+          </div>
 
           {/* Attachments */}
+          <div data-tour="tasks-detail-attachments">
           <Section title="المرفقات" icon="📎" defaultOpen={false}>
             <Attachments taskId={id} attachments={task.attachments || []} onRefresh={loadTask} />
           </Section>
+          </div>
 
           {/* Audit log */}
+          <div data-tour="tasks-detail-audit">
           <Section title="سجل الأحداث" icon="📜" defaultOpen={false}>
             <AuditLogPanel logs={task.audit_logs || []} />
           </Section>
+          </div>
         </div>
 
         {/* ── Right column: metadata ── */}
         <div className="space-y-4">
 
           {/* Details card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          <div data-tour="tasks-detail-info" className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
             <h3 className="font-semibold text-gray-700 text-sm text-right border-b pb-2">تفاصيل المهمة</h3>
 
             {editMode ? (
@@ -707,6 +716,7 @@ export default function TaskDetailPage() {
           </div>
 
           {/* Assignments */}
+          <div data-tour="tasks-detail-team">
           <Section title="الفريق" icon="👥">
             <AssignmentsPanel
               taskId={id}
@@ -715,6 +725,7 @@ export default function TaskDetailPage() {
               onRefresh={loadTask}
             />
           </Section>
+          </div>
 
           {/* Related link */}
           {task.related_model && task.related_id && (
@@ -746,7 +757,7 @@ export default function TaskDetailPage() {
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowComplete(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg">إلغاء</button>
-              <button
+              <button data-tour="tasks-detail-complete-confirm"
                 onClick={completeTask}
                 disabled={completing}
                 className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"

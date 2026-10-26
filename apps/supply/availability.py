@@ -20,7 +20,7 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 
-from .ingest import resolve_line, review_flags, teach_alias
+from .ingest import teach_alias
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Supplier-message parser — an ORDERED, deterministic pipeline (hardened in Phase 7
@@ -35,18 +35,10 @@ from .ingest import resolve_line, review_flags, teach_alias
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Arabic-Indic + Eastern-Arabic (Persian) digits → Latin.
-_AR_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')
 _NUM = r'\d+(?:[.,]\d+)?'
 
-# "[20/09/2026, 10:15] Name: …" · "20/09/2026, 10:15 - Name: …" · "[20/9/2026 10:17 ص] Name: …"
-# · "9/20/26, 10:15 PM - Name: …" · WhatsApp Desktop copy, time first: "[12:44 pm, 07/10/2026] Name: …".
-# Group `sender` is the chat participant (supplier hint).
-_WA_TIME = r'\d{1,2}:\d{2}(?::\d{2})?\s*(?:[AaPp]\.?\s?[Mm]\.?|ص|م)?'
-_WA_DATE = r'\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}'
-_WA_TS = (r'^\s*\[?\s*(?:' + _WA_DATE + r',?\s+' + _WA_TIME + r'|' + _WA_TIME + r',?\s+' + _WA_DATE + r')'
-          r'\s*\]?\s*(?:[-–—]\s*)?')
-_WA_HEADER_RE = re.compile(_WA_TS + r'(?P<sender>[^:\n]{1,60}):\s*')
-_WA_SYSTEM_RE = re.compile(_WA_TS + r'[^:]*$')          # timestamp but no "Name:" → system line
+# WhatsApp headers ("[20/09/2026, 10:15] Name: …", Android "… - Name:", Desktop time-first …)
+# are read by apps/supply/line_matching.header — ONE reader for this screen and «طلبات واتساب».
 
 _NOISE_RE = re.compile(
     r'<\s*media omitted\s*>|<\s*تم استبعاد الوسائط\s*>|(?:image|video|audio|sticker|document) omitted|'
@@ -151,7 +143,8 @@ def line_terms(line) -> dict:
 
 
 def _fold_digits(s: str) -> str:
-    return (s or '').translate(_AR_DIGITS).replace('٪', '%')
+    from .line_matching import fold                     # one folding for both screens
+    return fold(s)
 
 
 def _to_float(s):
@@ -165,9 +158,13 @@ def clean_line(raw: str):
     text = _fold_digits(str(raw or '')).strip()
     if not text:
         return None
-    if _WA_SYSTEM_RE.match(text) and not _WA_HEADER_RE.match(text):
-        return None
-    text = _WA_HEADER_RE.sub('', text, count=1)
+    from .line_matching import header                   # one header reader for both screens
+    h = header(text, sender_rule='first')
+    if h is not None:
+        if h['sender']:
+            text = h['body']                               # «[time] Name: item» → «item»
+        elif ':' not in h['body']:
+            return None                                    # timestamp, no «Name:» → system line
     text = _EMOJI_RE.sub(' ', text)
     text = _BULLET_RE.sub('', text)
     text = _NUMBERING_RE.sub('', text).strip()
@@ -202,11 +199,12 @@ def detect_sender(raw_content: str) -> str:
     """The most frequent WhatsApp sender in a pasted chat — a supplier hint when the
     operator didn't type one (§2: make the WhatsApp path fast)."""
     from collections import Counter
+    from .line_matching import header
     senders = Counter()
     for ln in str(raw_content or '').splitlines():
-        m = _WA_HEADER_RE.match(_fold_digits(ln))
-        if m:
-            senders[m.group('sender').strip()] += 1
+        h = header(ln, sender_rule='first')
+        if h and h['sender']:
+            senders[h['sender']] += 1
     return senders.most_common(1)[0][0] if senders else ''
 
 
@@ -526,22 +524,23 @@ def _new_line(batch, raw_text, source, terms, **kw):
 
 def _resolve_into(line, name, vendor_code):
     """Match one product name and record provenance on an (unsaved) line."""
-    resolved = resolve_line(name, vendor_code=vendor_code)
+    from .line_matching import SUPPLIER, match_text     # one core for both screens (doc 31)
+    r = match_text(name, source=SUPPLIER, vendor_code=vendor_code)
     # The machine's ORIGINAL suggestion is preserved here even if an operator later corrects
     # the item — that is what makes match accuracy / correction rate measurable (KPIs).
-    # Match-safety guard: a fuzzy match with a strength / form / name conflict, or a close
-    # rival product, is held for human review however high its score (§5). Human-confirmed
-    # aliases and explicit picks are trusted as-is.
-    flags = []
-    if resolved.item is not None and not resolved.picked and not resolved.learned:
-        flags = review_flags(name, resolved.item.name,
-                             runner_up_name=resolved.runner_up_name,
-                             score=resolved.score, runner_up_score=resolved.runner_up_score)
-    line.match_reason.update({'name_part': name, 'suggested_item_id': resolved.item_id,
-                              'suggested_score': resolved.score, 'learned': resolved.learned,
-                              'review_flags': flags})
-    if resolved.item is not None:
-        line.item, line.match_score, line.is_unmatched = resolved.item, resolved.score, False
+    # Match-safety guard, STRICT (owner 2026-10-25): every reason either engine has — a
+    # strength / form / word / name conflict, a close rival, several versions that fit, the
+    # two engines disagreeing — holds the line for a person however high its score.
+    # Human-confirmed aliases and explicit picks are trusted as-is.
+    flags = [f for f in r['flags'] if f != 'no_match']   # «unmatched» already says it
+    line.match_reason.update({'name_part': name, 'suggested_item_id': r['suggested_item_id'],
+                              'suggested_score': r['score'], 'learned': r['learned'],
+                              'review_flags': flags, 'engines': r['engines'],
+                              # the product's versions with network sales — for the review panel
+                              'versions': [{k: c.get(k) for k in ('id', 'code', 'name', 'score', 'network_rate')}
+                                           for c in r['candidates'] if c.get('variant')][:12]})
+    if r['item'] is not None:
+        line.item, line.match_score, line.is_unmatched = r['item'], r['score'], False
     else:
         line.is_unmatched = True
     return line
@@ -885,7 +884,10 @@ def analyze_rows(batch, line_ids) -> list:
 # code 95, else the matcher's score; each safety flag costs points (a different strength is
 # the most dangerous); past approvals of this same spelling → this item add confidence.
 TRUST_PENALTY = {'strength_mismatch': 30, 'head_mismatch': 25, 'form_mismatch': 20,
-                 'ambiguous': 10, 'vendor_code_conflict': 40, 'family': 15}
+                 'ambiguous': 10, 'vendor_code_conflict': 40, 'family': 15,
+                 # strict flags from the shared core (line_matching, 2026-10-25)
+                 'word_mismatch': 25, 'engines_disagree': 20, 'choose_variant': 15,
+                 'pack_not_found': 10, 'low_score': 10}
 
 
 def trust_score(ln, approvals: int = 0, carried: bool = False) -> int:
@@ -957,7 +959,7 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
     from .ingest import AUTO_MATCH_SINGLE
     from .models import SupplyCase
 
-    qs = batch.lines.select_related('item').order_by('id')
+    qs = batch.lines.filter(duplicate_of__isnull=True).select_related('item').order_by('id')
     if line_ids is not None:
         qs = qs.filter(pk__in=list(line_ids))
     lines = list(qs)
@@ -1014,7 +1016,9 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
                # this supplier is the item's main supplier in SOFTECH (itemssuppliers)
                'main_supplier': bool(ln.item_id and vendor_code and
                                      (ln.item.supplier_code or '').strip() == vendor_code.strip()),
-               'locked': batch.is_locked}
+               'locked': batch.is_locked,
+               # rows of the same item merged into this one when the list was locked
+               'merged': (ln.match_reason or {}).get('merged') or []}
         conflict = (ln.match_reason or {}).get('vendor_code_conflict')
         if conflict:
             row['flags'].append('vendor_code_conflict')
@@ -1074,6 +1078,55 @@ def analyze_batch(batch, line_ids=None, branch_ids=None) -> dict:
     return {'batch_id': batch.id, 'lines': rows, 'scope': scope,
             'locked': batch.is_locked,
             'summary': {'total': len(rows), **dict(summary)}}
+
+
+# ── Finalizing: one row per item ────────────────────────────────────────────────
+
+def _terms_weight(ln) -> int:
+    """How much supplier economics a row carries — the richer row is the one kept."""
+    return sum(1 for v in (ln.supplier_qty, ln.price, ln.discount_pct, ln.foc_qty, ln.quota,
+                           ln.expiry, ln.supplier_item_code, ln.promo) if v not in (None, ''))
+
+
+def collapse_duplicates(batch) -> list:
+    """When a list is locked, rows matched to the SAME item become one (owner 2026-10-12): an
+    item must never be sent to the supplier twice. The row kept: confirmed first, then the
+    one with more supplier terms, then the earliest. The others point to it (duplicate_of) —
+    nothing is deleted, unlocking restores them. Returns what was merged (for the audit)."""
+    from collections import defaultdict
+    from django.db import transaction
+    from .models import AvailabilityLine
+    groups = defaultdict(list)
+    for ln in (batch.lines.filter(item__isnull=False, duplicate_of__isnull=True)
+               .select_related('item').order_by('id')):
+        groups[ln.item_id].append(ln)
+    out = []
+    with transaction.atomic():
+        for iid, lns in groups.items():
+            if len(lns) < 2:
+                continue
+            keep = sorted(lns, key=lambda l: (not l.is_confirmed, -_terms_weight(l), l.id))[0]
+            dups = [l for l in lns if l is not keep]
+            AvailabilityLine.objects.filter(pk__in=[d.pk for d in dups]).update(duplicate_of=keep)
+            merged = [{'line_id': d.pk, 'raw_text': d.raw_text} for d in dups]
+            keep.match_reason = {**(keep.match_reason or {}), 'merged': merged}
+            keep.save(update_fields=['match_reason'])
+            out.append({'item_id': iid, 'item': keep.item.name, 'kept': keep.pk,
+                        'kept_raw': keep.raw_text, 'removed': merged})
+    return out
+
+
+def restore_duplicates(batch) -> int:
+    """Unlocking brings the merged rows back (they can be matched / edited again)."""
+    from django.db import transaction
+    from .models import AvailabilityLine
+    with transaction.atomic():
+        n = batch.lines.filter(duplicate_of__isnull=False).update(duplicate_of=None)
+        for ln in batch.lines.filter(match_reason__has_key='merged'):
+            mr = dict(ln.match_reason)
+            mr.pop('merged', None)
+            AvailabilityLine.objects.filter(pk=ln.pk).update(match_reason=mr)
+    return n
 
 
 def carried_or_offered(vendor_code: str, item_ids, *, exclude_batch=None) -> set:

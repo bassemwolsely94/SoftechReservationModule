@@ -14,6 +14,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 // ── Number formatter: English digits + comma separators ──────────────────────
 const fmt = (n, d = 0) =>
@@ -573,7 +574,7 @@ export default function ExpenseAnalyticsPage() {
               onClick={() => setPage(p => p + 1)}
               className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
             >
-              التالي →
+              التالي {fa()}
             </button>
           </div>
         </Card>

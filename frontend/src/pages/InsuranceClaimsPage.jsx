@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import { wildcardMatch } from '../utils/wildcard'
+import { fa } from '../utils/flowArrow'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
@@ -238,7 +239,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                   {importLog.map((r, i) => (
                     <div key={i} className={r.status === 'error' ? 'text-red-600' : 'text-green-700'}>
                       {r.status === 'imported'
-                        ? `✓ مطالبة ${r.motalbano} → ${r.claim_number} (${r.rx_count} روشتة)`
+                        ? `✓ مطالبة ${r.motalbano} ${fa()} ${r.claim_number} (${r.rx_count} روشتة)`
                         : r.status === 'already_imported'
                         ? `— مطالبة ${r.motalbano} مستوردة مسبقاً`
                         : `✗ مطالبة ${r.motalbano}: ${r.error}`}
@@ -309,7 +310,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                           {r.subclient_name || <span className="text-amber-600">غير مُعدّ</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
-                          {r.motfromdate} → {r.mottodate}
+                          {r.motfromdate} {fa()} {r.mottodate}
                         </td>
                         <td className="px-3 py-2 text-center">{r.rxcount}</td>
                         <td className="px-3 py-2 text-left font-mono text-gray-700 text-xs">
@@ -444,7 +445,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
                       }`}>
                       <div>
                         <span className="font-mono font-bold text-blue-700 ml-2">#{m.motalbano}</span>
-                        <span className="text-gray-500">{m.motfromdate} → {m.mottodate}</span>
+                        <span className="text-gray-500">{m.motfromdate} {fa()} {m.mottodate}</span>
                       </div>
                       <div>
                         <span className="text-gray-500 ml-2">{m.rxcount} روشتة</span>

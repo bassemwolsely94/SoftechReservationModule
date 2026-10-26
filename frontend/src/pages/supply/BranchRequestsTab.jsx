@@ -15,11 +15,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, fmtDate } from './supplyUi'
+import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, fmtDate, SortTh, useSort } from './supplyUi'
 import { PlanView, PlanSettings, DEFAULT_SETTINGS, settingsBody, planBody, settingsChanged } from './IsrFulfilmentTab'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import ProgressBar from '../../components/ProgressBar'
+import { fa } from '../../utils/flowArrow'
 
 const FLAG = {
   choose_variant:     ['اختر النوع / الحجم', 'amber'],
@@ -35,6 +36,11 @@ const FLAG = {
   pack_not_found:     ['حجم العبوة غير موجود', 'amber'],
   learned_group:      ['من الذاكرة · عدة أصناف', 'teal'],
   learned_fuzzy:      ['من الذاكرة · تهجئة قريبة', 'teal'],
+  // the supplier-list engine's reasons, now on this screen too (shared core, strict flags)
+  form_mismatch:      ['الشكل مختلف', 'rose'],
+  ambiguous:          ['منتج آخر قريب', 'amber'],
+  word_mismatch:      ['النوع مختلف', 'rose'],
+  engines_disagree:   ['المحركان مختلفان', 'rose'],
 }
 const NOTE = { phone: 'هاتف', name: 'اسم عميل', ref: 'مرجع', remark: 'ملاحظة' }
 const STATUS_TONE = { draft: 'amber', confirmed: 'emerald', cancelled: 'gray' }
@@ -58,6 +64,11 @@ export default function BranchRequestsTab() {
 
 function RequestList({ list, loading, selected, onSelect }) {
   const [open, setOpen] = useState(true)
+  const grid = useSort(list, {
+    id: r => r.id, branch: r => r.branch, group: r => r.group_name, status: r => r.status_label,
+    items: r => r.items, confirmed: r => r.confirmed, review: r => r.need_review, by: r => r.created_by,
+    at: r => r.created_at,
+  })
   return (
     <div className="rounded-lg border border-line">
       <div className="flex items-center gap-2 px-3 py-2 bg-surface-2">
@@ -73,11 +84,12 @@ function RequestList({ list, loading, selected, onSelect }) {
           {list.length > 0 && (
             <table className="w-full text-sm">
               <thead className="text-xs text-content/60 sticky top-0 bg-surface">
-                <tr>{['#', 'الفرع', 'المجموعة', 'الحالة', 'أصناف', 'مؤكَّد', 'للمراجعة', 'بواسطة', 'التاريخ'].map(h =>
-                  <th key={h} className="px-2 py-1.5 font-medium text-center">{h}</th>)}</tr>
+                <tr>{[['id', '#'], ['branch', 'الفرع'], ['group', 'المجموعة'], ['status', 'الحالة'], ['items', 'أصناف'],
+                  ['confirmed', 'مؤكَّد'], ['review', 'للمراجعة'], ['by', 'بواسطة'], ['at', 'التاريخ']].map(([k, h]) =>
+                  <SortTh key={k} k={k} {...grid} className="px-2 py-1.5 font-medium text-center">{h}</SortTh>)}</tr>
               </thead>
               <tbody>
-                {list.map(r => (
+                {grid.sorted.map(r => (
                   <tr key={r.id} onClick={() => onSelect(r.id)}
                     className={`border-t border-line text-center cursor-pointer hover:bg-surface-2 ${selected === r.id ? 'bg-primary/5' : ''}`}>
                     <td className="px-2 py-1 font-mono">WA-{r.id}</td>
@@ -133,7 +145,7 @@ function NewRequest({ branches, canWrite, onCreated }) {
           placeholder={'في واتساب على الكمبيوتر: حدِّد الرسائل (⋮ ← تحديد الرسائل) ثم نسخ، والصقها هنا.\nأو الصق نص الرسائل مباشرة — سطر لكل صنف.'} />
       </label>
       <div className="flex items-center gap-3">
-        <button onClick={() => createM.mutate()} disabled={!branch || !text.trim() || createM.isPending} className={btnPrimary}>
+        <button data-tour="purchasing-supply-wa-extract" onClick={() => createM.mutate()} disabled={!branch || !text.trim() || createM.isPending} className={btnPrimary}>
           {createM.isPending ? 'جاري الاستخراج والمطابقة…' : 'استخراج الأصناف'}
         </button>
         {createM.isError && <span className="text-sm text-rose-700">{errOf(createM.error)}</span>}
@@ -232,7 +244,7 @@ function Review({ id }) {
               onChange={e => { const f = e.target.files?.[0]; if (f) ocrM.mutate(f); e.target.value = '' }} />
             <button className={btnGhost} onClick={() => safeM.mutate()} disabled={safeM.isPending}
               title="يؤكّد كل سطر مطابق بلا تنبيهات وبنسبة تطابق جيدة">تأكيد الآمنة</button>
-            <button className={btnPrimary} onClick={() => confirmM.mutate()}
+            <button data-tour="purchasing-supply-wa-create-list" className={btnPrimary} onClick={() => confirmM.mutate()}
               disabled={confirmM.isPending || items.length === pending.length}
               title="ينشئ قائمة نواقص الفرع من الأسطر المؤكَّدة ويُعلِّم المطابِق">
               {confirmM.isPending ? '…' : `إنشاء قائمة النواقص (${items.length - pending.length})`}
@@ -341,13 +353,13 @@ function TransfersBar({ id, plan, setPlan, disabled }) {
           {t.legs.map(l => (
             <Chip key={l.id} tone={LEG_TONE[l.status] || 'gray'}
               title={l.isrdocnumber ? `SOFTECH ISR ${l.isrdocnumber}` : ''}>
-              {l.kind === 'branch_to_hq' ? `${bl(t.donor)} ⟶ ${bl('100')}` : `${bl('100')} ⟶ ${bl(r.branch)}`} · {q(l.qty)} · #{l.id} {l.status_label}
+              {l.kind === 'branch_to_hq' ? `${bl(t.donor)} ${fa()} ${bl('100')}` : `${bl('100')} ${fa()} ${bl(r.branch)}`} · {q(l.qty)} · #{l.id} {l.status_label}
             </Chip>
           ))}
         </span>
       ))}
       {pending.length > 0 && plan.can_transfer && !disabled && (
-        <button onClick={() => createM.mutate()} disabled={createM.isPending} className={btnPrimary}
+        <button data-tour="purchasing-supply-wa-transfers" onClick={() => createM.mutate()} disabled={createM.isPending} className={btnPrimary}
           title="لكل فرع مانح: طلب توريد من الفرع إلى الرئيسي + طلب من الرئيسي إلى الفرع الطالب — من الأسطر المؤكَّدة فقط، بعد إعادة قراءة الأرصدة">
           {createM.isPending ? 'جاري الإنشاء…' : `إنشاء مقترحات التحويل (${q(pendingQty)} من ${pending.length} فرع)`}
         </button>
@@ -363,7 +375,7 @@ function TransfersBar({ id, plan, setPlan, disabled }) {
 
 function Line({ l, reqId, editable, busy, update, kb, openReq }) {
   const needsChoice = !l.item || (l.flags || []).some(f => ['choose_variant', 'low_score', 'head_mismatch',
-    'strength_mismatch', 'no_match'].includes(f))
+    'strength_mismatch', 'no_match', 'form_mismatch', 'ambiguous', 'word_mismatch', 'engines_disagree'].includes(f))
   const [open, setOpen] = useState(l.kind === 'item' && !l.confirmed && needsChoice)
   const [qtyDraft, setQtyDraft] = useState(String(l.qty))
   useEffect(() => setQtyDraft(String(l.qty)), [l.qty])
@@ -456,6 +468,10 @@ function Choices({ l, reqId, update, busy }) {
     onSuccess: setResults,
   })
   const list = results || l.candidates || []
+  const cgrid = useSort(list, {
+    code: c => c.code, name: c => c.name, stock: c => c.branch_stock, rate: c => c.network_rate,
+    price: c => c.pack_price, score: c => c.score,
+  })
   const variants = (l.candidates || []).filter(c => c.variant).length
   const pickIds = (l.picks || []).map(p => p.id)
   // ONE control: tick = add to this line, untick = remove. Several ticks = several items,
@@ -495,12 +511,14 @@ function Choices({ l, reqId, update, busy }) {
         <thead className="text-content/50">
           <tr>
             <th className="px-2 py-1 font-medium text-center" title="علِّم صنفاً أو أكثر — كل صنف بكمية السطر">اختيار</th>
-            {['الكود', 'الصنف', 'رصيد الفرع', 'مبيعات الشبكة/شهر', 'السعر', 'تطابق', ''].map((h, i) =>
-              <th key={i} className="px-2 py-1 font-medium text-center">{h}</th>)}
+            {[['code', 'الكود'], ['name', 'الصنف'], ['stock', 'رصيد الفرع'], ['rate', 'مبيعات الشبكة/شهر'],
+              ['price', 'السعر'], ['score', 'تطابق']].map(([k, h]) =>
+              <SortTh key={k} k={k} {...cgrid} className="px-2 py-1 font-medium text-center">{h}</SortTh>)}
+            <th className="px-2 py-1" />
           </tr>
         </thead>
         <tbody>
-          {list.map(c => {
+          {cgrid.sorted.map(c => {
             const picked = pickIds.includes(c.id)
             return (
               <tr key={c.id} onClick={() => !busy && togglePick(c.id)}

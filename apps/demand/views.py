@@ -36,6 +36,7 @@ from .serializers import (
 )
 from . import service
 from core.errors import public_error
+from core.permissions import deny_unless
 
 
 def _profile(request):
@@ -230,6 +231,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def fulfill(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'finalize')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = FulfillSerializer(data=request.data)
@@ -244,6 +248,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def lost(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'edit')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = LostSerializer(data=request.data)
@@ -258,6 +265,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'delete')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = TransitionSerializer(data=request.data)

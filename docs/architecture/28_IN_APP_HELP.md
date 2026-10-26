@@ -88,6 +88,36 @@ must not get wrong → add a quiz question.
 - Trainers edit the tour **text** in «تعديل الشرح» (field `tour`, merged by `target` like tabs — the
   steps and their buttons stay fixed by the code).
 
+### Rich steps + journeys (built 2026-10-26, batch 1 of 6 — design: `docs/superpowers/specs/2026-10-26-rich-tours-design.md`)
+
+- **Step format:** `{'target', 'text', 'label'?, 'when'?, 'warn'?, 'open_hint'?}` — the card shows the
+  button name («label», bold), what it does, «متى؟» (when / what happens next), an amber ⚠ box, and
+  `open_hint` when the element is not on screen (another tab, a record to open, a status). Limits per
+  language: label ≤ 40, others ≤ 160 (`registry.TOUR_LIMITS`).
+- **⚠ rule:** an anchor with a whole word from `registry.TOUR_WARN_WORDS` (push, post, approve, reject,
+  discount, send, cancel, delete, close, settle, writeback, softech, flush) must have a `warn`. Name
+  anchors after what the button does.
+- **Emphasis:** progress bar + `i / n`, a pulsing ring (amber on ⚠ steps; no pulse under
+  `prefers-reduced-motion`), card placed by its measured height, width `min(340, viewport − 24)`.
+- **Journeys** (`MODULE['journeys']`): `{'key', 'title', 'summary', 'shell': 'desktop'|'mobile',
+  'roles'?, 'steps': [{'screen', 'target', 'perm'?, …step text}]}`. Served in the module payload and in
+  the screen payload (`module.journeys`, role-filtered, each step with its shell's `routes` and a
+  param-free `route`). The runner keeps going across navigation; off-screen it offers «روح للشاشة» (only
+  a param-free route, only when `perm` view is allowed) or shows `open_hint`, and continues by itself on
+  arrival. It never clicks or saves. Started from «🧭 …» in the help panel footer or «▶ ابدأ الرحلة» on
+  the module page (/help). Tour events use `screen_key='journey:<module>.<key>'`; the usage report lists
+  them (`kind: 'journey'`).
+- **Trainer edits of journeys:** `GET/PUT/DELETE /api/help/journeys/<module>.<key>/` (help/edit),
+  stored in `HelpOverride` with key `journey:<id>` (no new table), revisions in `HelpRevision`; a step's
+  edit applies only while the same index still has the same target.
+- **Coverage tracking:** `registry.TOUR_PENDING` = modules not rewritten yet. For every other module the
+  tests require a tour on every screen, rich-step rules, and at least one journey. Done: `reservations`,
+  `pos` (batch 1); `demand`, `transfers`, `followups`, `delivery`, `stockcount`, `tasks` (batch 2,
+  2026-10-26 — 27 screens, 15 journeys); `customers`, `vouchers`, `loyalty`, `catalog`, `chronic`, `batches`
+  (batch 3, 2026-10-26 — 23 screens, 13 journeys); `shortage`, `replacement`, `callcenter`, `omni` (batch 4,
+  2026-10-26 — 19 screens, 11 journeys); `purchasing`, `invoices`, `pricing`, `analytics`, `incentives`
+  (batch 5, 2026-10-26 — 26 screens, 14 journeys). Remove a module from the set in the batch that finishes it.
+
 ## «اسأل النظام» (built 2026-10-10)
 
 - Type a question in the panel / help-center search box → «💬 اسأل النظام» (one click, never while
@@ -182,4 +212,4 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (only ~56 of 176 have one; the panel shows the button only where one exists).
+- Rich tours + journeys for the modules still in `registry.TOUR_PENDING` (batches 2–6, in side-menu order).

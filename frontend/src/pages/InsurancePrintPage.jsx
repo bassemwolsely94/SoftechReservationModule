@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 
@@ -171,7 +172,7 @@ export default function InsurancePrintPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">الفترة</span>
-                <span className="font-mono text-xs">{claimMeta.period_from} → {claimMeta.period_to}</span>
+                <span className="font-mono text-xs">{claimMeta.period_from} {fa()} {claimMeta.period_to}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">عدد الروشتات</span>
@@ -265,8 +266,8 @@ export default function InsurancePrintPage() {
                       </select>
                       <select value={sortDir} onChange={e => setSortDir(e.target.value)}
                         className="border border-gray-300 rounded px-2 py-1 text-xs">
-                        <option value="asc">تصاعدى (أ → ي)</option>
-                        <option value="desc">تنازلى (ي → أ)</option>
+                        <option value="asc">تصاعدى (أ {fa()} ي)</option>
+                        <option value="desc">تنازلى (ي {fa()} أ)</option>
                       </select>
                       <span className="text-[11px] text-blue-600">
                         {layout === 'flat_paged'

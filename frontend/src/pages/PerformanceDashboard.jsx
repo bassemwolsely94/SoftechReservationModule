@@ -157,16 +157,18 @@ export default function PerformanceDashboard() {
           <h1 className="text-2xl font-bold text-gray-800">لوحة الأداء</h1>
           <p className="text-sm text-gray-500 mt-0.5">أداء الموظفين — إيراد · ربح · خصم · كود المستخدم واسمه</p>
         </div>
-        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary">
+        <RefreshButton loading={isFetching} onClick={() => refetch()} variant="primary" data-tour="analytics-performance-refresh">
           تحديث
         </RefreshButton>
       </div>
 
+      <div data-tour="analytics-performance-filters">
       <AnalyticsFilterPanel
         filters={filters} onChange={setFilters} options={opts || {}}
         config={{ showDocCodes: true, showPersons: true, showChannels: true,
                   showMedicineTypes: true, showDaysOfWeek: true, showHours: true }}
       />
+      </div>
 
       {isLoading && <div className="flex justify-center h-40 items-center"><div className="text-brand-600 animate-pulse">جارٍ التحميل…</div></div>}
       {isError   && <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-center text-red-600">تعذّر تحميل بيانات الأداء</div>}
@@ -174,7 +176,7 @@ export default function PerformanceDashboard() {
       {data && (
         <>
           {/* Summary KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" data-tour="analytics-performance-kpis">
             <KpiCard label="إجمالي الإيرادات"   value={`${fmt(s.total_revenue)} جم`}    color="brand" icon="💰" />
             <KpiCard label="صافي الربح"          value={`${fmt(s.total_profit)} جم`}     color="green" icon="📈" sub={`هامش ${fmtPct(s.profit_margin_pct)}`} />
             <KpiCard label="إجمالي الخصومات"    value={`${fmt(s.total_discount)} جم`}   color="amber" icon="🏷️" />
@@ -188,7 +190,7 @@ export default function PerformanceDashboard() {
 
           {/* Podium — top 3 */}
           {empRows.length >= 3 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="analytics-performance-podium">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">المتصدرون</h2>
               <div className="flex justify-center items-end gap-4">
                 <div className="text-center">
@@ -221,7 +223,7 @@ export default function PerformanceDashboard() {
 
           {/* Tabs */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div className="flex border-b border-gray-100 overflow-x-auto" data-tour="analytics-performance-tabs">
               {TABS.map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px
@@ -231,7 +233,7 @@ export default function PerformanceDashboard() {
               ))}
             </div>
 
-            <div>
+            <div data-tour="analytics-performance-table">
 
               {activeTab === 'employees' && (
                 <DataTable

@@ -72,6 +72,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold text-gray-800">حملات واتساب</h2>
           <button
+            data-tour="omni-campaigns-new"
             onClick={onNew}
             className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
           >
@@ -89,7 +90,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
       </div>
 
       {/* Status tabs */}
-      <div className="flex overflow-x-auto border-b border-gray-200 bg-gray-50">
+      <div className="flex overflow-x-auto border-b border-gray-200 bg-gray-50" data-tour="omni-campaigns-status-tabs">
         {STATUS_TABS.map(t => (
           <button
             key={t.key}
@@ -116,6 +117,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
         {campaigns.map(c => (
           <button
             key={c.id}
+            data-tour="omni-campaigns-row"
             onClick={() => onSelect(c.id)}
             className={`w-full text-right px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
               selectedId === c.id ? 'bg-green-50 border-r-4 border-r-green-500' : ''
@@ -320,7 +322,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
       </div>
 
       {/* Message template */}
-      <div>
+      <div data-tour="omni-campaigns-message">
         <label className="block text-sm font-medium text-gray-700 mb-1">نص الرسالة *</label>
         <div className="flex flex-wrap gap-1 mb-2">
           {TEMPLATE_VARS.map(v => (
@@ -345,7 +347,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
       </div>
 
       {/* Target audience */}
-      <div className="space-y-4 border border-gray-200 rounded-xl p-4">
+      <div className="space-y-4 border border-gray-200 rounded-xl p-4" data-tour="omni-campaigns-audience">
         <h3 className="font-semibold text-gray-700 text-sm">🎯 الجمهور المستهدف</h3>
 
         {/* Segments */}
@@ -490,6 +492,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
         {campaign && (
           <button
             type="button"
+            data-tour="omni-campaigns-preview"
             onClick={handlePreview}
             disabled={previewLoading}
             className="w-full py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 disabled:opacity-50"
@@ -530,6 +533,7 @@ function CampaignForm({ campaign, onSave, onCancel }) {
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         <button
+          data-tour="omni-campaigns-save"
           onClick={() => saveMutation.mutate(buildPayload())}
           disabled={!form.name || !form.message_template || saveMutation.isPending}
           className="flex-1 py-2.5 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50"
@@ -565,6 +569,7 @@ function WorkflowBar({ campaign, onAction }) {
     <div className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
       {status === 'draft' && campaign.can_request_approval && (
         <button
+          data-tour="omni-campaigns-request-approval"
           onClick={() => onAction('request-approval')}
           className="px-4 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 font-medium"
         >
@@ -575,6 +580,7 @@ function WorkflowBar({ campaign, onAction }) {
       {status === 'pending_approval' && (
         <>
           <button
+            data-tour="omni-campaigns-approve"
             onClick={() => onAction('approve')}
             className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium"
           >
@@ -582,6 +588,7 @@ function WorkflowBar({ campaign, onAction }) {
           </button>
           {!showRejectBox ? (
             <button
+              data-tour="omni-campaigns-reject"
               onClick={() => setShowRejectBox(true)}
               className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 font-medium"
             >
@@ -614,7 +621,7 @@ function WorkflowBar({ campaign, onAction }) {
       )}
 
       {status === 'approved' && campaign.can_queue && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="omni-campaigns-send">
           <input
             type="datetime-local"
             value={scheduledAt}
@@ -632,6 +639,7 @@ function WorkflowBar({ campaign, onAction }) {
 
       {campaign.can_cancel && (
         <button
+          data-tour="omni-campaigns-cancel"
           onClick={() => onAction('cancel')}
           className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 font-medium mr-auto"
         >
@@ -712,6 +720,7 @@ function MessagesTab({ campaign }) {
                 </span>
                 {msg.whatsapp_url && (
                   <a
+                    data-tour="omni-campaigns-open-whatsapp"
                     href={msg.whatsapp_url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -807,6 +816,7 @@ function CampaignDetail({ campaignId, onClose }) {
           <div className="flex items-center gap-2 flex-shrink-0">
             {(campaign.status === 'draft' || campaign.status === 'rejected') && (
               <button
+                data-tour="omni-campaigns-edit"
                 onClick={() => setEditing(true)}
                 className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
               >
@@ -847,7 +857,7 @@ function CampaignDetail({ campaignId, onClose }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-gray-50">
+      <div className="flex border-b border-gray-200 bg-gray-50" data-tour="omni-campaigns-tabs">
         {[
           { key: 'overview', label: 'نظرة عامة' },
           { key: 'audience', label: 'الجمهور' },

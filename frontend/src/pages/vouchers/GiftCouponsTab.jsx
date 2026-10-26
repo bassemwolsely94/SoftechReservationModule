@@ -13,6 +13,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { couponsApi } from '../../api/client'
 import useHelpTab from '../../help/useHelpTab'
+import { fa } from '../../utils/flowArrow'
 
 const STAGE_LABEL = {
   stocked: 'في المخزن الرئيسي', issued: 'صُرف لعميل', at_branch: 'في فرع',
@@ -111,7 +112,7 @@ function SerialSearch() {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4">
+    <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="vouchers-main-coupon-serial">
       <div className="flex gap-2 items-center">
         <input value={q} onChange={e => setQ(e.target.value.toUpperCase())}
           onKeyDown={e => e.key === 'Enter' && search()} dir="ltr"
@@ -396,7 +397,7 @@ function BatchRow({ b, canManage, writerEnabled, onChanged }) {
         <span className="font-bold">#{b.id}</span>
         <span className="font-mono" dir="ltr">{b.serial_from}–{b.serial_to}</span>
         <span>{b.size} كوبون</span>
-        <span className="text-gray-500">صلاحية {b.expiry_from} → {b.expiry_to}</span>
+        <span className="text-gray-500">صلاحية {b.expiry_from} {fa()} {b.expiry_to}</span>
         <span className={`px-2 py-0.5 rounded text-xs ${BATCH_TONE[b.status] || ''}`}>{b.status_label}</span>
         <span className="text-gray-500">مستندات SOFTECH: نقاط {leg(b.points)} · استحقاق {leg(b.served)}</span>
         <span className="text-gray-400 text-xs">{b.created_by} · {b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : ''}</span>
@@ -406,15 +407,15 @@ function BatchRow({ b, canManage, writerEnabled, onChanged }) {
       )}
       {canManage && (
         <div className="flex flex-wrap gap-2 mt-2">
-          <Btn onClick={() => run('print', () => download(b.id, 'print'))} disabled={!!busy}>🖨️ ملف الطباعة</Btn>
+          <Btn data-tour="vouchers-main-coupon-print" onClick={() => run('print', () => download(b.id, 'print'))} disabled={!!busy}>🖨️ ملف الطباعة</Btn>
           <Btn onClick={() => run('dl', () => download(b.id, 'dataload'))} disabled={!!busy}>ملف DataLoad</Btn>
           {pending && (
-            <Btn onClick={() => run('probe', async () => setProbe((await couponsApi.probe(b.id)).data))} disabled={!!busy}>
+            <Btn data-tour="vouchers-main-coupon-probe" onClick={() => run('probe', async () => setProbe((await couponsApi.probe(b.id)).data))} disabled={!!busy}>
               {busy === 'probe' ? 'جارٍ التجربة…' : 'تجربة بدون حفظ'}
             </Btn>
           )}
           {pending && !confirming && (
-            <Btn variant="primary" onClick={() => setConfirming(true)} disabled={!!busy || !writerEnabled}
+            <Btn data-tour="vouchers-main-coupon-push" variant="primary" onClick={() => setConfirming(true)} disabled={!!busy || !writerEnabled}
               title={writerEnabled ? '' : 'الإدخال في SOFTECH مغلق من الإعدادات (INVOICE_WRITER_ENABLED)'}>
               إدخال في SOFTECH
             </Btn>
@@ -429,12 +430,12 @@ function BatchRow({ b, canManage, writerEnabled, onChanged }) {
                   <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} /> تجاوز التحذيرات
                 </label>
               )}
-              <Btn variant="danger" onClick={doPush} disabled={!!busy}>{busy === 'push' ? 'جارٍ الإدخال…' : 'تأكيد'}</Btn>
+              <Btn data-tour="vouchers-main-coupon-push-confirm" variant="danger" onClick={doPush} disabled={!!busy}>{busy === 'push' ? 'جارٍ الإدخال…' : 'تأكيد'}</Btn>
               <Btn onClick={() => setConfirming(false)} disabled={!!busy}>إلغاء</Btn>
             </span>
           )}
           {b.status === 'stocked' && (
-            <Btn onClick={() => run('verify', async () => setVerify((await couponsApi.verify(b.id)).data))} disabled={!!busy}>
+            <Btn data-tour="vouchers-main-coupon-verify" onClick={() => run('verify', async () => setVerify((await couponsApi.verify(b.id)).data))} disabled={!!busy}>
               {busy === 'verify' ? '…' : 'تحقق من SOFTECH'}
             </Btn>
           )}
@@ -480,7 +481,7 @@ function BatchesView({ overview, onChanged }) {
             onChange={e => setSize(Number(e.target.value))}
             className="w-24 border border-gray-300 rounded-lg px-2 py-1" />
           <span className="text-gray-500">كوبون (حد أقصى {overview.batch_size} لكل فاتورة)</span>
-          <Btn variant="primary" onClick={generate} disabled={busy}>{busy ? '…' : 'توليد السريالات'}</Btn>
+          <Btn data-tour="vouchers-main-coupon-generate" variant="primary" onClick={generate} disabled={busy}>{busy ? '…' : 'توليد السريالات'}</Btn>
           <span className="text-xs text-gray-400">التوليد لا يكتب شيئًا في SOFTECH.</span>
           {!overview.writer_enabled && (
             <span className="text-xs text-amber-700 w-full">
@@ -549,7 +550,7 @@ export default function GiftCouponsTab() {
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
         <span>آخر تحديث: {ov.last_sync_at ? new Date(ov.last_sync_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'} · آخر حركة {ov.latest_movement || '—'}</span>
-        {ov.can_manage && <Btn onClick={sync} disabled={syncing}>{syncing ? 'جارٍ التحديث…' : 'تحديث من SOFTECH'}</Btn>}
+        {ov.can_manage && <Btn data-tour="vouchers-main-coupon-sync" onClick={sync} disabled={syncing}>{syncing ? 'جارٍ التحديث…' : 'تحديث من SOFTECH'}</Btn>}
         {syncMsg && <span>{syncMsg}</span>}
       </div>
 

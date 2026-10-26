@@ -129,7 +129,7 @@ function SystemEvent({ ev, onTranscribe, transcribing }) {
         <span>{ev.summary}</span>
         <span className="text-gray-400">{fmtDt(ev.occurred_at)}</span>
         {isCall && ev.recording && onTranscribe && (
-          <button onClick={() => onTranscribe(ev)} disabled={transcribing === ev.id}
+          <button data-tour="omni-inbox-transcribe" onClick={() => onTranscribe(ev)} disabled={transcribing === ev.id}
                   className="text-purple-600 hover:text-purple-800 disabled:opacity-50"
                   title="تفريغ نصي بالذكاء الاصطناعي">
             {transcribing === ev.id ? '⏳' : '📝'}
@@ -208,7 +208,7 @@ function TimelinePane({ conv }) {
           </p>
         </div>
         {replyChannel && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium
+          <span data-tour="omni-inbox-window" className={`text-xs px-2 py-0.5 rounded-full font-medium
             ${windowOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
             {windowOpen ? `نافذة ${channelLabel} مفتوحة` : `نافذة ${channelLabel} مغلقة`}
           </span>
@@ -258,6 +258,7 @@ function TimelinePane({ conv }) {
                 className="flex-1 border border-gray-200 rounded-full px-4 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-400 focus:outline-none focus:border-indigo-400"
               />
               <button
+                data-tour="omni-inbox-send"
                 onClick={() => reply.mutate()}
                 disabled={!canReply || !text.trim() || reply.isPending}
                 className="w-9 h-9 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm disabled:opacity-40"
@@ -292,7 +293,7 @@ function AIAssistBar({ conv, onUseReply }) {
   const r = assist.data
   return (
     <div className="border-t border-purple-100 bg-purple-50/40" dir="rtl">
-      <button onClick={open ? () => setOpen(false) : run}
+      <button data-tour="omni-inbox-ai" onClick={open ? () => setOpen(false) : run}
               className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-purple-700 hover:bg-purple-50">
         <span className="font-medium">✨ مساعد الذكاء الاصطناعي</span>
         <span>{assist.isPending ? '⏳ يحلل...' : open ? '▲' : '▼'}</span>
@@ -367,6 +368,7 @@ function Customer360Panel({ conv, onUpdate }) {
       <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2" data-tour="omni-inbox-manage">
         <p className="text-xs font-bold text-gray-500">إدارة المحادثة</p>
         <select
+          data-tour="omni-inbox-status"
           value={conv.status}
           onChange={e => update.mutate({ status: e.target.value })}
           className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
@@ -382,7 +384,7 @@ function Customer360Panel({ conv, onUpdate }) {
 
       {/* Customer 360 */}
       {conv.customer ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
+        <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2" data-tour="omni-inbox-customer">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold text-gray-500">العميل 360</p>
             <Link to={`/customers/${conv.customer}`} className="text-xs text-indigo-600 underline">
@@ -470,6 +472,7 @@ export default function OmniInboxPage() {
               </button>
             ))}
             <button
+              data-tour="omni-inbox-mine"
               onClick={() => setMineOnly(v => !v)}
               className={`px-2 py-1 rounded-full mr-auto transition-colors
                 ${mineOnly ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>

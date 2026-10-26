@@ -146,7 +146,7 @@ function OverviewTab({ product }) {
       )}
 
       {/* Key attributes summary */}
-      <div className="bg-gray-50 rounded-xl p-4 space-y-1">
+      <div className="bg-gray-50 rounded-xl p-4 space-y-1" data-tour="catalog-product-facts">
         <h4 className="text-sm font-bold text-gray-700 mb-2">معلومات سريعة</h4>
         <InfoRow label="الاسم العلمي"     value={product.name_scientific} />
         <InfoRow label="المادة الفعالة"   value={product.active_ingredients} />
@@ -322,7 +322,7 @@ function AvailabilityTab({ productId }) {
   const overall  = data?.overall || 'unavailable'
 
   return (
-    <div>
+    <div data-tour="catalog-product-availability">
       <div className="flex items-center gap-3 mb-4">
         <span className="text-sm text-gray-500">التوافر العام:</span>
         <AvailBadge status={overall} size="lg" />
@@ -443,7 +443,7 @@ function SimilarTab({ productId }) {
   }
 
   return (
-    <div>
+    <div data-tour="catalog-product-similar">
       {groupLabel && (
         <p className="text-xs text-brand-600 bg-brand-50 rounded-lg px-3 py-1.5 mb-4 inline-block">
           التصنيف: {groupLabel}
@@ -519,7 +519,7 @@ function DemandTab({ productId }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="catalog-product-demand">
       {/* Open demands */}
       {demands.length > 0 && (
         <div>
@@ -734,7 +734,7 @@ export default function ProductDetailPage() {
                 <span className="font-mono">{product.softech_id}</span>
                 {product.barcode && <span className="font-mono">|  {product.barcode}</span>}
                 <span className="flex-1" />
-                <ShelfQrButton productId={product.id || id} productName={product.display_name_ar || product.name} />
+                <div data-tour="catalog-product-qr"><ShelfQrButton productId={product.id || id} productName={product.display_name_ar || product.name} /></div>
               </div>
 
               {/* Pricing */}
@@ -808,6 +808,7 @@ export default function ProductDetailPage() {
                 🔬 ملف الصنف الشامل
               </Link>
               <Link
+                data-tour="catalog-product-images"
                 to={`/products/${id}/admin`}
                 className="flex items-center justify-center gap-2 text-xs text-gray-400 hover:text-brand-500
                            border border-dashed border-gray-200 rounded-xl py-2 px-3 transition-colors"

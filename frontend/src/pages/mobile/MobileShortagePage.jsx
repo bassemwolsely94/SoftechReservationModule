@@ -31,7 +31,7 @@ function toLatin(s) {
 
 function ListCard({ l, onOpen }) {
   return (
-    <button onClick={onOpen}
+    <button data-tour="shortage-mobile-card" onClick={onOpen}
       className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="font-bold text-sm text-gray-900 line-clamp-1">{l.title || `نواقص ${l.branch_name || ''}`}</span>
@@ -69,7 +69,7 @@ export default function MobileShortagePage() {
   return (
     <div className="p-3 space-y-3">
       <div className="flex justify-end"><DataFreshnessBar compact domains={['stock']} /></div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div data-tour="shortage-mobile-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
         {FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -98,7 +98,7 @@ export default function MobileShortagePage() {
         </div>
       )}
 
-      <button onClick={() => navigate('/m/shortage/new')}
+      <button data-tour="shortage-mobile-new" onClick={() => navigate('/m/shortage/new')}
         className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
         title="قائمة نواقص جديدة">
         +

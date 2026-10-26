@@ -69,19 +69,22 @@ def _is_unreachable(exc):
 def compute(invoice: SupplierInvoice):
     """Return (computed_lines, header) where computed_lines aligns 1:1 with
     invoice.lines.all() (only lines with a matched item + qty>0 are written)."""
+    from . import grid as grid_mod
     computed = []
     lines = []
-    for line in invoice.lines.select_related('item').all():
+    all_lines = list(invoice.lines.select_related('item').all())
+    # PharmaOverseas-style vendors fold the distributor margin into the posted cost;
+    # RAMCO-style keep it display-only. Decided once per invoice (flag or auto-detect).
+    fold = grid_mod.invoice_folds_margin(invoice, all_lines)
+    for line in all_lines:
         if not line.item_id or float(line.quantity or 0) <= 0:
             continue
-        c = pricing.compute_line(
-            public_price=line.public_price, unit_price=line.unit_price,
-            qty=line.quantity, discount_pct=line.discount_pct,
-            extra_discount_pct=line.extra_discount_pct, vat_pct=line.vat_pct,
-        )
-        c['_line'] = line
-        computed.append(c)
-        lines.append(c)
+        # Corrected engine (pre-tax discount base) + FOC: a bonus line expands to a
+        # paid entry and a free entry (qty=bonus, cost 0) — written as two stktrans lines.
+        for entry in grid_mod.computed_entries(line, fold_margin=fold):
+            entry['_line'] = line
+            computed.append(entry)
+            lines.append(entry)
     header = pricing.compute_header(lines)
     return computed, header
 
@@ -120,6 +123,291 @@ def _docnumber2(invoice):
     0 when the supplier number is non-numeric (kept verbatim in our PG record)."""
     raw = ''.join(ch for ch in str(invoice.invoice_number or '') if ch.isdigit())
     return int(raw) if raw else 0
+
+
+def _our_invoice_signature(invoice):
+    """(total, {softech_id,…}, item_count, invoice_date) for duplicate matching.
+    total = the real posted grand total (tax + folded margin), else the OCR-declared."""
+    from . import grid as grid_mod
+    lines = list(invoice.lines.select_related('item').all())
+    codes = {str(l.item.softech_id).strip() for l in lines
+             if l.item_id and getattr(l.item, 'softech_id', None)}
+    count = len([l for l in lines if l.item_id and float(l.quantity or 0) > 0])
+    total = 0.0
+    try:
+        fold = grid_mod.invoice_folds_margin(invoice, lines)
+        total = float(grid_mod.tax_summary(lines, fold_margin=fold).get('total_final') or 0)
+    except Exception:
+        pass
+    total = total or float(invoice.declared_total or 0)
+    return total, codes, count, _parse_expiry(invoice.invoice_date) if isinstance(invoice.invoice_date, str) else invoice.invoice_date
+
+
+def _score_candidate(cand, our_total, our_codes, our_count, our_date, our_dn2):
+    """Score a SOFTECH stktransm header (+ its itemcodes) as a possible prior entry of
+    this invoice, 0..1, combining every available factor. Returns (score, factors)."""
+    import datetime as _dt
+    factors, score = [], 0.0
+    # supplier invoice number (strongest single signal)
+    cdn2 = str(cand.get('docnumber2') or '').strip()
+    cdn2_digits = ''.join(ch for ch in cdn2 if ch.isdigit())
+    our_digits = ''.join(ch for ch in str(our_dn2 or '') if ch.isdigit())
+    if our_digits and cdn2_digits:
+        if cdn2_digits == our_digits:
+            score += 0.40; factors.append('رقم الفاتورة مطابق تماماً')
+        elif our_digits in cdn2_digits or cdn2_digits in our_digits:
+            score += 0.22; factors.append('رقم الفاتورة شبه مطابق')
+    # total value
+    cval = float(cand.get('docvalue') or 0)
+    if our_total and cval:
+        diff = abs(cval - our_total) / our_total
+        if diff <= 0.005:
+            score += 0.26; factors.append(f'الإجمالي مطابق ({cval:.2f})')
+        elif diff <= 0.02:
+            score += 0.18; factors.append(f'الإجمالي قريب جداً ({cval:.2f})')
+        elif diff <= 0.05:
+            score += 0.08; factors.append(f'الإجمالي قريب ({cval:.2f})')
+    # item overlap + count (fetched into cand by the caller)
+    cand_codes = cand.get('_item_codes')
+    if cand_codes is not None and our_codes:
+        overlap = len(our_codes & set(cand_codes)) / max(1, len(our_codes))
+        if overlap >= 0.9:
+            score += 0.22; factors.append(f'الأصناف مطابقة ({int(overlap*100)}%)')
+        elif overlap >= 0.6:
+            score += 0.13; factors.append(f'معظم الأصناف مطابقة ({int(overlap*100)}%)')
+        elif overlap >= 0.3:
+            score += 0.05; factors.append(f'بعض الأصناف مطابقة ({int(overlap*100)}%)')
+        if our_count and len(cand_codes) and abs(len(cand_codes) - our_count) <= 1:
+            score += 0.06; factors.append('عدد الأصناف متقارب')
+    # date proximity (invoice date vs doc date; and the SOFTECH save date nearby)
+    def _d(v):
+        if isinstance(v, str):
+            try: return _dt.date.fromisoformat(v[:10])
+            except ValueError: return None
+        return v.date() if isinstance(v, _dt.datetime) else v
+    cdate = _d(cand.get('docdate'))
+    if our_date and cdate:
+        days = abs((cdate - our_date).days)
+        if days == 0:
+            score += 0.08; factors.append('نفس تاريخ الفاتورة')
+        elif days <= 3:
+            score += 0.05; factors.append(f'تاريخ قريب ({days} يوم)')
+        elif days <= 10:
+            score += 0.02
+    return min(1.0, round(score, 3)), factors
+
+
+def check_duplicates(invoice) -> dict:
+    """THOROUGH pre-save duplicate check surfaced on the post / «فحص التكرار» button:
+    has this supplier invoice already been entered — in OUR module (another
+    SupplierInvoice, same vendor + printed number) or in SOFTECH itself? Read-only.
+
+    Beyond the exact (cust_branch_code + doccode + docnumber2) match, it scans the
+    supplier's recent SOFTECH purchase headers in a date window and scores each by
+    MULTIPLE factors — supplier invoice number (exact/partial), grand total, item
+    overlap, item count, invoice-date and save-date proximity — so a re-entry is
+    caught even when the OCR'd invoice number differs. Returns {is_duplicate,
+    likely_duplicate, pg_duplicates, softech_match, candidates:[{score,factors,…}],
+    checked_softech, softech_error?}."""
+    from .models import SupplierInvoice
+    out = {'is_duplicate': False, 'likely_duplicate': False, 'pg_duplicates': [],
+           'softech_match': None, 'candidates': [], 'checked_softech': False}
+
+    # ── our module: another invoice, same vendor + printed invoice number ──
+    if invoice.vendor_id and (invoice.invoice_number or '').strip():
+        qs = (SupplierInvoice.objects
+              .filter(vendor_id=invoice.vendor_id, invoice_number=invoice.invoice_number)
+              .exclude(pk=invoice.pk)
+              .filter(status__in=['confirmed', 'queued', 'pushing', 'finalized'])
+              .order_by('-created_at'))
+        for d in qs[:5]:
+            out['pg_duplicates'].append({
+                'id': d.pk, 'status': d.status,
+                'softech_docnumber': int(d.softech_docnumber) if d.softech_docnumber else None,
+                'created_at': d.created_at.isoformat(),
+            })
+
+    dn2 = _docnumber2(invoice)
+    if invoice.doc_kind == 'purchase' and invoice.vendor and invoice.vendor.softech_personcode:
+        try:
+            host = branch_host(invoice)
+            if host:
+                from config.sybase import get_branch_connection
+                conn = get_branch_connection(host, invoice.branch.db_port or 5000,
+                                             invoice.branch.db_name or 'SOFTECHDB9',
+                                             charset=_write_charset())
+                try:
+                    out['checked_softech'] = True
+                    pc, dc = invoice.vendor.softech_personcode, invoice.softech_doccode
+                    # exact supplier-number match (high confidence). Bind docnumber2 as
+                    # Decimal — big supplier numbers (>2^31) overflow a Java int bind.
+                    if dn2:
+                        row = _q1(conn, "SELECT docnumber, docdate, docvalue FROM stktransm "
+                                        "WHERE cust_branch_code=? AND doccode=? AND docnumber2=?",
+                                  [pc, dc, Decimal(dn2)])
+                        if row:
+                            out['softech_match'] = {'docnumber': int(row[0]),
+                                                    'docdate': _jsonify(row[1]),
+                                                    'docvalue': _jsonify(row[2])}
+                    # multi-factor candidate scan over the supplier's recent headers
+                    out['candidates'] = _softech_candidates(conn, invoice, pc, dc, dn2)
+                finally:
+                    conn.close()
+        except Exception as e:
+            out['softech_error'] = str(e)[:200]
+
+    best = max((c['score'] for c in out['candidates']), default=0.0)
+    out['is_duplicate'] = bool(out['pg_duplicates'] or out['softech_match'] or best >= 0.75)
+    out['likely_duplicate'] = out['is_duplicate'] or best >= 0.5
+    return out
+
+
+def scan_invoice_duplicates(invoice) -> dict:
+    """Run the thorough duplicate check and CACHE a compact summary on the invoice
+    (dup_check + dup_checked_at) so the invoice list can flag re-entries without a
+    per-row SOFTECH round-trip. Best-effort: never raises. Returns the summary."""
+    from django.utils import timezone
+    summary = {'is_duplicate': False, 'likely_duplicate': False, 'best_score': 0.0,
+               'softech_docnumber': None, 'candidates': 0, 'checked_softech': False}
+    try:
+        r = check_duplicates(invoice)
+        best = max((c['score'] for c in r.get('candidates', [])), default=0.0)
+        summary = {
+            'is_duplicate':      bool(r.get('is_duplicate')),
+            'likely_duplicate':  bool(r.get('likely_duplicate')),
+            'best_score':        round(best, 3),
+            'softech_docnumber': (r.get('softech_match') or {}).get('docnumber'),
+            'candidates':        len(r.get('candidates', [])),
+            'checked_softech':   bool(r.get('checked_softech')),
+        }
+    except Exception as e:
+        summary['error'] = str(e)[:200]
+    try:
+        invoice.dup_check = summary
+        invoice.dup_checked_at = timezone.now()
+        invoice.save(update_fields=['dup_check', 'dup_checked_at'])
+    except Exception:
+        pass
+    return summary
+
+
+def _softech_candidates(conn, invoice, personcode, doccode, dn2) -> list:
+    """Ranked multi-factor duplicate candidates from the supplier's recent SOFTECH
+    purchase headers (read-only). Scores headers, fetches itemcodes for the top few,
+    re-scores with item overlap, returns the strongest (score ≥ 0.3)."""
+    import datetime as _dt
+    our_total, our_codes, our_count, our_date = _our_invoice_signature(invoice)
+    # date window: around the invoice date when known, else the last ~120 days
+    if our_date:
+        lo, hi = our_date - _dt.timedelta(days=60), our_date + _dt.timedelta(days=60)
+    else:
+        hi = _dt.date.today(); lo = hi - _dt.timedelta(days=120)
+    cur = conn.cursor()
+    try:
+        cur.execute("SET ROWCOUNT 200 SELECT docnumber, docnumber2, docdate, docwritedate, "
+                    "docvalue, usercode FROM stktransm WHERE cust_branch_code=? AND doccode=? "
+                    "AND docdate BETWEEN ? AND ? ORDER BY docdate DESC",
+                    [personcode, doccode, lo.isoformat(), hi.isoformat()])
+        cols = [d[0] for d in cur.description]
+        heads = [{c: _jsonify(v) for c, v in zip(cols, r)} for r in cur.fetchall()]
+    finally:
+        cur.close()
+    # preliminary score (no items yet), keep top 8 for the line fetch
+    scored = []
+    for h in heads:
+        s, _f = _score_candidate(h, our_total, our_codes, our_count, our_date, dn2)
+        scored.append((s, h))
+    scored.sort(key=lambda t: t[0], reverse=True)
+    out = []
+    for _s, h in scored[:8]:
+        codes = []
+        try:
+            lc = conn.cursor()
+            lc.execute("SELECT itemcode FROM stktrans WHERE branchcode=? AND doccode=? AND docnumber=?",
+                       [str(invoice.softech_branchcode or invoice.store_code or '100'), doccode, h['docnumber']])
+            codes = [str(r[0]).strip() for r in lc.fetchall()]
+            lc.close()
+        except Exception:
+            pass
+        h['_item_codes'] = codes
+        score, factors = _score_candidate(h, our_total, our_codes, our_count, our_date, dn2)
+        if score < 0.3:
+            continue
+        out.append({
+            'docnumber': int(h['docnumber']), 'docnumber2': h.get('docnumber2'),
+            'docdate': h.get('docdate'), 'save_date': h.get('docwritedate'),
+            'docvalue': h.get('docvalue'), 'usercode': h.get('usercode'),
+            'item_count': len(codes), 'score': score, 'factors': factors,
+        })
+    out.sort(key=lambda c: c['score'], reverse=True)
+    return out[:5]
+
+
+_RECON_THRESHOLD = 0.02   # flag a pairwise total difference above 2%
+
+
+def reconcile_three_way(invoice) -> dict:
+    """Three-way financial reconciliation for the review workbench:
+      A = OCR-declared invoice total (read from the scan)
+      B = reconstructed total (Σ our captured lines, after discount)
+      C = SOFTECH-posted total (stktransm.docvalue for this supplier invoice)
+
+    Returns the three values + pairwise comparisons + flags. NOTE: C was entered
+    by a human in SOFTECH and MAY ITSELF BE WRONG — so this surfaces all three for
+    judgement rather than treating any one as ground truth. Read-only."""
+    ocr_total = float(invoice.declared_total or 0) or None
+    recon_total = round(float(invoice.total_after_discount or 0), 3) or None
+    softech_total = None
+    checked_softech = False
+    err = None
+
+    dn2 = _docnumber2(invoice)
+    if dn2 and invoice.doc_kind == 'purchase' and invoice.vendor and invoice.vendor.softech_personcode:
+        try:
+            host = branch_host(invoice)
+            if host:
+                from config.sybase import get_branch_connection
+                conn = get_branch_connection(host, invoice.branch.db_port or 5000,
+                                             invoice.branch.db_name or 'SOFTECHDB9',
+                                             charset=_write_charset())
+                try:
+                    row = _q1(conn, "SELECT docvalue FROM stktransm WHERE cust_branch_code=? "
+                                    "AND doccode=? AND docnumber2=?",
+                              [invoice.vendor.softech_personcode, invoice.softech_doccode, dn2])
+                    checked_softech = True
+                    if row and row[0] is not None:
+                        softech_total = round(float(row[0]), 3)
+                finally:
+                    conn.close()
+        except Exception as e:
+            err = str(e)[:200]
+
+    def _cmp(a, b):
+        if not a or not b:
+            return None
+        return {'a': a, 'b': b, 'delta': round(b - a, 3),
+                'pct': round(abs(b - a) / a, 4) if a else None}
+
+    comparisons = {
+        'recon_vs_ocr':     _cmp(ocr_total, recon_total),
+        'recon_vs_softech': _cmp(softech_total, recon_total),
+        'softech_vs_ocr':   _cmp(ocr_total, softech_total),
+    }
+    flags = []
+    labels = {
+        'recon_vs_ocr':     'إجمالي أسطرنا يختلف عن الإجمالي المقروء من الفاتورة',
+        'recon_vs_softech': 'إجمالي أسطرنا يختلف عن الإجمالي المُسجَّل في SOFTECH',
+        'softech_vs_ocr':   'الإجمالي في SOFTECH يختلف عن الإجمالي المطبوع على الفاتورة (قد يكون خطأ إدخال بشري)',
+    }
+    for key, c in comparisons.items():
+        if c and c['pct'] is not None and c['pct'] > _RECON_THRESHOLD:
+            flags.append({'type': key, 'pct': c['pct'], 'delta': c['delta'],
+                          'severity': 'error' if c['pct'] > 0.10 else 'warning',
+                          'message': f"{labels[key]} — بنسبة {c['pct']:.0%}"})
+
+    return {'ocr_total': ocr_total, 'reconstructed_total': recon_total,
+            'softech_total': softech_total, 'checked_softech': checked_softech,
+            'comparisons': comparisons, 'flags': flags, 'error': err}
 
 
 # ── 2. BUILD PLAN — exact column→value maps + SQL (no SOFTECH contact) ──────────
@@ -364,10 +652,11 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
             'itemexpirydate': exp_lit, 'transprice': float(c['transprice']),
             'newcostprice': float(newcostprice if newcostprice is not None else c['transprice']),
             'transprice_total': float(c['transprice_total']), 'origintaxp': float(c['origintaxp']),
-            'custdiscp': 0.0, 'specialdiscp': 0.0, 'saleprice_extrap': 0.0, 'usercode': usercode,
+            'custdiscp': 0.0, 'specialdiscp': float(c.get('specialdiscp', 0.0)),
+            'saleprice_extrap': 0.0, 'usercode': usercode,
             'bonusqty': 0.0, 'dblitemflag': int(dblitemflag), 'storecode2': '0',
             'r_docnumber': int(invoice.return_of_docnumber or 0), 'r_docdate': rdd,
-            'transqty': float(ln.quantity), 'newqty': float(newqty), 'retqty': 0.0,
+            'transqty': float(c.get('qty', ln.quantity)), 'newqty': float(newqty), 'retqty': 0.0,
             'itemcode': str(ln.item.softech_id), 'suppliercode': personcode, 'personcode': personcode,
             'itemsaleprice': float(c['itemsaleprice']), 'r_doccode': '10', 'promtype': 1,
         }
@@ -378,9 +667,10 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
         'pharmacydiscp': float(c['pharmacydiscp']), 'additionaldiscp': float(c['additionaldiscp']),
         'itemexpirydate': exp_lit,
         'transprice': float(c['transprice']), 'transprice_total': float(c['transprice_total']),
-        'origintaxp': float(c['origintaxp']), 'custdiscp': 0.0, 'specialdiscp': 0.0,
+        'origintaxp': float(c['origintaxp']), 'custdiscp': 0.0,
+        'specialdiscp': float(c.get('specialdiscp', 0.0)),
         'saleprice_extrap': 0.0, 'usercode': usercode, 'bonusqty': 0.0, 'dblitemflag': int(dblitemflag),
-        'storecode2': '0', 'transqty': float(ln.quantity), 'newqty': float(newqty),
+        'storecode2': '0', 'transqty': float(c.get('qty', ln.quantity)), 'newqty': float(newqty),
         'retqty': 0.0, 'suppliercode': personcode, 'personcode': personcode,
         'itemsaleprice': float(c['itemsaleprice']), 'promtype': 1,
     }
@@ -409,6 +699,33 @@ def _read_original_purchase(conn, branch, docnumber):
         cur.close()
     rdd = _Raw(f"convert(datetime, '{docdate:%Y-%m-%d} 00:00:00')") if docdate else _Raw("convert(datetime, '1900-01-01')")
     return costs, rdd, (docdate is not None)
+
+
+def read_stock_for_invoice(invoice) -> dict:
+    """Best-effort live stock (stkbal.nowqty) for every matched item on the invoice,
+    at the branch/store the invoice will be saved to — for the grid's رصيد حالي
+    column. Returns {softech_id: nowqty}; empty when SOFTECH is unreachable (the
+    grid then falls back to the catalog mirror). Read-only."""
+    codes = [str(l.item.softech_id) for l in invoice.lines.select_related('item').all()
+             if l.item_id and l.item.softech_id]
+    if not codes:
+        return {}
+    branch = invoice.softech_branchcode or (invoice.branch.softech_branch_id if invoice.branch_id else '')
+    store  = invoice.store_code or branch
+    try:
+        host = branch_host(invoice)
+        if not host:
+            return {}
+        from config.sybase import get_branch_connection
+        conn = get_branch_connection(host, invoice.branch.db_port or 5000,
+                                     invoice.branch.db_name or 'SOFTECHDB9', charset=_write_charset())
+        try:
+            return read_stkbal(conn, branch, store, codes)
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning('read_stock_for_invoice failed for %s: %s', invoice.pk, e)
+        return {}
 
 
 def read_stkbal(conn, branch, store, itemcodes):
@@ -509,7 +826,7 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
     running = dict(nowqty)   # per-item running balance, accumulates across lines
     for idx, c in enumerate(computed, start=1):
         code = str(c['_line'].item.softech_id).strip()
-        qty  = float(c['_line'].quantity or 0)
+        qty  = float(c.get('qty', c['_line'].quantity or 0))   # per-entry (FOC paid vs free)
         running[code] = running.get(code, 0.0) + (-qty if is_return else qty)
         nq = running[code]
         newqtys[code] = nq

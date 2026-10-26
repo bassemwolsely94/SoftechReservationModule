@@ -18,6 +18,7 @@ import GamificationCard from '../components/GamificationCard'
 import {
   PageHeader, Modal, EmptyState, Spinner, SectionTitle, useToast,
 } from '../components/ui'
+import { fa } from '../utils/flowArrow'
 
 const KIND_LABEL = { supplier: 'مورد', customer: 'عميل / موظف', salesperson: 'مسؤول بيع', self: 'شخصي' }
 const STATUS_BADGE = {
@@ -1022,7 +1023,7 @@ function AdminApprovalQueue() {
         {pending.map(p => (
           <div key={p.id} className="flex items-center justify-between gap-2 bg-white rounded-xl p-3 border border-gray-100">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-gray-800 truncate">{p.staff_name} → {p.label || p.person_code}</div>
+              <div className="text-sm font-bold text-gray-800 truncate">{p.staff_name} {fa()} {p.label || p.person_code}</div>
               <div className="text-sm text-gray-400">{KIND_LABEL[p.kind]} · كود {p.person_code}{p.note ? ` · ${p.note}` : ''}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">

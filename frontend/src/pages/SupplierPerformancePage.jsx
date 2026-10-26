@@ -83,7 +83,7 @@ function SupplierDetail({ supplierCode, onBack }) {
 
   return (
     <div className="space-y-5">
-      <button onClick={onBack} className="text-sm text-brand-600 hover:underline flex items-center gap-1">
+      <button data-tour="purchasing-suppliers-back" onClick={onBack} className="text-sm text-brand-600 hover:underline flex items-center gap-1">
         ← العودة للقائمة
       </button>
 
@@ -134,7 +134,7 @@ function SupplierDetail({ supplierCode, onBack }) {
       </div>
 
       {/* Purchase History Chart */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <div data-tour="purchasing-suppliers-history" className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
         <h3 className="font-semibold text-gray-700 mb-1">المشتريات الشهرية</h3>
         <HistoryChart data={history} />
       </div>

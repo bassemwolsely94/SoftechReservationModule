@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 function Btn({ children, onClick, variant = 'primary', size = 'sm', disabled, className = '' }) {
   const v = {
@@ -386,7 +387,7 @@ function ContractPanel({ subclient }) {
             <div className="flex justify-between items-start mb-2">
               <span className="font-medium text-gray-800 text-sm">{c.name || `عقد ${c.effective_from}`}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">{c.effective_from} → {c.effective_to || 'مفتوح'}</span>
+                <span className="text-xs text-gray-400">{c.effective_from} {fa()} {c.effective_to || 'مفتوح'}</span>
                 <EditIcon active={false} onClick={() => openEdit(c)} />
               </div>
             </div>

@@ -26,6 +26,7 @@ from apps.catalog.models import Item
 from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
 from . import spike as S
 from apps.catalog.wildcard import wq
+from core.permissions import deny_unless
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,9 @@ def _get_item(request):
 @permission_classes([IsAuthenticated])
 def spike_confirm(request):
     """Confirm a STRONG spike as an unsustained burst → eligible for the order cap."""
+    denied = deny_unless(request, 'purchasing', 'edit', 'approve')
+    if denied:
+        return denied
     it = _get_item(request)
     if it is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -146,6 +150,9 @@ def spike_confirm(request):
 @permission_classes([IsAuthenticated])
 def spike_unconfirm(request):
     """Revert to monitor-only (no cap) — e.g. it's a genuine new-product ramp."""
+    denied = deny_unless(request, 'purchasing', 'edit', 'approve')
+    if denied:
+        return denied
     it = _get_item(request)
     if it is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)

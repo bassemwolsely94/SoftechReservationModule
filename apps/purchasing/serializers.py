@@ -51,6 +51,11 @@ class MetricsSerializer(serializers.ModelSerializer):
     cost_price            = serializers.DecimalField(source='item.cost_price', read_only=True, max_digits=10, decimal_places=3)
     std_gross_margin_pct  = serializers.SerializerMethodField()
     net_margin_pct        = serializers.SerializerMethodField()
+    # seasonality for the month we are in (apps/purchasing/seasonality.py — display only)
+    season_index  = serializers.DecimalField(read_only=True, max_digits=6, decimal_places=3, allow_null=True)
+    season_stable = serializers.BooleanField(read_only=True, allow_null=True)
+    season_note   = serializers.CharField(read_only=True, allow_null=True)
+    season_month  = serializers.SerializerMethodField()
 
     class Meta:
         model  = ItemDemandMetrics
@@ -87,8 +92,14 @@ class MetricsSerializer(serializers.ModelSerializer):
             'availability_rate_30d', 'root_cause',
             # UI helpers
             'last_sale_date', 'stock_status', 'stock_status_color', 'needs_purchase',
+            'season_index', 'season_stable', 'season_note', 'season_month',
         ]
         read_only_fields = fields
+
+    def get_season_month(self, obj):
+        from apps.purchasing.seasonality import AR_MONTHS
+        from django.utils import timezone
+        return AR_MONTHS[timezone.localdate().month]
 
     def get_branch_name(self, obj):
         return obj.branch.name_ar or obj.branch.name
@@ -147,6 +158,11 @@ class AggregatedSerializer(serializers.ModelSerializer):
     cost_price           = serializers.DecimalField(source='item.cost_price', read_only=True, max_digits=10, decimal_places=3)
     std_gross_margin_pct = serializers.SerializerMethodField()
     net_margin_pct       = serializers.SerializerMethodField()
+    # seasonality for the month we are in (apps/purchasing/seasonality.py — display only)
+    season_index  = serializers.DecimalField(read_only=True, max_digits=6, decimal_places=3, allow_null=True)
+    season_stable = serializers.BooleanField(read_only=True, allow_null=True)
+    season_note   = serializers.CharField(read_only=True, allow_null=True)
+    season_month  = serializers.SerializerMethodField()
 
     class Meta:
         model  = ItemDemandAggregated
@@ -169,8 +185,14 @@ class AggregatedSerializer(serializers.ModelSerializer):
             # MODULE 13 — Lost Sales (network rollup)
             'total_lost_qty_30d', 'total_lost_revenue_30d', 'total_lost_margin_30d',
             'network_availability_rate_30d',
+            'season_index', 'season_stable', 'season_note', 'season_month',
         ]
         read_only_fields = fields
+
+    def get_season_month(self, obj):
+        from apps.purchasing.seasonality import AR_MONTHS
+        from django.utils import timezone
+        return AR_MONTHS[timezone.localdate().month]
 
     def get_item_category_name(self, obj):
         cat = obj.item.category

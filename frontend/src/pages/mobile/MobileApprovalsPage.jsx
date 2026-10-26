@@ -20,6 +20,7 @@ import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobile
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../../help/useHelpTab'
+import { fa } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -37,7 +38,7 @@ function PriceChangeSummary({ oldValues = {}, newValues = {} }) {
       {keys.map(k => (
         <div key={k} className="text-[11px] text-gray-500 flex items-center gap-1.5" dir="ltr">
           <span className="font-mono">{k}</span>
-          <span className="text-gray-400">{oldValues?.[k] ?? '—'} → </span>
+          <span className="text-gray-400">{oldValues?.[k] ?? '—'} {fa()} </span>
           <span className="font-semibold text-gray-700">{newValues[k]}</span>
         </div>
       ))}

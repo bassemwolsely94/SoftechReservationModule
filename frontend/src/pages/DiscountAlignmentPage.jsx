@@ -86,7 +86,7 @@ function CreateTierModal({ onClose, onCreated }) {
               className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
           </label>
 
-          <button onClick={doPreview} disabled={busy}
+          <button data-tour="pricing-alignment-tier-preview" onClick={doPreview} disabled={busy}
             className="text-xs px-3 py-1.5 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800 disabled:opacity-50">
             {busy ? '⏳...' : '👁 معاينة'}
           </button>
@@ -113,7 +113,7 @@ function CreateTierModal({ onClose, onCreated }) {
         </div>
         <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
           <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600">إلغاء</button>
-          <button onClick={doCreate} disabled={busy || !preview || preview.code_exists}
+          <button data-tour="pricing-alignment-tier-create-softech" onClick={doCreate} disabled={busy || !preview || preview.code_exists}
             className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-40">
             {busy ? '⏳ جارٍ...' : '✔ إنشاء فى SOFTECH'}
           </button>
@@ -222,7 +222,7 @@ export default function DiscountAlignmentPage() {
             الخصم الفعلى هو المرجع — تُصحَّح تسميات التصنيف/المنشأ القديمة لتطابقه (تُكتب على SOFTECH)
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div data-tour="pricing-alignment-stats" className="flex items-center gap-2">
           <div className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 font-semibold">
             مفحوص: <b>{(stats.checked || 0).toLocaleString('en-US')}</b>
           </div>
@@ -235,19 +235,19 @@ export default function DiscountAlignmentPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 ابحث باسم الصنف..."
+        <input data-tour="pricing-alignment-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 ابحث باسم الصنف..."
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-brand-400" />
-        <select value={flag} onChange={e => setFlag(e.target.value)}
+        <select data-tour="pricing-alignment-flag" value={flag} onChange={e => setFlag(e.target.value)}
           className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-brand-400">
           {FLAG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+        <label data-tour="pricing-alignment-only" className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
           <input type="checkbox" checked={onlyMis} onChange={e => setOnlyMis(e.target.checked)} className="rounded" /> غير المتوافقة فقط
         </label>
         <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
           <input type="checkbox" checked={inclInactive} onChange={e => setIncl(e.target.checked)} className="rounded" /> تضمين الموقوفة
         </label>
-        <button onClick={() => setShowCreate(true)}
+        <button data-tour="pricing-alignment-new-tier" onClick={() => setShowCreate(true)}
           className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100"
           title="إنشاء تصنيف/منشأ جديد فى SOFTECH عند عدم توفّر تصنيف مطابق">
           ➕ تصنيف جديد
@@ -268,7 +268,7 @@ export default function DiscountAlignmentPage() {
           <span className="text-sm font-bold text-emerald-800">✎ {sel.size} صنف محدد</span>
 
           {/* Lead action — apply each item's own family-aware suggestion */}
-          <button onClick={doApplySuggestions} disabled={applyMut.isLoading || selWithSugg.length === 0}
+          <button data-tour="pricing-alignment-apply-suggested-softech" onClick={doApplySuggestions} disabled={applyMut.isLoading || selWithSugg.length === 0}
             className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-40"
             title="يُعيَّن لكل صنف المنشأ/تصنيف الخصم المطابق لفئته (محلى/مستورد…) ونسبته">
             {applyMut.isLoading ? '⏳ جارٍ...' : `✨ تطبيق المقترح لكل صنف (${selWithSugg.length})`}
@@ -278,7 +278,7 @@ export default function DiscountAlignmentPage() {
           {oneTarget != null
             ? <span className="text-[11px] text-emerald-700">الهدف <b>{oneTarget}%</b></span>
             : targets.length > 1 && <span className="text-[11px] text-amber-700">⚠ خصومات مختلفة ({targets.map(t=>t+'%').join('، ')})</span>}
-          <select value={newOrigin} onChange={e => setNewOrigin(e.target.value)}
+          <select data-tour="pricing-alignment-uniform" value={newOrigin} onChange={e => setNewOrigin(e.target.value)}
             className="border border-emerald-300 rounded-lg px-2 py-1 text-xs bg-white max-w-[240px]">
             <option value="">المنشأ الجديد (اختياري)…</option>
             {origins.map(o => (
@@ -296,7 +296,7 @@ export default function DiscountAlignmentPage() {
               </option>
             ))}
           </select>
-          <button onClick={doApply} disabled={applyMut.isLoading}
+          <button data-tour="pricing-alignment-apply-softech" onClick={doApply} disabled={applyMut.isLoading}
             className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-50">
             {applyMut.isLoading ? '⏳ جارٍ الكتابة...' : '✔ تطبيق على SOFTECH'}
           </button>
@@ -311,7 +311,7 @@ export default function DiscountAlignmentPage() {
             <thead className="sticky top-0 bg-gray-50 text-gray-500 text-xs font-bold z-10">
               <tr>
                 <th className="px-2 py-2 w-8 text-center">
-                  <input type="checkbox" checked={allVisible} onChange={toggleAll} className="rounded" />
+                  <input data-tour="pricing-alignment-select-all" type="checkbox" checked={allVisible} onChange={toggleAll} className="rounded" />
                 </th>
                 <th className="px-3 py-2 text-right">الصنف</th>
                 <th className="px-3 py-2 text-right">المورد</th>
@@ -331,7 +331,7 @@ export default function DiscountAlignmentPage() {
               {rows.map(r => {
                 const tp = targetPct(r)
                 return (
-                  <tr key={r.item_id} className={`hover:bg-gray-50 ${sel.has(r.item_id) ? 'bg-emerald-50/60' : r.misaligned ? 'bg-red-50/40' : ''}`}>
+                  <tr key={r.item_id} data-tour="pricing-alignment-row" className={`hover:bg-gray-50 ${sel.has(r.item_id) ? 'bg-emerald-50/60' : r.misaligned ? 'bg-red-50/40' : ''}`}>
                     <td className="px-2 py-2 text-center">
                       <input type="checkbox" checked={sel.has(r.item_id)} onChange={() => toggle(r.item_id)} className="rounded" />
                     </td>

@@ -68,7 +68,7 @@ function SpikeTab() {
       <p className="text-sm text-gray-500 mb-3">
         قفزة طلب حديثة قد لا تدوم (نُشتري بكثرة لملاحقتها ثم يركد المخزون). التقليل <b>مراجَع بشريًا</b>: أكِّد الذروة القوية فقط لتصبح قابلة للتقليل،
         ويُطبَّق التقليل على شيت النواقص فقط عند تفعيله في تشغيل المحرك.
-        {summary && <span className={`mr-2 px-2 py-0.5 rounded-full text-xs ${summary.cap_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+        {summary && <span data-tour="purchasing-cash-cap-status" className={`mr-2 px-2 py-0.5 rounded-full text-xs ${summary.cap_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
           {summary.cap_active ? 'التقليل مُفعَّل' : 'التقليل غير مُفعَّل (رصد فقط)'}</span>}
       </p>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4" data-tour="purchasing-cash-kpis">
@@ -127,7 +127,7 @@ function SpikeTab() {
                         {r.tier !== 'strong'
                           ? <span className="text-xs text-gray-400">مراقبة فقط</span>
                           : r.confirmed
-                            ? <button onClick={() => unconfirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">إلغاء التأكيد</button>
+                            ? <button data-tour="purchasing-cash-unconfirm" onClick={() => unconfirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">إلغاء التأكيد</button>
                             : <button onClick={() => confirm.mutate(r.item_id)} data-tour="purchasing-cash-confirm" className="px-2 py-1 text-xs text-red-700 border border-red-200 rounded hover:bg-red-50">تأكيد (طبّق التقليل)</button>}
                       </td>
                     </tr>
