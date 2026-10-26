@@ -10,6 +10,8 @@
  * All widget data flows through /api/personal/widgets/:id/data/, which is
  * hard-scoped server-side to an APPROVED identity claim you own.
  */
+import FirstDay from '../help/FirstDay'
+import WhatsNewCard from '../help/WhatsNewCard'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { personalApi } from '../api/client'
@@ -75,6 +77,7 @@ function BranchFilter({ options, selected, onChange }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function MyDashboardPage() {
+  const isMobileRoute = window.location.pathname.startsWith('/m/')
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
   const qc = useQueryClient()
@@ -129,13 +132,15 @@ export default function MyDashboardPage() {
         subtitle="بياناتك في SOFTECH كمورد وكعميل وكمسؤول بيع + مهامك"
         actions={
           <>
-            <button className="btn-secondary" onClick={() => setShowManage(true)}>🪪 هوياتي</button>
-            <button className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>
+            <button className="btn-secondary" onClick={() => setShowManage(true)} data-tour="general-me-identities">🪪 هوياتي</button>
+            <button className="btn-primary" onClick={() => setShowAdd(true)} data-tour="general-me-add-widget">➕ إضافة لوحة</button>
           </>
         }
       />
 
       <div className="max-w-7xl mx-auto px-4">
+        {/* «أول يوم» — on mobile «لوحتي» is the home; on desktop it lives on /dashboard */}
+        {isMobileRoute && <div className="mb-4 space-y-3"><FirstDay mobile /><WhatsNewCard mobile /></div>}
         {/* التحفيز — level, points, streak, open items (apps/gamification) */}
         <GamificationCard className="mb-4" />
         {isAdmin && <AdminApprovalQueue />}
@@ -150,7 +155,7 @@ export default function MyDashboardPage() {
             action={<button className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" data-tour="general-me-widgets">
             {order.map((w, i) => (
               <WidgetCard
                 key={w.id} widget={w} index={i} canEdit={canEditComments}
@@ -279,7 +284,7 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0" data-tour="general-me-widget-controls">
           <button title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
           <button title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
           <button title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
@@ -1016,7 +1021,7 @@ function AdminApprovalQueue() {
 
   if (pending.length === 0) return null
   return (
-    <div className="mt-4 card border-amber-200 bg-amber-50/40">
+    <div className="mt-4 card border-amber-200 bg-amber-50/40" data-tour="general-me-approvals">
       <SectionTitle icon="🪪">طلبات اعتماد الهويات ({pending.length})</SectionTitle>
       <div className="space-y-2">
         {pending.map(p => (

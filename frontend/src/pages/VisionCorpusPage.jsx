@@ -24,7 +24,7 @@ export default function VisionCorpusPage() {
 
   return (
     <div className="page-body">
-      <div className="mb-4">
+      <div data-tour="catalog-vision-header" className="mb-4">
         <h1 className="text-lg font-bold text-content">مجموعة بيانات المحرك البصري الداخلي</h1>
         <p className="text-xs text-faint">قاعدة التعلّم المملوكة لصيدليات الرزيقي — تنمو مع كل قراءة وتأكيد عبر المبيعات والمشتريات.</p>
       </div>
@@ -34,20 +34,20 @@ export default function VisionCorpusPage() {
 
       {d && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div data-tour="catalog-vision-stats" className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <Stat label="إجمالي العيّنات" value={d.total} />
             <Stat label="مُصنَّفة (بتأكيد بشري)" value={d.labelled} />
             <Stat label="جاهزة للتدريب (صور)" value={d.trainable_images ?? '—'} />
             <Stat label="المحرك الداخلي" value={d.inhouse_ready ? 'مُفعَّل ✓' : (d.inhouse_configured ? 'مُهيَّأ' : 'غير مُدرَّب')} />
           </div>
-          <div className="grid md:grid-cols-3 gap-3">
+          <div data-tour="catalog-vision-breakdown" className="grid md:grid-cols-3 gap-3">
             <Breakdown title="حسب المصدر" data={d.by_module} labels={MODULE_LABEL} />
             <Breakdown title="حسب المحرك" data={d.by_engine} labels={ENGINE_LABEL} />
             <Breakdown title="حسب الوسيط" data={d.by_media} labels={MEDIA_LABEL} />
           </div>
           {/* accuracy — in-house engines vs Gemini, measured against human confirmations */}
           {acc && acc.results?.length > 0 && (
-            <div className="card mt-4">
+            <div data-tour="catalog-vision-accuracy" className="card mt-4">
               <div className="section-title">دقة المحركات — استرجاع الأصناف المؤكَّدة (آخر {acc.sample_window} عيّنة)</div>
               <div className="space-y-2">
                 {acc.results.map(r => (

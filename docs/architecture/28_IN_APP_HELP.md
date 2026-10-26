@@ -4,6 +4,60 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
 
 ## What users get
 
+- **«🆕 الجديد في الشرح هذا الأسبوع»** home card (desktop /dashboard, mobile «لوحتي»): screens whose help or
+  tour changed in the last 7 days that matter to the person (role path + screens whose help they opened in
+  90 days), unread first; only changes after the person joined (newcomers get «ابدأ من هنا» instead). Read = opened that help after the change (HelpEvent open) or «تمام، شفتها»
+  (`HelpPreference.whats_new_seen_at`) — on the server, same on every device. Hidden when nothing is
+  unread. `GET/POST /api/help/whats-new/`. Each item shows «اتحدّث: …» when there is a «what changed»
+  note: the trainer's one-liner on their latest save («إيه الجديد للمستخدمين؟» in the editor,
+  `HelpRevision.public_note`, separate from the internal reason) if that save is the newest change, else
+  the repo `change_note` (`views.change_notes`). Also shown in the «الجديد» tab and the help panel.
+- **«👋 ابدأ من هنا» (first day)** at the top of the home page (/dashboard; mobile «لوحتي», with a one-line
+  pointer on the mobile landing page): system tour, the next screen on the role's training path (opens
+  it and starts its tour), the role's workflow tours, the next quiz — ticked ✓ when done. Shown until
+  the path is 100% or the person hides it (`HelpPreference.first_day_hidden_at`; «إظهار» in «مساري
+  التدريبي»). Cards, never a popup. API `GET/POST /api/help/first-day/`.
+- Path / quiz / workflow-tour saves in «للمدربين» take the same one-liner (`public_note` on
+  `PUT /api/help/training/<kind>/<key>/`, tidied, ≤120, stored on the `HelpRevision`; reverts never
+  carry one). Paths and quizzes append it to their notification as «الجديد: …» (`notify._with_note`);
+  workflow tours send no notification, so `training.flow_notes()` puts it on the tour's card
+  (`change_note` in `flow_brief`: help panel, module page, «ابدأ من هنا») while that save is the
+  latest change to the tour and under `FLOW_NOTE_DAYS` (14) old.
+- **«📝 إيه الجديد» in «للمدربين»** (`NotesLog.jsx`, `GET /api/help/notes-log/?days=30`, help/edit only):
+  every one-liner of the last 30 days (1–90) in one list — trainers' screen / path / quiz / flow saves
+  (`HelpRevision.public_note`) plus the developers' repo `change_note` on screens updated in the window —
+  with author and state (`shown` still visible to people, `sent` went out in the path/quiz notification,
+  `replaced` by a later change). Filter by kind; a row opens the screen editor or the training editor
+  (`?tkind=&tkey=`). The weekly supervisors' digest adds the last 7 days' lines («📝 اتحدّث في التدريب»,
+  first 3 + count). Built by `onboarding_views.recent_notes()`.
+- **«💡» note hints while typing** (`NoteHints.jsx` in the screen editor and the training editor, debounced
+  `POST /api/help/notes-check/ {kind, key, note, data}`, help/edit only, read-only; rules in
+  `apps/help/notecheck.py`, deterministic word rules, no model): `big_empty` — no note on a big edit
+  (`BIG_EDIT` = 3+ texts changed vs the current version), on path screens added, or on a changed quiz
+  (both notify people); `vague` — only generic words («تعديلات بسيطة»); `similar` — a note of the last
+  30 days on another screen / path / quiz / tour describing the same change in other words (Dice ≥ 0.6 on
+  normalised Arabic words with a small synonym map, 2+ shared non-generic words) → «استخدمها» copies its
+  wording. Never blocks a save.
+- **«📖 قاموس المصطلحات»** (`Glossary.jsx` in «للمدربين»; `HelpGlossaryTerm` preferred / avoid[] /
+  modules[] / why, migration 0012; `apps/help/glossary.py`, `GET/POST /api/help/glossary/`,
+  `PUT/DELETE /api/help/glossary/<id>/`, writes help/edit only, each change → `HelpRevision 'glossary:<id>'`).
+  A term can be limited to modules («حجز» not «طلب» only in reservations). Matching is on normalised
+  Arabic words with attached prefixes (ال/و/ب/ل/لل/وال/بال…) and never counts the agreed word itself.
+  Note hints gain `term` (offers the note with the agreed word, keeping the prefix: «للخزنة» → «للكاشير»)
+  and `term_text` (avoided words in the help text being edited, ×count). Trainers' GET adds `uses`:
+  how many screens' current help still use an avoided word (first 8, click → editor). Hints only — the
+  glossary never rewrites text.
+- **«📖 طبّق القاموس»** in the screen help editor (`GlossaryApply.jsx`; pure draft edits in
+  `glossaryEdits.js`): `POST /api/help/glossary/scan/ {screen_key, data: draft}` (help/edit, read-only)
+  → every avoided word in the draft's Arabic text with `path` (keys down to `'ar'`), `start`/`end`,
+  `match`, `replacement` (prefix kept) and its sentence (`before`/`after`) — same matcher as the hints
+  (`notecheck.occurrences`). The trainer replaces or skips each one (or «استبدل الباقي»); a replacement
+  only happens if the text at that place is still the scanned word (else «افحص تاني»), later places in
+  the same text shift. Only the draft changes — the normal «حفظ» records it in `HelpRevision`.
+
+- **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
+  starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.
+
 - **«؟ مساعدة» button + F1** in every staff shell (desktop `Layout`, mobile `MobileLayout`,
   rider `RiderLayout`). Opens a docked side panel (not a modal — the page stays usable) with the
   help of the **screen the user is on**, opened on the **tab they are on** (marked «أنت هنا»).
@@ -101,13 +155,73 @@ must not get wrong → add a quiz question.
 - 30 questions per person per hour. Every question is logged (`HelpEvent kind=ask`, `results=0`
   when unanswered) and listed for trainers — unanswered questions = help that needs writing.
 
+## Cross-page tours (built 2026-10-11)
+
+This is what product tools call a *product tour* / *walkthrough* with *coach marks* (spotlights):
+started only on request, it dims the page, zooms into one real area at a time and explains it.
+
+- **Step fields:** `target`, `text`, and optionally `route` (the page the step lives on — the runner
+  opens it when it has no `:params`), `wait` (the step waits for the user to open that page, e.g.
+  click a row → `/x/:id`, then continues there; «التالي» is replaced by «اضغط على الجزء المعلَّم»),
+  `nav` (open that page's side-menu group first, to point at its menu item).
+- **List → detail:** a screen with `tour_continue: '<detail screen>'` whose last step `wait`s for the
+  detail route runs as one flow (`registry.tour_flow`, sent as `tour_flow`): reservations board,
+  transfers list, demand list, customers list.
+- **Workflow tours** (`MODULE['flows']`, optional `roles`, `mobile: True` for the mobile app):
+  «جولات دورة العمل» in the panel (only the tours for the current shell — mobile or desktop) and on
+  the module page (all, 📱 marks mobile). Desktop: reservation lifecycle, transfer lifecycle, POS order
+  → cashier, POS exceptions, missed demand, delivery (dashboard → dispatch → rider), purchasing
+  cycle (recommendations → supply → supplier invoices), insurance claim (import → review → issue →
+  print), HR request, HR approvals, stock count (session → snapshot → count → variances), transfers in
+  transit → receiving, call → case → follow-up. Mobile: reservations, transfers, missed demand,
+  approvals, stock counting (anchors `mshell-*`, generated `mnav-<path>` for the bottom
+  tabs — tabs beyond the bar live under «المزيد»).
+- **Trainers edit workflow tours** in «للمدربين» → «جولة دورة عمل»: title, summary and each step's
+  text (steps, their buttons and pages stay the code's). `HelpTrainingOverride(kind='flow',
+  key='<module>.<key>')`, history `HelpRevision('flow:<module>.<key>')`, revert. A weak workflow step
+  in the usage report opens this editor on that step.
+- **Every screen has a tour** (enforced by `test_help`). Coverage per module / screen:
+  [29_PRODUCT_TOURS.md](29_PRODUCT_TOURS.md) — regenerate with `manage.py help_tour_coverage`.
+- A screen tour keeps running while you move between that screen's own pages (e.g. a mobile list
+  and its detail); steps whose element is on the other page show their text with a note. **System tour** (`general.system`):
+  «🧭 جولة تعريفية بالنظام» on /help — side menu, search, help, notifications, security.
+- **App-frame anchors:** `shell-*` (rail, nav panel, search, help, notifications, security) and
+  generated menu anchors `nav-group-<id>` / `nav-<path>` (Layout `navTourId`); the runner opens a
+  menu group with the `help:nav-show` event.
+- Going to a page the tour does not expect ends it. Zoom-in + soft pulse on each step
+  (`.tour-spot`, off with reduced motion). Trainer text edits merge by position + target.
+- **Test** checks every target (incl. generated menu anchors), that `route`/`wait` are real routes,
+  `nav` a real menu path, and that `tour_continue` follows a last step waiting for that screen.
+
 ## Usage report — help nobody uses (built 2026-10-10)
 
 «للمدربين» → for the selected period: screens whose help nobody opened (those on a role's training
 path first — people should have read them), and «اعرض لي» tours: runs, % finished, the step most
 people stop after (the next step is probably unclear or its button not visible), tours never run.
+A weak step («✏️ صلّح الخطوة») opens `/help?screen=<its screen>&edit=1&tour_step=<i>`: the editor
+scrolls to that step's text and highlights it (workflow tours open their module page).
 The tour runner reports its end once (`POST /api/help/tour-event/` → `HelpEvent kind=tour`,
 `results` = steps reached, `query='done'` when finished); report: `GET /api/help/usage/?days=`.
+
+## Weekly training digest for supervisors (built 2026-10-11)
+
+Every Sunday 08:40 (scheduler job `help_training_digest`; `manage.py help_training_digest [--dry-run]`)
+each person with `help/edit` gets one notification (`apps.notifications`, deduped per ISO week) about the
+active staff in the branches they can see (themselves excluded): team size and how many finished; ✅
+finished this week; ⏳ stuck — no training activity (screen ticked / quiz) for 7+ days, joined 7+ days ago,
+path not complete (incl. never started); ❌ failed a quiz (best attempt on the current version below the
+pass mark); ⟳ must retake a changed quiz. Up to 5 names per line, the rest in «للمدربين». Built on the
+same calculation as the trainers' team view (`onboarding_views.team_rows`). SystemSetting
+`help_training_digest_enabled` (default on). Code: `apps/help/digest.py`.
+
+## «🔔 تذكير» for stuck people (built 2026-10-11)
+
+In «للمدربين» → «تقدّم الفريق في التدريب»: a person is «⏳ واقف» when their path is not complete and
+they had no training activity for 7+ days (`onboarding_views.is_stuck`, the same rule as the weekly
+digest). «🔔 تذكير» (per row) / «تذكير كل الواقفين» → `POST /api/help/onboarding/remind/ {staff_ids}`:
+help/edit only, only people in the sender's branches, skips finished people, one reminder per person every
+3 days; each reminder is a `HelpReminder` (who / whom / when / progress) and a gentle notification (who
+sent it, what is left, where to continue); it also re-shows the person's «ابدأ من هنا» cards.
 
 ## Trainers (help/edit)
 
@@ -155,7 +269,8 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
 5. a `related` / `workflows` reference points at something that does not exist.
 
 **Rule for every feature batch:** new screen / tab / status → update the matching
-`apps/help/content/<module>.py` and bump that screen's `updated` date (users get the "new" dot).
+`apps/help/content/<module>.py` and bump that screen's `updated` date (users get the "new" dot), and
+add a one-line `change_note` (ar + en) saying what changed — users see it in «الجديد» and on the home card.
 
 ## Adding help for a new screen
 
@@ -173,7 +288,10 @@ closing the drawer falls back to the page tab). Pages that keep the tab in `?tab
     'related': ['other.screen'],
     'workflows': ['key'],              # optional: only these module workflows
     'tour': [{'target': 'module-screen-btn', 'text': T('…', '…')}],  # optional «اعرض لي»; add data-tour="module-screen-btn" to the element
+    #   step extras: 'route': '/page', 'wait': '/page/:id', 'nav': '/menu-path'
+    'tour_continue': 'module.detail',  # optional: last step waits for its route, then its tour follows
     'updated': 'YYYY-MM-DD',
+    'change_note': T('زر تصدير جديد', 'New export button'),  # optional: one line «what changed» for users
 }
 ```
 
@@ -182,4 +300,3 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Tours for the remaining screens (only ~56 of 176 have one; the panel shows the button only where one exists).

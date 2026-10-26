@@ -577,8 +577,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     def push_preview(self, request, pk=None):
         """Dry-run: build the exact SOFTECH plan (header + line column→value maps + SQL)
         WITHOUT writing anything. Safe for any authenticated user to inspect."""
-        from . import writer
+        from . import writer, suppliers
         invoice = self.get_object()
+        suppliers.ensure_invoice_vendor(invoice)
         try:
             result = writer.push_final(invoice, dry_run=True)
         except ValueError as e:
@@ -589,8 +590,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     def validate(self, request, pk=None):
         """Run the SofTech save-time validations (credit limit, item allowed, price caps,
         expiry required, …) and return {ok, errors[], warnings[]}. Read-only."""
-        from . import validations
+        from . import validations, suppliers
         invoice = self.get_object()
+        suppliers.ensure_invoice_vendor(invoice)
         return Response(validations.validate_invoice(invoice, live=True))
 
     @action(detail=True, methods=['post'])
@@ -608,6 +610,8 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'يجب تأكيد الفاتورة قبل الترحيل'},
                             status=status.HTTP_400_BAD_REQUEST)
         force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
+        from . import suppliers
+        suppliers.ensure_invoice_vendor(invoice)
         try:
             result = writer.push_final(invoice, dry_run=False, force=force)
             _audit_invoice_push(request, invoice, result, force)
@@ -684,13 +688,61 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='update-header')
     def update_header(self, request, pk=None):
+        from . import suppliers
         invoice = self.get_object()
         fields  = ['supplier_name', 'invoice_number', 'invoice_date', 'currency',
-                   'global_discount_pct', 'global_discount_amt', 'notes', 'vendor']
+                   'global_discount_pct', 'global_discount_amt', 'notes']
+        old_name = invoice.supplier_name
         for field in fields:
             if field in request.data:
                 setattr(invoice, field, request.data[field])
+        if 'vendor' in request.data:
+            vid = request.data.get('vendor') or None
+            if vid and not VendorProfile.objects.filter(pk=vid).exists():
+                return Response({'detail': 'المورد غير موجود'}, status=status.HTTP_400_BAD_REQUEST)
+            invoice.vendor_id = vid
         invoice.save()
+        # A corrected supplier name re-links an unlinked (or name-only) vendor.
+        if invoice.supplier_name != old_name and not (invoice.vendor and invoice.vendor.softech_personcode):
+            suppliers.ensure_invoice_vendor(invoice)
+        return Response(SupplierInvoiceDetailSerializer(
+            self.get_queryset().get(pk=invoice.pk),
+            context=self.get_serializer_context()
+        ).data)
+
+
+    # ── Link the invoice to a SOFTECH supplier by hand ────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='link-vendor')
+    def link_vendor(self, request, pk=None):
+        """Attach a SOFTECH-coded supplier when auto-resolution missed it (E7
+        supplier_unlinked). Body: {vendor: <VendorProfile id>} or {personcode, name}.
+        The invoice's supplier name is learned as an alias, so the next invoice
+        from this supplier links itself."""
+        from . import suppliers
+        invoice = self.get_object()
+        if invoice.status in ('pushing', 'finalized'):
+            return Response({'detail': 'لا يمكن تغيير مورد فاتورة مُرحّلة'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        vid = request.data.get('vendor')
+        pc  = str(request.data.get('personcode') or '').strip()
+        if vid:
+            vp = VendorProfile.objects.filter(pk=vid).first()
+            if not vp or not vp.softech_personcode:
+                return Response({'detail': 'المورد المختار ليس له كود SOFTECH'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            suppliers.learn_alias(vp, invoice.supplier_name or '')
+        elif pc:
+            if not pc.isdigit() or len(pc) > 8:
+                return Response({'detail': 'كود المورد غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
+            name = str(request.data.get('name') or '').strip()[:200]
+            if not name and pc in suppliers.TOP_SUPPLIERS:
+                name = suppliers.TOP_SUPPLIERS[pc][0]
+            vp = suppliers.get_or_create_vendor(pc, name, alias=invoice.supplier_name or '')
+        else:
+            return Response({'detail': 'اختر المورد'}, status=status.HTTP_400_BAD_REQUEST)
+        invoice.vendor = vp
+        invoice.save(update_fields=['vendor', 'updated_at'])
         return Response(SupplierInvoiceDetailSerializer(
             self.get_queryset().get(pk=invoice.pk),
             context=self.get_serializer_context()
@@ -712,6 +764,13 @@ class VendorProfileViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('main') in ('1', 'true'):
             qs = qs.filter(is_main=True)
         return qs
+
+    @action(detail=False, methods=['get'])
+    def linkable(self, request):
+        """Suppliers an invoice can be linked to: coded VendorProfiles + curated
+        top distributors not yet profiled. [{vendor_id, personcode, name, is_main}]."""
+        from .suppliers import linkable_suppliers
+        return Response(linkable_suppliers())
 
     @action(detail=False, methods=['get'])
     def main(self, request):

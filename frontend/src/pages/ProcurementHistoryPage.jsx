@@ -119,7 +119,7 @@ export default function ProcurementHistoryPage() {
       </div>
 
       {/* Summary bar (totals over the full match set) */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div data-tour="purchasing-history-totals" className="grid grid-cols-2 md:grid-cols-6 gap-2">
         <StatCard label="سطور مطابقة" value={s ? fmt(s.line_count, 0) : '…'} sub={s ? `${fmt(s.invoices, 0)} فاتورة` : ''} />
         <StatCard label="صافي المشتريات" value={s ? `${fmtK(s.paid_value)}` : '…'} sub="ج.م" />
         <StatCard label="بونص (وحدات)" value={s ? fmt(s.bonus_units, 0) : '…'} sub={s ? `${fmt(s.foc_lines, 0)} سطر FOC` : ''} tone="text-emerald-600" />
@@ -135,7 +135,7 @@ export default function ProcurementHistoryPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">بحث عام</label>
-            <input name="q" value={filters.q} onChange={onInput} placeholder="اسم/كود صنف، فاتورة..."
+            <input data-tour="purchasing-history-search" name="q" value={filters.q} onChange={onInput} placeholder="اسم/كود صنف، فاتورة..."
               className="input-field w-full text-sm" onKeyDown={e => e.key === 'Enter' && handleSearch()} />
           </div>
           <div><label className="text-xs text-gray-500 block mb-1">كود المورد</label>
@@ -151,7 +151,7 @@ export default function ProcurementHistoryPage() {
         </div>
 
         {/* Row 4 — numeric ranges */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div data-tour="purchasing-history-ranges" className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <div><label className="text-xs text-gray-500 block mb-1">هامش من %</label>
             <input type="number" name="margin_min" value={filters.margin_min} onChange={onInput} className="input-field w-full text-sm" /></div>
           <div><label className="text-xs text-gray-500 block mb-1">هامش إلى %</label>
@@ -167,7 +167,7 @@ export default function ProcurementHistoryPage() {
         </div>
 
         {/* Row 5 — toggle filters + actions */}
-        <div className="flex flex-wrap gap-2 items-center pt-1">
+        <div data-tour="purchasing-history-toggles" className="flex flex-wrap gap-2 items-center pt-1">
           {[
             { label: 'كل الحركات', value: '' },
             { label: 'مشتريات فقط', value: 'false' },
@@ -196,12 +196,12 @@ export default function ProcurementHistoryPage() {
           <div className="flex-1" />
           <span className="text-xs text-gray-400">{activeCount > 0 ? `${activeCount} فلتر نشط` : ''}</span>
           <button onClick={handleReset} className="px-3 py-1 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">إعادة ضبط</button>
-          <button onClick={handleSearch} className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700">بحث</button>
+          <button data-tour="purchasing-history-apply" onClick={handleSearch} className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand-600 text-white hover:bg-brand-700">بحث</button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div data-tour="purchasing-history-table" className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 ml-3" />جاري التحميل...

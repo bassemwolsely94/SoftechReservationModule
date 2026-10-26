@@ -174,7 +174,7 @@ export default function DemandDashboardPage() {
           </div>
 
           {/* Window selector */}
-          <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden text-xs">
+          <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden text-xs" data-tour="demand-dashboard-days">
             {[7, 14, 30, 60, 90].map(d => (
               <button key={d} onClick={() => setDays(d)}
                 className="px-3 py-1.5 font-semibold transition-colors"
@@ -184,7 +184,7 @@ export default function DemandDashboardPage() {
             ))}
           </div>
 
-          <button onClick={() => navigate('/demand')} className="btn-primary text-sm">
+          <button onClick={() => navigate('/demand')} className="btn-primary text-sm" data-tour="demand-dashboard-new">
             + تسجيل طلب جديد
           </button>
         </div>
@@ -205,7 +205,7 @@ export default function DemandDashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="demand-dashboard-kpis">
               <KpiCard icon="📋" label="إجمالي الطلبات"
                 value={k.total_30d} sub={`آخر ${days} يوم`}
                 color={BRAND} bg="rgb(var(--c-brand-50))" />
@@ -238,7 +238,7 @@ export default function DemandDashboardPage() {
 
         {/* Top lost items + top demanded items */}
         {!isLoading && (
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid md:grid-cols-2 gap-5" data-tour="demand-dashboard-top-items">
             <Section icon="❌" title="الأصناف الأكثر تسجيلاً كبيع ضائع">
               {(data?.top_lost_items || []).length === 0 ? (
                 <div className="text-center py-6 text-gray-300 text-sm">
@@ -333,7 +333,7 @@ export default function DemandDashboardPage() {
 
         {/* Chronic shortages + discontinued */}
         {!isLoading && (
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid md:grid-cols-2 gap-5" data-tour="demand-dashboard-chronic">
             <Section icon="⏳" title="أصناف نقص مزمن (طلب متكرر غير مُستوفى)">
               {chronic.length === 0 ? (
                 <div className="text-center py-6 text-green-300 text-sm">
@@ -480,7 +480,7 @@ export default function DemandDashboardPage() {
               <p className="text-xs text-gray-400">
                 أصناف طلبها عملاء حقيقيون (مفتوحة + ضائعة) — أعلى إشارة شراء ثقةً. مرتّبة حسب القيمة الضائعة المؤكدة.
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-tour="demand-dashboard-suggestions">
                 <button onClick={exportSuggestionsCsv} className="btn-secondary text-xs px-3">⬇ تصدير CSV</button>
                 <button onClick={pushSuggestions} disabled={pushing}
                   className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold disabled:opacity-50"

@@ -502,12 +502,20 @@ def _search_rows(tiers, branch_id) -> list:
 
 
 _SOFTECH_SEARCH_BREAKER = 'catalog:softech_search_down'
+_SOFTECH_SEARCH_CACHE = 'catalog:softech_search:'
+_SOFTECH_SEARCH_TTL = 180       # seconds — results found
+_SOFTECH_SEARCH_MISS_TTL = 60   # seconds — nothing found
 
 
 def _softech_live_search(like_q: str, branch_id) -> list:
     """SOFTECH items LIKE the pattern that the PG catalog doesn't have yet (just created,
     not synced). A failure trips a 5-minute breaker — no waiting on a down server."""
     from django.core.cache import cache
+    import hashlib
+    cache_key = _SOFTECH_SEARCH_CACHE + hashlib.sha1(like_q.encode('utf-8')).hexdigest()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return _finish_live_rows([dict(r) for r in cached], branch_id)
     if cache.get(_SOFTECH_SEARCH_BREAKER):
         return []
     try:
@@ -535,11 +543,20 @@ def _softech_live_search(like_q: str, branch_id) -> list:
             'requires_fridge': bool(row[9]) if row[9] else False,
             'medicine_type': str(row[10]).strip() if row[10] else '',
             'source': 'softech', 'item_id': None, 'tier': 'ordered',
-            'qty_at_branch': 0.0 if branch_id else None,
         })
+    # Same pattern again within a few minutes (typing, paging, a colleague) is answered
+    # from here instead of another login + items scan (doc 30 F10). Misses expire sooner
+    # so a just-created SOFTECH item still shows up quickly.
+    cache.set(cache_key, out, _SOFTECH_SEARCH_TTL if out else _SOFTECH_SEARCH_MISS_TTL)
+    return _finish_live_rows([dict(r) for r in out], branch_id)
+
+
+def _finish_live_rows(out, branch_id):
+    """Per-request part of a live result: branch column + link to our catalog row."""
     pg = {i.softech_id: i.id for i in Item.objects.filter(
         softech_id__in=[r['softech_id'] for r in out if r['softech_id']], is_active=True)}
     for r in out:
+        r['qty_at_branch'] = 0.0 if branch_id else None
         r['item_id'] = pg.get(r['softech_id'])
     return out
 

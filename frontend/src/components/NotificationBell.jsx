@@ -188,7 +188,7 @@ export default function NotificationBell() {
 
   return (
     <>
-      <div className="relative flex items-center gap-1" dir="rtl">
+      <div className="relative flex items-center gap-1" dir="rtl" data-tour="shell-notifications">
         {/* ── Desktop push toggle (OS notification when tab unfocused) ──────── */}
         {pushSupported() && (
           <button

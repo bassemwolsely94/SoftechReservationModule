@@ -206,6 +206,7 @@ export default function TaskDashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <select
+            data-tour="tasks-dashboard-branch"
             className="border rounded-lg px-3 py-1.5 text-sm text-right"
             value={branch}
             onChange={e => setBranch(e.target.value)}
@@ -231,7 +232,7 @@ export default function TaskDashboardPage() {
       <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
 
         {/* ── KPI cards row ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" data-tour="tasks-dashboard-kpis">
           <KpiCard
             label="إجمالي المهام"
             value={total}
@@ -281,7 +282,7 @@ export default function TaskDashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4" data-tour="tasks-dashboard-breakdown">
 
           {/* ── Status distribution ── */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -336,7 +337,7 @@ export default function TaskDashboardPage() {
         <div className="grid grid-cols-2 gap-4">
 
           {/* ── Upcoming due soon ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="tasks-dashboard-due-soon">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-700 text-sm">المهام المستحقة قريباً</h3>
               <button onClick={() => navigate('/tasks?overdue=1')} className="text-xs text-brand-600 hover:underline">عرض الكل</button>
@@ -371,7 +372,7 @@ export default function TaskDashboardPage() {
         </div>
 
         {/* ── Schedules ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="tasks-dashboard-schedules">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-700 text-sm">الجداول التلقائية النشطة</h3>
             <button onClick={() => navigate('/tasks/schedules')} className="text-xs text-brand-600 hover:underline">إدارة الجداول</button>

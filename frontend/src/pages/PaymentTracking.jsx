@@ -260,7 +260,7 @@ function PaymentRow({ payment, onConfirm, onDispute }) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div data-tour="finance-payments-actions" className="flex items-center gap-2 shrink-0">
           {payment.status === 'pending' && (
             <>
               <button onClick={() => onConfirm(payment)}
@@ -364,7 +364,7 @@ export default function PaymentTracking() {
           <h1 className="text-2xl font-bold text-gray-800">تتبع المدفوعات</h1>
           <p className="text-sm text-gray-500 mt-0.5">انستاباي — فودافون كاش — كاش — تحويل بنكي</p>
         </div>
-        <button onClick={() => setShowNew(true)}
+        <button data-tour="finance-payments-new" onClick={() => setShowNew(true)}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors">
           + تسجيل دفعة
         </button>
@@ -372,7 +372,7 @@ export default function PaymentTracking() {
 
       {/* Summary */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div data-tour="finance-payments-summary" className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-brand-50 border border-brand-200 rounded-xl p-4">
             <p className="text-xs text-gray-400">إجمالي اليوم</p>
             <p className="text-2xl font-bold text-brand-700 font-mono mt-1">{fmt(summary.total_value_today, 2)} جم</p>
@@ -400,7 +400,7 @@ export default function PaymentTracking() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <div data-tour="finance-payments-filters" className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         {/* Row 1: main filters */}
         <div className="flex flex-wrap gap-3 items-end">
           <div>
@@ -447,7 +447,7 @@ export default function PaymentTracking() {
               placeholder="اسم / هاتف / مرجع..."
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none min-w-36" />
           </div>
-          <button type="button" onClick={() => setShowTimeFilters(v => !v)}
+          <button data-tour="finance-payments-time" type="button" onClick={() => setShowTimeFilters(v => !v)}
             className={`self-end flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border transition-colors
               ${showTimeFilters ? 'bg-brand-50 border-brand-400 text-brand-700' : 'bg-white border-gray-300 text-gray-600 hover:border-brand-400'}`}>
             🕐 وقت {showTimeFilters ? '▲' : '▼'}
@@ -500,7 +500,7 @@ export default function PaymentTracking() {
       </div>
 
       {/* Payments list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div data-tour="finance-payments-list" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-600">{payments.length} دفعة</span>
           <RefreshButton loading={isFetching} onClick={invalidate} variant="ghost" size="sm">

@@ -112,7 +112,7 @@ export default function MobileReservationDetailPage() {
       </button>
 
       {/* Header card */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="reservations-mdetail-header" className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h1 className="font-bold text-base text-gray-900 leading-snug">{r.item_name}</h1>
           <span className="text-xs text-gray-400 shrink-0">#{r.id}</span>
@@ -127,7 +127,7 @@ export default function MobileReservationDetailPage() {
       </div>
 
       {/* Info card */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
+      <div data-tour="reservations-mdetail-items" className="bg-white rounded-2xl border border-gray-200 p-4 divide-y divide-gray-50">
         <Row label="العميل">{r.customer_name || '—'}</Row>
         {r.contact_phone && (
           <Row label="الهاتف">
@@ -188,7 +188,7 @@ export default function MobileReservationDetailPage() {
 
       {/* Status actions */}
       {allowed.length > 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div data-tour="reservations-mdetail-status" className="bg-white rounded-2xl border border-gray-200 p-4">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">تغيير الحالة</h2>
           <div className="grid grid-cols-2 gap-2">
             {allowed.map(s => (
@@ -203,7 +203,7 @@ export default function MobileReservationDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="text-center text-xs text-gray-400 py-2">هذا الحجز في حالة نهائية</div>
+        <div data-tour="reservations-mdetail-status" className="text-center text-xs text-gray-400 py-2">هذا الحجز في حالة نهائية</div>
       )}
 
       {/* Confirm sheet */}

@@ -1742,10 +1742,57 @@ def _poll_erp_matches():
         'supplying_branch', 'requesting_branch',
     )
 
+    # One SOFTECH login for the whole cycle (doc 30 F4 — was one per transfer).
+    # If the shared connection drops, reconnect and retry that transfer once, so a
+    # lost link is never recorded as "document not found".
+    from config.sybase import get_sybase_connection
+    shared = {'conn': None}
+
+    def _conn():
+        if shared['conn'] is None:
+            shared['conn'] = get_sybase_connection()
+        return shared['conn']
+
+    def _drop():
+        if shared['conn'] is not None:
+            try:
+                shared['conn'].close()
+            except Exception:
+                pass
+        shared['conn'] = None
+
+    try:
+        return _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                                      ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage)
+    finally:
+        _drop()
+
+
+def _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                           ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage):
     checked = 0
     for tr in pending_qs:
         try:
-            result = ERPMatcher(tr).run()
+            try:
+                conn = _conn()
+            except Exception as exc:
+                logger.warning(f'_poll_erp_matches: SOFTECH not reachable, stopping cycle: {exc}')
+                break
+            matcher = ERPMatcher(tr, conn=conn)
+            result = matcher.run()
+            if matcher.shared_conn_failed:
+                _drop()
+                try:
+                    matcher = ERPMatcher(tr, conn=_conn())
+                except Exception as exc:
+                    logger.warning(f'_poll_erp_matches: reconnect failed, stopping cycle: {exc}')
+                    break
+                result = matcher.run()
+                if matcher.shared_conn_failed:
+                    _drop()
+                    logger.warning(f'_poll_erp_matches: SOFTECH error on retry for TR {tr.request_number}; '
+                                   f'left pending for the next cycle')
+                    continue
             apply_match_result(tr, result)
 
             match_status = result['status']
@@ -1893,6 +1940,11 @@ def _write_heartbeat():
         )
     except Exception as exc:
         logger.debug('[scheduler] heartbeat write failed: %s', exc)
+    try:
+        from apps.sync import softech_load
+        softech_load.flush()   # save SOFTECH load counts at least once a minute
+    except Exception as exc:
+        logger.debug('[scheduler] softech load flush failed: %s', exc)
 
 
 def _run_segment_customers():
@@ -1917,6 +1969,15 @@ def _run_insights(period):
 
 def _insights_daily():
     _run_insights('day')
+
+
+def _help_training_digest():
+    """In-app help: weekly training digest to supervisors (apps/help/digest.py)."""
+    try:
+        from apps.help import digest
+        digest.send_weekly()
+    except Exception as exc:
+        logger.warning('help_training_digest failed: %s', exc)
 
 
 def _help_announce_training():
@@ -2670,34 +2731,6 @@ def _sync_crm_delivery_orders():
         logger.error('[APScheduler] crm_delivery_sync failed: %s', exc)
 
 
-def _reconcile_pos_orders():
-    """
-    APScheduler job — reconcile pushed Indirect-POS orders vs the branch DBs every
-    5 minutes (read-only settlement detection). Delegates to reconcile_pos_orders.
-    Non-fatal: errors are logged but never crash the scheduler.
-    """
-    try:
-        from django.core.management import call_command
-        call_command('reconcile_pos_orders', verbosity=0)
-        logger.info('[APScheduler] pos_orders_reconcile completed')
-    except Exception as exc:
-        logger.error('[APScheduler] pos_orders_reconcile failed: %s', exc)
-
-
-def _flush_pos_orders():
-    """
-    APScheduler job — retry POS orders queued while the branch/SOFTECH was unreachable.
-    Idempotent + serial-allocated-at-write, so retries can never duplicate a document.
-    No-op unless POS_WRITER_ENABLED. Non-fatal.
-    """
-    try:
-        from django.core.management import call_command
-        call_command('flush_pos_orders', verbosity=0)
-        logger.info('[APScheduler] pos_orders_flush completed')
-    except Exception as exc:
-        logger.error('[APScheduler] pos_orders_flush failed: %s', exc)
-
-
 def _sync_insurance_cache():
     """Daily insurance cache sync — motalba + companiesitems last-90-days mirror."""
     try:
@@ -2843,6 +2876,14 @@ def start_scheduler():
     _slow_min = int(getattr(_dj_settings, 'SYNC_SLOW_MINUTES', 60))
 
     _scheduler = BackgroundScheduler(timezone='Africa/Cairo')
+    # File everything each job asks of SOFTECH under its job id (doc 30 telemetry).
+    from apps.sync import softech_load as _sl
+    _add_job = _scheduler.add_job
+
+    def _scoped_add_job(func, *args, **kwargs):
+        name = kwargs.get('id') or getattr(func, '__name__', 'job')
+        return _add_job(_sl.scoped(func, f'job:{name}'), *args, **kwargs)
+    _scheduler.add_job = _scoped_add_job
     # FAST lane — stock + sales + reactive hooks (cheap, high-frequency).
     _scheduler.add_job(
         run_fast_sync,
@@ -3094,7 +3135,8 @@ def start_scheduler():
     )
 
     # (POS flush + reconcile are registered ONCE, above, as pos_orders_flush /
-    # pos_orders_reconcile — a second copy here made two jobs push the same queue. Batch 2, P-11.)
+    # pos_orders_reconcile — a second copy here made two jobs push the same queue.
+    # Security Batch 2 P-11 = doc 30 F7.)
     # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
     # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
     # from the live Issabel CDR automatically once DB access is granted.
@@ -3232,6 +3274,10 @@ def start_scheduler():
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
+    _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)
+        _help_training_digest, 'cron', day_of_week='sun', hour=8, minute=40, id='help_training_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
     _scheduler.add_job(   # in-app help: tell staff about training changes (cheap)
         _help_announce_training, 'cron', minute=20, id='help_announce_training',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,

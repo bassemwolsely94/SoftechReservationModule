@@ -1039,7 +1039,7 @@ export default function SettingsPage() {
       <Toast msg={toast?.msg} type={toast?.type} />
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
+      <div data-tour="admin-settings-header" className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚙️</span>
           <div>
@@ -1063,7 +1063,7 @@ export default function SettingsPage() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Sidebar ── */}
-        <nav className="w-52 bg-white border-e border-gray-200 shrink-0 py-3 px-2 space-y-0.5 overflow-y-auto">
+        <nav data-tour="admin-settings-tabs" className="w-52 bg-white border-e border-gray-200 shrink-0 py-3 px-2 space-y-0.5 overflow-y-auto">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
@@ -1077,7 +1077,7 @@ export default function SettingsPage() {
         </nav>
 
         {/* ── Content Panel ── */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main data-tour="admin-settings-content" className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-48">
               <div className="text-gray-400 animate-pulse text-sm">
@@ -1088,7 +1088,7 @@ export default function SettingsPage() {
 
             /* ─── GENERAL ───────────────────────────────────────────────── */
             activeTab === 'general' ? (
-              <div className="max-w-3xl space-y-5">
+              <div data-tour="admin-settings-general" className="max-w-3xl space-y-5">
                 <h2 className="text-lg font-bold text-gray-900">{lang === 'en' ? 'General Settings' : 'الإعدادات العامة'}</h2>
 
                 {/* Language & Direction */}
@@ -1163,7 +1163,7 @@ export default function SettingsPage() {
                     {lang === 'en' ? 'No branches found.' : 'لا توجد فروع.'}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div data-tour="admin-settings-branches" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {branches.map(b => (
                       <BranchCard key={b.id} branch={b} isAdmin={isAdmin}
                         onRefresh={loadAll} showToast={showToast} />
@@ -1174,7 +1174,7 @@ export default function SettingsPage() {
 
             /* ─── SETTINGS TABS (reservations / transfers / …) ─────────── */
             ) : activeTab === 'dropdowns' ? (
-              <div className="space-y-6 max-w-3xl">
+              <div data-tour="admin-settings-dropdowns" className="space-y-6 max-w-3xl">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-900">{lang === 'en' ? 'Dropdown Options' : 'القوائم المنسدلة'}</h2>
                   <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{ddKeys.length} {lang === 'en' ? 'lists' : 'قائمة'}</span>

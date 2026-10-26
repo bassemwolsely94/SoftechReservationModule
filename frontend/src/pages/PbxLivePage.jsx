@@ -282,9 +282,9 @@ export default function PbxLivePage() {
   return (
     <div className="flex flex-col h-full" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div data-tour="callcenter-pbx-header" className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <h1 className="text-xl font-bold text-gray-800">لوحة المكالمات الحية</h1>
-        <div className="flex items-center gap-2 text-sm">
+        <div data-tour="callcenter-pbx-status" className="flex items-center gap-2 text-sm">
           <span className={`w-2 h-2 rounded-full ${
             wsStatus === 'connected' ? 'bg-green-500' :
             wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'
@@ -297,7 +297,7 @@ export default function PbxLivePage() {
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Active calls */}
-        <section>
+        <section data-tour="callcenter-pbx-active">
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">
             مكالمات نشطة ({activeSessions.length})
           </h2>
@@ -315,7 +315,7 @@ export default function PbxLivePage() {
         </section>
 
         {/* Recent history */}
-        <section>
+        <section data-tour="callcenter-pbx-history">
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">سجل المكالمات الأخيرة</h2>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">

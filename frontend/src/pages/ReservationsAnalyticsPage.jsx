@@ -104,7 +104,7 @@ export default function ReservationsAnalyticsPage() {
           <h1 className="text-xl font-black text-gray-800">تحليلات الحجوزات</h1>
           <p className="text-xs text-gray-400 mt-0.5">معدلات التحقق، أكثر الأصناف طلباً، الطلب المفقود</p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+        <div data-tour="analytics-reservations-filters" className="flex flex-wrap gap-2 items-center">
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_from} onChange={e => upd('date_from', e.target.value)} />
           <input type="date" className="input-field text-xs py-1.5 w-36" value={filters.date_to}   onChange={e => upd('date_to',   e.target.value)} />
           <select className="input-field text-xs py-1.5 w-44" value={filters.branch} onChange={e => upd('branch', e.target.value)}>
@@ -130,7 +130,7 @@ export default function ReservationsAnalyticsPage() {
       ) : (
         <>
           {/* KPI cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div data-tour="analytics-reservations-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard icon="📋" label="إجمالي الحجوزات"     value={fmt(s.total)}            color="brand" />
             <KpiCard icon="✅" label="معدل التسليم"         value={fmtPct(s.fulfillment_rate)} sub={`${fmt(s.fulfilled)} تم تسليمها`} color="green" />
             <KpiCard icon="⏱️" label="متوسط وقت التسليم"   value={s.avg_fulfill_hours != null ? `${s.avg_fulfill_hours} ساعة` : '—'} color="blue" />
@@ -148,7 +148,7 @@ export default function ReservationsAnalyticsPage() {
           <div className="grid lg:grid-cols-2 gap-6">
 
             {/* Fulfillment by branch */}
-            <div className="card">
+            <div data-tour="analytics-reservations-by-branch" className="card">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">معدل التسليم حسب الفرع</h2>
               {byBranch.length === 0 ? (
                 <div className="text-xs text-gray-400 py-4 text-center">لا توجد بيانات</div>
@@ -175,7 +175,7 @@ export default function ReservationsAnalyticsPage() {
             </div>
 
             {/* Top items */}
-            <div className="card">
+            <div data-tour="analytics-reservations-top-items" className="card">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">أكثر الأصناف المحجوزة (أول 20)</h2>
               {topItems.length === 0 ? (
                 <div className="text-xs text-gray-400 py-4 text-center">لا توجد بيانات</div>
@@ -204,7 +204,7 @@ export default function ReservationsAnalyticsPage() {
             </div>
 
             {/* Conversion by channel */}
-            <div className="card">
+            <div data-tour="analytics-reservations-channels" className="card">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">معدل التحويل حسب القناة</h2>
               {byChannel.length === 0 ? (
                 <div className="text-xs text-gray-400 py-4 text-center">لا توجد بيانات</div>
@@ -245,7 +245,7 @@ export default function ReservationsAnalyticsPage() {
             </div>
 
             {/* Lost demand */}
-            <div className="card">
+            <div data-tour="analytics-reservations-lost" className="card">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">الطلب المفقود (ملغي + منتهي) حسب الصنف</h2>
               {lostItems.length === 0 ? (
                 <div className="text-xs text-gray-400 py-4 text-center">لا توجد بيانات</div>

@@ -43,7 +43,7 @@ export default function MobileTasksPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1" data-tour="tasks-mobile-filters">
         {FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -56,7 +56,7 @@ export default function MobileTasksPage() {
         : isError ? <MobileError text="تعذّر تحميل المهام" onRetry={refetch} />
         : rows.length === 0 ? <MobileEmpty icon="✅" text="لا توجد مهام" />
         : (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5" data-tour="tasks-mobile-list">
             {rows.map(t => (
               <button key={t.id} onClick={() => navigate(`/m/tasks/${t.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">

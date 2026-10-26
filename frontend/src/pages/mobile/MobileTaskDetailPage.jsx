@@ -45,7 +45,7 @@ export default function MobileTaskDetailPage() {
     <div className="p-3 space-y-3">
       <button onClick={() => navigate('/m/tasks')} className="text-sm text-gray-500">→ الرجوع للمهام</button>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="tasks-mobile-info">
         <div className="flex items-start justify-between gap-2 mb-1">
           <h1 className="font-bold text-base text-gray-900">{t.title}</h1>
           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 shrink-0">{t.status_label || t.status}</span>
@@ -55,7 +55,7 @@ export default function MobileTaskDetailPage() {
       </div>
 
       {items.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="tasks-mobile-checklist">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">قائمة التحقق</h2>
           <div className="space-y-1.5">
             {items.map(it => {
@@ -72,7 +72,7 @@ export default function MobileTaskDetailPage() {
       )}
 
       {!isDone && (
-        <button onClick={complete} className="btn-primary w-full py-3">✅ إنهاء المهمة</button>
+        <button onClick={complete} className="btn-primary w-full py-3" data-tour="tasks-mobile-complete">✅ إنهاء المهمة</button>
       )}
 
       <MobileChatter messages={messages} onSend={sendNote} title="💬 المحادثة" />

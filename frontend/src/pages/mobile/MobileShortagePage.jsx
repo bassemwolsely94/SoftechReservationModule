@@ -69,7 +69,7 @@ export default function MobileShortagePage() {
   return (
     <div className="p-3 space-y-3">
       <div className="flex justify-end"><DataFreshnessBar compact domains={['stock']} /></div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+      <div data-tour="shortage-mobile-filters" className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
         {FILTERS.map(f => (
           <button key={f.value || 'all'} onClick={() => setFilter(f.value)}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -87,7 +87,7 @@ export default function MobileShortagePage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="🚨" text="لا توجد قوائم نواقص" />
       ) : (
-        <div className="space-y-2.5">
+        <div data-tour="shortage-mobile-lists" className="space-y-2.5">
           {rows.map(l => <ListCard key={l.id} l={l} onOpen={() => navigate(`/m/shortage/${l.id}`)} />)}
           {hasNextPage && (
             <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}
@@ -98,7 +98,7 @@ export default function MobileShortagePage() {
         </div>
       )}
 
-      <button onClick={() => navigate('/m/shortage/new')}
+      <button data-tour="shortage-mobile-new" onClick={() => navigate('/m/shortage/new')}
         className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
         title="قائمة نواقص جديدة">
         +

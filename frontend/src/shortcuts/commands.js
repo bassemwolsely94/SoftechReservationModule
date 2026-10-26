@@ -57,6 +57,12 @@ export function buildCommands() {
       run: () => window.dispatchEvent(new CustomEvent('help:open', { detail: {} })),
     },
     {
+      id: 'show-me-this-screen', section: 'action', icon: '👆',
+      title: 'اعرض لي — جولة على هذه الشاشة (Shift+F1)', title_en: 'Show me — tour of this screen (Shift+F1)',
+      keywords: ['اعرض', 'جولة', 'وريني', 'ازاي', 'tour', 'show', 'walkthrough', 'guide'],
+      run: () => window.dispatchEvent(new Event('help:show-me')),
+    },
+    {
       id: 'logout', section: 'action', icon: '🚪',
       title: 'تسجيل الخروج', title_en: 'Log out',
       keywords: ['خروج', 'signout', 'logout'],

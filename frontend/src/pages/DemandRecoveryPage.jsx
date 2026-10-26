@@ -145,19 +145,19 @@ function RecoveryRow({ row, onAction }) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 justify-end flex-wrap">
           {row.wa_link && (
-            <button onClick={() => onAction('whatsapp', row)}
+            <button onClick={() => onAction('whatsapp', row)} data-tour="demand-recovery-whatsapp"
               className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
               style={{ background: GREEN }} title="فتح واتساب وتسجيل التواصل">
               واتساب
             </button>
           )}
-          <button onClick={() => onAction('recover', row)}
+          <button onClick={() => onAction('recover', row)} data-tour="demand-recovery-recover"
             className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
             style={{ background: BRAND }} title="تأكيد استرداد البيعة">
             استرداد
           </button>
           <CanDo module="reservations" action="create">
-            <button onClick={() => onAction('reserve', row)}
+            <button onClick={() => onAction('reserve', row)} data-tour="demand-recovery-reserve"
               className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
               style={{ background: BLUE }} title="تحويل إلى حجز للعميل">
               حجز
@@ -241,7 +241,7 @@ export default function DemandRecoveryPage() {
             </svg>
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-black text-gray-900">🔔 قائمة الاسترداد — عاد للمخزون</h1>
+            <h1 className="text-xl font-black text-gray-900" data-tour="demand-recovery-header">🔔 قائمة الاسترداد — عاد للمخزون</h1>
             <p className="text-xs text-gray-400 mt-0.5">
               عملاء طلبوا أصنافاً نفدت ثم عادت للمخزون — تواصل معهم لاسترداد البيعة
             </p>
@@ -256,7 +256,7 @@ export default function DemandRecoveryPage() {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
         {/* ROI tiles */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="demand-recovery-kpis">
           <KpiTile icon="💰" label="إيراد مُسترَد (٣٠ يوم)"
             value={`${egp(kpis?.recovered_revenue_30d)} ج.م`}
             sub={`${toLatin(kpis?.recovered_count_30d ?? 0)} بيعة مُستردة`}
@@ -289,7 +289,7 @@ export default function DemandRecoveryPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" data-tour="demand-recovery-queue">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <span className="text-sm font-bold text-gray-700">
                 {toLatin(queue.length)} فرصة استرداد

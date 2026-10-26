@@ -32,7 +32,7 @@ function Rail({ c }) {
     ['المطابقة', c.status === 'reconciled' || c.status === 'closed'],
   ]
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div data-tour="replacement-detail-rail" className="flex items-center gap-1 flex-wrap">
       {steps.map(([label, ok], i) => (
         <div key={label} className="flex items-center gap-1">
           <span className={`text-xs px-2.5 py-1 rounded-full border ${ok
@@ -187,7 +187,7 @@ export default function ReplacementCaseDetailPage() {
               {c.supplier_tier_pct && ` (فئة المورد ${Number(c.supplier_tier_pct)}%)`}
             </div>
           </div>
-          <div className="flex gap-4">
+          <div data-tour="replacement-detail-balance" className="flex gap-4">
             <div className="text-center"><div className="text-[11px] text-gray-500">الرصيد</div><div className="text-2xl font-bold tabular-nums">{money(c.entitlement)}</div></div>
             <div className="text-center"><div className="text-[11px] text-gray-500">المتبقي</div>
               <div className={`text-2xl font-bold tabular-nums ${Number(c.outstanding) > 0.01 ? 'text-rose-700' : 'text-emerald-700'}`}>{money(c.outstanding)}</div></div>
@@ -232,7 +232,7 @@ export default function ReplacementCaseDetailPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
+        <button data-tour="replacement-detail-rebuild" disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
       </div>
 
       {activeTab === 'workflow' && <WorkflowPanel c={c} />}

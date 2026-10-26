@@ -21,7 +21,7 @@ import useHelpTab from '../help/useHelpTab'
 function SaveBar({ onSave, saving, dirty }) {
   if (!dirty) return null
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
+    <div data-tour="catalog-content-admin-save" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3
                     bg-white border border-gray-200 shadow-xl rounded-2xl px-6 py-3">
       <span className="text-sm text-amber-600 font-medium">⚠ يوجد تغييرات غير محفوظة</span>
       <button
@@ -106,6 +106,7 @@ function MediaTab({ product, productId }) {
     <div>
       {/* Upload zone */}
       <div
+        data-tour="catalog-content-admin-upload"
         onClick={() => fileInputRef.current?.click()}
         className="border-2 border-dashed border-brand-200 hover:border-brand-400 rounded-xl p-8
                    text-center cursor-pointer transition-colors bg-brand-50 hover:bg-brand-100 mb-6"
@@ -184,7 +185,7 @@ function MediaTab({ product, productId }) {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div data-tour="catalog-content-admin-media-actions" className="flex items-center gap-2 shrink-0">
                 {!m.is_primary && (
                   <button
                     onClick={() => updateMutation.mutate({ mediaId: m.id, data: { is_primary: true } })}
@@ -561,7 +562,7 @@ export default function ProductContentAdminPage() {
             ←
           </button>
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-gray-800">
+            <h1 data-tour="catalog-content-admin-header" className="text-lg font-bold text-gray-800">
               إدارة المحتوى — {product.display_name_ar || product.name}
             </h1>
             <p className="text-xs text-gray-400 font-mono">{product.softech_id}</p>
@@ -577,7 +578,7 @@ export default function ProductContentAdminPage() {
 
       <div className="max-w-4xl mx-auto px-6 py-6">
         {/* Tab bar */}
-        <div className="flex gap-2 mb-6 overflow-x-auto">
+        <div data-tour="catalog-content-admin-tabs" className="flex gap-2 mb-6 overflow-x-auto">
           {ADMIN_TABS.map(tab => (
             <button
               key={tab.key}
@@ -593,7 +594,7 @@ export default function ProductContentAdminPage() {
         </div>
 
         {/* Tab content */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <div data-tour="catalog-content-admin-panel" className="bg-white rounded-2xl border border-gray-100 p-6">
           {activeTab === 'media'      && <MediaTab product={product} productId={id} />}
           {activeTab === 'content'    && <ContentTab productId={id} initialContent={product.content} />}
           {activeTab === 'attributes' && <AttributesTab productId={id} initialAttributes={product.attributes} />}

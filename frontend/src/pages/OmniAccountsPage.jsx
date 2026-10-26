@@ -58,13 +58,13 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
           </p>
           <p className="text-xs text-gray-500 mt-0.5" dir="ltr">{acc.phone_or_handle}</p>
         </div>
-        <span className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full shrink-0 ${st.cls || ''}`}>
+        <span data-tour="omni-accounts-status" className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full shrink-0 ${st.cls || ''}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${st.dot || ''}`} />
           {st.label || acc.status}
         </span>
       </div>
 
-      <div className="grid grid-cols-4 gap-1 text-center">
+      <div data-tour="omni-accounts-load" className="grid grid-cols-4 gap-1 text-center">
         {[
           ['محادثات', acc.stats?.threads],
           ['اليوم', acc.stats?.messages_today],
@@ -89,7 +89,7 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
         <span className="text-gray-400">{acc.branch_name || 'كل الفروع'}</span>
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-gray-100">
+      <div data-tour="omni-accounts-actions" className="flex gap-2 pt-1 border-t border-gray-100">
         <button onClick={() => onEdit(acc)}
                 className="flex-1 text-xs text-gray-600 hover:text-indigo-600 py-1">
           ✏️ تعديل
@@ -264,14 +264,14 @@ export default function OmniAccountsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-4">
+      <div data-tour="omni-accounts-header" className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-gray-800">📡 حسابات القنوات</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {accounts.length} حساب — {connected} متصل
           </p>
         </div>
-        <button onClick={() => setModal({})}
+        <button data-tour="omni-accounts-new" onClick={() => setModal({})}
                 className="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm">
           + حساب جديد
         </button>
@@ -298,7 +298,7 @@ export default function OmniAccountsPage() {
           <p>لا توجد حسابات — أضف رقم واتساب أول</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div data-tour="omni-accounts-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {accounts.map(acc => (
             <AccountCard key={acc.id} acc={acc}
                          onEdit={setModal} onProbe={probe} probing={probing} />

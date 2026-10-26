@@ -136,10 +136,12 @@ def read_softech_points(softech_pic: str) -> int | None:
         return None
 
 
-def read_bulk_softech_points(pic_list: list) -> dict:
+def read_bulk_softech_points(pic_list: list, conn=None) -> dict:
     """
     Fetch net points balances for multiple PICs in one round-trip.
     Returns { phcode: int_net_balance } — PICs with no history are returned as 0.
+    Returns {} on a SOFTECH error. Pass `conn` to reuse an open connection (it is
+    left open); otherwise one is opened and closed here.
     """
     if not pic_list:
         return {}
@@ -151,12 +153,17 @@ def read_bulk_softech_points(pic_list: list) -> dict:
         f'WHERE lcp.phcode IN ({placeholders}) '
         f'GROUP BY lcp.phcode'
     )
+    own = conn is None
     try:
-        conn   = get_sybase_connection()
-        cursor = conn.cursor()
-        cursor.execute(sql, list(pic_list))
-        rows = cursor.fetchall()
-        conn.close()
+        if own:
+            conn = get_sybase_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, list(pic_list))
+            rows = cursor.fetchall()
+        finally:
+            if own:
+                conn.close()
         result = {}
         for row in rows:
             pic = _safe_str(row[0]) if row[0] else None
@@ -337,11 +344,36 @@ def sync_all_softech_balances() -> int:
     pic_map = {acc.customer.softech_pic: acc for acc in accounts}
     pics    = list(pic_map.keys())
 
-    # Fetch in chunks of 200 (safe IN-clause size for Sybase ASE 12.5)
+    # Fetch in chunks of 200 (safe IN-clause size for Sybase ASE 12.5) over ONE
+    # connection (doc 30 F6 — was one login per chunk). If a chunk fails, reconnect
+    # once and retry it; a second failure stops the run (SOFTECH is down).
     CHUNK    = 200
     balances: dict = {}
-    for i in range(0, len(pics), CHUNK):
-        balances.update(read_bulk_softech_points(pics[i:i + CHUNK]))
+    conn = None
+    try:
+        conn = get_sybase_connection()
+        for i in range(0, len(pics), CHUNK):
+            chunk = pics[i:i + CHUNK]
+            got = read_bulk_softech_points(chunk, conn=conn)
+            if not got:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = get_sybase_connection()
+                got = read_bulk_softech_points(chunk, conn=conn)
+                if not got:
+                    logger.warning('sync_all_softech_balances: stopped at chunk %d — SOFTECH not answering', i // CHUNK)
+                    break
+            balances.update(got)
+    except Exception as exc:
+        logger.warning('sync_all_softech_balances: SOFTECH connection failed: %s', exc)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     updated = 0
     for pic, new_bal in balances.items():

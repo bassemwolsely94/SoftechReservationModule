@@ -157,7 +157,7 @@ export default function MobileNewReservationPage() {
       )}
 
       {/* Customer */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="reservations-mnew-customer" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">
           👤 العميل <span className="text-xs text-gray-400 font-normal">(اختياري)</span>
         </h2>
@@ -165,7 +165,7 @@ export default function MobileNewReservationPage() {
       </div>
 
       {/* Item */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="reservations-mnew-item" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الصنف *</h2>
         {manualMode ? (
           <div className="space-y-2">
@@ -213,7 +213,7 @@ export default function MobileNewReservationPage() {
       </div>
 
       {/* Details */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="reservations-mnew-details" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 text-sm">📋 التفاصيل</h2>
 
         {/* Branch */}
@@ -257,7 +257,7 @@ export default function MobileNewReservationPage() {
         </div>
 
         {/* Contact */}
-        <div>
+        <div data-tour="reservations-mnew-contact">
           <label className="label">اسم التواصل *</label>
           <input className="input-field w-full" value={form.contact_name} onChange={e => upd('contact_name', e.target.value)} />
         </div>
@@ -302,6 +302,7 @@ export default function MobileNewReservationPage() {
       <div className="flex gap-2.5">
         <button onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
         <button
+          data-tour="reservations-mnew-submit"
           onClick={() => submit(false)}
           disabled={submitting}
           className="btn-primary flex-1 py-3 text-base disabled:opacity-50"

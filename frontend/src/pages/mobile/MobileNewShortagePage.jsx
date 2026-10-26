@@ -72,7 +72,7 @@ export default function MobileNewShortagePage() {
 
       <div className="flex gap-2.5">
         <button onClick={() => navigate('/m/shortage')} className="btn-secondary px-5">إلغاء</button>
-        <button onClick={create} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
+        <button data-tour="shortage-mobile-create" onClick={create} disabled={busy} className="btn-primary flex-1 py-3 disabled:opacity-50">
           {busy ? 'جارٍ الإنشاء...' : 'إنشاء وبدء التسجيل'}
         </button>
       </div>

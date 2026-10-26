@@ -5,10 +5,12 @@
  * The server validates everything (screens must exist, each question needs ≥2 options,
  * a correct answer and an explanation).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { TField } from './HelpEditor'
+import NoteHints, { useNoteHints } from './NoteHints'
 import { pick } from './text'
 
 const ROLES = ['pharmacist', 'salesperson', 'call_center', 'purchasing', 'delivery', 'supervisor',
@@ -20,8 +22,20 @@ const newQuestion = () => ({ q: emptyT(), options: [emptyT(), emptyT()], answer:
 const btn = 'text-xs border border-line rounded-lg px-2 py-1 hover:bg-surface-2 disabled:opacity-40'
 
 export default function TrainingEditor({ index }) {
-  const [kind, setKind] = useState('path')
-  const [key, setKey] = useState('pharmacist')
+  // ?tkind=flow&tkey=<module>.<key>&tstep=N — opened from the usage report on a weak step
+  const [params] = useSearchParams()
+  const [kind, setKind] = useState(params.get('tkind') || 'path')
+  const [key, setKey] = useState(params.get('tkey') || 'pharmacist')
+  const focusStep = params.get('tstep') != null ? Number(params.get('tstep')) : null
+  const boxRef = useRef(null)
+  // opened again from a link (usage report, «إيه الجديد») while the tab is already showing
+  const tkind = params.get('tkind')
+  const tkey = params.get('tkey')
+  useEffect(() => {
+    if (!tkind) return
+    if (tkey) { setKind(tkind); setKey(tkey) }
+    boxRef.current?.scrollIntoView({ block: 'start' })
+  }, [tkind, tkey])
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'training', kind, key],
@@ -29,17 +43,24 @@ export default function TrainingEditor({ index }) {
   })
   const [draft, setDraft] = useState(null)
   const [note, setNote] = useState('')
+  const [publicNote, setPublicNote] = useState('')
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
-  useEffect(() => { setDraft(data ? clone(data.current) : null); setMsg(null) }, [data])
+  const [draftOf, setDraftOf] = useState(null)   // the payload the draft was made from
+  useEffect(() => { setDraft(data ? clone(data.current) : null); setDraftOf(data || null); setMsg(null) }, [data])
 
-  const switchKind = (k) => { setKind(k); setKey(k === 'path' ? 'pharmacist' : 'pos') }
+  const ready = !!draft && draftOf === data
+  const hints = useNoteHints(kind, key, publicNote, !ready ? null
+    : kind === 'path' ? { screens: draft } : kind === 'quiz' ? { questions: draft } : draft)
+  const flows = index.flows || []
+  const switchKind = (k) => { setKind(k); setKey(k === 'path' ? 'pharmacist' : k === 'quiz' ? 'pos' : (flows[0]?.id || '').slice(5)) }
   const done = (payload, text) => {
     qc.setQueryData(['help', 'training', kind, key], payload)
     qc.invalidateQueries({ queryKey: ['help', 'onboarding'] })
     qc.invalidateQueries({ queryKey: ['help', 'quiz'] })
+    qc.invalidateQueries({ queryKey: ['help', 'notes-log'] })
     const n = payload?.notified
-    setNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
+    setNote(''); setPublicNote(''); setMsg({ ok: true, text: n ? `${text} · اتبعت إشعار لـ ${n} موظف` : text })
   }
   const run = async (fn, text) => {
     setBusy(true); setMsg(null)
@@ -48,15 +69,16 @@ export default function TrainingEditor({ index }) {
       setMsg({ ok: false, text: [d?.detail, ...(d?.errors || [])].filter(Boolean).join(' — ') || 'تعذّر الحفظ' })
     } finally { setBusy(false) }
   }
-  const save = () => run(() => helpApi.saveTraining(kind, key, kind === 'path' ? { screens: draft } : { questions: draft }, note), 'تم الحفظ — ظاهر للجميع الآن')
+  const save = () => run(() => helpApi.saveTraining(kind, key,
+    kind === 'path' ? { screens: draft } : kind === 'quiz' ? { questions: draft } : draft, note, publicNote), 'تم الحفظ — ظاهر للجميع الآن')
   const revert = () => run(() => helpApi.revertTraining(kind, key, note), 'رجعنا للنسخة الأصلية')
 
   return (
-    <div className="rounded-xl border border-line bg-surface p-4 space-y-3" dir="rtl">
+    <div ref={boxRef} className="rounded-xl border border-line bg-surface p-4 space-y-3" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-bold text-content flex-1">تعديل المسارات التدريبية والاختبارات</h3>
         <div className="flex border border-line rounded-lg overflow-hidden text-xs">
-          {[['path', 'مسار دور'], ['quiz', 'اختبار موديول']].map(([k, t]) => (
+          {[['path', 'مسار دور'], ['quiz', 'اختبار موديول'], ['flow', 'جولة دورة عمل']].map(([k, t]) => (
             <button key={k} type="button" onClick={() => switchKind(k)}
                     className={`px-3 py-1.5 ${kind === k ? 'bg-brand-600 text-white' : 'text-muted hover:bg-surface-3'}`}>{t}</button>
           ))}
@@ -65,11 +87,13 @@ export default function TrainingEditor({ index }) {
                 className="text-xs bg-surface border border-line rounded-lg px-2 py-1.5 text-content">
           {kind === 'path'
             ? ROLES.map((r) => <option key={r} value={r}>{r}</option>)
-            : index.modules.map((m) => <option key={m.key} value={m.key}>{m.icon} {pick(m.title, 'ar')}</option>)}
+            : kind === 'quiz'
+            ? index.modules.map((m) => <option key={m.key} value={m.key}>{m.icon} {pick(m.title, 'ar')}</option>)
+            : flows.map((f) => <option key={f.id} value={f.id.slice(5)}>{f.mobile ? '📱 ' : '🧭 '}{pick(f.title, 'ar')}</option>)}
         </select>
       </div>
 
-      {isLoading || !draft ? <div className="text-sm text-faint">…جارٍ التحميل</div> : (
+      {isLoading || !draft || draftOf !== data ? <div className="text-sm text-faint">…جارٍ التحميل</div> : (
         <>
           {data.override && (
             <div className={`text-xs rounded-lg px-3 py-2 border ${data.override.base_changed ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-surface-2 border-line text-muted'}`}>
@@ -79,8 +103,20 @@ export default function TrainingEditor({ index }) {
           )}
           {kind === 'path'
             ? <PathEditor items={draft} onChange={setDraft} index={index} />
-            : <QuizEditor items={draft} onChange={setDraft} />}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+            : kind === 'quiz'
+            ? <QuizEditor items={draft} onChange={setDraft} />
+            : <FlowEditor flow={draft} onChange={setDraft} focusStep={focusStep} />}
+          <div className="space-y-1 pt-2 border-t border-line">
+            <label className="block text-xs font-semibold text-content">
+              إيه الجديد للمستخدمين؟ <span className="font-normal text-faint">(سطر واحد، اختياري — {kind === 'flow'
+                ? 'يظهر على كارت الجولة أسبوعين' : kind === 'path' ? 'يتضاف لإشعار «شاشات جديدة في مسارك»' : 'يتضاف لإشعار «اختبار اتحدّث»'})</span>
+            </label>
+            <input value={publicNote} onChange={(e) => setPublicNote(e.target.value)} maxLength={120}
+                   placeholder={kind === 'quiz' ? 'مثال: سؤالين جداد عن المرتجعات' : kind === 'path' ? 'مثال: اتضافت شاشة التحويلات — ابدأ بيها' : 'مثال: خطوة جديدة عن طباعة الفاتورة'}
+                   className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
+            <NoteHints hints={hints} onUse={setPublicNote} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب التعديل (يظهر في السجل)"
                    className="flex-1 min-w-[200px] text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
             <button type="button" disabled={busy} onClick={save}
@@ -97,7 +133,7 @@ export default function TrainingEditor({ index }) {
               <summary className="cursor-pointer">سجل التعديلات ({data.revisions.length})</summary>
               <div className="mt-1 space-y-0.5">
                 {data.revisions.map((r) => (
-                  <div key={r.id}>{new Date(r.created_at).toLocaleString('ar-EG-u-nu-latn')} · {r.staff} · {r.action === 'save' ? 'حفظ' : 'رجوع للأصل'}{r.note ? ` — ${r.note}` : ''}</div>
+                  <div key={r.id}>{new Date(r.created_at).toLocaleString('ar-EG-u-nu-latn')} · {r.staff} · {r.action === 'save' ? 'حفظ' : 'رجوع للأصل'}{r.note ? ` — ${r.note}` : ''}{r.public_note ? ` · للمستخدمين: «${r.public_note}»` : ''}</div>
                 ))}
               </div>
             </details>
@@ -178,6 +214,33 @@ function QuizEditor({ items, onChange }) {
         </div>
       ))}
       <button type="button" className={btn} onClick={() => onChange([...items, newQuestion()])}>+ سؤال</button>
+    </div>
+  )
+}
+
+/** Workflow-tour text: title, summary, each step's text. Steps and their buttons are fixed
+ *  by the code (like screen tours) — trainers change the wording only. */
+function FlowEditor({ flow, onChange, focusStep }) {
+  const focusRef = useRef(null)
+  useEffect(() => { focusRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [])
+  const setStep = (i, text) => onChange({ ...flow, steps: flow.steps.map((x, j) => (j === i ? { ...x, text } : x)) })
+  return (
+    <div className="space-y-3">
+      <div className="text-xs text-muted">الخطوات والأزرار ثابتة حسب الشاشات — عدّل العنوان والملخص ونص كل خطوة. الصفحة اللي الخطوة بتظهر فيها مكتوبة جنب رقمها.</div>
+      <div className="space-y-1"><div className="text-[11px] text-faint">العنوان</div>
+        <TField value={flow.title} rows={1} required onChange={(v) => onChange({ ...flow, title: v })} /></div>
+      <div className="space-y-1"><div className="text-[11px] text-faint">الملخص</div>
+        <TField value={flow.summary} rows={2} onChange={(v) => onChange({ ...flow, summary: v })} /></div>
+      {flow.steps.map((st, i) => (
+        <div key={`${i}-${st.target}`} ref={i === focusStep ? focusRef : null}
+             className={`rounded-lg border p-2 space-y-1.5 ${i === focusStep ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300' : 'border-line'}`}>
+          <div className="text-[10px] text-faint">
+            {i + 1}. {st.target}{st.route ? ` · ${st.route}` : ''}{st.wait ? ` · ينتظر فتح ${st.wait}` : ''}
+            {i === focusStep && <span className="text-amber-700 font-semibold"> — أغلب الناس بيقفوا قبل الخطوة دي: وضّح النص</span>}
+          </div>
+          <TField value={st.text} rows={2} required onChange={(v) => setStep(i, v)} />
+        </div>
+      ))}
     </div>
   )
 }

@@ -138,7 +138,7 @@ function ProgramProgressCard({ prog }) {
     : 0
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div data-tour="incentives-mine-program" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-l from-brand-600 to-brand-700 px-6 py-5 text-white">
         <div className="flex items-start justify-between">
@@ -166,7 +166,7 @@ function ProgramProgressCard({ prog }) {
       {/* Projection & top items */}
       <div className="p-5 space-y-4">
         {/* Projection */}
-        <div className="grid grid-cols-2 gap-4">
+        <div data-tour="incentives-mine-projection" className="grid grid-cols-2 gap-4">
           <div className="bg-brand-50 rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-brand-700">{fmt(prog.projected_total)}</div>
             <div className="text-xs text-brand-500 mt-0.5">المتوقع نهاية الشهر ج.م</div>
@@ -196,7 +196,7 @@ function ProgramProgressCard({ prog }) {
         {/* Slab / target progress */}
         {prog.slab_progress?.length > 0 && (
           <div>
-            <button
+            <button data-tour="incentives-mine-slabs"
               className="w-full text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 py-1"
               onClick={() => setExpanded(e => !e)}
             >
@@ -286,7 +286,7 @@ export default function MyIncentivesPage() {
               {employee?.name} — {asOf ? `حتى ${asOf}` : ''}
             </p>
           </div>
-          <button
+          <button data-tour="incentives-mine-refresh"
             className="btn-secondary text-sm flex items-center gap-1"
             onClick={load}
           >
@@ -296,7 +296,7 @@ export default function MyIncentivesPage() {
 
         {/* Grand total banner */}
         {programs.length > 0 && (
-          <div className="bg-gradient-to-l from-green-600 to-green-700 rounded-2xl p-6 text-white">
+          <div data-tour="incentives-mine-totals" className="bg-gradient-to-l from-green-600 to-green-700 rounded-2xl p-6 text-white">
             <div className="grid grid-cols-2 gap-6 text-center">
               <div>
                 <div className="text-4xl font-bold">{fmt(totalEarned)}</div>
@@ -324,7 +324,7 @@ export default function MyIncentivesPage() {
           <ProgramProgressCard key={prog.program_id} prog={prog} />
         ))}
 
-        <p className="text-center text-xs text-gray-400 pb-4">
+        <p data-tour="incentives-mine-note" className="text-center text-xs text-gray-400 pb-4">
           * التوقعات تعتمد على متوسط يومي خطي — قد تختلف عن النتائج الفعلية
         </p>
       </div>

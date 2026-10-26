@@ -183,6 +183,11 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         except (ValueError, TypeError):
             pass
 
+        # Received locally («تسجيل الاستلام») but SOFTECH's receipt (doc 25) not seen yet
+        if qp.get('awaiting_erp') in ('1', 'true'):
+            qs = qs.filter(manually_received_at__isnull=False, erp_received_date__isnull=True,
+                           transit_status='received')
+
         return qs
 
     def get_serializer_class(self):

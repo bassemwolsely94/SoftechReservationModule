@@ -118,7 +118,7 @@ export default function InsuranceItemOverridesPage() {
         <button onClick={() => navigate('/insurance')} className="text-blue-600 text-sm hover:underline">
           ← مطالبات التأمين
         </button>
-        <div className="flex items-center justify-between mt-1">
+        <div data-tour="insurance-item-overrides-header" className="flex items-center justify-between mt-1">
           <div>
             <h1 className="text-xl font-bold text-gray-800">تصويبات تصنيف الأصناف</h1>
             <p className="text-sm text-gray-500">
@@ -138,14 +138,14 @@ export default function InsuranceItemOverridesPage() {
       )}
 
       <div className="px-6 py-5">
-        <div className="mb-3 flex gap-2">
+        <div data-tour="insurance-item-overrides-search" className="mb-3 flex gap-2">
           <input className={inp + ' max-w-xs'} placeholder="بحث بالكود أو الاسم…"
             value={search} onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && load()} />
           <Btn variant="secondary" onClick={load}>بحث</Btn>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div data-tour="insurance-item-overrides-table" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
               <tr>
@@ -178,7 +178,7 @@ export default function InsuranceItemOverridesPage() {
                         : <CatBadge value={o.forced_category} />}
                     </td>
                     <td className="px-3 py-2">
-                      <button onClick={() => toggleActive(o)}
+                      <button data-tour="insurance-item-overrides-status" onClick={() => toggleActive(o)}
                         className={`rounded px-2 py-0.5 text-xs font-medium ${
                           o.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {o.is_active ? 'مُفعَّل' : 'موقوف'}
@@ -186,7 +186,7 @@ export default function InsuranceItemOverridesPage() {
                     </td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{o.reason}</td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1 justify-end">
+                      <div data-tour="insurance-item-overrides-actions" className="flex items-center gap-1 justify-end">
                         <Btn variant="secondary" onClick={() => toggleAffected(o)}>المطالبات المتأثرة</Btn>
                         <Btn variant="secondary" onClick={() => openEdit(o)}>تعديل</Btn>
                         <Btn variant="danger" onClick={() => remove(o)}>حذف</Btn>

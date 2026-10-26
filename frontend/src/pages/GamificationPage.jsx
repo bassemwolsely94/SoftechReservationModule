@@ -80,7 +80,7 @@ function MeTab({ me, t, lang }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card lg:col-span-2">
+        <div data-tour="gamification-level" className="card lg:col-span-2">
           <LevelBar level={me.level} xp={me.xp} t={t} lang={lang} />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             <Kpi label={t('نقاط اليوم', 'Today')} value={signed(me.points?.day)}
@@ -108,7 +108,7 @@ function MeTab({ me, t, lang }) {
           </div>
         </div>
 
-        <div className="card">
+        <div data-tour="gamification-open-items" className="card">
           <div className="font-black text-gray-900 mb-2">
             {t('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind')}
           </div>
@@ -728,7 +728,7 @@ export default function GamificationPage() {
                   subtitle={t('كل عمل تنجزه يُحتسب: ارتقِ في المستويات، اجمع الشارات، ولا تترك شيئاً خلفك',
                               'Every job you do counts: climb levels, collect badges, and leave nothing behind')} />
       <div className="px-4 sm:px-6 space-y-4">
-        <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
+        <div data-tour="gamification-tabs" className="flex gap-1 overflow-x-auto border-b border-gray-200">
           {tabs.map(([k, ar, en]) => (
             <button key={k} onClick={() => setTab(k)}
                     className={`px-3 py-2 text-sm font-bold whitespace-nowrap border-b-2 -mb-px ${tab === k

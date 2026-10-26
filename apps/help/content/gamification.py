@@ -122,6 +122,14 @@ SCREENS = [
                     'Within 30 minutes of the work being recorded. The "clean day" and deductions are applied after midnight.')},
         ],
         'related': ['general.dashboard', 'general.me', 'incentives.mine'],
-        'updated': '2026-10-10',
+        'tour': [
+            {'target': 'gamification-level', 'text': T('مستواك ولقبك وشريط التقدم للترقية التالية، ونقاطك اليوم والأسبوع والشهر وسلسلة الأيام النظيفة.',
+                                                    'Your level, title and progress to the next promotion, plus your points today / this week / this month and your clean-day streak.')},
+            {'target': 'gamification-open-items', 'text': T('«لا تترك شيئاً خلفك»: الأعمال المعلقة عليك — اضغط بنداً يفتح شاشته؛ الأحمر يخصم نقاطاً عند إغلاق اليوم.',
+                                                         '"Leave nothing behind": work still waiting on you — click an item to open its screen; red items deduct points at day close.')},
+            {'target': 'gamification-tabs', 'text': T('باقي التبويبات: «الترتيب»، «ترتيب الفروع»، «الشارات»، «كيف تكسب النقاط»، «أبطال الشهر» و«المكافآت».',
+                                                   'The other tabs: "Leaderboard", "Branches", "Badges", "How to earn", "Champions" and "Rewards".')},
+        ],
+        'updated': '2026-10-12',
     },
 ]

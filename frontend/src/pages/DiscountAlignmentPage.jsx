@@ -222,7 +222,7 @@ export default function DiscountAlignmentPage() {
             الخصم الفعلى هو المرجع — تُصحَّح تسميات التصنيف/المنشأ القديمة لتطابقه (تُكتب على SOFTECH)
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div data-tour="pricing-alignment-stats" className="flex items-center gap-2">
           <div className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 font-semibold">
             مفحوص: <b>{(stats.checked || 0).toLocaleString('en-US')}</b>
           </div>
@@ -234,7 +234,7 @@ export default function DiscountAlignmentPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
+      <div data-tour="pricing-alignment-filters" className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 ابحث باسم الصنف..."
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-brand-400" />
         <select value={flag} onChange={e => setFlag(e.target.value)}
@@ -247,7 +247,7 @@ export default function DiscountAlignmentPage() {
         <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
           <input type="checkbox" checked={inclInactive} onChange={e => setIncl(e.target.checked)} className="rounded" /> تضمين الموقوفة
         </label>
-        <button onClick={() => setShowCreate(true)}
+        <button data-tour="pricing-alignment-new-tier" onClick={() => setShowCreate(true)}
           className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100"
           title="إنشاء تصنيف/منشأ جديد فى SOFTECH عند عدم توفّر تصنيف مطابق">
           ➕ تصنيف جديد
@@ -264,7 +264,7 @@ export default function DiscountAlignmentPage() {
 
       {/* Bulk-fix bar */}
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 sticky top-0 z-20">
+        <div data-tour="pricing-alignment-bulk" className="flex flex-wrap items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 sticky top-0 z-20">
           <span className="text-sm font-bold text-emerald-800">✎ {sel.size} صنف محدد</span>
 
           {/* Lead action — apply each item's own family-aware suggestion */}
@@ -305,7 +305,7 @@ export default function DiscountAlignmentPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div data-tour="pricing-alignment-table" className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50 text-gray-500 text-xs font-bold z-10">

@@ -32,13 +32,13 @@ export default function TargetsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-5">
+      <div data-tour="analytics-targets-header" className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🎯 الأهداف البيعية</h1>
           <p className="text-sm text-gray-500 mt-0.5">حدّد الهدف وتابع التحقيق لحظياً مقابل المبيعات الفعلية</p>
         </div>
         {canEdit && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button data-tour="analytics-targets-new" onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
             {showForm ? 'إغلاق' : '+ هدف جديد'}
           </button>
         )}
@@ -51,7 +51,7 @@ export default function TargetsPage() {
       ) : targets.length === 0 ? (
         <div className="text-center py-16 text-gray-400">لا توجد أهداف بعد</div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div data-tour="analytics-targets-list" className="grid gap-3 md:grid-cols-2">
           {targets.map(t => {
             const a = t.attainment || {}
             const pace = PACE[a.pace] || {}
@@ -68,7 +68,7 @@ export default function TargetsPage() {
                     <div className="text-[11px] text-gray-400 mt-0.5">{t.period_start} → {t.period_end} · باقٍ {a.days_left} يوم</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pace.cls || 'bg-gray-100 text-gray-500'}`}>{pace.label || '—'}</span>
+                    <span data-tour="analytics-targets-pace" className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pace.cls || 'bg-gray-100 text-gray-500'}`}>{pace.label || '—'}</span>
                     {canEdit && <button onClick={() => del.mutate(t.id)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>}
                   </div>
                 </div>
@@ -76,7 +76,7 @@ export default function TargetsPage() {
                   <span className="font-black text-gray-900">{fmt(a.actual)}{isMoney ? ' ج.م' : ''}</span>
                   <span className="text-gray-400 text-xs">من {fmt(a.target)}{isMoney ? ' ج.م' : ''} · {a.pct}%</span>
                 </div>
-                <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden relative">
+                <div data-tour="analytics-targets-progress" className="h-2.5 rounded-full bg-gray-100 overflow-hidden relative">
                   <div className={`h-full rounded-full ${a.pace === 'behind' || a.pace === 'missed' ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
                   {/* expected-to-date marker */}
                   {a.target > 0 && (

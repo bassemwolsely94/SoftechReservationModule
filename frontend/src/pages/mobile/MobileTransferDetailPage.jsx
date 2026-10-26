@@ -98,7 +98,7 @@ export default function MobileTransferDetailPage() {
       <button onClick={() => navigate('/m/transfers')} className="text-sm text-gray-500">→ الرجوع للقائمة</button>
 
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="transfers-mdetail-header" className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="font-bold text-base text-gray-900">{t.request_number}</h1>
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${transferBadgeClass(t.status_color)}`}>
@@ -114,7 +114,7 @@ export default function MobileTransferDetailPage() {
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="transfers-mdetail-items" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">الأصناف ({toLatin((t.items || []).length)})</h2>
         <div className="space-y-1.5">
           {(t.items || []).map(it => (
@@ -133,7 +133,7 @@ export default function MobileTransferDetailPage() {
 
       {/* Actions */}
       {available.length > 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div data-tour="transfers-mdetail-actions" className="bg-white rounded-2xl border border-gray-200 p-4">
           <h2 className="font-semibold text-gray-700 text-sm mb-2.5">الإجراءات</h2>
           <div className="grid grid-cols-2 gap-2">
             {available.map(k => (
@@ -148,7 +148,7 @@ export default function MobileTransferDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="text-center text-xs text-gray-400 py-2">لا توجد إجراءات متاحة لك في هذه الحالة</div>
+        <div data-tour="transfers-mdetail-actions" className="text-center text-xs text-gray-400 py-2">لا توجد إجراءات متاحة لك في هذه الحالة</div>
       )}
 
       {/* Confirm sheet */}

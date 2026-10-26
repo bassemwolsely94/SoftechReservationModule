@@ -27,7 +27,8 @@ const useHelpStore = create(
       seen: {},
       tour: null,
 
-      startTour(key, steps) { if (steps?.length) set({ tour: { key, steps, i: 0 }, isOpen: false }) },
+      // routes: the screen's own pages (list + detail…) — moving between them keeps a screen tour going
+      startTour(key, steps, routes = []) { if (steps?.length) set({ tour: { key, steps, routes, i: 0 }, isOpen: false }) },
       tourStep(i) { const t = get().tour; if (t) set({ tour: { ...t, i: Math.max(0, Math.min(i, t.steps.length - 1)) } }) },
       endTour() { set({ tour: null }) },
       open(key = null, tab = null) { set({ isOpen: true, forcedKey: key, forcedTab: tab }) },

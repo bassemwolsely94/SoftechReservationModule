@@ -108,7 +108,7 @@ export default function InventoryDashboard() {
     <div className="p-6 space-y-5 max-w-screen-xl mx-auto" dir="rtl">
 
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-tour="catalog-inventory-header" className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">لوحة المخزون</h1>
           <p className="text-sm text-gray-500 mt-0.5">نواقص · فائض · راكد · نوع الدواء · توزيع الفروع</p>
@@ -143,7 +143,7 @@ export default function InventoryDashboard() {
       />
 
       {/* ABC class filter — inventory-specific, added inline */}
-      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-2">
+      <div data-tour="catalog-inventory-abc-filter" className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-2">
         <span className="text-xs text-gray-500 font-medium">فئة ABC:</span>
         {(opts?.abc_classes || [
           { code: 'A', label: 'فئة A' }, { code: 'B', label: 'فئة B' },
@@ -184,7 +184,7 @@ export default function InventoryDashboard() {
       {data && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div data-tour="catalog-inventory-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard label="إجمالي الأصناف"       value={fmt(data.total_items)}       color="brand" icon="📦" />
             <KpiCard label="أصناف ناقصة"           value={fmt(data.shortage_items)}
               sub={`قيمة الفجوة: ${fmt(data.shortage_value)} جم`}                    color="red"   icon="⚠️" />
@@ -204,7 +204,7 @@ export default function InventoryDashboard() {
 
           {/* Tab bar */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div data-tour="catalog-inventory-tabs" className="flex border-b border-gray-100 overflow-x-auto">
               {TAB_CONFIG.map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px
@@ -219,7 +219,7 @@ export default function InventoryDashboard() {
               ))}
             </div>
 
-            <div className="p-0">
+            <div data-tour="catalog-inventory-tab-content" className="p-0">
 
               {activeTab === 'shortages' && (
                 <div>
