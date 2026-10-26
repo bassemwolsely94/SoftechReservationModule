@@ -108,7 +108,7 @@ class SoftechSalesOrder(models.Model):
                                    verbose_name='العميل')
     softech_pic      = models.CharField(max_length=18, blank=True, verbose_name='PIC')
     customer_name    = models.CharField(max_length=255, blank=True, verbose_name='اسم العميل')
-    cust_branch_code = models.CharField(max_length=8, blank=True, verbose_name='كود حساب العميل (personcode)')
+    cust_branch_code = models.CharField(max_length=8, blank=True, db_index=True, verbose_name='كود حساب العميل (personcode)')
 
     # ── SOFTECH refs (writer / reconciler fill these) ──────────────────────────
     softech_docnumber       = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True,

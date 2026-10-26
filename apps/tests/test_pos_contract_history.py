@@ -80,12 +80,13 @@ class PatientSuggestTests(TestCase):
         self.assertEqual(res[0]['last_date'], '2026-10-01')
 
     def test_dedupe_keeps_latest_insurance(self):
-        _order(self.b1, raw={'patientname': 'أحمد علي'}, day=date(2026, 8, 1))
+        _order(self.b1, raw={'patientname': 'أحمد علي', 'fileno': 'F1'}, day=date(2026, 8, 1))
         _insurance_rx(name='احمد على', docdate=date(2026, 9, 1))
         res = ch.patient_suggest(PC, 'احمد')
         self.assertEqual(len(res), 1)
         self.assertEqual(res[0]['source'], 'insurance')
-        self.assertEqual(res[0]['fields'], {})
+        self.assertEqual(res[0]['last_date'], '2026-09-01')
+        self.assertEqual(res[0]['fields'], {'fileno': 'F1'})   # remembered from the newest POS record
 
     def test_patient_suggest_arabic_variants(self):
         _order(self.b1, raw={'patientname': 'أحمد علي'})
@@ -126,6 +127,18 @@ class HistoryTests(TestCase):
             self.assertEqual(c['revalidated']['lines'][0]['status'], 'out_of_stock')
         self.assertEqual(cards[0]['total'], 20.0)
         self.assertEqual(cards[1]['total'], 55.0)
+
+    def test_taxed_pos_line_not_flagged_price_changed(self):
+        b = make_branch()
+        item = make_item(name='Taxed', softech_id='CH2')
+        item.pack_price = Decimal('50.00')
+        item.save(update_fields=['pack_price'])
+        o = _order(b, raw={'patientname': 'ت'})
+        SoftechSalesOrderLine.objects.create(
+            order=o, item=item, softech_itemcode='CH2', qty=1,
+            item_sale_price=Decimal('50.00'), item_sale_price_tax=Decimal('57.00'))
+        line = ch.recent_prescriptions(PC, 'ت', branch_id=None)[0]['revalidated']['lines'][0]
+        self.assertFalse(line['price_changed'])
 
     def test_recent_prescriptions_unknown_itemcode_flagged_missing(self):
         rx = _insurance_rx(name='س')

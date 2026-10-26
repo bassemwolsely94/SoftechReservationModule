@@ -47,6 +47,7 @@ def _orders(personcode):
     return (SoftechSalesOrder.objects
             .filter(cust_branch_code=str(personcode).strip())
             .exclude(status=SoftechSalesOrder.STATUS_CANCELLED)
+            .only('id', 'branch_id', 'doc_date', 'created_at', 'source_companies_raw')
             .order_by('-created_at'))
 
 
@@ -73,6 +74,7 @@ def patient_suggest(personcode, q, limit=10):
     cfg = entry_config(personcode)
     stable = [c for c in COLUMNS if c not in cfg['per_visit_columns'] and c != 'patientname']
     best = {}                                                    # norm name → candidate (latest wins)
+    pos_fields = {}                                              # norm name → newest POS stable fields
 
     def offer(name, d, source, fields):
         key = _norm(name)
@@ -87,11 +89,17 @@ def patient_suggest(personcode, q, limit=10):
     for o in qs[:_SCAN_CAP]:
         raw = o.source_companies_raw or {}
         fields = {c: _val(raw, c) for c in stable if _val(raw, c)}
-        offer(_val(raw, 'patientname'), _order_date(o), 'pos', fields)
+        name = _val(raw, 'patientname')
+        if _norm(name) and _matches(name, q):
+            pos_fields.setdefault(_norm(name), fields)           # rows are newest-first
+        offer(name, _order_date(o), 'pos', fields)
     for rx in _insurance_rx(personcode).exclude(patient_name='').order_by('-softech_docdate')[:_SCAN_CAP]:
         offer(rx.patient_name, rx.softech_docdate, 'insurance', {})
 
     out = sorted(best.values(), key=lambda r: r['_d'], reverse=True)[:limit]
+    for key_, r in ((_norm(r['patientname']), r) for r in out):
+        if r['source'] == 'insurance' and not r['fields']:
+            r['fields'] = pos_fields.get(key_, {})               # latest date/source, POS-remembered fields
     for r in out:
         r.pop('_d')
     return out
@@ -109,34 +117,42 @@ def recent_prescriptions(personcode, patientname, *, branch_id=None, limit=5):
     key = _norm(patientname)
     if not key:
         return []
-    cards = []
-    qs = (_orders(personcode).filter(source_companies_raw__has_key='patientname')
-          .prefetch_related('lines'))
+    cands = []                                   # (date, source, id) — no lines loaded yet
+    qs = _orders(personcode).filter(source_companies_raw__has_key='patientname')
     for o in qs[:_SCAN_CAP]:
-        if _norm(_val(o.source_companies_raw, 'patientname')) != key:
-            continue
-        lines = list(o.lines.all())
-        cards.append({'_d': _order_date(o), 'date': _order_date(o).isoformat(), 'source': 'pos',
-                      'ref': o.id, 'total': _order_total(o, lines),
-                      '_lines': [{'item_id': l.item_id, 'softech_itemcode': l.softech_itemcode,
-                                  'qty': l.qty,
-                                  'unit_price': l.item_sale_price_tax or l.item_sale_price}
-                                 for l in lines]})
-    rxs = (_insurance_rx(personcode).exclude(patient_name='')
-           .order_by('-softech_docdate').prefetch_related('lines'))
+        if _norm(_val(o.source_companies_raw, 'patientname')) == key:
+            cands.append((_order_date(o), 'pos', o.id))
+    rxs = (_insurance_rx(personcode).exclude(patient_name='').order_by('-softech_docdate')
+           .only('id', 'softech_docdate', 'patient_name'))
     for rx in rxs[:_SCAN_CAP]:
-        if _norm(rx.patient_name) != key:
-            continue
-        cards.append({'_d': rx.softech_docdate, 'date': rx.softech_docdate.isoformat(),
-                      'source': 'insurance', 'ref': rx.softech_docnumber,
-                      'total': float(rx.net_after or 0),
-                      '_lines': [{'softech_itemcode': l.softech_itemcode, 'qty': l.quantity,
-                                  'unit_price': l.unit_price} for l in rx.lines.all()]})
-    cards.sort(key=lambda c: c['_d'], reverse=True)
-    out = cards[:limit]
-    for c in out:
-        c['revalidated'] = revalidate_lines(c.pop('_lines'), branch_id=branch_id)
-        c.pop('_d')
+        if _norm(rx.patient_name) == key:
+            cands.append((rx.softech_docdate, 'insurance', rx.id))
+    cands.sort(key=lambda c: c[0], reverse=True)
+    top = cands[:limit]
+
+    from apps.insurance.models import InsuranceClaimPrescription
+    orders = {o.id: o for o in SoftechSalesOrder.objects.filter(
+        id__in=[i for _, src, i in top if src == 'pos']).prefetch_related('lines')}
+    rx_map = {r.id: r for r in InsuranceClaimPrescription.objects.filter(
+        id__in=[i for _, src, i in top if src == 'insurance']).prefetch_related('lines')}
+    out = []
+    for d, src, pk in top:
+        if src == 'pos':
+            o = orders[pk]
+            lines = list(o.lines.all())
+            card = {'date': d.isoformat(), 'source': 'pos', 'ref': o.id,
+                    'total': _order_total(o, lines)}
+            # pre-tax itemsaleprice: same basis as Item.pack_price in revalidate_lines
+            raw_lines = [{'item_id': l.item_id, 'softech_itemcode': l.softech_itemcode,
+                          'qty': l.qty, 'unit_price': l.item_sale_price} for l in lines]
+        else:
+            rx = rx_map[pk]
+            card = {'date': d.isoformat(), 'source': 'insurance', 'ref': rx.softech_docnumber,
+                    'total': float(rx.net_after or 0)}
+            raw_lines = [{'softech_itemcode': l.softech_itemcode, 'qty': l.quantity,
+                          'unit_price': l.unit_price} for l in rx.lines.all()]
+        card['revalidated'] = revalidate_lines(raw_lines, branch_id=branch_id)
+        out.append(card)
     return out
 
 
