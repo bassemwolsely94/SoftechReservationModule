@@ -56,7 +56,7 @@ export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAc
           {more > 0 && <span className="text-[10px] text-gray-400">+{more}</span>}
         </div>
         {act.kind !== 'add' && (
-          <div className="flex items-center gap-1 mt-1" onMouseDown={e => e.stopPropagation()}>
+          <div className="flex items-center gap-1 mt-1" onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}>
             {act.kind === 'transfer' && (
               <ActionTile prominent icon="transfer"
                 label={`تحويل من ${nameOf(act.from_branch_id) || 'فرع آخر'}`}
