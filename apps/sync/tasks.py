@@ -2747,6 +2747,34 @@ def _sync_crm_delivery_orders():
         logger.error('[APScheduler] crm_delivery_sync failed: %s', exc)
 
 
+def _reconcile_pos_orders():
+    """
+    APScheduler job — reconcile pushed Indirect-POS orders vs the branch DBs every
+    5 minutes (read-only settlement detection). Delegates to reconcile_pos_orders.
+    Non-fatal: errors are logged but never crash the scheduler.
+    """
+    try:
+        from django.core.management import call_command
+        call_command('reconcile_pos_orders', verbosity=0)
+        logger.info('[APScheduler] pos_orders_reconcile completed')
+    except Exception as exc:
+        logger.error('[APScheduler] pos_orders_reconcile failed: %s', exc)
+
+
+def _flush_pos_orders():
+    """
+    APScheduler job — retry POS orders queued while the branch/SOFTECH was unreachable.
+    Idempotent + serial-allocated-at-write, so retries can never duplicate a document.
+    No-op unless POS_WRITER_ENABLED. Non-fatal.
+    """
+    try:
+        from django.core.management import call_command
+        call_command('flush_pos_orders', verbosity=0)
+        logger.info('[APScheduler] pos_orders_flush completed')
+    except Exception as exc:
+        logger.error('[APScheduler] pos_orders_flush failed: %s', exc)
+
+
 def _sync_insurance_cache():
     """Daily insurance cache sync — motalba + companiesitems last-90-days mirror."""
     try:
