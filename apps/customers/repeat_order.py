@@ -78,6 +78,7 @@ def revalidate_lines(lines, *, branch_id=None):
         out.append({
             'item_id': it.id,
             'softech_id': it.softech_id,
+            'batch_required': bool(it.batch_required),
             'name': it.name,
             'qty': qty,
             'old_unit_price': old_price,

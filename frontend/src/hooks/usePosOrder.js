@@ -684,6 +684,9 @@ export default function usePosOrder() {
     const q = Number(opts.qty) > 0 ? { qty: Number(opts.qty) } : {}
     const NL = (it, extra) => _newLine(it, { ...extra, ...q })
     setMsg('')
+    // opts.needsBatch(item): called when the line was added WITHOUT a batch although one is mandatory
+    // (the caller lists those lines; the per-line setMsg below is overwritten by the next add).
+    const noBatch = () => { if (opts.needsBatch) opts.needsBatch(item) }
     _captureSelection(item, 'add')   // telemetry: the selection happened now (Wave 3 inc3)
     // Service / non-stocked items (SOFTECH itemtrans=0) have NO stock, batch or reservation — they
     // go straight in as a single plain line (matches the writer's _allocate_line). Skip the read.
@@ -692,6 +695,7 @@ export default function usePosOrder() {
     // and batch/expiry resolve once a branch is chosen. (Never drop the selected item.)
     if (!branch || service) {
       setLines(prev => [...prev, NL(item)])
+      if (!service && item.batch_required) noBatch()
       setMsg(service ? `"${item.name}" صنف غير مخزون (خدمي) — أُضيف مباشرة، بلا تشغيلة أو حجز.`
                      : `أُضيف "${item.name}" — اختر الفرع لعرض الرصيد والتشغيلة.`)
       return
@@ -738,13 +742,14 @@ export default function usePosOrder() {
         // `mandatory` tells confirmBatchPick to refuse a confirm that leaves the line without a batch.
         if (opts.noModal) {
           setLines(prev => [...prev, NL(avail)])
-          if (action === 'must_select') setMsg(`"${item.name}" يتطلب اختيار التشغيلة — اختَرها من السطر.`)
+          if (action === 'must_select') { setMsg(`"${item.name}" يتطلب اختيار التشغيلة — اختَرها من السطر.`); noBatch() }
         } else setBatchModal({ item: avail, batches: data.batches, total: data.total,
                         picks: data.batches.map(() => ''), need: q.qty || 1, shortfall: 0,
                         mandatory: action === 'must_select' })
       }
     } catch (e) {
       setLines(prev => [...prev, NL(item)])
+      if (item.batch_required) noBatch()
       const why = e.response?.data?.detail
       setMsg(`أُضيف "${item.name}" — تعذّر قراءة الأرصدة${why ? ': ' + why : ''} (بدون تشغيلة).`)
     }
@@ -770,12 +775,14 @@ export default function usePosOrder() {
   // returns the lines that were NOT added so the UI can list them (non-modal).
   const applyPrescriptionLines = useCallback(async (revalidated) => {
     const skipped = []
+    const needBatch = []                     // added without a batch although one is mandatory
     for (const l of (revalidated?.lines || [])) {
       if (l.status !== 'ok' || !l.softech_id) { skipped.push(l); continue }
       await addItem({ id: l.item_id, item_id: l.item_id, softech_id: l.softech_id, name: l.name,
-                      pack_price: l.current_pack_price }, { qty: l.qty, noModal: true })
+                      pack_price: l.current_pack_price, batch_required: !!l.batch_required },
+                    { qty: l.qty, noModal: true, needsBatch: (it) => needBatch.push(it.name) })
     }
-    return skipped
+    return { skipped, needBatch }
   }, [addItem])
 
   const setBatchNeed = useCallback((v) => setBatchModal(m => m ? { ...m, need: v } : m), [])

@@ -115,10 +115,13 @@ export default function ContractAssist({ P, mobile = false }) {
     finally { setBusy(false) }
   }
   const apply = async (c) => {
+    if (busy) return
     setBusy(true)
-    const skipped = await P.applyPrescriptionLines(c.revalidated)
-    setNote({ added: (c.revalidated?.lines?.length || 0) - skipped.length, skipped })
-    setCards(null); setBusy(false)
+    try {
+      const { skipped, needBatch } = await P.applyPrescriptionLines(c.revalidated)
+      setNote({ added: (c.revalidated?.lines?.length || 0) - skipped.length, skipped, needBatch })
+      setCards(null)
+    } finally { setBusy(false) }
   }
   const WHY = { missing: 'صنف غير موجود', blocked: 'ممنوع البيع', out_of_stock: 'غير متوفر بالفرع' }
   const label = (l) => `${l.name || 'صنف غير معروف'} (${WHY[l.status] || l.status})`
@@ -137,8 +140,8 @@ export default function ContractAssist({ P, mobile = false }) {
                 const s = c.revalidated?.summary || {}
                 const bad = (s.out_of_stock || 0) + (s.blocked || 0) + (s.missing_item || 0)
                 return (
-                  <button key={`${c.source}-${c.ref}`} type="button" onClick={() => apply(c)}
-                          className="text-start border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white hover:border-blue-500 shrink-0 min-w-[9.5rem]">
+                  <button key={`${c.source}-${c.ref}`} type="button" disabled={busy} onClick={() => apply(c)}
+                          className="text-start border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white hover:border-blue-500 disabled:opacity-50 shrink-0 min-w-[9.5rem]">
                     <div className="text-xs font-semibold">{dateOf(c.date)}</div>
                     <div className="text-[11px] text-gray-600">{s.total_lines ?? c.revalidated?.lines?.length ?? 0} أصناف · {fmtMoney(c.total)} ج</div>
                     <div className="mt-0.5 flex gap-1">
@@ -153,6 +156,9 @@ export default function ContractAssist({ P, mobile = false }) {
       {note && (
         <div className="mt-2 text-xs rounded border border-gray-200 bg-gray-50 px-2 py-1.5">
           <span className="text-green-700">أُضيف {note.added} صنف من الروشتة — راجع الكميات.</span>
+          {note.needBatch?.length > 0 && (
+            <div className="text-amber-800 mt-0.5">يتطلب اختيار التشغيلة: {note.needBatch.join(' ، ')}</div>
+          )}
           {note.skipped.length > 0 && (
             <div className="text-amber-800 mt-0.5">لم يُضف: {note.skipped.map(label).join(' ، ')}</div>
           )}
