@@ -175,6 +175,10 @@ apps/composition/management/commands/probe_softech_ingredients.py::Command._cols
 apps/composition/management/commands/probe_softech_ingredients.py::Command._find_class_table
 apps/composition/management/commands/probe_softech_ingredients.py::Command._mirror
 apps/composition/management/commands/probe_softech_ingredients.py::Command.handle
+apps/customers/management/commands/investigate_pic_create.py::Command._columns
+apps/customers/management/commands/investigate_pic_create.py::Command.s_pic_tables
+apps/customers/management/commands/investigate_pic_create.py::Command.s_replication
+apps/customers/management/commands/investigate_pic_create.py::Command.s_triggers
 apps/customers/management/commands/investigate_pic_merge.py::Command.s_fk
 apps/customers/management/commands/investigate_pic_merge.py::Command.s_flags
 apps/customers/management/commands/investigate_pic_merge.py::Command.s_footprint

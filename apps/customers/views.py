@@ -83,6 +83,19 @@ class CustomerViewSet(viewsets.ModelViewSet):
         data = _recognize(request.query_params.get('q', ''), limit=max(1, limit))
         return Response(data)
 
+    # ── GET /api/customers/address-suggest/?field=area|district|landmark&q=&area= ──
+    @action(detail=False, methods=['get'], url_path='address-suggest')
+    def address_suggest(self, request):
+        """Autocomplete for the POS new-customer address fields (values already stored)."""
+        from .address_suggest import FIELDS, address_suggest as _suggest
+        field = request.query_params.get('field', '')
+        if field not in FIELDS:
+            return Response({'detail': 'field must be one of: ' + ', '.join(FIELDS)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        out = _suggest(field, request.query_params.get('q', ''),
+                       area=request.query_params.get('area', ''), limit=10)
+        return Response({'results': out})
+
     # ── GET /api/customers/{id}/purchases/ ────────────────────────────────────
 
     @action(detail=True, methods=['get'])

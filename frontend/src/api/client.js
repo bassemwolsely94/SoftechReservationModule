@@ -152,6 +152,8 @@ export const customersApi = {
 
   // Recognize-on-type for the POS customer field (+ duplicate surfacing)
   recognize:  (q, opts = {}) => api.get('/customers/recognize/', { params: { q, ...opts } }),
+  // Autocomplete for the new-customer address fields (values already stored). field: area|district|landmark
+  addressSuggest: (field, q, area = '') => api.get('/customers/address-suggest/', { params: { field, q, area } }),
   // Compact Customer-360 for the POS side-drawer
   posSummary: (id, params = {}) => api.get(`/customers/${id}/pos-summary/`, { params }),
   // Revalidated repeat-order proposal (never blind-copy). opts: { branch, invoice }

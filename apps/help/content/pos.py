@@ -129,7 +129,8 @@ _TABS = [
     {'key': 'query', 'title': T('نافذة العميل — إستعلام', 'Customer pop-up — Query'),
      'body': T('من زر «إسم العميل»: ابحث بالاسم أو الهاتف أو كود PIC واختر العميل من النتائج.', 'From the "Customer name" button: search by name, phone or PIC and pick the customer from the results.')},
     {'key': 'add', 'title': T('نافذة العميل — إضافة جديد', 'Customer pop-up — Add new'),
-     'body': T('إنشاء عميل سريع (الاسم، الهاتف، العنوان، تاريخ الميلاد، نسبة الخصم، نظام النقاط…) ثم «تخزين» (Ctrl+S). البيانات الكاملة للعميل تُدار من موديول العملاء.', 'Quick-create a customer (name, phone, address, birth date, discount %, points system…) then "Save" (Ctrl+S). The full customer record is managed in the Customers module.')},
+     'body': T('إنشاء عميل سريع: رقم التليفون أولاً. أول ما تكتب 8 أرقام يظهر العملاء الموجودين بنفس الرقم (الاسم وPIC) — اضغط «استخدم هذا العميل» بدل إنشاء مكرر؛ والاسم كذلك يعرض الأسماء المشابهة. المنطقة والحي والعلامة المميزة تقترح قيماً مسجلة من قبل (الحي والعلامة تتضيق بالمنطقة المختارة). المطلوب فقط الاسم والتليفون، وباقي الحقول اختيارية، ثم «تخزين» (Ctrl+S). الحفظ هنا في نظامنا فقط ولا يُنشئ PIC في SOFTECH؛ البيانات الكاملة للعميل تُدار من موديول العملاء.',
+               'Quick-create a customer: phone first. As soon as you type 8 digits, existing customers with that number (name and PIC) are listed — click "Use this customer" instead of creating a duplicate; the name field also lists similar names. Area, district and landmark suggest values already stored (district and landmark narrow to the chosen area). Only name and phone are required; everything else is optional, then "Save" (Ctrl+S). Saving here is in our system only and does not create a PIC in SOFTECH; the full customer record is managed in the Customers module.')},
     {'key': 'contract', 'title': T('بيانات التعاقد', 'Contract data'),
      'body': T('يظهر لقنوات التعاقد والتأمين والموظفين والعميل الدائم: بيانات المريض، تاريخ المطالبة، الطبيب المُحيل وكوده، صورة الروشتة، وما يسدده المريض مقابل ما يتحمله التعاقد. لا يمكن الإرسال قبل اكتمالها. '
                'اكتب اسم المريض أو رقم العضوية فتظهر اقتراحات من مبيعات سابقة لنفس التعاقد؛ اختيار مريض يملأ بياناته الثابتة ويفرّغ حقول الزيارة (الروشتة/تاريخ الكشف) ويظللها بالأصفر «جديد لهذه الزيارة». '
@@ -253,7 +254,7 @@ SCREENS = [
             {'target': 'pos-order-shortcuts', 'label': T('⌨ اختصارات لوحة المفاتيح', '⌨ Keyboard shortcuts'),
              'text': T('كل اختصارات الشاشة: F9 معاينة، F10 إرسال، Ctrl+F2/F3 نقدي/توصيل…', 'All the screen\'s shortcuts: F9 preview, F10 send, Ctrl+F2/F3 cash/delivery…')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-27',
     },
     {
         'key': 'pos.mobile',
