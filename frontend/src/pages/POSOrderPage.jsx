@@ -871,6 +871,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
                              {...numFieldHandlers({ P, i, k: 'qty', step: 1, onEnter: () => focusPosCell(P.discountLocked ? 'search' : `cust_discp-${i}`) })}
                              onChange={e => P.setLine(i, 'qty', e.target.value)}
                              className="pos-num w-16 border rounded px-1 py-0.5 text-center font-semibold tabular-nums" />
+                      {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                       {onOpenUnits && l.pack_qty > 1 && (
                         <button onClick={e => { e.stopPropagation(); onOpenUnits(i) }}
                                 title={`إدخال بالوحدات/الشرائط — العبوة ${l.pack_qty} (Q)`}

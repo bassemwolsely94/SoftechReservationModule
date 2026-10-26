@@ -30,7 +30,7 @@ const _replaceGroup = (prev, group, repl) => {
   rest.splice(first, 0, ...repl)
   return rest
 }
-const _stripFefo = (l) => ({ ...l, fefo_group: undefined, fefo_auto: false, fefo_need: undefined, fefo_shortfall: 0 })
+const _stripFefo = (l) => ({ ...l, fefo_group: undefined, fefo_auto: false, fefo_need: undefined, fefo_shortfall: 0, fefo_stale: false })
 // server picks → the modal's per-batch pick strings (matched on expiry+batchno, each pick used once)
 const _pickStrings = (batches, picks) => {
   const left = picks.slice()
@@ -230,6 +230,11 @@ export default function usePosOrder() {
   // batches read ONCE per item add (GET /pos-orders/batches/), keyed by softech_itemcode → qty edits
   // on an auto-split group re-split from here and never re-read SOFTECH (spec §6).
   const batchCacheRef = useRef({})
+  // keyed `${branch}:${store}:${itemcode}` — batches of another branch/store are never re-used
+  // (their batchnos may not exist here); the live branch/store are read through a ref.
+  const ctxRef = useRef({})
+  ctxRef.current = { branch, storeCode }
+  const _ck = (code) => `${ctxRef.current.branch || ''}:${ctxRef.current.storeCode || ''}:${code}`
   const fefoSeqRef = useRef({})            // per-group edit sequence → a stale split never lands
   const linesRef = useRef(lines)
   linesRef.current = lines
@@ -603,6 +608,16 @@ export default function usePosOrder() {
     })
     if (pendingDisc.length)
       advisories.push({ level: 'info', text: `خصم مقترح متاح لـ ${pendingDisc.length} صنف — اضغط للتطبيق`, action: 'applyAllSuggested', tab: 'items' })
+    // automatic FEFO split with an UNRESERVED shortfall: only the covered qty is sent. A warning
+    // (never a block) until the cashier reserves the rest («حجز الباقي») or lowers the qty.
+    const fefoShort = {}
+    lines.forEach(l => {
+      if (!isFefoMember(l)) return
+      const g = fefoShort[l.fefo_group] || (fefoShort[l.fefo_group] = { name: l.item_name, sf: Number(l.fefo_shortfall) || 0, q: 0 })
+      g.q += Number(l.qty) || 0
+    })
+    Object.values(fefoShort).filter(g => g.sf > 0).forEach(g =>
+      advisories.push({ level: 'warn', text: `سطر ${g.name}: ناقص ${g.sf} غير محجوز — سيُرسل ${+g.q.toFixed(5)} فقط`, tab: 'items' }))
     if (lines.some(l => Number(l.qty) > POS_LIMITS.MAX_QTY_LINE))
       advisories.push({ level: 'error', text: `صنف يتجاوز الحد الأقصى للكمية (${POS_LIMITS.MAX_QTY_LINE}).`, tab: 'items' })
     if (Number(changeDiscount || 0) > POS_LIMITS.MAX_FAKKA)
@@ -752,7 +767,7 @@ export default function usePosOrder() {
       // add-paths whose item payload lacks it (favorites / barcode / repeat) still drive the matrix.
       const mustBatch = !!(item.batch_required || data.batch_required)
       const avail = item ? { ...item, qty_at_branch: data.total, batch_required: mustBatch } : item
-      batchCacheRef.current[item.softech_id] = { batches: data.batches || [], total: data.total, item: avail }
+      batchCacheRef.current[_ck(item.softech_id)] = { batches: data.batches || [], total: data.total, item: avail }
       // The batch matrix (CASE 1-5) is decided SERVER-SIDE (backend owns the rule); the POS enforces
       // the verdict. Fall back to the derived branch only if an older backend omits `batch_action`.
       const action = data.batch_action || (
@@ -869,17 +884,20 @@ export default function usePosOrder() {
     fefoSeqRef.current[group] = seq
     const head = linesRef.current.find(l => isFefoMember(l, group))
     if (!head) return
-    const cache = batchCacheRef.current[head.softech_itemcode]
+    const cache = batchCacheRef.current[_ck(head.softech_itemcode)]
     const need = Number(v)
     // the typed value shows at once, so the input never fights the cashier while the split runs
     setLines(prev => prev.map(l => (isFefoMember(l, group) ? { ...l, fefo_need: v } : l)))
-    const plain = () => setLines(prev => _replaceGroup(prev, group, [_stripFefo({
-      ...head, qty: v, item_expiry: null, batchno: '', available_expiry_qty: null })]))
+    // fallback = today's behaviour: ONE line, qty edited locally, no batch guessed. It stays a group
+    // (flagged stale) so «تغيير التشغيلة» can re-pick from the CURRENT branch/store.
+    const plain = () => setLines(prev => _replaceGroup(prev, group, [{
+      ...head, qty: v, item_expiry: null, batchno: '', available_expiry_qty: null,
+      fefo_need: v, fefo_shortfall: 0, fefo_stale: true }]))
     if (!cache) {
-      // no cached batches (e.g. a recalled held order after a reload): one plain line, local qty —
-      // no batch is guessed.
+      // no batches cached for THIS branch/store (branch/store switched, or a held order recalled
+      // after a reload) — never re-split from another store's batches.
       plain()
-      setMsg('بيانات التشغيلات غير متاحة لهذا السطر — عُدّلت الكمية بدون تشغيلة.')
+      setMsg('تغيّر الفرع/المخزن أو بيانات التشغيلات غير متاحة — عُدّلت الكمية بدون تشغيلة؛ أعد الاختيار من «تغيير التشغيلة».')
       return
     }
     if (!(need > 0)) {
@@ -892,7 +910,7 @@ export default function usePosOrder() {
     try { r = await _fefoSplit(cache.batches, need) } catch {
       if (fefoSeqRef.current[group] !== seq) return
       plain()
-      setMsg('تعذّر توزيع التشغيلات — عُدّلت الكمية بدون تشغيلة.')
+      setMsg('تعذّر توزيع التشغيلات — عُدّلت الكمية بدون تشغيلة؛ أعد الاختيار من «تغيير التشغيلة».')
       return
     }
     if (fefoSeqRef.current[group] !== seq) return      // a newer edit superseded this one
@@ -900,7 +918,7 @@ export default function usePosOrder() {
       const h = prev.find(l => isFefoMember(l, group))
       if (!h) return prev
       const repl = r.picks?.length
-        ? _fefoLines(h, r.picks, group, v, r.shortfall)
+        ? _fefoLines({ ...h, fefo_stale: false }, r.picks, group, v, r.shortfall)
         : [{ ...h, qty: v, fefo_need: v, fefo_shortfall: r.shortfall || 0 }]
       return _replaceGroup(prev, group, repl)
     })
@@ -913,7 +931,7 @@ export default function usePosOrder() {
     const sf = Number(members[0]?.fefo_shortfall) || 0
     if (!(sf > 0)) return
     const head = members[0]
-    const cache = batchCacheRef.current[head.softech_itemcode]
+    const cache = batchCacheRef.current[_ck(head.softech_itemcode)]
     const res = cache?.item
       ? _newLine(cache.item, { qty: sf, is_reservation: true, fefo_group: group })
       : { ..._stripFefo(head), qty: sf, is_reservation: true, item_expiry: null, batchno: '',
@@ -933,11 +951,26 @@ export default function usePosOrder() {
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // «تغيير التشغيلة» — today's modal, prefilled with the group's picks; confirming REPLACES the group.
-  const openBatchModal = useCallback((group) => {
+  const openBatchModal = useCallback(async (group) => {
     const members = linesRef.current.filter(l => isFefoMember(l, group))
     if (!members.length) return
-    const cache = batchCacheRef.current[members[0].softech_itemcode]
-    if (!cache) { setMsg('بيانات التشغيلات غير متاحة — احذف السطر وأضف الصنف مرة أخرى.'); return }
+    const code = members[0].softech_itemcode
+    let cache = batchCacheRef.current[_ck(code)]
+    if (!cache) {
+      // nothing cached for the CURRENT branch/store (switched, or recalled order): one explicit
+      // batches read on this explicit «تغيير التشغيلة» — never on a qty edit.
+      const { branch: b, storeCode: st } = ctxRef.current
+      if (!b) { setMsg('اختر الفرع أولاً لعرض التشغيلات.'); return }
+      try {
+        const { data } = await api.get('/pos-orders/batches/', {
+          params: { branch: Number(b), item: code, store: st || undefined } })
+        cache = { batches: data.batches || [], total: data.total,
+                  item: { softech_id: code, name: members[0].item_name, item_id: members[0].item } }
+        batchCacheRef.current[_ck(code)] = cache
+      } catch (e) {
+        setMsg('تعذّر قراءة الأرصدة: ' + (e.response?.data?.detail || e.message)); return
+      }
+    }
     const sum = +members.reduce((s, l) => s + (Number(l.qty) || 0), 0).toFixed(5)
     setBatchModal({
       item: cache.item, batches: cache.batches, total: cache.total,
@@ -957,7 +990,8 @@ export default function usePosOrder() {
       if (!g) {
         byGroup[l.fefo_group] = { group: l.fefo_group, head: i, idx: [i], qty: Number(l.qty) || 0,
           available: Number(l.available_expiry_qty) || 0, expiries: [l.item_expiry],
-          batchnos: [l.batchno], need: l.fefo_need, shortfall: Number(l.fefo_shortfall) || 0 }
+          batchnos: [l.batchno], need: l.fefo_need, shortfall: Number(l.fefo_shortfall) || 0,
+          stale: !!l.fefo_stale }
       } else {
         g.idx.push(i); hidden.add(i)
         g.qty += Number(l.qty) || 0

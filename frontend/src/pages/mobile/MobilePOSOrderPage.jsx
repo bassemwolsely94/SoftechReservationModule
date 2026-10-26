@@ -172,6 +172,7 @@ export default function MobilePOSOrderPage() {
                   <Fld l="الكمية">
                     <div className="flex items-center gap-1">
                       <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                      {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                       {l.pack_qty > 1 && (
                         <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                                 className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
@@ -523,6 +524,7 @@ function MGItems({ P }) {
             <Fld l="كمية (عبوة)">
               <div className="flex items-center gap-1">
                 <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                 {l.pack_qty > 1 && (
                   <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                           className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
