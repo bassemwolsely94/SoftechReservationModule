@@ -344,6 +344,31 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                                                     version=request.data.get('version'),
                                                     reference=request.data.get('reference', ''), request=request))
 
+    # ── B4: reversals and corrections (native supplier return, approved here) ─
+    @action(detail=True, methods=['post'], url_path='reversals')
+    def request_reversal(self, request, pk=None):
+        from . import reversal
+        return self._step(request, pk, reversal.request_reversal, kind=request.data.get('kind', ''),
+                          reason=request.data.get('reason', ''), amount=request.data.get('amount'))
+
+    @action(detail=True, methods=['post'], url_path=r'reversals/(?P<rr_id>\d+)/(?P<verb>approve|reject|cancel)')
+    def act_reversal(self, request, pk=None, rr_id=None, verb=None):
+        from . import reversal
+        self.get_object()                                     # branch scope (404 outside)
+        user, version, note = _staff(request), request.data.get('version'), request.data.get('note', '')
+        if verb == 'cancel':
+            fn = lambda: reversal.cancel_reversal(int(pk), int(rr_id), user=user, version=version,
+                                                  reason=note, request=request)
+        else:
+            fn = lambda: reversal.decide_reversal(int(pk), int(rr_id), user=user, version=version,
+                                                  approve=verb == 'approve', note=note, request=request)
+        return self._do(fn)
+
+    @action(detail=True, methods=['post'], url_path='insurer-rejection')
+    def insurer_rejection(self, request, pk=None):
+        from . import reversal
+        return self._step(request, pk, reversal.record_insurer_rejection, note=request.data.get('note', ''))
+
     # ── B2: balance in Customer 360 / POS, and funding a POS order from it ────
     def _call(self, fn, render):
         """Same error mapping as _do, for services that do not return a case."""

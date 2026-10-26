@@ -689,6 +689,25 @@ as soon as the shift screens are decoded (D7 — owner screenshots).
 
 Tests: `apps/tests/test_replacement_cash.py` (8). 130 replacement tests green.
 
+## 24. B4 — returns, reversals and corrections (built 2026-10-27)
+
+Reversal, never deletion; every SOFTECH document is posted natively. `apps/replacement/reversal.py` +
+model `ReversalRequest` (migration 0008, replacement tables only).
+
+| Event (prompt §5 B4) | As built |
+|---|---|
+| Wrong %, wrong Rx, processed twice, products → cash, change of mind, other | `request_reversal(kind, reason, amount≤balance)` — reason required; one open request per case; refused while product funding or cash instructions are open, and when the balance is already used up («return the product sales first»). Approval on the existing inbox (band G): **supervisor**, **manager** once any balance was used; maker ≠ checker in the workspace and in the outcome hook (`self_approval`). Approved → case `reversing` (no new funding / cash / product orders) + supplier-return instruction (amount, supplier, reference = the purchase). |
+| Native supplier return (doccode 120) | Already booked to the ledger by reconstruction step 5; the daily check now matches it to the approved request (±0.05) → `executed`, case `reversed` when no balance remains. **`return_without_approval`** and **`reversal_amount_mismatch`** are HIGH; `reversal_not_executed` after `REVERSAL_EXECUTE_DAYS` (3). Re-purchase at the right rate = a new case (B0 flow). |
+| Insurance contract sale cancelled | Live cases now watch their linked contract sale (same patient / branch / items, `LIVE_RETURN_WATCH_DAYS` = 45): full return → `contract_void` + **`contract_cancelled` HIGH**; partial → `contract_partially_returned` WARNING. |
+| Patient changes mind | `change_of_mind_until(sale)` = 7 days **and** same month (Q4), shown on the case; a contract return after it → `late_contract_return` WARNING. |
+| Replacement sale returned / home delivery failed | A return of one of the case's own product receipts → `product_sale_returned` WARNING. **How the balance is restored in SOFTECH is an open owner question — detection only.** |
+| Insurer rejects later | `record_insurer_rejection(note)` → `insurer_rejected` (INFO, acknowledged so the daily check keeps it); nothing reversed ("what's done is done"). |
+
+API: `POST cases/{id}/reversals/`, `…/reversals/{rid}/approve|reject|cancel/`, `…/insurer-rejection/`. UI:
+workspace section «٥ — العكس والتصحيح» (no modal). `reset_reconstructed` truncates the new table too.
+
+Tests: `apps/tests/test_replacement_reversal.py` (9). 139 replacement tests green.
+
 ### 16.3 Owner answers 2026-10-26
 
 | # | Decision |

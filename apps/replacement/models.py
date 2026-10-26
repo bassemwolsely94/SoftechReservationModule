@@ -373,6 +373,14 @@ class CaseException(models.Model):
         ('voucher_by_creator',      'سند الصرف النقدي من منشئ الحالة نفسه'),
         ('payout_not_executed',     'تعليمات صرف نقدي لم تُنفّذ'),
         ('payout_not_confirmed',    'صرف نقدي لم يُؤكَّد تسليمه'),
+        ('contract_cancelled',      'فاتورة التعاقد أُلغيت بمرتجع كامل'),
+        ('contract_partially_returned', 'مرتجع جزئي من فاتورة التعاقد'),
+        ('late_contract_return',    'مرتجع تعاقد بعد مهلة التراجع'),
+        ('product_sale_returned',   'مرتجع من فاتورة منتجات البدل'),
+        ('insurer_rejected',        'شركة التأمين رفضت الروشتة'),
+        ('return_without_approval', 'مرتجع للمورد بدون طلب عكس معتمد'),
+        ('reversal_amount_mismatch', 'قيمة مرتجع المورد تختلف عن طلب العكس'),
+        ('reversal_not_executed',   'طلب عكس معتمد لم يُنفّذ'),
     ]
 
     STATUS_OPEN, STATUS_ACK, STATUS_RESOLVED, STATUS_CLEARED = 'open', 'acknowledged', 'resolved', 'auto_cleared'
@@ -574,6 +582,50 @@ class CashPayout(models.Model):
             models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_payout_positive'),
             models.UniqueConstraint(fields=['voucher'], condition=models.Q(voucher__isnull=False),
                                     name='uq_replacement_payout_voucher'),
+        ]
+
+
+class ReversalRequest(models.Model):
+    """B4 (doc 25 §24): undoing a case's entitlement — reversal, never deletion. The supplier return
+    (doccode 120) is posted NATIVELY; this record carries the reason and the approval (band G:
+    supervisor, manager once any of the balance was used) and is closed by the daily check when the
+    native return on the case's purchase appears with the approved amount."""
+    KIND_CHOICES = [('wrong_rate', 'نسبة خاطئة'), ('wrong_rx', 'روشتة خاطئة'), ('duplicate', 'مكررة'),
+                    ('to_cash', 'تحويل من منتجات إلى نقدي'), ('change_of_mind', 'تراجع المريض'), ('other', 'أخرى')]
+    ST_AWAITING, ST_APPROVED, ST_EXECUTED, ST_REJECTED, ST_CANCELLED = (
+        'awaiting_approval', 'approved', 'executed', 'rejected', 'cancelled')
+    STATUS_CHOICES = [(ST_AWAITING, 'بانتظار الموافقة'), (ST_APPROVED, 'معتمد — بانتظار مرتجع المورد'),
+                      (ST_EXECUTED, 'نُفّذ مرتجع المورد'), (ST_REJECTED, 'مرفوض'), (ST_CANCELLED, 'ملغى')]
+    OPEN = (ST_AWAITING, ST_APPROVED)
+
+    case   = models.ForeignKey(ReplacementCase, on_delete=models.PROTECT, related_name='reversals')
+    kind   = models.CharField(max_length=16, choices=KIND_CHOICES)
+    reason = models.TextField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)          # supplier-return value expected
+    balance_used = models.BooleanField(default=False)                      # any redemption before the request
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ST_AWAITING, db_index=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    approval_request = models.ForeignKey('approvals.ApprovalRequest', null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name='+')
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    supplier_return = models.ForeignKey('lineage.DocumentRef', null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name='reversal_requests')
+    executed_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True)                     # decision / cancel note
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'طلب عكس حالة بدل'
+        verbose_name_plural = 'طلبات عكس حالات البدل'
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_reversal_positive'),
+            models.UniqueConstraint(fields=['case'], condition=models.Q(status__in=['awaiting_approval', 'approved']),
+                                    name='uq_replacement_one_open_reversal'),
         ]
 
 
