@@ -101,7 +101,7 @@ export default function MobilePOSOrderPage() {
 
       {/* product search + barcode + favorites */}
       <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
-        <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
+        <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" />
         <div className="flex gap-2">
           <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
                  onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
@@ -209,8 +209,8 @@ export default function MobilePOSOrderPage() {
         </div>
         <MPointsBadge P={P} />
         <div className="grid grid-cols-4 gap-2 text-xs">
-          <button onClick={() => setSheet('pay')} className="py-2 rounded border">السداد ({P.tenders.length})</button>
-          <button onClick={P.parkOrder} className="py-2 rounded border">⏸ تعليق</button>
+          <button onClick={() => setSheet('pay')} data-tour="pos-mobile-pay" className="py-2 rounded border">السداد ({P.tenders.length})</button>
+          <button onClick={P.parkOrder} data-tour="pos-mobile-park" className="py-2 rounded border">⏸ تعليق</button>
           <button onClick={() => setSheet('parked')} className="py-2 rounded border">المعلّقة ({P.parked.length})</button>
           <button onClick={() => setSheet('receipt')} disabled={!P.lines.length} className="py-2 rounded border disabled:opacity-40">🧾 إيصال</button>
         </div>
@@ -218,8 +218,8 @@ export default function MobilePOSOrderPage() {
           <button onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
           <button data-tour="pos-mobile-preview" onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
           {P.ref?.writer_enabled
-            ? <button onClick={() => P.submit(true)} disabled={P.busy} className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
-            : <button disabled className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}
+            ? <button onClick={() => P.submit(true)} disabled={P.busy} data-tour="pos-mobile-send" className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
+            : <button disabled data-tour="pos-mobile-send" className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}
         </div>
       </div>
 
@@ -483,7 +483,7 @@ function MGItems({ P }) {
   const [unitsIdx, setUnitsIdx] = useState(-1)
   return (
     <div className="space-y-2 max-w-md mx-auto">
-      <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
+      <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود…" />
       {!P.lines.length && <div className="text-center text-gray-400 text-sm py-6">أضف الأصناف بالبحث بالأعلى</div>}
       {unitsIdx >= 0 && P.lines[unitsIdx] && (
         <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />

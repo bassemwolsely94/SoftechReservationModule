@@ -754,7 +754,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
                   className="px-2 rounded text-white text-xs whitespace-nowrap self-start mt-1" style={{ background: '#022871' }}>📷🎤 ذكي</button>
           {Object.values(P.suggest.map || {}).some(v => v != null) &&
@@ -867,7 +867,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
                   <TdInp l={l} i={i} k="sale_tax_pct" P={P} />
 
                   {/* ── خصم %: retrieved + manager-locked for contract/permanent (server-enforced too) ── */}
-                  <td className="px-1 py-1.5 text-center">
+                  <td className="px-1 py-1.5 text-center" data-tour="pos-order-line-discount">
                     <div className="relative inline-block">
                       <input type="number" step="any" value={l.cust_discp} onClick={e => e.stopPropagation()}
                              data-pos-cell={`cust_discp-${i}`}
@@ -922,7 +922,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
 
       {/* ── collapsible intelligence footer — bounded height so it never steals grid space ── */}
       {(P.lines.length > 0 || custId) && (
-        <div className="shrink-0 border-t bg-gray-50/60 px-2">
+        <div className="shrink-0 border-t bg-gray-50/60 px-2" data-tour="pos-order-intel">
           <button onClick={toggleIntel} className="w-full text-right text-[11px] text-gray-500 hover:text-gray-700 py-1 flex items-center justify-between">
             <span>💡 اقتراحات وعروض (تاريخ العميل · FBT · عروض)</span><span>{intelOpen ? '▾' : '▸'}</span>
           </button>
@@ -957,7 +957,7 @@ function PaymentTab({ P }) {
   const change = Number(P.totals.change || 0)
   return (
     <div className="p-2">
-      <div className="flex items-center gap-3 flex-wrap text-xs mb-2">
+      <div className="flex items-center gap-3 flex-wrap text-xs mb-2" data-tour="pos-order-payment">
         <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }}>الصافي <b className="text-base tabular-nums">{money(P.totals.net)}</b></span>
         <span className="text-gray-500">المدفوع <b className="text-gray-800 tabular-nums">{money(P.totals.paid)}</b></span>
         {change < -0.005
@@ -1033,7 +1033,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <span className="text-gray-500">الإجمالي <b className="text-gray-800 tabular-nums">{money(P.totals.gross)}</b></span>
       <span className="text-orange-600">− الخصم <b className="tabular-nums">{money(P.totals.discount)}</b></span>
       <span className="text-gray-500">ض.ق.م <b className="text-gray-800 tabular-nums">{money(P.totals.tax)}</b></span>
-      <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }}>
+      <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }} data-tour="pos-order-net">
         الصافي <b className="text-base tabular-nums">{money(P.totals.net)}</b>
       </span>
       {paid > 0 && <span className="text-gray-500">المدفوع <b className="text-gray-800 tabular-nums">{money(paid)}</b></span>}
@@ -1044,7 +1044,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <span className="text-gray-400 tabular-nums">🧾 {P.lines.length}</span>
       <div className="flex-1 min-w-2" />
       {/* finalize actions — always visible so the side panels can collapse away */}
-      <button onClick={P.parkOrder} title="تعليق السلة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
+      <button onClick={P.parkOrder} title="تعليق السلة" data-tour="pos-order-park" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
       <button onClick={onParked} title="السلال المعلّقة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">📥{P.parked.length ? ` ${P.parked.length}` : ''}</button>
       <button onClick={onReceipt} disabled={!P.lines.length} title="معاينة الإيصال" className="h-8 px-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-40">🧾</button>
       <button onClick={() => P.submit(false)} disabled={P.busy || !P.lines.length} title="معاينة الإرسال (تجريبى)" data-tour="pos-order-preview"
@@ -1052,10 +1052,10 @@ function FooterBar({ P, onParked, onReceipt }) {
         {P.busy ? '...' : <>🧾 معاينة <kbd className="text-[10px] bg-white/20 rounded px-1">F9</kbd></>}
       </button>
       {P.ref?.writer_enabled
-        ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير"
+        ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير" data-tour="pos-order-send"
                   className="h-8 px-3 rounded bg-red-600 text-white font-semibold disabled:opacity-40 flex items-center gap-1.5">⚠ إرسال <kbd className="text-[10px] bg-white/20 rounded px-1">F10</kbd></button>
-        : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك">🔒 مُعطّل</span>}
-      <button onClick={P.reset} title="أمر جديد" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
+        : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك" data-tour="pos-order-send">🔒 مُعطّل</span>}
+      <button onClick={P.reset} title="أمر جديد" data-tour="pos-order-reset" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
     </div>
   )
 }
@@ -1117,7 +1117,7 @@ function KeyboardLegend() {
   const toggle = () => setOpen(o => { const n = !o; try { localStorage.setItem('pos_shortcuts_open', n ? '1' : '0') } catch { /* private mode */ } return n })
   return (
     <div className="border-t mt-2 pt-2 text-right">
-      <button onClick={toggle} className="w-full flex items-center justify-between text-[11px] text-gray-500 hover:text-gray-700">
+      <button onClick={toggle} data-tour="pos-order-shortcuts" className="w-full flex items-center justify-between text-[11px] text-gray-500 hover:text-gray-700">
         <span>⌨ اختصارات لوحة المفاتيح</span><span>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
@@ -1164,7 +1164,7 @@ export function QueueIndicator({ P }) {
   const total = (q.queued || 0) + (q.push_failed || 0) + (q.pushing || 0)
   if (!total) return null
   return (
-    <div className="rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800">
+    <div className="rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800" data-tour="pos-order-queue">
       <div className="flex items-center justify-between">
         <span>⏳ في الطابور: <b>{q.queued || 0}</b>{q.push_failed ? ` · فشل ${q.push_failed}` : ''}{q.pushing ? ` · جارٍ ${q.pushing}` : ''}</span>
         <button onClick={P.refreshQueue} title="تحديث" className="text-amber-600">↻</button>

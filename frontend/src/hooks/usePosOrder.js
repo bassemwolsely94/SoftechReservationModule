@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
-import api from '../api/client'
+import api, { demandApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 
 // stable cart id — correlates selection telemetry with the eventual order (client_token)
@@ -646,6 +646,37 @@ export default function usePosOrder() {
   // flush buffered selections once a branch is chosen (items added before branch selection)
   useEffect(() => { if (branch) _flushSelections() }, [branch, _flushSelections])
 
+  // Search-row next actions (POS Speed Wave task 2). Backend decided WHICH action applies; these
+  // only wire the existing flows: reserve → reservation line · transfer → prefilled new transfer in
+  // a NEW TAB (the sale in progress is kept) · demand → existing POST /api/demand/ (lost-sale capture).
+  const searchAction = useCallback(async (kind, item, extra = {}) => {
+    if (!item) return
+    setMsg('')
+    if (kind === 'reserve') {
+      setLines(prev => [...prev, _newLine(item, { is_reservation: true })])
+      setMsg(`أُضيف "${item.name}" كحجز.`)
+    } else if (kind === 'transfer') {
+      const base = window.location.pathname.startsWith('/m/') ? '/m' : ''
+      window.open(`${base}/transfers/new?item=${encodeURIComponent(item.softech_id)}&from=${extra.from_branch_id ?? ''}`, '_blank', 'noopener')
+    } else if (kind === 'demand') {
+      const c = picCustomer || customer
+      const phone = c?.phone || c?.mobileno || c?.branchcustphone
+      if (!branch) return setMsg('اختر الفرع قبل تسجيل الطلب المفقود.')
+      if (!item.item_id) return setMsg('هذا الصنف غير مُزامَن للكتالوج بعد — لا يمكن تسجيل طلب له.')
+      if (!phone) return setMsg('اختر عميلاً (لسحب رقم الهاتف) قبل تسجيل الطلب المفقود.')
+      try {
+        await demandApi.create({
+          phone, customer_name: c?.name || '', branch: Number(branch), source: 'walk_in',
+          phcode: c?.softech_pic || '',
+          items: [{ item: item.item_id, quantity: 1, demand_type: 'out_of_stock' }],
+        })
+        setMsg(`تم تسجيل طلب "${item.name}" — سيصل للمشتريات ويُستدعى العميل عند التوفّر.`)
+      } catch (e) {
+        setMsg('تعذّر تسجيل الطلب: ' + (e.response?.data?.detail || JSON.stringify(e.response?.data || {}) || e.message))
+      }
+    }
+  }, [branch, customer, picCustomer])   // eslint-disable-line react-hooks/exhaustive-deps
+
   const addItem = useCallback(async (item) => {
     if (!item) return
     setMsg('')
@@ -1211,7 +1242,7 @@ export default function usePosOrder() {
     itemsReservation, setItemsReservation,
     doctorName, setDoctorName, doctorCode, setDoctorCode, rx, setRx, claim, setClaim,
     empDataFields, contractFields,
-    lines, setLine, lineDiscValue, lineSellPrice, removeLine, addItem, selected, setSelected, numMode, setNumMode, numpad,
+    lines, setLine, lineDiscValue, lineSellPrice, removeLine, addItem, searchAction, selected, setSelected, numMode, setNumMode, numpad,
     batchModal, setBatchModal, confirmBatchPick, setBatchNeed, fefoFill,
     couponModal, setCouponModal, checkCoupon,
     suggest, applySuggested, applyAllSuggested,
