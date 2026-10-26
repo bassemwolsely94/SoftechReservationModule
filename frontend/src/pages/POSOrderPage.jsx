@@ -20,6 +20,7 @@ import UnitsQtyModal from '../components/UnitsQtyModal'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../hooks/useGuidedFlow'
 import { Badge, BatchBadge, Icon, WorkflowStep, ErrorState } from '../pos/design'
+import FefoGroupChip from '../pos/batch/FefoGroupChip'
 
 /*
  * POSOrderPage — Indirect-POS (desktop). Mirrors the SOFTECH "In-Direct Point of Sale"
@@ -735,18 +736,23 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
     ['total', 'الإجمالي'], [null, ''],
   ]
   // After ANY add appends a line, jump focus to its qty cell (SOFTECH Enter→qty flow).
-  const prevLen = useRef(P.lines.length)
+  // A FEFO re-split grows a group IN PLACE (or appends its tail) — that is not an add, so it never
+  // steals the cashier's focus; a new auto-split group focuses its single visible (head) row.
+  const prevLines = useRef(P.lines)
   useEffect(() => {
-    if (P.lines.length > prevLen.current) {
-      const last = P.lines.length - 1
-      P.setSelected(last)   // select the new line so F4/arrows act on it immediately
-      setTimeout(() => {
-        const el = document.querySelector(`[data-pos-cell="qty-${last}"]`)
-        if (el) { el.focus(); el.select?.() }
-      }, 0)
-    }
-    prevLen.current = P.lines.length
-  }, [P.lines.length])
+    const prev = prevLines.current
+    prevLines.current = P.lines
+    if (P.lines.length <= prev.length) return
+    const lastL = P.lines[P.lines.length - 1]
+    if (prev.includes(lastL) || (lastL?.fefo_group && prev.some(p => p.fefo_group === lastL.fefo_group))) return
+    let last = P.lines.length - 1
+    if (lastL?.fefo_auto) last = P.lines.findIndex(l => l.fefo_auto && !l.is_reservation && l.fefo_group === lastL.fefo_group)
+    P.setSelected(last)   // select the new line so F4/arrows act on it immediately
+    setTimeout(() => {
+      const el = document.querySelector(`[data-pos-cell="qty-${last}"]`)
+      if (el) { el.focus(); el.select?.() }
+    }, 0)
+  }, [P.lines])
   const custId = P.picCustomer?.id || P.customer?.id
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -824,7 +830,10 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
           </thead>
           <tbody>
             {order.map(i => {
-              const l = P.lines[i]
+              // an automatic FEFO split is ONE row (its head); the other batch lines are folded in
+              if (P.fefoHidden(i)) return null
+              const g = P.fefoGroupAt(i)
+              const l = g ? { ...P.lines[i], qty: g.qty, available_expiry_qty: g.available } : P.lines[i]
               const net = +(l.item_sale_price * (1 - l.cust_discp / 100)) * l.qty
               const taxAmt = l.sale_tax_pct ? net - net / (1 + l.sale_tax_pct / 100) : 0
               const sel = P.selected === i
@@ -844,11 +853,12 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
                       {l.not_stockable && <Badge tone="info" icon="pill" size="xs" label="خدمي" title="صنف غير مخزون (خدمي) — بلا رصيد أو تشغيلة أو حجز" />}
                       {discOn && !P.discountLocked && <Badge tone="warn" icon="tag" size="xs" label={`−${l.cust_discp}%`} title="خصم مطبَّق" />}
                     </div>
+                    {g && <FefoGroupChip g={g} P={P} className="mt-0.5" />}
                   </td>
                   <Td className="tabular-nums text-gray-500">{l.available_expiry_qty ?? '—'}</Td>
                   <Td className="tabular-nums text-gray-500">{l.available_qty ?? '—'}</Td>
-                  <Td className="tabular-nums text-gray-500">{l.item_expiry || '—'}</Td>
-                  <Td className="text-gray-500">{l.batchno || '—'}</Td>
+                  <Td className="tabular-nums text-gray-500">{g ? (g.count === 1 ? (g.expiries[0] || '—') : `${g.count} تشغيلات`) : (l.item_expiry || '—')}</Td>
+                  <Td className="text-gray-500">{g ? (g.batchnos.filter(Boolean).join(' · ') || '—') : (l.batchno || '—')}</Td>
                   {/* ── العبوة = the item's UNIT (علبة/شريط), display-only (NOT a bonus) ── */}
                   <Td className="text-gray-600">{l.unit_name || 'علبة'}</Td>
 
@@ -856,7 +866,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
                   <td className="px-1 py-1.5 text-center">
                     <div className="flex items-center justify-center gap-0.5">
                       {/* Enter on qty → discount (or back to search when the discount is locked) */}
-                      <input type="number" step="any" value={l.qty} data-pos-cell={`qty-${i}`} title={STEP_HINT}
+                      <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} data-pos-cell={`qty-${i}`} title={STEP_HINT}
                              onClick={e => e.stopPropagation()}
                              {...numFieldHandlers({ P, i, k: 'qty', step: 1, onEnter: () => focusPosCell(P.discountLocked ? 'search' : `cust_discp-${i}`) })}
                              onChange={e => P.setLine(i, 'qty', e.target.value)}

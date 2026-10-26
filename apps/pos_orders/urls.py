@@ -5,6 +5,7 @@ urlpatterns = [
     path('',                  views.OrderListCreateView.as_view(), name='pos-order-list'),
     path('reference/',        views.reference_data,                name='pos-order-reference'),
     path('batches/',          views.batch_availability_view,       name='pos-order-batches'),
+    path('fefo-split/',       views.fefo_split_view,               name='pos-order-fefo-split'),
     path('discount-suggest/', views.discount_suggest,              name='pos-order-discount-suggest'),
     path('points-preview/',   views.points_preview_view,           name='pos-order-points-preview'),
     path('customer-types/',   views.customer_types,                name='pos-order-customer-types'),

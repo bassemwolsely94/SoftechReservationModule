@@ -931,6 +931,40 @@ def batch_availability_view(request):
                      'batch_action': verdict['action'], **summarize(batches)})
 
 
+FEFO_SPLIT_MAX_BATCHES = 50
+
+
+@api_view(['POST'])
+@permission_classes([CanOperatePosOrders])
+def fefo_split_view(request):
+    """
+    POST {"batches": [{expiry, batchno, qty}], "need": n} → {"picks": [...], "shortfall": x}
+    Pure FEFO split for the POS automatic batch split (Speed Wave Task 6). The batches are the
+    ones the client already received from `batches/` for this item add — NO SOFTECH read here,
+    so qty edits re-split without touching the branch node. Never creates a reservation.
+    """
+    from .batch_availability import fefo_split
+    data = request.data if isinstance(request.data, dict) else {}
+    raw = data.get('batches')
+    if not isinstance(raw, list):
+        return Response({'detail': 'batches يجب أن تكون قائمة.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(raw) > FEFO_SPLIT_MAX_BATCHES:
+        return Response({'detail': 'عدد التشغيلات أكبر من المسموح.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        need = float(data.get('need'))
+        batches = [{'expiry': (str(b.get('expiry'))[:10] if b.get('expiry') else None),
+                    'batchno': str(b.get('batchno') or '').strip(),
+                    'qty': float(b.get('qty') or 0)} for b in raw]
+    except (TypeError, ValueError, AttributeError):
+        return Response({'detail': 'بيانات غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    import math
+    if not math.isfinite(need) or need < 0 or not all(math.isfinite(b['qty']) for b in batches):
+        return Response({'detail': 'الكمية المطلوبة غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    # FEFO = earliest expiry first; a batch without an expiry goes last (stable for equal dates).
+    batches.sort(key=lambda b: (b['expiry'] is None, b['expiry'] or ''))
+    return Response(fefo_split(batches, need))
+
+
 @api_view(['GET'])
 @permission_classes([CanOperatePosOrders])
 def contract_fields_view(request):

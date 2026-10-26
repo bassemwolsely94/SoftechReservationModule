@@ -84,12 +84,16 @@ export default function usePosHotkeys(P, { enabled = true, onOpenUnits, onOpenIm
         e.preventDefault()
         const n = P.lines.length
         const cur = P.selected < 0 ? (k === 'ArrowDown' ? -1 : 0) : P.selected
-        const next = k === 'ArrowDown' ? Math.min(cur + 1, n - 1) : Math.max(cur - 1, 0)
+        let next = k === 'ArrowDown' ? Math.min(cur + 1, n - 1) : Math.max(cur - 1, 0)
+        // skip the batch lines folded into an automatic FEFO split row (only its head is shown)
+        const dir = k === 'ArrowDown' ? 1 : -1
+        while (next >= 0 && next < n && P.fefoHidden?.(next)) next += dir
+        if (next < 0 || next >= n) next = cur < 0 ? 0 : cur
         P.setSelected(next)
         return
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, onOpenUnits, onOpenImages, P.selected, P.lines.length, P.busy, P.setCustType, P.setActiveTab, P.removeLine, P.setSelected, P.submit, P.ref])
+  }, [enabled, onOpenUnits, onOpenImages, P.selected, P.lines.length, P.busy, P.setCustType, P.setActiveTab, P.removeLine, P.setSelected, P.submit, P.ref, P.fefoHidden])
 }

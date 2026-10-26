@@ -12,6 +12,7 @@ import CustomerTypePicker from '../../components/CustomerTypePicker'
 import SalespersonPicker from '../../components/SalespersonPicker'
 import POSCustomerModal from '../../components/POSCustomerModal'
 import UnitsQtyModal from '../../components/UnitsQtyModal'
+import FefoGroupChip from '../../pos/batch/FefoGroupChip'
 import { QueueIndicator, numFieldHandlers, STEP_HINT } from '../POSOrderPage'
 import ContractAssist, { ClaimField } from '../../pos/contract/ContractAssist'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../../hooks/usePosOrder'
@@ -142,7 +143,11 @@ export default function MobilePOSOrderPage() {
       {/* cart */}
       <div data-tour="pos-mobile-cart" className="bg-white">
         {!P.lines.length && <div className="text-center text-gray-400 py-8">لا أصناف بعد</div>}
-        {P.lines.map((l, i) => {
+        {P.lines.map((line, i) => {
+          // an automatic FEFO split is ONE card (its head); the other batch lines are folded in
+          if (P.fefoHidden(i)) return null
+          const g = P.fefoGroupAt(i)
+          const l = g ? { ...line, qty: g.qty, available_expiry_qty: g.available } : line
           const net = +(l.item_sale_price * (1 - l.cust_discp / 100)) * l.qty
           return (
             <div key={i} className="border-b">
@@ -154,18 +159,19 @@ export default function MobilePOSOrderPage() {
                   </div>
                   <div className="text-xs text-gray-500">
                     {l.softech_itemcode} · {Number(l.qty)}×{money(l.item_sale_price)}
-                    {' · '}{l.is_reservation ? <span className="bg-amber-100 text-amber-800 px-1 rounded">حجز</span> : (l.item_expiry || 'بدون تشغيلة')}
+                    {' · '}{l.is_reservation ? <span className="bg-amber-100 text-amber-800 px-1 rounded">حجز</span> : g ? null : (l.item_expiry || 'بدون تشغيلة')}
                     {P.suggest.map[l.softech_itemcode] != null &&
                       <button onClick={e => { e.stopPropagation(); P.applySuggested(i) }} className="text-emerald-700 mr-1">· مقترح {P.suggest.map[l.softech_itemcode]}%</button>}
                   </div>
                 </div>
                 <div className="text-left"><div className="font-mono">{money(net)}</div><button onClick={e => { e.stopPropagation(); P.removeLine(i) }} className="text-red-500 text-xs">حذف</button></div>
               </div>
+              {g && <div className="px-3 pb-2 -mt-1"><FefoGroupChip g={g} P={P} /></div>}
               {open === i && (
                 <div className="px-3 pb-3 grid grid-cols-3 gap-2 bg-gray-50">
                   <Fld l="الكمية">
                     <div className="flex items-center gap-1">
-                      <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                      <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
                       {l.pack_qty > 1 && (
                         <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                                 className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
@@ -185,7 +191,7 @@ export default function MobilePOSOrderPage() {
                   <Fld l="العبوة"><input value={l.unit_name || 'علبة'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد متاح"><input value={l.available_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد صلاحية"><input value={l.available_expiry_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
-                  <Fld l="رقم الباتش"><input value={l.batchno || '—'} readOnly className="minp bg-gray-100" /></Fld>
+                  <Fld l="رقم الباتش"><input value={(g ? g.batchnos.filter(Boolean).join(' · ') : l.batchno) || '—'} readOnly className="minp bg-gray-100" /></Fld>
                 </div>
               )}
             </div>
@@ -502,16 +508,21 @@ function MGItems({ P }) {
       {unitsIdx >= 0 && P.lines[unitsIdx] && (
         <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />
       )}
-      {P.lines.map((l, i) => (
+      {P.lines.map((line, i) => {
+        if (P.fefoHidden(i)) return null           // folded into its FEFO group's card
+        const g = P.fefoGroupAt(i)
+        const l = g ? { ...line, qty: g.qty } : line
+        return (
         <div key={i} className="border rounded p-2">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium flex-1">{l.item_name}</span>
             <button onClick={() => P.removeLine(i)} className="text-red-500 px-1">✕</button>
           </div>
+          {g && <FefoGroupChip g={g} P={P} className="mt-0.5" />}
           <div className="grid grid-cols-3 gap-2 mt-1">
             <Fld l="كمية (عبوة)">
               <div className="flex items-center gap-1">
-                <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
                 {l.pack_qty > 1 && (
                   <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                           className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
@@ -527,7 +538,8 @@ function MGItems({ P }) {
             </Fld>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
