@@ -677,8 +677,12 @@ export default function usePosOrder() {
     }
   }, [branch, customer, picCustomer])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addItem = useCallback(async (item) => {
+  const addItem = useCallback(async (item, opts = {}) => {
     if (!item) return
+    // opts.qty: pre-set the quantity (contract «آخر روشتة»). opts.noModal: never open the batch modal
+    // (several lines are added in a row) — the line is added without a batch and stays editable.
+    const q = Number(opts.qty) > 0 ? { qty: Number(opts.qty) } : {}
+    const NL = (it, extra) => _newLine(it, { ...extra, ...q })
     setMsg('')
     _captureSelection(item, 'add')   // telemetry: the selection happened now (Wave 3 inc3)
     // Service / non-stocked items (SOFTECH itemtrans=0) have NO stock, batch or reservation — they
@@ -687,7 +691,7 @@ export default function usePosOrder() {
     // no branch yet → still add the line so the cart can be built in ANY order; availability
     // and batch/expiry resolve once a branch is chosen. (Never drop the selected item.)
     if (!branch || service) {
-      setLines(prev => [...prev, _newLine(item)])
+      setLines(prev => [...prev, NL(item)])
       setMsg(service ? `"${item.name}" صنف غير مخزون (خدمي) — أُضيف مباشرة، بلا تشغيلة أو حجز.`
                      : `أُضيف "${item.name}" — اختر الفرع لعرض الرصيد والتشغيلة.`)
       return
@@ -715,33 +719,64 @@ export default function usePosOrder() {
       }
       if (action === 'plain') {
         // non-stockable (service/fee) → plain line, no batch, no حجز.
-        setLines(prev => [...prev, _newLine(avail, { not_stockable: true })])
+        setLines(prev => [...prev, NL(avail, { not_stockable: true })])
         setMsg(`"${item.name}" صنف غير مخزون (خدمي) — أُضيف مباشرة، بلا تشغيلة أو حجز.`)
       } else if (action === 'reserve') {
         // CASE 3 — no batch stock at all → reservation (applies to every item).
-        setLines(prev => [...prev, _newLine(avail, { is_reservation: true })])
+        setLines(prev => [...prev, NL(avail, { is_reservation: true })])
         setMsg(`"${item.name}" غير متوفر بالمخزن ${data.store || storeCode || ''} — أُضيف كحجز.`)
       } else if (action === 'auto_select') {
         // CASE 2 — mandatory-batch item with exactly ONE available batch → SOFTECH auto-selects it
         // (owner-confirmed). Skip the modal and add the line already bound to that batch/expiry.
         const b = data.batches[0]
-        setLines(prev => [...prev, _newLine(avail, {
+        setLines(prev => [...prev, NL(avail, {
           item_expiry: b.expiry, batchno: b.batchno || '', available_expiry_qty: b.qty,
         })])
         setMsg(`أُضيف "${item.name}" — تشغيلة واحدة متاحة (${b.expiry}) اختِيرت تلقائيًا.`)
       } else {
         // CASE 1 (must_select — mandatory, multiple batches) OR CASE 4/5 (optional FEFO helper).
         // `mandatory` tells confirmBatchPick to refuse a confirm that leaves the line without a batch.
-        setBatchModal({ item: avail, batches: data.batches, total: data.total,
-                        picks: data.batches.map(() => ''), need: 1, shortfall: 0,
+        if (opts.noModal) {
+          setLines(prev => [...prev, NL(avail)])
+          if (action === 'must_select') setMsg(`"${item.name}" يتطلب اختيار التشغيلة — اختَرها من السطر.`)
+        } else setBatchModal({ item: avail, batches: data.batches, total: data.total,
+                        picks: data.batches.map(() => ''), need: q.qty || 1, shortfall: 0,
                         mandatory: action === 'must_select' })
       }
     } catch (e) {
-      setLines(prev => [...prev, _newLine(item)])
+      setLines(prev => [...prev, NL(item)])
       const why = e.response?.data?.detail
       setMsg(`أُضيف "${item.name}" — تعذّر قراءة الأرصدة${why ? ': ' + why : ''} (بدون تشغيلة).`)
     }
   }, [branch, storeCode, _captureSelection])
+
+  // ── contract fast entry (POS Speed Wave §5) ─────────────────────────────────────────────────
+  // columns highlighted «جديد لهذه الزيارة» until the cashier types in them
+  const [freshCols, setFreshCols] = useState([])
+  const setClaimField = useCallback((k, v) => {
+    setClaim(c => ({ ...c, [k]: v }))
+    setFreshCols(f => (f.includes(k) ? f.filter(x => x !== k) : f))
+  }, [])
+  // Choosing a remembered patient fills the stable fields and clears + highlights the per-visit ones.
+  const applyContractPatient = useCallback((patientname, fields = {}, perVisit = []) => {
+    setClaim(c => {
+      const next = { ...c, ...fields, patientname }
+      perVisit.forEach(k => { next[k] = '' })
+      return next
+    })
+    setFreshCols(perVisit.slice())
+  }, [])
+  // Adds each available revalidated line through the normal add path (qty = the card's qty);
+  // returns the lines that were NOT added so the UI can list them (non-modal).
+  const applyPrescriptionLines = useCallback(async (revalidated) => {
+    const skipped = []
+    for (const l of (revalidated?.lines || [])) {
+      if (l.status !== 'ok' || !l.softech_id) { skipped.push(l); continue }
+      await addItem({ id: l.item_id, item_id: l.item_id, softech_id: l.softech_id, name: l.name,
+                      pack_price: l.current_pack_price }, { qty: l.qty, noModal: true })
+    }
+    return skipped
+  }, [addItem])
 
   const setBatchNeed = useCallback((v) => setBatchModal(m => m ? { ...m, need: v } : m), [])
 
@@ -957,7 +992,7 @@ export default function usePosOrder() {
     cartTokenRef.current = _genToken()
     setLines([]); setSelected(-1); setTenders([blankTender()]); setCustomer(null); setPicCustomer(null)
     setDoctorName(''); setDoctorCode(''); setRx(null); setReturnInvoice(''); setReturnMeta(null)
-    setClaim(blankClaim()); setNotes(''); setChangeDiscount(0); setPatientPayment(''); setPlan(null); setActiveTab('items')
+    setClaim(blankClaim()); setFreshCols([]); setNotes(''); setChangeDiscount(0); setPatientPayment(''); setPlan(null); setActiveTab('items')
   }
 
   // ── discount suggestions: apply the contracted rate (capped at the seller ceiling) ──
@@ -1241,6 +1276,7 @@ export default function usePosOrder() {
     altPrice, setAltPrice, sellAtCost, setSellAtCost, printReceipt, setPrintReceipt,
     itemsReservation, setItemsReservation,
     doctorName, setDoctorName, doctorCode, setDoctorCode, rx, setRx, claim, setClaim,
+    freshCols, setClaimField, applyContractPatient, applyPrescriptionLines,
     empDataFields, contractFields,
     lines, setLine, lineDiscValue, lineSellPrice, removeLine, addItem, searchAction, selected, setSelected, numMode, setNumMode, numpad,
     batchModal, setBatchModal, confirmBatchPick, setBatchNeed, fefoFill,

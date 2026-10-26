@@ -131,8 +131,14 @@ _TABS = [
     {'key': 'add', 'title': T('نافذة العميل — إضافة جديد', 'Customer pop-up — Add new'),
      'body': T('إنشاء عميل سريع (الاسم، الهاتف، العنوان، تاريخ الميلاد، نسبة الخصم، نظام النقاط…) ثم «تخزين» (Ctrl+S). البيانات الكاملة للعميل تُدار من موديول العملاء.', 'Quick-create a customer (name, phone, address, birth date, discount %, points system…) then "Save" (Ctrl+S). The full customer record is managed in the Customers module.')},
     {'key': 'contract', 'title': T('بيانات التعاقد', 'Contract data'),
-     'body': T('يظهر لقنوات التعاقد والتأمين والموظفين والعميل الدائم: بيانات المريض، تاريخ المطالبة، الطبيب المُحيل وكوده، صورة الروشتة، وما يسدده المريض مقابل ما يتحمله التعاقد. لا يمكن الإرسال قبل اكتمالها.',
-               'Shown for contract, insurance, employee and permanent-customer channels: patient data, claim date, referring doctor and code, prescription photo, and the patient\'s share vs the contract\'s share. The order cannot be sent until it is complete.')},
+     'body': T('يظهر لقنوات التعاقد والتأمين والموظفين والعميل الدائم: بيانات المريض، تاريخ المطالبة، الطبيب المُحيل وكوده، صورة الروشتة، وما يسدده المريض مقابل ما يتحمله التعاقد. لا يمكن الإرسال قبل اكتمالها. '
+               'اكتب اسم المريض أو رقم العضوية فتظهر اقتراحات من مبيعات سابقة لنفس التعاقد؛ اختيار مريض يملأ بياناته الثابتة ويفرّغ حقول الزيارة (الروشتة/تاريخ الكشف) ويظللها بالأصفر «جديد لهذه الزيارة». '
+               'زر «آخر روشتة» يعرض آخر 5 روشتات للمريض (التاريخ، عدد الأصناف، الإجمالي)؛ اضغط واحدة لإضافة أصنافها بالسعر والرصيد الحاليين، وتبقى قابلة للتعديل، وما لا يُضاف (غير متوفر/ممنوع) يُذكر في ملاحظة. '
+               'رقم الموافقة المستخدم من قبل يظهر عنده تنبيه أصفر بالتواريخ والفرع، ولا يمنع الإرسال. الحقول النصية (القسم، ملاحظات…) تقترح قيماً استُخدمت سابقاً على نفس التعاقد.',
+               'Shown for contract, insurance, employee and permanent-customer channels: patient data, claim date, referring doctor and code, prescription photo, and the patient\'s share vs the contract\'s share. The order cannot be sent until it is complete. '
+               'Type a patient name or membership no. to get suggestions from earlier sales under the same contract; choosing a patient fills the stable fields and clears + amber-highlights the per-visit fields (prescription / exam date) as "new for this visit". '
+               'The "Last prescription" button shows the patient\'s last 5 prescriptions (date, item count, total); click one to add its items at the current price and stock — still editable — and anything not added (out of stock / blocked) is listed in a note. '
+               'A previously used approval number shows an amber warning with dates and branch; it never blocks sending. Free-text fields (department, comment…) suggest values already used on that contract.')},
 ]
 
 _STEPS = [

@@ -9,6 +9,7 @@ import PicHistoryModal from '../components/PicHistoryModal'
 import PrescriptionOcrModal from '../components/PrescriptionOcrModal'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import PosImageSearch from '../pos/search/PosImageSearch'
+import ContractAssist, { ClaimField } from '../pos/contract/ContractAssist'
 import QuickSellGrid from '../components/QuickSellGrid'
 import StockLookupDrawer from '../components/StockLookupDrawer'
 import BasketIntelPanel from '../components/BasketIntelPanel'
@@ -1018,10 +1019,11 @@ function ContractTab({ P }) {
           </span>
         )}
       </div>
+      <ContractAssist P={P} />
       <div className="grid grid-cols-3 gap-3 max-w-3xl">
         {fields.map(({ key, label, type }) => (
           <F key={key} label={label}>
-            <input type={type || 'text'} value={P.claim[key] || ''} onChange={e => C(key, e.target.value)} className="inp" />
+            <ClaimField P={P} k={key} type={type} className="inp" />
           </F>
         ))}
         <F label="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => C('claimdate', e.target.value)} className="inp" /></F>

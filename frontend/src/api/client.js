@@ -2765,3 +2765,15 @@ export const stockAuditApi = {
   refresh:      ()              => api.post('/stock-audit/refresh/'),
   runs:         ()              => api.get('/stock-audit/runs/'),
 }
+
+// Contract (تعاقد) fast-entry assist — read-only PG history (POS Speed Wave §5). `customer` = the
+// contract account's personcode (SoftechSalesOrder.cust_branch_code).
+export const posApi = {
+  contractAssist: {
+    config:        (customer) => api.get('/pos-orders/contract-assist/config/', { params: { customer } }).then(r => r.data),
+    patients:      (customer, q) => api.get('/pos-orders/contract-assist/patients/', { params: { customer, q } }).then(r => r.data.results || []),
+    history:       (customer, patient, branch) => api.get('/pos-orders/contract-assist/history/', { params: { customer, patient, branch: branch || undefined } }).then(r => r.data.results || []),
+    fieldValues:   (customer, column, q) => api.get('/pos-orders/contract-assist/field-values/', { params: { customer, column, q } }).then(r => r.data.results || []),
+    approvalCheck: (customer, value) => api.get('/pos-orders/contract-assist/approval-check/', { params: { customer, value } }).then(r => r.data),
+  },
+}

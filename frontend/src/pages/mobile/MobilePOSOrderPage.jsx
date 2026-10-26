@@ -13,6 +13,7 @@ import SalespersonPicker from '../../components/SalespersonPicker'
 import POSCustomerModal from '../../components/POSCustomerModal'
 import UnitsQtyModal from '../../components/UnitsQtyModal'
 import { QueueIndicator, numFieldHandlers, STEP_HINT } from '../POSOrderPage'
+import ContractAssist, { ClaimField } from '../../pos/contract/ContractAssist'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../../hooks/useGuidedFlow'
 
@@ -352,8 +353,9 @@ export default function MobilePOSOrderPage() {
       {/* contract / patient + doctor / Rx */}
       {sheet === 'contract' && (
         <Sheet onClose={() => setSheet(null)} title="بيانات التعاقد / المريض">
+          <ContractAssist P={P} mobile />
           {CONTRACT_EMP_FIELDS.map(({ key, label, type }) => (
-            <M key={key} l={label}><input type={type || 'text'} value={P.claim[key] || ''} onChange={e => P.setClaim({ ...P.claim, [key]: e.target.value })} className="minp" /></M>
+            <M key={key} l={label}><ClaimField P={P} k={key} type={type} className="minp" /></M>
           ))}
           <M l="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => P.setClaim({ ...P.claim, claimdate: e.target.value })} className="minp" /></M>
           <M l="الطبيب المُحيل"><input value={P.doctorName} onChange={e => P.setDoctorName(e.target.value)} className="minp" /></M>
@@ -532,8 +534,9 @@ function MGItems({ P }) {
 function MGClaim({ P }) {
   return (
     <div className="space-y-2 max-w-md mx-auto">
+      <ContractAssist P={P} mobile />
       {CONTRACT_EMP_FIELDS.map(({ key, label, type }) => (
-        <Fld key={key} l={label}><input type={type || 'text'} value={P.claim[key] || ''} onChange={e => P.setClaim({ ...P.claim, [key]: e.target.value })} className="minp" /></Fld>
+        <Fld key={key} l={label}><ClaimField P={P} k={key} type={type} className="minp" /></Fld>
       ))}
       <Fld l="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => P.setClaim({ ...P.claim, claimdate: e.target.value })} className="minp" /></Fld>
     </div>
