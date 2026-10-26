@@ -34,7 +34,13 @@ SCREENS = [
             T('تأكد أن «المبيعات حتى» حديثة؛ لو متأخرة اضغط «تعويض المبيعات المتأخرة» أو «مزامنة كاملة 365 يوم» ثم «تشغيل».', 'Make sure "sales up to" is recent; if behind press "Catch up late sales" or "Full 365-day sync", then "Run".'),
             T('ابدأ بالتحويلات المقترحة (أرخص من الشراء)، ثم الفجوة المتبقية في فئة A.', 'Start with suggested transfers (cheaper than buying), then the remaining gap in class A.'),
         ],
-        'tips': [T('المعادلة الحالية مكتوبة أسفل الصفحة: موزون = معدل30×% + معدل90×% + معدل365×%.', 'The current formula is shown at the bottom: weighted = rate30×% + rate90×% + rate365×%.')],
+        'tips': [T('المعادلة الحالية مكتوبة أسفل الصفحة: موزون = معدل30×% + معدل90×% + معدل365×%.', 'The current formula is shown at the bottom: weighted = rate30×% + rate90×% + rate365×%.'),
+                 T('في شيت النواقص (زر «🗂 Pivot Excel (أولويات النواقص)» في قائمة التصدير) عمودان للتنبيه فقط بعد «ذروة طلب غير مؤكدة» — لا يغيّران المطلوب ولا يكتبان في SOFTECH: '
+                   '«يوجد أرخص (المورد الأفضل)» (أخضر) = مورد معتمد باع الصنف خلال آخر 90 يوماً بخصم حقيقي أعلى مما دفعناه بأكثر من نقطة — نفس حكم «مقارنة أسعار الشراء» — مع المورد والخصمين والتوفير الشهري؛ '
+                   '«بونص زائد عن 6 شهور» (أصفر) = صفقة بونص (المجاني ≥ 5% من المدفوع) آخر 180 يوماً اشترت أكثر من 6 شهور من مبيعات الشبكة، مع الكمية والمورد والتاريخ والتغطية والمبلغ المجمّد فوق 6 شهور. الأصناف الجديدة (أقل من 6 شهور مبيعات قبل الصفقة) لا تُحسب.',
+                   'The shortage sheet (the «🗂 Pivot Excel (أولويات النواقص)» button in the export menu) has two advisory columns after «ذروة طلب غير مؤكدة» — they never change the required qty and never write to SOFTECH: '
+                   '«يوجد أرخص (المورد الأفضل)» (green) = an accredited supplier sold the item in the last 90 days at a real discount more than one point better than what we paid — the same verdict as «مقارنة أسعار الشراء» — with the supplier, both discounts and the monthly saving; '
+                   '«بونص زائد عن 6 شهور» (yellow) = a bonus deal (free units ≥ 5% of the paid ones) in the last 180 days that bought more than 6 months of network sales, with the qty, supplier, date, cover and the cash tied up beyond 6 months. New items (under 6 months of sales before the deal) are not counted.')],
         'related': ['purchasing.supply', 'catalog.inventory', 'shortage.market', 'purchasing.cash'],
         'tour': [
             {'target': 'purchasing-engine-run', 'text': T('«▶ تشغيل» يحسب التوصيات من جديد.',
@@ -50,7 +56,7 @@ SCREENS = [
             {'target': 'purchasing-engine-export', 'text': T('«⬇ تصدير» يطلع القائمة Excel.',
                                               '"⬇ Export" downloads the list to Excel.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-26',
     },
     {
         'key': 'purchasing.cash',

@@ -1154,6 +1154,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         #   supp_code, supp_name, prod_code, prod_name, fam_code, fam_name,
         #   itemcode, itemname, price, cost
         [7, 14, 12, 16, 12, 9, 8, 16, 10, 18, 8, 14, 9, 34, 9, 9]
+        + [12, 26, 22, 20, 34, 34]                   # 6 flags: shortage, match, phantom, spike, cheaper, bonus
         + [10, 10, 10, 9, 10, 9]                     # 6 branch-100 cols (+in-transit)
         + [10, 10, 10, 9, 9, 10, 10, 9] * 5          # 40 (8 cols × 5 branches)
         + [11, 11, 11, 10, 11, 10]                   # 6 totals (+in-transit)
@@ -1164,7 +1165,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         + [13, 13, 13, 13, 16, 16, 13, 13]           # 8 summary
         + [5]  * 34                                  # 34 empty
     )
-    assert len(_cw) == 132, f'Expected 132 cols, got {len(_cw)}'
+    assert len(_cw) == 138, f'Expected 138 cols, got {len(_cw)}'
     for ci, w in enumerate(_cw, start=1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
@@ -1191,7 +1192,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── 5. Row 1 — Group headers ──────────────────────────────────────────────
     row1 = (
-        [_hdr('بيانات الصنف', HDR_FILL)] * 20
+        [_hdr('بيانات الصنف', HDR_FILL)] * 22
         + [_hdr(BL('100'),      B100_HFILL)] * 6
     )
     for bi, b in enumerate(branches_no100):
@@ -1229,6 +1230,8 @@ def _export_xlsx_pivot_v2(run, request, filename):
         'المنتج البديل (والتوفر)',    # matching product(s) + all-branch availability warning
         'مبيعات وهمية (النسبة الموصى بطلبها)',  # phantom substitution → recommended order %
         'ذروة طلب غير مؤكدة',        # demand-spike over-purchase (Jutoxib pattern)
+        'يوجد أرخص (المورد الأفضل)',  # 💲 a recent accredited supplier beats what we paid (buy_flags)
+        'بونص زائد عن 6 شهور',        # 🎁 bonus deal bought > 6 months of sales (buy_flags)
     ]
     B100_HDRS = [
         '100.الرصيد-الحالى',
@@ -1345,6 +1348,20 @@ def _export_xlsx_pivot_v2(run, request, filename):
               _Item.objects.filter(id__in=item_order, is_spike=True)
               .only('id', 'spike_tier', 'spike_ratio', 'spike_confirmed')}
     SPIKE_FILL = _f('FFE4CC')   # light orange — demand-spike over-purchase
+    # ── Purchase-side flags (doc 22 §10) — advisory, never change المطلوب ─────
+    from . import buy_flags as _bf
+    try:
+        _cheaper = _bf.cheaper_supplier_flags()
+    except Exception as exc:   # an annotation must never break the sheet
+        logger.warning('[PIVOT-V2] cheaper-supplier flags skipped: %s', exc)
+        _cheaper = {}
+    try:
+        _focx = _bf.foc_overbuy_flags()
+    except Exception as exc:
+        logger.warning('[PIVOT-V2] bonus over-buy flags skipped: %s', exc)
+        _focx = {}
+    CHEAPER_FILL = _f('DCFCE7')   # light green — a cheaper supplier exists
+    FOC_FILL     = _f('FEF9C3')   # light yellow — bonus bought beyond 6 months of sales
 
     for iid in item_order:
         item        = item_obj[iid]
@@ -1494,6 +1511,11 @@ def _export_xlsx_pivot_v2(run, request, filename):
             row.append(_cell(f'{_lbl} {_rt}{_conf}', SPIKE_FILL))
         else:
             row.append(_cell('', item_fill))
+        # يوجد أرخص + بونص زائد (advisory)
+        _ch = _cheaper.get(iid)
+        row.append(_cell(_bf.cheaper_label(_ch), CHEAPER_FILL) if _ch else _cell('', item_fill))
+        _fx = _focx.get(iid)
+        row.append(_cell(_bf.foc_label(_fx), FOC_FILL) if _fx else _cell('', item_fill))
 
         # [11-16] Branch 100 (6 cols — no coverage/priority)
         if branch_100 and branch_100.id in branch_data:
@@ -1582,7 +1604,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
     resp['Content-Disposition'] = f'attachment; filename="{filename}"'
-    logger.info('[PIVOT-V2] exported %d items, 132 cols', len(item_order))
+    logger.info('[PIVOT-V2] exported %d items, 138 cols', len(item_order))
     return resp
 
 
