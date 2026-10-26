@@ -10,9 +10,11 @@ from decimal import Decimal
 
 from django.conf import settings
 
-RULES_VERSION = 'p0-v4'   # v2: legacy −1-day purchase lines, return settlement, receipt-named patient
+RULES_VERSION = 'p0-v5'   # v2: legacy −1-day purchase lines, return settlement, receipt-named patient
                           # v3: capacity-aware duplicates, proportional coverage, clock tie-break
                           # v4: owner auto-confirm of a unique anonymous receipt; cross-branch severity by origin
+                          # v5: entry-first (owner 2026-10-26) — anon auto-confirm OFF, unclaimed purchases,
+                          #     live cases fund vouchers from their DECLARED receipts only
 
 # ── virtual / buy-back supplier accounts (personsdata ptcode 20) ─────────────────────────
 # tier = the % in the supplier NAME (an indicator only — D2); the posted line discount may
@@ -66,6 +68,8 @@ FUND_ANON_AFTER_MIN     = 10
 FUND_MAX_SUBSET         = 12       # brute-force subset search cap (patient receipts only)
 # Owner rule 2026-10-02: auto-confirm an ANONYMOUS receipt when it is the ONLY anonymous receipt
 # in [voucher − 10 min, voucher + 2 min] whose amount is 80 %–100 % of the voucher (+ absorb tol).
+# Owner 2026-10-26 (Q5): switched OFF — an anonymous receipt is always a *proposed* link for review.
+ANON_AUTO_CONFIRM     = False
 ANON_AUTO_BEFORE_MIN  = 10
 ANON_AUTO_AFTER_MIN   = 2
 ANON_AUTO_MIN_RATIO   = Decimal('0.80')
@@ -89,14 +93,25 @@ POSTING_ENABLED = False
 # the employee has no personal ReplacementGrant. Raising the deduction is always allowed.
 ROLE_MAX_OVERRIDE_PP = {'admin': 100, 'supervisor': 5}
 
-# Approval routing (doc 25 §16.2 proposal — owner to confirm values). Amounts are compared to the
-# patient's ROLLING total over AGGREGATION_DAYS (anti-splitting, control H).
+# Approval routing (owner 2026-10-03 + 2026-10-26). Amounts are compared to the patient's ROLLING
+# total over AGGREGATION_DAYS (anti-splitting, control H).
 APPROVAL_AGGREGATION_DAYS = 7
-# Owner decision 2026-10-03: auto ≤ 500, manager above 500.
 APPROVAL_AUTO_MAX      = Decimal('500')    # ≤ → no approval needed (products, no override)
 APPROVAL_MANAGER_ABOVE = Decimal('500')    # > → manager workflow (branch supervisor, then manager)
-APPROVAL_CASH_ALWAYS   = True              # any cash / mixed settlement needs approval
-APPROVAL_OVERRIDE_ALWAYS = True            # any patient-favourable rate override needs approval
+APPROVAL_CASH_ALWAYS   = True              # any cash / mixed settlement needs (at least) a supervisor
+APPROVAL_CASH_MANAGER_ABOVE = Decimal('1500')   # cash part above this → manager
+APPROVAL_OVERRIDE_ALWAYS = True            # any patient-favourable rate override needs (at least) a supervisor
+APPROVAL_OVERRIDE_MANAGER_PP = Decimal('5')     # lowered by more than N points → manager
+# Backdate (control E): a case whose purchase is dated before the case was entered.
+# same day → auto · ≤ N days and same month → supervisor · older or crossing month-end → manager
+APPROVAL_BACKDATE_SUPERVISOR_DAYS = 3
+
+# ── entry-first (owner 2026-10-26) ──────────────────────────────────────────────────────────
+# Branch → first purchase date from which every virtual-supplier purchase must come from a case
+# entered in the module first. A purchase on/after that date with no live case becomes an
+# UNCLAIMED record «شراء بدون حالة» (money still tracked, HIGH exception, claimable).
+# Before the date (or for a branch not listed) reconstruction keeps building historical cases.
+ENTRY_FIRST_FROM = {'130': '2026-11-01'}
 WORKFLOW_SUPERVISOR = 'replacement_supervisor'
 WORKFLOW_MANAGER    = 'replacement_manager'
 
@@ -118,6 +133,20 @@ NON_REDEMPTION_CHANNELS = CONTRACT_CHANNELS
 def get(name):
     """Settings override → module default."""
     return _s(name, globals()[name])
+
+
+def entry_first_from(branchcode):
+    """Cut-over date for the branch, or None while it is still matcher-first."""
+    from datetime import date
+    raw = get('ENTRY_FIRST_FROM').get(str(branchcode or '').strip())
+    if not raw:
+        return None
+    return raw if isinstance(raw, date) else date.fromisoformat(str(raw))
+
+
+def is_entry_first(branchcode, day) -> bool:
+    start = entry_first_from(branchcode)
+    return bool(start and day and day >= start)
 
 
 def conf_class(score) -> str:

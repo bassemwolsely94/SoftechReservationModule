@@ -569,6 +569,45 @@ vouchers and receipts are verified against SOFTECH every day. Off with `REPLACEM
 
 Tests: `apps/tests/test_replacement_native_links.py` (17).
 
+## 20. Entry-first (B0, built 2026-10-26)
+
+**Owner 2026-10-26:** switch from the matcher building cases to staff *initiating and entering* every case
+first; the matcher only verifies. Owner answers recorded in §16.3.
+
+| Change | Where |
+|---|---|
+| Per-branch cut-over `ENTRY_FIRST_FROM` (default `{'130': '2026-11-01'}`); `is_entry_first(branch, day)` | `config.py` |
+| A virtual-supplier purchase on/after the cut-over with no live case → reconstruction still books it (ledger, vouchers, I-1) but as status **`unclaimed` «شراء بدون حالة»** + HIGH `caseless_purchase` (evidence: SOFTECH `usercode`). Before the cut-over / other branches: unchanged. | `reconstruct.reconstruct_invoice` §7 |
+| **Claim**: `create_case(claim_of=…)` (same branch, unclaimed, not already claimed; items prefilled from the purchase lines). Submit refuses a rule whose supplier ≠ the purchase supplier. On approval (auto or approver, workspace or /approvals inbox) `legs.attach_claimed_purchase` links the purchase through the existing native-link path; the unclaimed record is retired with compensating entries even if someone had reviewed it (edge decisions survive). Cancelling a claim frees the record. | `workflow.py`, `legs.py`, `ReplacementCase.claim_of` (migration 0006) |
+| **Live cases verify, never guess**: voucher funding uses only the receipts declared on the case (`_own_receipts`). A voucher without declared receipts → cash for a cash case; cash + INFO for mixed; unclassified + WARNING `undeclared_redemption` for products. Reconstruction no longer overwrites a live case's settlement mode. | `reconstruct._fund_voucher` |
+| Native purchase dated before the case was entered → `backdated_entry` (WARNING ≤ 3 days same month, HIGH beyond; INFO on a claim, which was approved through the backdate band). | `reconstruct` §7 |
+| Anonymous receipt auto-confirm (p0-v4) **OFF** (`ANON_AUTO_CONFIRM=False`, Q5). `RULES_VERSION` p0-v5. The ≈427 historical auto-confirmed links revert to *proposed* on their next rebuild. | `config.py`, `matching.select_funding` |
+| Redemption customer (Q5): a linked native product sale must carry the patient's PIC or «عميل تبديل» (blank refused); a prepared product order needs a PIC on the case. | `legs.link_native_product_sale`, `prepare_product_sale` |
+| Approval matrix (Q3): cash/mixed → supervisor, **manager when the balance (upper bound of the cash part) > 1,500**; rate lowered → supervisor, **manager > 5 pp**; claim **backdate**: same day none, ≤ 3 days same month supervisor, older / across month-end manager; value band unchanged (auto ≤ 500, manager > 500). | `workflow.approval_route`, `config.APPROVAL_*` |
+| Patient lookup by **PIC or mobile** (phone / alt / WhatsApp, last 10 digits); a shared number returns `patients` to choose from. | `views.patient_sales`, `/replacement/new` |
+| Adoption on `/replacement`: per cut-over branch — entered first vs unclaimed (count, value), rate, unclaimed per SOFTECH user (`user_label`), entered per staff. Click → unclaimed list. | `views._adoption`, `ReplacementCasesPage` |
+| UI: unclaimed banner + «استلام في حالة جديدة» (no modal) on the record; claim banner + prefill (type/mode from the supplier, branch, PIC, items) on `/replacement/new?claim=<id>`; claim links both ways. | `ReplacementCaseDetailPage`, `ReplacementNewCasePage` |
+
+Tests: `apps/tests/test_replacement_entry_first.py` (17) — unclaimed vs historical, claim end-to-end
+(auto-link, retire, nightly no duplicate), prefill, guards, supplier mismatch, declared-only funding,
+cash live voucher, anonymous refusal, PIC required, backdated link, cash / override / backdate bands,
+mobile lookup, adoption + claim API. 99 replacement tests + 47 help tests green.
+
+**Not changed:** nothing is written to SOFTECH; vouchers stay native (Q2); the daily job schedule.
+**Before 2026-11-01:** the scheduler must be running on the server (`replacement_daily_check` 08:40) —
+on the dev box the last rebuild is 2026-10-02.
+
+### 16.3 Owner answers 2026-10-26
+
+| # | Decision |
+|---|---|
+| Q1 | Matrix confirmed: insurance Rx 30 % products (4471) / 40 % cash (4470) / 25 % shortage (4472); insurance meds not dispensed by us 40 % products (4470) / 50 % cash (4469); non-insurance clients 40 % products (**3068**) / 50 % cash (**4069**) — mapping confirmed. |
+| Q2 | Cash vouchers stay native at the cashier; the module links and checks them. No voucher writer (D11 reaffirmed). |
+| Q3 | Approvals: value auto ≤ 500 / manager > 500 · cash supervisor always, manager > 1,500 · rate lowered supervisor ≤ 5 pp, manager above · backdate same day auto, ≤ 3 days supervisor, older or across month-end manager · reversal supervisor, manager if any balance used. |
+| Q4 | Change of mind: contract sale returnable within 7 days **and** before month end. |
+| Q5 | Redemption sales on the patient's PIC or «عميل تبديل» only; historical anonymous receipts stay *proposed* for review. |
+| B0 | Entry-first; unclaimed purchases kept as a claimable record (option A); branch 130 cut-over 2026-11-01. |
+
 ## 16. Owner decisions (2026-09-28)
 
 | # | Decision |

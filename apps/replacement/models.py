@@ -50,7 +50,11 @@ class ReplacementCase(models.Model):
     STATUS_CANCELLED          = 'cancelled'
     STATUS_REVERSING          = 'reversing'
     STATUS_REVERSED           = 'reversed'
+    # entry-first (owner 2026-10-26): a virtual-supplier purchase posted natively after the branch
+    # cut-over with no case entered first. Money still tracked; a live case can CLAIM it.
+    STATUS_UNCLAIMED          = 'unclaimed'
     STATUS_CHOICES = [
+        (STATUS_UNCLAIMED,          'شراء بدون حالة'),
         (STATUS_DRAFT,              'مسودة'),
         (STATUS_CALCULATED,         'محسوبة'),
         (STATUS_AWAITING_APPROVAL,  'بانتظار الموافقة'),
@@ -132,6 +136,10 @@ class ReplacementCase(models.Model):
     approved_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
                                      on_delete=models.SET_NULL, related_name='+')
     approved_at  = models.DateTimeField(null=True, blank=True)
+    # A live case opened to claim an unclaimed purchase; on approval the purchase is linked to it
+    # and the unclaimed record is retired (compensating entries, history kept).
+    claim_of     = models.OneToOneField('self', null=True, blank=True, on_delete=models.SET_NULL,
+                                        related_name='claimed_by')
     locked_at    = models.DateTimeField(null=True, blank=True)   # set on submit; edits refused while set
     version      = models.PositiveIntegerField(default=1)        # optimistic concurrency token
 
@@ -357,6 +365,9 @@ class CaseException(models.Model):
         ('stale_approval',          'اعتماد على حساب تغيّر بعد الإرسال'),
         ('posting_failed',          'فشل الترحيل إلى SOFTECH'),
         ('purchase_value_mismatch', 'قيمة فاتورة الشراء في SOFTECH تختلف عن الرصيد المعتمد'),
+        ('caseless_purchase',       'شراء على مورد البدل بدون حالة مُسجلة أولاً'),
+        ('backdated_entry',         'فاتورة الشراء أقدم من تسجيل الحالة'),
+        ('undeclared_redemption',   'سند صرف بدون فواتير منتجات مربوطة بالحالة'),
     ]
 
     STATUS_OPEN, STATUS_ACK, STATUS_RESOLVED, STATUS_CLEARED = 'open', 'acknowledged', 'resolved', 'auto_cleared'

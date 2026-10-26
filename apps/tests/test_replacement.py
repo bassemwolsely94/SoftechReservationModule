@@ -141,9 +141,18 @@ class SamraAcceptanceTests(SamraFixture):
         self.assertEqual(c.applied_deduction_pct, D('28.99'))
         self.assertEqual(c.supplier_tier_pct, D('25'))
 
-    def test_unique_anonymous_receipt_is_auto_confirmed_owner_rule(self):
-        """Owner rule 2026-10-02: 457751 is the ONLY no-PIC receipt within 10 min before voucher
-        51297 at 80–100 % of it (89 %; the 43.33 receipt is outside the band) → auto-confirmed,
+    def test_anonymous_receipt_is_never_auto_confirmed_by_default(self):
+        """Owner 2026-10-26 (Q5): the 2026-10-02 auto-confirm rule is OFF — 457751 stays proposed."""
+        c = self.build()
+        cd = c.documents.get(role=CD.ROLE_PRODUCT_SALE, document__docnumber='457751')
+        self.assertEqual(cd.status, CD.STATUS_PROPOSED)
+        self.assertEqual(c.redeemed_unclassified, D('1500.00'))
+        self.assertTrue(c.exceptions.filter(exception_type='anonymous_receipt', status='open').exists())
+
+    @override_settings(REPLACEMENT_ANON_AUTO_CONFIRM=True)
+    def test_unique_anonymous_receipt_is_auto_confirmed_when_rule_switched_on(self):
+        """Rule of 2026-10-02 (kept switchable): 457751 is the ONLY no-PIC receipt within 10 min before
+        voucher 51297 at 80–100 % of it (89 %; the 43.33 receipt is outside the band) → auto-confirmed,
         and the case reaches the acceptance totals with no human step."""
         c = self.build()
         cd = c.documents.get(role=CD.ROLE_PRODUCT_SALE, document__docnumber='457751')
@@ -303,6 +312,7 @@ class MatchingUnitTests(TestCase):
         self.assertEqual(set(void), {2})
         self.assertEqual([r['key'] for r in partial[1]], [8])
 
+    @override_settings(REPLACEMENT_ANON_AUTO_CONFIRM=True)      # off by default since 2026-10-26 (Q5)
     def test_unique_qualifying_anonymous_receipt_auto_confirms(self):
         v = {'amount': D('1000'), 'trans_time': _utc(2026, 1, 1, 10, 0)}
         r = [{'key': 1, 'amount': D('900'), 'phcode': '', 'trans_time': _utc(2026, 1, 1, 9, 55)},

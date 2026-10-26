@@ -172,6 +172,15 @@ class CaseDetailSerializer(CaseListSerializer):
                'created_by': obj.created_by.full_name if obj.created_by_id else '',
                'approved_by': obj.approved_by.full_name if obj.approved_by_id else '',
                'approved_at': obj.approved_at, 'locked': bool(obj.locked_at)}
+        # entry-first: an unclaimed record ↔ the live case claiming it
+        if obj.claim_of_id:
+            out['claim_of'] = {'id': obj.claim_of_id, 'number': obj.claim_of.number}
+        claimer = ReplacementCase.objects.filter(claim_of=obj).exclude(status=ReplacementCase.STATUS_CANCELLED) \
+            .only('id', 'number').first()
+        if claimer:
+            out['claimed_by'] = {'id': claimer.pk, 'number': claimer.number}
+        if obj.status == ReplacementCase.STATUS_UNCLAIMED:
+            out['claimable'] = claimer is None and bool(staff) and authz.allows(staff, 'create')
         if obj.approval_request_id:
             r = obj.approval_request
             out['approval'] = {'id': r.pk, 'status': r.status, 'step': r.current_step_order,

@@ -116,7 +116,7 @@ export default function WorkflowPanel({ c }) {
           </>
         ) : <div className="text-sm text-gray-400">لم يُحسب بعد.</div>}
         {editable && can.create && (
-          <div className="flex gap-2 items-center flex-wrap">
+          <div data-tour="replacement-detail-calculate" className="flex gap-2 items-center flex-wrap">
             <input value={ov.pct} onChange={(e) => setOv({ ...ov, pct: e.target.value })} placeholder="نسبة خصم مختلفة (اختياري)"
                    className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-48" />
             {ov.pct !== '' && <input value={ov.reason} onChange={(e) => setOv({ ...ov, reason: e.target.value })} placeholder="سبب التعديل (إلزامي)"
@@ -126,7 +126,7 @@ export default function WorkflowPanel({ c }) {
           </div>
         )}
         {c.status === 'calculated' && can.create && (
-          <div className="flex gap-2 items-center flex-wrap">
+          <div data-tour="replacement-detail-submit" className="flex gap-2 items-center flex-wrap">
             <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.submit, c.id, v)}>
               {wf.route_preview?.workflow ? 'إرسال للاعتماد' : 'اعتماد تلقائي (ضمن الحدود)'}
             </Btn>
@@ -141,7 +141,7 @@ export default function WorkflowPanel({ c }) {
           <div className="text-sm">{wf.approval?.workflow} · الخطوة {wf.approval?.step}</div>
           <div className="flex gap-1 flex-wrap">{(wf.approval?.reasons || []).map((r) => <Chip key={r} tone="amber">{r}</Chip>)}</div>
           {can.approve ? (
-            <div className="flex gap-2 items-center">
+            <div data-tour="replacement-detail-approve-reject" className="flex gap-2 items-center">
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ملاحظة (إلزامية عند الرفض)"
                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm flex-1" />
               <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.approve, c.id, { ...v, note })}>اعتماد</Btn>
@@ -155,7 +155,7 @@ export default function WorkflowPanel({ c }) {
       {executing && (
         <Box title="تنفيذ المستندات">
           {/* purchase */}
-          <div className="space-y-1">
+          <div data-tour="replacement-detail-purchase-leg" className="space-y-1">
             <div className="text-xs text-gray-500">١ — فاتورة الشراء من المورد الافتراضي (تُنشئ الرصيد)</div>
             {!opOf('purchase').length && can.post &&
               <Btn disabled={busy} onClick={() => run(replacementApi.preparePurchase, c.id, v)}>تجهيز فاتورة الشراء</Btn>}
@@ -165,7 +165,7 @@ export default function WorkflowPanel({ c }) {
           </div>
           {/* contract */}
           {c.source_type === 'insurance_rx' && !hasContract && (
-            <div className="space-y-1">
+            <div data-tour="replacement-detail-contract-leg" className="space-y-1">
               <div className="text-xs text-gray-500">٢ — فاتورة التعاقد: اربط الفاتورة التي صُرفت بالفعل، أو جهّز بيع تعاقد للكاشير</div>
               <div className="flex gap-2 flex-wrap items-center">
                 <input value={link.branchcode} onChange={(e) => setLink({ ...link, branchcode: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-16" />
@@ -179,7 +179,7 @@ export default function WorkflowPanel({ c }) {
           )}
           {/* products */}
           {c.settlement_mode !== 'cash' && can.post && (
-            <div className="space-y-2">
+            <div data-tour="replacement-detail-products-leg" className="space-y-2">
               <div className="text-xs text-gray-500">٣ — منتجات البدل (المتاح {money(wf.available?.available)} · محجوز {money(wf.available?.reserved)})</div>
               <div className="flex gap-2 items-center flex-wrap">
                 <select value={channel} onChange={(e) => setChannel(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
@@ -211,7 +211,7 @@ export default function WorkflowPanel({ c }) {
           )}
           {/* operations */}
           {!!ops.length && (
-            <table className="w-full text-sm">
+            <table data-tour="replacement-detail-post-softech" className="w-full text-sm">
               <thead className="text-[11px] text-gray-500 bg-gray-50"><tr>
                 {['المستند', 'القيمة', 'الحالة', 'رقم SOFTECH', ''].map((h) => <th key={h} className="px-2 py-1 text-right">{h}</th>)}
               </tr></thead>
@@ -237,7 +237,7 @@ export default function WorkflowPanel({ c }) {
             </table>
           )}
           {wf.voucher_instruction && (
-            <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-sm space-y-1">
+            <div data-tour="replacement-detail-voucher" className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-sm space-y-1">
               <div className="font-semibold text-sky-900">تعليمات الكاشير — سند صرف (يدوي في SOFTECH)</div>
               <div>المورد: <b>{wf.voucher_instruction.supplier}</b> {wf.voucher_instruction.supplier_name}</div>
               <div>على فاتورة الشراء: <b className="font-mono">{wf.voucher_instruction.branch}/{wf.voucher_instruction.invoice}</b> · الرصيد {money(wf.voucher_instruction.balance)}</div>
@@ -253,7 +253,7 @@ export default function WorkflowPanel({ c }) {
       {['calculated', 'awaiting_approval', 'approved', 'draft'].includes(c.status) &&
         !ops.some((o) => ['posting', 'posted', 'posted_verified'].includes(o.status)) && (can.approve || can.create) && (
         <Box>
-          <div className="flex gap-2 items-center flex-wrap">
+          <div data-tour="replacement-detail-reopen-cancel" className="flex gap-2 items-center flex-wrap">
             <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="السبب (إلزامي)"
                    className="border border-gray-300 rounded-lg px-2 py-1 text-sm flex-1" />
             {can.approve && c.status !== 'draft' &&

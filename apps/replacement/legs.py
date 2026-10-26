@@ -259,6 +259,8 @@ def prepare_product_sale(case_id, *, user, version, channel, items, request=None
         raise ValidationError('هذه حالة صرف نقدي — لا يوجد صرف منتجات.')
     if not items:
         raise ValidationError('أضف منتجات.')
+    if not case.softech_pic:          # owner Q5: never an anonymous redemption sale
+        raise ValidationError('سجّل كود المريض (أو حساب «عميل تبديل») في الحالة قبل تجهيز فاتورة المنتجات.')
     lines = _order_lines(items)
     total = estimate_order(lines)
     av = available(case)
@@ -446,7 +448,10 @@ def resolve_native_purchase(op, *, user=None) -> bool:
     other = RC.objects.select_for_update().filter(purchase_ref=p_ref).exclude(pk=case.pk).first() \
         or RC.objects.select_for_update().filter(purchase_invoice=inv).exclude(pk=case.pk).first()
     if other is not None:
-        if _case_touched_by_people(other):
+        # the unclaimed record this case was opened to claim is retired even if people reviewed it:
+        # its human link decisions live on the lineage edges and are honoured by the rebuild below
+        claimed = other.status == RC.STATUS_UNCLAIMED and case.claim_of_id == other.pk
+        if not claimed and _case_touched_by_people(other):
             _fail(op, case, user, f'فاتورة الشراء مرتبطة بالحالة {other.number} — راجعها قبل الربط.')
             return False
         _retire_duplicate(other, case, user)
@@ -500,6 +505,32 @@ def link_native_purchase(case_id, *, user, version, branchcode, docnumber, docda
     return RC.objects.get(pk=case.pk)
 
 
+@transaction.atomic
+def attach_claimed_purchase(case, *, user=None) -> RC:
+    """Approved case opened from an unclaimed record → link that native purchase (same path as a
+    typed native link: one op, idempotent, verified, the unclaimed record retired)."""
+    case = RC.objects.select_for_update().get(pk=case.pk)
+    src = case.claim_of
+    if src is None or src.purchase_ref_id is None:
+        return case
+    key = f'{case.pk}:purchase'
+    if Op.objects.filter(idempotency_key=key).exclude(status=Op.ST_CANCELLED).exists():
+        return case                                             # already linked / prepared
+    p = src.purchase_ref
+    nk = {'branchcode': p.branchcode, 'docnumber': p.docnumber, 'docdate': p.docdate.isoformat()}
+    calc = case.current_calc
+    op = Op.objects.create(case=case, kind=Op.KIND_PURCHASE, idempotency_key=key, status=Op.ST_POSTED,
+                           result_docnumber=p.docnumber, expected_value=calc.entitlement if calc else 0,
+                           requested_by=user, result={'native': nk, 'claimed_from': src.number,
+                                                      'linked_by': user.full_name if user else 'system'})
+    case.status = RC.STATUS_EXECUTING
+    _bump(case, 'status')
+    _audit('replacement_leg_posted', case, user, new={'op': str(op.op_id), 'kind': op.kind,
+                                                       'mode': 'claim', 'claimed_from': src.number, **nk})
+    resolve_native_purchase(op, user=user)
+    return RC.objects.get(pk=case.pk)
+
+
 def resolve_pending_native_links(user=None) -> dict:
     """Scheduled: attach every pending natively-posted purchase the mirror now has."""
     out = {'pending': 0, 'attached': 0}
@@ -533,8 +564,11 @@ def link_native_product_sale(case_id, *, user, version, branchcode, docnumber, d
     if ph.sales_channel in C.CONTRACT_CHANNELS:
         raise ValidationError('هذه فاتورة تعاقد — اربطها كفاتورة التعاقد.')
     pic = (ph.softech_phcode or '').strip()
-    if case.softech_pic and pic and pic != case.softech_pic and pic not in tabdeel_pics():
-        raise ValidationError('فاتورة المنتجات على عميل آخر (المسموح: كود المريض أو حساب «عميل تبديل»).')
+    # owner 2026-10-26 (Q5): a redemption sale is on the patient's PIC or «عميل تبديل» — never
+    # anonymous, never another customer
+    if not pic or (pic != case.softech_pic and pic not in tabdeel_pics()):
+        raise ValidationError('فاتورة المنتجات يجب أن تكون على كود المريض أو حساب «عميل تبديل» '
+                              + ('(الفاتورة بدون كود عميل).' if not pic else '(الفاتورة على عميل آخر).'))
     ref = ref_for_sale(ph)
     elsewhere = (CD.objects.filter(document=ref, role=CD.ROLE_PRODUCT_SALE, status=CD.STATUS_CONFIRMED)
                  .exclude(case=case).select_related('case').first()) or \

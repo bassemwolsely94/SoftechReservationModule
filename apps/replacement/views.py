@@ -28,6 +28,15 @@ def _staff(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+def _by_staff(qs):
+    """[{name, n}] of cases per creator (full_name is a property → named in Python)."""
+    from apps.users.models import StaffProfile
+    rows = list(qs.values('created_by').annotate(n=Count('id')).order_by('-n'))
+    staff = {s.pk: s for s in StaffProfile.objects.filter(pk__in=[r['created_by'] for r in rows if r['created_by']])}
+    return [{'name': staff[r['created_by']].full_name if r['created_by'] in staff else '—', 'n': r['n']}
+            for r in rows]
+
+
 def _filter_cases(request, qs):
     p = request.query_params
     q = (p.get('q') or '').strip()
@@ -111,7 +120,36 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                             'amount': str(e['amount'] or 0)} for e in exc],
             'last_run': RunSerializer(ReconstructionRun.objects.first()).data
             if ReconstructionRun.objects.exists() else None,
+            'adoption': self._adoption(qs),
         })
+
+    @staticmethod
+    def _adoption(qs):
+        """Entry-first adoption per cut-over branch: purchases that came from a case entered first
+        vs «شراء بدون حالة», and who posted the case-less ones (SOFTECH usercode on the purchase)."""
+        from apps.purchasing.isr_fulfillment import user_label, user_names
+        from . import config as C
+        out = []
+        for code in sorted(C.get('ENTRY_FIRST_FROM')):
+            start = C.entry_first_from(code)
+            base = qs.filter(branchcode=code, purchase_date__gte=start, purchase_ref__isnull=False) \
+                .exclude(status=RC.STATUS_CANCELLED)
+            live = base.filter(origin=RC.ORIGIN_LIVE)
+            un = base.filter(status=RC.STATUS_UNCLAIMED)
+            n_live, n_un = live.count(), un.count()
+            by_user = list(un.values('purchase_invoice__usercode').annotate(n=Count('id'), value=Sum('entitlement'))
+                           .order_by('-n'))
+            names = user_names(u['purchase_invoice__usercode'] for u in by_user)
+            out.append({
+                'branchcode': code, 'from': start.isoformat(), 'entered_first': n_live, 'unclaimed': n_un,
+                'unclaimed_value': str(un.aggregate(s=Sum('entitlement'))['s'] or 0),
+                'rate': round(100 * n_live / (n_live + n_un), 1) if (n_live + n_un) else None,
+                'unclaimed_by_user': [{'usercode': u['purchase_invoice__usercode'] or '',
+                                       'label': user_label(u['purchase_invoice__usercode'], names),
+                                       'n': u['n'], 'value': str(u['value'] or 0)} for u in by_user],
+                'entered_by_staff': _by_staff(live),
+            })
+        return out
 
     def get_serializer_context(self):
         return {**super().get_serializer_context(), 'staff': _staff(self.request)}
@@ -183,13 +221,18 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
             if branch is None:
                 raise ValidationError('الفرع مطلوب.')
             sale = PurchaseHistory.objects.filter(pk=d['from_sale']).first() if d.get('from_sale') else None
+            claim = None
+            if d.get('claim_of'):
+                claim = self.get_queryset().filter(pk=d['claim_of']).first()    # branch scope
+                if claim is None:
+                    raise ValidationError('سجل «شراء بدون حالة» غير موجود.')
             return W.create_case(user=_staff(request), branch=branch, source_type=d.get('source_type', ''),
                                  settlement_mode=d.get('settlement_mode', 'products'),
                                  softech_pic=(d.get('softech_pic') or '').strip(),
                                  contract_personcode=(d.get('contract_personcode') or '').strip(),
                                  items=d.get('items') or [], is_shortage_item=bool(d.get('is_shortage_item')),
                                  prescription_no=d.get('prescription_no', ''), approval_no=d.get('approval_no', ''),
-                                 notes=d.get('notes', ''), from_sale=sale, request=request)
+                                 notes=d.get('notes', ''), from_sale=sale, claim_of=claim, request=request)
         resp = self._do(run)
         if resp.status_code == 200:
             resp.status_code = status.HTTP_201_CREATED
@@ -280,15 +323,28 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
 
     @action(detail=False, methods=['get'], url_path='patient-sales')
     def patient_sales(self, request):
-        """Recent CONTRACT sales of a patient at a branch — to start a case from the prescription."""
+        """Recent CONTRACT sales of a patient at a branch — to start a case from the prescription.
+        `pic` may be the SOFTECH PIC or a mobile number (Customer 360 identity); a mobile shared by
+        several customers returns `patients` to choose from and no sales."""
         from datetime import timedelta
         from django.utils import timezone
-        from apps.customers.models import PurchaseHistory
+        from apps.customers.models import Customer, PurchaseHistory
         from . import config as C
         pic = (request.query_params.get('pic') or '').strip()
         branch = request.query_params.get('branch')
         if not pic:
-            return Response({'results': []})
+            return Response({'results': [], 'patients': []})
+        patients = []
+        digits = ''.join(ch for ch in pic if ch.isdigit())
+        if digits == pic.replace(' ', '').lstrip('+') and len(digits) >= 8:       # a phone number
+            tail = digits[-10:]
+            found = (Customer.objects.filter(Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
+                                             | Q(whatsapp_phone__endswith=tail))
+                     .exclude(softech_pic='').values('softech_pic', 'name', 'phone')[:10])
+            patients = [{'pic': f['softech_pic'], 'name': f['name'], 'phone': f['phone']} for f in found]
+            if len(patients) != 1:
+                return Response({'results': [], 'patients': patients})
+            pic = patients[0]['pic']
         qs = (PurchaseHistory.objects.filter(softech_phcode__iexact=pic, doc_code='115',
                                              sales_channel__in=C.CONTRACT_CHANNELS,
                                              invoice_date__gte=timezone.now() - timedelta(days=60))
@@ -307,7 +363,7 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                     'public_price': str(l.list_price or l.item.pack_price or 0), 'contract_price': str(l.unit_price)})
                 a['qty'] += l.quantity
             return [{**a, 'qty': str(a['qty'])} for a in agg.values()]
-        return Response({'results': [{
+        return Response({'pic': pic, 'patients': patients, 'results': [{
             'id': s.pk, 'branch': s.branch_id, 'branchcode': s.branch.softech_branch_id, 'docnumber': s.docnumber,
             'date': s.invoice_date.date().isoformat() if s.invoice_date else None, 'total': str(s.total_amount),
             'contract': s.cust_branch_code, 'lines': lines(s)} for s in qs]})

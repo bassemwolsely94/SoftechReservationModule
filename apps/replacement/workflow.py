@@ -77,15 +77,30 @@ def _item_price(item) -> Decimal:
 @transaction.atomic
 def create_case(*, user, branch, source_type, settlement_mode, softech_pic='', contract_personcode='',
                 items=(), is_shortage_item=False, prescription_no='', approval_no='', notes='',
-                from_sale=None, request=None) -> RC:
+                from_sale=None, claim_of=None, request=None) -> RC:
     """items: [{item_id, qty}] to replace. from_sale: a customers.PurchaseHistory contract sale
-    whose lines prefill the prescription (dispensed items) and the patient/contract."""
+    whose lines prefill the prescription (dispensed items) and the patient/contract.
+    claim_of: an UNCLAIMED record (purchase posted natively without a case) this case takes over —
+    its purchase lines prefill the items; on approval the purchase is linked here."""
     from apps.catalog.models import Item
     from apps.customers.models import Customer
     if source_type not in dict(RC.SOURCE_CHOICES) or settlement_mode not in ('products', 'cash', 'mixed'):
         raise ValidationError('نوع الحالة أو طريقة الصرف غير صالحة.')
     probe = RC(branch=branch, source_type=source_type, settlement_mode=settlement_mode)
     authz.require(user, 'create', case=probe)
+    if claim_of is not None:
+        claim_of = RC.objects.select_for_update().get(pk=claim_of.pk)
+        if claim_of.status != RC.STATUS_UNCLAIMED:
+            raise ValidationError('هذا السجل ليس «شراء بدون حالة».')
+        if claim_of.branchcode != branch.softech_branch_id:
+            raise ValidationError('الحالة يجب أن تكون في نفس فرع فاتورة الشراء.')
+        taken = RC.objects.filter(claim_of=claim_of).exclude(status=RC.STATUS_CANCELLED).first()
+        if taken:
+            raise ValidationError(f'السجل قيد الاستلام بالحالة {taken.number}.')
+        softech_pic = softech_pic or claim_of.softech_pic
+        if not items:
+            items = [{'item_id': i.item_id, 'qty': i.qty_replaced}
+                     for i in claim_of.items.filter(disposition=ReplacementItem.DISP_REPLACED, item__isnull=False)]
     if from_sale is not None:
         softech_pic = softech_pic or (from_sale.softech_phcode or '').strip()
         contract_personcode = contract_personcode or (from_sale.cust_branch_code or '').strip()
@@ -99,7 +114,7 @@ def create_case(*, user, branch, source_type, settlement_mode, softech_pic='', c
         customer=cust, softech_pic=softech_pic, patient_name=cust.name if cust else '',
         contract_personcode=contract_personcode, supplier_personcode='', purchase_date=today,
         is_shortage_item=is_shortage_item, prescription_no=prescription_no, approval_no=approval_no,
-        notes=notes, created_by=user, rules_version=C.RULES_VERSION)
+        notes=notes, created_by=user, rules_version=C.RULES_VERSION, claim_of=claim_of)
     case.assign_number()
     if from_sale is not None:
         from .reconstruct import ref_for_sale
@@ -122,8 +137,17 @@ def create_case(*, user, branch, source_type, settlement_mode, softech_pic='', c
     _set_items(case, items, Item)
     _audit('replacement_case_created', case, user, request=request,
            new={'source': source_type, 'mode': settlement_mode, 'pic': softech_pic, 'branch': case.branchcode,
-                'items': [dict(i) for i in items]})
+                'items': [{k: str(v) for k, v in dict(i).items()} for i in items],
+                'claim_of': claim_of.number if claim_of else None})
     return case
+
+
+def _after_approval(case, user):
+    """A claiming case links the unclaimed purchase as soon as it is approved (no extra click).
+    A failure is recorded on the case by the leg itself; the approval stands."""
+    if case.claim_of_id:
+        from .legs import attach_claimed_purchase
+        attach_claimed_purchase(case, user=user)
 
 
 def _set_items(case, items, Item):
@@ -201,14 +225,33 @@ def calculate(case_id, *, user, version, override_pct=None, override_reason='', 
 # ─────────────────────────────────────────────────────────────────────────────
 
 def approval_route(case) -> tuple[str | None, list[str]]:
-    """Which approval workflow (None = auto) and why — deterministic & explainable (§8)."""
+    """Which approval workflow (None = auto) and why — deterministic & explainable (§8).
+    Owner matrix 2026-10-26: cash supervisor / manager > 1,500 · rate lowered supervisor / manager
+    > 5 pp · backdate supervisor ≤ 3 days same month / manager beyond · value auto ≤ 500 / manager."""
     calc = case.current_calc
     reasons, level = [], 0
     if case.settlement_mode in ('cash', 'mixed') and C.get('APPROVAL_CASH_ALWAYS'):
         level, reasons = max(level, 1), reasons + ['صرف نقدي']
-    if calc.applied_deduction_pct < calc.rule_deduction_pct and C.get('APPROVAL_OVERRIDE_ALWAYS'):
+        # the cash part of a mixed case is not known up front → its upper bound is the whole balance
+        if calc.entitlement > C.get('APPROVAL_CASH_MANAGER_ABOVE'):
+            level = 2
+            reasons.append(f'النقدي حتى {calc.entitlement} يتجاوز حد المدير ({C.get("APPROVAL_CASH_MANAGER_ABOVE")})')
+    lowered = calc.rule_deduction_pct - calc.applied_deduction_pct
+    if lowered > 0 and C.get('APPROVAL_OVERRIDE_ALWAYS'):
         level, reasons = max(level, 1), reasons + [f'تخفيض نسبة الخصم من {calc.rule_deduction_pct}% '
                                                    f'إلى {calc.applied_deduction_pct}%']
+        if lowered > C.get('APPROVAL_OVERRIDE_MANAGER_PP'):
+            level = 2
+            reasons.append(f'التخفيض {lowered} نقطة يتجاوز حد المشرف ({C.get("APPROVAL_OVERRIDE_MANAGER_PP")})')
+    if case.claim_of_id:                              # claiming a purchase already posted → backdated
+        p_day, today = case.claim_of.purchase_date, timezone.localdate()
+        days = (today - p_day).days
+        if days > 0:
+            crossed = (p_day.year, p_day.month) != (today.year, today.month)
+            far = crossed or days > C.get('APPROVAL_BACKDATE_SUPERVISOR_DAYS')
+            level = max(level, 2 if far else 1)
+            reasons.append(f'بأثر رجعي: فاتورة الشراء بتاريخ {p_day} ({days} يوم)'
+                           + (' — عبر نهاية الشهر' if crossed else ''))
     since = timezone.now() - timedelta(days=C.get('APPROVAL_AGGREGATION_DAYS'))
     rolling = calc.entitlement
     if case.softech_pic:
@@ -233,6 +276,9 @@ def submit(case_id, *, user, version, request=None) -> RC:
     _require_editable(case)
     if case.status != RC.STATUS_CALCULATED or not case.current_calc_id:
         raise ValidationError('احسب الرصيد قبل الإرسال.')
+    if case.claim_of_id and case.current_calc.rule.supplier_personcode != case.claim_of.supplier_personcode:
+        raise ValidationError(f'قاعدة الحساب على المورد {case.current_calc.rule.supplier_personcode} وفاتورة الشراء '
+                              f'المستلمة على المورد {case.claim_of.supplier_personcode} — غيّر النوع أو طريقة الصرف.')
     workflow, reasons = approval_route(case)
     case.locked_at = timezone.now()
     if workflow is None:
@@ -241,7 +287,8 @@ def submit(case_id, *, user, version, request=None) -> RC:
         _audit('replacement_case_approved', case, user, request=request,
                new={'auto': True, 'entitlement': str(case.entitlement), 'fingerprint': case.current_calc.fingerprint},
                note='اعتماد تلقائي — ضمن الحدود')
-        return case
+        _after_approval(case, user)
+        return RC.objects.get(pk=case.pk)
     req = ApprovalService.submit(
         workflow_code=workflow, subject_object=case, requested_by=user,
         title=f'اعتماد بدل {case.number} — {case.entitlement} ج.م',
@@ -306,6 +353,7 @@ def on_approval_outcome(approval_request, outcome: str) -> None:
         _bump(case, 'status', 'approved_at', 'approved_by')
         _audit('replacement_case_approved', case, last.decided_by if last else None,
                new={'approval_request': approval_request.pk, 'fingerprint': case.current_calc.fingerprint})
+        _after_approval(case, last.decided_by if last else None)
     else:
         case.status, case.locked_at = RC.STATUS_CALCULATED, None        # back to the maker for changes
         _bump(case, 'status', 'locked_at')
@@ -368,7 +416,7 @@ def cancel(case_id, *, user, version, reason, request=None) -> RC:
             case.approval_request.save(update_fields=['status'])
     case.operations.exclude(status__in=POSTED_OPS).update(status=Op.ST_CANCELLED)
     old = case.status
-    case.status = RC.STATUS_CANCELLED
-    _bump(case, 'status')
+    case.status, case.claim_of = RC.STATUS_CANCELLED, None      # an unclaimed record becomes claimable again
+    _bump(case, 'status', 'claim_of')
     _audit('replacement_case_cancelled', case, user, old={'status': old}, note=reason, request=request)
     return case
