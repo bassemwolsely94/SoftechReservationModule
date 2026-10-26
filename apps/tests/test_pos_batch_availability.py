@@ -167,3 +167,22 @@ class FefoSplitTests(TestCase):
         _, _, seller = make_user('fefo_seller', role='salesperson')
         r = seller.post('/api/pos-orders/fefo-split/', {'batches': [], 'need': 1}, format='json')
         self.assertEqual(r.status_code, 200)
+
+    def _split_status(self, name, role):
+        from .factories import make_user
+        _, _, c = make_user(name, role=role)
+        return c.post('/api/pos-orders/fefo-split/', {'batches': [], 'need': 1}, format='json').status_code
+
+    def test_fefo_split_seeded_explicit_denial_is_final(self):
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.create(role='salesperson', module='pos', action='view', is_allowed=False)
+        self.assertEqual(self._split_status('fefo_denied', 'salesperson'), 403)
+
+    def test_fefo_split_seeded_grant_allows(self):
+        from apps.users.models import RoleModuleAccess
+        RoleModuleAccess.objects.create(role='salesperson', module='pos', action='view', is_allowed=True)
+        self.assertEqual(self._split_status('fefo_granted', 'salesperson'), 200)
+
+    def test_fefo_split_unseeded_push_role_uses_fallback(self):
+        self.assertEqual(self._split_status('fefo_unseeded', 'salesperson'), 200)
+        self.assertEqual(self._split_status('fefo_unseeded_v', 'viewer'), 403)

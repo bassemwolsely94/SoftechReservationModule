@@ -46,8 +46,9 @@ class CanPushPosOrders(BasePermission):
 class CanViewPos(BasePermission):
     """Contract-assist / FEFO helper endpoints — roles with the POS module (`pos`/view).
 
-    RBAC matrix is authoritative; PUSH_ROLES (the operator roles) is only the fallback for a DB
-    where the `pos` rows aren't seeded yet, same as CanPushPosOrders.
+    The RBAC matrix is authoritative: once a role has ANY `pos` row (seeded), an explicit
+    denial is final. PUSH_ROLES is the fallback only for a role with no `pos` rows at all.
+    A failing matrix lookup denies — it never falls back to allow.
     """
     def has_permission(self, request, view):
         p = _profile(request)
@@ -56,8 +57,9 @@ class CanViewPos(BasePermission):
         if p.role == 'admin':
             return True
         try:
-            if p.can_do('pos', 'view'):
-                return True
+            from apps.users.models import RoleModuleAccess
+            if RoleModuleAccess.objects.filter(role=p.role, module='pos').exists():
+                return bool(p.can_do('pos', 'view'))
         except Exception:
-            pass
+            return False
         return p.role in PUSH_ROLES
