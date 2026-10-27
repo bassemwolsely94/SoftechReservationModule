@@ -145,6 +145,7 @@ class SearchEndpointTests(TestCase):
 
     def test_softech_breaker(self):
         from apps.catalog.views import _softech_live_search
+        cache.clear()                                    # no cached '%x%' rows from another test
         with mock.patch('config.sybase.get_sybase_connection', side_effect=OSError('down')) as conn:
             self.assertEqual(_softech_live_search('%x%', None), [])
             self.assertEqual(_softech_live_search('%x%', None), [])
