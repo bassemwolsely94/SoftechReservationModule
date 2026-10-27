@@ -294,3 +294,7 @@ apps/sync/management/commands/probe_stock_audit.py::Command.section_d
 apps/sync/management/commands/probe_stock_audit.py::Command.section_e
 apps/sync/management/commands/verify_branch_replication.py::Command.handle
 apps/vouchers/management/commands/push_coupon_batch.py::Command._probe
+
+# Owner: doc 30 SOFTECH load telemetry (merged from amazing-fermi 2026-10-27) — POSTGRES write, not SOFTECH
+#   only the VALUES placeholder list is .format()-ed (a fixed "(%s,…)" per bucket); every value is a bound param
+apps/sync/softech_load.py::flush
