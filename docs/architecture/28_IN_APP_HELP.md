@@ -54,6 +54,16 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   (`notecheck.occurrences`). The trainer replaces or skips each one (or «استبدل الباقي»); a replacement
   only happens if the text at that place is still the scanned word (else «افحص تاني»), later places in
   the same text shift. Only the draft changes — the normal «حفظ» records it in `HelpRevision`.
+- **Elaborate tours (2026-10-25).** Every tour step — screen `tour` and module `flows` — has a one-line
+  headline (`text`) and a longer explanation (`more`: what the button does, when to use it, what
+  happens next, what to watch for), checked by `TourExplanationTests` (≥ 60 Arabic chars + English).
+  Every module has a desktop module / workflow tour (`flows`; modules without a process tour got an
+  `overview` «جولة في موديول …»). The tour card shows the tour name, a progress bar («خطوة 3 من 9»),
+  the bold headline and the explanation under it; the highlighted element gets a thicker ring, a glow
+  and a numbered badge, and the card is placed from its real height. Trainers edit `more` next to each
+  step's text (screen editor and workflow-tour editor; empty keeps the repo text; `_merge_tour`).
+  The same steps appear in each help article as «الأزرار والأجزاء — خطوة بخطوة» and in the printed
+  manual (`buttons` in `/api/help/manual/`), so the explanations are readable without running a tour.
 
 - **«👆 اعرض لي» in the top bar** (next to «؟ مساعدة», desktop and mobile; Shift+F1; Ctrl+K → «اعرض لي»)
   starts the current screen's guided tour directly. Also a prominent button at the top of the help panel.

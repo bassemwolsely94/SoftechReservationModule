@@ -1,5 +1,90 @@
 from . import T
 
+# Longer explanations ("more") shared by the screen tours and the module tour.
+PR_MORE_NEW = T(
+    'استخدمه لما سعر صنف أو خصمه في SOFTECH محتاج يتغيّر (تسعيرة جديدة، خصم مورد اتغيّر…).\n'
+    '• بيفتح نافذة «طلب تعديل سعر / خصم»: تختار الصنف، وتكتب القيمة الجديدة لحقل واحد على الأقل (سعر العبوة بدون ضريبة، خصم الصيدلية، الإضافي، الخاص، POS)، والسبب إجباري.\n'
+    '• سعر الوحدة والسعر شامل الضريبة بيتحسبوا لوحدهم من سعر العبوة.\n'
+    '• «إرسال الطلب» بيسجّله «في الانتظار» — مفيش أي تغيير في SOFTECH لحد ما المدير يعتمده.',
+    'Use it when an item\'s price or discount in SOFTECH needs to change (new price list, a supplier discount changed…).\n'
+    '• It opens the "Price / discount change request" window: pick the item and enter the new value for at least one field (pack price before VAT, pharmacy, additional, special or POS discount); the reason is required.\n'
+    '• The unit price and the price with VAT are calculated automatically from the pack price.\n'
+    '• "Send request" saves it as "Pending" — nothing changes in SOFTECH until a manager approves it.')
+PR_MORE_TABS = T(
+    '• «الطلبات»: كل الطلبات وحالتها — ده الشغل اليومي.\n'
+    '• «متابعة المعلّقة (SLA)»: الطلبات اللي اعتمادها اتأخر، عشان محدش يفضل مستني.\n'
+    '• «تدقيق النسخ المتماثل» و«لوحات المعلومات» بيظهروا للمدير بس: هل التعديل المنفّذ وصل لكل الفروع، وإحصاءات الطلبات وزمن الاعتماد.',
+    '• "Requests": every request and its status — the daily work.\n'
+    '• "Pending follow-up (SLA)": requests whose approval is late, so nobody is left waiting.\n'
+    '• "Replication audit" and "Insights" show to admins only: whether an executed change reached every branch, and request statistics and approval time.')
+PR_MORE_STATUS = T(
+    'اختار الحالة اللي عايز تشوفها:\n'
+    '• «في الانتظار»: لسه محدش راجعه.\n'
+    '• «منفذ»: اتطبّق في SOFTECH.\n'
+    '• «مرفوض» بملاحظة المدير، و«فشل»: اتعتمد بس التنفيذ في SOFTECH ما كملش — اقرأ الخطأ.',
+    'Choose which status to show:\n'
+    '• "Pending": nobody has reviewed it yet.\n'
+    '• "Executed": applied in SOFTECH.\n'
+    '• "Rejected" with the manager\'s note, and "Failed": approved but execution in SOFTECH did not complete — read the error.')
+PR_MORE_TABLE = T(
+    'كل صف طلب: الصنف وكوده، القيم القديمة والجديدة لكل حقل اتطلب تعديله، مين طلبه، التاريخ والحالة.\n'
+    '• لو مش مدير هتلاقي طلباتك هنا — المدير بيراجعها ويعتمدها.\n'
+    '• بعد التنفيذ بيظهر كمان القيم اللي اتطبقت فعلاً.',
+    'Each row is a request: the item and its code, old and new values for each field asked to change, who asked, the date and the status.\n'
+    '• If you are not a manager, your own requests show here — the manager reviews and approves them.\n'
+    '• After execution the values actually applied are shown too.')
+PR_MORE_HISTORY = T(
+    '«🕘 السجل» جنب كود الصنف بيفتح تغييرات السعر اللي حصلت للصنف ده قبل كده.\n'
+    '• مفيد قبل ما تعتمد أو تطلب تعديل: تعرف السعر اتغيّر إمتى وكام مرة.\n'
+    '• للعرض بس — مش بيغيّر حاجة.',
+    '"🕘 Log" next to the item code opens the price changes this item had before.\n'
+    '• Useful before approving or requesting a change: see when and how often the price changed.\n'
+    '• View only — it changes nothing.')
+PR_MORE_REVIEW = T(
+    '• «اعتماد» بيفتح نافذة فيها مستخدم SOFTECH المرتبط بحسابك، و«اعتماد وتنفيذ في Softech» بيطبّق التعديل فوراً في SOFTECH باسمك وينتشر لكل الفروع. لو حسابك مش مربوط بمستخدم SOFTECH الزر بيتقفل.\n'
+    '• «رفض» بملاحظة اختيارية، والطلب «الفاشل» ممكن تعتمده تاني.\n'
+    '• «↩ تراجع» على طلب منفّذ مش بيرجّع حاجة على طول: بيعمل طلب جديد «في الانتظار» بالقيم السابقة محتاج اعتماد.\n'
+    '• للمدير بس، والسيرفر بيتحقق من الصلاحية، وكل إجراء متسجّل.',
+    '• "Approve" opens a window showing the SOFTECH user linked to your account, and "Approve and execute in Softech" applies the change in SOFTECH at once under your name and spreads it to every branch. If your account has no linked SOFTECH user the button is disabled.\n'
+    '• "Reject" with an optional note; a "Failed" request can be approved again.\n'
+    '• "↩ Rollback" on an executed request does not revert anything by itself: it creates a new "Pending" request with the previous values that needs approval.\n'
+    '• Admins only; the server checks permission and every action is recorded.')
+AL_MORE_STATS = T(
+    '• «مفحوص»: عدد الأصناف اللي اتفحصت بالفلاتر الحالية.\n'
+    '• «غير متوافق»: أصناف الخصم الأساسي الفعلي بتاعها مش مطابق لنسبة المنشأ أو تصنيف خصم التعاقد أو السياسة الرئيسية للمورد.\n'
+    'الرقم ده هو حجم الشغل اللي قدامك.',
+    '• "Checked": how many items were checked with the current filters.\n'
+    '• "Incompatible": items whose actual basic discount does not match the origin rate, the contract-discount class or the supplier\'s master policy.\n'
+    'This number is the size of the work in front of you.')
+AL_MORE_FILTERS = T(
+    '• ابحث باسم الصنف، واختار نوع التنبيه (الخصم ≠ نسبة المنشأ، ≠ نسبة التعاقد، المنشأ ≠ التعاقد، ≠ السياسة الرئيسية).\n'
+    '• «غير المتوافقة فقط» يخفي الأصناف السليمة، و«تضمين الموقوفة» يضيف الأصناف الموقوفة.\n'
+    'الفلاتر بتغيّر العرض بس — مفيش كتابة.',
+    '• Search by item name and pick a flag type (discount ≠ origin rate, ≠ contract rate, origin ≠ contract, ≠ master policy).\n'
+    '• "Incompatible only" hides the correct items, and "Include inactive" adds stopped items.\n'
+    'Filters only change the view — nothing is written.')
+AL_MORE_TABLE = T(
+    'كل صف: الصنف والمورد، المنشأ الحالي، الخصم الأساسي، نسبة المنشأ ونسبة التعاقد، والهدف المقترح.\n'
+    '• الخصم الفعلي هو المرجع: المطلوب إن التسميات (المنشأ وتصنيف الخصم) تتعدّل عشان تطابقه — مش العكس.\n'
+    '• علّم مربع الاختيار للأصناف اللي عايز تصلّحها، فيظهر شريط الإجراءات.',
+    'Each row: item and supplier, current origin, basic discount, origin rate and contract rate, and the suggested target.\n'
+    '• The actual discount is the reference: the labels (origin and discount class) are changed to match it — not the other way round.\n'
+    '• Tick the items you want to fix and the action bar appears.')
+AL_MORE_BULK = T(
+    '• «✨ تطبيق المقترح لكل صنف» بيدّي كل صنف المنشأ/تصنيف الخصم المناسب لفئته ونسبته.\n'
+    '• أو «تعيين موحّد»: اختار منشأ و/أو تصنيف خصم جديد ثم «✔ تطبيق على SOFTECH» لكل الأصناف المحددة.\n'
+    '• الاتنين بيكتبوا فعلاً في SOFTECH على الرئيسي باسم مستخدم SOFTECH بتاعك وبعد تأكيد، والتغيير بينتشر للفروع (الرسالة بتقول حوالي 30 دقيقة). للمدير بس.',
+    '• "✨ Apply each item\'s suggestion" gives each item the origin/discount class that fits its category and rate.\n'
+    '• Or a uniform assignment: pick a new origin and/or discount class, then "✔ Apply to SOFTECH" for all selected items.\n'
+    '• Both really write to SOFTECH on HQ under your SOFTECH user after a confirmation, and the change spreads to branches (the message says about 30 minutes). Admins only.')
+AL_MORE_TIER = T(
+    'لو مفيش منشأ أو تصنيف خصم بالنسبة المطلوبة أصلاً في SOFTECH، استخدم «➕ تصنيف جديد».\n'
+    '• بيعرض معاينة للصف المقترح (الكود والاسم) الأول من غير كتابة.\n'
+    '• «✔ إنشاء فى SOFTECH» بعد التأكيد بينسخ صف موجود كقالب ويغيّر الكود والاسم بس. للمدير بس.',
+    'If no origin or discount class with the needed rate exists in SOFTECH yet, use "➕ New class".\n'
+    '• It first shows a preview of the proposed row (code and name) without writing.\n'
+    '• "✔ Create in SOFTECH", after a confirmation, copies an existing row as a template changing only the code and name. Admins only.')
+
 MODULE = {
     'key': 'pricing', 'group': 'purchasing', 'icon': '🏷️',
     'title': T('الأسعار والخصومات', 'Prices & discounts'),
@@ -85,6 +170,64 @@ MODULE = {
              'open_hint': T('افتح تبويب «تدقيق النسخ المتماثل».', 'Open the "Replication audit" tab.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول الأسعار والخصومات', 'A tour of the Prices & discounts module'),
+            'summary': T('إزاي تعديل سعر أو خصم صنف بيمشي من طلب لاعتماد لتنفيذ في SOFTECH، وإزاي «مطابقة الخصومات» بتصلّح تسميات المنشأ وتصنيف الخصم.',
+                         'How an item price or discount change goes from request to approval to execution in SOFTECH, and how "Discount alignment" fixes origin and discount-class labels.'),
+            'roles': ['admin', 'purchasing', 'pharmacist'],
+            'steps': [
+                {'target': 'nav-pricing-approvals', 'nav': '/pricing-approvals',
+                 'text': T('«المشتريات» ← «موافقات الأسعار».', '"Purchasing" → "Price approvals".'),
+                 'more': T('أي تغيير في سعر صنف أو خصوماته بيبدأ من هنا — مفيش تعديل مباشر.\n'
+                           '• الموظف يطلب، والمدير يعتمد، والتنفيذ بيحصل في SOFTECH باسم مستخدم SOFTECH بتاع المعتمد وينتشر لكل الفروع.\n'
+                           '• كل طلب واعتماد ورفض متسجّل بمين وإمتى وإيه القيم قبل وبعد.',
+                           'Every change to an item\'s price or discounts starts here — there is no direct edit.\n'
+                           '• An employee requests, a manager approves, and execution happens in SOFTECH under the approver\'s SOFTECH user and spreads to every branch.\n'
+                           '• Every request, approval and rejection is recorded with who, when and the before/after values.')},
+                {'target': 'pricing-approvals-new', 'route': '/pricing-approvals',
+                 'text': T('«طلب تعديل جديد» — بداية أي تغيير سعر أو خصم.', '"New change request" — where any price or discount change starts.'),
+                 'more': PR_MORE_NEW},
+                {'target': 'pricing-approvals-tabs', 'route': '/pricing-approvals',
+                 'text': T('التبويبات: الطلبات، والمعلّقة، وتبويبات المدير.', 'The tabs: requests, pending follow-up, and the admin tabs.'),
+                 'more': PR_MORE_TABS},
+                {'target': 'pricing-approvals-status', 'route': '/pricing-approvals',
+                 'text': T('فلتر الحالة: في الانتظار، منفذ، مرفوض، فشل.', 'Status filter: pending, executed, rejected, failed.'),
+                 'more': PR_MORE_STATUS},
+                {'target': 'pricing-approvals-table', 'route': '/pricing-approvals',
+                 'text': T('جدول الطلبات: القيم القديمة والجديدة ومين طلب.', 'The requests table: old and new values and who asked.'),
+                 'more': PR_MORE_TABLE},
+                {'target': 'pricing-approvals-history', 'route': '/pricing-approvals',
+                 'text': T('«🕘 السجل» لتاريخ أسعار الصنف.', '"🕘 Log" for the item\'s price history.'),
+                 'more': PR_MORE_HISTORY},
+                {'target': 'pricing-approvals-review', 'route': '/pricing-approvals',
+                 'text': T('المدير: «اعتماد» و«رفض» و«↩ تراجع».', 'Manager: "Approve", "Reject" and "↩ Rollback".'),
+                 'more': PR_MORE_REVIEW},
+                {'target': 'nav-discount-alignment', 'nav': '/discount-alignment',
+                 'text': T('الشاشة التانية: «المشتريات» ← «مطابقة الخصومات».', 'The second screen: "Purchasing" → "Discount alignment".'),
+                 'more': T('هنا مش بنغيّر الخصم نفسه — بنصلّح تسميات الصنف (المنشأ محلي/مستورد وتصنيف خصم التعاقد) عشان تطابق الخصم الفعلي.\n'
+                           '• لو الخصم نفسه محتاج يتغيّر، ارجع لـ «موافقات الأسعار» واعمل طلب.',
+                           'Here we do not change the discount itself — we fix the item\'s labels (local/imported origin and contract-discount class) to match the actual discount.\n'
+                           '• If the discount itself must change, go back to "Price approvals" and make a request.')},
+                {'target': 'pricing-alignment-stats', 'route': '/discount-alignment',
+                 'text': T('كام صنف اتفحص وكام غير متوافق.', 'How many items were checked and how many are incompatible.'),
+                 'more': AL_MORE_STATS},
+                {'target': 'pricing-alignment-filters', 'route': '/discount-alignment',
+                 'text': T('ضيّق القائمة بنوع التنبيه و«غير المتوافقة فقط».', 'Narrow the list by flag type and "Incompatible only".'),
+                 'more': AL_MORE_FILTERS},
+                {'target': 'pricing-alignment-table', 'route': '/discount-alignment',
+                 'text': T('علّم الأصناف اللي هتصلّحها.', 'Tick the items you will fix.'),
+                 'more': AL_MORE_TABLE},
+                {'target': 'pricing-alignment-bulk', 'route': '/discount-alignment',
+                 'text': T('شريط التصليح بيظهر بعد التحديد — بيكتب في SOFTECH.', 'The fix bar appears after selecting — it writes to SOFTECH.'),
+                 'more': AL_MORE_BULK},
+                {'target': 'pricing-alignment-new-tier', 'route': '/discount-alignment',
+                 'text': T('«➕ تصنيف جديد» لو مفيش تصنيف بالنسبة المطلوبة.', '"➕ New class" when no class has the needed rate.'),
+                 'more': AL_MORE_TIER},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -113,7 +256,10 @@ SCREENS = [
             {'target': 'pricing-approvals-new', 'label': T('+ طلب تعديل جديد', '+ New change request'),
              'text': T('يفتح نموذج طلب تعديل سعر العبوة أو أي خصم لصنف واحد.',
                        'Opens the form to request a change to the pack price or any discount of one item.'),
-             'when': T('أي موظف يطلب؛ التنفيذ لا يحصل إلا بعد اعتماد المدير.', 'Any employee can request; nothing happens until a manager approves.')},
+             'when': T('أي موظف يطلب؛ التنفيذ لا يحصل إلا بعد اعتماد المدير.', 'Any employee can request; nothing happens until a manager approves.'),
+             'more': T(
+                 'استخدمه لما سعر صنف أو خصمه في SOFTECH محتاج يتغيّر (تسعيرة جديدة، خصم مورد اتغيّر…).\n• بيفتح نافذة «طلب تعديل سعر / خصم»: تختار الصنف، وتكتب القيمة الجديدة لحقل واحد على الأقل (سعر العبوة بدون ضريبة، خصم الصيدلية، الإضافي، الخاص، POS)، والسبب إجباري.\n• سعر الوحدة والسعر شامل الضريبة بيتحسبوا لوحدهم من سعر العبوة.\n• «إرسال الطلب» بيسجّله «في الانتظار» — مفيش أي تغيير في SOFTECH لحد ما المدير يعتمده.',
+                 'Use it when an item\'s price or discount in SOFTECH needs to change (new price list, a supplier discount changed…).\n• It opens the "Price / discount change request" window: pick the item and enter the new value for at least one field (pack price before VAT, pharmacy, additional, special or POS discount); the reason is required.\n• The unit price and the price with VAT are calculated automatically from the pack price.\n• "Send request" saves it as "Pending" — nothing changes in SOFTECH until a manager approves it.')},
             {'target': 'pricing-approvals-create-item', 'label': T('الصنف *', 'Item *'),
              'text': T('ابحث بالاسم أو الكود أو الباركود. تظهر القيم الحالية من SOFTECH بجانب كل حقل.',
                        'Search by name, code or barcode. The current SOFTECH values show beside each field.'),
@@ -137,7 +283,10 @@ SCREENS = [
              'when': T('طلب «فشل» يعرض سبب الخطأ تحته.', 'A "Failed" request shows the error under it.')},
             {'target': 'pricing-approvals-history', 'label': T('🕘 السجل', '🕘 History'),
              'text': T('سجل تغييرات السعر والخصم لهذا الصنف عبر الزمن.', 'The price and discount change history of this item over time.'),
-             'when': T('قبل الاعتماد: تأكد أن الصنف لم يتغير مؤخراً لنفس السبب.', 'Before approving: check the item was not changed recently for the same reason.')},
+             'when': T('قبل الاعتماد: تأكد أن الصنف لم يتغير مؤخراً لنفس السبب.', 'Before approving: check the item was not changed recently for the same reason.'),
+             'more': T(
+                 '«🕘 السجل» جنب كود الصنف بيفتح تغييرات السعر اللي حصلت للصنف ده قبل كده.\n• مفيد قبل ما تعتمد أو تطلب تعديل: تعرف السعر اتغيّر إمتى وكام مرة.\n• للعرض بس — مش بيغيّر حاجة.',
+                 '"🕘 Log" next to the item code opens the price changes this item had before.\n• Useful before approving or requesting a change: see when and how often the price changed.\n• View only — it changes nothing.')},
             {'target': 'pricing-approvals-approve', 'label': T('اعتماد', 'Approve'),
              'text': T('يفتح نافذة المراجعة: ملخص التعديل ومستخدم SOFTECH الذي سيُنفَّذ باسمه. الفتح لا يكتب شيئاً.',
                        'Opens the review window: the change summary and the SOFTECH user it will run under. Opening writes nothing.'),
@@ -175,18 +324,31 @@ SCREENS = [
              'open_hint': T('للمدير: تبويب «تدقيق النسخ المتماثل»، ثم اختر فحصاً.', 'Admins: the "Replication audit" tab, then pick a scan.')},
             {'target': 'pricing-approvals-tabs',  # from the GitHub-side tour
              'text': T('«الطلبات» و«متابعة المعلّقة (SLA)»؛ التدقيق ولوحات المعلومات تظهر للمدير فقط.',
-                       '"Requests" and "Pending follow-up (SLA)"; the audit and insights tabs show to admins only.')},
+                       '"Requests" and "Pending follow-up (SLA)"; the audit and insights tabs show to admins only.'),
+             'more': T(
+                 '• «الطلبات»: كل الطلبات وحالتها — ده الشغل اليومي.\n• «متابعة المعلّقة (SLA)»: الطلبات اللي اعتمادها اتأخر، عشان محدش يفضل مستني.\n• «تدقيق النسخ المتماثل» و«لوحات المعلومات» بيظهروا للمدير بس: هل التعديل المنفّذ وصل لكل الفروع، وإحصاءات الطلبات وزمن الاعتماد.',
+                 '• "Requests": every request and its status — the daily work.\n• "Pending follow-up (SLA)": requests whose approval is late, so nobody is left waiting.\n• "Replication audit" and "Insights" show to admins only: whether an executed change reached every branch, and request statistics and approval time.')},
             {'target': 'pricing-approvals-status',  # from the GitHub-side tour
              'text': T('في «الطلبات»: صفِّ بالحالة: في الانتظار، منفذ، مرفوض، فشل.',
-                       'In "Requests": filter by status: pending, executed, rejected, failed.')},
+                       'In "Requests": filter by status: pending, executed, rejected, failed.'),
+             'more': T(
+                 'اختار الحالة اللي عايز تشوفها:\n• «في الانتظار»: لسه محدش راجعه.\n• «منفذ»: اتطبّق في SOFTECH.\n• «مرفوض» بملاحظة المدير، و«فشل»: اتعتمد بس التنفيذ في SOFTECH ما كملش — اقرأ الخطأ.',
+                 'Choose which status to show:\n• "Pending": nobody has reviewed it yet.\n• "Executed": applied in SOFTECH.\n• "Rejected" with the manager\'s note, and "Failed": approved but execution in SOFTECH did not complete — read the error.')},
             {'target': 'pricing-approvals-table',  # from the GitHub-side tour
              'text': T('الطلبات مع الصنف والتعديلات المطلوبة ومن طلبها وحالتها.',
-                       'Requests with the item, requested changes, requester and status.')},
+                       'Requests with the item, requested changes, requester and status.'),
+             'more': T(
+                 'كل صف طلب: الصنف وكوده، القيم القديمة والجديدة لكل حقل اتطلب تعديله، مين طلبه، التاريخ والحالة.\n• لو مش مدير هتلاقي طلباتك هنا — المدير بيراجعها ويعتمدها.\n• بعد التنفيذ بيظهر كمان القيم اللي اتطبقت فعلاً.',
+                 'Each row is a request: the item and its code, old and new values for each field asked to change, who asked, the date and the status.\n• If you are not a manager, your own requests show here — the manager reviews and approves them.\n• After execution the values actually applied are shown too.')},
             {'target': 'pricing-approvals-review',  # from the GitHub-side tour
              'text': T('للمدير فقط: «اعتماد» و«رفض» و«↩ تراجع» حسب الحالة؛ تحتاج صلاحية وكل إجراء مُسجَّل.',
-                       'Admins only: "Approve", "Reject" and "↩ Rollback" by status; they need permission and every action is recorded.')},
+                       'Admins only: "Approve", "Reject" and "↩ Rollback" by status; they need permission and every action is recorded.'),
+             'more': T(
+                 '• «اعتماد» بيفتح نافذة فيها مستخدم SOFTECH المرتبط بحسابك، و«اعتماد وتنفيذ في Softech» بيطبّق التعديل فوراً في SOFTECH باسمك وينتشر لكل الفروع. لو حسابك مش مربوط بمستخدم SOFTECH الزر بيتقفل.\n• «رفض» بملاحظة اختيارية، والطلب «الفاشل» ممكن تعتمده تاني.\n• «↩ تراجع» على طلب منفّذ مش بيرجّع حاجة على طول: بيعمل طلب جديد «في الانتظار» بالقيم السابقة محتاج اعتماد.\n• للمدير بس، والسيرفر بيتحقق من الصلاحية، وكل إجراء متسجّل.',
+                 '• "Approve" opens a window showing the SOFTECH user linked to your account, and "Approve and execute in Softech" applies the change in SOFTECH at once under your name and spreads it to every branch. If your account has no linked SOFTECH user the button is disabled.\n• "Reject" with an optional note; a "Failed" request can be approved again.\n• "↩ Rollback" on an executed request does not revert anything by itself: it creates a new "Pending" request with the previous values that needs approval.\n• Admins only; the server checks permission and every action is recorded.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'pricing.alignment',
@@ -207,7 +369,10 @@ SCREENS = [
             {'target': 'pricing-alignment-stats', 'label': T('مفحوص · غير متوافق', 'Checked · incompatible'),
              'text': T('عدد الأصناف المفحوصة وعدد غير المتوافقة مع نسبة المنشأ أو التعاقد.',
                        'How many items were checked and how many do not match the origin or contract rate.'),
-             'when': T('الهدف أن يقل «غير متوافق» مع كل تصحيح.', 'The goal is for "incompatible" to drop with each fix.')},
+             'when': T('الهدف أن يقل «غير متوافق» مع كل تصحيح.', 'The goal is for "incompatible" to drop with each fix.'),
+             'more': T(
+                 '• «مفحوص»: عدد الأصناف اللي اتفحصت بالفلاتر الحالية.\n• «غير متوافق»: أصناف الخصم الأساسي الفعلي بتاعها مش مطابق لنسبة المنشأ أو تصنيف خصم التعاقد أو السياسة الرئيسية للمورد.\nالرقم ده هو حجم الشغل اللي قدامك.',
+                 '• "Checked": how many items were checked with the current filters.\n• "Incompatible": items whose actual basic discount does not match the origin rate, the contract-discount class or the supplier\'s master policy.\nThis number is the size of the work in front of you.')},
             {'target': 'pricing-alignment-search', 'label': T('🔍 ابحث باسم الصنف...', '🔍 Search item name...'),
              'text': T('يحصر الجدول في صنف أو مجموعة أصناف بالاسم.', 'Narrows the table to an item or a group of items by name.')},
             {'target': 'pricing-alignment-flag', 'label': T('نوع التنبيه', 'Flag type'),
@@ -244,7 +409,10 @@ SCREENS = [
              'open_hint': T('حدّد أصنافاً واختر المنشأ أو التصنيف الجديد.', 'Select items and pick the new origin or class.')},
             {'target': 'pricing-alignment-new-tier', 'label': T('➕ تصنيف جديد', '➕ New class'),
              'text': T('ينشئ منشأً أو تصنيف خصم تعاقدات جديداً لو لا يوجد تصنيف بالنسبة المطلوبة.',
-                       'Creates a new origin or contract-discount class when none has the needed rate.')},
+                       'Creates a new origin or contract-discount class when none has the needed rate.'),
+             'more': T(
+                 'لو مفيش منشأ أو تصنيف خصم بالنسبة المطلوبة أصلاً في SOFTECH، استخدم «➕ تصنيف جديد».\n• بيعرض معاينة للصف المقترح (الكود والاسم) الأول من غير كتابة.\n• «✔ إنشاء فى SOFTECH» بعد التأكيد بينسخ صف موجود كقالب ويغيّر الكود والاسم بس. للمدير بس.',
+                 'If no origin or discount class with the needed rate exists in SOFTECH yet, use "➕ New class".\n• It first shows a preview of the proposed row (code and name) without writing.\n• "✔ Create in SOFTECH", after a confirmation, copies an existing row as a template changing only the code and name. Admins only.')},
             {'target': 'pricing-alignment-tier-preview', 'label': T('👁 معاينة', '👁 Preview'),
              'text': T('قراءة فقط: يعرض الصف المقترح والكود الجديد، وينبّه لو الكود مستخدم.',
                        'Read only: shows the proposed row and the new code, and warns if the code is taken.'),
@@ -257,14 +425,24 @@ SCREENS = [
              'open_hint': T('بعد «👁 معاينة» داخل نافذة التصنيف الجديد.', 'After "👁 Preview" inside the new-class window.')},
             {'target': 'pricing-alignment-filters',  # from the GitHub-side tour
              'text': T('ابحث باسم الصنف، اختر نوع التنبيه، و«غير المتوافقة فقط» أو «تضمين الموقوفة».',
-                       'Search by item name, pick a flag type, and "incompatible only" or "include inactive".')},
+                       'Search by item name, pick a flag type, and "incompatible only" or "include inactive".'),
+             'more': T(
+                 '• ابحث باسم الصنف، واختار نوع التنبيه (الخصم ≠ نسبة المنشأ، ≠ نسبة التعاقد، المنشأ ≠ التعاقد، ≠ السياسة الرئيسية).\n• «غير المتوافقة فقط» يخفي الأصناف السليمة، و«تضمين الموقوفة» يضيف الأصناف الموقوفة.\nالفلاتر بتغيّر العرض بس — مفيش كتابة.',
+                 '• Search by item name and pick a flag type (discount ≠ origin rate, ≠ contract rate, origin ≠ contract, ≠ master policy).\n• "Incompatible only" hides the correct items, and "Include inactive" adds stopped items.\nFilters only change the view — nothing is written.')},
             {'target': 'pricing-alignment-table',  # from the GitHub-side tour
              'text': T('الأصناف مع المنشأ والخصم الأساسي والنسب المقارنة؛ حدد الأصناف بمربع الاختيار.',
-                       'Items with origin, basic discount and compared rates; select items with the checkbox.')},
+                       'Items with origin, basic discount and compared rates; select items with the checkbox.'),
+             'more': T(
+                 'كل صف: الصنف والمورد، المنشأ الحالي، الخصم الأساسي، نسبة المنشأ ونسبة التعاقد، والهدف المقترح.\n• الخصم الفعلي هو المرجع: المطلوب إن التسميات (المنشأ وتصنيف الخصم) تتعدّل عشان تطابقه — مش العكس.\n• علّم مربع الاختيار للأصناف اللي عايز تصلّحها، فيظهر شريط الإجراءات.',
+                 'Each row: item and supplier, current origin, basic discount, origin rate and contract rate, and the suggested target.\n• The actual discount is the reference: the labels (origin and discount class) are changed to match it — not the other way round.\n• Tick the items you want to fix and the action bar appears.')},
             {'target': 'pricing-alignment-bulk',  # from the GitHub-side tour
              'text': T('يظهر بعد تحديد أصناف: «تطبيق المقترح لكل صنف» أو تعيين موحّد؛ يكتب على SOFTECH ويحتاج صلاحية ويُسجَّل.',
-                       'Appears after selecting items: "Apply each item\'s suggestion" or a uniform assignment; writes to SOFTECH, needs permission and is recorded.')},
+                       'Appears after selecting items: "Apply each item\'s suggestion" or a uniform assignment; writes to SOFTECH, needs permission and is recorded.'),
+             'more': T(
+                 '• «✨ تطبيق المقترح لكل صنف» بيدّي كل صنف المنشأ/تصنيف الخصم المناسب لفئته ونسبته.\n• أو «تعيين موحّد»: اختار منشأ و/أو تصنيف خصم جديد ثم «✔ تطبيق على SOFTECH» لكل الأصناف المحددة.\n• الاتنين بيكتبوا فعلاً في SOFTECH على الرئيسي باسم مستخدم SOFTECH بتاعك وبعد تأكيد، والتغيير بينتشر للفروع (الرسالة بتقول حوالي 30 دقيقة). للمدير بس.',
+                 '• "✨ Apply each item\'s suggestion" gives each item the origin/discount class that fits its category and rate.\n• Or a uniform assignment: pick a new origin and/or discount class, then "✔ Apply to SOFTECH" for all selected items.\n• Both really write to SOFTECH on HQ under your SOFTECH user after a confirmation, and the change spreads to branches (the message says about 30 minutes). Admins only.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

@@ -27,7 +27,7 @@ MODULE = {
              'next': ['assigned', 'cancelled']},
             {'key': 'assigned', 'label': T('تم التكليف', 'Assigned'), 'desc': T('كُلِّف سائق وينتظر قبوله.', 'A driver is assigned and must accept.'),
              'next': ['driver_accepted', 'cancelled']},
-            {'key': 'driver_accepted', 'label': T('السائق قبل الطلب', 'Driver accepted'), 'desc': T('السائق قبل وسيستلم من الفرع (يُطلب منه تفعيل الموقع).', 'The driver accepted and will collect from the branch (location required).'),
+            {'key': 'driver_accepted', 'label': T('السائق قبل الطلب', 'Driver accepted'), 'desc': T('السائق قبل وسيستلم من الفرع (الموقع بيتطلب عند «انطلقت» لو نطاق الفرع مفعّل).', 'The driver accepted and will collect from the branch (location is checked at "Set off" when the branch geofence is on).'),
              'next': ['out_for_delivery', 'cancelled']},
             {'key': 'out_for_delivery', 'label': T('في الطريق', 'Out for delivery'), 'desc': T('السائق في الطريق للعميل.', 'The driver is on the way.'),
              'next': ['delivered', 'partial_delivery', 'customer_unavailable', 'failed']},
@@ -54,34 +54,90 @@ MODULE = {
             'steps': [
                 {'target': 'nav-delivery', 'nav': '/delivery',
                  'text': T('«العمليات» ← «توصيل الطلبات».',
-                           '"Operations" → "Deliveries".')},
+                           '"Operations" → "Deliveries".'),
+                 'more': T('هنا بتبدأ أي رحلة توصيل: لوحة فيها كل طلبات التوصيل بحالتها من التسجيل لحد الإغلاق.\n'
+                           '• منها بتسجّل الطلب، بتكلّف سائق، وبتتابع التسليم والتحصيل.\n'
+                           '• التوزيع على مسارات بيتم من «لوحة التوزيع» اللي هنروح لها بعد شوية.',
+                           'Every delivery journey starts here: a board with all delivery orders and their status from logging to closing.\n'
+                           '• From it you log the order, assign a driver, and follow delivery and cash collection.\n'
+                           '• Grouping orders into routes is done on the "Dispatch board", which we visit in a moment.')},
                 {'target': 'delivery-dashboard-new', 'route': '/delivery',
                  'text': T('«+ طلب جديد» لطلب توصيل.',
-                           '"+ New order" for a delivery order.')},
+                           '"+ New order" for a delivery order.'),
+                 'more': T('اضغطه لما عميل يطلب توصيل بالتليفون أو من الفرع.\n'
+                           '• بيفتح نموذج: مصدر الطلب، الفرع، اسم العميل (مطلوبين)، الهاتف والعنوان والمنطقة، قيمة الطلب ورسوم التوصيل وطريقة الدفع.\n'
+                           '• بعد «إنشاء الطلب» بيظهر في القائمة بحالة «جديد».',
+                           'Press it when a customer asks for delivery by phone or at the branch.\n'
+                           '• It opens a form: order source, branch, customer name (required), phone, address and area, order value, delivery fee and payment method.\n'
+                           '• After "Create order" it shows in the list as "New".')},
                 {'target': 'delivery-dashboard-status', 'route': '/delivery',
                  'text': T('فلتر الحالة: جديد، مكلَّف، في الطريق…',
-                           'Status filter: new, assigned, on the way…')},
+                           'Status filter: new, assigned, on the way…'),
+                 'more': T('كل زر بيعرض الطلبات اللي في المرحلة دي بس، و«الكل» بيرجّع كل حاجة.\n'
+                           '• «جديد» عشان تشوف اللي لسه محتاج تجهيز وتكليف.\n'
+                           '• «في الطريق» و«غير متاح» عشان تتابع اللي خرج فعلاً.',
+                           'Each chip shows only the orders at that stage; "All" brings everything back.\n'
+                           '• "New" shows what still needs preparing and assigning.\n'
+                           '• "On the way" and "Unavailable" let you follow what has already left.')},
                 {'target': 'delivery-dashboard-orders', 'route': '/delivery',
                  'text': T('اضغط على أي طلب يفتح تفاصيله جنب القائمة.',
-                           'Click any order to open its details beside the list.')},
+                           'Click any order to open its details beside the list.'),
+                 'more': T('التفاصيل فيها العميل والعنوان على الخريطة والمبالغ والأصناف وسجل الحالات.\n'
+                           '• أزرار الإجراء على كل صف بتتغير حسب الحالة: «تكليف سائق»، «السائق قبل ✓»، «تسليم ✓»، «تحصيل نقدي 💵»، «إغلاق».\n'
+                           '• الطلب المتأخر بيتعلّم «⚠️ متأخر».',
+                           'The details show the customer, the address on the map, the amounts, the items and the status log.\n'
+                           '• The action buttons on each row change with the status: "Assign driver", "Driver accepted ✓", "Deliver ✓", "Cash collection 💵", "Close".\n'
+                           '• A late order is marked "⚠️ Late".')},
                 {'target': 'nav-delivery-dispatch', 'nav': '/delivery/dispatch',
                  'text': T('التوزيع: «العمليات» ← «لوحة التوزيع».',
-                           'Dispatch: "Operations" → "Dispatch board".')},
+                           'Dispatch: "Operations" → "Dispatch board".'),
+                 'more': T('لما يبقى عندك كذا طلب جاهز لنفس المنطقة، جمّعهم في «مسار» واحد لسائق واحد بدل ما تكلّف كل طلب لوحده.\n'
+                           '• اللوحة بتعرض الطلبات اللي حالتها «جاهز» بس.',
+                           'When several ready orders go to the same area, group them in one "route" for one driver instead of assigning each order alone.\n'
+                           '• The board only shows orders whose status is "Ready".')},
                 {'target': 'delivery-dispatch-ready', 'route': '/delivery/dispatch',
                  'text': T('الطلبات الجاهزة — علّم اللي هتطلع مع بعض.',
-                           'Ready orders — tick the ones going out together.')},
+                           'Ready orders — tick the ones going out together.'),
+                 'more': T('كل سطر فيه اسم العميل والمبلغ والمنطقة وطريقة الدفع.\n'
+                           '• علّم الطلبات القريبة من بعض؛ ترتيب علامتك هو ترتيب المحطات عند السائق.\n'
+                           '• القائمة بتتحدّث لوحدها كل شوية.',
+                           'Each line shows the customer, amount, area and payment method.\n'
+                           '• Tick orders that are close to each other; the order you tick them in becomes the stop order for the driver.\n'
+                           '• The list refreshes by itself every little while.')},
                 {'target': 'delivery-dispatch-driver', 'route': '/delivery/dispatch',
                  'text': T('اختار الطيار.',
-                           'Choose the rider.')},
+                           'Choose the rider.'),
+                 'more': T('القائمة فيها السائقين النشطين بس، والرقم جنب الاسم هو عدد طلباته النهارده.\n'
+                           '• اختار اللي حمله أقل أو الأقرب للمنطقة.',
+                           'The list holds active drivers only; the number beside a name is their order count today.\n'
+                           '• Pick the one with the lightest load or closest to the area.')},
                 {'target': 'delivery-dispatch-create', 'route': '/delivery/dispatch',
                  'text': T('«إنشاء مسار».',
-                           '"Create route".')},
+                           '"Create route".'),
+                 'more': T('مش بيشتغل غير لما تختار سائق وطلب واحد على الأقل.\n'
+                           '• بيكلّف السائق بكل الطلبات المعلَّمة (حالتها تبقى «مكلَّف») ويحفظ ترتيبها.\n'
+                           '• المسار بيظهر في «مسارات اليوم» بحالة «مُخطّط».',
+                           'It only works once you pick a driver and at least one order.\n'
+                           '• It assigns the driver to every ticked order (their status becomes "Assigned") and saves their order.\n'
+                           '• The route appears under "Today\'s routes" as "Planned".')},
                 {'target': 'delivery-dispatch-launch', 'route': '/delivery/dispatch',
                  'text': T('«🚚 إطلاق المسار» لما الطيار يتحرك — بيوصله على تطبيقه.',
-                           '"🚚 Launch route" when the rider leaves — it reaches their app.')},
+                           '"🚚 Launch route" when the rider leaves — it reaches their app.'),
+                 'more': T('اضغطه لحظة ما السائق يخرج من الفرع فعلاً.\n'
+                           '• كل طلبات المسار بتتحول مرة واحدة لـ«في الطريق»، والمسار يبقى «في الطريق 🚚».\n'
+                           '• بعدها تتابع شريط التقدّم «تم x/y» والنقدي المتوقّع للمسار.',
+                           'Press it the moment the driver actually leaves the branch.\n'
+                           '• All the route\'s orders switch to "Out for delivery" at once, and the route becomes "On the way 🚚".\n'
+                           '• Then follow the "done x/y" progress bar and the route\'s expected cash.')},
                 {'target': 'delivery-driver-header', 'route': '/delivery/my',
                  'text': T('ده اللي الطيار بيشوفه: مهامه بالترتيب، يقبل، «انطلقت»، و«تم التسليم».',
-                           'This is what the rider sees: tasks in order — accept, "On my way", "Delivered".')},
+                           'This is what the rider sees: tasks in order — accept, "On my way", "Delivered".'),
+                 'more': T('شاشة السائق على موبايله: محطاته بالترتيب مع زر اتصال وخريطة.\n'
+                           '• عند العميل يضغط «تم التسليم ✅» ويكتب اسم المستلم والمبلغ المحصَّل، وموقعه بيتسجّل كإثبات.\n'
+                           '• الحالة بتتحدّث عندك في لوحة التوصيل لوحدها.',
+                           'The driver\'s phone screen: stops in order with a call button and a map.\n'
+                           '• At the customer they press "Delivered ✅", enter the recipient name and the cash collected, and their location is saved as proof.\n'
+                           '• The status updates on your delivery board by itself.')},
             ],
         },
     ],
@@ -253,25 +309,40 @@ SCREENS = [
              'text': T('يفتح نموذج طلب توصيل: المصدر، الفرع، العميل والهاتف، العنوان، قيمة الطلب، رسوم التوصيل وطريقة الدفع.',
                        'Opens the delivery order form: source, branch, customer and phone, address, order value, delivery fee and payment method.'),
              'when': T('للطلبات اللي بتيجي بالتليفون. طلبات CRM من SOFTECH بتظهر هنا لوحدها بعد المزامنة.',
-                       'For phone orders. CRM orders from SOFTECH show up here by themselves after the sync.')},
+                       'For phone orders. CRM orders from SOFTECH show up here by themselves after the sync.'),
+             'more': T(
+                 'بيفتح نموذج تسجيل طلب توصيل: «مصدر الطلب» (كول سنتر أو POS الفرع)، الفرع واسم العميل (مطلوبين)، الهاتف والهاتف البديل، العنوان والمنطقة والمحافظة، قيمة الطلب ورسوم التوصيل وطريقة الدفع.\n• مفيش حاجة بتتحفظ غير لما تضغط «إنشاء الطلب».\n• الطلب الجديد بيظهر في القائمة بحالة «جديد».',
+                 'Opens the new delivery order form: "Order source" (call center or branch POS), branch and customer name (required), phone and alternate phone, address, area and governorate, order value, delivery fee and payment method.\n• Nothing is saved until you press "Create order".\n• The new order shows in the list as "New".')},
             {'target': 'delivery-dashboard-kpis', 'label': T('إجمالي اليوم · في الطريق · متأخرة الآن', 'Today · On the way · Late now'),
              'text': T('أرقام اللحظة: المنتظر، المكلَّف، في الطريق، المُسلَّم والفاشل اليوم، معدل النجاح، والمتأخر.',
                        'Live numbers: waiting, assigned, on the way, delivered and failed today, success rate, and late orders.'),
              'when': T('«نقدي معلق» = طلبات كاش خرجت أو اتسلّمت ولسه ماتسجلش مبلغها المحصَّل.',
-                       '"Cash pending" = cash orders out or delivered with no collected amount recorded yet.')},
+                       '"Cash pending" = cash orders out or delivered with no collected amount recorded yet.'),
+             'more': T(
+                 'نظرة سريعة على يوم التوصيل:\n• «إجمالي اليوم»، «في الانتظار»، «مكلَّف»، «في الطريق»، «مُسلَّم اليوم»، «فشل اليوم».\n• «معدل النجاح» ومعاه متوسط وقت التسليم بالدقايق.\n• «متأخرة الآن» ومعاه «نقدي معلق» — لو الرقم أحمر ابدأ بالطلبات المتأخرة.',
+                 'A quick look at the delivery day:\n• "Total today", "Waiting", "Assigned", "On the way", "Delivered today", "Failed today".\n• "Success rate" with the average delivery time in minutes.\n• "Late now" with "Cash outstanding" — if it is red, start with the late orders.')},
             {'target': 'delivery-dashboard-search', 'label': T('بحث — اسم، هاتف، رقم طلب...', 'Search — name, phone, order no...'),
              'text': T('ابحث باسم العميل أو تليفونه أو رقم الطلب.', 'Search by customer name, phone or order number.'),
-             'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls about their order.')},
+             'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls about their order.'),
+             'more': T(
+                 'أسرع طريقة لما عميل يتصل يسأل عن طلبه: اكتب رقمه أو اسمه والقائمة بتتفلتر على طول.\n• جنبه فلتر المصدر وزر «🗓️ التاريخ» لو عايز يوم أو فترة تانية غير النهارده.',
+                 'The fastest way when a customer calls about their order: type their phone or name and the list filters straight away.\n• Next to it are the source filter and the "🗓️ Date" button if you need another day or period.')},
             {'target': 'delivery-dashboard-dates', 'label': T('🗓️ التاريخ', '🗓️ Date'),
              'text': T('يفتح فترات جاهزة (اليوم، أمس، ٧ أيام، ٣٠ يوم) أو من/إلى.', 'Opens ready periods (today, yesterday, 7 days, 30 days) or from/to.'),
              'warn': T('القائمة بتبدأ على طلبات النهارده بس. طلب امبارح مش ظاهر؟ غيّر التاريخ.',
                        'The list starts on today only. Missing an order from yesterday? Change the date.')},
             {'target': 'delivery-dashboard-status', 'label': T('الكل · جديد · مكلَّف · في الطريق…', 'All · New · Assigned · On the way…'),
              'text': T('شرائح تحصر القائمة في حالة واحدة.', 'Chips that limit the list to one status.'),
-             'when': T('ابدأ بـ«في الطريق» و«غير متاح» — دول محتاجين متابعة دلوقتي.', 'Start with "On the way" and "Unavailable" — they need follow-up now.')},
+             'when': T('ابدأ بـ«في الطريق» و«غير متاح» — دول محتاجين متابعة دلوقتي.', 'Start with "On the way" and "Unavailable" — they need follow-up now.'),
+             'more': T(
+                 'كل شريحة بتعرض مرحلة واحدة: «جديد»، «مكلَّف»، «قبل السائق»، «في الطريق»، «مُسلَّم»، «غير متاح»، «فشل»، «ملغى»، و«الكل».\n• اشتغل عليها بالترتيب: الجديد يتكلّف، والغير متاح يتعاد أو يتسجّل فشل.',
+                 'Each chip shows one stage: "New", "Assigned", "Driver accepted", "On the way", "Delivered", "Unavailable", "Failed", "Cancelled" and "All".\n• Work through them in order: new ones get assigned, unavailable ones get retried or marked failed.')},
             {'target': 'delivery-dashboard-orders',
              'text': T('الطلبات بالحالة والسائق والقيمة. علامة «⚠️ متأخر» = عدّى وقت التسليم. اضغط الاسم يفتح التفاصيل.',
-                       'Orders with status, driver and value. "⚠️ Late" = past the delivery time. Click the name to open the details.')},
+                       'Orders with status, driver and value. "⚠️ Late" = past the delivery time. Click the name to open the details.'),
+             'more': T(
+                 'اضغط على اسم الطلب يفتح لوحة التفاصيل: العنوان على الخريطة، المبالغ، الأصناف وسجل الحالات.\n• الأزرار على الصف بتتغير بالحالة: «تكليف سائق» و«إلغاء» قبل الخروج، «تسليم ✓» و«جزئي» و«غير متاح» و«فشل ✗» وهو في الطريق، و«تحصيل نقدي 💵» و«إغلاق» بعد التسليم.\n• «فشل» و«إلغاء» بيطلبوا سبب.',
+                 'Click the order to open the details panel: address on the map, amounts, items and status log.\n• The row buttons change with the status: "Assign driver" and "Cancel" before leaving, "Deliver ✓", "Partial", "Unavailable" and "Fail ✗" while on the way, and "Cash collection 💵" and "Close" after delivery.\n• "Fail" and "Cancel" ask for a reason.')},
             {'target': 'delivery-dashboard-assign', 'label': T('تكليف سائق · إلغاء', 'Assign driver · Cancel'),
              'text': T('«تكليف سائق»: اختار من قائمة السائقين أو اكتب الاسم والمركبة. الطلب يبقى «تم التكليف».',
                        '"Assign driver": pick from the driver list or type the name and vehicle. The order becomes "Assigned".'),
@@ -308,9 +379,13 @@ SCREENS = [
              'open_hint': T('افتح طلب له رقم هاتف وفي مرحلة تسمح بإبلاغ العميل.', 'Open an order with a phone number at a stage that allows notifying the customer.')},
             {'target': 'delivery-dashboard-branch',  # from the GitHub-side tour
              'text': T('فلتر الفرع.',
-                       'Branch filter.')},
+                       'Branch filter.'),
+             'more': T(
+                 'اختار فرع عشان تشوف طلباته بس، أو «كل الفروع» للصورة الكاملة.\n• مفيد للصيدلي اللي بيجهّز طلبات فرعه ولمسؤول التوزيع اللي ماسك كذا فرع.',
+                 'Choose a branch to see only its orders, or "All branches" for the full picture.\n• Useful for the pharmacist preparing their branch\'s orders and for the dispatcher covering several branches.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'delivery.dispatch',
@@ -328,33 +403,52 @@ SCREENS = [
         'tour': [
             {'target': 'delivery-dispatch-header', 'label': T('🧭 لوحة التوزيع', '🧭 Dispatch board'),
              'text': T('هنا تجمّع الطلبات الجاهزة في «مسار» لسائق واحد وتطلقه مرة واحدة، وتتابع مسارات النهارده.',
-                       'Here you group ready orders into one driver\'s "route", launch it at once, and watch today\'s routes.')},
+                       'Here you group ready orders into one driver\'s "route", launch it at once, and watch today\'s routes.'),
+             'more': T(
+                 'هنا بتجمّع الطلبات الجاهزة في «مسار» لسائق واحد بدل ما تكلّف كل طلب لوحده.\n• يمين: الطلبات الجاهزة وبناء المسار. شمال: مسارات النهارده وحالتها.\n• الطلب لازم يكون «جاهز» في لوحة التوصيل عشان يظهر هنا.',
+                 'Here you group ready orders into one driver\'s "route" instead of assigning each order alone.\n• One side: ready orders and building the route. The other: today\'s routes and their status.\n• An order must be "Ready" on the delivery board to show here.')},
             {'target': 'delivery-dispatch-ready', 'label': T('📦 جاهزة للتكليف', '📦 Ready to assign'),
              'text': T('الطلبات «جاهز للتسليم» بس، بالعميل والقيمة والمنطقة وطريقة الدفع. علّم اللي هيطلعوا مع بعض.',
                        'Only orders "Ready", with customer, value, area and payment. Tick the ones going out together.'),
              'when': T('اختار طلبات في نفس المنطقة. المحطات بتترقّم بترتيب ما علّمتها.', 'Pick orders in the same area. Stops are numbered in the order you tick them.'),
-             'open_hint': T('الطلب بيظهر هنا لما الفرع يخلّيه جاهز.', 'An order shows here once the branch marks it ready.')},
+             'open_hint': T('الطلب بيظهر هنا لما الفرع يخلّيه جاهز.', 'An order shows here once the branch marks it ready.'),
+             'more': T(
+                 'كل سطر: اسم العميل والمبلغ شامل التوصيل، والمنطقة وطريقة الدفع.\n• علّم الطلبات القريبة من بعض؛ ترتيب ما علّمتها هو ترتيب المحطات في تطبيق السائق.\n• فوق القائمة بيظهر عدد المحدد.',
+                 "Each line: customer, amount including delivery, area and payment method.\n• Tick orders that are close together; the order you tick them in is the stop order in the driver's app.\n• The selected count shows above the list.")},
             {'target': 'delivery-dispatch-driver', 'label': T('اختر السائق…', 'Choose the driver…'),
              'text': T('السائقين النشطين، وجنب كل واحد عدد طلباته النهارده.', 'Active drivers, each with their order count for today.'),
-             'when': T('وزّع على الأقل حِملاً لو المناطق متقاربة.', 'Give it to the least loaded one when areas are close.')},
+             'when': T('وزّع على الأقل حِملاً لو المناطق متقاربة.', 'Give it to the least loaded one when areas are close.'),
+             'more': T(
+                 'بتظهر هنا السائقين النشطين بس، والرقم بين القوسين هو عدد طلباته النهارده.\n• وزّع الحمل: ما تديش سائق واحد كل الطلبات وغيره فاضي.',
+                 'Only active drivers appear; the number in brackets is their order count today.\n• Spread the load: do not give one driver everything while another is free.')},
             {'target': 'delivery-dispatch-create', 'label': T('إنشاء مسار', 'Create route'),
              'text': T('يعمل مسار للسائق ويكلّفه بكل الطلبات المعلَّمة فوراً؛ تظهر في تطبيقه بالترتيب.',
                        'Creates a route for the driver and assigns all ticked orders at once; they appear in their app in order.'),
              'warn': T('التكليف بيتسجل باسمك على كل طلب. راجع السائق والطلبات قبل الضغط.',
-                       'The assignment is recorded under your name on every order. Check the driver and orders before pressing.')},
+                       'The assignment is recorded under your name on every order. Check the driver and orders before pressing.'),
+             'more': T(
+                 'بيشتغل بعد ما تختار سائق وطلب واحد على الأقل.\n• الطلبات المعلَّمة بتتكلّف للسائق (حالتها «مكلَّف») وبتختفي من قائمة الجاهز.\n• المسار بيتسجّل في «مسارات اليوم» بحالة «مُخطّط 📝» لحد ما تطلقه.',
+                 'It works once you pick a driver and at least one order.\n• The ticked orders are assigned to the driver (status "Assigned") and leave the ready list.\n• The route is saved under "Today\'s routes" as "Planned 📝" until you launch it.')},
             {'target': 'delivery-dispatch-routes', 'label': T('🚚 مسارات اليوم', '🚚 Today\'s routes'),
              'text': T('كل مسار: السائق، عدد الطلبات، الحالة، النقدي المتوقّع، وتم كام من كام.',
                        'Each route: driver, order count, status, expected cash, and how many are done.'),
              'when': T('«نقدي متوقّع» هو اللي السائق المفروض يرجع بيه — قارنه بالتحصيل آخر اليوم.',
-                       '"Expected cash" is what the driver should bring back — compare it with collections at day end.')},
+                       '"Expected cash" is what the driver should bring back — compare it with collections at day end.'),
+             'more': T(
+                 'كل كارت مسار فيه: السائق وعدد الطلبات، الحالة («مُخطّط»، «في الطريق»، «مكتمل»)، النقدي المتوقّع، و«تم x/y» مع شريط التقدّم.\n• القائمة بتتحدّث لوحدها، فتقدر تسيبها مفتوحة وتتابع.',
+                 'Each route card shows the driver and order count, the status ("Planned", "On the way", "Completed"), the expected cash, and "done x/y" with a progress bar.\n• The list refreshes by itself, so you can keep it open and watch.')},
             {'target': 'delivery-dispatch-launch', 'label': T('🚚 إطلاق المسار', '🚚 Launch route'),
              'text': T('يحوّل كل طلبات المسار لـ«في الطريق» مرة واحدة ويسجّل قبول السائق.',
                        'Moves every order of the route to "On the way" at once and records the driver as accepted.'),
              'warn': T('بيتخطى قبول السائق وتحقق موقع الاستلام. اضغطه بس والسائق خارج فعلاً بالطلبات.',
                        'It skips the driver\'s accept and the pickup location check. Press it only when the driver is really leaving.'),
-             'open_hint': T('يظهر على المسارات «مُخطّط» بس.', 'Shown only on "Planned" routes.')},
+             'open_hint': T('يظهر على المسارات «مُخطّط» بس.', 'Shown only on "Planned" routes.'),
+             'more': T(
+                 'بيظهر على المسارات «المُخطّطة» بس. اضغطه لحظة خروج السائق من الفرع.\n• كل طلبات المسار بتتحول مرة واحدة لـ«في الطريق»، والمسار يبقى «في الطريق 🚚».\n• بعدها السائق بيسجّل التسليم لكل محطة من تطبيقه.',
+                 'It shows only on "Planned" routes. Press it the moment the driver leaves the branch.\n• All the route\'s orders switch to "Out for delivery" at once and the route becomes "On the way 🚚".\n• The driver then records each stop\'s delivery from their app.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'delivery.driver',
@@ -364,7 +458,7 @@ SCREENS = [
                      'The driver\'s phone screen: today\'s orders in route order, with a call button and map, and the steps: accept → out → delivered with proof of delivery.'),
         'audience': T('السائقون (والمشرف للمتابعة).', 'Drivers (and supervisors to follow).'),
         'steps': [
-            T('«قبول الطلب» لكل طلب مكلَّف به — يطلب تفعيل الموقع لتأكيد الاستلام من الفرع.', '"Accept" each assigned order — location must be on to confirm pickup from the branch.'),
+            T('«قبول الطلب» لكل طلب مكلَّف به، وبعد الاستلام من الفرع «انطلقت 🚚» — ولو نطاق الفرع مفعّل، «انطلقت» محتاجة تفعيل الموقع وإنك تكون جنب الفرع.', '"Accept" each assigned order, then "Set off 🚚" after collecting from the branch — when the branch geofence is on, "Set off" needs your location on and you near the branch.'),
             T('«انطلقت» عند الخروج للعميل.', '"Out" when leaving for the customer.'),
             T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
               'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),
@@ -376,25 +470,43 @@ SCREENS = [
             {'target': 'delivery-driver-header', 'label': T('🚚 مهامي اليوم', '🚚 My tasks today'),
              'text': T('رقم مسارك، اتسلّم كام من كام، والنقدي المتوقّع اللي المفروض تحصّله.',
                        'Your route number, how many are delivered, and the expected cash you should collect.'),
-             'open_hint': T('الشاشة محتاجة ملف سائق مربوط بحسابك. مافيش مهام؟ كلّم المشرف.', 'This screen needs a driver profile linked to your account. No tasks? Ask your supervisor.')},
+             'open_hint': T('الشاشة محتاجة ملف سائق مربوط بحسابك. مافيش مهام؟ كلّم المشرف.', 'This screen needs a driver profile linked to your account. No tasks? Ask your supervisor.'),
+             'more': T(
+                 'لو عندك مسار النهارده هتلاقي رقمه، و«تم x/y» من المحطات، و«متوقّع نقدي» = الفلوس اللي المفروض تحصّلها في المسار كله.\n• الشاشة بتتحدّث لوحدها كل نص دقيقة تقريباً.',
+                 'If you have a route today you see its number, "done x/y" stops, and "Expected cash" = the money you should collect on the whole route.\n• The screen refreshes by itself about every half minute.')},
             {'target': 'delivery-driver-stops',
              'text': T('طلباتك بترتيب المسار: العميل، العنوان، المبلغ وطريقة الدفع، والحالة.',
-                       'Your orders in route order: customer, address, amount and payment method, and status.')},
+                       'Your orders in route order: customer, address, amount and payment method, and status.'),
+             'more': T(
+                 'كل كارت = عميل: رقم المحطة، الاسم، العنوان، المبلغ وطريقة الدفع (كاش 💵)، وحالة الطلب.\n• امشي بالترتيب اللي مسؤول التوزيع حدده.\n• لو مفيش مسار، بتظهر الطلبات المكلَّف بيها لوحدها.',
+                 'Each card = one customer: stop number, name, address, amount and payment (cash 💵), and the order status.\n• Follow the order set by the dispatcher.\n• If there is no route, your individually assigned orders show instead.')},
             {'target': 'delivery-driver-call', 'label': T('📞 اتصال', '📞 Call'),
              'text': T('يتصل بالعميل من الموبايل مباشرة.', 'Calls the customer straight from the phone.'),
-             'when': T('اتصل قبل ما توصل عشان تتأكد إن حد موجود.', 'Call before you arrive to make sure someone is there.')},
+             'when': T('اتصل قبل ما توصل عشان تتأكد إن حد موجود.', 'Call before you arrive to make sure someone is there.'),
+             'more': T(
+                 'بيفتح الاتصال على رقم العميل مباشرة من موبايلك.\n• اتصل قبل ما توصل بشوية تتأكد إنه موجود، أو لو العنوان مش واضح.',
+                 "It dials the customer's number straight from your phone.\n• Call a little before you arrive to check they are in, or if the address is unclear.")},
             {'target': 'delivery-driver-map', 'label': T('🗺️ خريطة', '🗺️ Map'),
              'text': T('يفتح عنوان العميل على خرائط جوجل.', 'Opens the customer address on Google Maps.'),
-             'open_hint': T('يظهر لو الطلب له موقع على الخريطة.', 'Shown when the order has a map location.')},
+             'open_hint': T('يظهر لو الطلب له موقع على الخريطة.', 'Shown when the order has a map location.'),
+             'more': T(
+                 'بيفتح عنوان العميل على خرائط جوجل في صفحة جديدة عشان تمشي بالملاحة.\n• الزر بيظهر بس لو الطلب متسجّل له موقع.',
+                 "Opens the customer's address on Google Maps in a new page so you can navigate.\n• The button shows only when the order has a saved location.")},
             {'target': 'delivery-driver-next', 'label': T('قبول الطلب · انطلقت 🚚', 'Accept · On my way 🚚'),
              'text': T('«قبول الطلب» أول ما يتكلّف بيه، و«انطلقت» وانت في الفرع ومعاك الطلب.',
                        '"Accept" once assigned, then "On my way" while at the branch with the order.'),
              'warn': T('«انطلقت» بيطلب الموقع؛ ممكن يترفض لو انت بعيد عن الفرع. فعّل GPS.',
-                       '"On my way" asks for your location; it may be refused if you are far from the branch. Turn on GPS.')},
+                       '"On my way" asks for your location; it may be refused if you are far from the branch. Turn on GPS.'),
+             'more': T(
+                 'الزر بيتغيّر مع الحالة:\n• «قبول الطلب» على الطلب المكلَّف — كده الكول سنتر يعرف إنك شفته.\n• «انطلقت 🚚» وانت في الفرع ومعاك الطلب: لازم تفعّل الموقع، والنظام ممكن يرفض لو انت بعيد عن الفرع.\n• طلبات المسار اللي اتطلق بتوصلك «في الطريق» على طول.',
+                 'The button changes with the status:\n• "Accept order" on an assigned order — so the call center knows you saw it.\n• "Set off 🚚" while at the branch with the order: location must be on, and the system may refuse if you are far from the branch.\n• Orders on a launched route reach you already "On the way".')},
             {'target': 'delivery-driver-deliver', 'label': T('تم التسليم ✅', 'Delivered ✅'),
              'text': T('عند العميل: يفتح نموذج إثبات التسليم.', 'At the customer: opens the proof-of-delivery form.'),
              'when': T('العميل مش موجود أو رفض؟ ماتضغطش هنا — كلّم المشرف يسجّلها.', 'Customer absent or refused? Do not press this — call your supervisor to record it.'),
-             'open_hint': T('يظهر على الطلب «في الطريق».', 'Shown on an order "On the way".')},
+             'open_hint': T('يظهر على الطلب «في الطريق».', 'Shown on an order "On the way".'),
+             'more': T(
+                 'بيفتح «إثبات التسليم»: اسم المستلِم، المبلغ المحصَّل (متعبّي بقيمة الطلب لو كاش)، صورة اختيارية، وملاحظة زي «سُلّم للبواب».\n• «تأكيد التسليم» بيسجّل موقعك الحالي كإثبات، وممكن يرفض لو انت بعيد عن عنوان العميل.\n• بعدها الطلب يبقى «تم التسليم» في لوحة التوصيل.',
+                 'Opens "Proof of delivery": recipient name, amount collected (pre-filled with the order value for cash), optional photo, and a note like "left with the doorman".\n• "Confirm delivery" saves your current location as proof, and may refuse if you are far from the customer\'s address.\n• The order then shows as "Delivered" on the delivery board.')},
             {'target': 'delivery-driver-pod-recipient', 'label': T('اسم المستلِم', 'Recipient name'),
              'text': T('مين استلم فعلاً — العميل نفسه، أو مثلاً البواب.', 'Who really received it — the customer, or e.g. the doorman.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
@@ -413,6 +525,7 @@ SCREENS = [
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'delivery.analytics',
@@ -435,10 +548,16 @@ SCREENS = [
             {'target': 'delivery-analytics-filters', 'label': T('اليوم · ٧ أيام · ٣٠ يوم · ٩٠ يوم', 'Today · 7 · 30 · 90 days'),
              'text': T('اختار الفترة بزر جاهز أو من/إلى. الافتراضي آخر ٣٠ يوم.', 'Pick the period with a ready button or from/to. The default is the last 30 days.')},
             {'target': 'delivery-analytics-branch', 'label': T('كل الفروع', 'All branches'),
-             'text': T('فرع واحد أو كل الفروع.', 'One branch or all branches.')},
+             'text': T('فرع واحد أو كل الفروع.', 'One branch or all branches.'),
+             'more': T(
+                 'بيقصر كل الأرقام على طلبات الفرع ده بس.\n• قارن الفروع ببعض بإنك تبدّل الفرع وتبص على نفس التبويب.',
+                 "Limits every figure to that branch's orders.\n• Compare branches by switching the branch while looking at the same tab.")},
             {'target': 'delivery-analytics-tabs', 'label': T('السائقين · المناطق · الورديات · الرضا', 'Drivers · Areas · Shifts · CSAT'),
              'text': T('أربع تقارير: أداء السائقين، الطلبات حسب المنطقة، توزيع الساعات، ورضا العملاء.',
-                       'Four reports: driver performance, orders by area, orders by hour, and customer satisfaction.')},
+                       'Four reports: driver performance, orders by area, orders by hour, and customer satisfaction.'),
+             'more': T(
+                 '• «أداء السائقين»: الطلبات والمُسلَّم ومعدل النجاح ومتوسط الوقت والنقد المحصَّل لكل سائق.\n• «خريطة المناطق»: الطلبات حسب المحافظة وأكتر المناطق طلباً.\n• «تقرير الورديات»: الطلبات على ساعات اليوم وساعة الذروة.\n• «رضا العملاء»: متوسط التقييم والتقييمات المنخفضة لمتابعتها.',
+                 '• "Driver performance": orders, delivered, success rate, average time and cash collected per driver.\n• "Area map": orders by governorate and the busiest areas.\n• "Shift report": orders by hour of day and the peak hour.\n• "Customer satisfaction": the average rating and low ratings to follow up.')},
             {'target': 'delivery-analytics-drivers', 'label': T('🚴 أداء السائقين', '🚴 Driver performance'),
              'text': T('لكل سائق: الإجمالي، المُسلَّم، الفاشل، معدل النجاح، متوسط الوقت، والنقدي المحصَّل.',
                        'Per driver: total, delivered, failed, success rate, average time and cash collected.'),
@@ -447,12 +566,19 @@ SCREENS = [
             {'target': 'delivery-analytics-content',
              'text': T('محتوى التبويب المختار. في «الورديات» ساعة الذروة، وفي «الرضا» التقييمات المنخفضة (1-2) للمتابعة.',
                        'The chosen tab\'s content. "Shifts" shows the peak hour; "CSAT" lists low ratings (1-2) to follow up.'),
-             'when': T('استخدم الورديات لتحديد عدد السائقين في كل وردية.', 'Use shifts to plan how many drivers each shift needs.')},
+             'when': T('استخدم الورديات لتحديد عدد السائقين في كل وردية.', 'Use shifts to plan how many drivers each shift needs.'),
+             'more': T(
+                 'المحتوى بيتغيّر على طول لما تغيّر الفترة أو الفرع أو التبويب.\n• لو مفيش طلبات في الفترة دي هتلاقي المساحة فاضية — جرّب فترة أطول.',
+                 'The content changes straight away when you change the period, branch or tab.\n• If there are no orders in that period the area is empty — try a longer period.')},
             {'target': 'delivery-analytics-header',  # from the GitHub-side tour
              'text': T('«تحليلات التوصيل»: أداء السائقين والمناطق والورديات ورضا العملاء لفترة تختارها.',
-                       '"Delivery analytics": driver, area, shift and customer-satisfaction performance for a period you choose.')},
+                       '"Delivery analytics": driver, area, shift and customer-satisfaction performance for a period you choose.'),
+             'more': T(
+                 'شاشة قراءة بس — مفيش فيها أي تعديل على الطلبات.\n• استخدمها في مراجعة الأسبوع أو الشهر: مين من السائقين محتاج متابعة، وأي منطقة أو ساعة محتاجة سائقين أكتر.',
+                 'A read-only screen — it changes nothing on the orders.\n• Use it in the weekly or monthly review: which drivers need follow-up, and which area or hour needs more drivers.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'delivery.mobile_board',
@@ -468,13 +594,22 @@ SCREENS = [
         'tour': [
             {'target': 'delivery-mobile-board-filters', 'label': T('النشطة · جاهز · في الطريق · الكل', 'Active · Ready · On the way · All'),
              'text': T('شرائح تختار بيها الطلبات اللي تشوفها.', 'Chips that choose which orders you see.'),
-             'when': T('«النشطة» = كل اللي لسه ماخلصش؛ ابدأ منها.', '"Active" = everything not finished yet; start there.')},
+             'when': T('«النشطة» = كل اللي لسه ماخلصش؛ ابدأ منها.', '"Active" = everything not finished yet; start there.'),
+             'more': T(
+                 'الشرائح: «النشطة» (الافتراضي)، «جاهز»، «في الطريق»، «تم التسليم»، و«الكل».\n• «النشطة» بتوريك اللي لسه ما خلصش — ابدأ بيها.',
+                 'The chips: "Active" (the default), "Ready", "On the way", "Delivered" and "All".\n• "Active" shows what is not finished yet — start there.')},
             {'target': 'delivery-mobile-board-list',
-             'text': T('الطلبات الأحدث فوق، وبتتحدث لوحدها كل دقيقة. «تحميل المزيد» تحت.', 'Newest orders first, refreshed every minute. "Load more" is at the bottom.')},
+             'text': T('الطلبات الأحدث فوق، وبتتحدث لوحدها كل دقيقة. «تحميل المزيد» تحت.', 'Newest orders first, refreshed every minute. "Load more" is at the bottom.'),
+             'more': T(
+                 'الأحدث فوق، والقائمة بتتحدّث لوحدها كل دقيقة.\n• في الآخر «تحميل المزيد» لو الطلبات كتير.\n• الشاشة دي للمتابعة بس؛ تغيير الحالة بيتم من لوحة التوزيع وتطبيق السائق.',
+                 'Newest at the top, and the list refreshes by itself every minute.\n• At the bottom, "Load more" when there are many orders.\n• This screen is for following only; status changes happen on the dispatch board and in the driver app.')},
             {'target': 'delivery-mobile-board-card',
              'text': T('رقم الطلب، الحالة، «متأخر»، العميل، المنطقة والسائق. اضغط يفتح التفاصيل.',
                        'Order number, status, "late", customer, area and driver. Tap to open the details.'),
-             'open_hint': T('محتاج طلب واحد على الأقل في الشريحة دي.', 'Needs at least one order in this chip.')},
+             'open_hint': T('محتاج طلب واحد على الأقل في الشريحة دي.', 'Needs at least one order in this chip.'),
+             'more': T(
+                 'الكارت فيه رقم الطلب وحالته وعلامة «متأخر»، والعميل والمنطقة والسائق ومن إمتى اتسجّل.\n• جوه التفاصيل «📍 إرسال رابط التتبع للعميل» بيفتح واتساب برابط يتابع بيه طلبه من غير تسجيل دخول.',
+                 'The card shows the order number, status and "late" flag, the customer, area, driver and how long ago it was logged.\n• Inside the details, "📍 Send tracking link" opens WhatsApp with a link the customer can follow without logging in.')},
             {'target': 'delivery-mobile-board-contact', 'label': T('📞 اتصال · 💬 واتساب · 🗺️ الموقع', '📞 Call · 💬 WhatsApp · 🗺️ Location'),
              'text': T('تتصل بالعميل، أو تفتح واتساب برسالة جاهزة، أو تشوف العنوان على الخريطة.',
                        'Call the customer, open WhatsApp with a ready message, or see the address on the map.'),
@@ -493,5 +628,6 @@ SCREENS = [
              'open_hint': T('افتح طلب له سجل حالات.', 'Open an order that has a status log.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

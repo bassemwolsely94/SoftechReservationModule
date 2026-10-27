@@ -119,6 +119,126 @@ MODULE = {
              'open_hint': T('جنب كل مكافأة في «🎁 استبدال النقاط».', 'Next to each reward under "🎁 Redeem points".')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول العملاء', 'A tour of the customers module'),
+            'summary': T('إزاي تلاقي أي عميل وترتّب العملاء حسب خطر الانقطاع، وبعدين تفتح ملفه الكامل (360°): مشترياته من SOFTECH وحجوزاته وأدويته المزمنة ونقاطه، وتسجّل ملاحظة أو تعمل له حجز.',
+                         'How to find any customer and sort customers by churn risk, then open their full (360°) profile: SOFTECH purchases, reservations, chronic medicines and points, and add a note or create a reservation.'),
+            'steps': [
+                {'target': 'nav-customers', 'nav': '/customers',
+                 'text': T('«العملاء» ← «العملاء».', '"Customers" → "Customers".'),
+                 'more': T('قائمة كل العملاء المسجّلين، مبنية على بيانات SOFTECH (المشتريات والمرتجعات) اللي بتتزامن هنا.\n'
+                           '• منها بتوصل لملف أي عميل.\n'
+                           '• الملف بيجمّع بيانات من موديولات تانية: الحجوزات، متابعة المزمن، والنقاط.',
+                           'The list of every registered customer, built on SOFTECH data (purchases and returns) synced here.\n'
+                           '• From it you reach any customer\'s profile.\n'
+                           '• The profile pulls data from other modules: reservations, chronic follow-up and points.')},
+                {'target': 'customers-list-search', 'route': '/customers',
+                 'text': T('ابحث بالاسم أو الهاتف أو كود SOFTECH.', 'Search by name, phone or SOFTECH code.'),
+                 'more': T('اكتب جزء من الاسم أو الرقم والنتايج بتتحدّث وانت بتكتب.\n'
+                           '• «مسح ✕» بيظهر جنب الفلاتر يرجّع القائمة كاملة.',
+                           'Type part of the name or number and results update as you type.\n'
+                           '• "Clear ✕" appears beside the filters to bring the full list back.')},
+                {'target': 'customers-list-churn', 'route': '/customers',
+                 'text': T('فلتر «خطر الانقطاع»: حرج، مرتفع، متوسط، مستقر.', 'The "churn risk" filter: critical, high, medium, stable.'),
+                 'more': T('خطر الانقطاع بيتحسب يومياً من انتظام شراء العميل.\n'
+                           '• «🚨 انقطاع حرج» = غاب أطول بكتير من عادته — دول أولى ناس بالاتصال.\n'
+                           '• استخدمه قبل حملة تواصل أو متابعة.',
+                           'Churn risk is calculated daily from how regularly the customer buys.\n'
+                           '• "🚨 Critical churn" = absent much longer than usual — call these first.\n'
+                           '• Use it before a contact campaign or follow-up.')},
+                {'target': 'customers-list-sort', 'route': '/customers',
+                 'text': T('الترتيب: الاسم، خطر الانقطاع، القيمة (LTV)، الغياب، أو آخر زيارة.', 'Sort: name, churn risk, value (LTV), absence or last visit.'),
+                 'more': T('• «الأعلى قيمة (LTV)» يوريك أهم العملاء من ناحية إجمالي الشراء.\n'
+                           '• «الأطول غياباً» يوريك اللي بقالهم كتير ما جوش.\n'
+                           '• الترتيب بيرجّعك للصفحة الأولى.',
+                           '• "Highest value (LTV)" shows your most important customers by total spend.\n'
+                           '• "Longest absent" shows those who have not come for a long time.\n'
+                           '• Changing the sort takes you back to page one.')},
+                {'target': 'customers-list-table', 'route': '/customers', 'wait': '/customers/:id',
+                 'text': T('افتح أي عميل — الجولة هتكمّل على ملفه. لو القائمة فاضية اضغط «إنهاء».',
+                           'Open any customer — the tour continues on their profile. If the list is empty, press "End".'),
+                 'more': T('الجدول فيه الاسم والهاتف والقناة/الشريحة وخطر الانقطاع وآخر زيارة والفرع.\n'
+                           '• اضغط على الصف يفتح ملف العميل الكامل.',
+                           'The table shows name, phone, channel/segment, churn risk, last visit and branch.\n'
+                           '• Click the row to open the customer\'s full profile.')},
+                {'target': 'customers-detail-identity', 'route': '/customers/:id',
+                 'text': T('اسم العميل ونوعه وكود SOFTECH.', 'The customer\'s name, type and SOFTECH code.'),
+                 'more': T('أول حاجة تتأكد منها إنك على العميل الصح.\n'
+                           '• علامة «💊 مزمن» معناها إن عنده أدوية مزمنة متابَعة.\n'
+                           '• كود SOFTECH هو اللي بيربط الملف بفواتيره ونقاطه.',
+                           'First make sure you are on the right customer.\n'
+                           '• The "💊 Chronic" badge means they have chronic medicines being followed.\n'
+                           '• The SOFTECH code links the profile to their invoices and points.')},
+                {'target': 'customers-detail-kpis', 'route': '/customers/:id',
+                 'text': T('ملخص: عدد الفواتير، الإجمالي بالجنيه، والحجوزات النشطة.', 'Summary: invoices, total in EGP, and active reservations.'),
+                 'more': T('تحتها البطاقة الجانبية: الشريحة، خطر الانقطاع، وأيام من آخر زيارة.\n'
+                           '• لو ظهر «⚡ يُنصح بالتواصل مع هذا العميل فوراً» كلّمه.',
+                           'Below it is the side card: segment, churn risk and days since the last visit.\n'
+                           '• If "⚡ Contact this customer now" shows, call them.')},
+                {'target': 'customers-detail-tabs', 'route': '/customers/:id',
+                 'text': T('التبويبات: الجدول الزمني، المشتريات، الحجوزات، المزمن، الصحة، النقاط وغيرها.', 'Tabs: timeline, purchases, reservations, chronic, health, points and more.'),
+                 'more': T('• «المشتريات»: فواتير ومرتجعات SOFTECH.\n'
+                           '• «💊 المزمن»: أدويته المزمنة وميعاد الصرف الجاي (من موديول المتابعة).\n'
+                           '• «🏥 الصحة»: الحساسيات والحمل والأطفال — معلومة حساسة.\n'
+                           '• «🏆 النقاط»: رصيد SOFTECH وتعديله لمن عنده صلاحية.',
+                           '• "Purchases": SOFTECH invoices and returns.\n'
+                           '• "💊 Chronic": chronic medicines and the next refill (from the follow-up module).\n'
+                           '• "🏥 Health": allergies, pregnancy and children — sensitive data.\n'
+                           '• "🏆 Points": the SOFTECH balance and adjusting it, for those allowed.')},
+                {'target': 'customers-detail-note', 'route': '/customers/:id',
+                 'text': T('اكتب ملاحظة عن العميل — Ctrl+Enter للحفظ.', 'Write a note about the customer — Ctrl+Enter saves.'),
+                 'more': T('في تبويب «الجدول الزمني»: سجّل أي حاجة زمايلك محتاجين يعرفوها (طلب خاص، تعليق طبي، شكوى).\n'
+                           '• بتتحفظ بـ«إرسال» أو Ctrl+Enter وتظهر في الجدول الزمني باسمك.',
+                           'On the "Timeline" tab: record anything colleagues should know (a special request, a medical comment, a complaint).\n'
+                           '• It saves with "Send" or Ctrl+Enter and shows on the timeline under your name.')},
+                {'target': 'customers-detail-new-reservation', 'route': '/customers/:id',
+                 'text': T('«+ حجز جديد» يفتح شاشة تسجيل حجز.', '"+ New reservation" opens the new reservation screen.'),
+                 'more': T('لما العميل يطلب صنف مش موجود، سجّل له حجز من هنا (موديول الحجوزات).\n'
+                           '• اختار العميل في شاشة الحجز وكمّل الأصناف ورقم التواصل.\n'
+                           '• الحجز بعد كده بيظهر في تبويب «الحجوزات» هنا.',
+                           'When the customer asks for an item that is not available, log a reservation from here (reservations module).\n'
+                           '• Pick the customer on the reservation screen and fill in the items and contact phone.\n'
+                           '• The reservation then appears in the "Reservations" tab here.')},
+            ],
+        },
+        {
+            'key': 'merge',
+            'title': T('دمج الأكواد المكررة', 'Merging duplicate codes'),
+            'summary': T('إزاي تراجع كودين SOFTECH لنفس العميل على نفس الرقم، تعلّمهم للدمج أو ترفضهم، ومراجع تاني يعتمد.',
+                         'How to review two SOFTECH codes for the same customer on the same phone, mark them for merge or reject them, and have another reviewer approve.'),
+            'roles': ['admin', 'supervisor', 'call_center'],
+            'steps': [
+                {'target': 'nav-customers-merge', 'nav': '/customers/merge',
+                 'text': T('«العملاء» ← «دمج الأكواد المكررة».', '"Customers" → "Merge duplicate codes".'),
+                 'more': T('نفس العميل أحياناً بيتعمل له أكتر من كود في SOFTECH، فنقاطه وتاريخه بيتقسموا.\n'
+                           '• الشاشة دي بتعرض الأزواج اللي الفحص الأسبوعي لقاها على رقم هاتف واحد.',
+                           'The same customer sometimes gets more than one SOFTECH code, so their points and history get split.\n'
+                           '• This screen lists the pairs the weekly scan found on one phone number.')},
+                {'target': 'customers-merge-status', 'route': '/customers/merge',
+                 'text': T('ابدأ بـ«مقترح»، والمعلَّم من غيرك في «بانتظار الاعتماد».', 'Start with "Proposed"; pairs marked by others are in "Awaiting approval".'),
+                 'more': T('الرقم جنب كل حالة هو عدد الأزواج فيها.\n'
+                           '• «معتمد» = جاهز للدمج الفعلي اللي بينفذه المدير.',
+                           'The number beside each status is its pair count.\n'
+                           '• "Approved" = ready for the actual merge run by the admin.')},
+                {'target': 'customers-merge-list', 'route': '/customers/merge',
+                 'text': T('قارن «الكود المكرر (يُغلق)» بـ«الكود الرئيسي».', 'Compare the "duplicate code (to be closed)" with the "main code".'),
+                 'more': T('لكل كود: الفرع، تاريخ الإنشاء، النقاط، آخر بيع والحالة، والهاتف المشترك.\n'
+                           '• اتأكد إنه فعلاً نفس الشخص مش حد من نفس الأسرة.',
+                           'For each code: branch, creation date, points, last sale and status, plus the shared phone.\n'
+                           '• Make sure it really is the same person, not a family member.')},
+                {'target': 'customers-merge-actions', 'route': '/customers/merge',
+                 'text': T('«تعليم للدمج» أو «اعتماد» أو «ليس نفس العميل».', '"Mark for merge", "Approve" or "Not the same customer".'),
+                 'more': T('• اللي يعلّم ما يقدرش يعتمد نفس الزوج — لازم مراجع تاني.\n'
+                           '• «ليس نفس العميل» بيطلب سبب.\n'
+                           '• الاعتماد هنا ما بيكتبش في SOFTECH.',
+                           '• Whoever marks a pair cannot approve it — another reviewer must.\n'
+                           '• "Not the same customer" asks for a reason.\n'
+                           '• Approving here does not write to SOFTECH.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -142,35 +262,53 @@ SCREENS = [
              'text': T('ابحث عن العميل بالاسم أو رقم الهاتف أو كود SOFTECH. النتيجة بتتحدّث وانت بتكتب.',
                        'Find the customer by name, phone number or SOFTECH code. Results update as you type.'),
              'when': T('أول خطوة لما عميل يكلمك أو يقف قدامك. الرقم أدق من الاسم.',
-                       'The first step when a customer calls or stands in front of you. The phone is more exact than the name.')},
+                       'The first step when a customer calls or stands in front of you. The phone is more exact than the name.'),
+             'more': T(
+                 'أسرع طريقة توصل لعميل: اكتب جزء من اسمه أو رقمه أو كوده، والنتايج بتتحدّث وانت بتكتب.\n• «مسح ✕» جنب الفلاتر بيرجّع القائمة كلها.',
+                 'The fastest way to reach a customer: type part of their name, phone or code, and results update as you type.\n• "Clear ✕" beside the filters brings the whole list back.')},
             {'target': 'customers-list-churn', 'label': T('كل العملاء', 'All customers'),
              'text': T('يحصر القائمة في درجة خطر انقطاع واحدة: حرج، مرتفع، متوسط، أو مستقر.',
                        'Limits the list to one churn-risk level: critical, high, medium or stable.'),
              'when': T('اختار «🚨 انقطاع حرج» عشان تلاقي العملاء اللي غابوا أطول بكتير من عادتهم وتتواصل معاهم.',
-                       'Choose "🚨 Critical churn" to find customers absent far longer than usual, and contact them.')},
+                       'Choose "🚨 Critical churn" to find customers absent far longer than usual, and contact them.'),
+             'more': T(
+                 'الاختيارات: «كل العملاء»، «🚨 انقطاع حرج»، «🔴 انقطاع مرتفع»، «⚠️ انقطاع متوسط»، «✅ مستقر».\n• بيتحسب يومياً من انتظام شراء العميل.\n• «حرج» = غاب أطول بكتير من عادته — ابدأ بيهم في الاتصالات.',
+                 'Options: "All customers", "🚨 Critical churn", "🔴 High churn", "⚠️ Medium churn", "✅ Stable".\n• It is calculated daily from how regularly the customer buys.\n• "Critical" = absent much longer than usual — start your calls with them.')},
             {'target': 'customers-list-sort', 'label': T('الترتيب: الاسم', 'Sort: name'),
              'text': T('رتّب حسب الأعلى خطر انقطاع، الأعلى قيمة (LTV)، الأطول غياباً، أو آخر زيارة.',
                        'Sort by highest churn risk, highest value (LTV), longest absence or last visit.'),
              'when': T('«الأعلى قيمة» مع «انقطاع حرج» = أهم ناس لازم تكلمهم النهارده.',
-                       '"Highest value" with "Critical churn" = the most important people to call today.')},
+                       '"Highest value" with "Critical churn" = the most important people to call today.'),
+             'more': T(
+                 '• «الأعلى خطر انقطاع» للمتابعة.\n• «الأعلى قيمة (LTV)» لأهم العملاء من ناحية إجمالي الشراء.\n• «الأطول غياباً» و«آخر زيارة» لمعرفة مين بقاله كتير ما جاش.',
+                 '• "Highest churn risk" for follow-up.\n• "Highest value (LTV)" for your top customers by total spend.\n• "Longest absent" and "Last visit" to see who has not come for a while.')},
             {'target': 'customers-list-clear', 'label': T('مسح ✕', 'Clear ✕'),
              'text': T('يمسح البحث وفلتر الانقطاع ويرجعك لكل العملاء.', 'Clears the search and the churn filter and shows all customers again.'),
              'open_hint': T('يظهر بعد ما تكتب في البحث أو تختار فلتر انقطاع.', 'Appears after you type a search or choose a churn filter.')},
             {'target': 'customers-list-table',
              'text': T('الجدول: الاسم وكود SOFTECH، الهاتف، الشريحة، خطر الانقطاع، آخر زيارة، والفرع المفضل. السطر الأحمر = حرج.',
-                       'The table: name and SOFTECH code, phone, segment, churn risk, last visit and preferred branch. A red row = critical.')},
+                       'The table: name and SOFTECH code, phone, segment, churn risk, last visit and preferred branch. A red row = critical.'),
+             'more': T(
+                 'الأعمدة: الاسم، الهاتف، القناة/الشريحة، خطر الانقطاع، آخر زيارة، والفرع.\n• اضغط على الصف يفتح ملف العميل (360°) بمشترياته وحجوزاته ونقاطه.',
+                 "Columns: name, phone, channel/segment, churn risk, last visit and branch.\n• Click a row to open the customer's 360° profile with purchases, reservations and points.")},
             {'target': 'customers-list-row',
              'text': T('اضغط أي سطر يفتح ملف العميل الكامل (360°).', 'Click any row to open the full customer profile (360°).'),
              'open_hint': T('محتاج نتيجة واحدة على الأقل في الجدول.', 'Needs at least one result in the table.')},
             {'target': 'customers-list-pages', 'label': T('← السابق · التالي', '← Previous · Next'),
              'text': T('التنقل بين الصفحات؛ كل صفحة 50 عميل.', 'Move between pages; 50 customers per page.'),
-             'open_hint': T('يظهر لما النتائج أكتر من صفحة.', 'Appears when the results fill more than one page.')},
+             'open_hint': T('يظهر لما النتائج أكتر من صفحة.', 'Appears when the results fill more than one page.'),
+             'more': T(
+                 'بيوضح «صفحة x من y» وعدد النتايج الكلي، و«← السابق» و«التالي →».\n• لو النتايج كتير، ضيّق بالبحث أو الفلتر أحسن من التقليب.',
+                 'Shows "page x of y" and the total results, with "← Previous" and "Next →".\n• With many results, narrow by search or filter rather than paging.')},
             {'target': 'customers-list-table', 'wait': '/customers/:id',
              'text': T('افتح أي عميل — الجولة هتكمّل على ملفه. لو القائمة فاضية اضغط «إنهاء».',
-                       'Open any customer — the tour continues on their profile. If the list is empty, press "End".')},
+                       'Open any customer — the tour continues on their profile. If the list is empty, press "End".'),
+             'more': T('اضغط على أي صف في الجدول، والجولة هتكمّل على صفحة ملفه وتشرح أجزاءها.',
+                       'Click any row in the table and the tour carries on on their profile page, explaining its parts.')},
         ],
         'tour_continue': 'customers.detail',
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'customers.detail',
@@ -208,7 +346,10 @@ SCREENS = [
             {'target': 'customers-detail-identity',
              'text': T('اسم العميل ونوعه، وعلامة «💊 مزمن» لو له أمراض مزمنة مسجلة، وكود SOFTECH.',
                        'The customer name and type, a "💊 Chronic" badge if chronic conditions are recorded, and the SOFTECH code.'),
-             'open_hint': T('افتح أي عميل من قائمة العملاء.', 'Open any customer from the customer list.')},
+             'open_hint': T('افتح أي عميل من قائمة العملاء.', 'Open any customer from the customer list.'),
+             'more': T(
+                 'الاسم ونوع العميل، وعلامة «💊 مزمن» لو عنده أدوية مزمنة متابَعة.\n• كود SOFTECH هو اللي بيربط الملف بفواتيره ونقاطه — اتأكد منه قبل أي تعديل.\n• السهم جنب الاسم بيرجّعك للقائمة.',
+                 'The name and customer type, and a "💊 Chronic" badge if they have chronic medicines being followed.\n• The SOFTECH code links the profile to their invoices and points — check it before any change.\n• The arrow beside the name takes you back to the list.')},
             {'target': 'customers-detail-account-state',
              'text': T('حالة الكود في SOFTECH لو مش نشط: مغلق، متوفى، مدموج في كود تاني، أو خارج نظام النقاط.',
                        'The code state in SOFTECH when not active: closed, deceased, merged into another code, or outside the points system.'),
@@ -222,7 +363,10 @@ SCREENS = [
             {'target': 'customers-detail-new-reservation', 'label': T('+ حجز جديد', '+ New reservation'),
              'text': T('يفتح نموذج حجز جديد. اختار العميل في النموذج بالاسم أو الهاتف.',
                        'Opens a new reservation form. Pick the customer in the form by name or phone.'),
-             'when': T('لما العميل يطلب صنف مش موجود دلوقتي.', 'When the customer asks for an item that is not here now.')},
+             'when': T('لما العميل يطلب صنف مش موجود دلوقتي.', 'When the customer asks for an item that is not here now.'),
+             'more': T(
+                 'استخدمه لما العميل يطلب صنف مش موجود أو عايز يحجزه.\n• في شاشة الحجز اختار العميل وكمّل الأصناف والقناة ورقم التواصل، وبعدين «✅ إنشاء الحجز».\n• الحجز بيظهر بعد كده في تبويب «الحجوزات» هنا.',
+                 'Use it when the customer asks for an item that is not available or wants it held.\n• On the reservation screen pick the customer and fill in the items, channel and contact phone, then "✅ Create reservation".\n• The reservation then appears in the "Reservations" tab here.')},
             {'target': 'customers-detail-unmet',
              'text': T('«طلبات لم تُلبَّ»: أصناف طلبها العميل وماخدهاش. اضغط أي صنف يفتح الطلب وإجراءاته.',
                        '"Unmet requests": items the customer asked for and did not get. Click one to open the request and its actions.'),
@@ -230,12 +374,18 @@ SCREENS = [
              'open_hint': T('يظهر بس لو للعميل طلبات لم تُلبَّ.', 'Shows only when the customer has unmet requests.')},
             {'target': 'customers-detail-tabs', 'label': T('الجدول الزمني · المشتريات · الحجوزات …', 'Timeline · Purchases · Reservations …'),
              'text': T('التبويبات: الجدول الزمني، المشتريات، الحجوزات، الأكثر شراءً، المزمن، الصحة، التاريخ الكامل، والنقاط.',
-                       'Tabs: timeline, purchases, reservations, most bought, chronic, health, full history and points.')},
+                       'Tabs: timeline, purchases, reservations, most bought, chronic, health, full history and points.'),
+             'more': T(
+                 '• «المشتريات»: فواتير ومرتجعات SOFTECH، و«الأدوية الأكثر شراءً».\n• «💊 المزمن» و«🏥 الصحة»: الأدوية المزمنة والحساسيات والحمل — معلومات حساسة.\n• «📅 التاريخ الكامل»: كل حدث بالترتيب.\n• «🏆 النقاط»: رصيد SOFTECH و«✎ تعديل النقاط» بسبب إلزامي لمن عنده صلاحية.',
+                 '• "Purchases": SOFTECH invoices and returns, and "Most-bought medicines".\n• "💊 Chronic" and "🏥 Health": chronic medicines, allergies and pregnancy — sensitive data.\n• "📅 Full history": every event in order.\n• "🏆 Points": the SOFTECH balance and "✎ Adjust points" with a required reason, for those allowed.')},
             {'target': 'customers-detail-note', 'label': T('إرسال', 'Send'),
              'text': T('اكتب ملاحظة أو تعليق عن العميل واضغط «إرسال» أو Ctrl+Enter. بتتسجل باسمك وفرعك.',
                        'Write a note or comment about the customer and press "Send" or Ctrl+Enter. It is saved under your name and branch.'),
              'warn': T('«حذف» تحت الملاحظة بيمسحها نهائياً من غير تأكيد.', '"Delete" under a note removes it for good, with no confirmation.'),
-             'open_hint': T('في تبويب «الجدول الزمني».', 'On the "Timeline" tab.')},
+             'open_hint': T('في تبويب «الجدول الزمني».', 'On the "Timeline" tab.'),
+             'more': T(
+                 'في تبويب «الجدول الزمني»: ملاحظة أو تعليق طبي أو تحديث، زي «بيفضّل التوصيل بعد العصر».\n• بتتحفظ بـ«إرسال» أو Ctrl+Enter وتظهر في الجدول الزمني باسمك عشان زمايلك يشوفوها.',
+                 'On the "Timeline" tab: a note, medical comment or update, like "prefers delivery in the afternoon".\n• It saves with "Send" or Ctrl+Enter and appears on the timeline under your name for colleagues to see.')},
             {'target': 'customers-detail-purchases-filter', 'label': T('الكل · مبيعات · مرتجعات', 'All · Sales · Returns'),
              'text': T('فواتير البيع والمرتجعات المتزامنة من SOFTECH. اختار مبيعات أو مرتجعات بس.',
                        'Sales and return invoices synced from SOFTECH. Choose sales only or returns only.'),
@@ -268,9 +418,13 @@ SCREENS = [
              'when': T('اكتب بس اللي العميل قاله فعلاً — من غير تشخيص.', 'Write only what the customer actually said — no diagnosis.')},
             {'target': 'customers-detail-kpis',  # from the GitHub-side tour
              'text': T('ملخص: عدد الفواتير، الإجمالي، والحجوزات النشطة.',
-                       'Summary: invoices, total, and active reservations.')},
+                       'Summary: invoices, total, and active reservations.'),
+             'more': T(
+                 '«فاتورة» = عدد فواتيره، «إجمالي (ج.م)» = قيمة مشترياته، و«حجز نشط» بيتلوّن لو عنده حجز مفتوح.\n• تحته البطاقة الجانبية: الشريحة وخطر الانقطاع وأيام من آخر زيارة؛ ولو ظهر «⚡ يُنصح بالتواصل مع هذا العميل فوراً» كلّمه.',
+                 '"Invoice" = number of invoices, "Total (EGP)" = their spend, and "Active reservation" is highlighted when one is open.\n• Below it is the side card: segment, churn risk and days since the last visit; if "⚡ Contact this customer now" shows, call them.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'customers.merge',
@@ -292,13 +446,22 @@ SCREENS = [
             {'target': 'customers-merge-status', 'label': T('مقترح · بانتظار الاعتماد · معتمد …', 'Proposed · Awaiting · Approved …'),
              'text': T('حالات الدمج وعدد كل حالة. «مقترح» للتعليم، و«بانتظار الاعتماد» لمراجع تاني.',
                        'Merge statuses with a count each. "Proposed" is for marking; "Awaiting approval" is for a second reviewer.'),
-             'when': T('الشاشة للمدير والمشرف والكول سنتر بس.', 'The screen is for admin, supervisor and call center only.')},
+             'when': T('الشاشة للمدير والمشرف والكول سنتر بس.', 'The screen is for admin, supervisor and call center only.'),
+             'more': T(
+                 '• «مقترح»: لقاه الفحص ولسه محدش راجعه — ابدأ هنا.\n• «بانتظار الاعتماد»: مراجع علّمه، ومستني مراجع تاني.\n• «معتمد» و«تم الدمج» و«فشل الدمج» و«مرفوض» للمتابعة.',
+                 '• "Proposed": found by the scan, not reviewed yet — start here.\n• "Awaiting approval": a reviewer marked it and it waits for another.\n• "Approved", "Merged", "Merge failed" and "Rejected" are for follow-up.')},
             {'target': 'customers-merge-strength', 'label': T('كل الدرجات', 'All strengths'),
              'text': T('قوي = نفس الاسم والعنوان، نفس الاسم، للمراجعة = اسم مشابه.',
                        'Strong = same name and address; same name; review = similar name.'),
-             'when': T('ابدأ بالقوي؛ «للمراجعة» محتاج تدقيق أكتر.', 'Start with strong; "review" needs a closer look.')},
+             'when': T('ابدأ بالقوي؛ «للمراجعة» محتاج تدقيق أكتر.', 'Start with strong; "review" needs a closer look.'),
+             'more': T(
+                 '«قوي» = نفس الاسم والعنوان، «نفس الاسم»، و«للمراجعة» = اسم مشابه بس — دي محتاجة تركيز أكتر.\n• في «مقترح» بيظهر زر «تعليم القوية (حتى 100)»، وفي «بانتظار الاعتماد» زر «اعتماد القوية التي علّمها غيري (حتى 100)».',
+                 '"Strong" = same name and address, "Same name", and "Review" = only a similar name — these need the most care.\n• Under "Proposed" a "Mark strong ones (up to 100)" button shows, and under "Awaiting approval" an "Approve strong ones marked by others (up to 100)" button.')},
             {'target': 'customers-merge-search', 'label': T('بحث بالكود', 'Search by code'),
-             'text': T('ابحث بكود العميل (PIC) عشان تلاقي زوج معيّن.', 'Search by customer code (PIC) to find a specific pair.')},
+             'text': T('ابحث بكود العميل (PIC) عشان تلاقي زوج معيّن.', 'Search by customer code (PIC) to find a specific pair.'),
+             'more': T(
+                 'اكتب كود PIC لما عميل يشتكي إن نقاطه ناقصة أو إن عنده كودين، وشوف لو له زوج هنا.',
+                 'Type a PIC when a customer complains their points are missing or that they have two codes, and see whether they have a pair here.')},
             {'target': 'customers-merge-row',
              'text': T('الكود المكرر (هيتقفل) ← الكود الرئيسي. قارن الفرع والإنشاء والنقاط وآخر بيع والحالة والهاتف المشترك.',
                        'Duplicate code (to be closed) → main code. Compare branch, creation, points, last sale, status and shared phone.'),
@@ -337,15 +500,25 @@ SCREENS = [
              'open_hint': T('في حالة «بانتظار الاعتماد».', 'In the "Awaiting approval" status.')},
             {'target': 'customers-merge-header',  # from the GitHub-side tour
              'text': T('دي شاشة الأكواد المكررة لنفس العميل على رقم هاتف واحد؛ الاعتماد هنا مش بيكتب في SOFTECH.',
-                       'This screen lists duplicate codes for one customer on one phone; approving here does not write to SOFTECH.')},
+                       'This screen lists duplicate codes for one customer on one phone; approving here does not write to SOFTECH.'),
+             'more': T(
+                 'لما نفس العميل يتعمل له كودين، نقاطه وتاريخه بيتقسموا عليهم.\n• الأسماء المختلفة على نفس الرقم بتتعتبر أسرة ومش بتتقترح.\n• الدمج الفعلي (نقل النقاط وغلق الكود المكرر) بينفذه المدير بعد الاعتماد.',
+                 'When one customer gets two codes, their points and history are split between them.\n• Different names on the same phone count as a family and are never proposed.\n• The actual merge (moving points and closing the duplicate) is run by the admin after approval.')},
             {'target': 'customers-merge-list',  # from the GitHub-side tour
              'text': T('كل صف بيقارن الكود المكرر بالكود الرئيسي: الفرع، تاريخ الإنشاء، النقاط، آخر بيع والحالة.',
-                       'Each row compares the duplicate code with the main code: branch, creation date, points, last sale and status.')},
+                       'Each row compares the duplicate code with the main code: branch, creation date, points, last sale and status.'),
+             'more': T(
+                 'يمين «الكود المكرر (يُغلق)» وجنبه «الكود الرئيسي»، ومعاهم الدرجة والهاتف المشترك ومين علّم أو اعتمد.\n• النظام بيختار الرئيسي: الأقدم إنشاءً ثم الأعلى نقاطاً ثم الأحدث بيعاً.',
+                 'The "Duplicate code (to be closed)" sits beside the "Main code", with the strength, shared phone and who marked or approved.\n• The system picks the main code: oldest first, then most points, then latest sale.')},
             {'target': 'customers-merge-actions',  # from the GitHub-side tour
              'text': T('على الأزواج المفتوحة: «تعليم للدمج» أو «اعتماد» (مراجع غير اللي علّم) أو تبديل الرئيسي أو «ليس نفس العميل».',
-                       'On open pairs: "Mark for merge", "Approve" (by a different reviewer), swap the main code, or "Not the same customer".')},
+                       'On open pairs: "Mark for merge", "Approve" (by a different reviewer), swap the main code, or "Not the same customer".'),
+             'more': T(
+                 '• «تعليم للدمج» على المقترح، و«اعتماد» على المعلَّم — ومقفول لو انت اللي علّمته.\n• «اجعل … الرئيسي» يبدّل الكودين لو المكرر هو الأصح.\n• «ليس نفس العميل» بيطلب «السبب» وبعدين «رفض».',
+                 '• "Mark for merge" on proposed pairs, and "Approve" on marked ones — disabled if you marked it yourself.\n• "Make … the main" swaps the codes when the duplicate is the better one.\n• "Not the same customer" asks for a "Reason", then "Reject".')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'customers.mobile',
@@ -363,18 +536,30 @@ SCREENS = [
         'tour': [
             {'target': 'customers-mobile-search', 'label': T('👥 بحث عن عميل', '👥 Find a customer'),
              'text': T('ابحث عن العميل بالاسم أو الهاتف أو الكود واختاره من النتائج.',
-                       'Search the customer by name, phone or code and pick them from the results.')},
+                       'Search the customer by name, phone or code and pick them from the results.'),
+             'more': T(
+                 'اكتب الاسم أو الرقم واختار العميل من النتايج.\n• بعد الاختيار بتظهر تحت نقاطه ومكافآته وآخر حجوزاته.',
+                 'Type the name or number and pick the customer from the results.\n• Once chosen, their points, rewards and latest reservations show below.')},
             {'target': 'customers-mobile-scan', 'label': T('📷 مسح رمز العميل (QR)', '📷 Scan customer QR'),
              'text': T('يفتح الكاميرا ويقرا رمز QR بتاع العميل ويفتح ملفه.', 'Opens the camera, reads the customer QR code and opens their profile.'),
              'when': T('لو الرمز مش معروف هتظهر رسالة «لم يُعثر على عميل».', 'If the code is unknown, a "customer not found" message appears.'),
-             'open_hint': T('يظهر قبل ما تختار عميل.', 'Shows before a customer is chosen.')},
+             'open_hint': T('يظهر قبل ما تختار عميل.', 'Shows before a customer is chosen.'),
+             'more': T(
+                 '«📷 مسح رمز العميل (QR)» بيفتح الكاميرا؛ وجّهها على الرمز اللي مع العميل.\n• لو الرمز مش معروف هتظهر رسالة «لم يُعثر على عميل بهذا الرمز».\n• الزر بيختفي بعد ما تختار عميل.',
+                 '"📷 Scan customer QR" opens the camera; point it at the customer\'s code.\n• If the code is unknown you see "No customer found for this code".\n• The button hides once a customer is chosen.')},
             {'target': 'customers-mobile-loyalty', 'label': T('🏆 الولاء', '🏆 Loyalty'),
              'text': T('نقاط الشراء (SOFTECH) ونقاط الإحالة، ومستوى العميل.', 'Purchase points (SOFTECH) and referral points, and the customer tier.'),
-             'open_hint': T('اختار عميل الأول.', 'Choose a customer first.')},
+             'open_hint': T('اختار عميل الأول.', 'Choose a customer first.'),
+             'more': T(
+                 'رقمين: «نقاط الشراء (SOFTECH)» اللي بيكسبها من مشترياته، و«نقاط الإحالة» الإضافية.\n• فوقهم درجة الولاء لو العميل له درجة.',
+                 'Two numbers: "Purchase points (SOFTECH)" earned from purchases, and the extra "Referral points".\n• Above them is the loyalty tier if the customer has one.')},
             {'target': 'customers-mobile-rewards', 'label': T('🎁 استبدال النقاط', '🎁 Redeem points'),
              'text': T('المكافآت المتاحة وتكلفة كل واحدة بالنقاط. الاستبدال بنقاط الإحالة.',
                        'Available rewards and the points each costs. Redemption uses referral points.'),
-             'open_hint': T('يظهر لعميل مختار لما تكون فيه مكافآت متاحة.', 'Shows for a chosen customer when rewards are available.')},
+             'open_hint': T('يظهر لعميل مختار لما تكون فيه مكافآت متاحة.', 'Shows for a chosen customer when rewards are available.'),
+             'more': T(
+                 'كل مكافأة بعدد نقاطها؛ «استبدال» بيعمل طلب استبدال «بانتظار الاعتماد» من الكول سنتر — مش بيخصم على طول.\n• لو النقاط مش كفاية الزر بيبقى «رصيد غير كافٍ».',
+                 'Each reward shows its points cost; "Redeem" creates a redemption request "awaiting approval" by the call center — nothing is deducted straight away.\n• If the points are not enough the button reads "Not enough balance".')},
             {'target': 'customers-mobile-redeem', 'label': T('استبدال', 'Redeem'),
              'text': T('يعمل طلب استبدال للمكافأة بانتظار الاعتماد. «رصيد غير كافٍ» = النقاط مش كفاية.',
                        'Creates a redemption request for the reward, awaiting approval. "Not enough balance" = too few points.'),
@@ -383,8 +568,12 @@ SCREENS = [
              'open_hint': T('جنب كل مكافأة في «🎁 استبدال النقاط».', 'Next to each reward under "🎁 Redeem points".')},
             {'target': 'customers-mobile-reservations', 'label': T('📋 آخر الحجوزات', '📋 Latest reservations'),
              'text': T('آخر 10 حجوزات للعميل وحالة كل واحد.', 'The customer last 10 reservations and the status of each.'),
-             'open_hint': T('اختار عميل الأول.', 'Choose a customer first.')},
+             'open_hint': T('اختار عميل الأول.', 'Choose a customer first.'),
+             'more': T(
+                 'آخر 10 حجوزات بالصنف وحالته — مفيد لو العميل جاي يسأل «الصنف اللي حجزته وصل؟».',
+                 'The last 10 reservations with the item and status — handy when a customer asks "has the item I reserved arrived?".')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

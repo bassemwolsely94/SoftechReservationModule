@@ -224,6 +224,7 @@ function FlowEditor({ flow, onChange, focusStep }) {
   const focusRef = useRef(null)
   useEffect(() => { focusRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [])
   const setStep = (i, text) => onChange({ ...flow, steps: flow.steps.map((x, j) => (j === i ? { ...x, text } : x)) })
+  const setMore = (i, more) => onChange({ ...flow, steps: flow.steps.map((x, j) => (j === i ? { ...x, more } : x)) })
   return (
     <div className="space-y-3">
       <div className="text-xs text-muted">الخطوات والأزرار ثابتة حسب الشاشات — عدّل العنوان والملخص ونص كل خطوة. الصفحة اللي الخطوة بتظهر فيها مكتوبة جنب رقمها.</div>
@@ -239,6 +240,8 @@ function FlowEditor({ flow, onChange, focusStep }) {
             {i === focusStep && <span className="text-amber-700 font-semibold"> — أغلب الناس بيقفوا قبل الخطوة دي: وضّح النص</span>}
           </div>
           <TField value={st.text} rows={2} required onChange={(v) => setStep(i, v)} />
+          <div className="text-[10px] text-faint">الشرح الإضافي تحت السطر (اختياري)</div>
+          <TField value={st.more} rows={3} onChange={(v) => setMore(i, v)} />
         </div>
       ))}
     </div>

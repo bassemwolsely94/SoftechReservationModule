@@ -193,6 +193,8 @@ def validate_flow(data, base):
     for i, (st, b) in enumerate(zip(steps, base['steps'])):
         if not isinstance(st, dict) or st.get('target') != b['target'] or not _t_ok(st.get('text')):
             errs.append(f'خطوة {i + 1}: النص العربي مطلوب')
+        elif st.get('more') not in (None, '') and not isinstance(st.get('more'), dict):
+            errs.append(f'خطوة {i + 1}: الشرح الإضافي: صيغة غير صالحة')
     return errs
 
 
@@ -200,7 +202,9 @@ def clean_flow(data):
     def t(v):
         return {'ar': v['ar'].strip(), 'en': (v.get('en') or '').strip()}
     out = {'title': t(data['title']),
-           'steps': [{'target': st['target'], 'text': t(st['text'])} for st in data['steps']]}
+           'steps': [{'target': st['target'], 'text': t(st['text']),
+                      **({'more': t(st['more'])} if isinstance(st.get('more'), dict)
+                         and (st['more'].get('ar') or '').strip() else {})} for st in data['steps']]}
     if isinstance(data.get('summary'), dict) and (data['summary'].get('ar') or '').strip():
         out['summary'] = t(data['summary'])
     return out

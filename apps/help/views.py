@@ -462,6 +462,7 @@ def manual(request):
             out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
                                 'summary': m['summary'], 'workflows': m.get('workflows') or []})
         item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item['buttons'] = [{'text': t['text'], 'more': t.get('more')} for t in eff.get('tour') or []]
         item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
                     steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
                     tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])

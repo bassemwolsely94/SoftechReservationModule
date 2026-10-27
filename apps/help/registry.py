@@ -64,12 +64,13 @@ from .content import MODULE_FILES
 EDITABLE_FIELDS = ('title', 'summary', 'audience', 'steps', 'tabs', 'tips', 'faq', 'notes', 'tour')
 
 # «اعرض لي» steps: the text parts a trainer may edit (target / screen / perm follow the code)
-TOUR_TEXT_KEYS = ('label', 'text', 'when', 'warn', 'open_hint')
+TOUR_TEXT_KEYS = ('label', 'text', 'when', 'warn', 'open_hint', 'more')
 # route / wait / nav: cross-page steps («اعرض لي» flows, list → detail continuation) —
 # see tour_flow() below
 TOUR_STEP_KEYS = {'target', *TOUR_TEXT_KEYS, 'route', 'wait', 'nav'}
 JOURNEY_STEP_KEYS = TOUR_STEP_KEYS | {'screen', 'perm'}
-TOUR_LIMITS = {'label': 40, 'text': 160, 'when': 160, 'warn': 160, 'open_hint': 160}
+# more = the longer explanation shown under the step (help tours)
+TOUR_LIMITS = {'label': 40, 'text': 160, 'when': 160, 'warn': 160, 'open_hint': 160, 'more': 600}
 # a step on a button whose anchor has one of these words must carry a ⚠ warning
 TOUR_WARN_WORDS = {'push', 'post', 'approve', 'reject', 'discount', 'send', 'cancel', 'delete',
                    'close', 'settle', 'writeback', 'softech', 'flush'}
@@ -139,7 +140,7 @@ def _step_text(base, edited):
 
 def _merge_tour(base_tour, edited_tour):
     """Like tabs: the steps and their targets follow the code; trainers edit the text
-    (every text part: label / text / when / warn / open_hint).
+    (every text part: label / text / when / warn / open_hint / more).
     Matched by position AND target first (a tour may point at the same element twice, e.g.
     "this is the list" then "open a row"); an edit saved before steps were added still
     applies to a step whose target appears once. A step the code replaced keeps the repo text."""

@@ -164,7 +164,7 @@ function PanelBody() {
               </div>
             )}
             {data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes)}
+              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
                       className="w-full mb-4 flex items-center gap-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 text-start">
                 <span className="text-2xl">👆</span>
                 <span className="flex-1">
@@ -226,7 +226,7 @@ export function FlowList({ flows, role, lang, onStart, mobile = null }) {
         🧭 {lang === 'en' ? 'Workflow tours (across screens)' : 'جولات دورة العمل (بين الشاشات)'}
       </h3>
       {mine.map((f) => (
-        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps)}
+        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
                 className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
           <div className="text-sm font-semibold text-content">{f.mobile ? '📱' : '👆'} {pick(f.title, lang)}</div>
           {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}

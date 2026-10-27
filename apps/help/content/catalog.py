@@ -1,5 +1,7 @@
 from . import T
 
+CHANGE_NOTE = T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour')
+
 MODULE = {
     'key': 'catalog', 'group': 'inventory', 'icon': '💊',
     'title': T('المنتجات والمخزون', 'Products & stock'),
@@ -85,6 +87,147 @@ MODULE = {
              'open_hint': T('اختار صنف من البحث.', 'Pick an item from the search.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول المنتجات والمخزون', 'A tour of the Products & stock module'),
+            'summary': T('من البحث عن صنف في الكتالوج، لصحة المخزون في «لوحة المخزون»، لتنظيم الكتالوج في «ذكاء الكتالوج» و«التوصيات الذكية»، '
+                         'وفي الآخر نفتح صفحة صنف وملفه الشامل — وإزاي كل شاشة بتغذي التانية.',
+                         'From searching an item in the catalog, to stock health in the "Inventory dashboard", to organising the catalog in "Catalog intelligence" '
+                         'and "Smart recommendations", and finally opening an item page and its full file — and how each screen feeds the next.'),
+            'roles': ['admin', 'pharmacist', 'purchasing'],
+            'steps': [
+                {'target': 'nav-products', 'nav': '/products',
+                 'text': T('نبدأ من «المنتجات» في القائمة — كتالوج كل الأصناف.',
+                           'Start at "Products" in the menu — the catalog of every item.'),
+                 'more': T('الكتالوج بيتحدّث من SOFTECH: الاسم والكود والباركود والسعر والتوافر في الفروع.\n'
+                           '• ده المكان اللي بتبدأ منه أي سؤال عن صنف: موجود؟ بكام؟ في أنهي فرع؟\n'
+                           '• الشاشة دي للقراءة والبحث — مفيش فيها أي تعديل على SOFTECH.',
+                           'The catalog is updated from SOFTECH: name, code, barcode, price and availability by branch.\n'
+                           '• This is where any question about an item starts: do we have it? at what price? in which branch?\n'
+                           '• This screen is for search and reading — nothing here changes SOFTECH.')},
+                {'target': 'catalog-products-search', 'route': '/products',
+                 'text': T('اكتب الاسم أو الكود أو الباركود أو المادة الفعالة.',
+                           'Type the name, code, barcode or active ingredient.'),
+                 'more': T('النتائج بتظهر وانت بتكتب، من غير ما تضغط Enter. في تبويب «الكتالوج» لازم تكتب حاجة الأول عشان تظهر نتائج.\n'
+                           '• جنبها 📷 لمسح الباركود بالكاميرا.\n'
+                           '• افتكر: الاسم العلمي في SOFTECH مش دقيق لكل الأصناف، فمتعتمدش عليه لوحده في اختيار بديل.',
+                           'Results appear as you type, no Enter needed. On the "Catalog" tab you must type something first to see results.\n'
+                           '• Next to it, 📷 scans a barcode with the camera.\n'
+                           '• Remember: the SOFTECH scientific name is not accurate for every item, so do not rely on it alone to pick an alternative.')},
+                {'target': 'catalog-products-filters', 'route': '/products',
+                 'text': T('«⚙ فلتر» يضيّق النتائج بالتوافر والتصنيف والشكل والتأمين.',
+                           '"⚙ Filter" narrows results by availability, class, form and insurance.'),
+                 'more': T('بيفتح لوحة جانبية: التوافر، التصنيف العلاجي، الشكل الصيدلي، التأمين الصحي، وخيارات زي ثلاجة ووصفة ومزمن وسريع التداول ولديه صورة.\n'
+                           '• الرقم الأصفر على الزر = عدد الفلاتر الشغالة.\n'
+                           '• زر «⬇ Excel» جنبه بيصدّر النتائج الحالية بنفس البحث والفلاتر.',
+                           'Opens a side panel: availability, therapeutic class, dosage form, health insurance, and options like fridge, prescription, chronic, fast-moving and has image.\n'
+                           '• The yellow number on the button = how many filters are on.\n'
+                           '• The "⬇ Excel" button next to it exports the current results with the same search and filters.')},
+                {'target': 'catalog-products-tabs', 'route': '/products',
+                 'text': T('التبويبات: الكتالوج، سريع التداول، مخزون منخفض، الباقات، آخر تحديث.',
+                           'Tabs: catalog, fast moving, low stock, bundles, recently updated.'),
+                 'more': T('• «سريع التداول»: الأصناف اللي لازم ماتنقصش أبداً.\n'
+                           '• «مخزون منخفض»: الأصناف اللي توافرها «كميات محدودة» — راجعها لتحويل أو طلب.\n'
+                           '• «الباقات»: الباقات النشطة المتعرّفة في «ذكاء الكتالوج».\n'
+                           '• «آخر تحديث»: آخر الأصناف اللي اتحدّثت من SOFTECH.',
+                           '• "Fast moving": items that must never run out.\n'
+                           '• "Low stock": items whose availability is "limited quantities" — review them for a transfer or an order.\n'
+                           '• "Bundles": the active bundles set up in "Catalog intelligence".\n'
+                           '• "Recently updated": the latest items updated from SOFTECH.')},
+                {'target': 'nav-inventory', 'nav': '/inventory',
+                 'text': T('بعدها «لوحة المخزون»: صحة المخزون في الشبكة كلها.',
+                           'Next, the "Inventory dashboard": stock health across the whole network.'),
+                 'more': T('الكتالوج بيقولك الصنف موجود ولا لأ؛ لوحة المخزون بتقولك فين المشكلة: نواقص، فائض، راكد، ورأس مال محبوس.\n'
+                           '• أرقامها جاية من آخر تشغيل لمحرك الطلب في المشتريات.',
+                           'The catalog tells you whether an item is there; the inventory dashboard tells you where the problem is: shortages, overstock, dead stock and tied-up capital.\n'
+                           '• Its numbers come from the last run of the purchasing demand engine.')},
+                {'target': 'catalog-inventory-kpis', 'route': '/inventory',
+                 'text': T('المؤشرات: إجمالي الأصناف، الناقصة، الفائضة، والراكدة بلا مبيعات.',
+                           'Indicators: total items, short, overstocked, and dead stock with no sales.'),
+                 'more': T('تحت «أصناف ناقصة» قيمة الفجوة، وتحت «أصناف فائضة» قيمة الفائض بالجنيه.\n'
+                           '• لو فيه نواقص بيظهر شريط أحمر بعددها.\n'
+                           '• الأرقام بتتغير حسب فلاتر الفرع ونوع الدواء وفئة ABC اللي فوق.',
+                           'Under "Short items" is the gap value, and under "Overstocked items" the excess value in pounds.\n'
+                           '• If there are shortages, a red banner shows how many.\n'
+                           '• The numbers follow the branch, medicine type and ABC filters above.')},
+                {'target': 'catalog-inventory-tabs', 'route': '/inventory',
+                 'text': T('النواقص والفائض والراكد بالتفصيل، وبالفرع وبنوع الدواء ورأس المال.',
+                           'Shortages, overstock and dead stock in detail, plus by branch, by medicine type and capital.'),
+                 'more': T('الفكرة: الفائض في فرع ممكن يغطي النقص في فرع تاني بتحويل بدل الشراء.\n'
+                           '• التنفيذ نفسه بيتم من التحويلات أو المشتريات — اللوحة دي للمتابعة والقرار بس.',
+                           'The idea: overstock in one branch can cover a shortage in another by transfer instead of buying.\n'
+                           '• The action itself happens in transfers or purchasing — this board is for monitoring and deciding only.')},
+                {'target': 'nav-catalog-intelligence', 'nav': '/catalog-intelligence',
+                 'text': T('«ذكاء الكتالوج»: تنظيم الأصناف وتحسين بياناتها.',
+                           '"Catalog intelligence": organise items and improve their data.'),
+                 'more': T('هنا بتربط الأصناف اللي هي نفس المنتج بأشكال مختلفة، وتعمل باقات، وتشوف اللي بيتشترى مع بعض، وتحسّن جودة البيانات.\n'
+                           '• الباقات اللي بتعملها هنا هي اللي بتظهر في تبويب «الباقات» في الكتالوج.',
+                           'Here you link items that are the same product in different forms, create bundles, see what is bought together, and improve data quality.\n'
+                           '• The bundles you create here are what shows in the catalog\'s "Bundles" tab.')},
+                {'target': 'catalog-intelligence-tabs', 'route': '/catalog-intelligence',
+                 'text': T('مجموعات المتغيرات، الباقات، يُشترى معه عادةً، وإثراء الكتالوج.',
+                           'Variant groups, bundles, frequently bought together, and catalog enrichment.'),
+                 'more': T('• «مجموعات المتغيرات» و«الباقات» بتتعدّل يدوياً.\n'
+                           '• «يُشترى معه عادةً» للقراءة — بيحسبه محرك التوصيات.\n'
+                           '• «إثراء الكتالوج»: اقتراحات الذكاء الاصطناعي بتتراجع قبل النشر، والبدائل الدوائية عمرها ما بتتطبّق تلقائياً.',
+                           '• "Variant groups" and "Bundles" are edited by hand.\n'
+                           '• "Frequently bought together" is read-only — computed by the recommendation engine.\n'
+                           '• "Catalog enrichment": AI suggestions are reviewed before publishing, and drug alternatives are never applied automatically.')},
+                {'target': 'nav-recommendations', 'nav': '/recommendations',
+                 'text': T('«التوصيات الذكية»: الأصناف اللي بتتشترى مع بعض وتوصيات كل عميل.',
+                           '"Smart recommendations": items bought together and per-customer suggestions.'),
+                 'more': T('المحرك بيحلل الفواتير ويطلع أزواج الأصناف اللي بتتشترى سوا، ويقترح لكل عميل أصناف حسب مشترياته.\n'
+                           '• فيه فلتر سلامة بيستبعد اللي يتعارض مع أدويته المزمنة — ومع ذلك أي اقتراح لمريض بيرجع لحكم الصيدلي.',
+                           'The engine analyses invoices to find item pairs bought together, and suggests items to each customer from their purchases.\n'
+                           '• A safety filter excludes anything that conflicts with their chronic medicines — still, any suggestion to a patient is the pharmacist\'s call.')},
+                {'target': 'catalog-recommendations-status', 'route': '/recommendations',
+                 'text': T('حالة آخر تشغيل للمحرك ونتايجه.',
+                           'The engine\'s last run status and results.'),
+                 'more': T('بتشوف آخر تشغيل نجح ولا فشل وامتى، ولو نجح: عدد الاقترانات والفواتير والعملاء.\n'
+                           '• «▶ تشغيل المحرك» بيظهر للمدير والمشرف بس، ومينفعش تشغيلين في نفس الوقت.',
+                           'You see whether the last run succeeded or failed and when; on success: the number of pairs, invoices and customers.\n'
+                           '• "▶ Run engine" shows only for admins and supervisors, and two runs cannot happen at once.')},
+                {'target': 'nav-products', 'nav': '/products',
+                 'text': T('نرجع للكتالوج نفتح صنف بعينه.',
+                           'Back to the catalog to open one item.'),
+                 'more': T('كل اللي فات بيتجمّع في صفحة الصنف: سعره وتوافره وبدائله والطلب المفتوح عليه.\n'
+                           '• في الخطوة الجاية ابحث عن صنف وافتحه.',
+                           'Everything so far comes together on the item page: its price, availability, alternatives and open demand.\n'
+                           '• In the next step, search for an item and open it.')},
+                {'target': 'catalog-products-results', 'route': '/products', 'wait': '/products/:id',
+                 'text': T('ابحث عن صنف واضغط عليه عشان تفتح صفحته. لو مش عايز اضغط «إنهاء».',
+                           'Search for an item and click it to open its page. If you prefer not to, press "End".'),
+                 'more': T('في النتايج: الضغط على الصنف يفتح صفحته، وزر المقارنة يضيفه للمقارنة (لحد 3 أصناف) في شريط تحت الشاشة.\n'
+                           '• تقدر تبدّل بين عرض الشبكة ⊞ والقائمة ≡.',
+                           'In the results: clicking an item opens its page, and the compare button adds it to the comparison (up to 3 items) in a bar at the bottom.\n'
+                           '• You can switch between grid ⊞ and list ≡ view.')},
+                {'target': 'catalog-product-summary', 'route': '/products/:id',
+                 'text': T('ملخص الصنف: التوافر والتصنيف والكود والباركود.',
+                           'The item summary: availability, class, code and barcode.'),
+                 'more': T('شارة التوافر بتقولك: متاح، كميات محدودة، أو غير متاح — من غير كميات.\n'
+                           '• شارات «يحتاج وصفة طبية Rx» و«دواء مزمن» و«سريع التداول» لو تنطبق، وتنبيه الثلاجة لو الصنف بيتحفظ بارد.',
+                           'The availability badge tells you: available, limited quantities, or unavailable — without quantities.\n'
+                           '• "Prescription Rx", "Chronic" and "FMI" badges when they apply, and a fridge note when the item is kept cold.')},
+                {'target': 'catalog-product-tabs', 'route': '/products/:id',
+                 'text': T('تبويبات الصنف: التعليمات، التوافر بالفروع، المشابهة والمرتبطة، والطلب المفتوح.',
+                           'Item tabs: instructions, branch availability, similar and related, and open demand.'),
+                 'more': T('• «التوافر بالفروع» يقولك أقرب فرع عنده الصنف.\n'
+                           '• «الطلب المفتوح» بيوريك طلبات العملاء والنواقص المسجّلة عليه.\n'
+                           '• المنتجات المشابهة والمرتبطة للمساعدة بس — أي بديل لمريض محتاج قرار صيدلي.',
+                           '• "Branch availability" tells you the nearest branch that has the item.\n'
+                           '• "Open demand" shows customer requests and recorded shortages for it.\n'
+                           '• Similar and related products are a help only — any alternative for a patient needs a pharmacist\'s decision.')},
+                {'target': 'catalog-product-intel', 'route': '/products/:id',
+                 'text': T('«🔬 ملف الصنف الشامل» فيه كل بيانات الصنف من كل الموديولات.',
+                           '"🔬 Full item profile" holds all of the item\'s data from every module.'),
+                 'more': T('بيفتح صفحة فيها بيانات SOFTECH (للقراءة)، والإثراء، والمواد الفعّالة، ومؤشرات الطلب، وتاريخ الشراء من الموردين.\n'
+                           '• ربط المواد الفعّالة هناك هو المصدر الموثوق للبدائل، مش الاسم العلمي.',
+                           'Opens a page with SOFTECH data (read-only), enrichment, active ingredients, demand indicators and supplier purchase history.\n'
+                           '• The active-ingredient links there are the reliable source for alternatives, not the scientific name.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -115,10 +258,16 @@ SCREENS = [
                        'Search by name, code, barcode or active ingredient. On the "Catalog" tab you must type first before results show.'),
              'when': T('أسرع طريقة لما عميل يسأل على صنف أو تمسك علبة في إيدك.', 'The fastest way when a customer asks about an item or you hold a pack.'),
              'warn': T('المادة الفعالة والاسم العلمي جايين من SOFTECH ومش نضاف. ماتعتمدش عليهم لوحدهم في أي بديل.',
-                       'Active ingredient and scientific name come from SOFTECH and are not clean. Never rely on them alone for any alternative.')},
+                       'Active ingredient and scientific name come from SOFTECH and are not clean. Never rely on them alone for any alternative.'),
+             'more': T(
+                 'النتائج بتظهر وانت بتكتب من غير ما تضغط Enter. في تبويب «الكتالوج» لازم تكتب حاجة الأول عشان تظهر نتائج (الكتالوج كبير جداً).\n• «×» جوه الخانة بيمسح البحث.\n• الاسم العلمي في SOFTECH مش دقيق لكل الأصناف — متعتمدش عليه لوحده في البدائل.',
+                 'Results appear as you type, no Enter needed. On the "Catalog" tab you must type something first to see results (the catalog is very large).\n• The "×" inside the box clears the search.\n• The SOFTECH scientific name is not accurate for every item — do not rely on it alone for alternatives.')},
             {'target': 'catalog-products-scan', 'label': T('📷', '📷'),
              'text': T('يفتح ماسح الباركود بالكاميرا. لو الباركود معروف يفتح صفحة الصنف على طول، ولو لأ يتكتب في البحث.',
-                       'Opens the camera barcode scanner. A known barcode opens the item page directly; otherwise it goes into the search box.')},
+                       'Opens the camera barcode scanner. A known barcode opens the item page directly; otherwise it goes into the search box.'),
+             'more': T(
+                 'بيفتح نافذة الكاميرا؛ وجّهها على الباركود. لو الصنف اتعرف بتفتح صفحته على طول، ولو لأ الباركود بيتحط في خانة البحث.\n• لو المتصفح مش سامح بالكاميرا، اكتب الباركود يدوي في «أدخل الباركود يدوياً».',
+                 'Opens the camera window; point it at the barcode. If the item is recognised its page opens directly; if not, the barcode goes into the search box.\n• If the browser does not allow the camera, type the barcode in "Enter barcode manually".')},
             {'target': 'catalog-products-export', 'label': T('⬇ Excel', '⬇ Excel'),
              'text': T('ينزّل قائمة أسعار للنتائج الحالية بنفس البحث والفلاتر (حتى 10,000 صنف).',
                        'Downloads a price list of the current results with the same search and filters (up to 10,000 items).'),
@@ -126,10 +275,16 @@ SCREENS = [
                        'The file includes purchase price and margin. Internal data: never send it to a customer or anyone outside the company.')},
             {'target': 'catalog-products-sort', 'label': T('الأكثر شهرة', 'Most popular'),
              'text': T('ترتيب النتائج: الأكثر شهرة، آخر مزامنة، السعر صعوداً أو نزولاً، أو أبجدي.',
-                       'Result order: most popular, latest sync, price up or down, or A to Z.')},
+                       'Result order: most popular, latest sync, price up or down, or A to Z.'),
+             'more': T(
+                 'بيغيّر ترتيب النتائج الحالية ويرجعك لأول صفحة.\n• «السعر: الأقل أولاً» مفيد لما العميل يسأل عن أرخص اختيار.\n• في تبويب «آخر تحديث» الترتيب دايماً الأحدث أولاً.',
+                 'Changes the order of the current results and takes you back to page one.\n• "Price: low first" helps when a customer asks for the cheapest option.\n• On the "Recently updated" tab the order is always newest first.')},
             {'target': 'catalog-products-filters', 'label': T('⚙ فلتر', '⚙ Filter'),
              'text': T('يفتح ويقفل لوحة الفلاتر الجانبية. الرقم الأصفر = عدد الفلاتر الشغالة.',
-                       'Opens and closes the side filter panel. The yellow number is how many filters are on.')},
+                       'Opens and closes the side filter panel. The yellow number is how many filters are on.'),
+             'more': T(
+                 'بيفتح لوحة «تصفية النتائج» على الجنب: التوافر، التصنيف العلاجي، الشكل الصيدلي، التأمين الصحي، وخيارات إضافية (ثلاجة، وصفة Rx، مزمن، FMI، لديه صورة).\n• الرقم على الزر = عدد الفلاتر الشغالة.\n• «⬇ Excel» جنبه بيصدّر النتائج الحالية بنفس البحث والفلاتر.',
+                 'Opens the "Filter results" side panel: availability, therapeutic class, dosage form, health insurance, and extra options (fridge, Rx, chronic, FMI, has image).\n• The number on the button = how many filters are on.\n• "⬇ Excel" next to it exports the current results with the same search and filters.')},
             {'target': 'catalog-products-filter-panel', 'label': T('↺ مسح الفلاتر', '↺ Clear filters'),
              'text': T('فلتر بالتوافر والتصنيف العلاجي والشكل الصيدلي والتأمين، وثلاجة أو وصفة أو مزمن أو سريع التداول أو له صورة.',
                        'Filter by availability, therapeutic class, dosage form and insurance, plus fridge, prescription, chronic, fast-moving or has image.'),
@@ -139,10 +294,16 @@ SCREENS = [
                        'Card view with images, or a list. The list adds the pick-zone and margin columns.')},
             {'target': 'catalog-products-tabs', 'label': T('الكتالوج · سريع التداول · مخزون منخفض', 'Catalog · Fast moving · Low stock'),
              'text': T('الكتالوج كله، سريع التداول، المخزون المحدود، الباقات النشطة، أو آخر الأصناف اللي اتحدثت من SOFTECH.',
-                       'The whole catalog, fast movers, limited stock, active bundles, or the items most recently updated from SOFTECH.')},
+                       'The whole catalog, fast movers, limited stock, active bundles, or the items most recently updated from SOFTECH.'),
+             'more': T(
+                 '• «سريع التداول»: الأصناف اللي لازم ماتنقصش.\n• «مخزون منخفض»: اللي توافرها «كميات محدودة» — راجعها لتحويل أو طلب.\n• «الباقات»: الباقات النشطة من «ذكاء الكتالوج» — اضغط صنف فيها يفتح صفحته.\n• «آخر تحديث»: آخر ما اتحدّث من SOFTECH.',
+                 '• "Fast moving": items that must not run out.\n• "Low stock": items with "limited quantities" — review them for a transfer or an order.\n• "Bundles": active bundles from "Catalog intelligence" — click an item in one to open its page.\n• "Recently updated": what was last updated from SOFTECH.')},
             {'target': 'catalog-products-results',
              'text': T('اضغط أي صنف يفتح صفحته: السعر والتوافر بالفروع والتعليمات.', 'Click any item to open its page: price, availability by branch and instructions.'),
-             'when': T('بعد البحث أو المسح.', 'After a search or scan.')},
+             'when': T('بعد البحث أو المسح.', 'After a search or scan.'),
+             'more': T(
+                 'كل صنف بيظهر بسعره وشارة توافره (متاح / كميات محدودة / غير متاح).\n• زر المقارنة يضيف الصنف لشريط المقارنة تحت (لحد 3 أصناف): السعر والهامش والتصنيف والمورد والتوافر.\n• ⊞ و≡ فوق بيبدّلوا بين عرض الشبكة والقائمة.',
+                 'Each item shows its price and availability badge (available / limited / unavailable).\n• The compare button adds it to the comparison bar at the bottom (up to 3 items): price, margin, class, supplier and availability.\n• ⊞ and ≡ at the top switch between grid and list view.')},
             {'target': 'catalog-products-compare', 'label': T('إضافة للمقارنة', 'Add to compare'),
              'text': T('الدائرة على البطاقة (أو المربع في القائمة) تضيف الصنف للمقارنة. الحد 3 أصناف.',
                        'The circle on a card (or the box in the list) adds the item to the comparison. Up to 3 items.'),
@@ -155,6 +316,7 @@ SCREENS = [
              'open_hint': T('علّم صنف واحد على الأقل للمقارنة فيظهر الشريط تحت.', 'Tick at least one item to compare and the bar appears at the bottom.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.product',
@@ -177,11 +339,17 @@ SCREENS = [
         'tour': [
             {'target': 'catalog-product-summary',
              'text': T('ملخص الصنف: التوافر العام، «يحتاج وصفة طبية»، مزمن أو سريع التداول، والكود والباركود.',
-                       'Item summary: overall availability, "needs prescription", chronic or fast-moving, and the code and barcode.')},
+                       'Item summary: overall availability, "needs prescription", chronic or fast-moving, and the code and barcode.'),
+             'more': T(
+                 'شارة التوافر العام (متاح / كميات محدودة / غير متاح)، والاسم بالعربي والإنجليزي، والتصنيف، وشارات «دواء مزمن» و«سريع التداول FMI» و«يحتاج وصفة طبية Rx».\n• تحتها كود SOFTECH والباركود، وتنبيه الثلاجة ومنطقة التجميع لو موجودين.',
+                 'The overall availability badge (available / limited quantities / unavailable), the Arabic and English name, the class, and the "Chronic", "FMI" and "Prescription Rx" badges.\n• Below: the SOFTECH code and barcode, and the fridge note and pick zone when present.')},
             {'target': 'catalog-product-price', 'label': T('سعر العبوة · سعر الوحدة', 'Pack price · Unit price'),
              'text': T('سعر العبوة والوحدة من SOFTECH، وتحتهم هامش الربح بلون أخضر أو أصفر أو أحمر.',
                        'Pack and unit price from SOFTECH, with the margin below in green, amber or red.'),
-             'warn': T('الهامش للاستخدام الداخلي بس — ماتقولوش للعميل.', 'The margin is for internal use only — never tell the customer.')},
+             'warn': T('الهامش للاستخدام الداخلي بس — ماتقولوش للعميل.', 'The margin is for internal use only — never tell the customer.'),
+             'more': T(
+                 'السعر جاي من SOFTECH ومش بيتعدّل من هنا.\n• لو «هامش الربح» ظاهر: أخضر = 30% أو أكتر، أصفر = من 15%، أحمر = أقل من كده.',
+                 'The price comes from SOFTECH and is not edited here.\n• When "Margin" is shown: green = 30% or more, amber = from 15%, red = below that.')},
             {'target': 'catalog-product-qr', 'label': T('🔳 QR للرف', '🔳 Shelf QR'),
              'text': T('اختار الفرع واطبع ملصق QR للرف. العميل يمسحه فيفتح صفحة «أبلغني عند توفره».',
                        'Choose the branch and print a shelf QR label. The customer scans it to open a "notify me when available" page.'),
@@ -189,16 +357,25 @@ SCREENS = [
             {'target': 'catalog-product-share', 'label': T('📤 مشاركة واتساب', '📤 Share on WhatsApp'),
              'text': T('ينسخ وصف جاهز للصنف عشان تلصقه في واتساب. لو النسخ فشل يفتح واتساب بالنص.',
                        'Copies a ready item description to paste into WhatsApp. If copying fails it opens WhatsApp with the text.'),
-             'when': T('اقرأ النص قبل ما تبعته للعميل.', 'Read the text before you send it to the customer.')},
+             'when': T('اقرأ النص قبل ما تبعته للعميل.', 'Read the text before you send it to the customer.'),
+             'more': T(
+                 'بيجهّز نص الصنف وينسخه، والزر يتحول لـ «تم النسخ» — الصقه في محادثة العميل.\n• لو النسخ مانفعش بيفتح واتساب بالنص جاهز.\n• النص ده جاي من محتوى الصنف اللي بيتعدّل في «إدارة المحتوى».',
+                 'Prepares the item text and copies it; the button turns into "Copied" — paste it into the customer chat.\n• If copying fails, WhatsApp opens with the text ready.\n• The text comes from the item content edited in "Content admin".')},
             {'target': 'catalog-product-intel', 'label': T('🔬 ملف الصنف الشامل', '🔬 Full item file'),
              'text': T('يفتح كل بيانات الصنف من كل الموديولات: SOFTECH والإثراء والمواد الفعالة والطلب وتاريخ الشراء.',
-                       'Opens all the item data from every module: SOFTECH, enrichment, active ingredients, demand and purchase history.')},
+                       'Opens all the item data from every module: SOFTECH, enrichment, active ingredients, demand and purchase history.'),
+             'more': T(
+                 'بيفتح صفحة فيها بيانات SOFTECH والإثراء والمواد الفعّالة ومؤشرات الطلب وتاريخ الشراء.\n• الزر الصغير «🖼 الصور» جنبه بيفتح إدارة محتوى وصور الصنف.',
+                 'Opens a page with SOFTECH data, enrichment, active ingredients, demand indicators and purchase history.\n• The small "🖼 Images" button next to it opens the item\'s content and image admin.')},
             {'target': 'catalog-product-images', 'label': T('🖼 الصور', '🖼 Images'),
              'text': T('يفتح إدارة محتوى الصنف: الصور والوصف والخصائص وSEO.', 'Opens the item content admin: images, description, attributes and SEO.'),
              'open_hint': T('الحفظ هناك للمدير والمشتريات بس.', 'Saving there is for admins and purchasing only.')},
             {'target': 'catalog-product-tabs', 'label': T('نظرة عامة · التوافر بالفروع', 'Overview · Branch availability'),
              'text': T('نظرة عامة، التعليمات والتخزين، الخصائص، التوافر بالفروع، منتجات مشابهة، مرتبطة، والطلب المفتوح.',
-                       'Overview, instructions and storage, attributes, branch availability, similar, related and open demand.')},
+                       'Overview, instructions and storage, attributes, branch availability, similar, related and open demand.'),
+             'more': T(
+                 '• «التعليمات والتخزين» فيها الموانع والتحذيرات — راجعها قبل ما تنصح عميل.\n• «التوافر بالفروع» بيقولك أنهي فرع عنده الصنف (من غير كميات).\n• «الطلب المفتوح»: طلبات العملاء والنواقص المسجّلة على الصنف.',
+                 '• "Instructions & storage" holds contraindications and warnings — check them before advising a customer.\n• "Branch availability" tells you which branch has the item (without quantities).\n• "Open demand": customer requests and recorded shortages for the item.')},
             {'target': 'catalog-product-facts', 'label': T('معلومات سريعة', 'Quick facts'),
              'text': T('الاسم العلمي والمادة الفعالة والتصنيف والشركة والتركيز والعبوة.', 'Scientific name, active ingredient, class, company, strength and pack.'),
              'warn': T('الاسم العلمي والمادة الفعالة من SOFTECH ومش نضاف لأصناف كتير. ماتصرفش بديل على أساسهم.',
@@ -219,9 +396,13 @@ SCREENS = [
              'open_hint': T('اضغط تبويب «الطلب المفتوح». بيظهر بس لو فيه طلبات.', 'Press the "Open demand" tab. It lists only when there are requests.')},
             {'target': 'catalog-product-content',  # from the GitHub-side tour
              'text': T('محتوى التبويب.',
-                       'The tab\'s content.')},
+                       'The tab\'s content.'),
+             'more': T(
+                 'بيتغيّر حسب التبويب اللي فوق.\n• البدائل والمنتجات المرتبطة هنا للمساعدة بس — أي بديل لروشتة مريض محتاج قرار صيدلي، والنظام مبيبدّلش أصناف لوحده.',
+                 "It changes with the tab above.\n• Alternatives and related products here are a help only — any alternative for a patient's prescription needs a pharmacist's decision; the system never swaps items on its own.")},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.content_admin',
@@ -241,10 +422,16 @@ SCREENS = [
             {'target': 'catalog-content-admin-tabs', 'label': T('🖼 الصور · 📝 المحتوى · ⚗️ الخصائص · 🔍 SEO', '🖼 Images · 📝 Content · ⚗️ Attrs · 🔍 SEO'),
              'text': T('أربع تبويبات: الصور والوسائط، المحتوى والوصف، الخصائص الدوائية، وSEO والروابط.',
                        'Four tabs: images and media, content and description, pharmaceutical attributes, and SEO and links.'),
-             'open_hint': T('الحفظ في كل التبويبات للمدير والمشتريات بس؛ الباقي يشوف ومايحفظش.', 'Saving on every tab is for admins and purchasing only; others can view but not save.')},
+             'open_hint': T('الحفظ في كل التبويبات للمدير والمشتريات بس؛ الباقي يشوف ومايحفظش.', 'Saving on every tab is for admins and purchasing only; others can view but not save.'),
+             'more': T(
+                 '• «المحتوى والوصف»: الوصف المختصر هو اللي بيظهر في البطاقة وواتساب.\n• «الخصائص الدوائية»: التركيز والتخزين والوصفة والتحذيرات — اكتبها بدقة لأنها بتظهر للموظفين.\n• «SEO والروابط»: تغيير الرابط بيكسر الروابط القديمة.',
+                 '• "Content": the short description is what shows on the card and WhatsApp.\n• "Pharmaceutical attributes": strength, storage, prescription and warnings — write them accurately since staff see them.\n• "SEO & links": changing the slug breaks old links.')},
             {'target': 'catalog-content-admin-upload', 'label': T('انقر لاختيار صور أو اسحبها هنا', 'Click to choose images or drop here'),
              'text': T('ارفع صورة أو أكتر (JPG أو PNG أو WebP حتى 10MB).', 'Upload one or more images (JPG, PNG or WebP up to 10MB).'),
-             'when': T('صوّر العلبة نفسها من قدام وبإضاءة كويسة.', 'Photograph the actual pack from the front in good light.')},
+             'when': T('صوّر العلبة نفسها من قدام وبإضاءة كويسة.', 'Photograph the actual pack from the front in good light.'),
+             'more': T(
+                 'تقدر تختار أكتر من صورة مرة واحدة، وكل صورة بتترفع لوحدها.\n• الصورة الجديدة بتظهر في القائمة تحت، وتقدر تكتب لها «النص البديل» — بيتحفظ لما تخرج من الخانة.\n• لو الرفع فشل بتظهر الرسالة بالأحمر.',
+                 'You can pick several images at once; each one is uploaded on its own.\n• The new image appears in the list below, and you can write its "alt text" — saved when you leave the box.\n• If an upload fails, the message shows in red.')},
             {'target': 'catalog-content-admin-primary', 'label': T('★', '★'),
              'text': T('يخلي الصورة «رئيسية» — دي اللي بتظهر في الكتالوج وواتساب.', 'Makes the image "main" — the one shown in the catalog and WhatsApp.'),
              'open_hint': T('بيظهر جنب أي صورة مش رئيسية في تبويب الصور.', 'It shows next to any non-main image on the images tab.')},
@@ -276,18 +463,31 @@ SCREENS = [
             {'target': 'catalog-content-admin-save', 'label': T('حفظ التغييرات', 'Save changes'),
              'text': T('يحفظ تغييرات التبويب الحالي في نظامنا. SOFTECH مابيتغيرش.', 'Saves the current tab changes in our system. SOFTECH is not changed.'),
              'when': T('الشريط بيظهر تحت أول ما تعدّل حاجة. احفظ قبل ما تنقل تبويب.', 'The bar appears at the bottom once you edit something. Save before switching tabs.'),
-             'open_hint': T('عدّل أي حقل في المحتوى أو الخصائص أو SEO.', 'Edit any field on content, attributes or SEO.')},
+             'open_hint': T('عدّل أي حقل في المحتوى أو الخصائص أو SEO.', 'Edit any field on content, attributes or SEO.'),
+             'more': T(
+                 'الشريط ده بيظهر تحت الشاشة أول ما تعدّل حاجة في تبويبات النصوص أو الخصائص أو SEO.\n• لو خرجت من غير ما تحفظ، التعديلات بتضيع.\n• بعد الحفظ التغيير بيظهر في صفحة المنتج ورسالة الواتساب.',
+                 'This bar appears at the bottom as soon as you change something in the text, attributes or SEO tabs.\n• If you leave without saving, the edits are lost.\n• After saving, the change shows on the product page and in the WhatsApp message.')},
             {'target': 'catalog-content-admin-header',  # from the GitHub-side tour
              'text': T('إدارة محتوى الصنف: اسمه وكود SOFTECH، ورابط «عرض صفحة المنتج».',
-                       'Item content admin: its name and SOFTECH code, plus the «View product page» link.')},
+                       'Item content admin: its name and SOFTECH code, plus the «View product page» link.'),
+             'more': T(
+                 'هنا بتعدّل اللي بيظهر عن الصنف في الكتالوج ورسالة الواتساب، مش بيانات SOFTECH نفسها.\n• «عرض صفحة المنتج ↗» يوريك النتيجة زي ما الموظفين هيشوفوها.',
+                 'Here you edit what is shown about the item in the catalog and the WhatsApp message, not the SOFTECH data itself.\n• "View product page ↗" shows you the result as staff will see it.')},
             {'target': 'catalog-content-admin-panel',  # from the GitHub-side tour
              'text': T('هنا تظهر حقول التبويب المختار للتعديل.',
-                       'The fields of the selected tab appear here for editing.')},
+                       'The fields of the selected tab appear here for editing.'),
+             'more': T(
+                 'في تبويبات النصوص والخصائص وSEO التعديل مش بيتحفظ غير لما تضغط «حفظ التغييرات».\n• في تبويب الصور كل إجراء (رفع، رئيسية، اعتماد، حذف) بيتحفظ على طول.',
+                 'In the text, attributes and SEO tabs, edits are saved only when you press "Save changes".\n• In the images tab, every action (upload, main, approve, delete) is saved immediately.')},
             {'target': 'catalog-content-admin-media-actions',  # from the GitHub-side tour
              'text': T('لكل صورة مرفوعة: ★ لجعلها رئيسية، «اعتماد» أو «إلغاء الاعتماد»، و🗑 للحذف.',
-                       'For each uploaded image: ★ to make it main, «Approve» or «Unapprove», and 🗑 to delete.')},
+                       'For each uploaded image: ★ to make it main, «Approve» or «Unapprove», and 🗑 to delete.'),
+             'more': T(
+                 '• ★ يخلي الصورة هي «رئيسية» اللي بتظهر في الكتالوج.\n• الصورة اللي مكتوب عليها «في انتظار الاعتماد» محتاجة «اعتماد».\n• 🗑 بيسأل «حذف هذه الصورة نهائياً؟» — الحذف مايترجعش.',
+                 '• ★ makes the image the "main" one shown in the catalog.\n• An image marked "awaiting approval" needs "Approve".\n• 🗑 asks "Delete this image permanently?" — deletion cannot be undone.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.intel',
@@ -309,10 +509,16 @@ SCREENS = [
         'tour': [
             {'target': 'catalog-intel-sections', 'label': T('🔗 SOFTECH · 🧬 الإثراء · 💊 المواد','🔗 SOFTECH · 🧬 Enrichment · 💊 Ingredients'),
              'text': T('أقسام الملف: SOFTECH، الإثراء، المحتوى، المواد الفعالة، مؤشرات الطلب، تاريخ الشراء، ويُشترى معاً.',
-                       'File sections: SOFTECH, enrichment, content, active ingredients, demand indicators, purchase history and bought together.')},
+                       'File sections: SOFTECH, enrichment, content, active ingredients, demand indicators, purchase history and bought together.'),
+             'more': T(
+                 'اضغط قسم يظهر محتواه على الشمال.\n• «المواد الفعّالة» هو المكان اللي بتربط فيه المادة الفعّالة بالصنف وتصنّفه مزمن — ده مصدر البدائل الموثوق.\n• «تاريخ الشراء» مفيد للمشتريات: أقل وأعلى سعر من كل مورد.',
+                 'Click a section to show its content on the side.\n• "Active ingredients" is where you link the ingredient to the item and tag it chronic — the reliable source for alternatives.\n• "Purchase history" helps purchasing: the lowest and highest price from each supplier.')},
             {'target': 'catalog-intel-content', 'label': T('بيانات SOFTECH (للقراءة فقط)', 'SOFTECH data (read-only)'),
              'text': T('بيانات الصنف زي ما هي في SOFTECH، منها سعر الشراء. مفيش تعديل من هنا.', 'The item data as it is in SOFTECH, including purchase price. Nothing can be edited here.'),
-             'warn': T('«الاسم العلمي» و«المواد الفعالة» هنا مش نضاف. ماتستخدمهمش لاختيار بديل.', '"Scientific name" and "active ingredients" here are not clean. Never use them to choose an alternative.')},
+             'warn': T('«الاسم العلمي» و«المواد الفعالة» هنا مش نضاف. ماتستخدمهمش لاختيار بديل.', '"Scientific name" and "active ingredients" here are not clean. Never use them to choose an alternative.'),
+             'more': T(
+                 'عنوان كل قسم بيقولك: «للقراءة فقط» ولا «✎ قابل للتعديل».\n• بيانات SOFTECH مابتتعدلش من هنا أبداً.\n• في الأقسام القابلة للتعديل اضغط «حفظ التغييرات»، وهتظهر رسالة «تم الحفظ».',
+                 'Each section title tells you: "read-only" or "✎ editable".\n• SOFTECH data is never edited from here.\n• In editable sections press "Save changes" and a "Saved" message appears.')},
             {'target': 'catalog-intel-meta', 'label': T('معلومات سريعة', 'Quick info'),
              'text': T('فئة ABC للصنف ونسبة اكتمال بياناته، ولينكات لصفحة المنتج وإدارة الصور.', 'The item ABC class and data completeness, with links to the product page and image admin.')},
             {'target': 'catalog-intel-completeness', 'label': T('نسبة اكتمال البيانات', 'Data completeness'),
@@ -336,12 +542,19 @@ SCREENS = [
              'warn': T('بيتنفذ فوراً من غير تأكيد. فك ربط صحيح يضعف فحوص المزمن والسلامة.', 'It runs at once with no confirmation. Unlinking a correct one weakens chronic and safety checks.'),
              'open_hint': T('بيظهر جنب كل مادة مربوطة في قسم «💊 المواد الفعّالة».', 'It shows next to every linked ingredient in the "💊 Active ingredients" section.')},
             {'target': 'catalog-intel-links', 'label': T('🔍 صفحة المنتج · 🖼 إدارة الصور', '🔍 Product page · 🖼 Image admin'),
-             'text': T('ارجع لصفحة المنتج أو افتح إدارة الصور والمحتوى.', 'Go back to the product page or open the image and content admin.')},
+             'text': T('ارجع لصفحة المنتج أو افتح إدارة الصور والمحتوى.', 'Go back to the product page or open the image and content admin.'),
+             'more': T(
+                 '• «🔍 صفحة المنتج» يفتح الصفحة اللي الموظفين بيشوفوها.\n• «🖼 إدارة الصور» يفتح إدارة محتوى الصنف على تبويب الصور.',
+                 '• "🔍 Product page" opens the page staff see.\n• "🖼 Image management" opens the item content admin on the images tab.')},
             {'target': 'catalog-intel-breadcrumb',  # from the GitHub-side tour
              'text': T('مسار الصفحة: الكتالوج ← الصنف ← ملف الصنف الشامل؛ اضغط أي جزء للرجوع.',
-                       'Page path: catalog → item → full item file; click any part to go back.')},
+                       'Page path: catalog → item → full item file; click any part to go back.'),
+             'more': T(
+                 '«الكتالوج» يرجعك لقائمة الأصناف، واسم الصنف يرجعك لصفحة المنتج.\n• الشريط ده ثابت فوق حتى وانت بتنزل في الصفحة.',
+                 '"Catalog" takes you back to the item list, and the item name back to the product page.\n• This bar stays fixed at the top even as you scroll.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.inventory',
@@ -371,18 +584,28 @@ SCREENS = [
             {'target': 'catalog-inventory-item-filters',
              'text': T('فلاتر تشغيلية للصنف: التأمين، المستوى، التصنيف، سريع التداول وغيرها.', 'Operational item filters: insurance, level, classification, fast-moving and more.')},
             {'target': 'catalog-inventory-kpis', 'label': T('أصناف ناقصة · أصناف فائضة', 'Short items · Overstock items'),
-             'text': T('إجمالي الأصناف، الناقص وقيمة الفجوة، الفائض وقيمته، والراكد بدون مبيعات.', 'Total items, shortages and gap value, overstock and its value, and dead stock with no sales.')},
+             'text': T('إجمالي الأصناف، الناقص وقيمة الفجوة، الفائض وقيمته، والراكد بدون مبيعات.', 'Total items, shortages and gap value, overstock and its value, and dead stock with no sales.'),
+             'more': T(
+                 'تحت «أصناف ناقصة» قيمة الفجوة، وتحت «أصناف فائضة» قيمة الفائض بالجنيه.\n• لو فيه نواقص بيظهر تحتها شريط أحمر: «صنف يحتاج إعادة توريد».\n• الأرقام بتتبع الفلاتر اللي فوق.',
+                 'Under "Short items" is the gap value, and under "Overstocked items" the excess value in pounds.\n• If there are shortages, a red banner below says how many items need restocking.\n• The numbers follow the filters above.')},
             {'target': 'catalog-inventory-tabs', 'label': T('النواقص · الفائض · الراكد · رأس المال', 'Shortages · Overstock · Dead · Capital'),
              'text': T('النواقص، الفائض، الراكد، بالفرع، بنوع الدواء، ورأس المال المحبوس.', 'Shortages, overstock, dead stock, by branch, by medicine type, and tied-up capital.'),
-             'open_hint': T('«رأس المال» محتاج تشغيل محرك الطلب الأول.', '"Capital" needs the demand engine to have run first.')},
+             'open_hint': T('«رأس المال» محتاج تشغيل محرك الطلب الأول.', '"Capital" needs the demand engine to have run first.'),
+             'more': T(
+                 'الرقم الأحمر على «النواقص» = عدد الأصناف الناقصة.\n• الفائض في فرع ممكن يغطي نقص في فرع تاني — نفّذ ده من التحويلات قبل ما تشتري.\n• «رأس المال» محتاج تشغيل محرك الطلب الأول.',
+                 'The red number on "Shortages" = the count of short items.\n• Overstock in one branch can cover a shortage in another — do that through transfers before buying.\n• "Capital" needs the demand engine to have run first.')},
             {'target': 'catalog-inventory-table',
              'text': T('جدول التبويب. اضغط عنوان أي عمود للترتيب. الشاشة للقراءة بس.', 'The tab table. Click any column title to sort. The screen is read-only.'),
              'when': T('النواقص: اطلب تحويل أو بلّغ المشتريات. الفائض: رشّحه للتحويل لفرع محتاج.', 'Shortages: request a transfer or tell purchasing. Overstock: propose it for transfer to a branch in need.')},
             {'target': 'catalog-inventory-header',  # from the GitHub-side tour
              'text': T('«لوحة المخزون» مع تاريخ آخر تشغيل لمحرك الطلب وزر «تحديث».',
-                       '«Inventory dashboard» with the demand engine\'s last run date and a «Refresh» button.')},
+                       '«Inventory dashboard» with the demand engine\'s last run date and a «Refresh» button.'),
+             'more': T(
+                 'كل الأرقام هنا جاية من آخر تشغيل لمحرك الطلب في المشتريات — شوف «آخر تشغيل» عشان تعرف البيانات قديمة ولا لأ.\n• «تحديث» بيعيد تحميل الأرقام بس، مش بيشغّل المحرك من جديد.',
+                 'All the numbers here come from the last run of the purchasing demand engine — check "Last run" to know how fresh the data is.\n• "Refresh" only reloads the numbers; it does not run the engine again.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.intelligence',
@@ -400,7 +623,10 @@ SCREENS = [
         'related': ['catalog.images', 'catalog.recommendations'],
         'tour': [
             {'target': 'catalog-intelligence-tabs', 'label': T('🔗 المتغيرات · 📦 الباقات · 🧩 · 🤖 الإثراء', '🔗 Variants · 📦 Bundles · 🧩 · 🤖 Enrich'),
-             'text': T('مجموعات المتغيرات، الباقات، يُشترى معه عادةً، وإثراء الكتالوج.', 'Variant groups, bundles, frequently bought together, and catalog enrichment.')},
+             'text': T('مجموعات المتغيرات، الباقات، يُشترى معه عادةً، وإثراء الكتالوج.', 'Variant groups, bundles, frequently bought together, and catalog enrichment.'),
+             'more': T(
+                 '• «مجموعات المتغيرات»: نفس المنتج بأشكال أو أحجام مختلفة.\n• «الباقات»: مجموعة أصناف بخصم اختياري.\n• «يُشترى معه عادةً»: للقراءة من محرك التوصيات.\n• «إثراء الكتالوج»: اقتراحات بتتراجع قبل النشر، والبدائل الدوائية مابتتطبّقش تلقائياً.',
+                 '• "Variant groups": the same product in different forms or sizes.\n• "Bundles": a set of items with an optional discount.\n• "Frequently bought together": read-only from the recommendation engine.\n• "Catalog enrichment": suggestions are reviewed before publishing, and drug alternatives are never applied automatically.')},
             {'target': 'catalog-intelligence-variant-new', 'label': T('+', '+'),
              'text': T('ينشئ مجموعة متغيرات: نفس المنتج بأشكال أو أحجام مختلفة. بعدها ضيف الأصناف من البحث.',
                        'Creates a variant group: the same product in different forms or sizes. Then add the items from the search.'),
@@ -448,21 +674,37 @@ SCREENS = [
              'open_hint': T('بيظهر للصنف اللي عنده اقتراحات معلّقة.', 'It shows for an item that has pending suggestions.')},
             {'target': 'catalog-intelligence-header',  # from the GitHub-side tour
              'text': T('«ذكاء الكتالوج»: تنظيم الأصناف وتحسين جودة بيانات الكتالوج.',
-                       '«Catalog intelligence»: organise items and improve catalog data quality.')},
+                       '«Catalog intelligence»: organise items and improve catalog data quality.'),
+             'more': T(
+                 'الشاشة دي بتنظم الكتالوج عندنا ومابتغيّرش بيانات SOFTECH.\n• الباقات اللي بتتعمل هنا بتظهر في تبويب «الباقات» في كتالوج المنتجات.',
+                 'This screen organises our catalog and does not change SOFTECH data.\n• Bundles made here show in the "Bundles" tab of the product catalog.')},
             {'target': 'catalog-intelligence-variant-search',  # from the GitHub-side tour
              'text': T('في المتغيرات: ابحث في المجموعات، و«+» لإنشاء مجموعة جديدة.',
-                       'In variants: search the groups, and «+» to create a new group.')},
+                       'In variants: search the groups, and «+» to create a new group.'),
+             'more': T(
+                 '«+» بيفتح نموذج صغير: «الاسم (إنجليزي)» إجباري و«الاسم (عربي)» اختياري، وبعدين «إنشاء».\n• «إلغاء» يقفل النموذج من غير ما يعمل حاجة.',
+                 '"+" opens a small form: "Name (English)" is required and "Name (Arabic)" optional, then "Create".\n• "Cancel" closes the form without doing anything.')},
             {'target': 'catalog-intelligence-variant-list',  # from the GitHub-side tour
              'text': T('قائمة المجموعات بعدد أصناف كل منها — اضغط مجموعة لعرضها.',
-                       'The group list with each group\'s item count — click a group to open it.')},
+                       'The group list with each group\'s item count — click a group to open it.'),
+             'more': T(
+                 'كل مجموعة بتظهر باسمها وعدد الأصناف اللي فيها.\n• اللي تضغط عليها بتتلوّن وتفتح تفاصيلها على الجنب.',
+                 'Each group shows its name and how many items it holds.\n• The one you click is highlighted and its details open on the side.')},
             {'target': 'catalog-intelligence-variant-detail',  # from the GitHub-side tour
              'text': T('تفاصيل المجموعة المختارة وأصنافها، مع «حذف» للمجموعة و✕ لإزالة صنف.',
-                       'The selected group\'s details and items, with «Delete» for the group and ✕ to remove an item.')},
+                       'The selected group\'s details and items, with «Delete» for the group and ✕ to remove an item.'),
+             'more': T(
+                 'كل صنف في المجموعة بيظهر بكوده وسعره.\n• «🗑 حذف» بيسأل تأكيد قبل حذف المجموعة.\n• ✕ بيشيل الصنف من المجموعة على طول من غير سؤال (الصنف نفسه مابيتمسحش من الكتالوج).',
+                 'Each item in the group shows its code and price.\n• "🗑 Delete" asks for confirmation before deleting the group.\n• ✕ removes the item from the group straight away without asking (the item itself stays in the catalog).')},
             {'target': 'catalog-intelligence-variant-add',  # from the GitHub-side tour
              'text': T('بعد اختيار مجموعة: ابحث باسم الصنف أو الكود أو الباركود لإضافته إليها.',
-                       'After selecting a group: search by item name, code or barcode to add it.')},
+                       'After selecting a group: search by item name, code or barcode to add it.'),
+             'more': T(
+                 'أول ما تختار الصنف من نتايج البحث بيتضاف للمجموعة على طول.\n• حط في المجموعة بس الأصناف اللي هي فعلاً نفس المنتج — التجميع ده للتنظيم ومش معناه إنها بدائل لبعض في الصرف.',
+                 'As soon as you pick the item from the search results it is added to the group.\n• Only group items that really are the same product — this grouping is for organisation and does not make them interchangeable when dispensing.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.images',
@@ -485,15 +727,24 @@ SCREENS = [
             {'target': 'catalog-images-tabs', 'label': T('📊 لوحة التحكم · 👁️ قائمة المراجعة · 🚀', '📊 Dashboard · 👁️ Review queue · 🚀'),
              'text': T('لوحة التحكم، المراجعة، إطلاق دفعة، مراجعة شاملة، السجل، معرض المنتج، ونتائج التعلم.',
                        'Dashboard, review queue, launch batch, revise all, history, product gallery and learning results.'),
-             'when': T('الرقم الأحمر على «قائمة المراجعة» = صور مستنية قرارك.', 'The red number on "Review queue" = images waiting for your decision.')},
+             'when': T('الرقم الأحمر على «قائمة المراجعة» = صور مستنية قرارك.', 'The red number on "Review queue" = images waiting for your decision.'),
+             'more': T(
+                 '• الرقم الأحمر على «قائمة المراجعة» = الصور اللي مستنية قرارك.\n• «إطلاق دفعة» بيبدأ بحث لمجموعة أصناف (زي اللي مالهاش صور) مع تقدير التكلفة قبل التشغيل.\n• «مراجعة شاملة» بتدوّر تاني حتى للأصناف اللي ليها صور، عشان تبدّل الرديء.',
+                 '• The red number on "Review queue" = images waiting for your decision.\n• "Launch batch" starts a search for a set of items (such as those with no image) with a cost estimate before running.\n• "Revise all" searches again even for items that have images, to replace poor ones.')},
             {'target': 'catalog-images-stats', 'label': T('نسبة التغطية · تنتظر المراجعة', 'Coverage · Pending review'),
              'text': T('إجمالي الأصناف، اللي ليها صورة معتمدة، التغطية، تغطية قيمة وكمية المبيعات، المنتظر، الموافقة التلقائية، والمهام الجارية والفاشلة.',
                        'Total items, items with an approved image, coverage, sales value and qty coverage, pending, auto-approved, and running and failed jobs.'),
-             'when': T('تغطية المبيعات بتطلع أسرع من نسبة التغطية لأن الأعلى مبيعاً بيتصور الأول.', 'Sales coverage rises faster than plain coverage because best sellers get images first.')},
+             'when': T('تغطية المبيعات بتطلع أسرع من نسبة التغطية لأن الأعلى مبيعاً بيتصور الأول.', 'Sales coverage rises faster than plain coverage because best sellers get images first.'),
+             'more': T(
+                 '«تنتظر المراجعة» لو كبير يبقى روح «قائمة المراجعة».\n• «مهام فاشلة» لو فيها أرقام راجع «السجل» عشان تعرف السبب.\n• المهام الجارية بتظهر بالتفصيل تحت شريط التغطية.',
+                 'If "Pending review" is high, go to the "Review queue".\n• If "Failed jobs" has numbers, check "History" for the reason.\n• Running jobs are listed in detail under the coverage bar.')},
             {'target': 'catalog-images-review-filters', 'label': T('حد العلامة المائية · حد النقاط', 'Watermark limit · Score limit'),
              'text': T('اخفي الصور اللي علامتها المائية فوق الحد أو نقاطها تحت الحد. «تحديث» يعيد التحميل.',
                        'Hide images with a watermark above the limit or a score below it. "Refresh" reloads.'),
-             'open_hint': T('في تبويب «👁️ قائمة المراجعة».', 'On the "👁️ Review queue" tab.')},
+             'open_hint': T('في تبويب «👁️ قائمة المراجعة».', 'On the "👁️ Review queue" tab.'),
+             'more': T(
+                 'الفلتر ده بيغيّر اللي معروض بس، مابيقبلش ولا بيرفض حاجة.\n• «حد العلامة المائية» يخفي الصور اللي احتمال العلامة فيها أعلى من النسبة، و«حد النقاط» يخفي الأقل من الدرجة.\n• القبول والرفض بيتم من كارت كل صورة تحت، مجمّعة بالصنف.',
+                 'This filter only changes what is shown; it does not accept or reject anything.\n• "Watermark limit" hides images whose watermark likelihood is above the percentage, and "Score limit" hides those below the score.\n• Accepting and rejecting happens on each image card below, grouped by item.')},
             {'target': 'catalog-images-watermark',
              'text': T('الشريط تحت الصورة: أخضر نظيف، أصفر مشبوه، أحمر علامة مائية. وجنبها نقاط الجودة والتطابق.',
                        'The bar under the image: green clean, amber suspicious, red watermark. Next to it the quality and match scores.'),
@@ -529,12 +780,19 @@ SCREENS = [
              'open_hint': T('اختار صنف من قائمة «🖼️ معرض المنتج».', 'Pick an item from the "🖼️ Product gallery" list.')},
             {'target': 'catalog-images-header',  # from the GitHub-side tour
              'text': T('محرك اكتساب صور المنتجات: بحث آلي عن الصور مع تقييم ومراجعة بشرية.',
-                       'The product image engine: automatic image search with scoring and human review.')},
+                       'The product image engine: automatic image search with scoring and human review.'),
+             'more': T(
+                 'النظام بيدوّر على صور مرشحة لكل صنف ويقيّم جودتها وتطابقها ووجود علامة مائية.\n• اللي فوق حد الثقة بيتعتمد تلقائي، والباقي بيستنى مراجعتك.\n• قراراتك في المراجعة بتعلّم النظام يختار أحسن بعد كده.',
+                 'The system searches candidate images for each item and scores quality, match and watermarks.\n• Those above the confidence threshold are auto-approved; the rest wait for your review.\n• Your review decisions teach the system to choose better next time.')},
             {'target': 'catalog-images-coverage',  # from the GitHub-side tour
              'text': T('شريط التغطية البصرية: كم منتجاً له صورة معتمدة من الإجمالي.',
-                       'The coverage bar: how many products have an approved image out of the total.')},
+                       'The coverage bar: how many products have an approved image out of the total.'),
+             'more': T(
+                 'تحت الشريط مكتوب العدد بالظبط: كذا من كذا منتج.\n• الصورة المعتمدة بس هي اللي بتتحسب — الصور المرشحة اللي لسه في المراجعة مش داخلة.',
+                 'Under the bar is the exact count: so many out of so many products.\n• Only approved images count — candidates still in review are not included.')},
         ],
         'updated': '2026-10-27',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.recommendations',
@@ -562,7 +820,10 @@ SCREENS = [
              'warn': T('تشغيل تقيل على سنة فواتير. شغّله بره وقت الذروة.', 'A heavy run over a year of invoices. Run it outside peak hours.'),
              'open_hint': T('للمدير والمشرف بس.', 'Admins and supervisors only.')},
             {'target': 'catalog-recommendations-tabs', 'label': T('🔗 اقترانات · 👤 العملاء · 🕓 السجل', '🔗 Pairs · 👤 Customers · 🕓 History'),
-             'text': T('اقترانات الأصناف، توصيات العملاء، وسجل التشغيل.', 'Item pairs, customer recommendations and run history.')},
+             'text': T('اقترانات الأصناف، توصيات العملاء، وسجل التشغيل.', 'Item pairs, customer recommendations and run history.'),
+             'more': T(
+                 '• «اقترانات الأصناف»: الأزواج اللي بتتشترى سوا.\n• «توصيات العملاء»: ابحث عن عميل وشوف المقترح له — مفيد للكول سنتر وقت المكالمة.\n• «سجل التشغيل»: كل مرات التشغيل ونتايجها.',
+                 '• "Item pairs": pairs bought together.\n• "Customer recommendations": search a customer and see what is suggested — handy for the call center during a call.\n• "Run history": every run and its results.')},
             {'target': 'catalog-recommendations-fbt-search', 'label': T('ابحث باسم الصنف أو كوده…', 'Search item name or code…'),
              'text': T('دوّر على أزواج صنف معيّن. الرفع (Lift) أعلى من 1 يعني ارتباط حقيقي.', 'Find the pairs of a given item. Lift above 1 means a real association.')},
             {'target': 'catalog-recommendations-fbt-sort', 'label': T('الدرجة ↓', 'Score ↓'),
@@ -576,18 +837,31 @@ SCREENS = [
              'open_hint': T('اختار عميل في تبويب «👤 توصيات العملاء».', 'Pick a customer on the "👤 Customer recommendations" tab.')},
             {'target': 'catalog-recommendations-header',  # from the GitHub-side tour
              'text': T('«محرك التوصيات الذكية»: اقترانات الأصناف والتوصيات الشخصية للعملاء.',
-                       '«Smart recommendations engine»: item pairs and personal customer recommendations.')},
+                       '«Smart recommendations engine»: item pairs and personal customer recommendations.'),
+             'more': T(
+                 'المحرك بيقرا الفواتير ويطلع الأصناف اللي بتتشترى مع بعض، ويقترح لكل عميل أصناف حسب مشترياته.\n• فيه فلتر سلامة بيستبعد اللي يتعارض مع أدويته المزمنة — ومع ذلك أي اقتراح لمريض بيرجع لحكم الصيدلي.',
+                 "The engine reads invoices, finds items bought together, and suggests items to each customer from their purchases.\n• A safety filter excludes anything conflicting with their chronic medicines — still, any suggestion to a patient is the pharmacist's call.")},
             {'target': 'catalog-recommendations-run-controls',  # from the GitHub-side tour
              'text': T('«⚙️ إعدادات» و«▶ تشغيل المحرك» — تظهر للمدير والمشرف فقط.',
-                       '«⚙️ Settings» and «▶ Run engine» — shown only to admins and supervisors.')},
+                       '«⚙️ Settings» and «▶ Run engine» — shown only to admins and supervisors.'),
+             'more': T(
+                 '«⚙️ إعدادات» بيفتح: فترة الرصد بالأيام، والحد الأدنى للدعم، والحد الأدنى للثقة.\n• «▶ تشغيل المحرك» بيبدأ التشغيل بالإعدادات دي، ومينفعش تشغيلين في نفس الوقت.\n• السيرفر نفسه بيرفض التشغيل من أي حد غير المدير والمشرف.',
+                 '"⚙️ Settings" opens: look-back period in days, minimum support and minimum confidence.\n• "▶ Run engine" starts a run with these settings; two runs cannot happen at once.\n• The server itself refuses a run from anyone other than admins and supervisors.')},
             {'target': 'catalog-recommendations-fbt-toolbar',  # from the GitHub-side tour
              'text': T('في الاقترانات: ابحث باسم الصنف أو كوده، واختر الترتيب.',
-                       'In item pairs: search by item name or code, and choose the sort order.')},
+                       'In item pairs: search by item name or code, and choose the sort order.'),
+             'more': T(
+                 'الترتيب: الدرجة، الثقة، الرفع، أو التكرار.\n• جنبها عدد الاقترانات الكلي.\n• البحث بيرجعك لأول صفحة.',
+                 'Sort by: score, confidence, lift or frequency.\n• Next to it is the total number of pairs.\n• Searching takes you back to page one.')},
             {'target': 'catalog-recommendations-fbt-table',  # from the GitHub-side tour
              'text': T('الأزواج مع الثقة والرفع والدعم والتكرار والدرجة.',
-                       'The pairs with confidence, lift, support, frequency and score.')},
+                       'The pairs with confidence, lift, support, frequency and score.'),
+             'more': T(
+                 '• «الثقة»: من اللي اشتروا الصنف الأساسي، كام في المية اشتروا المقترن معاه.\n• «الرفع» أعلى من 1 يعني ارتباط حقيقي مش صدفة.\n• «التكرار»: عدد الفواتير اللي اتجمعوا فيها.',
+                 '• "Confidence": of those who bought the main item, what percent also bought the paired one.\n• "Lift" above 1 means a real association, not chance.\n• "Frequency": how many invoices they appeared on together.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.vision',
@@ -599,17 +873,27 @@ SCREENS = [
         'tips': [T('كلما أكّدت قراءة صحيحة في نقطة البيع أو النواقص أو الفواتير زادت دقة المحرك الداخلي.', 'Every correct reading you confirm in the POS, shortages or invoices improves the in-house engine.')],
         'tour': [
             {'target': 'catalog-vision-header',
-             'text': T('قاعدة التعلّم بتاعتنا: كل قراءة آلية أكّدها موظف بتبقى مثال تدريب.', 'Our own training set: every machine reading a person confirmed becomes a training example.')},
+             'text': T('قاعدة التعلّم بتاعتنا: كل قراءة آلية أكّدها موظف بتبقى مثال تدريب.', 'Our own training set: every machine reading a person confirmed becomes a training example.'),
+             'more': T(
+                 'الشاشة دي للمتابعة بس، مفيهاش أزرار.\n• كل مرة موظف يأكد قراءة صورة روشتة أو صوت أو قائمة نواقص أو فاتورة مورّد، بتتحفظ كمثال تدريب.',
+                 'This screen is for monitoring only; it has no buttons.\n• Every time a staff member confirms the reading of a prescription photo, voice note, shortage list or supplier invoice, it is saved as a training example.')},
             {'target': 'catalog-vision-stats', 'label': T('إجمالي العيّنات · مُصنَّفة', 'Total samples · Labelled'),
-             'text': T('إجمالي العينات، المؤكدة بشرياً، الصور الجاهزة للتدريب، وحالة المحرك الداخلي.', 'Total samples, human-confirmed ones, images ready for training, and the in-house engine status.')},
+             'text': T('إجمالي العينات، المؤكدة بشرياً، الصور الجاهزة للتدريب، وحالة المحرك الداخلي.', 'Total samples, human-confirmed ones, images ready for training, and the in-house engine status.'),
+             'more': T(
+                 '• «مُصنَّفة (بتأكيد بشري)» هي اللي ليها قيمة في التدريب.\n• حالة «المحرك الداخلي»: «مُفعَّل ✓» أو «مُهيَّأ» أو «غير مُدرَّب».',
+                 '• "Labelled (human-confirmed)" are the ones that matter for training.\n• The "In-house engine" status: "active ✓", "configured" or "not trained".')},
             {'target': 'catalog-vision-sources', 'label': T('حسب المصدر · المحرك · الوسيط', 'By source · engine · media'),
              'text': T('توزيع العينات حسب الموديول والمحرك ونوع الوسيط (صورة أو صوت).', 'Samples split by module, engine and media type (image or voice).')},
             {'target': 'catalog-vision-accuracy', 'label': T('دقة المحركات', 'Engine accuracy'),
              'text': T('نسبة الأصناف المؤكدة اللي كل محرك لقاها. الشاشة للقراءة بس.', 'The share of confirmed items each engine found. The screen is read-only.'),
              'when': T('كل تأكيد صحيح في الكاشير والنواقص والفواتير بيرفع الدقة.', 'Every correct confirmation at the till, shortages and invoices raises accuracy.'),
-             'open_hint': T('بيظهر لما يكون فيه عينات مؤكدة كفاية.', 'It shows once there are enough confirmed samples.')},
+             'open_hint': T('بيظهر لما يكون فيه عينات مؤكدة كفاية.', 'It shows once there are enough confirmed samples.'),
+             'more': T(
+                 'النسبة = كام صنف من الأصناف اللي الموظفين أكدوها المحرك لقاها صح، في آخر مجموعة عيّنات.\n• القسم ده مش بيظهر غير لما يكون فيه نتايج كفاية.',
+                 'The percentage = how many of the items staff confirmed the engine found correctly, over the latest set of samples.\n• This section only appears when there are enough results.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'catalog.mobile_items',
@@ -620,19 +904,32 @@ SCREENS = [
         'related': ['catalog.products'],
         'tour': [
             {'target': 'catalog-mobile-items-search', 'label': T('🔎 بحث عن صنف', '🔎 Search item'),
-             'text': T('اكتب الاسم أو الكود أو امسح الباركود بالماسح. الصفحة للقراءة بس.', 'Type the name or code, or scan the barcode with the scanner. The page is read-only.')},
+             'text': T('اكتب الاسم أو الكود أو امسح الباركود بالماسح. الصفحة للقراءة بس.', 'Type the name or code, or scan the barcode with the scanner. The page is read-only.'),
+             'more': T(
+                 'البحث بيدوّر بالاسم والاسم العلمي والكود وكل باركودات الصنف، وبيشتغل مع قارئ الباركود.\n• الشاشة دي للقراءة بس — مفيش أي تعديل على المخزون.',
+                 "The search looks up name, scientific name, code and all the item's barcodes, and works with a barcode scanner.\n• This screen is read-only — nothing changes in stock.")},
             {'target': 'catalog-mobile-items-card',
              'text': T('اسم الصنف والاسم العلمي والكود وسعر العبوة وإجمالي المخزون في الشبكة.', 'Item name, scientific name, code, pack price and total stock across the network.'),
              'warn': T('الاسم العلمي من SOFTECH ومش نضيف. ماتختارش بديل على أساسه.', 'The scientific name comes from SOFTECH and is not clean. Never pick an alternative from it.'),
-             'open_hint': T('اختار صنف من البحث.', 'Pick an item from the search.')},
+             'open_hint': T('اختار صنف من البحث.', 'Pick an item from the search.'),
+             'more': T(
+                 'بيظهر الاسم والاسم العلمي (لو موجود) وكود SOFTECH وسعر العبوة.\n• اتأكد إنه نفس الصنف اللي العميل طالبه قبل ما ترد عليه.',
+                 'Shows the name, the scientific name (if any), the SOFTECH code and the pack price.\n• Make sure it is the same item the customer asked for before you answer.')},
             {'target': 'catalog-mobile-items-stock', 'label': T('📦 المخزون حسب الفرع', '📦 Stock by branch'),
              'text': T('الكمية الحية في كل فرع من الأكتر للأقل: أخضر متوفر، أصفر قليل، أحمر نافد.', 'Live quantity in every branch, highest first: green in stock, amber low, red out.'),
              'when': T('الصنف مش عندك؟ شوف أقرب فرع عنده واطلب تحويل.', 'Not in your branch? Find the nearest branch that has it and request a transfer.'),
-             'open_hint': T('اختار صنف من البحث.', 'Pick an item from the search.')},
+             'open_hint': T('اختار صنف من البحث.', 'Pick an item from the search.'),
+             'more': T(
+                 'اللون بيوضح الحالة: أخضر متوفر، أصفر قليل، أحمر خلصان.\n• مفيد عشان تعرف أقرب فرع تبعت له العميل أو تطلب منه تحويل.',
+                 'The colour shows the status: green in stock, amber low, red out.\n• Useful to know the nearest branch to send the customer to or to request a transfer from.')},
             {'target': 'catalog-mobile-items-total',  # from the GitHub-side tour
              'text': T('«إجمالي الشبكة»: مجموع المخزون في كل الفروع.',
-                       '«Network total»: the combined stock across all branches.')},
+                       '«Network total»: the combined stock across all branches.'),
+             'more': T(
+                 'لو صفر يبقى الصنف مش موجود في أي فرع.\n• في الحالة دي ممكن تسجّله في النواقص أو تعمل للعميل حجز.',
+                 'If it is zero, the item is not in any branch.\n• In that case you can record it as a shortage or make a reservation for the customer.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

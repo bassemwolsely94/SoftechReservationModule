@@ -46,6 +46,40 @@ MODULE = {
              'next': []},
         ],
     }],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في التحفيز والمستويات', 'A tour of gamification & levels'),
+            'summary': T('نقاطك بتيجي من شغلك المسجّل أصلاً، ومستواك عمره ما بينزل.',
+                         'Your points come from work already recorded, and your level never drops.'),
+            'steps': [
+                {'target': 'nav-gamification', 'nav': '/gamification',
+                 'text': T('«الرئيسية» ← «التحفيز والمستويات».', '"Home" → "Gamification & levels".'),
+                 'more': T('الشاشة دي للتقدير بس: النقاط بتتحسب من الشغل اللي اتسجّل في النظام (مبيعات، حجوزات، تحويلات، جرد…) كل نص ساعة.\n'
+                           '• مفيش حاجة تدخلها بإيدك عشان تاخد نقاط.',
+                           'This screen is for recognition only: points are counted every 30 minutes from work already recorded (sales, reservations, transfers, stock counts…).\n'
+                           '• There is nothing to enter by hand to earn points.')},
+                {'target': 'gamification-level', 'route': '/gamification',
+                 'text': T('مستواك ولقبك ونقاطك.', 'Your level, title and points.'),
+                 'more': T('شريط التقدم بيوريك فاضل كام نقطة على المستوى اللي بعده، وتحته نقاط النهارده والأسبوع والشهر وسلسلة الأيام النظيفة.\n'
+                           '• المستوى واللقب عمرهم ما بينزلوا، حتى لو اتخصم منك نقاط.',
+                           'The progress bar shows how many points remain to the next level, with today / this week / this month and your clean-day streak below it.\n'
+                           '• Your level and title never go down, even after a deduction.')},
+                {'target': 'gamification-open-items', 'route': '/gamification',
+                 'text': T('«لا تترك شيئاً خلفك»: الشغل المعلّق عليك.', '"Leave nothing behind": work still waiting on you.'),
+                 'more': T('دوس على أي بند يفتحلك شاشته عشان تخلّصه.\n'
+                           '• البنود الحمرا بتخصم نقاط عند قفل اليوم بعد نص الليل، فخلّصها الأول.',
+                           'Click any item to open its screen and finish it.\n'
+                           '• Red items deduct points at day close after midnight, so clear them first.')},
+                {'target': 'gamification-tabs', 'route': '/gamification',
+                 'text': T('الترتيب والشارات والمكافآت.', 'Rankings, badges and rewards.'),
+                 'more': T('«الترتيب» و«ترتيب الفروع» بيقارنوك بزمايلك، «كيف تكسب النقاط» بيشرح كل قاعدة، و«المكافآت» بتخليك تستبدل رصيدك بمكافأة بعد موافقة المدير.\n'
+                           '• المكافآت بتتصرف من الرصيد بس، مش من المستوى.',
+                           '"Leaderboard" and "Branches" compare you with colleagues, "How to earn" explains every rule, and "Rewards" lets you exchange your balance for a reward after a manager approves.\n'
+                           '• Rewards spend your balance only, never your level.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [

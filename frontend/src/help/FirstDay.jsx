@@ -72,7 +72,7 @@ export default function FirstDay({ mobile = false }) {
           <Card icon="🧭" primary={!data.system_tour.done} done={data.system_tour.done}
                 title="جولة تعريفية بالنظام" sub="القائمة، البحث، المساعدة، الإشعارات — في دقيقتين."
                 cta={data.system_tour.done ? 'شوفها تاني' : 'ابدأ الجولة'}
-                onClick={() => startTour(data.system_tour.id, data.system_tour.steps)} />
+                onClick={() => startTour(data.system_tour.id, data.system_tour.steps, [], data.system_tour.title)} />
         )}
         {next && (
           <Card icon="🎓" primary={!!data.system_tour?.done || !data.system_tour}
@@ -83,7 +83,7 @@ export default function FirstDay({ mobile = false }) {
         {data.flows.map((f) => (
           <Card key={f.id} icon={mobile ? '📱' : '👆'} done={f.done} title={pick(f.title, 'ar')} sub={pick(f.summary, 'ar')}
                 note={f.change_note && pick(f.change_note, 'ar')}
-                cta={f.done ? 'شوفها تاني' : 'ابدأ الجولة'} onClick={() => startTour(f.id, f.steps)} />
+                cta={f.done ? 'شوفها تاني' : 'ابدأ الجولة'} onClick={() => startTour(f.id, f.steps, [], f.title)} />
         ))}
         {data.quiz && (
           <Card icon="📝" title={`اختبار قصير: ${pick(data.quiz.title, 'ar')}`} sub={`${data.quiz.questions} أسئلة — النجاح من 80%.`}

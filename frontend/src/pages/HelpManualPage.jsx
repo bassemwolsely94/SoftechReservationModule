@@ -168,6 +168,18 @@ function Screen({ s, n, lang }) {
           </ol>
         </Block>
       )}
+      {s.buttons?.length > 0 && (
+        <Block title={label('buttons', lang)}>
+          <ol className="list-decimal ps-5 space-y-1 text-sm leading-7">
+            {s.buttons.map((b, i) => (
+              <li key={i}>
+                <span className="font-semibold whitespace-pre-line">{pick(b.text, lang)}</span>
+                {b.more && pick(b.more, lang) && <div className="whitespace-pre-line text-gray-700">{pick(b.more, lang)}</div>}
+              </li>
+            ))}
+          </ol>
+        </Block>
+      )}
       {s.tips?.length > 0 && (
         <Block title={label('tips', lang)}>
           <ul className="list-disc ps-5 space-y-1 text-sm leading-7">
