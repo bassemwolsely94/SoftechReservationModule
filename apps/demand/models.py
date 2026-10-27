@@ -54,6 +54,7 @@ class DemandRecord(models.Model):
         ('delivery',     'توصيل'),
         ('online',       'أونلاين'),
         ('call_center',  'مركز الاتصالات'),
+        ('self_service', 'تسجيل ذاتي (QR/رابط)'),
         ('other',        'أخرى'),
     ]
 
@@ -230,6 +231,16 @@ class DemandRecord(models.Model):
     def total_items(self):
         return self.items.count()
 
+    @property
+    def potential_value(self):
+        """Total potential revenue at stake = Σ line_value over priced items.
+        Free-text / unpriced lines contribute 0."""
+        return float(sum(
+            (i.quantity * i.unit_price_snapshot)
+            for i in self.items.all()
+            if i.unit_price_snapshot is not None
+        ))
+
     def try_link_customer(self):
         """
         Try to find a Customer record matching this phone or phcode.
@@ -256,6 +267,32 @@ class DemandRecord(models.Model):
 # Demand Item — one item per line on a demand record
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+class DemandItemQuerySet(models.QuerySet):
+    """Single source of truth for the Phase 1 recovery eligibility rule (§5.2).
+
+    A line is recovery-eligible iff it has a real catalog item, is not
+    disqualified, the customer has not opted out, the parent record is within
+    the 12-month recovery window, and its status is one we can still win back.
+    Detection, the recovery queue, and the monthly reminder ALL filter on this.
+    """
+    def recovery_eligible(self):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=DemandItem.RECOVERY_WINDOW_DAYS)
+        return self.filter(
+            item__isnull=False,
+            disqualified=False,
+            contact_opt_out=False,
+            demand__created_at__gte=cutoff,
+        ).filter(
+            models.Q(item_status__in=['pending', 'sourcing', 'available_again']) |
+            models.Q(item_status='lost', demand__lost_reason='no_stock')
+        )
+
+    def awaiting_winback(self):
+        """Recovery-eligible lines already flagged back-in-stock (the work queue)."""
+        return self.recovery_eligible().filter(item_status='available_again')
+
+
 class DemandItem(models.Model):
 
     DEMAND_TYPE_CHOICES = [
@@ -266,12 +303,35 @@ class DemandItem(models.Model):
     ]
 
     ITEM_STATUS_CHOICES = [
-        ('pending',     'قيد الانتظار'),
-        ('sourcing',    'جارٍ التوفير'),
-        ('fulfilled',   'تم التسليم ✅'),
-        ('lost',        'ضاعت المبيعة ❌'),
-        ('cancelled',   'ملغي'),
+        ('pending',         'قيد الانتظار'),
+        ('sourcing',        'جارٍ التوفير'),
+        ('available_again', 'عاد للمخزون 🔔'),   # Phase 1: restock detected, awaiting win-back
+        ('recovered',       'تم الاسترداد 💰'),   # Phase 1: customer came back and bought
+        ('fulfilled',       'تم التسليم ✅'),
+        ('lost',            'ضاعت المبيعة ❌'),
+        ('cancelled',       'ملغي'),
     ]
+
+    # ── Recovery loop (Phase 1) ───────────────────────────────────────────────
+    RECOVERY_WINDOW_DAYS = 365   # ignore demand older than this when an item restocks
+
+    DISQUALIFY_REASONS = [
+        ('not_in_egypt',    'غير متوفر في مصر'),
+        ('discontinued',    'متوقف عن الإنتاج'),
+        ('not_allowed',     'غير مسموح ببيعه في الصيدلية'),
+        ('unknown_item',    'صنف غير معروف'),
+        ('never_available', 'لن يتوفر مطلقاً'),
+        ('other',           'أخرى'),
+    ]
+
+    OPT_OUT_REASONS = [
+        ('not_needed',       'لم يعد بحاجته'),
+        ('moved',            'انتقل / غادر'),
+        ('for_other_person', 'كان يطلبه لشخص آخر'),
+        ('other',            'أخرى'),
+    ]
+
+    objects = DemandItemQuerySet.as_manager()
 
     demand = models.ForeignKey(
         DemandRecord,
@@ -303,10 +363,11 @@ class DemandItem(models.Model):
         verbose_name='نوع الطلب',
     )
     item_status = models.CharField(
-        max_length=15,
+        max_length=20,
         choices=ITEM_STATUS_CHOICES,
         default='pending',
         verbose_name='حالة الصنف',
+        db_index=True,
     )
 
     # ── Shortage intelligence ─────────────────────────────────────────────────
@@ -324,6 +385,67 @@ class DemandItem(models.Model):
 
     notes = models.CharField(max_length=255, blank=True)
 
+    # ── Therapeutic substitution at capture (Phase 3) ─────────────────────────
+    # When this line is an in-stock same-molecule alternative offered in place of
+    # an out-of-stock item, this points at the original item. Makes substitution a
+    # queryable signal (which molecules customers accept swaps for).
+    substitute_for_item = models.ForeignKey(
+        'catalog.Item', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='offered_as_substitute_in',
+        verbose_name='بديل علمي لـ',
+    )
+
+    # ── Price snapshot (Phase 0) ──────────────────────────────────────────────
+    # Frozen at capture time because ERP prices drift. Used to value lost demand
+    # and to prioritise recovery. Null for free-text items (price unknowable).
+    unit_price_snapshot = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='سعر الوحدة المُجمَّد',
+        help_text='نسخة من سعر العبوة (item.pack_price) وقت التسجيل — للتقييم والاسترداد',
+    )
+    cost_price_snapshot = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='سعر التكلفة المُجمَّد',
+        help_text='نسخة من سعر التكلفة (item.cost_price) وقت التسجيل — لحساب الهامش',
+    )
+    price_snapshot_at = models.DateTimeField(null=True, blank=True)
+    # True when the price was typed by hand (uncoded item) rather than synced from
+    # ERP. Surfaced in the UI so manual estimates are never mistaken for ERP data.
+    price_is_manual = models.BooleanField(
+        default=False, verbose_name='سعر مُدخَل يدوياً',
+        help_text='القيمة تقديرية أُدخلت يدوياً ولم تُجلب من ERP',
+    )
+
+    # ── Recovery tracking (Phase 1) ───────────────────────────────────────────
+    back_in_stock_at     = models.DateTimeField(null=True, blank=True, db_index=True,
+        verbose_name='تاريخ عودته للمخزون')
+    notified_customer_at = models.DateTimeField(null=True, blank=True,
+        verbose_name='تاريخ آخر تواصل مع العميل')
+    recovered_at         = models.DateTimeField(null=True, blank=True,
+        verbose_name='تاريخ الاسترداد')
+    recovered_revenue    = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='الإيراد المُسترَد (ج.م)')
+    # Forward bridge target (Phase 1b): set when a recovery becomes a Reservation.
+    reservation          = models.ForeignKey(
+        'reservations.Reservation', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='source_demand_items',
+        verbose_name='الحجز الناتج')
+
+    # ── Item-level contact opt-out (Phase 1, §5.10) ───────────────────────────
+    contact_opt_out        = models.BooleanField(default=False, db_index=True,
+        verbose_name='رفض التواصل بخصوص هذا الصنف')
+    contact_opt_out_reason = models.CharField(max_length=20, blank=True, choices=OPT_OUT_REASONS)
+    contact_opt_out_at     = models.DateTimeField(null=True, blank=True)
+
+    # ── Disqualification gate (Phase 1, §5.8 — approval-gated) ────────────────
+    disqualified        = models.BooleanField(default=False, db_index=True,
+        verbose_name='مُستبعَد من الاسترداد')
+    disqualified_reason = models.CharField(max_length=20, blank=True, choices=DISQUALIFY_REASONS)
+    disqualified_by     = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='disqualified_demand_items')
+    disqualified_at     = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'صنف في الطلب'
         verbose_name_plural = 'أصناف الطلب'
@@ -331,6 +453,17 @@ class DemandItem(models.Model):
     def __str__(self):
         name = self.item.name if self.item else self.item_name_free
         return f'{name} × {self.quantity}'
+
+    def save(self, *args, **kwargs):
+        # Freeze the item's price once, at first save, when an item is linked.
+        # Never overwrites an existing snapshot; free-text items stay null.
+        if self.unit_price_snapshot is None and self.item_id:
+            item = self.item
+            if item is not None:
+                self.unit_price_snapshot = item.pack_price
+                self.cost_price_snapshot = item.cost_price
+                self.price_snapshot_at    = timezone.now()
+        super().save(*args, **kwargs)
 
     @property
     def item_display_name(self):
@@ -362,12 +495,87 @@ class DemandItem(models.Model):
         )
         return float(result['total'] or 0)
 
+    @property
+    def line_value(self):
+        """Potential revenue of this line = quantity × frozen unit price.
+        None when no price snapshot (free-text item)."""
+        if self.unit_price_snapshot is None:
+            return None
+        return float(self.quantity * self.unit_price_snapshot)
+
+    @property
+    def line_margin(self):
+        """Potential margin of this line = quantity × (unit price − cost).
+        None when either snapshot is missing."""
+        if self.unit_price_snapshot is None or self.cost_price_snapshot is None:
+            return None
+        return float(self.quantity * (self.unit_price_snapshot - self.cost_price_snapshot))
+
+    # ── Recovery loop (Phase 1) ───────────────────────────────────────────────
+
+    @property
+    def is_recovery_eligible(self):
+        """Per-instance mirror of DemandItemQuerySet.recovery_eligible (§5.2)."""
+        from datetime import timedelta
+        if not self.item_id or self.disqualified or self.contact_opt_out:
+            return False
+        if self.demand.created_at < timezone.now() - timedelta(days=self.RECOVERY_WINDOW_DAYS):
+            return False
+        if self.item_status in ('pending', 'sourcing', 'available_again'):
+            return True
+        return self.item_status == 'lost' and self.demand.lost_reason == 'no_stock'
+
+    @property
+    def days_waiting(self):
+        """Whole days the customer has been waiting since the demand was created."""
+        return (timezone.now() - self.demand.created_at).days
+
+    @property
+    def wa_link(self):
+        """Operator-clickable wa.me deep link prefilled with a back-in-stock message.
+        Human-in-the-loop: the operator decides to send. None if no phone."""
+        from urllib.parse import quote
+        phone = (self.demand.phone or '').strip()
+        if not phone:
+            return None
+        # Normalise Egyptian local number (01XXXXXXXXX) to international (201XXXXXXXXX)
+        digits = ''.join(c for c in phone if c.isdigit())
+        if digits.startswith('0'):
+            digits = '2' + digits
+        elif not digits.startswith('20'):
+            digits = '20' + digits
+        branch = self.demand.branch
+        branch_name = (branch.name_ar or branch.name) if branch else ''
+        name = self.demand.customer_name or ''
+        msg = (
+            f'السلام عليكم {name}،\n'
+            f'صنف "{self.item_display_name}" الذي طلبته أصبح متوفراً الآن'
+            f'{" في فرع " + branch_name if branch_name else ""}.\n'
+            f'هل ترغب في حجزه؟'
+        )
+        return f'https://wa.me/{digits}?text={quote(msg)}'
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Follow-up Task
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-class FollowUpTask(models.Model):
+class DemandFollowUp(models.Model):
+    """Per-DemandRecord follow-up task (the demand workflow's own task list).
+
+    DISTINCT from ``followups.FollowUpTask`` (DUP-004) — do not conflate:
+      • ``demand.DemandFollowUp`` (this model) — a channel-typed micro-task
+        (call / whatsapp / sms / visit / stock_check) bound to ONE DemandRecord
+        (required FK, CASCADE). Auto-created with every demand, surfaced in the
+        demand detail "المتابعات" tab. ``due_date`` carries a time.
+      • ``followups.FollowUpTask`` — the customer-centric chronic-refill engine
+        (priority scoring, multi-assignee, ERP sale anchors, pinning). It can
+        *spawn* a DemandRecord via ``followups.services.create_demand_from_task``
+        (one-directional bridge); it is NOT this per-record task list.
+
+    Table name is pinned to the original ``demand_followuptask`` so the rename
+    from ``FollowUpTask`` is purely a code-level de-collision (no data move).
+    """
 
     STATUS_CHOICES = [
         ('pending',    'مجدولة'),
@@ -411,9 +619,10 @@ class FollowUpTask(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        db_table = 'demand_followuptask'   # preserve table across the FollowUpTask→DemandFollowUp rename
         ordering = ['due_date']
-        verbose_name = 'مهمة متابعة'
-        verbose_name_plural = 'مهام المتابعة'
+        verbose_name = 'متابعة طلب'
+        verbose_name_plural = 'متابعات الطلبات'
 
     def __str__(self):
         return f'{self.get_task_type_display()} — {self.demand.demand_number} — {self.due_date:%Y-%m-%d %H:%M}'
@@ -530,6 +739,10 @@ class ItemDemandStat(models.Model):
     lost_count_30d      = models.PositiveIntegerField(default=0)
     fulfilled_count_30d = models.PositiveIntegerField(default=0)
     lost_qty_30d        = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Phase 2 — confirmed lost EGP (Σ quantity × frozen unit price of lost lines)
+    lost_value_30d      = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    # Demand-driven reorder: open + lost demand units → suggested purchase qty
+    suggested_order_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     # Shortage flags (managed manually or via command)
     is_long_shortage  = models.BooleanField(default=False, db_index=True)

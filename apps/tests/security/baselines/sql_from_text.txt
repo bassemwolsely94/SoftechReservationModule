@@ -1,0 +1,296 @@
+# SQL built from text reaching an execute-style call. Batch 1 (2026-10-26) fixed every
+# user-reachable READ; every line left is explained below. New lines need the same.
+
+# Owner: Batch 2 (SOFTECH write path — needs owner OK) — inline-literal INSERT writer (bound INSERTs do not land on this ASE)
+#   every row value escaped by _sql_literal; _Raw date literals only via _dt_literal (real date/datetime) — P-1 fixed 2026-10-26
+apps/pos_orders/writer.py::_exec_insert
+#   claim.examdate validated as a date (serializer) and re-checked by _dt_literal before INSERT companiesitems5 — P-1 fixed 2026-10-26
+apps/pos_orders/writer.py::_execute_write
+
+# Owner: Batch 2 (SOFTECH write path — needs owner OK) — user-influenced values, escaped today
+#   user-confirmed vendor code + editable personcode; escaped (_sql_literal)
+apps/invoices/supplier_items.py::inject_mapping
+#   softech_branchcode / store user-editable; escaped (_sql_literal)
+apps/invoices/writer.py::_run_write_batch
+#   order branch/doccode; escaped; int(docnumber)
+apps/pos_orders/writer.py::_delete_pending_from_softech
+
+# Owner: Batch 2 (SOFTECH write path — needs owner OK) — constants / mirror values / bound; no user text interpolated
+apps/customers/branch_copy.py::copy_one
+apps/discount_approvals/alignment.py::apply_classification_changes
+apps/discount_approvals/alignment.py::create_new_tier
+apps/discount_approvals/replication.py::force_replication
+apps/discount_approvals/services.py::execute_price_change
+apps/finance/recon_writer.py::_live_write._write_steps
+apps/finance/recon_writer.py::_reverse_steps
+apps/finance/recon_writer.py::_top_up._work
+apps/finance/recon_writer.py::complete_half_reversal
+apps/finance/recon_writer.py::complete_half_write
+apps/finance/recon_writer.py::fix_due_before._work
+apps/insurance/date_service.py::_set_docdate
+apps/insurance/reprice_service.py::_write_receipt
+apps/insurance/reprice_service.py::_revert_locked
+apps/invoices/writer.py::_exec_insert
+apps/personal/writeback.py::_write_and_verify
+apps/pos_orders/writer.py::probe_cancel
+apps/purchasing/coverage_writer.py::_apply_reset
+apps/purchasing/coverage_writer.py::probe_coverage_write._set
+apps/purchasing/rate_writer.py::probe_write
+apps/purchasing/shortage_writer.py::_write_softech
+
+# reason: internal-only — dates from _parse_date/isoformat; supplier codes from SupplierSegmentation (engine-written from SOFTECH); admin-triggered (triage 2026-10-26)
+apps/batches/expiry_audit.py::run_backfill
+
+# reason: internal-only — DB / FLAGS / EDITOR column constants; pic bound (triage 2026-10-26)
+apps/customers/branch_copy.py::read_row
+
+# reason: internal-only — WHERE assembled from fixed fragments; phcode/phone bound (triage 2026-10-26)
+apps/demand/service.py::lookup_customer_in_erp
+
+# reason: internal-only — table/column from the LOOKUP_TABLES whitelist or SOFTECH schema; user values bound (triage 2026-10-26)
+apps/discount_approvals/alignment.py::_next_code
+apps/discount_approvals/alignment.py::_tier_schema
+apps/discount_approvals/alignment.py::preview_new_tier
+
+# reason: internal-only — PRICE_COLS constant; cutoff = timezone.now()-timedelta strftime; ids bound (triage 2026-10-26)
+apps/discount_approvals/replication.py::check_item
+apps/discount_approvals/replication.py::scan_recent
+
+# reason: internal-only — DB/table constants, periods from int year/month (monthrange), int rowcount/limit; many functions have no callers; inspect_table is CLI-only (triage 2026-10-26)
+apps/finance/queries/sybase_accounting.py::_fetch
+apps/finance/queries/sybase_accounting.py::get_acctrans_by_month
+apps/finance/queries/sybase_accounting.py::get_acctrans_columns
+apps/finance/queries/sybase_accounting.py::get_acctrans_monthly_totals
+apps/finance/queries/sybase_accounting.py::get_actual_cheques_by_month
+apps/finance/queries/sybase_accounting.py::get_bankstrans_by_month
+apps/finance/queries/sybase_accounting.py::get_branchesales_by_month
+apps/finance/queries/sybase_accounting.py::get_branchesales_monthly_aggregated
+apps/finance/queries/sybase_accounting.py::get_branchesales_ytd
+apps/finance/queries/sybase_accounting.py::get_cheques_by_month
+apps/finance/queries/sybase_accounting.py::get_custpayments_by_month
+apps/finance/queries/sybase_accounting.py::get_dailyexpenses_by_branch_month
+apps/finance/queries/sybase_accounting.py::get_dailyexpenses_by_month
+apps/finance/queries/sybase_accounting.py::get_dailyexpenses_with_master_by_month
+apps/finance/queries/sybase_accounting.py::get_empsalaries_by_month
+apps/finance/queries/sybase_accounting.py::get_expenses_by_month
+apps/finance/queries/sybase_accounting.py::get_expenses_columns
+apps/finance/queries/sybase_accounting.py::get_expenses_monthly_totals
+apps/finance/queries/sybase_accounting.py::get_total_payroll_by_month
+apps/finance/queries/sybase_accounting.py::inspect_table
+
+# reason: internal-only — table names only from the discover_finance_schema management command (operator CLI) (triage 2026-10-26)
+apps/finance/queries/sybase_discovery.py::get_all_table_names
+apps/finance/queries/sybase_discovery.py::get_table_columns
+apps/finance/queries/sybase_discovery.py::get_table_row_count
+apps/finance/queries/sybase_discovery.py::get_table_sample
+
+# reason: internal-only — DB constant, int year/month periods, DOCCODE constants; branch_id never passed by any caller (latent — keep it that way) (triage 2026-10-26)
+apps/finance/queries/sybase_finance.py::get_inventory_value_snapshot
+apps/finance/queries/sybase_finance.py::get_monthly_branch_snapshot
+apps/finance/queries/sybase_finance.py::get_payment_transactions
+apps/finance/queries/sybase_finance.py::get_purchase_returns_by_month
+apps/finance/queries/sybase_finance.py::get_purchases_by_month
+apps/finance/queries/sybase_finance.py::get_sales_by_month
+apps/finance/queries/sybase_finance.py::get_sales_returns_by_month
+apps/finance/queries/sybase_finance.py::get_signed_period_totals
+apps/finance/queries/sybase_finance.py::get_top_items_by_purchase_value
+apps/finance/queries/sybase_finance.py::get_ytd_summary
+
+# reason: internal-only — WHERE fragments + '?' markers; every value bound (triage 2026-10-26)
+apps/finance/queries/sybase_reconciliation.py::get_allocations
+apps/finance/queries/sybase_reconciliation.py::get_invoices
+apps/finance/queries/sybase_reconciliation.py::get_vouchers
+
+# reason: internal-only — br/dc/dn isdigit()/int() validated, date parts; values from the APInvoice mirror (triage 2026-10-26)
+apps/finance/recon_lines.py::invoice_lines
+
+# reason: internal-only — SELECT steps of the A/P writer; keys from the APInvoice/payment mirror (SOFTECH-sourced), int(cheqsno) (triage 2026-10-26)
+apps/finance/recon_writer.py::_live_write
+apps/finance/recon_writer.py::_top_up
+apps/finance/recon_writer.py::complete_half_write._landed
+apps/finance/recon_writer.py::fix_due_before
+apps/finance/recon_writer.py::fix_due_before._restored
+apps/finance/recon_writer.py::reverse_allocation
+
+# reason: internal-only — dates + agent usercodes only from the build_call_center_rollups command; quotes stripped (triage 2026-10-26)
+apps/forecasting/cc_softech.py::cc_returns_from_softech
+
+# reason: internal-only — docno filter of '?' fragments; bound (triage 2026-10-26)
+apps/insurance/importer.py::_fetch_lines_batch
+
+# reason: internal-only — _LINE_COLS / _HDR_COLS constants; values bound (triage 2026-10-26)
+apps/insurance/reprice_service.py::_read_receipt
+
+# reason: internal-only — limit is an int literal from management commands (triage 2026-10-26)
+apps/loyalty/pic_bridge.py::read_softech_points_log
+
+# reason: internal-only — table from env ISSABEL_CDR_TABLE; uniqueid bound (MySQL) (triage 2026-10-26)
+apps/pbx/recordings.py::lookup_cdr_recording
+
+# reason: internal-only — DB constant + WHERE fragments; LIKE value bound (triage 2026-10-26)
+apps/personal/queries.py::search_persons
+
+# reason: internal-only — column list f1-f12 generated in code; pc bound (triage 2026-10-26)
+apps/pos_orders/contract_fields.py::contract_field_spec
+
+# reason: internal-only — WHERE fragments + int(limit); q bound (triage 2026-10-26)
+apps/pos_orders/customer_directory.py::list_entities
+apps/pos_orders/customer_directory.py::salespeople
+
+# reason: internal-only — DOCKIND_TO_COUNTER doc list never executed (_build_sql); _SALE_LINE_COLS constant + int(invoice) bound (read_finalized_sale) (triage 2026-10-26)
+apps/pos_orders/writer.py::_build_sql
+apps/pos_orders/writer.py::read_finalized_sale
+
+# reason: internal-only — item codes from the engine run, escaped (triage 2026-10-26)
+apps/purchasing/distribution.py::_item_ages
+
+# reason: internal-only — days parameter re-bound to max(1, min(int(days), 90)) — numeric; scanner stays conservative on re-bound parameters (triage 2026-10-26)
+apps/purchasing/isr_fulfillment.py::recent_branch_isrs
+
+# reason: internal-only — column names picked from SOFTECH's own column list via hint lists; date bound (triage 2026-10-26)
+apps/purchasing/lead_time.py::estimate_lead_times
+
+# reason: internal-only — bb personcodes read from SOFTECH personsdata; RECENT/FLAG constants (triage 2026-10-26)
+apps/purchasing/phantom.py::_purchase_metrics
+
+# reason: internal-only — PostgreSQL TRUNCATE of model._meta.db_table names (triage 2026-10-26)
+apps/replacement/reconstruct.py::reset_reconstructed
+
+# reason: internal-only — d1/d2 from strftime('%Y%m%d') (triage 2026-10-26)
+apps/stock_audit/ledger.py::_HqFetcher.__call__
+
+# reason: internal-only — table from env setting; dates bound (triage 2026-10-26)
+config/issabel.py::fetch_cdr_rows
+
+# reason: internal-only — execute_stored_procedure has no callers (dead code); prepareCall only feeds the read-only guard (false positive) (triage 2026-10-26)
+config/sybase.py::SoftechConnector.execute_stored_procedure
+config/sybase.py::_ReadOnlyJavaConnection.prepareCall
+
+# reason: internal-only — table/column names regex-checked identifiers, code constants of the sync
+#   investigations; key values bound (Batch 2, P-14, 2026-10-26)
+core/softech_probe_restore.py::RowGuard.snapshot
+
+# reason: management command — operator CLI only, not HTTP-reachable; reviewed 2026-10-26
+apps/composition/management/commands/probe_softech_ingredients.py::Command._cols
+apps/composition/management/commands/probe_softech_ingredients.py::Command._find_class_table
+apps/composition/management/commands/probe_softech_ingredients.py::Command._mirror
+apps/composition/management/commands/probe_softech_ingredients.py::Command.handle
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_fk
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_flags
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_footprint
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_pics
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_relatives
+apps/customers/management/commands/investigate_pic_merge.py::Command.s_triggers
+apps/customers/management/commands/investigate_pic_replication.py::Command._trace_one
+apps/customers/management/commands/investigate_pic_replication.py::Command.s_side
+apps/delivery/management/commands/sync_crm_orders.py::Command.handle
+apps/delivery/management/commands/sync_crm_orders.py::_apply_branch_status_updates
+apps/finance/management/commands/backfill_ap_invoice_comments.py::Command.handle
+apps/finance/management/commands/backfill_ap_invoice_stubs.py::Command.handle
+apps/finance/management/commands/fix_ap_due_before.py::Command._needing_fix
+apps/finance/management/commands/sync_ap_return_links.py::Command.handle
+apps/incentives/management/commands/detect_near_expiry_schema.py::Command._get_sample_val
+apps/incentives/management/commands/detect_near_expiry_schema.py::Command._sp_columns
+apps/incentives/management/commands/detect_near_expiry_schema.py::Command.handle
+apps/insurance/management/commands/inspect_insurance_schema.py::Command._inspect_table
+apps/insurance/management/commands/inspect_insurance_schema.py::Command._run_full_discovery
+apps/insurance/management/commands/preview_receipt_reprice.py::_read_receipt
+apps/insurance/management/commands/scan_softech_receipt_edits.py::Command.handle
+apps/invoices/management/commands/benchmark_vs_softech.py::Command._header_map
+apps/invoices/management/commands/benchmark_vs_softech.py::Command._lines_map
+apps/invoices/management/commands/diag_chained.py::Command.handle
+apps/invoices/management/commands/diag_purchase3.py::Command.handle
+apps/invoices/management/commands/diag_purchase_insert.py::Command.handle
+apps/invoices/management/commands/diag_purchase_verbatim.py::Command._insert
+apps/invoices/management/commands/probe_docnumbers.py::Command.handle
+apps/offers/management/commands/investigate_override.py::Command._rows
+apps/offers/management/commands/investigate_promo_table.py::Command._candidates
+apps/offers/management/commands/investigate_promo_table.py::Command._find
+apps/offers/management/commands/investigate_promo_table.py::Command.handle
+apps/procurement/management/commands/inspect_procurement_sources.py::Command._discover_foc_columns
+apps/procurement/management/commands/inspect_procurement_sources.py::Command._probe_foc_signals
+apps/procurement/management/commands/inspect_tax_columns.py::Command.handle
+apps/purchasing/management/commands/probe_isr.py::Command._anatomy
+apps/purchasing/management/commands/probe_isr.py::Command._columns
+apps/purchasing/management/commands/probe_isr.py::Command._converted
+apps/purchasing/management/commands/probe_isr.py::Command._dump_where
+apps/purchasing/management/commands/probe_isr.py::Command._locate_isr
+apps/purchasing/management/commands/probe_isr.py::Command._serials
+apps/purchasing/management/commands/probe_sales_rate.py::Command._dump_candidate_tables
+apps/purchasing/management/commands/probe_sales_rate.py::Command._dump_item
+apps/purchasing/management/commands/probe_sales_rate.py::Command._dump_rate_cols
+apps/purchasing/management/commands/probe_sales_rate.py::Command._fingerprint
+apps/purchasing/management/commands/probe_sales_rate.py::Command._scan_columns
+apps/sync/management/commands/backfill_sales_channels.py::Command.handle
+apps/sync/management/commands/capture_dbcc_sqltext.py::Command.handle
+apps/sync/management/commands/capture_save_sql.py::Command.handle
+apps/sync/management/commands/check_pic_balance.py::Command.handle.q
+apps/sync/management/commands/find_points_proc.py::Command._list_procs
+apps/sync/management/commands/find_points_proc.py::Command._show_proc_source
+apps/sync/management/commands/find_posdiscp_tables.py::Command.handle.scan
+apps/sync/management/commands/find_replication_job.py::Command.handle.scan
+apps/sync/management/commands/inspect_softech_schema.py::Command.handle
+apps/sync/management/commands/investigate_britems.py::Command._investigate
+apps/sync/management/commands/investigate_crm_orders.py::Command.handle
+apps/sync/management/commands/investigate_crm_orders.py::Command.handle.schema
+apps/sync/management/commands/investigate_gift_vouchers.py::Command.handle
+apps/sync/management/commands/investigate_import_tables.py::Command.handle
+apps/sync/management/commands/investigate_import_tables.py::Command.handle.schema
+apps/sync/management/commands/investigate_indirect_pos_full.py::Command.handle
+apps/sync/management/commands/investigate_permissions.py::Command.handle
+apps/sync/management/commands/investigate_permissions.py::Command.handle.count
+apps/sync/management/commands/investigate_permissions.py::Command.handle.sample
+apps/sync/management/commands/investigate_pic_points.py::Command.handle
+apps/sync/management/commands/investigate_pic_points.py::Command.handle.print_columns
+apps/sync/management/commands/investigate_pic_points.py::Command.handle.print_source
+apps/sync/management/commands/investigate_pos_cashier.py::Command.handle
+apps/sync/management/commands/investigate_pos_cashier.py::Command.handle.schema
+apps/sync/management/commands/investigate_pos_discount.py::Command.handle
+apps/sync/management/commands/investigate_pos_discount2.py::Command.handle.schema
+apps/sync/management/commands/investigate_pos_discount3.py::Command.handle
+apps/sync/management/commands/investigate_pos_discount4.py::Command.handle.sample
+apps/sync/management/commands/investigate_pos_discount4.py::Command.handle.schema
+apps/sync/management/commands/investigate_purchase_draft.py::Command.handle.set_rowcount
+apps/sync/management/commands/investigate_purchase_draft2.py::Command.handle
+apps/sync/management/commands/investigate_purchase_draft2.py::Command.handle.schema
+apps/sync/management/commands/investigate_purchase_draft2.py::Command.handle.set_rowcount
+apps/sync/management/commands/investigate_purchase_draft3.py::Command.handle
+apps/sync/management/commands/investigate_purchase_draft3.py::Command.handle.cols_of
+apps/sync/management/commands/investigate_purchase_draft3.py::Command.handle.set_rowcount
+apps/sync/management/commands/investigate_purchase_invoice.py::Command.handle
+apps/sync/management/commands/investigate_purchase_invoice.py::Command.handle.schema
+apps/sync/management/commands/investigate_purchase_invoice.py::Command.handle.set_rowcount
+apps/sync/management/commands/investigate_purchase_invoice2.py::Command.handle
+apps/sync/management/commands/investigate_purchase_invoice2.py::Command.handle.set_rowcount
+apps/sync/management/commands/investigate_purchase_validations.py::Command.handle.rc
+apps/sync/management/commands/investigate_purchase_validations.py::Command.handle.schema
+apps/sync/management/commands/investigate_replication.py::Command._investigate
+apps/sync/management/commands/investigate_save_process.py::Command.handle
+apps/sync/management/commands/observe_finalization.py::Command._snapshot
+apps/sync/management/commands/observe_finalization.py::Command._snapshot.rows
+apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle
+apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.col_exists
+apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.schema
+apps/sync/management/commands/probe_ap_reconciliation.py::Command.handle.set_rowcount
+apps/sync/management/commands/probe_ap_writeback.py::Command._rehearse
+apps/sync/management/commands/probe_ap_writeback.py::Command.handle
+apps/sync/management/commands/probe_ap_writeback.py::Command.handle.run
+apps/sync/management/commands/probe_ap_writeback.py::Command.handle.schema
+apps/sync/management/commands/probe_hq_os.py::Command.handle.xp
+apps/sync/management/commands/probe_itemlastupdate.py::Command._investigate
+apps/sync/management/commands/probe_lib_db.py::Command.handle
+apps/sync/management/commands/probe_softech_change_columns.py::Command.s_customers
+apps/sync/management/commands/probe_softech_task.py::Command.handle.xp
+apps/sync/management/commands/probe_ssb_comm.py::Command.handle.xp
+apps/sync/management/commands/probe_stock_audit.py::Command.section_a
+apps/sync/management/commands/probe_stock_audit.py::Command.section_a_nodes
+apps/sync/management/commands/probe_stock_audit.py::Command.section_b
+apps/sync/management/commands/probe_stock_audit.py::Command.section_c
+apps/sync/management/commands/probe_stock_audit.py::Command.section_d
+apps/sync/management/commands/probe_stock_audit.py::Command.section_e
+apps/sync/management/commands/verify_branch_replication.py::Command.handle
+apps/vouchers/management/commands/push_coupon_batch.py::Command._probe
+
+# Owner: doc 30 SOFTECH load telemetry (merged from amazing-fermi 2026-10-27) — POSTGRES write, not SOFTECH
+#   only the VALUES placeholder list is .format()-ed (a fixed "(%s,…)" per bucket); every value is a bound param
+apps/sync/softech_load.py::flush

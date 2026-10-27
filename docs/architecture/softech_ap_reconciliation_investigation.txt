@@ -1,0 +1,735 @@
+AP-reconciliation discovery started: 2026-09-18T17:45:24.050730
+Profile: prod | effective host: 192.168.1.8
+Mode: READ-ONLY (SELECT only)
+ANCHORS  voucher_serial=51703 receipt_no=31789 inner_serial=451 invoice_serial=12207 supplier_docno=5213 amount=743.40 branch=130 invoice_date=2026-08-15
+
+================================================================================
+  A: Candidate payment / receipt / settlement tables by NAME
+================================================================================
+
+--- name LIKE '%pay%' ---
+  COLS: name
+  custpayments
+  empborrowpayments
+  patientpayments
+  paymentstypes
+  refusedcheques_pay
+  salespay
+  stockordersmpay
+
+--- name LIKE '%recei%' ---
+  COLS: name
+  ereceipt_devices
+  ereceipt_lastuudi
+  ereceipt_latesubmit
+  ereceipt_qrcode
+  ereceipt_snos
+  ereceipt_token
+  personsdatareceipt
+
+--- name LIKE '%receipt%' ---
+  COLS: name
+  ereceipt_devices
+  ereceipt_lastuudi
+  ereceipt_latesubmit
+  ereceipt_qrcode
+  ereceipt_snos
+  ereceipt_token
+  personsdatareceipt
+
+--- name LIKE '%sadad%' ---
+  (no rows)
+
+--- name LIKE '%sanad%' ---
+  (no rows)
+
+--- name LIKE '%sarf%' ---
+  (no rows)
+
+--- name LIKE '%dafe%' ---
+  (no rows)
+
+--- name LIKE '%madfo%' ---
+  (no rows)
+
+--- name LIKE '%mokbod%' ---
+  (no rows)
+
+--- name LIKE '%kabd%' ---
+  (no rows)
+
+--- name LIKE '%voucher%' ---
+  (no rows)
+
+--- name LIKE '%settle%' ---
+  (no rows)
+
+--- name LIKE '%alloc%' ---
+  (no rows)
+
+--- name LIKE '%financ%' ---
+  COLS: name
+  financialdocs
+
+--- name LIKE '%treasur%' ---
+  (no rows)
+
+--- name LIKE '%khazn%' ---
+  (no rows)
+
+--- name LIKE '%cash%' ---
+  COLS: name
+  branchescash
+  cheques_cashed
+
+--- name LIKE '%cheq%' ---
+  COLS: name
+  cheques
+  cheques5
+  cheques_5
+  cheques_cashed
+  cheques_del
+  cheques_to_bank
+  cheques_trial
+  cheques_trial1
+  chequesash
+  chequeslevels
+  chequeslimits
+  chequestrans
+  chequestrans5
+  chequestrans_31206
+  chequestrans_del
+  refusedcheques_pay
+
+--- name LIKE '%bank%' ---
+  COLS: name
+  bankcurrencies
+  bankcurrenciestrans
+  banks
+  banks2
+  banks_date
+  banks_safe_pending
+  banksopenbal
+  bankstrans
+  banksusers
+  banksx
+  cheques_to_bank
+
+--- name LIKE '%openinv%' ---
+  (no rows)
+
+--- name LIKE '%invpay%' ---
+  (no rows)
+
+--- name LIKE '%docpay%' ---
+  (no rows)
+
+--- name LIKE '%paid%' ---
+  (no rows)
+
+--- name LIKE '%opentrans%' ---
+  (no rows)
+
+================================================================================
+  B: COLUMN-name census — tables carrying settlement / paid / invoice-link columns
+================================================================================
+  (This is the key discovery: whichever table holds the invoice↔voucher
+   allocation must expose columns like paid/paidnow/invno/refdoc/docpay/amountdue.)
+
+--- column LIKE '%paid%' ---
+  COLS: name | name | name
+  chequestrans | docvaluepaid | numeric
+  chequestrans5 | docvaluepaid | decimal
+  chequestrans_31206 | docvaluepaid | numeric
+  chequestrans_del | docvaluepaid | numeric
+  empovertime | otpaid | tinyint
+  empovertime | otpaidby | varchar
+  patientpayments | whopaidthis | decimal
+  salespay | money_paid | decimal
+
+--- column LIKE '%paynow%' ---
+  COLS: name | name | name
+  chequestrans | docvaluepaynow | numeric
+  chequestrans5 | docvaluepaynow | decimal
+  chequestrans_31206 | docvaluepaynow | numeric
+  chequestrans_del | docvaluepaynow | numeric
+
+--- column LIKE '%paidnow%' ---
+  (no rows)
+
+--- column LIKE '%paidvalue%' ---
+  (no rows)
+
+--- column LIKE '%settle%' ---
+  (no rows)
+
+--- column LIKE '%sadad%' ---
+  (no rows)
+
+--- column LIKE '%invno%' ---
+  (no rows)
+
+--- column LIKE '%invnumber%' ---
+  (no rows)
+
+--- column LIKE '%invoiceno%' ---
+  (no rows)
+
+--- column LIKE '%refdoc%' ---
+  COLS: name | name | name
+  custrefdoctors | refdoctorcode | varchar
+  patientdata | refdoctor_p | varchar
+  patientdata | refdoctorcode | varchar
+  patientdata2 | refdoctor_p | varchar
+  patientdata2 | refdoctorcode | varchar
+  patientdata_del | refdoctor_p | varchar
+  patientdata_del | refdoctorcode | varchar
+  picdoctors | refdoctorcode | varchar
+  r3stktransm | refdoctorcode | varchar
+  refdoctors | isrefdoctor | varchar
+  refdoctors | refdoctor_percent | decimal
+  refdoctors | refdoctor_personcode | varchar
+  refdoctors | refdoctorcode | varchar
+  refdoctors | refdoctornote | varchar
+  refdoctors_deal | refdoctor_bonus | decimal
+  refdoctors_deal | refdoctor_bonusv | tinyint
+  refdoctors_deal | refdoctor_percent | decimal
+  refdoctors_deal | refdoctor_percentv | tinyint
+  refdoctors_deal | refdoctorcode | varchar
+  refdoctors_groups | refdoctorcode | varchar
+  refdoctors_m | refdoctorcode | varchar
+  refdoctors_m | refdoctornote | varchar
+  refdoctors_mtob | refdoctorcode | varchar
+  refdoctors_mtob | refdoctornote | varchar
+  refdoctorsdschedule | refdoctorcode | varchar
+  refdoctorsschedule | refdoctorcode | varchar
+  stktransm | refdoctorcode | varchar
+  stktransm5 | refdoctorcode | varchar
+  stktransm9 | refdoctorcode | varchar
+  stktransm_hq | refdoctorcode | varchar
+  stktransm_prep | refdoctorcode | varchar
+  stktransm_q | refdoctorcode | varchar
+  stktransmres | refdoctorcode | varchar
+  stockorders | refdocnumber | decimal
+  stockordersrec | refdocnumber | decimal
+  temp_ash1 | refdoctorcode | varchar
+
+--- column LIKE '%paydoc%' ---
+  (no rows)
+
+--- column LIKE '%docpay%' ---
+  COLS: name | name | name
+  r3stktransm | docpaydue | datetime
+  stktransm | docpaydue | datetime
+  stktransm5 | docpaydue | datetime
+  stktransm9 | docpaydue | datetime
+  stktransm_hq | docpaydue | datetime
+  stktransm_prep | docpaydue | datetime
+  stktransm_q | docpaydue | datetime
+  stktransmres | docpaydue | datetime
+
+--- column LIKE '%openinv%' ---
+  (no rows)
+
+--- column LIKE '%opentrans%' ---
+  COLS: name | name | name
+  banksopenbal | opentrans | varchar
+  expensesopenbal | opentrans | varchar
+  personsopenbal | opentrans | varchar
+  stkbal | opentrans | varchar
+
+--- column LIKE '%blockinv%' ---
+  COLS: name | name | name
+  cheques | blockinv | tinyint
+  cheques5 | blockinv | tinyint
+  cheques_5 | blockinv | tinyint
+
+--- column LIKE '%docpaydue%' ---
+  COLS: name | name | name
+  r3stktransm | docpaydue | datetime
+  stktransm | docpaydue | datetime
+  stktransm5 | docpaydue | datetime
+  stktransm9 | docpaydue | datetime
+  stktransm_hq | docpaydue | datetime
+  stktransm_prep | docpaydue | datetime
+  stktransm_q | docpaydue | datetime
+  stktransmres | docpaydue | datetime
+
+--- column LIKE '%amountdue%' ---
+  (no rows)
+
+--- column LIKE '%duevalue%' ---
+  (no rows)
+
+--- column LIKE '%remain%' ---
+  COLS: name | name | name
+  branchesales | localpayment_remain | decimal
+  branchesales5 | localpayment_remain | decimal
+  branchesales9 | localpayment_remain | decimal
+  branchesalesres | localpayment_remain | decimal
+  empoffdaystrans | empremainarda | tinyint
+  empoffdaystrans | empremainoffdays | decimal
+  empoffdaystrans | empremainrr | tinyint
+  empoffdaystrans | empremainsick | tinyint
+  personsdata2 | empremainarda | tinyint
+  personsdata2 | empremainoffdays | decimal
+  personsdata2 | empremainrr | tinyint
+  personsdata2 | empremainsick | tinyint
+  personsdata9 | empremainoffdays | decimal
+  recpersonsdata2 | empremainarda | tinyint
+  recpersonsdata2 | empremainoffdays | decimal
+  recpersonsdata2 | empremainsick | tinyint
+
+--- column LIKE '%allocat%' ---
+  (no rows)
+
+--- column LIKE '%financialdoc%' ---
+  COLS: name | name | name
+  cheques | financialdoccode | varchar
+  cheques5 | financialdoccode | varchar
+  cheques_5 | financialdoccode | varchar
+  cheques_del | financialdoccode | varchar
+  cheques_trial | financialdoccode | varchar
+  chequesash | financialdoccode | varchar
+  financialdocs | financialdoccode | varchar
+  financialdocs | financialdocname | varchar
+  patientpayments | financialdoccode | varchar
+  reception_shiftclosing | financialdoccode | varchar
+  stockordersmpay | financialdoccode | varchar
+
+--- column LIKE '%receiptno%' ---
+  (no rows)
+
+--- column LIKE '%esalno%' ---
+  (no rows)
+
+--- column LIKE '%serial%' ---
+  COLS: name | name | name
+  custmaintm | maintserialno | varchar
+  ereceipt_devices | posserial | varchar
+  invoices | invoiceserialno | int
+  invoices_del | invoiceserialno | int
+  patientpayments | isalserialno | int
+
+--- column LIKE '%mokbod%' ---
+  (no rows)
+
+================================================================================
+  C: ANCHOR hunt — locate the voucher and its invoice allocation
+================================================================================
+
+  [C1] cheques — cash/box voucher hypothesis (cheqtype=10)
+
+--- cheques WHERE cheqvalue = amount (recent) ---
+  COLS: cheqsno | cheqno | ourcheqsno | financialdoccode | cheqtype | cheqdate | cheqvalue | bankcode | personcode | branchcode | chequenote | personnewbal | banknewbal | open_trans | blockinv | handedto
+  51703 | 451 | 31789 | 10 | 20 | 2026-09-18 00:00:00 | 743.4 | 40 | 4471 | 130 | مورد 12207 | -1598644.04 | 13272723.36 | 0 | 0 | NULL
+  45026 | 10694 | 25561 | 10 | 20 | 2026-08-01 00:00:00 | 743.4 | 50 | 3068 | 140 | NULL | -8941500.77 | 90904903.24 | 0 | 0 | NULL
+
+--- cheques WHERE cheqsno = 51703 ---
+  COLS: cheqsno | cheqno | ourcheqsno | financialdoccode | cheqtype | cheqdate | cheqvalue | personcode | branchcode | chequenote | personnewbal | open_trans | blockinv
+  51703 | 10479 | 35415 | 10 | 20 | 2024-02-20 00:00:00 | 85.0 | 4470 | 150 | ف 10479 | -61961.87 | 0 | 0
+  51703 | 8865 | 15602 | 30 | 10 | 2025-10-31 00:00:00 | 452.0 | -170 | 160 | NULL | 0.0 | 0 | 1
+  51703 | 12261 | 35461 | 10 | 20 | 2026-06-05 00:00:00 | 420.0 | 3068 | 170 | مكتب صحة 12261 | -8759096.48 | 0 | 0
+  51703 | 451 | 31789 | 10 | 20 | 2026-09-18 00:00:00 | 743.4 | 4471 | 130 | مورد 12207 | -1598644.04 | 0 | 0
+
+--- cheques WHERE cheqno = 31789 ---
+  [ERROR] com.sybase.jdbc3.jdbc.SybSQLException: Implicit conversion from datatype 'VARCHAR' to 'INT' is not allowed.  Use the CONVERT function to run this query.
+
+
+--- cheques WHERE ourcheqsno = 31789 ---
+  COLS: cheqsno | cheqno | ourcheqsno | financialdoccode | cheqtype | cheqdate | cheqvalue | personcode | branchcode | chequenote | personnewbal | open_trans | blockinv
+  46432 | 14/07/2023 | 31789 | 10 | 20 | 2023-07-14 00:00:00 | 60.0 | 562 | 150 | فرق سعر ف 529685 | 11621.37 | 0 | 0
+  46124 | 20683 | 31789 | 10 | 20 | 2025-05-06 00:00:00 | 1246.0 | 4471 | 160 | NULL | -332772.3 | 0 | 0
+  45830 | 10311 | 31789 | 10 | 20 | 2025-08-07 00:00:00 | 518.85 | 4470 | 170 | 10311 | -230458.42 | 0 | 0
+  51703 | 451 | 31789 | 10 | 20 | 2026-09-18 00:00:00 | 743.4 | 4471 | 130 | مورد 12207 | -1598644.04 | 0 | 0
+
+--- cheques WHERE cheqsno = 31789 ---
+  COLS: cheqsno | cheqno | ourcheqsno | financialdoccode | cheqtype | cheqdate | cheqvalue | personcode | branchcode | chequenote | personnewbal | open_trans | blockinv
+  31789 | 2391 | 22549 | 10 | 20 | 2022-01-01 00:00:00 | 50.0 | -120 | 150 | كوبون م - 23913 كود 609 | 0.0 | 0 | 0
+  31789 | pos31789 | 9871 | 10 | 10 | 2023-05-04 00:00:00 | 740.0 | -170 | 170 | NULL | 0.0 | 0 | 1
+  31789 | pos31789 | 13026 | 10 | 10 | 2023-06-17 00:00:00 | 2845.0 | -170 | 130 | NULL | 0.0 | 0 | 1
+  31789 | 11750 | 20943 | 10 | 20 | 2023-09-09 00:00:00 | 2441.94 | 4883 | 160 | NULL | -39563.66 | 0 | 0
+  31789 | 429622 | 18595 | 10 | 20 | 2024-01-31 00:00:00 | 5.0 | -120 | 140 | NULL | 0.0 | 0 | 0
+  31789 | 1312 | 5054 | 90 | 10 | 2026-09-03 00:00:00 | 222.7 | 4980 | 100 | NULL | 0.0 | 0 | 0
+
+--- cheques WHERE ourcheqsno = 51703 ---
+  (no rows)
+
+  [C2] custpayments / bankstrans anchor probes
+
+--- custpayments WHERE custpayvalue = amount (recent) ---
+  (no rows)
+
+--- bankstrans recent rows (bounded) ---
+  (no rows)
+
+  [C3] the settled supplier invoice (stktransm doccode 10)
+
+--- stktransm doccode=10 WHERE docnumber = invoice_serial (branch, dated) (one row, vertical) ---
+    branchcode                   = 130
+    doccode                      = 10
+    docnumber                    = 12207.0
+    docdate                      = 2026-08-15 00:00:00
+    supp_main_code               = 00
+    docnumber2                   = 5213.0
+    comments                     = NULL
+    docvalue                     = 743.4
+    cust_branch_code             = 4471
+    origintaxp                   = 0.0
+    custdiscp                    = 0.0
+    specialdiscp                 = 0.0
+    storecode                    = 130
+    docvaluepay                  = 743.4
+    fatstatuscode                = 10
+    ptcode                       = 20
+    ptclassifcode                = 80
+    cust_branch_store            = 130
+    docvaluereturn               = 0.0
+    fatcurrentstatus             = 90
+    docwritedate                 = NULL
+    cust_professional            = 0
+    saleprice_extrap             = 0.0
+    usercode                     = 1633
+    trans_time                   = 2026-08-15 14:39:35
+    patientpayment               = 0.0
+    table_dumped                 = 2026-08-15 14:39:35
+    docvalue1                    = 0.0
+    docvalue2                    = 0.0
+    docvalue3                    = 0.0
+    phcode                       = NULL
+    personnewbal                 = -1530572.33
+    bcurrency                    = 1
+    docvaluebc                   = 743.4
+    docvaluepaybc                = 743.4
+    bcrate                       = 1.0
+    mitemsys                     = NULL
+    cashiercode                  = NULL
+    origdoc                      = 0
+    refdoctorcode                = NULL
+    docpaydue                    = NULL
+    vf1                          = NULL
+    vf2                          = NULL
+
+  >> resolved supplier personcode = 4471
+
+================================================================================
+  C4: GLOBAL needle scan — table+column holding invoice_serial and amount
+================================================================================
+  Enumerating user tables with BOTH an integer-ish column = invoice_serial
+  and a decimal column = amount would need dynamic SQL; instead we list every
+  table that has a column matching a settlement pattern (from §B) and, for the
+  top candidates, dump recent rows so the link row is visible. Prioritise any
+  table whose §B column census flagged paid/paidnow/invno/refdoc/docpay.
+
+--- which candidate detail tables exist ---
+  COLS: name
+  financialdocs
+
+  SCHEMA: financialdocs  (colid | name | type | len | NULL?)
+    [  1] financialdoccode             varchar        len=2     NOT NULL
+    [  2] financialdocname             varchar        len=15    NOT NULL
+
+--- financialdocs: recent rows ---
+  COLS: financialdoccode | financialdocname
+  20 | شيك بنكي
+  10 | نقــدي
+  90 | قيد تسوية
+  30 | بطافة إئتمان
+  40 | كمبيالة
+  50 | إيصال أمانة
+  60 | سند إذني
+  25 | ورقة دفع داخلية
+
+================================================================================
+  D: Schema of known + candidate tables
+================================================================================
+
+  SCHEMA: cheques  (colid | name | type | len | NULL?)
+    [  1] cheqsno                      int            len=4     NOT NULL
+    [  2] financialdoccode             varchar        len=2     NOT NULL
+    [  3] cheqtype                     varchar        len=2     NOT NULL
+    [  4] cheqno                       varchar        len=20    NOT NULL
+    [  5] cheqdate                     datetime       len=8     NOT NULL
+    [  6] bankcode                     varchar        len=3     NOT NULL
+    [  7] personcode                   varchar        len=8     NOT NULL
+    [  8] cheqvalue                    decimal        len=6     NOT NULL
+    [  9] cashtype                     smallint       len=2     NULL
+    [ 10] cheqcashdate                 datetime       len=8     NULL
+    [ 11] cheqregisterdate             datetime       len=8     NOT NULL
+    [ 12] cheqtobankdate               datetime       len=8     NULL
+    [ 13] ourcheqsno                   int            len=4     NULL
+    [ 14] usercode                     varchar        len=5     NULL
+    [ 15] chequenote                   varchar        len=250   NULL
+    [ 16] wentto_bankstrans            varchar        len=1     NULL
+    [ 17] bankcode2                    varchar        len=3     NULL
+    [ 18] refuse_reason                smallint       len=2     NULL
+    [ 19] refuse_charges               decimal        len=6     NULL
+    [ 20] cheqvaluediscount            decimal        len=6     NULL
+    [ 21] cheqvaluetax                 decimal        len=6     NULL
+    [ 22] cheqvaluedamgha              decimal        len=6     NULL
+    [ 23] trans_time                   datetime       len=8     NULL
+    [ 24] branchcode                   varchar        len=5     NOT NULL
+    [ 25] payrefusesno                 int            len=4     NULL
+    [ 26] phcode                       varchar        len=13    NULL
+    [ 27] personnewbal                 decimal        len=6     NOT NULL
+    [ 28] banknewbal                   decimal        len=6     NOT NULL
+    [ 29] cheqcashfees                 decimal        len=6     NOT NULL
+    [ 30] banktrans_time               datetime       len=8     NULL
+    [ 31] open_trans                   tinyint        len=1     NULL
+    [ 32] handedto                     varchar        len=60    NULL
+    [ 33] creditcardtype               tinyint        len=1     NULL
+    [ 34] ourcheqsnop                  tinyint        len=1     NULL
+    [ 35] ptcode                       varchar        len=3     NULL
+    [ 36] bcurrency                    tinyint        len=1     NOT NULL
+    [ 37] bcrate                       decimal        len=4     NOT NULL
+    [ 38] banknewbal_lc                decimal        len=6     NOT NULL
+    [ 39] cheqvalue_lc                 decimal        len=6     NOT NULL
+    [ 40] table_dumped                 datetime       len=8     NULL
+    [ 41] tf_branchcode                varchar        len=5     NULL
+    [ 42] tf_bankcode                  varchar        len=3     NULL
+    [ 43] tf_cheqsno                   int            len=4     NULL
+    [ 44] bcrate_std                   decimal        len=4     NOT NULL
+    [ 45] cheqvalueother               decimal        len=6     NOT NULL
+    [ 46] origdoc                      tinyint        len=1     NULL
+    [ 47] blockinv                     tinyint        len=1     NOT NULL
+    [ 48] custbranchcode               varchar        len=5     NULL
+    [ 49] origintaxp                   decimal        len=4     NULL
+
+  SCHEMA: bankstrans  (colid | name | type | len | NULL?)
+    [  1] bankcode                     varchar        len=3     NOT NULL
+    [  2] transdate                    datetime       len=8     NOT NULL
+    [  3] transdescr                   varchar        len=40    NOT NULL
+    [  4] transcredit                  decimal        len=6     NOT NULL
+    [  5] transdebit                   decimal        len=6     NOT NULL
+    [  6] trans_counter                int            len=4     NOT NULL
+    [  7] trans_note                   varchar        len=40    NULL
+    [  8] usercode                     varchar        len=5     NULL
+
+  SCHEMA: custpayments  (colid | name | type | len | NULL?)
+    [  1] custcode                     varchar        len=8     NOT NULL
+    [  2] custpaydate                  datetime       len=8     NOT NULL
+    [  3] custpayvalue                 numeric        len=6     NOT NULL
+    [  4] custdeductvalue              numeric        len=6     NOT NULL
+    [  5] usercode                     varchar        len=5     NOT NULL
+    [  6] userentrydate                datetime       len=8     NOT NULL
+
+  SCHEMA: branchesales  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] paymentsno                   int            len=4     NOT NULL
+    [  6] paymenttype                  varchar        len=2     NOT NULL
+    [  7] paymentvalue                 decimal        len=7     NOT NULL
+    [  8] ref_docnumber                decimal        len=6     NOT NULL
+    [  9] localpayment_remain          decimal        len=7     NULL
+    [ 10] localpayment_sno             int            len=4     NULL
+    [ 11] usercode                     varchar        len=5     NOT NULL
+    [ 12] trans_time                   datetime       len=8     NULL
+    [ 13] comment                      varchar        len=25    NULL
+    [ 14] personcode                   varchar        len=8     NULL
+    [ 15] hour_of_day                  int            len=4     NULL
+    [ 16] samedayhours                 varchar        len=1     NULL
+    [ 17] table_dumped                 datetime       len=8     NULL
+    [ 18] intervalcode                 varchar        len=2     NULL
+    [ 19] intervaldocdate              datetime       len=8     NULL
+    [ 20] cheqdate                     datetime       len=8     NULL
+    [ 21] creditcardtype               tinyint        len=1     NULL
+    [ 22] bcurrency                    tinyint        len=1     NOT NULL
+    [ 23] bcrate                       decimal        len=4     NOT NULL
+    [ 24] paymentvaluebc               decimal        len=7     NOT NULL
+
+  SCHEMA: banks  (colid | name | type | len | NULL?)
+    [  1] bankcode                     varchar        len=3     NOT NULL
+    [  2] bankname                     varchar        len=40    NOT NULL
+    [  3] bankaccountno                varchar        len=15    NULL
+    [  4] bankaccountbalance           decimal        len=6     NOT NULL
+    [  5] banktype                     smallint       len=2     NOT NULL
+    [  6] acciteml6                    varchar        len=5     NULL
+    [  7] branchcode                   varchar        len=5     NULL
+    [  8] bcurrency                    tinyint        len=1     NULL
+    [  9] bankaccountbalance_lc        decimal        len=6     NULL
+    [ 10] accitemcode                  varchar        len=25    NULL
+    [ 11] accitemcode2                 varchar        len=25    NULL
+    [ 12] accitemcode3                 varchar        len=25    NULL
+    [ 13] accitemcode4                 varchar        len=25    NULL
+    [ 14] accitemcode5                 varchar        len=25    NULL
+    [ 15] modif_lastupdate             datetime       len=8     NULL
+    [ 16] bankprint                    varchar        len=50    NULL
+    [ 17] currdef                      tinyint        len=1     NOT NULL
+
+  SCHEMA: paymentstypes  (colid | name | type | len | NULL?)
+    [  1] paymenttype                  varchar        len=2     NOT NULL
+    [  2] paymentdescr                 varchar        len=20    NOT NULL
+    [  3] pos_payweight                decimal        len=4     NULL
+    [  4] modif_lastupdate             datetime       len=8     NULL
+
+  SCHEMA: personsdata  (colid | name | type | len | NULL?)
+    [  1] personcode                   varchar        len=8     NOT NULL
+    [  2] personname                   varchar        len=60    NOT NULL
+    [  3] personadd1                   varchar        len=30    NULL
+    [  4] personadd2                   varchar        len=30    NULL
+    [  5] personadd3                   varchar        len=30    NULL
+    [  6] personsdate                  datetime       len=8     NULL
+    [  7] ptcode                       varchar        len=3     NOT NULL
+    [  8] ptclassifcode                varchar        len=2     NOT NULL
+    [  9] personrepres1                varchar        len=5     NULL
+    [ 10] personrepres2                varchar        len=5     NULL
+    [ 11] origintaxp                   decimal        len=4     NOT NULL
+    [ 12] custdiscp                    decimal        len=4     NOT NULL
+    [ 13] personnote                   varchar        len=50    NULL
+    [ 14] personfdate                  datetime       len=8     NULL
+    [ 15] personidno                   varchar        len=10    NULL
+    [ 16] personidissue                varchar        len=15    NULL
+    [ 17] personiddate                 datetime       len=8     NULL
+    [ 18] empstime                     varchar        len=5     NULL
+    [ 19] empftime                     varchar        len=5     NULL
+    [ 20] persondebit1                 decimal        len=8     NOT NULL
+    [ 21] empsalary                    decimal        len=4     NOT NULL
+    [ 22] persondebit                  decimal        len=8     NOT NULL
+    [ 23] personcredit                 decimal        len=8     NOT NULL
+    [ 24] branchcode                   varchar        len=8     NOT NULL
+    [ 25] persondofbirth               datetime       len=8     NULL
+    [ 26] dw2_reportname               varchar        len=20    NULL
+    [ 27] graduatedate                 datetime       len=8     NULL
+    [ 28] personmaxbal                 decimal        len=8     NOT NULL
+    [ 29] patient_paypercent           decimal        len=4     NOT NULL
+    [ 30] patient_paytype              varchar        len=1     NOT NULL
+    [ 31] patient_maxfatora            decimal        len=6     NOT NULL
+    [ 32] personcredit1                decimal        len=8     NOT NULL
+    [ 33] persondebit2                 decimal        len=8     NOT NULL
+    [ 34] empdegree                    varchar        len=30    NULL
+    [ 35] personslevel                 smallint       len=2     NULL
+    [ 36] personmodified               varchar        len=1     NULL
+    [ 37] personcredit2                decimal        len=8     NOT NULL
+    [ 38] personopendebit              decimal        len=6     NOT NULL
+    [ 39] personopencredit             decimal        len=6     NOT NULL
+    [ 40] pcategorycode                smallint       len=2     NULL
+    [ 41] personcreditdays             smallint       len=2     NULL
+    [ 42] contractdisctype             varchar        len=1     NULL
+    [ 43] contractenddate              datetime       len=8     NULL
+    [ 44] salesdisccalc                smallint       len=2     NULL
+    [ 45] personglobalcode             varchar        len=10    NULL
+    [ 46] areacode                     int            len=4     NULL
+    [ 47] poboxno                      varchar        len=10    NULL
+    [ 48] zipcode                      varchar        len=10    NULL
+    [ 49] personsource                 varchar        len=5     NULL
+    [ 50] personsstatus                varchar        len=5     NULL
+    [ 51] personrepres3                varchar        len=5     NULL
+    [ 52] personrepres4                varchar        len=5     NULL
+    [ 53] vf1                          varchar        len=5     NULL
+    [ 54] vf2                          varchar        len=15    NULL
+    [ 55] vf3                          varchar        len=15    NULL
+
+  SCHEMA: lastdocnumbers  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] lastdocnumberin              decimal        len=6     NOT NULL
+    [  3] lastdocnumberout             decimal        len=6     NOT NULL
+    [  4] branchcustcode               decimal        len=6     NOT NULL
+    [  5] paymentsno                   decimal        len=9     NOT NULL
+    [  6] localpayment_sno             int            len=4     NOT NULL
+    [  7] ver_branch                   varchar        len=1     NOT NULL
+    [  8] lastdocnumberin_cust         decimal        len=6     NOT NULL
+    [  9] lastdocnumberout_cust        decimal        len=6     NOT NULL
+    [ 10] lastdocnumberin_supp         decimal        len=6     NOT NULL
+    [ 11] lastdocnumberout_supp        decimal        len=6     NOT NULL
+    [ 12] lastdocnumberout_inv         decimal        len=6     NOT NULL
+    [ 13] fa_lastdocnumberin           decimal        len=6     NOT NULL
+    [ 14] fa_lastdocnumberout          decimal        len=6     NOT NULL
+    [ 15] fa_facode                    int            len=4     NOT NULL
+    [ 16] lastpatientcode_l            int            len=4     NOT NULL
+    [ 17] lastpatientcode_s            int            len=4     NOT NULL
+    [ 18] lastpatientcode_c            int            len=4     NOT NULL
+    [ 19] lastpatientcode_r            int            len=4     NOT NULL
+    [ 20] accsno                       decimal        len=6     NOT NULL
+    [ 21] accsno2                      decimal        len=6     NOT NULL
+    [ 22] accsno3                      decimal        len=6     NOT NULL
+
+================================================================================
+  E: procedures/triggers referencing the settlement / voucher save path
+================================================================================
+
+--- procs/triggers mentioning cheques / settlement / open_trans / financialdoc ---
+  (no rows)
+
+--- tr_cheques trigger body (if readable — personnewbal/bank balance math) ---
+  (no rows)
+
+================================================================================
+  F: supplier A/P balance snapshot
+================================================================================
+
+--- personsdata debit/credit buckets for the supplier ---
+  COLS: personcode | ptcode | ptclassifcode | persondebit | persondebit1 | persondebit2 | personcredit | personcredit1 | personcredit2 | net_balance
+  4471 | 20 | 80 | 7969718.41 | 64.39 | 0.0 | 9563449.18 | 0.0 | 0.0 | -1593666.38
+
+--- recent docs for supplier (stktransm 10/120 + personnewbal trail) ---
+  COLS: doccode | docnumber | docdate | branchcode | docvalue | docvaluepay | docpaydue | personnewbal
+  10 | 32133.0 | 2026-09-18 00:00:00 | 160 | 1582.2 | 0.0 | NULL | -1599387.44
+  10 | 32132.0 | 2026-09-18 00:00:00 | 160 | 1573.5 | 0.0 | NULL | -1597805.24
+  10 | 32131.0 | 2026-09-18 00:00:00 | 160 | 374.36 | 0.0 | NULL | -1596231.74
+  10 | 32129.0 | 2026-09-18 00:00:00 | 160 | 452.9 | 0.0 | NULL | -1594862.68
+  10 | 32130.0 | 2026-09-18 00:00:00 | 160 | 994.7 | 0.0 | NULL | -1595857.38
+  10 | 18734.0 | 2026-09-17 00:00:00 | 150 | 230.0 | 230.0 | NULL | -1590597.98
+  10 | 32100.0 | 2026-09-17 00:00:00 | 160 | 637.0 | 0.0 | NULL | -1592537.78
+  10 | 12363.0 | 2026-09-17 00:00:00 | 130 | 406.7 | 0.0 | NULL | -1592307.48
+  10 | 32099.0 | 2026-09-17 00:00:00 | 160 | 449.4 | 0.0 | NULL | -1592740.78
+  10 | 32107.0 | 2026-09-17 00:00:00 | 160 | 700.0 | 0.0 | NULL | -1594177.3
+  10 | 18730.0 | 2026-09-17 00:00:00 | 150 | 733.32 | 733.32 | NULL | -1593477.3
+  10 | 32106.0 | 2026-09-17 00:00:00 | 160 | 300.0 | 0.0 | NULL | -1592743.98
+  10 | 32103.0 | 2026-09-17 00:00:00 | 160 | 551.6 | 0.0 | NULL | -1592002.98
+  10 | 32105.0 | 2026-09-17 00:00:00 | 160 | 441.0 | 0.0 | NULL | -1592443.98
+  10 | 32102.0 | 2026-09-17 00:00:00 | 160 | 591.85 | 0.0 | NULL | -1592043.23
+  10 | 32127.0 | 2026-09-17 00:00:00 | 160 | 575.4 | 0.0 | NULL | -1596515.68
+  10 | 18736.0 | 2026-09-17 00:00:00 | 150 | 1076.95 | 1076.95 | NULL | -1596786.63
+  10 | 32120.0 | 2026-09-17 00:00:00 | 160 | 220.5 | 0.0 | NULL | -1595709.68
+  10 | 32119.0 | 2026-09-17 00:00:00 | 160 | 630.0 | 0.0 | NULL | -1595489.18
+  10 | 32111.0 | 2026-09-17 00:00:00 | 160 | 334.13 | 0.0 | NULL | -1597314.58
+  10 | 32110.0 | 2026-09-17 00:00:00 | 160 | 930.3 | 0.0 | NULL | -1596980.45
+  10 | 32109.0 | 2026-09-17 00:00:00 | 160 | 54.6 | 0.0 | NULL | -1596050.15
+  10 | 32108.0 | 2026-09-17 00:00:00 | 160 | 1818.25 | 0.0 | NULL | -1595995.55
+  10 | 32091.0 | 2026-09-17 00:00:00 | 160 | 931.0 | 0.0 | NULL | -1592414.08
+  10 | 32092.0 | 2026-09-17 00:00:00 | 160 | 1785.7 | 0.0 | NULL | -1595039.78
+  10 | 12362.0 | 2026-09-17 00:00:00 | 130 | 840.0 | 0.0 | NULL | -1593254.08
+  10 | 32097.0 | 2026-09-17 00:00:00 | 160 | 24.15 | 0.0 | NULL | -1594148.68
+  10 | 32095.0 | 2026-09-17 00:00:00 | 160 | 54.6 | 0.0 | NULL | -1592503.68
+  10 | 32098.0 | 2026-09-17 00:00:00 | 160 | 159.6 | 0.0 | NULL | -1594308.28
+  10 | 32096.0 | 2026-09-17 00:00:00 | 160 | 1620.85 | 0.0 | NULL | -1594124.53
+
+--- supplier cheques/payments trail (personnewbal after each) ---
+  COLS: cheqsno | cheqno | cheqdate | cheqvalue | cheqtype | financialdoccode | branchcode | personnewbal | open_trans | blockinv | chequenote
+  62634 | 32129 | 2026-09-18 00:00:00 | 452.9 | 20 | 10 | 160 | -1598191.14 | 0 | 0 | NULL
+  62635 | 32130 | 2026-09-18 00:00:00 | 994.7 | 20 | 10 | 160 | -1597196.44 | 0 | 0 | NULL
+  62636 | 32131 | 2026-09-18 00:00:00 | 374.36 | 20 | 10 | 160 | -1596822.08 | 0 | 0 | NULL
+  62638 | 32132 | 2026-09-18 00:00:00 | 1573.5 | 20 | 10 | 160 | -1595248.58 | 0 | 0 | NULL
+  62639 | 32133 | 2026-09-18 00:00:00 | 1582.2 | 20 | 10 | 160 | -1593666.38 | 0 | 0 | NULL
+  51703 | 451 | 2026-09-18 00:00:00 | 743.4 | 20 | 10 | 130 | -1598644.04 | 0 | 0 | مورد 12207
+  45883 | 11022 | 2026-09-17 00:00:00 | 66.5 | 20 | 10 | 140 | -1594859.18 | 0 | 0 | NULL
+  62586 | 32090 | 2026-09-17 00:00:00 | 1073.1 | 20 | 10 | 160 | -1594092.48 | 0 | 0 | NULL
+  62587 | 32054 | 2026-09-17 00:00:00 | 2609.4 | 20 | 10 | 160 | -1591483.08 | 0 | 0 | NULL
+  62591 | 32091 | 2026-09-17 00:00:00 | 931.0 | 20 | 10 | 160 | -1594234.78 | 0 | 0 | NULL
+  62592 | 32092 | 2026-09-17 00:00:00 | 1785.7 | 20 | 10 | 160 | -1592449.08 | 0 | 0 | NULL
+  62593 | 32093 | 2026-09-17 00:00:00 | 32.2 | 20 | 10 | 160 | -1594276.08 | 0 | 0 | NULL
+  62594 | 32094 | 2026-09-17 00:00:00 | 126.0 | 20 | 10 | 160 | -1594150.08 | 0 | 0 | NULL
+  62595 | 32095 | 2026-09-17 00:00:00 | 54.6 | 20 | 10 | 160 | -1594095.48 | 0 | 0 | NULL
+  62596 | 32096 | 2026-09-17 00:00:00 | 1620.35 | 20 | 10 | 160 | -1592475.13 | 0 | 0 | NULL
+  62597 | 32097 | 2026-09-17 00:00:00 | 24.15 | 20 | 10 | 160 | -1592450.98 | 0 | 0 | NULL
+  62598 | 32098 | 2026-09-17 00:00:00 | 159.6 | 20 | 10 | 160 | -1592291.38 | 0 | 0 | NULL
+  62599 | 32099 | 2026-09-17 00:00:00 | 449.4 | 20 | 10 | 160 | -1592088.38 | 0 | 0 | NULL
+  62600 | 32100 | 2026-09-17 00:00:00 | 637.0 | 20 | 10 | 160 | -1591451.38 | 0 | 0 | NULL
+  62601 | 32101 | 2026-09-17 00:00:00 | 315.0 | 20 | 10 | 160 | -1591451.38 | 0 | 0 | NULL
+  62602 | 32102 | 2026-09-17 00:00:00 | 591.85 | 20 | 10 | 160 | -1591451.38 | 0 | 0 | NULL
+  62605 | 32105 | 2026-09-17 00:00:00 | 441.0 | 20 | 10 | 160 | -1597305.26 | 0 | 0 | NULL
+  62606 | 32106 | 2026-09-17 00:00:00 | 300.0 | 20 | 10 | 160 | -1597005.26 | 0 | 0 | NULL
+  62607 | 32107 | 2026-09-17 00:00:00 | 700.0 | 20 | 10 | 160 | -1596305.26 | 0 | 0 | NULL
+  62608 | 32108 | 2026-09-17 00:00:00 | 1818.25 | 20 | 10 | 160 | -1594487.01 | 0 | 0 | NULL
+  62609 | 32109 | 2026-09-17 00:00:00 | 54.6 | 20 | 10 | 160 | -1594432.41 | 0 | 0 | NULL
+  62610 | 32110 | 2026-09-17 00:00:00 | 930.3 | 20 | 10 | 160 | -1593502.11 | 0 | 0 | NULL
+  62611 | 32111 | 2026-09-17 00:00:00 | 334.13 | 20 | 10 | 160 | -1593167.98 | 0 | 0 | NULL
+  62612 | 32112 | 2026-09-17 00:00:00 | 2800.0 | 20 | 10 | 160 | -1590367.98 | 0 | 0 | NULL
+  62616 | 32117 | 2026-09-17 00:00:00 | 1609.3 | 20 | 10 | 160 | -1593249.88 | 0 | 0 | NULL
+
+Complete: 2026-09-18T17:45:31.596132
+
+NEXT: from §B/§C4 identify the ALLOCATION table (voucher↔invoice, paid_now),
+      then re-run with its name to dump the exact link row for invoice 12207.

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DemandRecord, DemandItem, FollowUpTask, DemandLog, ItemDemandStat
+from .models import DemandRecord, DemandItem, DemandFollowUp, DemandLog, ItemDemandStat
 
 
 class DemandItemInline(admin.TabularInline):
@@ -7,11 +7,14 @@ class DemandItemInline(admin.TabularInline):
     extra = 0
     raw_id_fields = ['item']
     fields = ['item', 'item_name_free', 'quantity', 'demand_type', 'item_status',
-              'is_long_shortage', 'is_discontinued']
+              'is_long_shortage', 'is_discontinued',
+              'unit_price_snapshot', 'back_in_stock_at', 'recovered_revenue',
+              'disqualified', 'contact_opt_out']
+    readonly_fields = ['unit_price_snapshot', 'back_in_stock_at', 'recovered_revenue']
 
 
 class FollowUpInline(admin.TabularInline):
-    model = FollowUpTask
+    model = DemandFollowUp
     extra = 0
     readonly_fields = ['created_at', 'completed_at']
     fields = ['task_type', 'due_date', 'status', 'assigned_to', 'note',
@@ -38,6 +41,23 @@ class DemandRecordAdmin(admin.ModelAdmin):
     inlines = [DemandItemInline, FollowUpInline, DemandLogInline]
     ordering = ['-created_at']
     raw_id_fields = ['customer', 'assigned_to', 'created_by']
+
+
+@admin.register(DemandItem)
+class DemandItemAdmin(admin.ModelAdmin):
+    """Recovery-queue audit surface (Phase 1)."""
+    list_display = [
+        'id', 'demand', 'item', 'item_name_free', 'quantity', 'item_status',
+        'back_in_stock_at', 'notified_customer_at', 'recovered_revenue',
+        'disqualified', 'contact_opt_out',
+    ]
+    list_filter  = ['item_status', 'disqualified', 'contact_opt_out',
+                    'disqualified_reason', 'contact_opt_out_reason']
+    search_fields = ['demand__demand_number', 'demand__phone', 'item__name', 'item__softech_id']
+    raw_id_fields = ['demand', 'item', 'disqualified_by', 'reservation']
+    readonly_fields = ['unit_price_snapshot', 'cost_price_snapshot', 'price_snapshot_at',
+                       'back_in_stock_at', 'recovered_at']
+    ordering = ['-back_in_stock_at']
 
 
 @admin.register(ItemDemandStat)

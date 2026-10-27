@@ -1,0 +1,201 @@
+Gift-voucher stocking probe: 2026-10-06T03:36:41.389545
+Mode: READ-ONLY   supplier=1268   since=2015-01-01
+
+================================================================================
+  DOCTYPES — tables with a doccode column + a name/description column
+================================================================================
+
+--- transdoc — rows for doccode in ['80', '180', '181', '81', '30', '150', '50', '20', '130', '110', '15', '70'] ---
+  COLS: doccode | docdescr | docallow | docorder
+  110 | صرف من الرئيسي إلى الفرع | 1 | 30
+  130 | صرف من الفرع إلى الرئيسي | 1 | 41
+  15 | إستلام في الفرع من الرئيسي | 1 | 31
+  150 | عجز جرد | 1 | 120
+  180 | تسليم حجز بضاعة غير موجودة | 1 | 335
+  181 | إلغاء حجز بضاعة | 1 | 332
+  20 | إلغاء صرف - تبادل بين الفروع | 1 | 311
+  30 | مرتجع من عميل | 1 | 60
+  50 | فائض جرد | 1 | 130
+  70 | إستلام أصناف مصروفات | 1 | 180
+  80 | حجز بضاعة غير موجودة | 1 | 330
+  81 | مرتجع تسليم حجز بضاعة | 1 | 337
+  (skip pos_cancel: 100627 rows)
+
+--- einv_transm — rows for doccode in ['80', '180', '181', '81', '30', '150', '50', '20', '130', '110', '15', '70'] ---
+  (no rows)
+  (skip companiesitems: 273244 rows)
+
+--- einv_transmlog — rows for doccode in ['80', '180', '181', '81', '30', '150', '50', '20', '130', '110', '15', '70'] ---
+  (no rows)
+
+--- companiesitems5 — rows for doccode in ['80', '180', '181', '81', '30', '150', '50', '20', '130', '110', '15', '70'] ---
+  (no rows)
+
+================================================================================
+  SAMPLE doccode 80 — most recent HQ coupon document
+================================================================================
+
+--- stktransm 130/80/34715.0 (vertical) ---
+    branchcode                   = 130
+    doccode                      = 80
+    docnumber                    = 34715.0
+    docdate                      = 2026-09-22 00:00:00
+    supp_main_code               = NULL
+    docnumber2                   = 460309.0
+    comments                     = NULL
+    docvalue                     = 232.0
+    cust_branch_code             = -80
+    origintaxp                   = 0.0
+    custdiscp                    = 0.0
+    specialdiscp                 = 0.0
+    storecode                    = 130
+    docvaluepay                  = 0.0
+    fatstatuscode                = 11
+    ptcode                       = -1
+    ptclassifcode                = -1
+    cust_branch_store            = NULL
+    docvaluereturn               = 0.0
+    fatcurrentstatus             = 15
+    docwritedate                 = NULL
+    cust_professional            = 0
+    saleprice_extrap             = 0.0
+    usercode                     = 1309
+    trans_time                   = 2026-09-22 16:04:40
+    patientpayment               = 0.0
+    table_dumped                 = 2026-09-22 16:04:40
+    docvalue1                    = 232.0
+    docvalue2                    = 232.0
+    docvalue3                    = 0.0
+    phcode                       = 04HD731
+    personnewbal                 = 0.0
+    bcurrency                    = 1
+    docvaluebc                   = 232.0
+    docvaluepaybc                = 0.0
+    bcrate                       = 1.0
+    mitemsys                     = CS
+    cashiercode                  = 1309
+    origdoc                      = 5
+    refdoctorcode                = 
+    docpaydue                    = NULL
+    vf1                          = NULL
+    vf2                          = NULL
+
+--- its lines ---
+  COLS: itemcode | transqty | transprice | itemsaleprice | itemexpirydate | item_partno | newqty | personcode | custdiscp
+  100294 | 6.0 | 47.0 | 47.0 | 2012-12-12 00:00:00 | Reservation | 10.0 | 1500 | 0.0
+  118639 | 1.0 | -50.0 | -50.0 | 2012-12-12 00:00:00 | Reservation | 5.0 | 1500 | 0.0
+
+--- personsdata -80 (the document party) (vertical) ---
+    personcode                   = -80
+    personname                   = حجز بضاعة غير موجودة
+    ptcode                       = -1
+    ptclassifcode                = -1
+
+================================================================================
+  SAMPLE doccode 180 — most recent HQ coupon document
+================================================================================
+
+--- stktransm 130/180/26951.0 (vertical) ---
+    branchcode                   = 130
+    doccode                      = 180
+    docnumber                    = 26951.0
+    docdate                      = 2026-10-03 00:00:00
+    supp_main_code               = NULL
+    docnumber2                   = 460217.0
+    comments                     = NULL
+    docvalue                     = 0.0
+    cust_branch_code             = -80
+    origintaxp                   = 0.0
+    custdiscp                    = 0.0
+    specialdiscp                 = 0.0
+    storecode                    = 130
+    docvaluepay                  = 0.0
+    fatstatuscode                = 10
+    ptcode                       = -1
+    ptclassifcode                = -1
+    cust_branch_store            = NULL
+    docvaluereturn               = 0.0
+    fatcurrentstatus             = 90
+    docwritedate                 = NULL
+    cust_professional            = 0
+    saleprice_extrap             = 0.0
+    usercode                     = 1633
+    trans_time                   = 2026-10-03 14:12:48
+    patientpayment               = 0.0
+    table_dumped                 = 2026-10-03 14:12:48
+    docvalue1                    = -150.0
+    docvalue2                    = 0.0
+    docvalue3                    = 0.0
+    phcode                       = 04HD731
+    personnewbal                 = 0.0
+    bcurrency                    = 1
+    docvaluebc                   = 0.0
+    docvaluepaybc                = 0.0
+    bcrate                       = 1.0
+    mitemsys                     = CS
+    cashiercode                  = 1309
+    origdoc                      = 5
+    refdoctorcode                = 
+    docpaydue                    = NULL
+    vf1                          = NULL
+    vf2                          = NULL
+
+--- its lines ---
+  COLS: itemcode | transqty | transprice | itemsaleprice | itemexpirydate | item_partno | newqty | personcode | custdiscp
+  118639 | 3.0 | 0.0 | -50.0 | 2028-02-02 00:00:00 | 8452 | 0.0 | 1500 | 0.0
+
+--- personsdata -80 (the document party) (vertical) ---
+    personcode                   = -80
+    personname                   = حجز بضاعة غير موجودة
+    ptcode                       = -1
+    ptclassifcode                = -1
+
+================================================================================
+  SAMPLE doccode 181 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 81 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 30 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 150 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 50 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 20 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 130 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 110 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 15 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)
+
+================================================================================
+  SAMPLE doccode 70 — most recent HQ coupon document
+================================================================================
+  (no recent document moving the coupon items)

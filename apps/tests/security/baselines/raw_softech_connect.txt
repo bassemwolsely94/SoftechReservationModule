@@ -1,0 +1,3 @@
+# Owner: Batch 2 (needs owner OK). SOFTECH connections opened outside config/sybase.py's guarded path —
+# they bypass SOFTECH_READ_ONLY and SOFTECH_BRANCH_HOST_OVERRIDE.
+

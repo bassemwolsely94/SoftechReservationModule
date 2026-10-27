@@ -1,0 +1,86 @@
+AP write-back discovery: 2026-10-26T19:56:11.924566
+Mode: DISCOVERY = SELECT-only. REHEARSAL (opt-in) = INSERT then ROLLBACK, never COMMIT.
+
+================================================================================
+  A: lastdocnumbers — is there a cheque serial counter?
+================================================================================
+
+--- all lastdocnumbers column names ---
+  COLS: 
+  0
+
+================================================================================
+  B: triggers on cheques / chequestrans + body readability
+================================================================================
+
+--- cheques: named triggers + text-row count ---
+  COLS: 
+  0
+
+--- chequestrans: named triggers + text-row count ---
+  COLS: 
+  0
+
+================================================================================
+  C: objects that reference cheques / chequestrans (sysdepends)
+================================================================================
+
+--- procs/triggers depending on the two tables ---
+  COLS: 
+  0
+
+================================================================================
+  D: per-branch MAX serials vs lastdocnumbers counters (the +1 pattern)
+================================================================================
+
+--- branch 130: max cheqsno / ourcheqsno ---
+  COLS: 
+  51710 | 31794
+
+--- branch 130: lastdocnumbers candidate counters ---
+  COLS: 
+  0
+
+--- HQ (000) staging counters row ---
+  COLS: 
+  0
+
+================================================================================
+  E: schema of cheques + chequestrans (writer NOT-NULL sentinels)
+================================================================================
+
+  SCHEMA: cheques  (colid | name | type | len | NULL?)
+    [ERROR] tuple index out of range
+
+  SCHEMA: chequestrans  (colid | name | type | len | NULL?)
+    [ERROR] tuple index out of range
+
+================================================================================
+  F: golden voucher + its allocation (the write template)
+================================================================================
+
+--- a recent cheques voucher for supplier 30 @ branch 130 ---
+  COLS: 
+  0
+
+--- a recent chequestrans allocation @ branch 130 ---
+  COLS: 
+  0
+
+================================================================================
+  G: ROLLBACK INSERT REHEARSAL (real INSERT → observe → ROLLBACK)
+================================================================================
+  marker note = APPROBE1793033771  (unique tag to find the row & detect serial reassignment)
+  allocated cheqsno=51710 ourcheqsno=31794 (branch 130)
+  target invoice: docnumber=12362 docdate=2026-09-17 docvalue=840.0 docvaluepay(before)=0.0
+  BEGIN TRAN
+  cheques INSERT executed (no exception)
+  READBACK: cheqsno=51710 (we sent 51710 → kept ours) ourcheqsno=31794
+           personnewbal=0 banknewbal=0  (we sent 0/0 → unchanged, client must compute)
+           cheqvalue=1.0 branchcode=130
+  chequestrans INSERT executed
+  stktransm.docvaluepay: before=0.0 after=0 → UNCHANGED → writer must UPDATE stktransm itself
+  ROLLBACK issued
+  RESIDUE CHECK: rows with marker after rollback = 51710 (must be 0)
+
+Complete: 2026-10-26T19:56:11.929051

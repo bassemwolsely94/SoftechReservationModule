@@ -1,18 +1,74 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
+
+from core.media import serve_media
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/auth/', include('apps.users.auth_urls')),
+    path('api/auth/',  include('apps.users.auth_urls')),
+    path('api/users/', include('apps.users.management_urls')),
     path('api/reservations/', include('apps.reservations.urls')),
     path('api/customers/', include('apps.customers.urls')),
     path('api/items/', include('apps.catalog.urls')),
+    path('api/search/', include('apps.catalog.search_urls')),   # unified universal search
     path('api/branches/', include('apps.branches.urls')),
     path('api/sync/', include('apps.sync.urls')),
     path('api/dashboard/', include('apps.dashboard.urls')),
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/transfers/', include('apps.transfers.urls')),
+    path('api/transits/', include('apps.transits.urls')),
     path('api/demand/', include('apps.demand.urls')),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path('api/chronic/', include('apps.chronic.urls')),
+    path('api/composition/', include('apps.composition.urls')),
+    path('api/followups/', include('apps.followups.urls')),
+    path('api/callcenter/', include('apps.callcenter.urls')),
+    path('api/audit/',     include('apps.audit.urls')),
+    path('api/config/',      include('apps.config.urls')),
+    path('api/stockcount/',  include('apps.stockcount.urls')),
+    path('api/shortage/',    include('apps.shortage.urls')),
+    path('api/supply/',      include('apps.supply.urls')),
+    path('api/replacement/', include('apps.replacement.urls')),
+    path('api/vouchers/',    include('apps.vouchers.urls')),
+    path('api/invoices/',    include('apps.invoices.urls')),
+    path('api/incentives/', include('apps.incentives.urls')),
+    path('api/insurance/', include('apps.insurance.urls')),
+    path('api/commerce/', include('apps.commerce.urls')),
+    path('api/purchasing/', include('apps.purchasing.urls')),
+    path('api/delivery/',  include('apps.delivery.urls')),
+    path('api/payments/',  include('apps.payments.urls')),
+    path('api/analytics/', include('apps.analytics.urls')),
+    path('api/tasks/',        include('apps.tasks.urls')),
+    path('api/procurement/',  include('apps.procurement.urls')),
+    path('api/products/',     include('apps.product_experience.urls')),
+    path('api/finance/',         include('apps.finance.urls')),
+    path('api/recommendations/', include('apps.recommendations.urls')),
+    path('api/campaigns/',       include('apps.campaigns.urls')),
+    path('api/cheques/',         include('apps.cheques.urls')),
+    path('api/enrichment/',      include('apps.enrichment.urls')),
+    path('api/images/',          include('apps.images.urls')),
+    path('api/pricing-approvals/', include('apps.discount_approvals.urls')),
+    path('api/pos-orders/',        include('apps.pos_orders.urls')),
+    path('api/approvals/',         include('apps.approvals.urls')),
+    path('api/batches/',           include('apps.batches.urls')),
+    path('api/hr/',          include('apps.hr.urls')),
+    path('api/forecasting/', include('apps.forecasting.urls')),
+    path('api/insights/', include('apps.insights.urls')),
+    path('api/whatsapp/',   include('apps.whatsapp.urls')),
+    path('api/omni/',       include('apps.omni.urls')),
+    path('api/social/',     include('apps.social.urls')),
+    path('api/loyalty/',    include('apps.loyalty.urls')),
+    path('api/offers/',     include('apps.offers.urls')),   # Phase 3 offers engine (eval only; no SOFTECH write)
+    path('api/vision/',     include('apps.vision.urls')),   # In-house OCR corpus (Phase 1)
+    path('api/referral/',   include('apps.referral.urls')),
+    path('api/pbx/',        include('apps.pbx.urls')),
+    path('api/qa/',         include('apps.qa.urls')),
+    path('api/personal/',   include('apps.personal.urls')),
+    path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
+    path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
+    path('api/stock-audit/', include('apps.stock_audit.urls')),     # doc 32 — gated in apps/stock_audit/access.py
+    # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
+    path('api/portal/',     include('apps.portal.urls')),
+    # Uploads: signature-checked (core/storage.py, core/media.py) in every mode,
+    # not just DEBUG — protected files need a signed, unexpired URL.
+    path('media/<path:path>', serve_media, name='media'),
+]

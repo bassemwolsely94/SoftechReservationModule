@@ -1,0 +1,101 @@
+import { useEffect } from 'react'
+
+/*
+ * usePosHotkeys — SOFTECH-parity keyboard control for the Indirect-POS screen.
+ * Makes the on-screen shortcut labels REAL so a cashier trained on SOFTECH keeps their
+ * muscle memory:
+ *   Ctrl+F2/F3    → channel (نقدى / توصيل)
+ *   (Ctrl+F4 contract channel and Ctrl+2/3/4 tabs are NOT handled: Chrome/Edge reserve them —
+ *    Ctrl+F4 closes the tab, Ctrl+1…8 switch tabs — confirmed clashing on the cashier PCs
+ *    2026-10-07. Contract channel and tabs are by mouse until an alternative is chosen.)
+ *   F2            → focus the item-search box (add a line — SOFTECH types in the empty row)
+ *   F6            → full-screen image search (PosImageSearch)
+ *   F7            → verified alternatives for the highlighted search row (handled inside
+ *                   ItemSearchWidget, which owns the highlighted row; F7 is free here)
+ *   F4 / Delete   → delete the selected line
+ *   F9            → preview the send (dry-run — never writes to SOFTECH)
+ *   F10           → live send to the cashier (only when the writer is enabled)
+ *   ArrowUp/Down  → move the selected line (only when not editing a field)
+ * (Ctrl+F1 advanced search is handled inside ItemSearchWidget.)
+ *
+ * `enabled` is false while a modal/overlay is open so shortcuts don't fire underneath it.
+ */
+const isEditable = (el) => {
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+export default function usePosHotkeys(P, { enabled = true, onOpenUnits, onOpenImages } = {}) {
+  useEffect(() => {
+    if (!enabled) return
+    const onKey = (e) => {
+      const k = e.key
+      const el = document.activeElement
+      const editing = isEditable(el)
+      // a plain letter shortcut must not fire while typing in a TEXT/search field (numbers are ok)
+      const inTextField = el && ((el.tagName === 'INPUT' && ['text', 'search', ''].includes((el.getAttribute('type') || 'text').toLowerCase())) || el.tagName === 'TEXTAREA' || el.isContentEditable)
+
+      // Q → enter the selected line's quantity in strips/units (SOFTECH's Q modal)
+      if ((k === 'q' || k === 'Q') && onOpenUnits && !inTextField && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (P.selected >= 0 && P.selected < P.lines.length) { e.preventDefault(); onOpenUnits(); return }
+      }
+
+      // ── Ctrl combos (safe to fire even while a field is focused) ──
+      // channel allowed for this seller? (server-filtered custTypes; empty = show all)
+      const okChan = (v) => !P.custTypes?.length || P.custTypes.some(t => t.channel === v || t.key === v)
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        // channel = نوع العميل (custType); setCustType cascades to channel + entity reset
+        if (k === 'F2') { e.preventDefault(); if (okChan('cash')) P.setCustType('cash'); return }
+        if (k === 'F3') { e.preventDefault(); if (okChan('delivery')) P.setCustType('delivery'); return }
+        return
+      }
+
+      // ── plain function/nav keys ──
+      if (k === 'F2') {                       // add a line → focus the item search
+        e.preventDefault()
+        P.setActiveTab('items')
+        setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0)
+        return
+      }
+      if (k === 'F6' && onOpenImages) {       // image search grid
+        e.preventDefault()
+        onOpenImages()
+        return
+      }
+      if (k === 'F4') {                       // delete the selected line
+        e.preventDefault()
+        if (P.selected >= 0 && P.selected < P.lines.length) P.removeLine(P.selected)
+        return
+      }
+      if (k === 'F9') {                       // preview the send (dry-run — never writes to SOFTECH)
+        e.preventDefault()
+        if (!P.busy && P.lines.length) P.submit(false)
+        return
+      }
+      if (k === 'F10') {                      // live send to cashier — only when the writer is enabled
+        e.preventDefault()
+        if (!P.busy && P.lines.length && P.ref?.writer_enabled) P.submit(true)
+        return
+      }
+      if (k === 'Delete' && !editing) {       // Delete only outside a field (would eat text otherwise)
+        if (P.selected >= 0 && P.selected < P.lines.length) { e.preventDefault(); P.removeLine(P.selected) }
+        return
+      }
+      if ((k === 'ArrowDown' || k === 'ArrowUp') && !editing && P.lines.length) {
+        e.preventDefault()
+        const n = P.lines.length
+        const cur = P.selected < 0 ? (k === 'ArrowDown' ? -1 : 0) : P.selected
+        let next = k === 'ArrowDown' ? Math.min(cur + 1, n - 1) : Math.max(cur - 1, 0)
+        // skip the batch lines folded into an automatic FEFO split row (only its head is shown)
+        const dir = k === 'ArrowDown' ? 1 : -1
+        while (next >= 0 && next < n && P.fefoHidden?.(next)) next += dir
+        if (next < 0 || next >= n) next = cur < 0 ? 0 : cur
+        P.setSelected(next)
+        return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [enabled, onOpenUnits, onOpenImages, P.selected, P.lines.length, P.busy, P.setCustType, P.setActiveTab, P.removeLine, P.setSelected, P.submit, P.ref, P.fefoHidden])
+}

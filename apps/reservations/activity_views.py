@@ -92,21 +92,21 @@ def _notify_counterpart(user, staff, reservation, log):
         message += f" — {log.note[:100]}"
 
     if staff.is_call_center or staff.is_admin:
-        # Call center acted → notify branch
-        Notification.send_to_branch(
-            branch=reservation.branch,
-            notification_type='call_logged',
-            title=title,
-            message=message,
-            reservation=reservation,
-            exclude_user=user,
-        )
+        # Call center / admin acted → notify branch staff
+        if reservation.branch:
+            Notification.send_to_branch(
+                branch=reservation.branch,
+                notification_type='call_logged',
+                title=title,
+                body=message,
+                reservation=reservation,
+                include_admins=False,   # actor is already admin — don't self-notify
+            )
     else:
-        # Branch acted → notify call center
+        # Branch staff acted → notify call center + admins
         Notification.send_to_call_center(
             notification_type='call_logged',
             title=title,
-            message=message,
+            body=message,
             reservation=reservation,
-            exclude_user=user,
         )

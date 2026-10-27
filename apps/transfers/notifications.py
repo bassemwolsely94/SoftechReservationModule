@@ -4,6 +4,12 @@ apps/transfers/notifications.py
 Notification helpers for transfer request events.
 All functions are wrapped in try/except — a notification failure
 must NEVER crash the transfer itself.
+
+Uses Notification.send_to_user() throughout so that:
+  - NotificationLog row is created (audit trail)
+  - push_realtime() fires → WebSocket delivery + REST polling fallback
+  - dedup_key prevents duplicate unread alerts within 5 minutes
+  - branch notification gate (BranchSettings.notifications_enabled) is honoured
 """
 import logging
 from django.apps import apps
@@ -19,49 +25,26 @@ def _get_notification_model():
 
 
 def _branch_staff(branch):
+    """Active staff at a specific branch."""
     StaffProfile = apps.get_model('users', 'StaffProfile')
     return StaffProfile.objects.filter(
         branch=branch,
         is_active=True,
-        role__in=('admin', 'pharmacist', 'salesperson', 'call_center'),
+        role__in=('pharmacist', 'salesperson', 'call_center'),
     )
 
 
-def _purchasing_staff():
+def _global_staff(roles):
+    """Active staff with global access (no branch restriction)."""
     StaffProfile = apps.get_model('users', 'StaffProfile')
     return StaffProfile.objects.filter(
         is_active=True,
-        role__in=('admin', 'purchasing'),
+        role__in=roles,
     )
 
 
-def _safe_create(Notification, recipient, title, body, notification_type, transfer):
-    """Create a single notification, catching any field mismatch errors."""
-    try:
-        kwargs = {
-            'recipient': recipient,
-            'title': title,
-            'is_read': False,
-        }
-        # Add optional fields only if the column exists on the model
-        for field_name, value in [
-            ('body', body or ''),
-            ('notification_type', notification_type),
-            ('transfer_request_id_ref', transfer.id),
-        ]:
-            if hasattr(Notification, field_name):
-                try:
-                    Notification._meta.get_field(field_name)
-                    kwargs[field_name] = value
-                except Exception:
-                    pass
-        Notification.objects.create(**kwargs)
-    except Exception as e:
-        logger.warning(f'Notification create failed (non-fatal): {e}')
-
-
 def notify_source_branch_new_request(transfer):
-    """Step 3: Notify ALL users at the source branch when a transfer is created."""
+    """Notify ALL users at the source branch + admins when a transfer is requested."""
     try:
         Notification = _get_notification_model()
         if not Notification:
@@ -70,26 +53,41 @@ def notify_source_branch_new_request(transfer):
         title = f'طلب تحويل جديد — {transfer.item.name}'
         body = (
             f'فرع {transfer.requesting_branch.name_ar or transfer.requesting_branch.name} '
-            f'يطلب {transfer.quantity_needed} وحدة من الصنف: {transfer.item.name}. '
-            f'يرجى مراجعة الطلب والرد.'
+            f'يطلب {transfer.quantity_needed} وحدة. يرجى مراجعة الطلب والرد.'
         )
+        dedup = f'tr_new_{transfer.id}'
 
-        recipients = _branch_staff(transfer.source_branch)
-        for staff in recipients:
-            _safe_create(
-                Notification, staff, title, body,
-                'transfer_request', transfer
+        # Branch staff at the source branch
+        for staff in _branch_staff(transfer.source_branch):
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='transfer_request',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_{staff.pk}',
             )
 
-        logger.info(
-            f'Transfer #{transfer.id}: notified source branch {transfer.source_branch}'
-        )
+        # Admins + purchasing (always in the loop)
+        for staff in _global_staff(['admin', 'purchasing']):
+            if staff.branch == transfer.source_branch:
+                continue  # already covered above
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='transfer_request',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_adm_{staff.pk}',
+            )
+
+        logger.info(f'Transfer #{transfer.id}: notified source branch {transfer.source_branch}')
     except Exception as e:
         logger.warning(f'notify_source_branch_new_request failed (non-fatal): {e}')
 
 
 def notify_requesting_branch_response(transfer):
-    """Step 5: Notify the requesting branch when source branch responds."""
+    """Notify the requesting branch + admins when source branch responds."""
     try:
         Notification = _get_notification_model()
         if not Notification:
@@ -105,25 +103,43 @@ def notify_requesting_branch_response(transfer):
         title = f'رد على طلب التحويل — {transfer.item.name}'
         body = (
             f'فرع {transfer.source_branch.name_ar or transfer.source_branch.name} '
-            f'رد على طلبك للصنف {transfer.item.name}: {status_text}.'
+            f'رد على طلبك: {status_text}.'
         )
         if transfer.status == 'partial' and transfer.quantity_approved:
             body += f' الكمية المعتمدة: {transfer.quantity_approved} وحدة.'
-        if transfer.rejection_reason_text:
+        if getattr(transfer, 'rejection_reason_text', None):
             body += f' السبب: {transfer.rejection_reason_text}'
 
-        recipients = _branch_staff(transfer.requesting_branch)
-        for staff in recipients:
-            _safe_create(
-                Notification, staff, title, body,
-                'transfer_response', transfer
+        dedup = f'tr_resp_{transfer.id}'
+
+        for staff in _branch_staff(transfer.requesting_branch):
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='transfer_response',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_{staff.pk}',
+            )
+
+        # Admins
+        for staff in _global_staff(['admin']):
+            if staff.branch == transfer.requesting_branch:
+                continue
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='transfer_response',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_adm_{staff.pk}',
             )
     except Exception as e:
         logger.warning(f'notify_requesting_branch_response failed (non-fatal): {e}')
 
 
 def notify_purchasing_rejection(transfer):
-    """Step 5b: Notify purchasing dept when a transfer is rejected."""
+    """Notify purchasing dept + admins when a transfer is rejected."""
     try:
         Notification = _get_notification_model()
         if not Notification:
@@ -132,24 +148,26 @@ def notify_purchasing_rejection(transfer):
         title = 'طلب تحويل مرفوض — يحتاج مراجعة المشتريات'
         body = (
             f'فرع {transfer.requesting_branch.name_ar} طلب {transfer.quantity_needed} '
-            f'وحدة من {transfer.item.name} من فرع '
-            f'{transfer.source_branch.name_ar} وتم رفضه. '
-            f'السبب: {transfer.get_rejection_reason_display() or "غير محدد"}. '
-            f'يرجى مراجعة إمكانية الطلب من المستودع الرئيسي.'
+            f'وحدة من {transfer.item.name} وتم رفضه. '
+            f'السبب: {getattr(transfer, "rejection_reason_text", "") or "غير محدد"}.'
         )
+        dedup = f'tr_rej_{transfer.id}'
 
-        recipients = _purchasing_staff()
-        for staff in recipients:
-            _safe_create(
-                Notification, staff, title, body,
-                'transfer_request', transfer
+        for staff in _global_staff(['admin', 'purchasing']):
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='transfer_request',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_{staff.pk}',
             )
     except Exception as e:
         logger.warning(f'notify_purchasing_rejection failed (non-fatal): {e}')
 
 
 def notify_unfulfilled_flag(transfer):
-    """Policy enforcement: notify purchasing when transfer has no sale after 14 days."""
+    """Notify purchasing + admins when transferred stock has no sale after 14 days."""
     try:
         Notification = _get_notification_model()
         if not Notification:
@@ -162,15 +180,18 @@ def notify_unfulfilled_flag(transfer):
         body = (
             f'فرع {transfer.requesting_branch.name_ar} طلب '
             f'{transfer.quantity_approved or transfer.quantity_needed} '
-            f'وحدة من الصنف {transfer.item.name} منذ {days} يوماً '
-            f'ولم يُسجَّل أي مبيعات. يرجى المتابعة.'
+            f'وحدة من {transfer.item.name} منذ {days} يوماً ولم يُسجَّل أي مبيعات.'
         )
+        dedup = f'tr_flag_{transfer.id}'
 
-        recipients = _purchasing_staff()
-        for staff in recipients:
-            _safe_create(
-                Notification, staff, title, body,
-                'unfulfilled_transfer_flag', transfer
+        for staff in _global_staff(['admin', 'purchasing']):
+            Notification.send_to_user(
+                staff=staff,
+                notification_type='unfulfilled_transfer_flag',
+                title=title,
+                body=body,
+                transfer_id=transfer.id,
+                dedup_key=f'{dedup}_{staff.pk}',
             )
 
         transfer.flagged_no_sale = True

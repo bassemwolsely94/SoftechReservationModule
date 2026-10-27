@@ -1,0 +1,36 @@
+Save-SQL capture: 2026-10-08T06:30:15.163106 (profile=prod)
+my SPID (excluded from capture) = 53
+
+==============================================================================
+  1: monitoring config (master..syscurconfigs run values)
+==============================================================================
+  enable monitoring              run_value=1
+  max SQL text monitored         run_value=16384
+  sql text pipe active           run_value=1
+  sql text pipe max messages     run_value=20000
+  → monitoring_ready = True
+
+==============================================================================
+  2: candidate client connections (master..sysprocesses)
+==============================================================================
+
+--- active user connections ---
+  spid | hostname | program_name | hostprocess | cmd | name
+  41 | SSB | BASSEM | 13280 | AWAITING COMMAND | SofTech9
+  44 | SSB-SB | SSB-SB | 13920 | AWAITING COMMAND | SofTech9
+  53 | Bassem_HPZ |  |  | SELECT | SofTech9
+  79 | Bassem_HPZ |  |  | AWAITING COMMAND | SofTech9
+  95 | Server | E-Services Tool. | 14148 | AWAITING COMMAND | SofTech9
+  106 | Server | E-Services Tool. | 4444 | AWAITING COMMAND | SofTech9
+
+==============================================================================
+  3: CAPTURING for 180s — go click SAVE on ONE purchase now
+==============================================================================
+  using text source: master..monProcessSQLText
+  polled 2631 times; captured 0 batch(es) (0 distinct proc texts)
+
+==============================================================================
+  5: CAPTURED SQL (per batch, in order)
+==============================================================================
+
+Complete: 2026-10-08T06:33:16.446898

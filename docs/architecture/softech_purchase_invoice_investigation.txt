@@ -1,0 +1,531 @@
+Purchase-invoice discovery started: 2026-06-28T00:06:46.801603
+Profile: prod | effective host: 192.168.1.8
+Mode: READ-ONLY (SELECT only)  | doccode 10=purchase, 120=return-to-supplier
+
+================================================================================
+  A: Candidate purchase / receiving / staging tables by NAME
+================================================================================
+
+--- name LIKE '%purch%' ---
+  (no rows)
+
+--- name LIKE '%supp%' ---
+  COLS: name
+  items_suppliers
+  itemssuppliers
+
+--- name LIKE '%receiv%' ---
+  (no rows)
+
+--- name LIKE '%grn%' ---
+  (no rows)
+
+--- name LIKE '%buy%' ---
+  COLS: name
+  empbuys
+
+--- name LIKE '%waredm%' ---
+  (no rows)
+
+--- name LIKE '%mokhzon%' ---
+  (no rows)
+
+--- name LIKE '%trans5%' ---
+  COLS: name
+  chequestrans5
+  costcenterstrans5
+  dm_stktrans5
+  dm_stktrans5photo
+  dm_tripstrans5
+  stktrans5
+  stktrans5_ot
+
+--- name LIKE '%transm5%' ---
+  COLS: name
+  dm_stktransm5
+  dm_stktransm5log
+  stktransm5
+  stktransm5_ext
+  stktransm5_ot
+  stktransm5_revise
+
+--- name LIKE '%pend%' ---
+  COLS: name
+  accitems_pend
+  acctrans_pend
+  banks_safe_pending
+  branchesspends
+
+--- name LIKE '%hold%' ---
+  (no rows)
+
+--- name LIKE '%draft%' ---
+  (no rows)
+
+--- name LIKE '%staging%' ---
+  (no rows)
+
+--- name LIKE '%temp%' ---
+  COLS: name
+  r3temp_r_mon
+  r3temp_r_stk
+  temp_aging
+  temp_ash1
+  temp_barcode_laser
+  temp_dm_rep1
+  temp_empsalguide
+  temp_empslip
+  temp_empslip2
+  temp_empslipx
+  temp_fa_dep
+  temp_fat_status
+  temp_im_bal
+  temp_im_bal2
+  temp_inv5
+  temp_inv6
+  temp_invoices
+  temp_patientdata_test
+  temp_patientdata_test2
+  temp_r4
+  temp_r_fs1
+  temp_r_fs1_old
+  temp_r_is
+  temp_r_is_bak
+  temp_r_is_copy
+  temp_r_mon
+  temp_r_ps
+  temp_r_ps_bak
+  temp_r_ps_copy
+  temp_r_sec
+  temp_r_stk
+  temp_r_trans
+  temp_r_trans2
+  temp_r_trans2_old
+  temp_r_trans2big
+  temp_r_trans2big_old
+  temp_rep_comp
+  temp_sitems
+  temp_snos
+  temp_stock
+  temp_storebal_date
+  temp_storebal_date_old
+  temp_u_tselect
+  tempo
+  temppic
+  testtemp
+
+================================================================================
+  B: doccode distribution in staging (stktransm5) vs final (stktransm)
+================================================================================
+
+--- stktransm5 row counts by doccode (HQ staging) ---
+  COLS: doccode | cnt | min_no | max_no
+  110 | 28 | 2.0 | 29.0
+  115 | 15 | 2222.0 | 7203.0
+
+--- stktransm row counts by doccode (last 30d, final) ---
+  COLS: doccode | cnt
+  10 | 2052
+  115 | 20331
+  120 | 87
+  125 | 954
+  140 | 15
+  150 | 5
+  170 | 367
+  180 | 899
+  181 | 70
+  20 | 14
+  25 | 922
+  30 | 523
+  40 | 15
+  50 | 21
+  80 | 953
+  81 | 17
+
+================================================================================
+  C: GOLDEN TEMPLATE — finalized purchase (stktransm/stktrans doccode 10)
+================================================================================
+
+--- stktransm doccode=10 (most recent finalized purchase header) (golden template, one row vertical) ---
+  [ERROR] java.sql.SQLException: JZ006: Caught IOException: java.net.SocketTimeoutException: Read timed out
+
+--- stktransm doccode=120 (most recent return-to-supplier header) (golden template, one row vertical) ---
+    branchcode                   = 100
+    doccode                      = 120
+    docnumber                    = 11014.0
+    docdate                      = 2026-06-26 21:00:00+00:00
+    supp_main_code               = 00
+    docnumber2                   = 4.0
+    comments                     = NULL
+    docvalue                     = 663.52
+    cust_branch_code             = 4327
+    origintaxp                   = 0.0
+    custdiscp                    = 0.0
+    specialdiscp                 = 0.0
+    storecode                    = 100
+    docvaluepay                  = 0.0
+    fatstatuscode                = 10
+    ptcode                       = 20
+    ptclassifcode                = 60
+    cust_branch_store            = 100
+    docvaluereturn               = 0.0
+    fatcurrentstatus             = 15
+    docwritedate                 = NULL
+    cust_professional            = 0
+    saleprice_extrap             = 0.0
+    usercode                     = 21
+    trans_time                   = 2026-06-27 13:47:58.203000+00:00
+    patientpayment               = 63492.0
+    table_dumped                 = 2026-06-27 13:47:58.206000+00:00
+    docvalue1                    = 0.0
+    docvalue2                    = 0.0
+    docvalue3                    = 0.0
+    phcode                       = NULL
+    personnewbal                 = NULL
+    bcurrency                    = 1
+    docvaluebc                   = 663.52
+    docvaluepaybc                = 0.0
+    bcrate                       = 1.0
+    mitemsys                     = NULL
+    cashiercode                  = NULL
+    origdoc                      = 0
+    refdoctorcode                = NULL
+    docpaydue                    = NULL
+    vf1                          = NULL
+    vf2                          = NULL
+
+================================================================================
+  D: PENDING purchase template (stktransm5/stktrans5 doccode 10/120) — may be empty
+================================================================================
+
+--- stktransm5 doccode IN (10,120) (a live pending purchase, if any) (golden template, one row vertical) ---
+  (no rows)
+
+================================================================================
+  E: lastdocnumbers — purchase counters (*_supp)
+================================================================================
+
+--- lastdocnumbers (all rows) — *_supp columns ---
+  COLS: branchcode | ver_branch | lastdocnumberin_supp | lastdocnumberout_supp
+  000 | 0 | 0.0 | 0.0
+  100 | 1 | 63527.0 | 11014.0
+
+================================================================================
+  F: procedures/triggers referencing the purchase create/save path
+================================================================================
+
+--- procs/triggers mentioning stktransm5 / purchase / supplier ---
+  COLS: name | type
+  sp_11973119731 | P
+  sp_24797247979 | P
+  sp_26905269051 | P
+  sp_28047280471 | P
+  sp_29378293789 | P
+  sp_610961091 | P
+  sp_purch_classif | P
+  sp_purch_classif_branches | P
+  sp_purch_family | P
+  sp_purch_family_branches | P
+  sp_purch_gclassif | P
+  sp_purch_gclassif_branches | P
+  sp_purch_origin1 | P
+  sp_purch_origin1_branches | P
+  sp_purch_shape | P
+  sp_purch_shape_branches | P
+  sp_purch_suppclassif | P
+  sp_purch_suppclassif_branches | P
+  sp_sales_supp_exp | P
+  tr_dm_stktransm5_updt | TR
+  tr_dm_tripstrans5_ins | TR
+  tr_stktransm5 | TR
+  tr_stktransm_inv | TR
+
+--- tr_stktransm5 trigger body (doccode->counter routing) ---
+  COLS: text
+  set stktransm5.trans_time=@trans_time         
+        from stktransm5,inserted          
+        where stktransm5.branchcode=@branch  and         
+              stktransm5.doccode=@doccode        and         
+              stktransm5.docnumber
+  begin /* 180 */        
+           update lastdocnumbers set lastdocnumbers.lastdocnumberout_supp=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 180 */        
+    else
+  begin /* 190 */        
+            if convert(integer,@doccode)<99        
+              begin /* 200 */        
+                update lastdocnumbers set lastdocnumbers.lastdocnumberin=@docnumber from        
+                lastdocnumbe
+  @docdate=docdate         
+           from inserted          
+         
+        select  @trans_time = getdate()         
+        /* ******************************** Update table StkTransM5 ITSELF*/          
+      update stktransm5
+  lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+              end /* 300 */        
+          /*end if*/        
+        end /* 190 */        
+    /*end if*/        
+        
+    /* ===================================
+  @docnumber integer,          
+              @docdate    datetime,          
+                 @trans_time datetime         
+                           
+         
+        select  @branch=branchcode,@doccode=doccode,@docnumber=docnumber,
+  update lastdocnumbers set lastdocnumbers.lastdocnumberout_cust=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 160 */        
+    else if @doccode='10'        
+        begin /* 1
+  70 */        
+            update lastdocnumbers set lastdocnumbers.lastdocnumberin_supp=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 170 */        
+    else if @doccode='120'
+  ===================== */        
+         
+      END
+  =@docnumber    and         
+              stktransm5.docdate=@docdate          
+        
+     /* ================================ Update lastdocnumbers */         
+    if @doccode='30'        
+        begin /* 150 */        
+            update lastdocnumb
+  CREATE TRIGGER dbo.tr_stktransm5 ON dbo.stktransm5           
+   FOR INSERT AS           
+      BEGIN          
+        declare  @ver_branch char(5),         
+                 @branch char(5),          
+                 @doccode char(5),
+  ers set lastdocnumbers.lastdocnumberin_cust=@docnumber from        
+            lastdocnumbers,inserted where lastdocnumbers.branchcode='000'        
+        end /* 150 */        
+    else if @doccode='115'        
+        begin /* 160 */
+  rs,inserted where lastdocnumbers.branchcode='000'        
+              end /* 200 */        
+            else        
+              begin /* 300 */        
+                update lastdocnumbers set lastdocnumbers.lastdocnumberout=@docnumber from
+  
+
+================================================================================
+  G: Schema of staging + final header/line tables
+================================================================================
+
+  SCHEMA: stktransm5  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] supp_main_code               varchar        len=8     NULL
+    [  6] docnumber2                   decimal        len=8     NULL
+    [  7] comments                     varchar        len=100   NULL
+    [  8] docvalue                     decimal        len=7     NOT NULL
+    [  9] cust_branch_code             varchar        len=8     NULL
+    [ 10] origintaxp                   decimal        len=4     NULL
+    [ 11] custdiscp                    decimal        len=4     NULL
+    [ 12] specialdiscp                 decimal        len=4     NULL
+    [ 13] storecode                    varchar        len=3     NOT NULL
+    [ 14] docvaluepay                  decimal        len=7     NOT NULL
+    [ 15] fatstatuscode                varchar        len=2     NOT NULL
+    [ 16] ptcode                       varchar        len=3     NULL
+    [ 17] ptclassifcode                varchar        len=2     NULL
+    [ 18] cust_branch_store            varchar        len=5     NULL
+    [ 19] docvaluereturn               decimal        len=7     NOT NULL
+    [ 20] fatcurrentstatus             varchar        len=2     NULL
+    [ 21] docwritedate                 datetime       len=8     NULL
+    [ 22] cust_professional            varchar        len=1     NULL
+    [ 23] saleprice_extrap             decimal        len=4     NULL
+    [ 24] usercode                     varchar        len=5     NULL
+    [ 25] trans_time                   datetime       len=8     NULL
+    [ 26] patientpayment               decimal        len=7     NULL
+    [ 27] table_dumped                 datetime       len=8     NULL
+    [ 28] docvalue1                    decimal        len=7     NOT NULL
+    [ 29] docvalue2                    decimal        len=7     NOT NULL
+    [ 30] docvalue3                    decimal        len=7     NOT NULL
+    [ 31] phcode                       varchar        len=13    NULL
+    [ 32] personnewbal                 decimal        len=6     NULL
+    [ 33] docvaluebc                   decimal        len=7     NULL
+    [ 34] bcrate                       decimal        len=4     NULL
+    [ 35] bcurrency                    tinyint        len=1     NULL
+    [ 36] docvaluepaybc                decimal        len=7     NULL
+    [ 37] cashiercode                  varchar        len=5     NULL
+    [ 38] mitemsys                     varchar        len=2     NULL
+    [ 39] origdoc                      tinyint        len=1     NULL
+    [ 40] refdoctorcode                varchar        len=13    NULL
+    [ 41] docpaydue                    datetime       len=8     NULL
+    [ 42] vf1                          varchar        len=5     NULL
+    [ 43] vf2                          varchar        len=15    NULL
+
+  SCHEMA: stktrans5  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] storecode                    varchar        len=3     NOT NULL
+    [  6] itemcode                     varchar        len=6     NOT NULL
+    [  7] transqty                     decimal        len=6     NOT NULL
+    [  8] transprice                   decimal        len=6     NOT NULL
+    [  9] newqty                       decimal        len=6     NULL
+    [ 10] newcostprice                 decimal        len=6     NULL
+    [ 11] itemexpirydate               datetime       len=8     NULL
+    [ 12] itemsaleprice                decimal        len=6     NOT NULL
+    [ 13] itemsalestax                 decimal        len=6     NULL
+    [ 14] itemsaleprice_tax            decimal        len=6     NULL
+    [ 15] pharmacydiscp                decimal        len=4     NULL
+    [ 16] additionaldiscp              decimal        len=4     NULL
+    [ 17] transprice_total             decimal        len=7     NOT NULL
+    [ 18] origintaxp                   decimal        len=4     NULL
+    [ 19] custdiscp                    decimal        len=4     NULL
+    [ 20] specialdiscp                 decimal        len=4     NOT NULL
+    [ 21] bonusqty                     decimal        len=6     NOT NULL
+    [ 22] dblitemflag                  smallint       len=2     NOT NULL
+    [ 23] r_docnumber                  decimal        len=6     NULL
+    [ 24] r_docdate                    datetime       len=8     NULL
+    [ 25] saleprice_extrap             decimal        len=4     NULL
+    [ 26] suppliercode                 varchar        len=8     NULL
+    [ 27] r_doccode                    varchar        len=3     NULL
+    [ 28] s_doccode                    varchar        len=3     NULL
+    [ 29] s_docnumber                  decimal        len=6     NULL
+    [ 30] s_docdate                    datetime       len=8     NULL
+    [ 31] usercode                     varchar        len=5     NULL
+    [ 32] trans_time                   datetime       len=8     NULL
+    [ 33] personcode                   varchar        len=8     NULL
+    [ 34] table_dumped                 datetime       len=8     NULL
+    [ 35] storecode2                   varchar        len=3     NULL
+    [ 36] retqty                       decimal        len=6     NULL
+    [ 37] item_partno                  varchar        len=15    NULL
+    [ 38] costcentercode               varchar        len=10    NULL
+    [ 39] rcostprice                   decimal        len=6     NULL
+    [ 40] vf1                          varchar        len=15    NULL
+    [ 41] vf2                          varchar        len=15    NULL
+    [ 42] vf3                          decimal        len=8     NULL
+    [ 43] vf4                          smallint       len=2     NULL
+    [ 44] promsno                      varchar        len=20    NULL
+    [ 45] promtype                     tinyint        len=1     NULL
+
+  SCHEMA: stktransm  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] supp_main_code               varchar        len=8     NULL
+    [  6] docnumber2                   decimal        len=8     NULL
+    [  7] comments                     varchar        len=100   NULL
+    [  8] docvalue                     decimal        len=7     NOT NULL
+    [  9] cust_branch_code             varchar        len=8     NULL
+    [ 10] origintaxp                   decimal        len=4     NULL
+    [ 11] custdiscp                    decimal        len=4     NULL
+    [ 12] specialdiscp                 decimal        len=4     NULL
+    [ 13] storecode                    varchar        len=3     NOT NULL
+    [ 14] docvaluepay                  decimal        len=7     NOT NULL
+    [ 15] fatstatuscode                varchar        len=2     NOT NULL
+    [ 16] ptcode                       varchar        len=3     NULL
+    [ 17] ptclassifcode                varchar        len=2     NULL
+    [ 18] cust_branch_store            varchar        len=5     NULL
+    [ 19] docvaluereturn               decimal        len=7     NOT NULL
+    [ 20] fatcurrentstatus             varchar        len=2     NULL
+    [ 21] docwritedate                 datetime       len=8     NULL
+    [ 22] cust_professional            varchar        len=1     NULL
+    [ 23] saleprice_extrap             decimal        len=4     NULL
+    [ 24] usercode                     varchar        len=5     NULL
+    [ 25] trans_time                   datetime       len=8     NULL
+    [ 26] patientpayment               decimal        len=7     NULL
+    [ 27] table_dumped                 datetime       len=8     NULL
+    [ 28] docvalue1                    decimal        len=7     NOT NULL
+    [ 29] docvalue2                    decimal        len=7     NOT NULL
+    [ 30] docvalue3                    decimal        len=7     NOT NULL
+    [ 31] phcode                       varchar        len=13    NULL
+    [ 32] personnewbal                 decimal        len=6     NULL
+    [ 33] bcurrency                    tinyint        len=1     NULL
+    [ 34] docvaluebc                   decimal        len=7     NULL
+    [ 35] docvaluepaybc                decimal        len=7     NULL
+    [ 36] bcrate                       decimal        len=4     NULL
+    [ 37] mitemsys                     varchar        len=2     NULL
+    [ 38] cashiercode                  varchar        len=5     NULL
+    [ 39] origdoc                      tinyint        len=1     NULL
+    [ 40] refdoctorcode                varchar        len=13    NULL
+    [ 41] docpaydue                    datetime       len=8     NULL
+    [ 42] vf1                          varchar        len=5     NULL
+    [ 43] vf2                          varchar        len=15    NULL
+
+  SCHEMA: stktrans  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] storecode                    varchar        len=3     NOT NULL
+    [  6] itemcode                     varchar        len=6     NOT NULL
+    [  7] transqty                     decimal        len=6     NOT NULL
+    [  8] transprice                   decimal        len=6     NOT NULL
+    [  9] newqty                       decimal        len=6     NULL
+    [ 10] newcostprice                 decimal        len=6     NULL
+    [ 11] itemexpirydate               datetime       len=8     NULL
+    [ 12] itemsaleprice                decimal        len=6     NOT NULL
+    [ 13] itemsalestax                 decimal        len=6     NULL
+    [ 14] itemsaleprice_tax            decimal        len=6     NULL
+    [ 15] pharmacydiscp                decimal        len=4     NULL
+    [ 16] additionaldiscp              decimal        len=4     NULL
+    [ 17] transprice_total             decimal        len=7     NOT NULL
+    [ 18] origintaxp                   decimal        len=4     NULL
+    [ 19] custdiscp                    decimal        len=4     NULL
+    [ 20] specialdiscp                 decimal        len=4     NOT NULL
+    [ 21] bonusqty                     decimal        len=6     NOT NULL
+    [ 22] dblitemflag                  smallint       len=2     NOT NULL
+    [ 23] r_docnumber                  decimal        len=6     NULL
+    [ 24] r_docdate                    datetime       len=8     NULL
+    [ 25] saleprice_extrap             decimal        len=4     NULL
+    [ 26] suppliercode                 varchar        len=8     NULL
+    [ 27] r_doccode                    varchar        len=3     NULL
+    [ 28] s_doccode                    varchar        len=3     NULL
+    [ 29] s_docnumber                  decimal        len=6     NULL
+    [ 30] s_docdate                    datetime       len=8     NULL
+    [ 31] usercode                     varchar        len=5     NULL
+    [ 32] trans_time                   datetime       len=8     NULL
+    [ 33] personcode                   varchar        len=8     NULL
+    [ 34] table_dumped                 datetime       len=8     NULL
+    [ 35] storecode2                   varchar        len=3     NULL
+    [ 36] retqty                       decimal        len=6     NULL
+    [ 37] item_partno                  varchar        len=32    NULL
+    [ 38] costcentercode               varchar        len=10    NULL
+    [ 39] rcostprice                   decimal        len=6     NULL
+    [ 40] vf1                          varchar        len=15    NULL
+    [ 41] vf2                          varchar        len=15    NULL
+    [ 42] vf3                          decimal        len=8     NULL
+    [ 43] vf4                          smallint       len=2     NULL
+    [ 44] promsno                      varchar        len=20    NULL
+    [ 45] promtype                     tinyint        len=1     NULL
+
+  SCHEMA: branchesales5  (colid | name | type | len | NULL?)
+    [  1] branchcode                   varchar        len=5     NOT NULL
+    [  2] doccode                      varchar        len=3     NOT NULL
+    [  3] docnumber                    decimal        len=6     NOT NULL
+    [  4] docdate                      datetime       len=8     NOT NULL
+    [  5] paymentsno                   int            len=4     NOT NULL
+    [  6] paymenttype                  varchar        len=2     NOT NULL
+    [  7] paymentvalue                 decimal        len=7     NOT NULL
+    [  8] ref_docnumber                decimal        len=6     NOT NULL
+    [  9] localpayment_remain          decimal        len=7     NULL
+    [ 10] localpayment_sno             int            len=4     NULL
+    [ 11] usercode                     varchar        len=5     NOT NULL
+    [ 12] trans_time                   datetime       len=8     NULL
+    [ 13] comment                      varchar        len=25    NULL
+    [ 14] personcode                   varchar        len=8     NULL
+    [ 15] hour_of_day                  int            len=4     NULL
+    [ 16] samedayhours                 varchar        len=1     NULL
+    [ 17] table_dumped                 datetime       len=8     NULL
+    [ 18] intervalcode                 varchar        len=2     NULL
+    [ 19] intervaldocdate              datetime       len=8     NULL
+    [ 20] cheqdate                     datetime       len=8     NULL
+    [ 21] creditcardtype               tinyint        len=1     NULL
+    [ 22] bcurrency                    tinyint        len=1     NOT NULL
+    [ 23] bcrate                       decimal        len=4     NOT NULL
+    [ 24] paymentvaluebc               decimal        len=7     NOT NULL
+
+Complete: 2026-06-28T00:07:37.966971

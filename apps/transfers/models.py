@@ -36,13 +36,13 @@ class TransferRequest(models.Model):
     )
 
     # ── Branches ──────────────────────────────────────────────────────────────
-    source_branch = models.ForeignKey(
+    requesting_branch = models.ForeignKey(
         'branches.Branch',
         on_delete=models.PROTECT,
         related_name='outgoing_requests',
         verbose_name='الفرع الطالب',
     )
-    destination_branch = models.ForeignKey(
+    supplying_branch = models.ForeignKey(
         'branches.Branch',
         on_delete=models.PROTECT,
         null=True,
@@ -62,13 +62,13 @@ class TransferRequest(models.Model):
 
     # ── People ────────────────────────────────────────────────────────────────
     created_by = models.ForeignKey(
-    'users.StaffProfile',
-    on_delete=models.PROTECT,
-    null=True,
-    blank=True,
-    related_name='created_transfer_requests',
-    verbose_name='أنشئ بواسطة',
-)
+        'users.StaffProfile',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='created_transfer_requests',
+        verbose_name='أنشئ بواسطة',
+    )
     reviewed_by = models.ForeignKey(
         'users.StaffProfile',
         on_delete=models.SET_NULL,
@@ -113,6 +113,87 @@ class TransferRequest(models.Model):
         verbose_name='أُرسل بواسطة',
     )
 
+    # ── ERP match verification ────────────────────────────────────────────────
+    ERP_MATCH_STATUS = [
+        ('pending',    'قيد التحقق'),
+        ('matched',    'مطابق'),
+        ('partial',    'مطابقة جزئية'),
+        ('not_found',  'غير موجود'),
+        ('timeout',    'انتهت المهلة'),
+    ]
+
+    erp_match_status = models.CharField(
+        max_length=20, choices=ERP_MATCH_STATUS,
+        blank=True, default='',
+        db_index=True,
+        verbose_name='حالة مطابقة ERP',
+    )
+    erp_matched_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='وقت المطابقة',
+    )
+    erp_match_doc_code = models.CharField(
+        max_length=20, blank=True,
+        verbose_name='كود نوع المستند',
+    )
+    erp_match_doc_date = models.DateField(
+        null=True, blank=True,
+        verbose_name='تاريخ المستند',
+    )
+    erp_match_doc_value = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        null=True, blank=True,
+        verbose_name='قيمة المستند',
+    )
+    erp_match_user_code = models.CharField(
+        max_length=50, blank=True,
+        verbose_name='كود المستخدم (ERP)',
+    )
+    erp_match_user_id = models.CharField(
+        max_length=100, blank=True,
+        verbose_name='اسم مستخدم ERP (userid)',
+    )
+    erp_match_user_name = models.CharField(
+        max_length=200, blank=True,
+        verbose_name='الاسم الكامل للمستخدم (ERP)',
+    )
+    erp_match_trans_time = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='وقت تنفيذ المعاملة (ERP)',
+    )
+    erp_match_store_code = models.CharField(
+        max_length=50, blank=True,
+        verbose_name='كود المخزن (ERP)',
+    )
+    erp_matched_items = models.JSONField(
+        default=list, blank=True,
+        verbose_name='الأصناف المطابقة',
+    )
+    erp_last_checked = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='آخر فحص',
+    )
+    erp_check_attempts = models.PositiveIntegerField(
+        default=0,
+        verbose_name='عدد محاولات الفحص',
+    )
+    erp_match_detail = models.CharField(
+        max_length=500, blank=True,
+        verbose_name='تفاصيل المطابقة',
+    )
+
+    # ── Intelligence link — closes the recommendation → execution loop ───────
+    # When a TransferRequest is created to action a TransferRecommendation,
+    # record the link here. This allows measuring adoption rate and ROI.
+    source_recommendation = models.ForeignKey(
+        'purchasing.TransferRecommendation',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='transfer_requests',
+        verbose_name='التوصية المصدر',
+        help_text='إذا نشأ هذا الطلب من توصية تحويل تلقائية، تُحفظ هنا الرابط للقياس والتحليل',
+    )
+
     # ── Timestamps ────────────────────────────────────────────────────────────
     submitted_at  = models.DateTimeField(null=True, blank=True)
     reviewed_at   = models.DateTimeField(null=True, blank=True)
@@ -125,20 +206,28 @@ class TransferRequest(models.Model):
         verbose_name = 'طلب تحويل'
         verbose_name_plural = 'طلبات التحويل'
         indexes = [
-            models.Index(fields=['status', 'source_branch']),
-            models.Index(fields=['status', 'destination_branch']),
+            models.Index(fields=['status', 'requesting_branch']),
+            models.Index(fields=['status', 'supplying_branch']),
             models.Index(fields=['created_at']),
         ]
 
     def __str__(self):
-        return f'{self.request_number} | {self.source_branch} → {self.destination_branch} | {self.get_status_display()}'
+        return f'{self.request_number} | {self.requesting_branch} → {self.supplying_branch} | {self.get_status_display()}'
 
     def save(self, *args, **kwargs):
         if not self.request_number:
-            # Generate after first save to get the ID
-            super().save(*args, **kwargs)
+            # Pre-fetch the next PK from the DB sequence so we can populate
+            # request_number BEFORE the INSERT — avoids a two-phase save and
+            # works even when the column has a NOT NULL constraint.
+            if not self.pk:
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT nextval('transfers_transferrequest_id_seq')"
+                    )
+                    next_id = cursor.fetchone()[0]
+                self.pk = next_id
             self.request_number = f'TR-{self.pk:06d}'
-            kwargs['force_insert'] = False
         super().save(*args, **kwargs)
 
     # ── State machine helpers ─────────────────────────────────────────────────
@@ -178,23 +267,28 @@ class TransferRequest(models.Model):
 
     @property
     def status_color(self):
-        return {
-            'draft':          'gray',
-            'pending':        'orange',
-            'approved':       'blue',
-            'rejected':       'red',
-            'needs_revision': 'yellow',
-            'sent_to_erp':    'purple',
-            'completed':      'green',
-            'cancelled':      'gray',
-        }.get(self.status, 'gray')
+        return _STATUS_COLORS.get(self.status, 'gray')
 
     @property
     def status_label_ar(self):
-        return dict(self.STATUS_CHOICES).get(self.status, self.status)
+        return _STATUS_LABELS.get(self.status, self.status)
 
     def total_items(self):
         return self.items.count()
+
+
+# Module-level look-up tables — built once, not per property call
+_STATUS_COLORS = {
+    'draft':          'gray',
+    'pending':        'orange',
+    'approved':       'blue',
+    'rejected':       'red',
+    'needs_revision': 'yellow',
+    'sent_to_erp':    'purple',
+    'completed':      'green',
+    'cancelled':      'gray',
+}
+_STATUS_LABELS = dict(TransferRequest.STATUS_CHOICES)
 
 
 class TransferRequestItem(models.Model):
@@ -218,6 +312,16 @@ class TransferRequestItem(models.Model):
         max_digits=10, decimal_places=3,
         verbose_name='الكمية المطلوبة',
     )
+    approved_quantity = models.DecimalField(
+        max_digits=10, decimal_places=3,
+        null=True, blank=True,
+        verbose_name='الكمية المعتمدة',
+    )
+    received_quantity = models.DecimalField(
+        max_digits=10, decimal_places=3,
+        null=True, blank=True,
+        verbose_name='الكمية المستلمة فعلياً',
+    )
     notes = models.CharField(
         max_length=255, blank=True,
         verbose_name='ملاحظة',
@@ -237,7 +341,7 @@ class TransferRequestItem(models.Model):
         from apps.catalog.models import ItemStock
         stock = ItemStock.objects.filter(
             item=self.item,
-            branch=self.request.destination_branch,
+            branch=self.request.supplying_branch,
         ).first()
         return float(stock.quantity_on_hand) if stock else 0.0
 
@@ -265,7 +369,7 @@ class TransferRequestMessage(models.Model):
         choices=MESSAGE_TYPES,
         default='message',
     )
-    message = models.TextField(verbose_name='الرسالة')
+    message = models.TextField(verbose_name='الرسالة', blank=True)
     created_by = models.ForeignKey(
         'users.StaffProfile',
         on_delete=models.SET_NULL,
@@ -274,6 +378,28 @@ class TransferRequestMessage(models.Model):
         verbose_name='بواسطة',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Attachments
+    attachment = models.ImageField(
+        upload_to='transfer_attachments/%Y/%m/',
+        null=True, blank=True,
+        verbose_name='مرفق صورة',
+    )
+    voice_note = models.FileField(
+        upload_to='transfer_voices/%Y/%m/',
+        null=True, blank=True,
+        verbose_name='ملاحظة صوتية',
+    )
+
+    # Soft-delete — tombstone stays; body/attachments are redacted
+    is_deleted = models.BooleanField(default=False, db_index=True, verbose_name='محذوف')
+    deleted_at  = models.DateTimeField(null=True, blank=True, verbose_name='وقت الحذف')
+    deleted_by  = models.ForeignKey(
+        'users.StaffProfile',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='deleted_transfer_messages',
+        verbose_name='حُذف بواسطة',
+    )
 
     class Meta:
         ordering = ['created_at']

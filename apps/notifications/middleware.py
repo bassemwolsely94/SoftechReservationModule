@@ -1,0 +1,93 @@
+"""
+apps/notifications/middleware.py
+
+JWT authentication middleware for Django Channels WebSocket connections.
+
+Usage — attach in asgi.py:
+    from apps.notifications.middleware import JWTAuthMiddlewareStack
+    application = ProtocolTypeRouter({
+        'http':      get_asgi_application(),
+        'websocket': JWTAuthMiddlewareStack(URLRouter(websocket_urlpatterns)),
+    })
+
+How it works:
+  1. Reads ?token=<jwt> from the WebSocket query string
+  2. Validates the token using SimpleJWT's UntypedToken
+  3. Resolves the Django User and injects it into scope['user']
+  4. Falls back to AnonymousUser on any failure — consumers must check is_authenticated
+"""
+import logging
+from urllib.parse import parse_qs
+
+from channels.auth import AuthMiddlewareStack
+from channels.db import database_sync_to_async
+from channels.middleware import BaseMiddleware
+from django.contrib.auth.models import AnonymousUser
+
+logger = logging.getLogger('elrezeiky.notifications')
+
+
+class JWTAuthMiddleware(BaseMiddleware):
+    """
+    Async ASGI middleware that extracts ?token=<jwt> from the WebSocket
+    handshake URL and populates scope['user'] with the resolved Django User.
+    """
+
+    async def __call__(self, scope, receive, send):
+        # Only process WebSocket connections
+        if scope['type'] == 'websocket':
+            scope['user'] = await self._authenticate(scope)
+        return await super().__call__(scope, receive, send)
+
+    async def _authenticate(self, scope):
+        query_string = scope.get('query_string', b'')
+        if isinstance(query_string, bytes):
+            query_string = query_string.decode('utf-8', errors='replace')
+        params = parse_qs(query_string)
+        token_list = params.get('token', [])
+        if token_list:                       # legacy clients: ?token=<jwt>
+            return await self._get_user_from_token(token_list[0])
+        # SPA: the httpOnly access cookie travels with the same-origin handshake,
+        # so the token never appears in a URL (proxy / access logs).
+        from http.cookies import SimpleCookie
+        from core.auth_cookies import ACCESS_COOKIE
+        for name, value in scope.get('headers', []):
+            if name == b'cookie':
+                jar = SimpleCookie()
+                jar.load(value.decode('latin-1'))
+                if ACCESS_COOKIE in jar:
+                    return await self._get_user_from_token(jar[ACCESS_COOKIE].value)
+        return AnonymousUser()
+
+    @database_sync_to_async
+    def _get_user_from_token(self, token: str):
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            from rest_framework_simplejwt.settings import api_settings
+            from django.contrib.auth import get_user_model
+            from apps.users.sessions import account_active
+
+            User = get_user_model()
+
+            # An ACCESS token only — signature, expiry and token type checked together.
+            # UntypedToken also took a 7-day refresh token, blacklisted or not (Batch 3, A-4).
+            user_id = AccessToken(token).get(api_settings.USER_ID_CLAIM)
+            if not user_id:
+                return AnonymousUser()
+            user = User.objects.select_related('staff_profile').get(
+                **{api_settings.USER_ID_FIELD: user_id})
+            if not account_active(user):        # a disabled account is refused at once (A-3/A-4)
+                return AnonymousUser()
+            return user
+
+        except Exception as exc:
+            logger.debug('WS JWT auth failed: %s', exc)
+            return AnonymousUser()
+
+
+def JWTAuthMiddlewareStack(inner):
+    """
+    Convenience wrapper — wraps with JWTAuthMiddleware then AuthMiddlewareStack
+    so session-based auth also works as a fallback.
+    """
+    return JWTAuthMiddleware(AuthMiddlewareStack(inner))

@@ -1,0 +1,204 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}ربط التحويلات بالموظفين — {{ site_header }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">الرئيسية</a>
+  &rsaquo; <a href="{% url 'admin:pbx_agentextension_changelist' %}">التحويلات</a>
+  &rsaquo; ربط التحويلات بالموظفين
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* ── layout ── */
+  .map-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; }
+  .map-header h1 { margin:0; font-size:1.5rem; }
+
+  /* ── group cards ── */
+  .group-card { background:#fff; border:1px solid #e0e0e0; border-radius:6px; margin-bottom:1.6rem; overflow:hidden; }
+  .group-card .group-title {
+    padding:.7rem 1rem; font-weight:bold; font-size:.95rem;
+    display:flex; align-items:center; gap:.5rem;
+  }
+  .group-card.agents   .group-title { background:#e8f5e9; color:#2e7d32; }
+  .group-card.hq       .group-title { background:#e3f2fd; color:#1565c0; }
+  .group-card.branch   .group-title { background:#fff8e1; color:#f57f17; }
+  .group-card.other    .group-title { background:#f5f5f5; color:#555; }
+
+  /* ── table ── */
+  .map-table { width:100%; border-collapse:collapse; }
+  .map-table th { background:#f9f9f9; padding:.55rem .9rem; text-align:right; font-size:.82rem; color:#555; border-bottom:1px solid #e0e0e0; }
+  .map-table td { padding:.5rem .9rem; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+  .map-table tr:last-child td { border-bottom:none; }
+  .map-table tr:hover td { background:#fafafa; }
+
+  /* ── status badges ── */
+  .badge { display:inline-block; padding:.15rem .55rem; border-radius:99px; font-size:.75rem; font-weight:600; }
+  .badge-ok         { background:#e8f5e9; color:#2e7d32; }
+  .badge-unreachable{ background:#fff3e0; color:#e65100; }
+  .badge-unknown    { background:#f5f5f5; color:#888; }
+  .badge-agent      { background:#e8f5e9; color:#2e7d32; }
+  .badge-hq         { background:#e3f2fd; color:#1565c0; }
+  .badge-branch     { background:#fff8e1; color:#f57f17; }
+  .badge-other      { background:#f5f5f5; color:#777; }
+
+  /* ── select ── */
+  .staff-select { width:100%; max-width:280px; padding:.3rem .5rem; border:1px solid #ccc; border-radius:4px; font-size:.88rem; direction:rtl; }
+  .staff-select.changed { border-color:#1a73e8; background:#f0f7ff; }
+
+  /* ── save bar ── */
+  .save-bar {
+    position:sticky; bottom:0; background:#fff; border-top:2px solid #1a73e8;
+    padding:.8rem 1.2rem; display:flex; gap:.8rem; align-items:center;
+    box-shadow:0 -2px 8px rgba(0,0,0,.1); z-index:100;
+  }
+  .btn-save { background:#1a73e8; color:#fff; border:none; padding:.55rem 1.6rem; border-radius:4px; font-size:.92rem; cursor:pointer; font-weight:600; }
+  .btn-save:hover { background:#1558b0; }
+  .save-note { color:#888; font-size:.82rem; }
+  .changed-count { font-weight:bold; color:#1a73e8; }
+
+  /* ── gateway card ── */
+  .gw-card { background:#fff; border:1px solid #e0e0e0; border-radius:6px; margin-bottom:1.4rem; overflow:hidden; }
+  .gw-card .gw-title { padding:.7rem 1rem; font-weight:bold; font-size:.95rem; background:#fce4ec; color:#880e4f; }
+  .gw-table { width:100%; border-collapse:collapse; }
+  .gw-table th { background:#f9f9f9; padding:.55rem .9rem; text-align:right; font-size:.82rem; color:#555; border-bottom:1px solid #e0e0e0; }
+  .gw-table td { padding:.55rem .9rem; border-bottom:1px solid #f0f0f0; font-size:.88rem; }
+  .gw-badge-mobile   { background:#fce4ec; color:#880e4f; }
+  .gw-badge-landline { background:#e8eaf6; color:#283593; }
+  .gw-badge-sip      { background:#e0f2f1; color:#004d40; }
+  .gw-input { width:110px; padding:.3rem .5rem; border:1px solid #ccc; border-radius:4px; font-size:.85rem; }
+</style>
+
+<div class="map-header">
+  <h1>ربط التحويلات بالموظفين</h1>
+  <a href="{% url 'admin:pbx_agentextension_changelist' %}" class="button">عرض قائمة التحويلات</a>
+</div>
+
+<form method="post" id="map-form">
+  {% csrf_token %}
+
+  {# ── Extension groups ────────────────────────────────────────────────── #}
+  {% for group in groups %}
+  <div class="group-card {{ group.css }}">
+    <div class="group-title">
+      <span>{{ group.label }}</span>
+      <span style="font-weight:normal;font-size:.83rem;color:inherit;opacity:.7">({{ group.extensions|length }} تحويلة)</span>
+    </div>
+    <table class="map-table">
+      <thead>
+        <tr>
+          <th style="width:80px">التحويلة</th>
+          <th style="width:90px">الحالة</th>
+          <th style="width:130px">آخر IP</th>
+          <th>الموظف المرتبط</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ext in group.extensions %}
+        <tr>
+          <td><strong>{{ ext.extension }}</strong></td>
+          <td>
+            {% if ext.is_registered %}
+              <span class="badge badge-ok">مسجّل</span>
+            {% elif 'UNREACHABLE' in ext.last_status %}
+              <span class="badge badge-unreachable">غير متاح</span>
+            {% else %}
+              <span class="badge badge-unknown">مجهول</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.8rem;color:#777">{{ ext.last_ip|default:"—" }}</td>
+          <td>
+            <select name="ext_{{ ext.pk }}"
+                    class="staff-select"
+                    data-original="{{ ext.staff_id|default:'' }}"
+                    onchange="this.classList.toggle('changed', this.value !== this.dataset.original); updateCount();">
+              <option value="">--- غير مُعيَّن ---</option>
+              {% for sp in staff_list %}
+                <option value="{{ sp.pk }}"
+                  {% if ext.staff_id == sp.pk %}selected{% endif %}>
+                  {{ sp.full_name }}{% if sp.role_label %} ({{ sp.role_label }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+  {# ── Gateway config ──────────────────────────────────────────────────── #}
+  {% if gateways %}
+  <div class="gw-card">
+    <div class="gw-title">البوابات الخارجية — تكوين نوع الخط والبادئة/اللاحقة</div>
+    <table class="gw-table">
+      <thead>
+        <tr>
+          <th style="width:130px">التحويلة</th>
+          <th style="width:140px">نوع البوابة</th>
+          <th style="width:160px">بادئة الرقم (call_prefix)</th>
+          <th style="width:160px">لاحقة الرقم (call_suffix)</th>
+          <th>ملاحظة</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for gw in gateways %}
+        <tr>
+          <td><strong>{{ gw.extension }}</strong><br><small style="color:#999">{{ gw.sip_peer }}</small></td>
+          <td>
+            <select name="gw_type_{{ gw.pk }}" class="staff-select" style="max-width:160px">
+              <option value="">— غير محدد —</option>
+              {% for val, label in gateway_type_choices %}
+                <option value="{{ val }}" {% if gw.gateway_type == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td>
+            <input type="text" name="gw_prefix_{{ gw.pk }}"
+                   value="{{ gw.call_prefix }}"
+                   placeholder="مثال: 0"
+                   class="gw-input">
+          </td>
+          <td>
+            <input type="text" name="gw_suffix_{{ gw.pk }}"
+                   value="{{ gw.call_suffix }}"
+                   placeholder="فارغة عادةً"
+                   class="gw-input">
+          </td>
+          <td style="font-size:.8rem;color:#777">
+            {% if gw.gateway_type == 'mobile' %}
+              خط موبايل — GoIP يحمّل أرقام الجوال
+            {% elif gw.gateway_type == 'landline' %}
+              خط أرضي — Grandstream يحمّل أرقام الأرضي
+            {% else %}
+              حدّد النوع لتفعيل تطبيع الأرقام في الـ bridge
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── Sticky save bar ─────────────────────────────────────────────────── #}
+  <div class="save-bar">
+    <button type="submit" class="btn-save">حفظ التعيينات</button>
+    <span class="save-note">تم تغيير <span class="changed-count" id="change-count">0</span> تحويلة</span>
+  </div>
+
+</form>
+
+<script>
+function updateCount() {
+  const changed = document.querySelectorAll('.staff-select.changed').length;
+  document.getElementById('change-count').textContent = changed;
+}
+// Mark changed on page load (shouldn't be needed, but safety net)
+document.addEventListener('DOMContentLoaded', updateCount);
+</script>
+{% endblock %}

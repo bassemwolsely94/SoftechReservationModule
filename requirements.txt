@@ -3,9 +3,37 @@ djangorestframework==3.15.1
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.3.1
 psycopg2-binary>=2.9.9
-pyodbc==5.0.1
 APScheduler==3.10.4
 python-decouple==3.8
 django-filter==23.5
 Pillow>=10.3.0
+numpy>=1.26               # apps/invoices preprocess/ocr/engines (imported directly, not only via easyocr)
 django-extensions==3.2.3
+pytesseract>=0.3.10           # optional: printed text OCR (requires Tesseract binary)
+easyocr>=1.7.0                # local handwriting OCR — no API key needed
+google-genai>=1.0.0           # optional: Gemini free-tier OCR (GEMINI_API_KEY in .env)
+PyMuPDF>=1.24                  # PDF page rendering for multi-invoice bundle ingestion (no system poppler)
+rapidocr-onnxruntime>=1.2      # free/fast local OCR for invoice-bundle boundary detection (no API key)
+zxing-cpp>=2.3.0               # optional: 1-D barcode decode to recover printed invoice numbers (pure wheel, no system dep)
+# Optional OCR engines (pluggable registry in apps/invoices/engines.py). Not hard deps —
+# the registry marks them unavailable if absent. Install per environment:
+#   paddleocr + paddlepaddle   # free local Arabic engine (needs Python ≤3.12; no 3.14 wheel yet)
+#   mistralai                  # paid Mistral vision OCR (set MISTRAL_API_KEY)
+faster-whisper>=1.0.3         # optional: nightly local call transcription (WHISPER_ENABLED=True)
+paramiko>=3.4                 # optional: read call recordings from Issabel over SFTP
+qrcode>=8.0
+pyotp>=2.9.0                   # TOTP 2FA (RFC 6238) for approval-role logins
+openpyxl>=3.1.0
+rapidfuzz>=3.6.0
+# ── WebSocket / real-time ─────────────────────────────────────────────────────
+channels>=4.0.0               # Django Channels — WebSocket support
+daphne>=4.0.0                 # ASGI server (required when channels is in INSTALLED_APPS)
+channels-redis>=4.2.0         # shared channel layer when REDIS_URL is set (web + scheduler are separate processes)
+PyJWT>=2.8.0                  # JWT decode in WS middleware (already pulled by simplejwt)
+imagehash>=4.3.0
+beautifulsoup4>=4.12.0
+# ── Web Push (VAPID) ──────────────────────────────────────────────────────────
+pywebpush>=2.0.0              # browser push notifications (VAPID) — "alive" bell
+PyMySQL==1.2.0  # Issabel CDR (call-center call counts, doc 16 Phase 5)
+python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
+JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT

@@ -1,0 +1,8 @@
+# Owner: Batch 4. /api/<prefix>/ not in MODULE_BY_PREFIX / READ_OPEN_PREFIXES / EXEMPT_PREFIXES —
+# ModuleAccessMiddleware never checks them, so only the views' own permissions apply.
+
+recommendations
+tasks
+# NEW 2026-10-26 from parallel work (apps/stock_audit, untracked): not in MODULE_BY_PREFIX, so the RBAC
+# middleware never checks it; the app ships its own apps/stock_audit/access.py. Flagged to owner — map it or confirm.
+stock-audit
