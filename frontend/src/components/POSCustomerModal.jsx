@@ -19,13 +19,14 @@ const blankForm = () => ({
   area: '', district: '', landmark: '',
 })
 
-export default function POSCustomerModal({ onSelect, onClose }) {
-  const [tab, setTab] = useState('query')
+export default function POSCustomerModal({ onSelect, onClose, initialPhone = '' }) {
+  // initialPhone (call screen-pop «عميل جديد بهذا الرقم»): open on the add form with the phone filled
+  const [tab, setTab] = useState(initialPhone ? 'add' : 'query')
   useHelpTab(tab)
   const [q, setQ] = useState('')
   const [rows, setRows] = useState([])
   const [searching, setSearching] = useState(false)
-  const [form, setForm] = useState(blankForm())
+  const [form, setForm] = useState(() => ({ ...blankForm(), phone: initialPhone }))
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [phoneHits, setPhoneHits] = useState([])   // existing customers with this phone

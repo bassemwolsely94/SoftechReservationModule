@@ -36,6 +36,7 @@ export default function POSOrderPage() {
   const P = usePosOrder()
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
+  const [picPhone, setPicPhone] = useState('')     // call screen-pop → new PIC with the caller's phone
   const [showParked, setShowParked] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [guided, setGuided] = useState(false)
@@ -66,7 +67,7 @@ export default function POSOrderPage() {
         .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         .pos-num{-moz-appearance:textfield}`}</style>
       <WorkflowBar P={P} guided={guided} onToggleGuided={() => setGuided(g => !g)} />
-      <CallPopBanner onLoadCustomer={P.setCustomer} />
+      <CallPopBanner onLoadCustomer={P.setPicCustomer} onNewCustomer={(phone) => { setPicPhone(phone); setShowPic(true) }} />
       <HeaderBand P={P} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* channels + flags (collapsible → item lines get the width) */}
@@ -92,7 +93,8 @@ export default function POSOrderPage() {
       {P.batchModal && <BatchModal P={P} />}
       {P.couponModal && <CouponModal P={P} />}
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
-      {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
+      {showPic && <POSCustomerModal onSelect={P.setPicCustomer} initialPhone={picPhone}
+                                    onClose={() => { setShowPic(false); setPicPhone('') }} />}
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
       <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
                       initialQuery={imgSeed} onPick={P.addItem} />

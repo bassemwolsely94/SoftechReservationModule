@@ -1,13 +1,16 @@
 """
 apps/pbx/views.py
 """
+from datetime import timedelta
+
 from django.http import FileResponse, HttpResponseRedirect
+from django.utils import timezone
 from rest_framework import generics
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.pbx.models import AgentExtension, PBXQueue, CallSession, PBXEvent
+from apps.pbx.models import AgentExtension, PBXQueue, CallSession, PBXEvent, PBXBridgeStatus
 from core.errors import public_error
 from apps.pbx.serializers import (
     AgentExtensionSerializer, PBXQueueSerializer,
@@ -72,10 +75,19 @@ class LiveSessionsView(APIView):
     """GET /api/pbx/live/ — active (non-completed) call sessions."""
     permission_classes = [IsAuthenticated]
 
+    # ?fresh=1 (POS screen-pop): only calls we can trust are live — the AMI bridge is alive
+    # (no hang-up event can arrive without it) and the call started recently.
+    FRESH_MAX_AGE = timedelta(hours=12)
+
     def get(self, request):
         sessions = CallSession.objects.filter(
             state__in=['ringing', 'answered', 'queued', 'on_hold', 'transferred']
         ).select_related('agent__staff', 'customer', 'queue').order_by('started_at')
+        if request.query_params.get('fresh') == '1':
+            bridge = PBXBridgeStatus.current()
+            if not (bridge and bridge.is_alive):
+                return Response([])
+            sessions = sessions.filter(started_at__gte=timezone.now() - self.FRESH_MAX_AGE)
         return Response(CallSessionSerializer(sessions, many=True).data)
 
 
