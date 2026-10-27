@@ -65,7 +65,8 @@ class ItemSearchTests(TestCase):
 
     def test_parts_must_be_in_order_otherwise_any_order_tier(self):
         res = self.tiers('50*voltaren')
-        self.assertEqual(res[0], ('VOLTAREN 50MG 20TAB (2STRIPSX10) فولتارين 50مجم', 'any_order'))
+        # the 50 GM emulgel matches too — same tier, no defined order between them
+        self.assertIn(('VOLTAREN 50MG 20TAB (2STRIPSX10) فولتارين 50مجم', 'any_order'), res)
         self.assertTrue(all(t == 'any_order' for _, t in res))
 
     def test_exact_text_first(self):
