@@ -55,10 +55,13 @@ class ItemSearchTests(TestCase):
         return [(names[i], t) for i, t in W.item_search(q, **kw)]
 
     def test_softech_style_wildcards(self):
-        for q in ('vol*ren*50*tab*', 'vol%ren%50%tab', 'voltaren 50%tab', 'VOL*REN*50'):
+        for q in ('vol*ren*50*tab*', 'vol%ren%50%tab', 'voltaren 50%tab'):
             res = self.tiers(q)
             self.assertTrue(res, q)
             self.assertTrue(res[0][0].startswith('VOLTAREN 50MG'), (q, res))
+        # 'VOL*REN*50' matches the 50 GM emulgel as well — same tier, no defined order between them
+        res = self.tiers('VOL*REN*50')
+        self.assertTrue(any(n.startswith('VOLTAREN 50MG') for n, _ in res), res)
 
     def test_parts_must_be_in_order_otherwise_any_order_tier(self):
         res = self.tiers('50*voltaren')
