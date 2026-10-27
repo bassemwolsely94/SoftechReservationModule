@@ -7,7 +7,8 @@ Entry points:
   create_job(item, ...)          — create / reactivate a search job
   run_job(job)                   — execute one job (called by worker thread)
   approve_candidate(candidate)   — promote to ProductMedia
-  build_item_queryset(filters)   — build filtered Item QS for batch launch
+  build_item_queryset(filters)   — best-seller-first Item list for batch launch
+  sales_ranks() / sales_coverage() — Pareto ranking + sales-weighted image coverage
 
 Supports:
   force_rerun=True   — re-search even if the item already has an approved image
@@ -63,9 +64,13 @@ def create_job(
 
 # ── Item queryset builder (for batch launch with advanced filters) ─────────────
 
-def build_item_queryset(filters: dict) -> QuerySet:
+def build_item_queryset(filters: dict) -> list:
     """
-    Build a filtered Item queryset for batch job creation.
+    Build the ordered Item list for batch job creation.
+
+    Jobs run in creation order, so the order returned here IS the order images
+    get fetched.  Every scope is ranked best-seller first (Pareto): the items
+    customers actually see get their images before the long tail.
 
     Accepted filter keys:
       scope          'no_image' | 'all_active' | 'low_score' | 'top_qty' | 'top_value'
@@ -75,7 +80,6 @@ def build_item_queryset(filters: dict) -> QuerySet:
       limit          int  (max items)
     """
     from apps.catalog.models import Item
-    from apps.product_experience.models import ProductMedia
 
     qs = Item.objects.filter(is_active=True, is_stockable=True)
 
@@ -97,13 +101,10 @@ def build_item_queryset(filters: dict) -> QuerySet:
     # ── Scope ─────────────────────────────────────────────────────────────────
     scope = filters.get('scope', 'no_image')
 
-    if scope == 'no_image':
-        items_with_image = (
-            ProductMedia.objects
-            .filter(media_type='image', approved=True)
-            .values_list('item_id', flat=True)
-        )
-        qs = qs.exclude(id__in=items_with_image)
+    if scope in ('no_image', 'top_qty', 'top_value'):
+        # Best-seller scopes skip items that are already done — a job spent on
+        # an item that has an approved image moves no coverage.
+        qs = qs.exclude(id__in=_items_with_approved_image())
 
     elif scope == 'low_score':
         from apps.enrichment.models import ItemEnrichment
@@ -114,15 +115,100 @@ def build_item_queryset(filters: dict) -> QuerySet:
         )
         qs = qs.filter(id__in=low_ids)
 
-    elif scope == 'top_qty':
-        qs = _order_by_top_sold(qs, by='qty')
-
+    # ── Order best-seller first, then limit ───────────────────────────────────
+    ranks = sales_ranks()
+    if scope == 'top_qty':
+        key, sold_only = (lambda r: r['qty']), True
     elif scope == 'top_value':
-        qs = _order_by_top_sold(qs, by='value')
+        key, sold_only = (lambda r: r['value']), True
+    else:
+        key, sold_only = (lambda r: r['score']), False
 
-    # ── Limit ─────────────────────────────────────────────────────────────────
+    rows = list(qs.values_list('id', 'name'))
+    if sold_only:
+        rows = [r for r in rows if r[0] in ranks]
+    # Ranked items by measure (desc); unsold items after them, by name.
+    rows.sort(key=lambda r: (0, -key(ranks[r[0]]), r[0]) if r[0] in ranks else (1, 0, r[1] or ''))
+
     limit = int(filters.get('limit', 100))
-    return qs[:limit]
+    ids   = [r[0] for r in rows[:limit]]
+    by_id = Item.objects.in_bulk(ids)
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def _items_with_approved_image() -> QuerySet:
+    from apps.product_experience.models import ProductMedia
+    return (ProductMedia.objects
+            .filter(media_type='image', approved=True)
+            .values_list('item_id', flat=True))
+
+
+def sales_ranks() -> dict:
+    """
+    {item_id: {'qty', 'value', 'score'}} from the latest successful demand run.
+
+    qty   = total monthly units sold (all branches)
+    value = total monthly sales value
+    score = 0..1, the average of the item's percentile rank by qty and by value,
+            so an item must sell well on BOTH to lead the queue.
+    Items with no sales (qty and value both 0) are left out.  Empty dict when
+    there is no demand run — callers then fall back to name order.
+    """
+    try:
+        from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
+        run = DemandCalculationRun.objects.filter(status='success').order_by('-started_at').first()
+        if not run:
+            return {}
+        rows = [
+            (item_id, float(qty or 0), float(value or 0))
+            for item_id, qty, value in ItemDemandAggregated.objects
+            .filter(run=run)
+            .values_list('item_id', 'total_monthly_avg', 'total_monthly_value')
+        ]
+    except Exception as exc:
+        logger.debug('Sales ranking failed: %s', exc)
+        return {}
+
+    rows = [r for r in rows if r[1] > 0 or r[2] > 0]
+    n = len(rows)
+    if not n:
+        return {}
+
+    def pct(idx: int) -> dict:
+        # Percentile rank, ties share the same value (1.0 = best seller).
+        ordered = sorted(rows, key=lambda r: r[idx])
+        out, i = {}, 0
+        while i < n:
+            j = i
+            while j + 1 < n and ordered[j + 1][idx] == ordered[i][idx]:
+                j += 1
+            p = (j + 1) / n
+            for k in range(i, j + 1):
+                out[ordered[k][0]] = p
+            i = j + 1
+        return out
+
+    q_pct, v_pct = pct(1), pct(2)
+    return {
+        item_id: {'qty': qty, 'value': value, 'score': (q_pct[item_id] + v_pct[item_id]) / 2}
+        for item_id, qty, value in rows
+    }
+
+
+def sales_coverage(ranks: dict | None = None) -> dict:
+    """Share of monthly sales (qty and value) whose items have an approved image."""
+    ranks = sales_ranks() if ranks is None else ranks
+    total_qty   = sum(r['qty'] for r in ranks.values())
+    total_value = sum(r['value'] for r in ranks.values())
+    with_image  = set(_items_with_approved_image()) & ranks.keys()
+    cov_qty     = sum(ranks[i]['qty'] for i in with_image)
+    cov_value   = sum(ranks[i]['value'] for i in with_image)
+    return {
+        'sales_coverage_qty_pct':   round(cov_qty / total_qty * 100, 1) if total_qty else 0,
+        'sales_coverage_value_pct': round(cov_value / total_value * 100, 1) if total_value else 0,
+        'sold_items':               len(ranks),
+        'sold_items_with_image':    len(with_image),
+    }
 
 
 def _filter_by_abc(qs: QuerySet, abc: str) -> QuerySet:
@@ -140,44 +226,6 @@ def _filter_by_abc(qs: QuerySet, abc: str) -> QuerySet:
         return qs.filter(id__in=item_ids)
     except Exception as exc:
         logger.debug('ABC filter failed: %s', exc)
-        return qs
-
-
-def _order_by_top_sold(qs: QuerySet, by: str = 'qty') -> QuerySet:
-    """
-    Annotate and order items by monthly_avg (qty) or monthly_avg × pack_price (value).
-    Uses ItemDemandAggregated from the latest successful demand run.
-    """
-    try:
-        from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
-        run = DemandCalculationRun.objects.filter(status='success').order_by('-calc_date').first()
-        if not run:
-            return qs
-
-        agg_qs = ItemDemandAggregated.objects.filter(run=run)
-        if by == 'value':
-            # Annotate approximate monthly revenue: monthly_avg × pack_price
-            from django.db.models import ExpressionWrapper, F, FloatField
-            agg_qs = agg_qs.annotate(
-                monthly_value=ExpressionWrapper(
-                    F('total_monthly_avg') * F('pack_price'),
-                    output_field=FloatField(),
-                )
-            ).order_by('-monthly_value')
-        else:
-            agg_qs = agg_qs.order_by('-total_monthly_avg')
-
-        ordered_ids = list(agg_qs.values_list('item_id', flat=True))
-        # Preserve order using CASE WHEN in PostgreSQL
-        from django.db.models import Case, IntegerField, Value, When
-        preserved = Case(
-            *[When(id=pk, then=Value(i)) for i, pk in enumerate(ordered_ids[:500])],
-            output_field=IntegerField(),
-            default=Value(9999),
-        )
-        return qs.filter(id__in=ordered_ids).annotate(_ord=preserved).order_by('_ord')
-    except Exception as exc:
-        logger.debug('Top-sold ordering failed: %s', exc)
         return qs
 
 
