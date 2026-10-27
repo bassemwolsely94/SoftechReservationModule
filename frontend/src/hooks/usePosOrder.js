@@ -835,6 +835,9 @@ export default function usePosOrder() {
         const need = q.qty || 1
         let r = null
         try { r = await _split(_netBatches(data.batches, linesRef.current, item.softech_id), need) } catch { r = null }
+        // branch/store switched while the split was in flight → its picks are the OLD store's
+        if (String(ctxRef.current.branch || '') !== String(branch || '')
+            || String(ctxRef.current.storeCode || '') !== String(storeCode || '')) r = null
         if (r && r.picks?.length) {
           const group = _genToken()
           setLines(prev => [...prev, ..._fefoLines(NL(avail), r.picks, group, need, r.shortfall)])
@@ -1039,7 +1042,9 @@ export default function usePosOrder() {
     // any split still in flight was computed from the old store's batches → never let it land
     Object.keys(fefoSeqRef.current).forEach(g => { fefoSeqRef.current[g] += 1 })
     const cur = linesRef.current
-    const bound = l => !l.is_reservation && !l.not_stockable
+    // a gift coupon's batchno is its PRINTED serial (the coupon's identity, not a store batch) → keep
+    // it; validate_order_coupons re-checks it against the order's branch on send.
+    const bound = l => !l.is_reservation && !l.not_stockable && !l.is_coupon
       && (String(l.batchno || '').trim() || l.item_expiry)
     if (!cur.some(bound)) return
     const out = []
@@ -1114,7 +1119,7 @@ export default function usePosOrder() {
       if (!data.ok) { setCouponModal(x => ({ ...x, checking: false, errors: data.errors || [] })); return }
       setLines(prev => [...prev, _newLine(m.item, {
         qty: 1, batchno: data.serial, item_expiry: data.info?.expiry || null,
-        available_expiry_qty: data.info?.branch_qty ?? 1,
+        available_expiry_qty: data.info?.branch_qty ?? 1, is_coupon: true,
       })])
       setMsg(`أُضيف الكوبون ${data.serial}.`)
       setCouponModal(null)
