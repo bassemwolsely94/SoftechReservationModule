@@ -522,6 +522,9 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
         _edge(r_ref, p_ref, Edge.REL_RETURNS, origin=Edge.ORIGIN_NATIVE, status=Edge.STATUS_CONFIRMED,
               amount=amt, confidence=100)
         L.ensure(case, E.TYPE_SUPPLIER_RET, -amt, document=r_ref, note='مرتجع للمورد')
+        if live:                                                         # B4: approved reversal ↔ native return
+            from . import reversal as REV
+            REV.match_supplier_return(case, r_ref, amt, issue)
         settled = D0
         r_cd = case.documents.get(document=r_ref, role=CD.ROLE_SUPPLIER_RETURN)
         for ra in Allocation.objects.filter(invoice=ret, origin__in=[Allocation.ORIGIN_SOFTECH,
@@ -582,6 +585,9 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
     if live:
         from . import cash as CASH
         CASH.ageing_issues(case, issue)                                  # B3: instructions not executed / confirmed
+        from . import reversal as REV
+        REV.detect_returns(case, issue)                                  # B4: contract / product returns
+        REV.ageing_issues(case, issue)
         entered = timezone.localtime(case.created_at).date()
         if inv.docdate < entered:
             days = (entered - inv.docdate).days
@@ -611,6 +617,9 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
         case.status = RC.STATUS_RECONCILED
     else:
         case.status = RC.STATUS_SETTLED
+    if live:
+        from . import reversal as REV
+        REV.apply_status(case)                                           # B4: reversing / reversed
     case.reconstructed_at = timezone.now()
     case.save()
     case.assign_number()
@@ -771,11 +780,11 @@ def reset_reconstructed() -> dict:
     if blockers:
         raise RuntimeError('لا يمكن إعادة الضبط: ' + '، '.join(blockers))
     counts = {'cases': RC.objects.count(), 'ledger': E.objects.count(), 'documents': Ref.objects.count()}
-    from .models import CashPayout, PostingOperation, ReplacementCalculation
-    # explicit list (no CASCADE): only this module's derived tables. Live data (calculations,
-    # operations, cash payouts) can't exist here — reset_blockers refuses whenever a live case exists.
+    from .models import CashPayout, PostingOperation, ReplacementCalculation, ReversalRequest
+    # explicit list (no CASCADE): only this module's derived tables. Live data (calculations, operations,
+    # cash payouts, reversals) can't exist here — reset_blockers refuses whenever a live case exists.
     tables = [m._meta.db_table for m in (E, CD, X, ReplacementItem, ReplacementCalculation, PostingOperation,
-                                         CashPayout, RC, Edge, Ref)]
+                                         CashPayout, ReversalRequest, RC, Edge, Ref)]
     with transaction.atomic(), connection.cursor() as cur:
         cur.execute('SET CONSTRAINTS ALL IMMEDIATE')     # flush deferred FK checks first
         # NO 'RESTART IDENTITY': ids must never be reused, or a new case would inherit the

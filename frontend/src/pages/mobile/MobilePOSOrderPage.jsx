@@ -506,8 +506,11 @@ function MGCustomer({ P, onOpenPic }) {
 }
 function MGItems({ P }) {
   const [unitsIdx, setUnitsIdx] = useState(-1)
+  const [altItem, setAltItem] = useState(null)   // own state: this component is outside MobilePOSOrderPage
   return (
     <div className="space-y-2 max-w-md mx-auto">
+      {altItem && <PosAlternatives sheet item={altItem} branchId={P.branch} onClose={() => setAltItem(null)}
+                                   onPick={(it) => { P.addItem(it); setAltItem(null) }} />}
       <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
       {!P.lines.length && <div className="text-center text-gray-400 text-sm py-6">أضف الأصناف بالبحث بالأعلى</div>}
       {unitsIdx >= 0 && P.lines[unitsIdx] && (

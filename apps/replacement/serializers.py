@@ -191,6 +191,23 @@ class CaseDetailSerializer(CaseListSerializer):
         if live:
             out['available'] = {k: str(v) for k, v in legs.available(obj).items()}
             out['voucher_instruction'] = legs.voucher_instruction(obj)
+            # B4: reversals (reason + approval → native supplier return) and the change-of-mind window
+            from . import reversal as REV
+            out['reversals'] = [{
+                'id': r.pk, 'kind': r.kind, 'kind_label': r.get_kind_display(), 'reason': r.reason,
+                'amount': str(r.amount), 'balance_used': r.balance_used, 'status': r.status,
+                'status_label': r.get_status_display(), 'note': r.note, 'created_at': r.created_at,
+                'requested_by': r.requested_by.full_name if r.requested_by_id else '',
+                'decided_by': r.decided_by.full_name if r.decided_by_id else '',
+                'supplier_return': r.supplier_return.label if r.supplier_return_id else '',
+                'can_decide': (r.status == r.ST_AWAITING and bool(staff) and r.requested_by_id != staff.pk
+                               and authz.allows(staff, 'approve')),
+                'instruction': REV.instruction(obj, r) if r.status == r.ST_APPROVED else None,
+            } for r in obj.reversals.select_related('requested_by', 'decided_by', 'supplier_return')]
+            sale = (obj.documents.filter(role='contract_sale', status='confirmed').select_related('document')
+                    .order_by('document__docdate').first())
+            if sale:
+                out['contract_return_until'] = REV.change_of_mind_until(sale.document.docdate).isoformat()
             # B3: cash handed to the patient — instruction → native voucher → handover confirmation
             from .cash import instruction
             out['payouts'] = [{

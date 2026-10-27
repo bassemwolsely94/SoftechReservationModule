@@ -248,6 +248,7 @@ class ScoreAndEscalationTests(SimpleTestCase):
         from apps.invoices import ocr
         strong = {'lines': [{'item_name': 'بنادول', 'public_price': '25'}]}
         with mock.patch('apps.invoices.ocr._gemini_key', return_value='k'), \
+             mock.patch('apps.invoices.ocr._gemini_keys', return_value=['k']), \
              mock.patch('apps.invoices.engines.best_free_engine', return_value='tesseract'), \
              mock.patch('apps.invoices.engines.free_structured_images', return_value=strong), \
              mock.patch('apps.invoices.ocr._gemini_images') as gem:
@@ -268,6 +269,7 @@ class ScoreAndEscalationTests(SimpleTestCase):
                 '_declared_count': 10}
         gemo = {'lines': [{'item_name': 'x', 'public_price': '1'}], '_engine': 'gemini'}
         with mock.patch('apps.invoices.ocr._gemini_key', return_value='k'), \
+             mock.patch('apps.invoices.ocr._gemini_keys', return_value=['k']), \
              mock.patch('apps.invoices.engines.best_free_engine', return_value='tesseract'), \
              mock.patch('apps.invoices.engines.free_structured_images', return_value=weak), \
              mock.patch('apps.invoices.ocr._gemini_images', return_value=gemo) as gem:
@@ -287,6 +289,7 @@ class ScoreAndEscalationTests(SimpleTestCase):
                 '_avg_confidence': 0.30}
         gemo = {'lines': [{'item_name': 'x', 'public_price': '1'}], '_engine': 'gemini'}
         with mock.patch('apps.invoices.ocr._gemini_key', return_value='k'), \
+             mock.patch('apps.invoices.ocr._gemini_keys', return_value=['k']), \
              mock.patch('apps.invoices.engines.best_free_engine', return_value='tesseract'), \
              mock.patch('apps.invoices.engines.free_structured_images', return_value=weak), \
              mock.patch('apps.invoices.ocr._gemini_images', return_value=gemo) as gem:
@@ -299,6 +302,7 @@ class ScoreAndEscalationTests(SimpleTestCase):
         weak = {'lines': [{'item_name': 'صنف', 'public_price': ''}]}
         gemo = {'lines': [{'item_name': 'بنادول', 'public_price': '25'}], '_engine': 'gemini'}
         with mock.patch('apps.invoices.ocr._gemini_key', return_value='k'), \
+             mock.patch('apps.invoices.ocr._gemini_keys', return_value=['k']), \
              mock.patch('apps.invoices.engines.best_free_engine', return_value='tesseract'), \
              mock.patch('apps.invoices.engines.free_structured_images', return_value=weak), \
              mock.patch('apps.invoices.ocr._gemini_images', return_value=gemo) as gem:

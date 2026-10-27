@@ -84,6 +84,79 @@ function PosOrderFunding({ c, busy, onDone }) {
   )
 }
 
+// B4: reversal, never deletion. Reason + approval here; the supplier return is posted natively and the
+// daily check closes the request. Insurer rejection is only recorded (owner: what's done is done).
+const REV_KINDS = [['wrong_rate', 'نسبة خاطئة'], ['wrong_rx', 'روشتة خاطئة'], ['duplicate', 'مكررة'],
+                   ['to_cash', 'تحويل من منتجات إلى نقدي'], ['change_of_mind', 'تراجع المريض'], ['other', 'أخرى']]
+const REV_TONE = { awaiting_approval: 'amber', approved: 'sky', executed: 'emerald', rejected: 'rose', cancelled: 'gray' }
+function Reversals({ c, wf, can, busy, run, v }) {
+  const [f, setF] = useState({ kind: 'wrong_rate', reason: '', amount: '' })
+  const [note, setNote] = useState('')
+  const [rej, setRej] = useState('')
+  const rows = wf.reversals || []
+  const open = rows.some((r) => ['awaiting_approval', 'approved'].includes(r.status))
+  return (
+    <div data-tour="replacement-detail-reversal" className="space-y-2 border-t border-gray-100 pt-2">
+      <div className="text-xs text-gray-500">
+        ٥ — العكس والتصحيح (مرتجع للمورد يُسجَّل في SOFTECH بعد الموافقة)
+        {wf.contract_return_until && <> · آخر موعد لتراجع المريض عن فاتورة التعاقد: <b>{wf.contract_return_until}</b></>}
+      </div>
+      {can.create && !open && !['reversed', 'cancelled'].includes(c.status) && (
+        <div className="flex gap-2 items-center flex-wrap">
+          <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
+            {REV_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} placeholder="السبب (إلزامي)"
+                 className="border border-gray-300 rounded-lg px-2 py-1 text-sm flex-1 min-w-[180px]" />
+          <input type="number" min="0" step="any" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })}
+                 placeholder="القيمة (الرصيد كاملاً)" className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36" />
+          <Btn kind="danger" disabled={busy || !f.reason.trim()} onClick={() => run(replacementApi.requestReversal, c.id, { ...v, ...f })}>طلب عكس</Btn>
+        </div>
+      )}
+      {rows.map((r) => (
+        <div key={r.id} className="border border-gray-200 rounded-lg p-2 text-sm space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Chip tone={REV_TONE[r.status]}>{r.status_label}</Chip>
+            <b>{r.kind_label}</b><span className="tabular-nums">{money(r.amount)}</span>
+            {r.balance_used && <Chip tone="amber">جزء من الرصيد مستخدم — موافقة مدير</Chip>}
+            <span className="text-[11px] text-gray-500">{r.requested_by}{r.decided_by ? ` · قرار: ${r.decided_by}` : ''}</span>
+            {r.supplier_return && <span className="text-[11px] text-emerald-700">مرتجع {r.supplier_return}</span>}
+          </div>
+          <div className="text-xs text-gray-600">{r.reason}{r.note ? ` — ${r.note}` : ''}</div>
+          {r.can_decide && (
+            <div className="flex gap-2 items-center">
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ملاحظة (إلزامية عند الرفض)"
+                     className="border border-gray-300 rounded px-2 py-0.5 text-xs flex-1" />
+              <Btn kind="ok" disabled={busy} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'approve', { ...v, note })}>اعتماد</Btn>
+              <Btn kind="danger" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'reject', { ...v, note })}>رفض</Btn>
+            </div>
+          )}
+          {r.instruction && (
+            <div className="bg-sky-50 border border-sky-200 rounded p-2 text-xs">
+              مرتجع للمورد <b>{r.instruction.supplier}</b> {r.instruction.supplier_name} بقيمة <b>{money(r.instruction.amount)}</b> ·
+              {' '}الرقم المرجعي: فاتورة الشراء <b className="font-mono">{r.instruction.branch}/{r.instruction.purchase}</b> — يُربط ويُراجع تلقائياً.
+            </div>
+          )}
+          {['awaiting_approval', 'approved'].includes(r.status) && !r.supplier_return && can.create && (
+            <div className="flex gap-2 items-center">
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب الإلغاء"
+                     className="border border-gray-300 rounded px-2 py-0.5 text-xs w-40" />
+              <Btn kind="ghost" disabled={busy || !note.trim()} onClick={() => run(replacementApi.actReversal, c.id, r.id, 'cancel', { ...v, note })}>إلغاء الطلب</Btn>
+            </div>
+          )}
+        </div>
+      ))}
+      {can.edit && (
+        <div className="flex gap-2 items-center flex-wrap">
+          <input value={rej} onChange={(e) => setRej(e.target.value)} placeholder="تسجيل رفض شركة التأمين (للتقارير فقط)"
+                 className="border border-gray-300 rounded-lg px-2 py-1 text-xs flex-1 min-w-[220px]" />
+          <Btn kind="ghost" disabled={busy || !rej.trim()} onClick={() => { run(replacementApi.insurerRejection, c.id, { ...v, note: rej }); setRej('') }}>تسجيل</Btn>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // B3: cash handed to the patient. Instruction (reserves the amount) → the cashier makes the سداد voucher
 // natively → the daily check links it → the handing employee confirms. No modal (rule 11).
 const PAYOUT_TONE = { instructed: 'amber', paid: 'sky', confirmed: 'emerald', cancelled: 'gray' }
@@ -359,6 +432,7 @@ export default function WorkflowPanel({ c }) {
           {['cash', 'mixed'].includes(c.settlement_mode) && c.purchase_docnumber && (
             <CashPayouts c={c} wf={wf} can={can} busy={busy} run={run} v={v} />
           )}
+          {c.purchase_docnumber && <Reversals c={c} wf={wf} can={can} busy={busy} run={run} v={v} />}
         </Box>
       )}
 

@@ -95,6 +95,11 @@ POSTING_BRANCHES = ()
 # handover nobody confirmed within N days, becomes an exception.
 PAYOUT_EXECUTE_DAYS = 2
 PAYOUT_CONFIRM_DAYS = 1
+# B4: change of mind — the contract sale may be returned within N days of the sale AND before that
+# month ends (owner Q4, both conditions). Live cases watch returns of their sales for this many days.
+CHANGE_OF_MIND_DAYS = 7
+LIVE_RETURN_WATCH_DAYS = 45
+REVERSAL_EXECUTE_DAYS = 3        # an approved reversal whose native supplier return has not appeared
 # Pre-write guard: the writer's own computed purchase total must equal the approved balance.
 PURCHASE_PRECHECK_TOLERANCE = Decimal('0.05')
 

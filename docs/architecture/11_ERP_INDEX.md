@@ -129,7 +129,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Delivery | `/api/delivery/` | deliveries |
 | Payments | `/api/payments/` | payments |
 | Recommendations | `/api/recommendations/` | recommendations |
-| **POS Orders (indirect-POS writeback)** | `/api/pos-orders/` | pos_orders — list/create + `reference/` + `batches/` + `discount-suggest/` + `queue-status/` + `flush/` + `{id}/ready\|push\|cancel/` |
+| **POS Orders (indirect-POS writeback)** | `/api/pos-orders/` | pos_orders — list/create + `reference/` + `batches/` + `discount-suggest/` + `queue-status/` + `flush/` + `{id}/ready\|push\|cancel/` + **`contract-assist/{config,patients,history,field-values,approval-check}/`** + **`fefo-split/`** (POS Speed Wave; also `/api/items/softech-search/?network=1`, `/api/customers/address-suggest/`, `/api/composition/alternatives/`) |
 | Insurance | `/api/insurance/` | insurance |
 | Pricing Approvals (discount writeback) | `/api/pricing-approvals/` | discount_approvals |
 | Approvals (operational + HR) | `/api/approvals/` | approvals |

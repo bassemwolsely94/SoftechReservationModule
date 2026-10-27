@@ -50,6 +50,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/items/{id}/` | GET | Item detail + stock levels per branch |
 | `/api/items/{id}/stock/` | GET | Stock breakdown per branch |
 | `/api/items/search/` | GET | Quick search (name, barcode, softech_id) |
+| `/api/items/softech-search/?network=1` | GET | POS search rows: thumb, strength, `branch_stock`, `next_action`, `stock_as_of` (quarantine stores 102/103/105 excluded) |
 | `/api/items/categories/` | GET | Category list |
 | `/api/items/bundles/` | GET, POST | Product bundles |
 | `/api/items/bundles/{id}/` | GET, PUT, DELETE | Bundle detail |
@@ -448,6 +449,19 @@ Default pagination: CursorPagination (50 items)
 | `/api/pos-orders/{id}/ready/` | POST | Mark ready → enqueue for push |
 | `/api/pos-orders/{id}/push/` | POST | Push to SOFTECH (`stktransm5`/`stktrans5`/`branchesales5`) |
 | `/api/pos-orders/{id}/cancel/` | POST | Cancel (pre-push) |
+| `/api/pos-orders/contract-assist/config/` | GET | Contract-entry field config (`ContractEntryConfig`) — POS Speed Wave T4; `CanViewPos` |
+| `/api/pos-orders/contract-assist/patients/` | GET | Recent patients for a contract/branch (indexed `cust_branch_code`) |
+| `/api/pos-orders/contract-assist/history/` | GET | Patient's previous contract orders (repeat-order, lines re-validated) |
+| `/api/pos-orders/contract-assist/field-values/` | GET | Suggested values for free-text contract fields |
+| `/api/pos-orders/contract-assist/approval-check/` | GET | Approval-number reuse check — warning only, never a block |
+| `/api/pos-orders/fefo-split/` | POST | Deterministic FEFO batch split + shortfall advisory (read-only; `CanViewPos`) |
+
+## POS SPEED WAVE (cross-module endpoints)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/customers/address-suggest/` | GET | Address suggestions for the phone-first Add-customer tab |
+| `/api/composition/alternatives/` | GET | Verified alternatives (`ItemMoleculeIndex.source='approved'` only), `CanViewPos`; powers the F7 panel |
 
 ## INSURANCE  `/api/insurance/`  *(DRF router)*
 
