@@ -221,7 +221,6 @@ delivery GET /api/purchasing/lost-sales/summary/
 delivery GET /api/purchasing/rates/pushes/987654321/
 delivery GET /api/purchasing/runs/active/
 delivery GET /api/purchasing/runs/latest/
-delivery GET /api/purchasing/shortage/suggest-matches/
 delivery GET /api/purchasing/summary/
 delivery GET /api/purchasing/transfer-recs/run/
 delivery GET /api/purchasing/transfer-recs/summary/
@@ -371,9 +370,6 @@ delivery POST /api/pos-orders/987654321/prescription/
 delivery POST /api/pos-orders/987654321/share-whatsapp/
 delivery POST /api/pricing-approvals/987654321/rollback/
 delivery POST /api/products/x/track/
-delivery POST /api/purchasing/phantom/confirm/
-delivery POST /api/purchasing/phantom/exclude/
-delivery POST /api/purchasing/phantom/reset/
 delivery POST /api/referral/customers/987654321/leads/
 delivery POST /api/referral/leads/987654321/invite/
 delivery POST /api/referral/leads/987654321/validate/
@@ -726,9 +722,6 @@ quality_manager POST /api/payments/audit/x
 quality_manager POST /api/pos-orders/987654321/prescription/
 quality_manager POST /api/pos-orders/987654321/share-whatsapp/
 quality_manager POST /api/products/x/track/
-quality_manager POST /api/purchasing/phantom/confirm/
-quality_manager POST /api/purchasing/phantom/exclude/
-quality_manager POST /api/purchasing/phantom/reset/
 quality_manager POST /api/supply/x
 quality_manager POST /api/users/x
 quality_manager POST /api/whatsapp/conversations/987654321/send-template/
@@ -1172,9 +1165,6 @@ viewer POST /api/pos-orders/987654321/prescription/
 viewer POST /api/pos-orders/987654321/share-whatsapp/
 viewer POST /api/pricing-approvals/987654321/rollback/
 viewer POST /api/products/x/track/
-viewer POST /api/purchasing/phantom/confirm/
-viewer POST /api/purchasing/phantom/exclude/
-viewer POST /api/purchasing/phantom/reset/
 viewer POST /api/qa/inspections/987654321/submit/
 viewer POST /api/qa/x
 viewer POST /api/referral/customers/987654321/leads/

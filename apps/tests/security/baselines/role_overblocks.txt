@@ -684,3 +684,13 @@ viewer GET /api/vouchers/coupons/no-serial/
 viewer GET /api/vouchers/coupons/overview/
 viewer GET /api/vouchers/coupons/serial/
 viewer GET /api/vouchers/coupons/sync/
+# reason: market shortage / phantom sales (affectionate-cartwright) — GET on POST-only endpoints is refused by the
+# view's own permission before the method check; export needs the export grant, which viewer does not hold.
+viewer GET /api/purchasing/phantom/confirm/
+viewer GET /api/purchasing/phantom/exclude/
+viewer GET /api/purchasing/phantom/reset/
+viewer GET /api/purchasing/shortage/dismiss/
+viewer GET /api/purchasing/shortage/export/
+viewer GET /api/purchasing/shortage/flag/
+viewer GET /api/purchasing/shortage/retrieve/
+viewer GET /api/purchasing/shortage/unflag/

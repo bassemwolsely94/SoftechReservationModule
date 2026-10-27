@@ -79,8 +79,17 @@ class SeededMatrixTests(TestCase):
         self.item.refresh_from_db()
         self.assertTrue(self.item.in_shortage)
 
-    def test_purchasing_grant_also_counts(self):
+    def test_purchasing_grant_reads_but_softech_writes_need_shortage_approve(self):
+        # the URLs live under /api/purchasing/, so a purchasing grant opens the screens;
+        # flag / dismiss write to SOFTECH and need shortage/approve itself (security Batch 2)
         _, _, client = make_user('sr_purch', role='purchasing')
+        self.assertEqual(client.get(CANDIDATES).status_code, 200)
+        with mock.patch(PUSH, return_value=True) as push:
+            r = client.post(FLAG, {'item_id': self.item.id}, format='json')
+        self.assertEqual(r.status_code, 403)
+        push.assert_not_called()
+        self._assert_untouched()
+        grant('purchasing', 'shortage', 'approve')
         with mock.patch(PUSH, return_value=True) as push:
             r = client.post(FLAG, {'item_id': self.item.id}, format='json')
         self.assertEqual(r.status_code, 200, r.content)

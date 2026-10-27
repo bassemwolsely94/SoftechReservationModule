@@ -8,7 +8,9 @@ itemcode_alt2 / itemnomoreuse to SOFTECH via shortage_writer (CLAUDE.md rule 9).
 Matrix module: the screens are the نواقص domain, so the 'shortage' grants decide
 (pharmacist / supervisor / purchasing hold shortage/approve; quality_manager holds
 view + export). The URLs live under /api/purchasing/, so a 'purchasing' grant for the
-same action is accepted too.
+same action is accepted too — except the SOFTECH writes (flag / unflag / dismiss /
+retrieve), whose views also call deny_unless(request, 'shortage', 'approve'): those
+need the shortage grant itself.
 
 Each endpoint names the action it needs:
   reads (candidates, deltas, lists, search, trends, …) → view
