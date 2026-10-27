@@ -24,6 +24,9 @@ class Command(BaseCommand):
         from apps.batches.models import StockExpirySyncRun
         from apps.batches.stock_expiry import sync_stock_expiry_all
 
+        stale = StockExpirySyncRun.fail_stale()
+        if stale:
+            self.stdout.write(self.style.WARNING(f'Marked {stale} stale run(s) failed.'))
         run = StockExpirySyncRun.objects.create(triggered_by='sync_stock_expiry')
         try:
             s = sync_stock_expiry_all(run=run, only_branch=(opts['branch'] or None),

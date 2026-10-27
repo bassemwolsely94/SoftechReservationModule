@@ -130,6 +130,71 @@ def _apply_query_timeout(stmt, timeout=None):
         pass  # not all drivers honor it; LOGIN_TIMEOUT still bounds connect
 
 
+# jConnect resolves column TYPE NAMES lazily: for SOFTECH's user-defined datatypes
+# RowFormatToken.getColumnTypeName runs a hidden callable statement whose query timeout
+# is 0 (wait forever). If a branch drops the session at that moment the read blocks for
+# good — 2026-10-27 the 05:30 stock_expiry_sync stalled 13 min on a flapping branch 150
+# and another scheduler thread stayed blocked in this call for 5+ hours.
+# RawDbio re-arms SO_TIMEOUT from each statement's own timeout on every read, so a
+# socket timeout cannot be set from outside; a watchdog CLOSES the socket instead,
+# which unblocks the read with an exception the caller's per-node try/except handles.
+SYBASE_METADATA_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_METADATA_TIMEOUT', 60))
+
+
+class SybaseDeadlineExceeded(Exception):
+    """A driver call outlived its watchdog deadline; the connection was aborted."""
+
+
+def _jfield(obj, name):
+    """Read a (private/protected) Java field, searching up the class hierarchy."""
+    cls = obj.getClass()
+    while cls is not None:
+        try:
+            f = cls.getDeclaredField(name)
+        except Exception:
+            cls = cls.getSuperclass()
+            continue
+        f.setAccessible(True)
+        return f.get(obj)
+    raise AttributeError(name)
+
+
+def abort_connection(java_conn):
+    """Close the jConnect connection's TCP socket from any thread — unblocks a hung
+    read. The connection is unusable afterwards. Returns True when the socket closed."""
+    try:
+        conn = getattr(java_conn, '_jc', java_conn)          # unwrap the read-only proxy
+        dbio = _jfield(_jfield(_jfield(conn, '_protocol'), '_inStreamMgr'), '_dbio')
+        _jfield(dbio, '_socket').close()
+        return True
+    except Exception as exc:
+        logger.warning('[sybase] could not abort connection: %s', str(exc)[:120])
+        return False
+
+
+def _with_deadline(java_conn, seconds, fn, what='driver call'):
+    """Run fn(); if it is still running after `seconds`, abort the connection so the
+    blocked read raises instead of hanging the thread (and its scheduler job)."""
+    fired = threading.Event()
+
+    def _kill():
+        fired.set()
+        logger.warning('[sybase] %s exceeded %ss — aborting connection', what, seconds)
+        abort_connection(java_conn)
+
+    timer = threading.Timer(seconds, _kill)
+    timer.daemon = True
+    timer.start()
+    try:
+        return fn()
+    except Exception as exc:
+        if fired.is_set():
+            raise SybaseDeadlineExceeded(f'{what} exceeded {seconds}s; connection aborted') from exc
+        raise
+    finally:
+        timer.cancel()
+
+
 # Branch Sybase servers reach HQ over an intermittent VPN/link, so driver.connect()
 # fails transiently ~half the time and then succeeds on a retry. Bound, short-backoff
 # retries smooth that over without masking a genuinely-down host (each attempt is still
@@ -600,7 +665,11 @@ class CursorWrapper:
         """Lazily build and cache column-type list from the current ResultSet."""
         if self._col_types is None:
             meta = self._rs.getMetaData()
-            self._col_types = self._build_type_sets(meta, meta.getColumnCount())
+            # the type-name lookup is the one driver read with no query timeout
+            self._col_types = _with_deadline(
+                self._conn, SYBASE_METADATA_TIMEOUT_SECONDS,
+                lambda: self._build_type_sets(meta, meta.getColumnCount()),
+                what='column-type metadata')
         return self._col_types
 
     # ── Row conversion ────────────────────────────────────────────────────────
