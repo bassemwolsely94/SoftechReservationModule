@@ -13,6 +13,7 @@ APScheduler==3.10.4
 python-decouple==3.8
 django-filter==23.5
 Pillow>=10.3.0
+numpy>=1.26               # apps/invoices preprocess/ocr/engines (imported directly, not only via easyocr)
 django-extensions==3.2.3
 qrcode>=8.0
 pyotp>=2.9.0
