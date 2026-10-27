@@ -637,6 +637,113 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
+   "code": "86         _, rows = self._q(self.hq, (\n87             'SELECT o.name AS table_name, c.name AS col, c.status, c.cdefault, c.length '\n88             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n89             f\"WHERE c.id = o.id AND o.type = 'U' AND o.name IN ({_marks(tables)}) ORDER BY o.name, c.colid\"),\n90             params=list(tables))\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 87,
+   "line_range": [
+    87,
+    88,
+    89
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "107         _, rows = self._q(self.hq, (\n108             'SELECT DISTINCT o.name '\n109             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n110             f\"WHERE c.id = o.id AND o.type = 'U' AND c.name IN ({_marks(PIC_COLS)}) ORDER BY o.name\"),\n111             params=list(PIC_COLS))\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 108,
+   "line_range": [
+    108,
+    109,
+    110
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "122         _, rows = self._q(self.hq, (\n123             'SELECT t.name AS trigger_name, o.name AS table_name '\n124             f'FROM {DB}.sysobjects t, {DB}.sysobjects o '\n125             f\"WHERE t.type = 'TR' AND o.type = 'U' AND o.name IN ({_marks(names)}) \"\n126             'AND (t.id = o.instrig OR t.id = o.updtrig OR t.id = o.deltrig) ORDER BY o.name, t.name'),\n127             params=names)\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 123,
+   "line_range": [
+    123,
+    124,
+    125,
+    126
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "133     def s_allocation(self):\n134         _, rows = self._q(self.hq, f'SELECT phcode FROM {DB}.{MAIN} ORDER BY trans_time DESC', limit=NEWEST)\n135         self.newest = [_s(r[0]) for r in rows]\n",
+   "col_offset": 37,
+   "end_col_offset": 56,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 134,
+   "line_range": [
+    134
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "161             try:\n162                 _, rows = self._q(conn, f'SELECT phcode FROM {DB}.{MAIN} WHERE phcode IN ({_marks(self.newest)})',\n163                                   params=list(self.newest))\n",
+   "col_offset": 42,
+   "end_col_offset": 61,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 162,
+   "line_range": [
+    162
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "120         _, rows = self._q(\n121             f\"SELECT c.name, t.name, c.length FROM {DB}.syscolumns c, {DB}.systypes t, {DB}.sysobjects o \"\n122             \"WHERE o.name = ? AND o.type = 'U' AND c.id = o.id AND c.usertype = t.usertype ORDER BY c.colid\",\n123             [table])\n",
    "col_offset": 14,
    "end_col_offset": 51,
@@ -5190,40 +5297,36 @@
    "test_name": "blacklist"
   },
   {
-   "code": "674 \n675     sql = f\"\"\"\n676         SET ROWCOUNT {safe_limit}\n677         SELECT\n678             sbe.itemcode,\n679             sbe.itemexpirydate,\n680             sbe.itemqty,\n681             sbe.branchcode,\n682             sbe.storecode,\n683             sbe.batchno,\n684             i.itemname\n685         FROM SOFTECHDB9.dbo.stkbalexpiry sbe\n686         JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode\n687         WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'\n688           AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'\n689           {qty_filter}\n690           {store_filter}\n691           {quarantine_filter}\n692           {item_filter}\n693         ORDER BY sbe.itemexpirydate ASC, sbe.itemcode\n694         SET ROWCOUNT 0\n695     \"\"\"\n696 \n",
-   "col_offset": 14,
-   "end_col_offset": 21,
+   "code": "697                 item_sql = f'AND sbe.itemcode IN ({_marks(chunk)})' if chunk else ''\n698                 cur.execute(f\"\"\"\n699                     SELECT\n700                         sbe.itemcode,\n701                         sbe.itemexpirydate,\n702                         sbe.itemqty,\n703                         sbe.branchcode,\n704                         sbe.storecode,\n705                         sbe.batchno,\n706                         i.itemname\n707                     FROM SOFTECHDB9.dbo.stkbalexpiry sbe\n708                     JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode\n709                     WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'\n710                       AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'\n711                       {qty_sql} {store_sql} {quarantine_sql}\n712                       {item_sql}\n713                     ORDER BY sbe.itemexpirydate ASC, sbe.itemcode\n714                 \"\"\", fixed_params + (chunk or []))\n715                 rows.extend(cur.fetchall())\n",
+   "col_offset": 32,
+   "end_col_offset": 49,
    "filename": "apps/incentives/engine.py",
-   "issue_confidence": "LOW",
+   "issue_confidence": "MEDIUM",
    "issue_cwe": {
     "id": 89,
     "link": "https://cwe.mitre.org/data/definitions/89.html"
    },
    "issue_severity": "MEDIUM",
    "issue_text": "Possible SQL injection vector through string-based query construction.",
-   "line_number": 675,
+   "line_number": 698,
    "line_range": [
-    675,
-    676,
-    677,
-    678,
-    679,
-    680,
-    681,
-    682,
-    683,
-    684,
-    685,
-    686,
-    687,
-    688,
-    689,
-    690,
-    691,
-    692,
-    693,
-    694,
-    695
+    698,
+    699,
+    700,
+    701,
+    702,
+    703,
+    704,
+    705,
+    706,
+    707,
+    708,
+    709,
+    710,
+    711,
+    712,
+    713,
+    714
    ],
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
@@ -8057,6 +8160,46 @@
    "line_range": [
     101,
     102
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "85                  \"AND docdate < dateadd(day, 1, convert(datetime, ?))\")\n86         hdr = IW._one_dict(conn, f'SELECT * FROM stktransm WHERE {where}', args)\n87         if not hdr:\n",
+   "col_offset": 35,
+   "end_col_offset": 65,
+   "filename": "apps/replacement/golden.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 86,
+   "line_range": [
+    86
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "88             raise ValueError(f'\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0641\u0627\u062a\u0648\u0631\u0629 \u0627\u0644\u0634\u0631\u0627\u0621 {branchcode}/{docnumber} \u0628\u062a\u0627\u0631\u064a\u062e {docdate}')\n89         lines = IW._all_dicts(conn, f'SELECT * FROM stktrans WHERE {where} ORDER BY dblitemflag', args)\n90     finally:\n",
+   "col_offset": 38,
+   "end_col_offset": 67,
+   "filename": "apps/replacement/golden.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 89,
+   "line_range": [
+    89
    ],
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
@@ -12679,6 +12822,46 @@
    "line_range": [
     42,
     43
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "59     where, wparams = _where(key)\n60     return f'UPDATE {_ident(table)} SET {\", \".join(sets)} WHERE {where}', params + wparams\n61 \n",
+   "col_offset": 13,
+   "end_col_offset": 20,
+   "filename": "core/softech_probe_restore.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 60,
+   "line_range": [
+    60
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "74             cur = conn.cursor()\n75             cur.execute(f'SELECT {\", \".join(self.columns)} FROM {self.table} WHERE {where}', params)\n76             row = cur.fetchone()\n",
+   "col_offset": 26,
+   "end_col_offset": 33,
+   "filename": "core/softech_probe_restore.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 75,
+   "line_range": [
+    75
    ],
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
