@@ -27,9 +27,9 @@ export default function PosImageSearch({ open, onClose, branchId, customerId, in
   }, [open])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 250); return () => clearTimeout(t) }, [q])
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isPlaceholderData } = useQuery({
     queryKey: ['item-search-widget', dq, branchId, 'pos'],      // shares the dropdown's cache
-    queryFn: () => itemsApi.wildcardSearch(dq, branchId, { network: true })
+    queryFn: () => itemsApi.wildcardSearch(dq, branchId, { network: true, noLive: true })
       .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null })),
     enabled: open && dq.length >= 2,
     staleTime: 15_000,
@@ -38,6 +38,18 @@ export default function PosImageSearch({ open, onClose, branchId, customerId, in
   const rows = data?.rows || []
 
   const pick = (item) => { onPick?.(item); onClose?.() }
+  // Enter while the debounce/fetch still shows the OLDER query's tiles → queued for the typed text;
+  // it picks the first tile of THAT query once its rows arrive (never the previous result's tile).
+  const typed = q.trim()
+  const stale = typed !== dq || isFetching || !!isPlaceholderData
+  const [enterFor, setEnterFor] = useState(null)
+  useEffect(() => {
+    if (enterFor == null) return
+    if (typed !== enterFor) { setEnterFor(null); return }
+    if (stale) return
+    setEnterFor(null)
+    if (rows[0]) pick(rows[0])
+  }, [enterFor, typed, stale, rows])   // eslint-disable-line react-hooks/exhaustive-deps
   if (!open) return null
 
   return (
@@ -46,7 +58,12 @@ export default function PosImageSearch({ open, onClose, branchId, customerId, in
       <div className="flex items-center gap-2 p-2 border-b bg-gray-50">
         <Icon name="image" size={18} className="text-gray-500" />
         <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
-               onKeyDown={e => { if (e.key === 'Enter' && rows[0]) { e.preventDefault(); pick(rows[0]) } }}
+               onKeyDown={e => {
+                 if (e.key !== 'Enter') return
+                 e.preventDefault()
+                 if (stale) { if (typed.length >= 2) setEnterFor(typed) }
+                 else if (rows[0]) pick(rows[0])
+               }}
                placeholder="ابحث بالاسم / الكود… (Enter يضيف أول صنف · Esc إغلاق)"
                className="flex-1 border rounded px-3 py-2 text-sm" />
         {data?.asOf != null && <StockAge asOf={data.asOf} />}
