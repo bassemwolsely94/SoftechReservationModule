@@ -57,8 +57,11 @@ Also ratcheted outside the baselines folder:
 - `softech_write_manifest.py` — **every** SOFTECH INSERT/UPDATE/DELETE site (59), with tables,
   switch, dry-run, idempotency, audit, trigger — each field verified against the code (P-10).
   A new write site without an entry fails.
-- `bandit-baseline.json` — 558 bandit findings (543 are B608 SQL strings; also B613 trojan-source
+- `bandit-baseline.json` — 568 bandit findings (553 are B608 SQL strings; also B613 trojan-source
   ×2, B507 SSH host-key ×1, B324 weak hash ×2, B310 urlopen ×5 — Batch 6). CI fails on new ones.
+  2026-10-27: +10 reviewed B608 (placeholders only, constant WHERE with bound values, regex-checked
+  identifiers, read-only probe lists). Bandit runs with forward-slash paths in CI, so on Windows
+  compare by (file, test, text, severity, confidence) instead of passing `-b` directly.
 - `pip-audit-ignore.txt` / `npm-audit-allow.txt` — known dependency advisories (below).
 
 ## Testing SQL: `RecordingSybase`

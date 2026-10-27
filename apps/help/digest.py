@@ -67,8 +67,8 @@ def summary_for(supervisor, now=None, notes=None):
     }
 
 
-def _names(rows, extra=None):
-    shown = [r['name'] + (f' ({extra(r)})' if extra else '') for r in rows[:MAX_NAMES]]
+def _names(rows, detail=None):
+    shown = [r['name'] + (f' ({detail(r)})' if detail else '') for r in rows[:MAX_NAMES]]
     more = len(rows) - MAX_NAMES
     return '، '.join(shown) + (f' و{more} غيرهم' if more > 0 else '')
 

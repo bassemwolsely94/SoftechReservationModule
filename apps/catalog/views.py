@@ -512,7 +512,7 @@ def _softech_live_search(like_q: str, branch_id) -> list:
     not synced). A failure trips a 5-minute breaker — no waiting on a down server."""
     from django.core.cache import cache
     import hashlib
-    cache_key = _SOFTECH_SEARCH_CACHE + hashlib.sha1(like_q.encode('utf-8')).hexdigest()
+    cache_key = _SOFTECH_SEARCH_CACHE + hashlib.sha1(like_q.encode('utf-8'), usedforsecurity=False).hexdigest()
     cached = cache.get(cache_key)
     if cached is not None:
         return _finish_live_rows([dict(r) for r in cached], branch_id)
