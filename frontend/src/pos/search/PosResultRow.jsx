@@ -1,9 +1,9 @@
 /**
  * PosResultRow — Layout A: one line per search result. thumb · name + strength chip + form ·
- * badges · «هنا» pill (bold) · other-branch pills (max 4, +N) · price · next action when stock here is 0.
+ * badges · BIG «رصيد <this branch>» box · small other-branch pills (max 4, +N) · price · next action when stock here is 0.
  * Display only: the stock/next-action decision comes from the server (rule 7).
  */
-import { Badge, BranchStockPill, ActionTile, Icon } from '../design'
+import { Badge, BranchStockPill, ActionTile, Icon, tone, meaning, stockMeaning } from '../design'
 import useBranchNames from './useBranchNames'
 
 export const MAX_OTHER_PILLS = 4
@@ -26,6 +26,24 @@ export function ItemBadges({ item }) {
   )
 }
 
+const fmtQty = (q) => { const n = Number(q); return Number.isFinite(n) ? +n.toFixed(2) : q }
+
+/** THIS branch's stock — big and colour-coded so the salesman never reads another branch's
+ *  number as his own; other branches stay as small pills under the name. */
+export function HereStock({ qty, branchName }) {
+  const m = stockMeaning(qty) || 'neutral'
+  const t = tone(meaning(m)?.tone || m)
+  return (
+    <div title={`رصيد ${branchName || 'هذا الفرع'}`}
+         className={`shrink-0 w-28 rounded-lg border-2 px-1 py-0.5 text-center leading-tight ${t.badge}`}>
+      <div className="text-[10px] font-semibold truncate">رصيد {branchName || 'هنا'}</div>
+      {m === 'oos'
+        ? <div className="text-base font-black py-0.5">لا يوجد</div>
+        : <div className="text-2xl font-black tabnum">{qty == null ? '—' : fmtQty(qty)}</div>}
+    </div>
+  )
+}
+
 export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAction, onPreview, onAlternatives, index }) {
   const nameOf = useBranchNames()
   const here = item.qty_at_branch
@@ -41,6 +59,7 @@ export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAc
          onMouseDown={e => { e.preventDefault(); onAdd(item) }}
          className={`flex items-center gap-2 px-2 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer ${selected ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-gray-50'}`}>
       <Thumb src={item.thumb} />
+      <HereStock qty={here} branchName={nameOf(hereBranchId)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-semibold text-sm text-gray-900 leading-snug">{item.name}</span>
@@ -49,9 +68,9 @@ export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAc
           <ItemBadges item={item} />
         </div>
         <div className="flex items-center gap-1 flex-wrap mt-0.5">
-          {here != null && <BranchStockPill name="هنا" qty={here} className="font-bold" />}
+          {(shown.length > 0) && <span className="text-[10px] text-gray-400">فروع أخرى:</span>}
           {shown.map(b => (
-            <BranchStockPill key={b.branch_id} name={nameOf(b.branch_id) || `#${b.branch_id}`} qty={b.qty} />
+            <BranchStockPill key={b.branch_id} size="xs" name={nameOf(b.branch_id) || `#${b.branch_id}`} qty={b.qty} />
           ))}
           {more > 0 && <span className="text-[10px] text-gray-400">+{more}</span>}
         </div>

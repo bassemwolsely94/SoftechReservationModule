@@ -1,7 +1,7 @@
 /**
  * PosImageSearch — full-screen image grid for choosing an item by its picture (F6).
  * 5 columns on desktop, 2 on mobile. Same search endpoint/rules as the dropdown (network stock);
- * tiles show image, name + strength, «هنا» pill and the best other-branch pill. Display only —
+ * tiles show image, name + strength, the big this-branch stock box and the best other-branch pill. Display only —
  * stock/next-action come from the server. Pick → onPick(item) then onClose.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -11,7 +11,7 @@ import { BranchStockPill, Icon } from '../design'
 import useBranchNames from './useBranchNames'
 import StockAge from './StockAge'
 import PosItemPreview from './PosItemPreview'
-import { ItemBadges } from './PosResultRow'
+import { ItemBadges, HereStock } from './PosResultRow'
 
 export default function PosImageSearch({ open, onClose, branchId, customerId, initialQuery = '', onPick }) {
   const nameOf = useBranchNames()
@@ -93,8 +93,8 @@ export default function PosImageSearch({ open, onClose, branchId, customerId, in
                     <ItemBadges item={item} />
                   </div>
                   <div className="flex items-center gap-1 flex-wrap mt-auto">
-                    {here != null && <BranchStockPill name="هنا" qty={here} className="font-bold" />}
-                    {best && <BranchStockPill name={nameOf(best.branch_id) || `#${best.branch_id}`} qty={best.qty} />}
+                    {here != null && <HereStock qty={here} branchName={nameOf(branchId)} />}
+                    {best && <BranchStockPill size="xs" name={nameOf(best.branch_id) || `#${best.branch_id}`} qty={best.qty} />}
                   </div>
                 </button>
               )
