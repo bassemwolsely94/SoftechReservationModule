@@ -64,9 +64,10 @@ function FilterPanel({ filters, onChange, meta }) {
           <option value="no_image">منتجات بلا صور</option>
           <option value="all_active">كل المنتجات النشطة</option>
           <option value="low_score">نقاط إثراء منخفضة</option>
-          <option value="top_qty">الأعلى مبيعاً بالكمية</option>
-          <option value="top_value">الأعلى مبيعاً بالقيمة</option>
+          <option value="top_qty">بلا صور — بالكمية فقط</option>
+          <option value="top_value">بلا صور — بالقيمة فقط</option>
         </select>
+        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>الترتيب دائماً: الأعلى مبيعاً (كمية + قيمة) أولاً</div>
       </label>
 
       {/* Category */}
@@ -206,6 +207,8 @@ function DashboardTab() {
     {label:'إجمالي المنتجات',    value:(r.total_items||0).toLocaleString(),      color:'#64748b'},
     {label:'بصورة معتمدة',       value:(r.items_with_image||0).toLocaleString(), color:'#059669'},
     {label:'نسبة التغطية',       value:(r.coverage_pct||0)+'%',                  color:'#2563eb'},
+    {label:'تغطية قيمة المبيعات', value:(r.sales_coverage_value_pct||0)+'%',      color:'#0d9488'},
+    {label:'تغطية كمية المبيعات', value:(r.sales_coverage_qty_pct||0)+'%',        color:'#0891b2'},
     {label:'تنتظر المراجعة',     value:r.pending_review||0,                      color:'#f59e0b'},
     {label:'موافقة تلقائية',     value:r.auto_approved||0,                       color:'#8b5cf6'},
     {label:'مهام جارية',         value:(r.jobs_running||0)+(r.jobs_pending||0),  color:'#3b82f6'},
@@ -228,6 +231,11 @@ function DashboardTab() {
         <CoverageBar pct={r.coverage_pct||0}/>
         <div style={{fontSize:12,color:'#64748b',marginTop:6}}>
           {(r.items_with_image||0).toLocaleString()} من {(r.total_items||0).toLocaleString()} منتج
+        </div>
+        <div style={{fontWeight:600,margin:'14px 0 8px'}}>تغطية المبيعات (باريتو)</div>
+        <CoverageBar pct={r.sales_coverage_value_pct||0}/>
+        <div style={{fontSize:12,color:'#64748b',marginTop:6}}>
+          {(r.sold_items_with_image||0).toLocaleString()} من {(r.sold_items||0).toLocaleString()} صنف عليه مبيعات · نسبة قيمة المبيعات اللي أصنافها لها صورة معتمدة
         </div>
       </div>
 

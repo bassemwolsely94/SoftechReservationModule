@@ -359,9 +359,7 @@ class AbuseFlag(models.Model):
 def _get_ip(request):
     """Extract client IP from Django request."""
     try:
-        x_forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded:
-            return x_forwarded.split(',')[0].strip()
-        return request.META.get('REMOTE_ADDR')
+        from core.client_ip import client_ip       # the real client, not a forged header (A-6)
+        return client_ip(request)
     except Exception:
         return None

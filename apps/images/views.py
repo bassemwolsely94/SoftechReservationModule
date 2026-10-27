@@ -348,7 +348,10 @@ def images_report(request):
     jobs_failed    = ImageSearchJob.objects.filter(status='failed').count()
     coverage_pct   = round(with_image / total * 100, 1) if total else 0
 
+    from .pipeline import sales_coverage
+
     return Response({
+        **sales_coverage(),
         'total_items':      total,
         'items_with_image': with_image,
         'coverage_pct':     coverage_pct,
@@ -363,12 +366,19 @@ def images_report(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def review_queue(request):
-    qs        = (ImageCandidate.objects
-                 .filter(status='pending_review')
-                 .select_related('item')
-                 .order_by('-total_score'))
+    """Pending candidates, best-selling items first; best image first within an item."""
+    from .pipeline import sales_ranks
+
     page_size = min(int(request.query_params.get('page_size', 30)), 100)
-    return Response(ImageCandidateSerializer(qs[:page_size], many=True, context={'request': request}).data)
+    ranks     = sales_ranks()
+    rows      = list(ImageCandidate.objects
+                     .filter(status='pending_review')
+                     .values_list('id', 'item_id', 'total_score'))
+    rows.sort(key=lambda r: (-(ranks[r[1]]['score'] if r[1] in ranks else -1), r[1], -(r[2] or 0), r[0]))
+    ids   = [r[0] for r in rows[:page_size]]
+    by_id = ImageCandidate.objects.select_related('item').in_bulk(ids)
+    page  = [by_id[i] for i in ids if i in by_id]
+    return Response(ImageCandidateSerializer(page, many=True, context={'request': request}).data)
 
 
 # ── Product image search (filterable item list with image status) ──────────────

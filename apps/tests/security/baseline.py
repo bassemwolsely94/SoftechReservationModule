@@ -16,7 +16,7 @@ a test fails on:
 SECURITY_BASELINE_PRUNE=1 deletes STALE lines in place. It never adds lines —
 new entries are always a human edit.
 
-Tests waiting on an owner decision use @pending('P-<n>') (an expectedFailure)
+Tests waiting on an owner decision use @pending('<X>-<n>') (an expectedFailure)
 and are listed in PENDING.md; a guard test keeps the two in step.
 """
 import os
@@ -76,7 +76,7 @@ def assert_matches_baseline(testcase, name: str, found) -> None:
     testcase.fail('\n\n'.join(parts))
 
 
-_PENDING_LINE = re.compile(r'^\s*-\s*(P-\d+)\s*:')
+_PENDING_LINE = re.compile(r'^\s*-\s*([A-Z]-\d+)\s*:')    # P-<n> Batch 2, A-<n> Batch 3, …
 
 
 def pending_ids() -> set:

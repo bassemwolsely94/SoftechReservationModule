@@ -30,6 +30,11 @@ PIC_COLS = ('phcode', 'picphcode', 'pphcode')   # candidate PIC column names in 
 _PIC = re.compile(r'^(\d{2,3}[A-Za-z]{2})(\d+)$')
 
 
+def _marks(values):
+    """'?,?,?' for an IN list — the values themselves are always bound."""
+    return ','.join('?' * len(values))
+
+
 def _s(v):
     return str(v).strip() if v is not None else ''
 
@@ -53,13 +58,13 @@ class Command(BaseCommand):
         self.stdout.write(str(line))
         self._buf.append(str(line))
 
-    def _q(self, conn, sql, limit=None):
+    def _q(self, conn, sql, limit=None, params=None):
         """Run ONE read statement. Every statement goes through here (the test asserts on it)."""
         cur = conn.cursor()
         try:
             if limit:
                 cur.execute(f'SET ROWCOUNT {int(limit)}')
-            cur.execute(sql)
+            cur.execute(sql, params) if params else cur.execute(sql)
             return [d[0] for d in (cur.description or [])], cur.fetchall()
         finally:
             if limit:
@@ -78,11 +83,11 @@ class Command(BaseCommand):
 
     # ── sections ──────────────────────────────────────────────────────────────
     def _columns(self, tables):
-        in_list = ','.join("'" + t + "'" for t in tables)
         _, rows = self._q(self.hq, (
             'SELECT o.name AS table_name, c.name AS col, c.status, c.cdefault, c.length '
             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '
-            f"WHERE c.id = o.id AND o.type = 'U' AND o.name IN ({in_list}) ORDER BY o.name, c.colid"))
+            f"WHERE c.id = o.id AND o.type = 'U' AND o.name IN ({_marks(tables)}) ORDER BY o.name, c.colid"),
+            params=list(tables))
         out = defaultdict(list)
         for row in rows:
             t, col, flags, cdefault = row[0], row[1], row[2], row[3]
@@ -99,11 +104,11 @@ class Command(BaseCommand):
                 self._emit(f'    {col:<28} {nul:<9} {dflt:<8} len={length}')
 
     def s_pic_tables(self):
-        in_list = ','.join("'" + c + "'" for c in PIC_COLS)
         _, rows = self._q(self.hq, (
             'SELECT DISTINCT o.name '
             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '
-            f"WHERE c.id = o.id AND o.type = 'U' AND c.name IN ({in_list}) ORDER BY o.name"))
+            f"WHERE c.id = o.id AND o.type = 'U' AND c.name IN ({_marks(PIC_COLS)}) ORDER BY o.name"),
+            params=list(PIC_COLS))
         self.pic_tables = [_s(r[0]) for r in rows]
         self._emit(f'  {len(self.pic_tables)} tables carry a PIC column: ' + ', '.join(self.pic_tables))
         others = [t for t in self.pic_tables if t != MAIN]
@@ -114,12 +119,12 @@ class Command(BaseCommand):
 
     def s_triggers(self):
         names = [MAIN] + [t for t in self.pic_tables if t != MAIN]
-        in_list = ','.join("'" + t + "'" for t in names)
         _, rows = self._q(self.hq, (
             'SELECT t.name AS trigger_name, o.name AS table_name '
             f'FROM {DB}.sysobjects t, {DB}.sysobjects o '
-            f"WHERE t.type = 'TR' AND o.type = 'U' AND o.name IN ({in_list}) "
-            'AND (t.id = o.instrig OR t.id = o.updtrig OR t.id = o.deltrig) ORDER BY o.name, t.name'))
+            f"WHERE t.type = 'TR' AND o.type = 'U' AND o.name IN ({_marks(names)}) "
+            'AND (t.id = o.instrig OR t.id = o.updtrig OR t.id = o.deltrig) ORDER BY o.name, t.name'),
+            params=names)
         if not rows:
             self._emit('  (no triggers found)')
         for trig, table in rows:
@@ -147,7 +152,6 @@ class Command(BaseCommand):
         if not self.newest:
             self._emit('  (no newest codes - skipped)')
             return
-        in_list = ','.join("'" + p.replace("'", '') + "'" for p in self.newest)
         for host, port, label in targets:
             try:
                 conn = get_branch_connection(host, port, 'SOFTECHDB9')
@@ -155,7 +159,8 @@ class Command(BaseCommand):
                 self._emit(f'  {label}: ! not reachable - {str(exc)[:100]}')
                 continue
             try:
-                _, rows = self._q(conn, f'SELECT phcode FROM {DB}.{MAIN} WHERE phcode IN ({in_list})')
+                _, rows = self._q(conn, f'SELECT phcode FROM {DB}.{MAIN} WHERE phcode IN ({_marks(self.newest)})',
+                                  params=list(self.newest))
                 have = {_s(r[0]) for r in rows}
                 missing = [p for p in self.newest if p not in have]
                 self._emit(f'  {label}: holds {len(have)}/{len(self.newest)} of the newest HQ codes'

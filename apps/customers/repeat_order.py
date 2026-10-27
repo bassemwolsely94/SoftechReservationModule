@@ -79,6 +79,10 @@ def revalidate_lines(lines, *, branch_id=None):
             'item_id': it.id,
             'softech_id': it.softech_id,
             'batch_required': bool(it.batch_required),
+            # pack facts so a re-added line keeps the real pack size (Q = strips modal)
+            'pack_qty': it.pack_qty,
+            'unit_name': it.unit_name,
+            'is_stockable': bool(it.is_stockable),
             'name': it.name,
             'qty': qty,
             'old_unit_price': old_price,

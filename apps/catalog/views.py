@@ -442,7 +442,9 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         from apps.catalog.wildcard import item_search, parse
         tiers = item_search(q, limit=50)
         results = _search_rows(tiers, branch_id)
-        if not any(r.get('tier') != 'approx' for r in results):
+        # no_live=1 (the POS) → never read SOFTECH live during a sale; PG catalog only.
+        no_live = request.query_params.get('no_live') == '1'
+        if not no_live and not any(r.get('tier') != 'approx' for r in results):
             live = _softech_live_search('%' + '%'.join(parse(q)['segments']).lower() + '%', branch_id)
             if live:
                 have = {r['softech_id'] for r in results}
@@ -495,10 +497,22 @@ def _search_rows(tiers, branch_id) -> list:
             'source': 'pg_catalog', 'item_id': item.id, 'tier': tier,
             'qty_at_branch': stock.get(item.id, 0.0) if branch_id else None,
         }
+        row.update(_unit_fields(item))
         if tier in ('learned', 'sound', 'approx'):
             row[tier] = True
         rows.append(row)
     return rows
+
+
+def _unit_fields(item) -> dict:
+    """Pack/unit facts the POS needs to add a search row as a line (Q = strips modal,
+    non-stock lines, mandatory batch). None when the item isn't in the PG catalog."""
+    if item is None:
+        return {'pack_qty': None, 'unit_name': None,
+                'is_stockable': None, 'batch_required': None}
+    return {'pack_qty': item.pack_qty, 'unit_name': item.unit_name,
+            'is_stockable': bool(item.is_stockable),
+            'batch_required': bool(item.batch_required)}
 
 
 _SOFTECH_SEARCH_BREAKER = 'catalog:softech_search_down'
@@ -552,12 +566,15 @@ def _softech_live_search(like_q: str, branch_id) -> list:
 
 
 def _finish_live_rows(out, branch_id):
-    """Per-request part of a live result: branch column + link to our catalog row."""
-    pg = {i.softech_id: i.id for i in Item.objects.filter(
+    """Per-request part of a live result: branch column, link to our catalog row and
+    the pack/unit facts the POS needs (best effort: unsynced items → None)."""
+    pg = {i.softech_id: i for i in Item.objects.filter(
         softech_id__in=[r['softech_id'] for r in out if r['softech_id']], is_active=True)}
     for r in out:
         r['qty_at_branch'] = 0.0 if branch_id else None
-        r['item_id'] = pg.get(r['softech_id'])
+        it = pg.get(r['softech_id'])
+        r['item_id'] = it.id if it else None
+        r.update(_unit_fields(it))
     return out
 
 
@@ -660,6 +677,7 @@ def _expand_disease_query(q: str) -> list:
                         'item_id':         item.id,
                         'qty_at_branch':   None,
                         'match_type':      'ingredient',
+                        **_unit_fields(item),
                         'ingredient':      m.active_ingredient.name,
                     })
             return results
@@ -699,6 +717,7 @@ def _expand_disease_query(q: str) -> list:
                 'item_id':         item.id,
                 'qty_at_branch':   None,
                 'match_type':      'disease',
+                **_unit_fields(item),
                 'chronic_class':   chronic_class,
                 'ingredient':      m.active_ingredient.name,
             })

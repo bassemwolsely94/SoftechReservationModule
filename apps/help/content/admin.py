@@ -22,7 +22,9 @@ SCREENS = [
             T('حدد الدور والفرع الأساسي، وصلاحيات الوصول: وصول لكل الفروع، قنوات البيع المسموح بها في نقطة البيع (فارغ = كلها)، رؤية عملاء كل الفروع، رؤية رقم هاتف العميل.', 'Set the role and main branch, and access: all branches, allowed POS sales channels (empty = all), see customers of all branches, see customer phone numbers.'),
             T('«الحساب نشط» لإيقاف أو تفعيل الدخول بدون حذف المستخدم.', '"Account active" stops or allows login without deleting the user.'),
         ],
-        'tips': [T('ربط المستخدم بمستخدم SOFTECH ضروري للاعتمادات التي تُنفَّذ في SOFTECH باسمه.', 'Linking the user to a SOFTECH user is required for approvals executed in SOFTECH under their name.')],
+        'tips': [T('ربط المستخدم بمستخدم SOFTECH ضروري للاعتمادات التي تُنفَّذ في SOFTECH باسمه.', 'Linking the user to a SOFTECH user is required for approvals executed in SOFTECH under their name.'),
+                 T('كلمة المرور 10 أحرف على الأقل، وتُرفض إن كانت شائعة (مثل password123) أو أرقاماً فقط أو قريبة من اسم المستخدم — عند الإنشاء وإعادة التعيين وتغيير كلمة المرور.',
+                   'Passwords need at least 10 characters and are refused if common (like password123), digits only, or close to the username — on create, reset and password change.')],
         'related': ['admin.permissions', 'admin.erp_permissions'],
         'tour': [
             {'target': 'admin-users-add', 'text': T('«إضافة مستخدم».',
@@ -38,7 +40,7 @@ SCREENS = [
             {'target': 'admin-users-actions', 'text': T('الإجراءات لكل مستخدم.',
                                               'The actions for each user.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-27',
     },
     {
         'key': 'admin.permissions',

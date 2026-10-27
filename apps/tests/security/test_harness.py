@@ -261,7 +261,7 @@ class PendingTests(SimpleTestCase):
                         marked.add(pid)
         walk(suite)
         self.assertEqual(marked, baseline.pending_ids(),
-                         'Every @pending marker needs a "- P-<n>: …" line in '
+                         'Every @pending marker needs a "- <X>-<n>: …" line in '
                          'apps/tests/security/PENDING.md and vice versa.')
 
 

@@ -128,6 +128,7 @@ class AuthLoginTests(TestCase):
 class PasswordChangeTests(TestCase):
 
     def setUp(self):
+        cache.clear()       # login throttle: earlier tests in the same minute must not starve these
         self.branch = make_branch()
         self.user, self.profile, self.auth_client = make_user(
             'pw_change_user', role='pharmacist', branch=self.branch, password='OldPass123'
@@ -161,7 +162,7 @@ class PasswordChangeTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_change_password_too_short(self):
-        """Password minimum length is 6. Anything shorter is rejected."""
+        """Password minimum length is 10 (A-5). Anything shorter is rejected."""
         r = self.auth_client.post(CHANGE_PW_URL, {
             'old_password': 'OldPass123',
             'new_password': '12345',

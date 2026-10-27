@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from apps.catalog.models import Item
 from apps.catalog.pos_search import extract_strength, network_stock, primary_thumbs
+from apps.catalog.safety import blocks_sale
 from .models import ItemMoleculeIndex
 
 _APPROVED = ItemMoleculeIndex.SOURCE_APPROVED
@@ -66,7 +67,9 @@ def alternatives_for(item_id, *, branch_id=None, limit=20):
         (same_ids if csig == sig and cform == forms else other_ids).append(iid)
 
     all_ids = same_ids + other_ids
-    items = {i.id: i for i in Item.objects.filter(id__in=all_ids, is_active=True)}
+    # archived / sale-stopped items are never offered (pharmacy safety wins)
+    items = {i.id: i for i in Item.objects.filter(id__in=all_ids, is_active=True)
+             if not blocks_sale(i)}
     stock, thumbs = network_stock(all_ids), primary_thumbs(all_ids)
     try:
         here = int(branch_id) if branch_id else None
@@ -82,7 +85,8 @@ def alternatives_for(item_id, *, branch_id=None, limit=20):
             'item_id': it.id, 'softech_id': it.softech_id, 'name': it.name,
             'strength': extract_strength(it.name) or _fmt_sig(csig),
             'dosage_form': forms_of.get(iid, ''),
-            'pack_price': str(it.pack_price) if it.pack_price is not None else None,
+            'pack_price': float(it.pack_price) if it.pack_price is not None else None,
+            'unit_price': float(it.unit_price) if it.unit_price is not None else None,
             'thumb': thumbs.get(iid), 'here_qty': here_qty, 'branch_stock': bs,
             # pass-through so the POS can add the pick as a normal line (same shape as a search row)
             'barcode': it.barcode, 'pack_qty': it.pack_qty, 'unit_name': it.unit_name,
@@ -92,7 +96,7 @@ def alternatives_for(item_id, *, branch_id=None, limit=20):
 
     def ordered(ids):
         out = [build(i) for i in ids if i in items]
-        out.sort(key=lambda r: (-r['here_qty'], Decimal(r['pack_price'] or 0), r['name']))
+        out.sort(key=lambda r: (-r['here_qty'], r['pack_price'] or 0, r['name']))
         return out[:limit]
 
     return {'verified': True, 'same': ordered(same_ids), 'other': ordered(other_ids)}

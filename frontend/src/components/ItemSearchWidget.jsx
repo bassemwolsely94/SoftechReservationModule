@@ -224,10 +224,10 @@ export default function ItemSearchWidget({
     return () => clearTimeout(t)
   }, [q, isPos])
 
-  const { data: found, isFetching } = useQuery({
+  const { data: found, isFetching, isPlaceholderData } = useQuery({
     queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ],
     queryFn: () => isPos
-      ? itemsApi.wildcardSearch(debouncedQ, branchId, { network: true })
+      ? itemsApi.wildcardSearch(debouncedQ, branchId, { network: true, noLive: true })
           .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null }))
       : api.get('/items/', { params: { search: debouncedQ, page_size: 10 } })
           .then(r => ({ rows: r.data.results || r.data, asOf: null })),
@@ -256,6 +256,13 @@ export default function ItemSearchWidget({
   // new result set → highlight the first row, close the preview
   useEffect(() => { setSel(0); setPreviewOn(false) }, [debouncedQ, branchId])
 
+  // pos: the rows on screen belong to an OLDER query while the debounce/fetch catches up, so an
+  // Enter pressed then is queued for the typed text and acts only on ITS fresh first row (a scanner
+  // typing a code + Enter adds that code's item, never the previous result's highlighted row).
+  const typedQ = isPos ? q.trim() : q.replace(/\*/g, '').trim()
+  const resultsStale = typedQ !== debouncedQ || isFetching || !!isPlaceholderData
+  const [enterFor, setEnterFor] = useState(null)
+
   const handleSelect = useCallback((item) => {
     setOpen(false)
     setQ('')
@@ -272,6 +279,15 @@ export default function ItemSearchWidget({
     onAction?.(kind, item, extra)
   }, [onAction])
 
+  // the queued Enter fires once the typed query's own rows are in
+  useEffect(() => {
+    if (enterFor == null) return
+    if (typedQ !== enterFor) { setEnterFor(null); return }       // typing went on → drop it
+    if (resultsStale) return
+    setEnterFor(null)
+    if (results[0]) handleSelect(results[0])
+  }, [enterFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
+
   // keep the highlighted row in view while arrowing
   useEffect(() => {
     if (!isPos || !open) return
@@ -283,6 +299,11 @@ export default function ItemSearchWidget({
     if (e.key === 'Escape') {
       if (previewOn) { e.preventDefault(); e.stopPropagation(); setPreviewOn(false) }
       else if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false) }
+      return
+    }
+    if (e.key === 'Enter' && resultsStale) {
+      e.preventDefault()
+      if (typedQ.replace(/[*%]/g, '').length >= 2) setEnterFor(typedQ)
       return
     }
     if (!listOpen) return

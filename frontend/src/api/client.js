@@ -208,9 +208,11 @@ export const itemsApi = {
    * q supports SOFTECH-style wildcards: "pan*500", "*cillin", "amox*"
    * Optional: branch_id → includes qty_at_branch in results.
    */
-  wildcardSearch: (q, branchId = null, { network = false } = {}) =>
+  // noLive: PG catalog only — never a live SOFTECH read (the POS, during a sale)
+  wildcardSearch: (q, branchId = null, { network = false, noLive = false } = {}) =>
     api.get('/items/softech-search/', {
-      params: { q, ...(branchId ? { branch_id: branchId } : {}), ...(network ? { network: 1 } : {}) },
+      params: { q, ...(branchId ? { branch_id: branchId } : {}), ...(network ? { network: 1 } : {}),
+                ...(noLive ? { no_live: 1 } : {}) },
     }),
 
   /**

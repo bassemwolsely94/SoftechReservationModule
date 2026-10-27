@@ -222,7 +222,7 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
                 value={form.password}
                 onChange={e => set('password', e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
               />
               {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.join(' ')}</p>}
@@ -412,7 +412,7 @@ function ResetPasswordModal({ user, onClose }) {
     e.preventDefault()
     setError('')
     if (newPw !== confirm) { setError('كلمتا المرور غير متطابقتين'); return }
-    if (newPw.length < 6) { setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return }
+    if (newPw.length < 10) { setError('كلمة المرور يجب أن تكون 10 أحرف على الأقل'); return }
     mutation.mutate()
   }
 
@@ -427,7 +427,7 @@ function ResetPasswordModal({ user, onClose }) {
             placeholder="كلمة المرور الجديدة"
             value={newPw}
             onChange={e => setNewPw(e.target.value)}
-            required minLength={6}
+            required minLength={10}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
           <input

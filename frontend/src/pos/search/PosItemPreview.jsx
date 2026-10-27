@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { customersApi } from '../../api/client'
 import { BranchStockPill } from '../design'
 import useBranchNames from './useBranchNames'
-import { ItemBadges } from './PosResultRow'
+import { ItemBadges, HereStock } from './PosResultRow'
 
 function useLastPurchaseDays(customerId, softechId) {
   const { data } = useQuery({
@@ -42,11 +42,11 @@ export default function PosItemPreview({ item, hereBranchId, customerId, classNa
       <div className="font-bold text-gray-900 leading-snug">{item.name}</div>
       <div className="flex gap-1 flex-wrap"><ItemBadges item={item} /></div>
       <div>
-        <div className="text-[11px] text-gray-500 mb-1">الرصيد بكل فرع</div>
+        {item.qty_at_branch != null && <div className="mb-1.5"><HereStock qty={item.qty_at_branch} branchName={nameOf(hereBranchId)} /></div>}
+        <div className="text-[11px] text-gray-500 mb-1">فروع أخرى</div>
         <div className="flex flex-wrap gap-1">
-          {item.qty_at_branch != null && <BranchStockPill name="هنا" qty={item.qty_at_branch} className="font-bold" />}
           {all.filter(b => String(b.branch_id) !== String(hereBranchId)).map(b => (
-            <BranchStockPill key={b.branch_id} name={nameOf(b.branch_id) || `#${b.branch_id}`} qty={b.qty} />
+            <BranchStockPill key={b.branch_id} size="xs" name={nameOf(b.branch_id) || `#${b.branch_id}`} qty={b.qty} />
           ))}
           {!all.length && <span className="text-xs text-gray-400">لا بيانات رصيد للشبكة</span>}
         </div>

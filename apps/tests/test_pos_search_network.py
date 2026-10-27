@@ -113,3 +113,50 @@ class PosSearchApiTests(TestCase):
         self.assertEqual(row['branch_stock'], [])
         self.assertIsNone(row['thumb'])
         self.assertEqual(row['next_action'], {'kind': 'demand'})
+
+    # ── Final-review fixes ────────────────────────────────────────────────────
+    def test_rows_carry_unit_fields(self):
+        """POS adds lines straight from search rows → the Q (strips) modal needs the real
+        pack size; a missing pack_qty defaulted to 1 and sold packs instead of strips."""
+        self.it.pack_qty = 3
+        self.it.unit_name = 'شريط'
+        self.it.is_stockable = True
+        self.it.batch_required = True
+        self.it.save(update_fields=['pack_qty', 'unit_name', 'is_stockable', 'batch_required'])
+        for params in ({'network': '1'}, {}):
+            r = self.client_.get(URL, {'q': 'CONCOR', 'branch_id': self.a.id, **params})
+            row = next(x for x in r.data['results'] if x['item_id'] == self.it.id)
+            self.assertEqual(row['pack_qty'], 3)
+            self.assertEqual(row['unit_name'], 'شريط')
+            self.assertIs(row['is_stockable'], True)
+            self.assertIs(row['batch_required'], True)
+
+    def test_live_row_unit_fields_present(self):
+        """Live SOFTECH rows: best effort — PG facts when the item is synced, else None."""
+        from unittest.mock import MagicMock, patch
+        from django.core.cache import cache
+        from apps.catalog.views import _softech_live_search
+        cache.delete('catalog:softech_search_down')
+        self.it.pack_qty = 2
+        self.it.save(update_fields=['pack_qty'])
+        conn = MagicMock()
+        conn.cursor.return_value.fetchall.return_value = [
+            ('N0010', 'CONCOR 5MG 30 TAB', '', '', '', 10, 1, '0', '0', None, ''),
+            ('LIVE3', 'UNSYNCED', '', '', '', 10, 1, '0', '0', None, '')]
+        with patch('config.sybase.get_sybase_connection', return_value=conn):
+            rows = {r['softech_id']: r for r in _softech_live_search('%x%', self.a.id)}
+        self.assertEqual(rows['N0010']['pack_qty'], 2)
+        self.assertIs(rows['N0010']['batch_required'], False)
+        for k in ('pack_qty', 'unit_name', 'is_stockable', 'batch_required'):
+            self.assertIsNone(rows['LIVE3'][k])
+
+    def test_no_live_skips_softech_live_search(self):
+        """Ruling: the POS search never reads SOFTECH live during a sale (no_live=1)."""
+        from unittest.mock import patch
+        with patch('apps.catalog.views._softech_live_search', return_value=[]) as live:
+            r = self.client_.get(URL, {'q': 'ZZNOTHING', 'branch_id': self.a.id,
+                                       'network': '1', 'no_live': '1'})
+            self.assertEqual(r.status_code, 200)
+            live.assert_not_called()
+            self.client_.get(URL, {'q': 'ZZNOTHING', 'branch_id': self.a.id})
+            live.assert_called_once()

@@ -20,6 +20,7 @@ reuses it (drop it after migrations change).
 | Harness self-tests (baseline, pending, tripwire, role fixtures) | `test_harness.py` | ~20 s |
 | Static guards (no DB) | `test_static_guards.py` | ~25–50 s |
 | Role × route sweep, both modes | `test_role_sweep.py` | ~7–9 min |
+| Authentication (Batch 3) | `test_auth_*.py`, `test_client_ip.py` | ~2 min |
 
 ## Baselines — the ratchet
 
@@ -128,10 +129,22 @@ failing test first, then a diff the owner approved. Tests: `test_softech_*.py`.
 - **P-15** locks / idempotency: ISR push (per-draft lock, status re-read; `push_isr --commit` retired), insurance rebalance / revert and date edit, points removal, offers channel B.
 - **P-16** an AuditLog row for every SOFTECH write (`core/softech_audit.py`): item / catalog writes (a) and who pushed (b). The `softech_*` action labels still need one state-only migration in the audit app.
 
+## Batch 3 — authentication (done 2026-10-27)
+
+[Plan](../superpowers/plans/2026-10-27-security-suite-batch-3-auth.md). Same flow as Batch 2.
+Tests: `test_auth_*.py`, `test_client_ip.py`.
+
+- **A-1** 2FA bypass with the password only: the login pre-auth token could set up and enable a new secret over the enrolled one → setup / enable take an enrol token only and refuse an enrolled account.
+- **A-2** second factor guessable / replayable → 5 wrong codes end the login; a login token opens one session; an accepted code can't be used again.
+- **A-3** disabling an account or resetting its password left the session alive → access and refresh refused for an inactive account, all refresh tokens blacklisted on change / reset / disable (`apps/users/sessions.py`); the remembered-device token is tied to the password and 2FA secret.
+- **A-4** WebSocket took refresh tokens, disabled accounts and any Origin → access token of an active account only, `AllowedHostsOriginValidator`.
+- **A-5** passwords: 6 characters only → `AUTH_PASSWORD_VALIDATORS` (10 characters, common, numeric, similar to username) on change, admin reset and create (`apps/users/passwords.py`); create-user no longer answers 500 after saving.
+- **A-6** forged client address: DRF throttles keyed on the whole `X-Forwarded-For`, audit IP its client-written first entry → `NUM_PROXIES` (1 on the VPS; default 1 behind the HTTPS proxy) feeds DRF and `core/client_ip.py`.
+
 ## Pending owner decisions
 
 A test exposing a hole whose fix needs the owner's OK (SOFTECH writes, auth, pricing, checkout)
-is marked `@pending('P-<n>')` (an expected failure) and listed in
+is marked `@pending('<X>-<n>')` (an expected failure: `P-` Batch 2, `A-` Batch 3) and listed in
 `apps/tests/security/PENDING.md`. A guard keeps the markers and the list in step; the marker
 comes off when the fix lands.
 
