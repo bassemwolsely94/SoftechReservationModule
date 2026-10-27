@@ -77,7 +77,7 @@ export default function POSOrderPage() {
         <div className="flex-1 flex flex-col bg-white overflow-hidden">
           <Tabs P={P} />
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenImages={openImages} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} />}
+            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenImages={openImages} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} onAlternatives={setAltItem} onFindStock={setStockItem} />}
             {P.activeTab === 'payment' && <div className="flex-1 min-h-0 overflow-auto"><PaymentTab P={P} /></div>}
             {P.activeTab === 'contract' && <div className="flex-1 min-h-0 overflow-auto"><ContractTab P={P} /></div>}
           </div>
@@ -117,7 +117,7 @@ export default function POSOrderPage() {
             : kind === 'transfer' ? '✓ تم إنشاء طلب تحويل بين الفروع' : 'تم')} />
       )}
       {showReceipt && <ReceiptModal P={P} onClose={() => setShowReceipt(false)} />}
-      {guided && <GuidedMode P={P} onClose={() => setGuided(false)} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />}
+      {guided && <GuidedMode P={P} onAlternatives={setAltItem} onClose={() => setGuided(false)} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />}
       {P.plan && <PlanModal P={P} />}
     </div>
   )
@@ -370,7 +370,7 @@ function WorkflowBar({ P, guided, onToggleGuided }) {
 /* ─────────────────── guided focus mode (wizard) ─────────────────── */
 // One panel at a time over a dimmed power-screen. Stages reuse the same tab panels and the
 // same reactive engine (via useGuidedFlow), so switching in/out never loses or forks state.
-function GuidedMode({ P, onClose, onOpenCust, onOpenPic }) {
+function GuidedMode({ P, onAlternatives, onClose, onOpenCust, onOpenPic }) {
   const wf = P.workflow
   const { stages, safeIdx, stage, isLast, stStatus, setIdx, goNext, goPrev } = useGuidedFlow(P)
   const stageAdvisories = wf.advisories.filter(a => a.tab === STAGE_TAB[stage.key])
@@ -417,7 +417,7 @@ function GuidedMode({ P, onClose, onOpenCust, onOpenPic }) {
         {/* the one active panel */}
         <div className="flex-1 overflow-auto p-4 bg-white">
           {stage.key === 'customer' && <GuidedCustomer P={P} onOpenCust={onOpenCust} onOpenPic={onOpenPic} />}
-          {stage.key === 'items' && <ItemsTab P={P} />}
+          {stage.key === 'items' && <ItemsTab P={P} onAlternatives={onAlternatives} />}
           {stage.key === 'claim' && <ContractTab P={P} />}
           {stage.key === 'payment' && <GuidedPayment P={P} />}
           {stageAdvisories.length > 0 && (
@@ -715,7 +715,7 @@ export function orderedIndices(lines, key = 'entry', dir = 'asc') {
 }
 
 /* ───────────────────────── Items tab ───────────────────────── */
-function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
+function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits, onAlternatives, onFindStock }) {
   // display-only sort of the line grid (canonical P.lines is untouched → prescription order kept)
   const [sortKey, setSortKey] = useState('entry')
   const [sortDir, setSortDir] = useState('asc')
@@ -773,7 +773,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور · F7 بدائل)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={onAlternatives} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور · F7 بدائل)" /></div>
           <button onClick={onOpenImages} title="بحث بالصور (F6)" data-tour="pos-order-image-search"
                   className="px-2 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 self-start mt-1 h-[34px] flex items-center"><Icon name="image" size={16} /></button>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
@@ -796,7 +796,7 @@ function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits }) {
                   ))}
                 </div>
               )}
-              <QuickSellGrid branchId={P.branch} onSelect={P.addItem} onFindStock={setStockItem} />
+              <QuickSellGrid branchId={P.branch} onSelect={P.addItem} onFindStock={onFindStock} />
             </div>
           )}
         </div>
