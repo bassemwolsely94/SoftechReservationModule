@@ -54,6 +54,16 @@ class RepeatOrderTests(TestCase):
         self.assertTrue(out['lines'][0]['blocked'])
         self.assertEqual(out['summary']['blocked'], 1)
 
+    def test_lines_carry_unit_fields(self):
+        """Re-added lines must keep the real pack size for the Q (strips) modal."""
+        self.item.pack_qty = 3
+        self.item.unit_name = 'شريط'
+        self.item.save(update_fields=['pack_qty', 'unit_name'])
+        line = build_repeat_order(self.ph)['lines'][0]
+        self.assertEqual(line['pack_qty'], 3)
+        self.assertEqual(line['unit_name'], 'شريط')
+        self.assertIn('is_stockable', line)
+
     def test_last_sale_helper(self):
         self.assertEqual(last_sale_for(self.cust).id, self.ph.id)
 

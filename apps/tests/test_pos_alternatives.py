@@ -82,6 +82,24 @@ class AlternativesHelperTests(TestCase):
         b.is_active = False; b.save(update_fields=['is_active'])
         self.assertEqual(alternatives_for(a.id, branch_id=None)['same'], [])
 
+    def test_blocked_candidate_excluded(self):
+        """Archived / sale-stopped items (catalog.safety.blocks_sale) are never offered."""
+        a, b, c = make_item('X 5', 'A0040'), make_item('Y 5', 'A0041'), make_item('Z 5', 'A0042')
+        for i in (a, b, c):
+            _idx(i, 'BISOPROLOL', 5)
+        b.item_archive = True; b.save(update_fields=['item_archive'])
+        r = alternatives_for(a.id, branch_id=None)
+        self.assertEqual(_ids(r['same']), ['A0042'])
+
+    def test_prices_are_numbers_and_unit_price_present(self):
+        a, b = make_item('X 5', 'A0043'), make_item('Y 5', 'A0044')
+        b.pack_price = Decimal('12.50'); b.save(update_fields=['pack_price'])
+        _idx(a, 'BISOPROLOL', 5); _idx(b, 'BISOPROLOL', 5)
+        row = alternatives_for(a.id, branch_id=None)['same'][0]
+        self.assertIsInstance(row['pack_price'], float)
+        self.assertEqual(row['pack_price'], 12.5)
+        self.assertIn('unit_price', row)
+
     def test_never_uses_name_scientific(self):
         a, b = make_item('P 1', 'A0016'), make_item('Q 1', 'A0017')
         for i in (a, b):
@@ -121,6 +139,11 @@ class AlternativesApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data['verified'])
         self.assertEqual(_ids(r.data['same']), ['A0032'])
+
+    def test_api_refuses_role_without_pos_grant(self):
+        a = make_item('A', 'A0033')
+        _, _, viewer = make_user('alt_viewer', role='viewer')
+        self.assertEqual(viewer.get(f'{URL}?item={a.id}').status_code, 403)
 
     def test_api_bad_item(self):
         _, _, client = make_user('alt_ph2', role='pharmacist')
