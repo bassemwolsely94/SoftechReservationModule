@@ -96,6 +96,12 @@ if BEHIND_HTTPS_PROXY:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+# Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
+# The client address is the NUM_PROXIES-th entry from the right; with 0 the header is ignored.
+# Used by core.client_ip (audit IPs) and DRF's throttles (Batch 3, A-6; owner 2026-10-27: 1 on
+# the VPS). Defaults to 1 behind the HTTPS proxy — with 0 there, every user would share
+# nginx's 127.0.0.1 and one login-throttle bucket.
+NUM_PROXIES = config('NUM_PROXIES', default=1 if BEHIND_HTTPS_PROXY else 0, cast=int)
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
 # Secure flag on the JWT cookies (core/auth_cookies.py). On by default whenever the
 # site is served over HTTPS; off only for plain-HTTP LAN deployments.
@@ -291,6 +297,8 @@ REST_FRAMEWORK = {
     # Gap-1: Throttle classes applied per-view; no global throttle to avoid
     # breaking authenticated API endpoints.
     'DEFAULT_THROTTLE_CLASSES': [],
+    # Throttles key on the real client, not the client-written X-Forwarded-For (A-6).
+    'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',   # max 10 login attempts per IP per minute
         # Customer portal (external) magic-link request + token exchange
@@ -346,6 +354,17 @@ LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Africa/Cairo'
 USE_I18N = True
 USE_TZ = True
+
+# ── PASSWORDS ─────────────────────────────────────────────────────────────────
+# 10 characters plus Django's checks (Batch 3, A-5; owner 2026-10-27). Applied by
+# apps.users.passwords on change-password, admin reset and user create.
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 10}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

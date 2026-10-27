@@ -61,13 +61,13 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
   }
 
   async function handleResetPwd() {
-    if (resetPwd.length < 6) { setError('كلمة المرور قصيرة جداً'); return }
+    if (resetPwd.length < 10) { setError('كلمة المرور يجب أن تكون 10 أحرف على الأقل'); return }
     try {
       await usersApi.resetPassword(staffId, resetPwd)
       setResetPwd('')
       setError('')
       alert('تم إعادة تعيين كلمة المرور بنجاح')
-    } catch { setError('فشل إعادة تعيين كلمة المرور') }
+    } catch (e) { setError(e.response?.data?.error || 'فشل إعادة تعيين كلمة المرور') }
   }
 
   if (isLoading || !form) return (
@@ -229,13 +229,13 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
             <div>
               <label className="label">كلمة المرور الجديدة</label>
               <input type="password" className="input-field" style={{ marginBottom: 10 }}
-                placeholder="6 أحرف على الأقل"
+                placeholder="10 أحرف على الأقل"
                 value={resetPwd}
                 onChange={e => setResetPwd(e.target.value)} />
               <button onClick={handleResetPwd}
-                disabled={resetPwd.length < 6}
+                disabled={resetPwd.length < 10}
                 className="btn-danger btn-sm"
-                style={{ opacity: resetPwd.length < 6 ? .5 : 1 }}>
+                style={{ opacity: resetPwd.length < 10 ? .5 : 1 }}>
                 🔑 إعادة التعيين
               </button>
             </div>

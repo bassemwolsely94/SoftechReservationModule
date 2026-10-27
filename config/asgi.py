@@ -21,12 +21,15 @@ django.setup()
 
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.security.websocket import AllowedHostsOriginValidator
 from apps.notifications.middleware import JWTAuthMiddlewareStack
 from apps.notifications.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter({
     'http': get_asgi_application(),
-    'websocket': JWTAuthMiddlewareStack(
+    # Origin must be one of ALLOWED_HOSTS: the access cookie travels with the handshake, so
+    # without this a page on another site could open a socket as the logged-in user (A-4).
+    'websocket': AllowedHostsOriginValidator(JWTAuthMiddlewareStack(
         URLRouter(websocket_urlpatterns)
-    ),
+    )),
 })

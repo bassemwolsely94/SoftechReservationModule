@@ -52,7 +52,7 @@ class CookieSessionTests(TestCase):
 
     def test_cookie_write_requires_xhr_header(self):
         self._login()
-        body = {'old_password': 'Secret123', 'new_password': 'Secret456', 'confirm_password': 'Secret456'}
+        body = {'old_password': 'Secret123', 'new_password': 'Cookie-pw-2026', 'confirm_password': 'Cookie-pw-2026'}
         r = self.client.post('/api/auth/change-password/', body, format='json')
         self.assertIn(r.status_code, (401, 403))           # forged cross-site POST → anonymous
         r = self.client.post('/api/auth/change-password/', body, format='json', **XHR)

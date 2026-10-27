@@ -19,14 +19,17 @@ Enrollment (self-service from settings, or forced at login during enforcement):
   GET  /auth/2fa/status/  → enrollment + enforcement state
 """
 import base64
+import hmac
 import io
 import secrets
+import time
 
 import pyotp
 import qrcode
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import User
 from django.core import signing
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -40,6 +43,9 @@ ISSUER = 'ElRezeiky Pharmacy'
 # Pre-auth token (between login step 1 and 2) — short TTL, no API access.
 _PREAUTH_SALT = 'mfa-preauth'
 _PREAUTH_MAX_AGE = 300          # 5 minutes
+# Wrong codes allowed per login token; then the token is dead → log in again
+# (Batch 3, A-2; owner 2026-10-27).
+MAX_CODE_TRIES = 5
 # Trusted-device token — lets a user skip 2FA on the same device for 30 days.
 _DEVICE_SALT = 'mfa-device'
 _DEVICE_MAX_AGE = 30 * 24 * 3600
@@ -65,22 +71,38 @@ def mfa_required_for(profile) -> bool:
 # ── Signed tokens ────────────────────────────────────────────────────────────────
 
 def make_preauth_token(user, purpose: str) -> str:
-    return signing.dumps({'uid': user.id, 'purpose': purpose}, salt=_PREAUTH_SALT)
+    # 'n' names this one login, so its wrong codes are counted and it opens one session (A-2).
+    return signing.dumps({'uid': user.id, 'purpose': purpose, 'n': secrets.token_hex(8)},
+                         salt=_PREAUTH_SALT)
+
+
+def _read_preauth(token: str, purpose: str):
+    """(User, login id) for a valid, unexpired pre-auth token of the given purpose, else (None, '')."""
+    try:
+        data = signing.loads(token, salt=_PREAUTH_SALT, max_age=_PREAUTH_MAX_AGE)
+    except signing.BadSignature:
+        return None, ''
+    if data.get('purpose') != purpose:
+        return None, ''
+    return User.objects.filter(id=data.get('uid')).first(), str(data.get('n') or '')
 
 
 def read_preauth_token(token: str, purpose: str):
     """Return the User for a valid, unexpired pre-auth token of the given purpose, else None."""
-    try:
-        data = signing.loads(token, salt=_PREAUTH_SALT, max_age=_PREAUTH_MAX_AGE)
-    except signing.BadSignature:
-        return None
-    if data.get('purpose') != purpose:
-        return None
-    return User.objects.filter(id=data.get('uid')).first()
+    return _read_preauth(token, purpose)[0]
+
+
+def _device_fingerprint(user) -> str:
+    """Changes whenever the password or the 2FA secret does, so a password change, an admin
+    reset or a 2FA reset cancels every "remember this device" (Batch 3, A-3; owner 2026-10-27)."""
+    from django.utils.crypto import salted_hmac
+    profile = getattr(user, 'staff_profile', None)
+    material = f'{user.password}|{getattr(profile, "mfa_secret", "") or ""}'
+    return salted_hmac('mfa-device-fingerprint', material).hexdigest()[:24]
 
 
 def make_device_token(user) -> str:
-    return signing.dumps({'uid': user.id}, salt=_DEVICE_SALT)
+    return signing.dumps({'uid': user.id, 'fp': _device_fingerprint(user)}, salt=_DEVICE_SALT)
 
 
 def valid_device_token(token: str, user) -> bool:
@@ -90,7 +112,7 @@ def valid_device_token(token: str, user) -> bool:
         data = signing.loads(token, salt=_DEVICE_SALT, max_age=_DEVICE_MAX_AGE)
     except signing.BadSignature:
         return False
-    return data.get('uid') == user.id
+    return data.get('uid') == user.id and data.get('fp') == _device_fingerprint(user)
 
 
 # ── TOTP + backup codes ──────────────────────────────────────────────────────────
@@ -101,6 +123,35 @@ def verify_totp(profile, code: str) -> bool:
     code = str(code).strip().replace(' ', '')
     # valid_window=1 tolerates ±30s clock drift between phone and server.
     return pyotp.TOTP(profile.mfa_secret).verify(code, valid_window=1)
+
+
+def _totp_step(profile, code: str):
+    """The 30-second time step `code` belongs to (now, ±1 for clock drift), or None."""
+    totp = pyotp.TOTP(profile.mfa_secret)
+    now = time.time()
+    for offset in (0, -1, 1):
+        t = now + offset * totp.interval
+        if hmac.compare_digest(totp.at(t), code):
+            return int(t // totp.interval)
+    return None
+
+
+def verify_login_code(profile, code: str) -> bool:
+    """verify_totp for the LOGIN step, where a code is accepted once: the step it belongs to,
+    and every earlier one, is refused afterwards — an observed code can't open a second
+    session (Batch 3, A-2; RFC 6238 §5.2)."""
+    if not profile.mfa_secret or not code:
+        return False
+    step = _totp_step(profile, str(code).strip().replace(' ', ''))
+    if step is None:
+        return False
+    last_key = f'mfa-last-step:{profile.pk}'
+    if step <= (cache.get(last_key) or -1):
+        return False
+    if not cache.add(f'mfa-step:{profile.pk}:{step}', 1, 120):    # two requests, same code
+        return False
+    cache.set(last_key, step, 120)
+    return True
 
 
 def generate_backup_codes(n=10):
@@ -154,9 +205,12 @@ def build_login_response(user) -> dict:
     }
 
 
-def _actor_from_request(request, purposes=('enroll', 'login')):
+def _actor_from_request(request, purposes=('enroll',)):
     """Resolve the acting user from either a JWT session (voluntary enrollment from
-    settings) or a pre-auth mfa_token in the body (forced enrollment at login)."""
+    settings) or a pre-auth mfa_token in the body (forced enrollment at login).
+    Only an ENROLL token counts: the 'login' token an enrolled user gets after the password
+    step is for /2fa/verify/ alone — accepting it here let the password by itself install a
+    new secret and come back with JWTs (Batch 3, A-1)."""
     if request.user and request.user.is_authenticated:
         return request.user, False  # via_jwt
     token = request.data.get('mfa_token', '')
@@ -180,8 +234,11 @@ def _log(action, profile, request, note=''):
 @permission_classes([AllowAny])
 def verify_2fa_view(request):
     """Step 2 of login: exchange a pre-auth token + TOTP/backup code for JWTs."""
-    user = read_preauth_token(request.data.get('mfa_token', ''), 'login')
-    if not user:
+    user, login_id = _read_preauth(request.data.get('mfa_token', ''), 'login')
+    tries_key, done_key = f'mfa-tries:{login_id}', f'mfa-done:{login_id}'
+    # A-2: a login token opens ONE session and takes at most MAX_CODE_TRIES wrong codes.
+    if (not user or not login_id or cache.get(done_key)
+            or (cache.get(tries_key) or 0) >= MAX_CODE_TRIES):
         return Response({'error': 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً'},
                         status=status.HTTP_401_UNAUTHORIZED)
     profile = getattr(user, 'staff_profile', None)
@@ -190,10 +247,16 @@ def verify_2fa_view(request):
     if not (profile and profile.mfa_enabled):
         return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not (verify_totp(profile, code) or consume_backup_code(profile, code)):
-        _log('mfa_failed', profile, request)
+    if not (verify_login_code(profile, code) or consume_backup_code(profile, code)):
+        cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
+        tries = cache.incr(tries_key)
+        _log('mfa_failed', profile, request, note=f'try {tries}/{MAX_CODE_TRIES}')
+        if tries >= MAX_CODE_TRIES:
+            return Response({'error': 'محاولات كثيرة خاطئة — سجّل الدخول من جديد'},
+                            status=status.HTTP_401_UNAUTHORIZED)
         return Response({'error': 'رمز التحقق غير صحيح'}, status=status.HTTP_401_UNAUTHORIZED)
 
+    cache.set(done_key, 1, _PREAUTH_MAX_AGE)
     _log('mfa_verified', profile, request)
     resp = build_login_response(user)
     if request.data.get('remember_device'):
@@ -211,6 +274,9 @@ def setup_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     if not profile:
         return Response({'error': 'لا يوجد ملف موظف لهذا الحساب'}, status=status.HTTP_400_BAD_REQUEST)
+    if profile.mfa_enabled:      # never replace a working authenticator (A-1) — disable it first
+        return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل — أوقفها أولاً لربط هاتف جديد'},
+                        status=status.HTTP_400_BAD_REQUEST)
 
     secret = pyotp.random_base32()
     profile.mfa_secret = secret           # pending until confirmed by /enable
@@ -232,6 +298,8 @@ def enable_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     if not profile or not profile.mfa_secret:
         return Response({'error': 'ابدأ الإعداد أولاً'}, status=status.HTTP_400_BAD_REQUEST)
+    if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
+        return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
 
     if not verify_totp(profile, request.data.get('code', '')):
         return Response({'error': 'رمز التحقق غير صحيح — تأكد من الوقت في هاتفك'},
