@@ -72,8 +72,6 @@ function TourBody({ tour }) {
   const [rect, setRect] = useState(null)
   const [cardH, setCardH] = useState(220)
   const [tick, setTick] = useState(0)
-  const cardRef = useRef(null)
-  const [cardH, setCardH] = useState(220)
   const step = tour.steps[tour.i]
   const last = tour.i === tour.steps.length - 1
   const next = tour.steps[tour.i + 1]
@@ -137,10 +135,10 @@ function TourBody({ tour }) {
     return () => { clearInterval(id); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true) }
   }, [step.target, tick, here])
 
-  // the card grows with the step's text — place it by its real height
+  // the card grows with the step's text (and its longer explanation) — place it by its real height
   useLayoutEffect(() => {
     if (cardRef.current) setCardH(cardRef.current.offsetHeight)
-  }, [tour.i, rect == null, here, lang])
+  }, [tour.i, rect == null, rect?.width, here, lang])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -152,11 +150,6 @@ function TourBody({ tour }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [tour.i, last, endTour, tourStep, step.wait])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // the card's real height (the explanation makes steps differ) for placing it
-  useLayoutEffect(() => {
-    if (cardRef.current) setCardH(cardRef.current.offsetHeight)
-  }, [tour.i, rect?.width, lang])
 
   const vw = window.innerWidth
   const vh = window.innerHeight
