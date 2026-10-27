@@ -181,7 +181,15 @@ class ApiTests(TestCase):
         self.c.force_authenticate(self.nobody)
         self.assertEqual(self.c.get('/api/supply/purchase-prices/').status_code, 403)
         self.c.force_authenticate(self.admin)
-        r = self.c.get('/api/supply/purchase-prices/', {'days': 90}, HTTP_ACCEPT_ENCODING='gzip')
+        # Django only gzips bodies ≥ 200 bytes, and the board is cached: pad the (empty)
+        # test board to a realistic size and bypass the cache, so the result never
+        # depends on what the shared cache of the machine running the tests holds.
+        from django.core.cache import cache
+        real_build = H.build
+        padded = lambda **kw: {**real_build(**kw), 'items': [{'code': str(i)} for i in range(50)]}
+        with mock.patch.object(cache, 'get', return_value=None), mock.patch.object(cache, 'set'), \
+             mock.patch.object(H, 'build', side_effect=padded):
+            r = self.c.get('/api/supply/purchase-prices/', {'days': 90}, HTTP_ACCEPT_ENCODING='gzip')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get('Content-Encoding'), 'gzip')
         x = self.c.get('/api/supply/purchase-prices/', {'format': 'xlsx'})
