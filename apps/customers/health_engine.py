@@ -351,7 +351,7 @@ class CustomerHealthEngine:
 
         for customer in (
             Customer.objects
-            .filter(id__in=customer_ids_with_history)
+            .filter(id__in=customer_ids_with_history, is_account_placeholder=False)
             .iterator(chunk_size=batch_size)
         ):
             try:

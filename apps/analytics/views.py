@@ -229,10 +229,10 @@ def _purchase_qs_filtered(params):
     if customer_ids:
         qs = qs.filter(customer_id__in=customer_ids)
 
-    # ── Customers by personcode / softech_id (العميل dropdown, from personsdata)
+    # ── Sales accounts by personcode (العميل dropdown, from personsdata)
     person_main_codes = _parse_list(params.get('person_main_codes'))
     if person_main_codes:
-        qs = qs.filter(customer__softech_id__in=person_main_codes)
+        qs = qs.filter(softech_personcode__in=person_main_codes)
 
     return qs
 
@@ -660,24 +660,26 @@ def filter_options(request):
     # Customer branch codes — kept for backward compat but no longer shown in UI.
     cust_branch_codes = []
 
-    # Persons (العميل) — top 800 customers from PurchaseHistory by invoice count,
-    # labelled by their name from Customer (synced from personsdata.personname).
-    # Excludes anonymous walk-in (1500) and home-delivery (1510) person codes.
+    # Persons (العميل) — top 800 SOFTECH sales accounts (stktrans.personcode) by invoice
+    # count, labelled from their account placeholder (personsdata.personname).
+    # Excludes anonymous home-delivery (1500) and walk-in (1510).
     from django.db.models import Count as _Count
+    from apps.customers.account_link import PLACEHOLDER_PREFIX
     persons_qs = (
         PurchaseHistory.objects
-        .exclude(customer__softech_id__in=['1500', '1510'])
-        .exclude(customer__name='')
-        .values('customer__softech_id', 'customer__name')
+        .exclude(softech_personcode__in=['', '1500', '1510'])
+        .values('softech_personcode')
         .annotate(_cnt=_Count('id'))
         .order_by('-_cnt')[:800]
     )
+    codes = [row['softech_personcode'] for row in persons_qs]
+    account_names = {
+        pic[len(PLACEHOLDER_PREFIX):]: name
+        for pic, name in Customer.objects.filter(
+            softech_pic__in=[PLACEHOLDER_PREFIX + c for c in codes]).values_list('softech_pic', 'name')
+    }
     persons = sorted(
-        [
-            {'code': row['customer__softech_id'], 'label': row['customer__name']}
-            for row in persons_qs
-            if row['customer__softech_id'] and row['customer__name']
-        ],
+        [{'code': c, 'label': account_names.get(c) or c} for c in codes],
         key=lambda x: x['label'],
     )
 
@@ -1115,10 +1117,11 @@ def customer_analytics(request):
     d30  = now_date - datetime.timedelta(days=30)
     d90  = now_date - datetime.timedelta(days=90)
 
-    total_customers = Customer.objects.count()
-    active_30d = Customer.objects.filter(purchases__invoice_date__date__gte=d30).distinct().count()
-    active_90d = Customer.objects.filter(purchases__invoice_date__date__gte=d90).distinct().count()
-    new_30d    = Customer.objects.filter(created_at__date__gte=d30).count()
+    people     = Customer.objects.filter(is_account_placeholder=False)
+    total_customers = people.count()
+    active_30d = people.filter(purchases__invoice_date__date__gte=d30).distinct().count()
+    active_90d = people.filter(purchases__invoice_date__date__gte=d90).distinct().count()
+    new_30d    = people.filter(created_at__date__gte=d30).count()
 
     net_rev, sales_rev, returns_rev, _, _ = _net_revenue_from_qs(qs)
     total_txn   = qs.count()
@@ -1163,10 +1166,11 @@ def customer_analytics(request):
             'distinct_piccodes': row['pic_count'],
         })
 
-    # Top customers
+    # Top customers (people only — account placeholders show under channels / accounts)
     top_customers = []
     for row in (
-        qs.values('customer__id', 'customer__name', 'customer__phone',
+        qs.filter(customer__is_account_placeholder=False)
+          .values('customer__id', 'customer__name', 'customer__phone',
                   'customer__softech_pic', 'sales_channel')
           .annotate(
               sales_amount   = Sum('total_amount', filter=Q(doc_code='115')),
@@ -1726,6 +1730,7 @@ def customer_churn(request):
     # Per-customer aggregation: last_purchase_date, count, total spend
     customer_stats = (
         ph_base
+        .filter(customer__is_account_placeholder=False)
         .values('customer_id', 'customer__name', 'customer__phone',
                 'customer__softech_pic', 'sales_channel')
         .annotate(

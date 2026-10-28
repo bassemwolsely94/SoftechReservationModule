@@ -134,7 +134,11 @@ SCREENS = [
             T('صفِّ بخطر الانقطاع (حرج / مرتفع / متوسط / مستقر) لاستهداف من يحتاج تواصلاً.', 'Filter by churn risk (critical / high / medium / stable) to target who needs contact.'),
             T('اضغط العميل لفتح ملفه الكامل.', 'Click a customer to open their full profile.'),
         ],
-        'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.')],
+        'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.'),
+                 T('مشتريات العميل = الفواتير اللي عليها الـPIC بتاعه. فواتير من غير PIC بتتسجّل على «حساب البيع» (زي Walk-In أو التعاقد) — '
+                   'الحسابات دي مش أشخاص فمش بتظهر في القائمة ولا في التقسيم أو الحملات أو متابعة المزمنين.',
+                   'A customer\'s purchases = invoices carrying their PIC. Invoices with no PIC are filed under the "sales account" '
+                   '(e.g. Walk-In or the contract) — accounts are not people, so they are left out of this list, segments, campaigns and chronic follow-up.')],
         'related': ['customers.detail', 'customers.merge'],
         'workflows': [],
         'tour': [
@@ -166,7 +170,7 @@ SCREENS = [
              'text': T('التنقل بين الصفحات؛ كل صفحة 50 عميل.', 'Move between pages; 50 customers per page.'),
              'open_hint': T('يظهر لما النتائج أكتر من صفحة.', 'Appears when the results fill more than one page.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'customers.detail',

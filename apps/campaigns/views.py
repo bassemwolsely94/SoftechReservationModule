@@ -64,7 +64,7 @@ def _build_audience_qs(target_filter: dict):
       min_ltv                  float — minimum lifetime value
       has_whatsapp             bool  — only customers with whatsapp_phone set
     """
-    qs = Customer.objects.filter(is_guest=False)
+    qs = Customer.objects.filter(is_guest=False, is_account_placeholder=False)
 
     # ── RFM Segment ──────────────────────────────────────────────────────────
     segment = target_filter.get('segment')

@@ -30,10 +30,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
     ordering            = ['name']
 
     def get_queryset(self):
-        return Customer.objects.select_related(
+        qs = Customer.objects.select_related(
             'preferred_branch', 'created_by__user',
             'health_profile',       # prevents N+1 on is_chronic / detected_conditions
         ).prefetch_related('notes__created_by__user')
+        if self.action == 'list':
+            # sales-account placeholders (Walk-In 1510 …) are not people; still openable by id
+            qs = qs.filter(is_account_placeholder=False)
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':

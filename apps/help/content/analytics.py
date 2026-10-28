@@ -106,7 +106,13 @@ SCREENS = [
             {'key': 'contribution', 'title': T('🏦 مساهمة الفروع', '🏦 Branch contribution'), 'body': T('هامش المساهمة لكل فرع = إجمالي الربح − مصروفات الفرع.', 'Each branch\'s contribution margin = gross profit − branch expenses.')},
             {'key': 'churn', 'title': T('👻 العملاء الغائبون', '👻 Lapsed customers'), 'body': T('عملاء انقطعوا عن الشراء مع الخسارة السنوية المقدّرة — قائمة للتواصل.', 'Customers who stopped buying with the estimated annual loss — a contact list.')},
         ],
-        'tips': [_FILTERS],
+        'tips': [_FILTERS,
+                 T('فلتر «العميل» = حساب البيع في SOFTECH (تعاقد، نقابة…). الفاتورة بتتنسب للعميل صاحب الـPIC؛ '
+                   'الفاتورة اللي من غير PIC (نقدي، أغلب التعاقدات) بتتسجّل على سجل الحساب نفسه — وده مش شخص، '
+                   'فمش بيظهر في «أفضل العملاء» ولا «العملاء الغائبون».',
+                   'The "Customer" filter = the SOFTECH sales account (contract, union…). An invoice belongs to its PIC '
+                   'customer; an invoice with no PIC (cash, most contracts) is filed under the account record itself — '
+                   'not a person, so it never appears in "Top customers" or "Lapsed customers".')],
         'related': ['analytics.performance', 'finance.dashboard'],
         'tour': [
             {'target': 'analytics-sales-refresh', 'label': T('تحديث', 'Refresh'),
@@ -151,7 +157,7 @@ SCREENS = [
              'warn': T('المساهمة بتتبع التاريخ بس، والغائبون مش بيتبعوا أي فلتر — ماتقارنهمش مباشرة بباقي التبويبات.',
                        'Contribution follows the dates only and lapsed customers ignore all filters — do not compare them directly with other tabs.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'analytics.performance',
