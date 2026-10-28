@@ -131,6 +131,12 @@ SCREENS = [
               'The same line repeated inside one invoice is off by default: it is how SOFTECH saves an item scanned one unit at a time.'),
             T('الملاحظة تبقى على حالتها بعد كل تشغيل؛ زيادة قيمة المتجاهلة أكثر من 50% تعيد فتحها مع ملاحظة.',
               'A finding keeps its status after every run; a dismissed one whose value grows by over 50% is reopened with a note.'),
+            T('عمود «القناة / الحساب» = قناة البيع (نقدي، Delivery، تعاقدات…) وتحتها حساب SOFTECH (نقابة، تعاقد، Walk-In). '
+              'عمود «العميل (PIC)» = اسم العميل وكود الـPIC من الفاتورة؛ «بدون PIC» = فاتورة على الحساب بس.',
+              'The «Channel / account» column = the sales channel (cash, delivery, contracts…) with the SOFTECH account under it '
+              '(a union, a contract, Walk-In). «Customer (PIC)» = the customer name and PIC from the invoice; "no PIC" = the invoice is on the account only.'),
+            T('كل الجداول (الملخص، الملاحظات، السطور الأصلية، التسويات حسب المستخدم، مديرو الفروع) بتترتب بالضغط على عنوان العمود، وتقدر توسّع العمود بسحب حافته.',
+              'Every table (summary, findings, original lines, adjustments by user, branch managers) sorts by clicking a column header; drag a header edge to widen the column.'),
         ],
         'related': ['stockcount.sessions', 'batches.main'],
         'tour': [
@@ -155,8 +161,15 @@ SCREENS = [
             {'target': 'stock-audit-main-rules', 'label': T('كل الفحوص', 'All checks'),
              'text': T('اختر فحصاً واحداً أو اعرضها كلها.', 'Pick one check or show them all.'),
              'open_hint': T('تبويب «🧾 المبيعات والأسعار».', 'The "🧾 Sales & prices" tab.')},
+            {'target': 'stock-audit-main-channel', 'label': T('قناة البيع', 'Sales channel'),
+             'text': T('يحصر الملاحظات في قناة واحدة: نقدي، Delivery، تعاقدات، عميل دائم…',
+                       'Limits the findings to one channel: cash, delivery, contracts, regular customer…'),
+             'when': T('مثلاً «تعاقدات / آجل» عشان تشوف البيع بأقل من التكلفة على التعاقدات بس.',
+                       'For example «تعاقدات / آجل» to see below-cost sales on contracts only.')},
             {'target': 'stock-audit-main-grid', 'label': T('قائمة الملاحظات', 'Findings list'),
-             'text': T('↑↓ للتنقل، Space للتحديد، Enter لفتح التفاصيل والسطور الأصلية.', '↑↓ to move, Space to tick, Enter to open the details and original lines.')},
+             'text': T('↑↓ للتنقل، Space للتحديد، Enter لفتح التفاصيل والسطور الأصلية.', '↑↓ to move, Space to tick, Enter to open the details and original lines.'),
+             'when': T('اضغط عنوان أي عمود للترتيب به، ومرة تانية يعكس الاتجاه. الترتيب على كل الملاحظات مش الصفحة الظاهرة بس، والتصدير بيطلع بنفس الترتيب.',
+                       'Click any column header to sort by it; click again to reverse. Sorting covers every finding, not just the page shown, and the export keeps the same order.')},
             {'target': 'stock-audit-main-review', 'label': T('✔ تمت المراجعة · تجاهل · ⬆ تصعيد', '✔ Reviewed · Dismiss · ⬆ Escalate'),
              'text': T('سجّل قرارك. التجاهل والتصعيد وإعادة الفتح تحتاج ملاحظة مكتوبة.', 'Record your decision. Dismiss, escalate and reopen need a written note.'),
              'open_hint': T('افتح ملاحظة من القائمة.', 'Open a finding from the list.')},
@@ -189,6 +202,6 @@ SCREENS = [
              'text': T('يوقف وصول مدير الفرع فوراً. يبقى سجل المنح والسحب.', 'Stops the branch manager’s access at once. The grant and removal stay on record.'),
              'open_hint': T('بجوار اسم مدير الفرع.', 'Next to the branch manager’s name.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
 ]
