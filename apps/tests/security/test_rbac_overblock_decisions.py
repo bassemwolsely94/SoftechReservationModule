@@ -22,6 +22,8 @@ role list in the view refused.
 - Z-11i (decision 9, owner 2026-10-29): the menus already showed these — supervisors now run
   stock counts (view / create / edit) and, with the call center, classify chronic items (chronic
   edit). Code matrix + data migration 0032 for the live matrix. (The mobile tab gating is UI.)
+- Z-12b (owner 2026-10-29): approving / rejecting a transfer recommendation follows purchasing
+  approve (admin, purchasing, the SOFTECH supply groups), not a hard-coded admin / pharmacist list.
 """
 from datetime import date, timedelta
 from unittest import mock
@@ -188,3 +190,17 @@ class MatrixScreenGapTests(_Base):
     def test_salesperson_still_cannot_classify(self):
         c, _ = self._as('salesperson')
         self.assertEqual(c.post('/api/chronic/items/987654321/classify/', {}, format='json').status_code, 403)
+
+
+class TransferRecommendationTests(_Base):
+
+    def test_purchasing_reviews_transfer_recommendations(self):
+        c, _ = self._as('purchasing')
+        self.assertEqual(c.patch('/api/purchasing/transfer-recs/987654321/status/', {'status': 'approved'},
+                                 format='json').status_code, 404)          # past the gate: no such recommendation
+
+    def test_roles_without_purchasing_approve_stay_out(self):
+        for role in ('salesperson', 'pharmacist'):
+            c, _ = self._as(role)
+            self.assertEqual(c.patch('/api/purchasing/transfer-recs/987654321/status/', {'status': 'approved'},
+                                     format='json').status_code, 403, role)

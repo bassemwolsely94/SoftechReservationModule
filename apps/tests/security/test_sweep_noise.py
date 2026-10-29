@@ -12,6 +12,7 @@ skips methods it does not implement. No app code changes.
 from django.test import SimpleTestCase
 
 
+
 ID = '987654321'
 
 
@@ -33,3 +34,10 @@ class HandlesTests(SimpleTestCase):
         self.assertTrue(self._handles(f'/api/vouchers/vouchers/{ID}/cancel/', 'POST'))
         self.assertTrue(self._handles('/api/vouchers/vouchers/', 'GET'))
         self.assertTrue(self._handles('/api/vouchers/vouchers/', 'POST'))
+
+
+class SweepMethodsTests(SimpleTestCase):
+
+    def test_the_sweep_sends_every_method_the_matrix_maps(self):
+        from . import sweep
+        self.assertEqual(set(getattr(sweep, 'METHODS', ('GET', 'POST'))), {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'})

@@ -393,7 +393,7 @@ SCREENS = [
                        'Review a transfer suggestion: approve or reject, and after the real move "✓ Executed". Recorded under your name.'),
              'warn': T('الموافقة بتغيّر حالة التوصية بس — مابتعملش طلب تحويل. اعمل التحويل نفسه من شاشة التحويلات.',
                        'Approving only changes the suggestion status — it creates no transfer. Make the transfer itself on the Transfers screen.'),
-             'open_hint': T('تبويب «🔄 التحويلات المقترحة»، على توصية «انتظار». للمدير والصيدلي فقط.', 'The "🔄 Suggested transfers" tab, on a "pending" suggestion. Admin and pharmacist only.')},
+             'open_hint': T('تبويب «🔄 التحويلات المقترحة»، على توصية «انتظار». للمدير والمشتريات وأعضاء مجموعات التوريد.', 'The "🔄 Suggested transfers" tab, on a "pending" suggestion. Admin, purchasing and the supply-group members.')},
         ],
         'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),

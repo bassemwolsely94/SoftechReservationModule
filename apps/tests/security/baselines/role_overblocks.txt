@@ -1,7 +1,6 @@
 # Owner review (Batch 4): the code matrix GRANTS the role, but the request answered 403.
 # Either the view is stricter than the matrix on purpose (keep, add '# reason:') or staff are locked out (fix).
 
-
 # reason: Z-11c — pricing approvals (approve / reject / force replication / replication scans / policy /
 #   alignment / who-changed-what / branch health / discount impact) are admin only (IsAdminRole):
 #   price changes and SOFTECH replication (Z-6).
@@ -445,3 +444,50 @@ quality_manager GET /api/invoices/vendors/linkable/
 salesperson GET /api/invoices/vendors/linkable/
 supervisor GET /api/invoices/vendors/linkable/
 viewer GET /api/invoices/vendors/linkable/
+
+# reason: Z-12 — edits of admin configuration (customer segmentation, offers margin floor, purchasing engine
+#   settings, finance schema, procurement supplier categories / rules / segmentation) are admin only.
+call_center PATCH /api/customers/segmentation-config/
+pharmacist PATCH /api/customers/segmentation-config/
+purchasing PATCH /api/finance/schema/987654321/
+purchasing PATCH /api/offers/margin-config/
+purchasing PATCH /api/procurement/categories/987654321/
+purchasing PATCH /api/procurement/classification-rules/987654321/
+purchasing PATCH /api/procurement/segments/987654321/update/
+purchasing PATCH /api/purchasing/config/
+purchasing PUT /api/finance/schema/987654321/
+purchasing PUT /api/procurement/categories/987654321/
+purchasing PUT /api/procurement/classification-rules/987654321/
+supervisor PATCH /api/customers/segmentation-config/
+supervisor PATCH /api/offers/margin-config/
+
+# reason: Z-12 — omni channel accounts / automations and PBX extension edits are admin / supervisor (Z-8b).
+call_center PATCH /api/omni/accounts/987654321/
+call_center PATCH /api/omni/automations/987654321/
+call_center PATCH /api/pbx/agents/987654321/
+call_center PUT /api/omni/accounts/987654321/
+call_center PUT /api/omni/automations/987654321/
+call_center PUT /api/pbx/agents/987654321/
+
+# reason: Z-12 — product content / attributes / media / SEO edits are for content managers.
+pharmacist PATCH /api/products/x/attributes/
+pharmacist PATCH /api/products/x/content/
+pharmacist PATCH /api/products/x/media/987654321/
+pharmacist PATCH /api/products/x/seo/
+pharmacist PUT /api/products/x/attributes/
+pharmacist PUT /api/products/x/content/
+pharmacist PUT /api/products/x/seo/
+purchasing PATCH /api/products/x/seo/
+purchasing PUT /api/products/x/seo/
+
+# reason: Z-12 — replacement grants are edited by replacement managers.
+supervisor PATCH /api/replacement/grants/987654321/
+supervisor PUT /api/replacement/grants/987654321/
+
+# reason: Z-12 — pick-zone, rule and override edits are admin / purchasing (Z-7c).
+pharmacist PATCH /api/transits/item-overrides/987654321/
+pharmacist PATCH /api/transits/pick-rules/987654321/
+pharmacist PATCH /api/transits/pick-zones/987654321/
+pharmacist PUT /api/transits/item-overrides/987654321/
+pharmacist PUT /api/transits/pick-rules/987654321/
+pharmacist PUT /api/transits/pick-zones/987654321/

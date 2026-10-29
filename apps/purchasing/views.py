@@ -2336,10 +2336,11 @@ def transfer_rec_update_status(request, pk):
     Approve or reject a single transfer recommendation.
     Body: { "status": "approved" | "rejected", "notes": "..." }
 
-    Restricted to admin and pharmacist roles.
+    Purchasing approve: admin, purchasing and the SOFTECH supply groups (owner 2026-10-29, Batch 4
+    Z-12b — a hard-coded admin / pharmacist list left the purchasing team out of its own screen).
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    from core.permissions import matrix_allows
+    if not matrix_allows(getattr(request.user, 'staff_profile', None), 'purchasing', 'approve'):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     try:

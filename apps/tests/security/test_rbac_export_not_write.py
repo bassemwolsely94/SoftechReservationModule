@@ -17,6 +17,7 @@ from core.middleware.module_access import required
 
 
 
+
 class ExportIsNotAWriteTests(SimpleTestCase):
 
     def test_a_plain_post_does_not_accept_export(self):
@@ -36,3 +37,15 @@ class ExportIsNotAWriteTests(SimpleTestCase):
         module, actions = required('/api/qa/inspections/', 'POST')
         self.assertEqual(module, 'hr')
         self.assertIn('export', actions)
+
+
+class AnalyticsEditsTests(SimpleTestCase):
+    """Z-12: on the analytics routes export counts for a POST (a computation) only — a PUT / PATCH
+    needs edit and a DELETE needs delete (export let view + export roles past on all three)."""
+
+    def test_forecasting_and_target_edits_need_edit_or_delete(self):
+        for path in ('/api/forecasting/scenarios/1/', '/api/incentives/targets/1/'):
+            self.assertEqual(required(path, 'PATCH'), ('analytics', ('edit',)), path)
+            self.assertEqual(required(path, 'PUT'), ('analytics', ('edit',)), path)
+            self.assertEqual(required(path, 'DELETE'), ('analytics', ('delete',)), path)
+            self.assertIn('export', required(path, 'POST')[1], path)
