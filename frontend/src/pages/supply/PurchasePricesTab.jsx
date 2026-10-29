@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
 import { wildcardMatch } from '../../utils/wildcard'
+import { fa } from '../../utils/flowArrow'
 import { FreshnessBar } from './AvailabilityControls'
 import { Chip, btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, useSort } from './supplyUi'
 
@@ -211,7 +212,7 @@ export default function PurchasePricesTab() {
           <button type="button" onClick={() => setState('cheaper')}><Chip tone={state === 'cheaper' ? 'amber' : 'gray'}>يوجد أرخص {t.cheaper}</Chip></button>
           <button type="button" onClick={() => setState('best')}><Chip tone={state === 'best' ? 'emerald' : 'gray'}>نشتري من الأفضل {t.best}</Chip></button>
           <Chip tone="amber" title="الفرق × سعر الجمهور الحالي × معدل البيع الشهري للشبكة">توفير محتمل/شهر {money(Math.round(t.saving_month))} ج</Chip>
-          <span className="text-content/50">من {money(t.lines)} سطر شراء · {d.since} ← {d.today}</span>
+          <span className="text-content/50">من {money(t.lines)} سطر شراء · {d.since} {fa()} {d.today}</span>
         </div>
       )}
 
