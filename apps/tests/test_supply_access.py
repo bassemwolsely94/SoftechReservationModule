@@ -52,10 +52,16 @@ class AccessByGroupTests(TestCase):
         self.assertTrue(access.can_run_engine(u))
         self.assertFalse(access.is_engine_admin(u))
 
-    def test_pharmacist_is_engine_admin_but_not_supply(self):
+    def test_pharmacist_has_no_purchasing_rights(self):
+        # Owner 2026-10-27 (Batch 4, Z-2): purchasing follows the matrix + supply groups;
+        # pharmacist has no purchasing grant.
         u = _user('ph1', role='pharmacist')
-        self.assertTrue(access.is_engine_admin(u))
+        self.assertFalse(access.is_engine_admin(u))
+        self.assertFalse(access.can_run_engine(u))
         self.assertFalse(access.can_supply_write(u))
+
+    def test_supervisor_has_no_supply_write(self):
+        self.assertFalse(access.can_supply_write(_user('sv1', role='supervisor')))
 
     @override_settings(SUPPLY_ERP_GROUPS='19')
     def test_groups_follow_the_setting(self):

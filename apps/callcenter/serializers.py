@@ -347,7 +347,11 @@ class CallLogDetailSerializer(serializers.ModelSerializer):
             'called_at', 'updated_at', 'callback_due', 'needs_callback',
             'address_updates', 'attachments',
         ]
-        read_only_fields = ['called_at', 'updated_at']
+        # quality_score mirrors the supervisor's CallQualityScore (quality action); the handler and
+        # AI fields are set by the system (Batch 4, Z-10b — an agent could score their own call)
+        read_only_fields = ['called_at', 'updated_at', 'quality_score', 'handled_by',
+                            'ai_summary', 'ai_intent', 'ai_sentiment', 'ai_urgency',
+                            'ai_next_action', 'ai_processed_at']
 
     def get_ai_sentiment_label(self, obj):
         labels = {'positive': 'إيجابي 😊', 'neutral': 'محايد 😐', 'negative': 'سلبي 😟'}

@@ -1,7 +1,7 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import AuditLogViewSet, AbuseFlagViewSet
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page under /api/audit/ (Z-4)
 router.register(r'logs',  AuditLogViewSet,  basename='audit-log')
 router.register(r'flags', AbuseFlagViewSet, basename='abuse-flag')
 

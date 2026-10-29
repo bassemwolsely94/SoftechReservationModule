@@ -82,12 +82,18 @@ class RewardFlowTests(TestCase):
         self.assertEqual(self.reward.stock, 2)
 
     def test_self_approval_refused(self):
+        # the approvals engine itself refuses a requester's own approval (Batch 4, Z-11j); the
+        # rewards module's own self-approval rejection stays as a second line
+        from apps.approvals.service import ApprovalError
         _give(self.admin, 1000, 'adm')
         x = R.request_reward(self.admin, self.reward.id)
-        x = self._approve_all(x, by=[self.sup, self.admin])
-        self.assertEqual(x.status, 'rejected')
-        self.assertIn('self-approval', x.decision_note)
-        self.assertEqual(R.wallet(self.admin)['balance'], 1000)
+        x = self._approve_all(x, by=[self.sup])
+        held = R.wallet(self.admin)['balance']                       # the request holds its points
+        with self.assertRaises(ApprovalError):
+            self._approve_all(x, by=[self.admin])
+        x.refresh_from_db()
+        self.assertNotEqual(x.status, 'approved')                    # still waiting for someone else
+        self.assertEqual(R.wallet(self.admin)['balance'], held)
 
     def test_not_enough_points(self):
         big = Reward.objects.create(name_ar='كبيرة', name_en='Big', cost=5000)

@@ -16,6 +16,7 @@ from django.db.models import Count, Q
 from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import APIException, MethodNotAllowed
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -80,6 +81,11 @@ def _link_invoice_corpus(invoice_pk, raw_name, item):
         pass
 
 
+class _InvoiceFrozen(APIException):
+    status_code = 409
+    default_detail = 'الفاتورة في طابور الترحيل أو مُرحَّلة إلى SOFTECH — لا يمكن تعديل رأسها أو سطورها.'
+
+
 class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'invoices'
@@ -132,6 +138,49 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return SupplierInvoiceDetailSerializer
         return SupplierInvoiceListSerializer
+
+    # Batch 4, Z-10c: once an invoice is queued for, being pushed to or posted to SOFTECH its header
+    # and lines are frozen — they were still editable, so our record could drift from the posted
+    # document (and a return is built from it). Corrections go through a return.
+    FROZEN_STATUSES = ('queued', 'pushing', 'finalized')
+    CONTENT_ACTIONS = ('run_ocr', 'add_line', 'update_line', 'delete_line', 'update_header')
+
+    # Batch 4, Z-11k: an edit to a confirmed (or push-failed) invoice sends it back to review, so a
+    # second confirm — the push's precondition — follows any change after the first one.
+    REOPEN_STATUSES = ('confirmed', 'push_failed')
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        self._reopen_from = None
+        if self.action in self.CONTENT_ACTIONS:
+            invoice_status = self.get_object().status
+            if invoice_status in self.FROZEN_STATUSES:
+                raise _InvoiceFrozen()
+            if invoice_status in self.REOPEN_STATUSES:
+                self._reopen_from = invoice_status
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        was = getattr(self, '_reopen_from', None)
+        if was and 200 <= response.status_code < 300:          # only an edit that went through
+            pk = self.kwargs.get('pk')
+            if SupplierInvoice.objects.filter(pk=pk, status=was).update(status='review'):
+                from apps.audit.models import AuditLog
+                AuditLog.log('invoice_reopened', user=getattr(request.user, 'staff_profile', None),
+                             obj=SupplierInvoice.objects.filter(pk=pk).first(),
+                             changes={'status': [was, 'review']}, extra={'action': self.action},
+                             note='تعديل بعد التأكيد — يحتاج تأكيداً جديداً قبل الترحيل')
+                if isinstance(response.data, dict) and str(response.data.get('id')) == str(pk):
+                    response.data['status'] = 'review'
+                    if 'status_label' in response.data:
+                        response.data['status_label'] = SupplierInvoiceListSerializer.STATUS_LABELS['review']
+        return super().finalize_response(request, response, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        # No generic PUT / PATCH (Batch 4, Z-10a): status and the SOFTECH fields change only through
+        # confirm / reject / push, the header through update-header, the lines through their own
+        # actions. A PATCH could clear a finalized invoice's docnumber and put it back to confirmed,
+        # and the next push would post it to SOFTECH a second time.
+        raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
@@ -833,13 +882,24 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
 # ── Vendor Profile ViewSet ────────────────────────────────────────────────────
 
+class _VendorPermission(MatrixPermission):
+    """Vendor lookups (list / retrieve / main) are read by the shortage screen too: `invoices`
+    or `shortage` view (Batch 4, Z-7a — was any logged-in user). Vendor edits stay `invoices`."""
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        from core.permissions import matrix_allows
+        if request.method in SAFE_METHODS and getattr(view, 'action', None) in ('list', 'retrieve', 'main'):
+            p = getattr(request.user, 'staff_profile', None)
+            return matrix_allows(p, 'invoices', 'view') or matrix_allows(p, 'shortage', 'view')
+        return super().has_permission(request, view)
+
+
 class VendorProfileViewSet(viewsets.ModelViewSet):
     queryset           = VendorProfile.objects.all().order_by('name')
     serializer_class   = VendorProfileSerializer
-    permission_classes = [IsAuthenticated, MatrixPermission]
+    permission_classes = [IsAuthenticated, _VendorPermission]
     rbac_module        = 'invoices'
-    # vendor lookups are read by other screens (e.g. the shortage page)
-    rbac_actions       = {'list': (), 'retrieve': (), 'main': ()}
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -914,6 +974,11 @@ class InvoiceBatchViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return InvoiceBatchDetailSerializer
         return InvoiceBatchListSerializer
+
+    def update(self, request, *args, **kwargs):
+        # No generic PUT / PATCH (Batch 4, Z-10b): the processing state and counts are set by the
+        # splitter and reprocess; a PATCH could mark a bundle ready / forge its counts.
+        raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)

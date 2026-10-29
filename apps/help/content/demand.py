@@ -369,7 +369,8 @@ SCREENS = [
             'أكثر الأصناف ضياعاً، أسباب الضياع، أداء الفروع، أصناف النقص المزمن، ومقارنة الخسارة «المؤكدة» (باسم عميل) بالخسارة «التقديرية» من محرك المشتريات.',
             'Analysis of unmet demand to improve purchasing and revenue: total requests, fulfilled, confirmed lost value, recovered revenue, '
             'most-lost items, loss reasons, branch performance, chronic shortage items, and "confirmed" losses (under a customer) vs the purchasing engine\'s "estimated" losses.'),
-        'audience': T('المشرفون، المشتريات، الإدارة.', 'Supervisors, purchasing, management.'),
+        'audience': T('كل من له صلاحية «عرض» على التحليلات: الإدارة والمشتريات والمشرفون والجودة والكول سنتر والصيادلة.',
+                      'Everyone with Analytics view: management, purchasing, supervisors, quality, the call center and pharmacists.'),
         'steps': [
             T('ابدأ بالأرقام العلوية: نسبة التوريد وقيمة الخسارة المؤكدة والإيراد المسترد.', 'Start with the top numbers: fulfilment rate, confirmed lost value, recovered revenue.'),
             T('«اقتراحات الشراء المدفوعة بطلب العملاء»: أصناف طلبها عملاء حقيقيون مرتبة بالقيمة — اضغط «إرسال للمشتريات» أو «تصدير CSV».',
@@ -416,7 +417,7 @@ SCREENS = [
                        'It sends all suggestions, not just the 15 shown. Only admin and purchasing may do it.'),
              'open_hint': T('قسم «اقتراحات الشراء» لما يكون فيه اقتراحات.', 'The "purchase suggestions" section, when there are suggestions.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
     {
         'key': 'demand.recovery',

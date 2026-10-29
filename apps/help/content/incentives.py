@@ -101,6 +101,8 @@ SCREENS = [
             {'key': 'history', 'title': T('🕒 سجل الاحتساب', '🕒 Calculation log'), 'body': T('كل عمليات الاحتساب والمحاكاة: من، متى، الملخص، وأكواد مندوبين غير مرتبطة بموظفين (اربطها).', 'Every calculation and simulation: who, when, summary, and salesperson codes not linked to employees (link them).')},
         ],
         'tips': [T('اربط كود SOFTECH لكل مندوب بحسابه وإلا لن تظهر حوافزه.', 'Link each salesperson\'s SOFTECH code to their account, otherwise their incentives will not show.'),
+                 T('لا تُضاف تسوية ولا تُعدَّل على فترة اعتُمدت، ولا يُسوّي أحد حوافزه هو.',
+                   'No adjustment is added or changed on a finalized period, and no one adjusts their own incentive.'),
                  T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الحوافز): «احتساب» يحتاج «تعديل»، و«اعتماد التسويات» وإعادة الاحتساب الإجباري يحتاجوا «إنهاء»، والتصدير يحتاج «تصدير».',
                    'Every action is checked on the server (Permissions Matrix, incentives module): "Calculate" needs "edit", finalizing and a forced recalculation need "finalize", and export needs "export".')],
         'related': ['incentives.mine', 'analytics.performance'],
@@ -164,7 +166,7 @@ SCREENS = [
              'text': T('يفتح إيصال المندوب بالمستحق وتفاصيله، وفيه زر «🖨 طباعة» للتوقيع.', 'Opens the salesperson receipt with the payout and its detail, with "🖨 Print" for signing.'),
              'open_hint': T('على أي تسوية في تبويب «✅ التسويات النهائية».', 'On any settlement in the "✅ Final settlements" tab.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'incentives.mine',

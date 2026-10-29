@@ -92,7 +92,7 @@ SCREENS = [
              'text': T('يسحب أرصدة الصلاحية من SOFTECH لكل الفروع دلوقتي بدل انتظار المزامنة اليومية. قراءة بس.',
                        'Pulls expiry balances from SOFTECH for every branch now instead of waiting for the daily sync. Read only.'),
              'warn': T('بتاخد وقت وبتحمّل على سيرفرات الفروع. استخدمها لما البيانات تكون قديمة بس.', 'It takes time and loads the branch servers. Use it only when the data is stale.'),
-             'open_hint': T('للمدير والمشرف فقط.', 'Admin and supervisor only.')},
+             'open_hint': T('للمدير والصيادلة والمشتريات (صلاحية «تعديل» على الأصناف). لا تبدأ لو فيه مزامنة جارية.', 'Admins, pharmacists and purchasing (Catalog «edit»). It does not start while a sync is already running.')},
             {'target': 'batches-main-filters', 'label': T('بحث بالاسم / الكود…', 'Search by name / code…'),
              'text': T('ابحث بالاسم أو الكود، وصفّي بالتصنيف العام، والمستورد، وأصناف الثلاجة. الترتيب من رأس أي عمود.',
                        'Search by name or code, and filter by general class, imported and fridge items. Sort from any column header.')},
@@ -134,6 +134,6 @@ SCREENS = [
              'warn': T('اضغطه بعد التنفيذ الفعلي في SOFTECH بس — الحالة نهائية.', 'Press it only after it is really applied in SOFTECH — the status is final.'),
              'open_hint': T('قرار «معتمد» — للمدير والجودة والمشرف.', 'An "approved" decision — admin, quality and supervisor.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
 ]

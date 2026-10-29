@@ -81,6 +81,21 @@ def _make_otp_qr(plain_code: str) -> str:
 
 # ── VoucherViewSet ─────────────────────────────────────────────────────────────
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Vouchers = the `vouchers` matrix module (Batch 4, Z-9d — owner sign-off; was any logged-in
+# user): reads and the eligibility check need view; issuing create, editing / cancelling edit,
+# assigning assign; redeeming (WhatsApp OTP send / verify — verify issues the redemption
+# document) approve. Amounts, codes and the redemption logic are unchanged.
+VOUCHERS = matrix_permission('vouchers', actions={
+    'validate_eligibility': ('view',),
+    'generate_otp': ('approve',), 'verify_otp': ('approve',),
+    'assign': ('assign',), 'cancel': ('edit',),
+})
+# A redemption document: reads need view; marking it used / sharing it approve or finalize.
+VOUCHER_DOCUMENTS = matrix_permission('vouchers', post=('approve', 'finalize'))
+
+
 class VoucherViewSet(viewsets.ModelViewSet):
     """
     Full CRUD + redemption workflow:
@@ -104,7 +119,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
       GET  /api/vouchers/documents/{ref}/print/  — print receipt data
       POST /api/vouchers/documents/{ref}/whatsapp/ — WhatsApp share message
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VOUCHERS]
 
     def get_queryset(self):
         qs = Voucher.objects.select_related(
@@ -143,6 +158,21 @@ class VoucherViewSet(viewsets.ModelViewSet):
         profile = _profile(self.request)
         code    = Voucher.generate_code()
         serializer.save(created_by=profile, code=code)
+
+    # Batch 4, Z-10a: only an active voucher is edited, and once it has been used or assigned
+    # its value, type, item and limits are fixed (a PATCH re-priced vouchers already handed out).
+    # The customer is set only through assign (VoucherCreateSerializer.update).
+    VALUE_FIELDS = ('voucher_category', 'voucher_type', 'discount_pct', 'discount_amount', 'credit_amount',
+                    'free_item', 'max_discount_cap', 'min_order_value', 'applicable_items',
+                    'applicable_branches', 'max_uses', 'usage_limit_per_customer', 'usage_limit_per_day')
+
+    def update(self, request, *args, **kwargs):
+        voucher = self.get_object()
+        handed_out = voucher.times_used or voucher.assignments.exists()
+        if voucher.status != 'active' or (handed_out and any(f in request.data for f in self.VALUE_FIELDS)):
+            return Response({'detail': 'لا يمكن تعديل قيمة قسيمة مُستخدَمة أو مُخصَّصة أو غير نشطة.'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().update(request, *args, **kwargs)
 
     # ── MODULE 1: Validate eligibility ─────────────────────────────────────────
 
@@ -537,7 +567,7 @@ class DocumentViewSet(viewsets.GenericViewSet):
       GET  /api/vouchers/documents/{reference_code}/print/
       POST /api/vouchers/documents/{reference_code}/whatsapp/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VOUCHER_DOCUMENTS]
     serializer_class   = VoucherRedemptionDocumentSerializer
     lookup_field       = 'reference_code'
     lookup_url_kwarg   = 'reference_code'
@@ -724,10 +754,14 @@ def _pos_permission():
 
 
 class _CanOperatePos(IsAuthenticated):
-    """Same audience as the POS screen (apps.pos_orders.permissions.CanOperatePosOrders)."""
+    """The POS screen's audience, or `vouchers` view — the gift-coupons tab checks serials too
+    (Batch 4, Z-5b: the POS permission follows the matrix now)."""
 
     def has_permission(self, request, view):
-        return _pos_permission()().has_permission(request, view)
+        if _pos_permission()().has_permission(request, view):
+            return True
+        from core.permissions import matrix_allows
+        return matrix_allows(getattr(request.user, 'staff_profile', None), 'vouchers', 'view')
 
 
 @api_view(['GET'])

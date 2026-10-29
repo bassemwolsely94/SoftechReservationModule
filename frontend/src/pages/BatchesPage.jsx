@@ -283,6 +283,8 @@ function PurchaseExpiryAuditTab() {
   const navigate = useNavigate()
   const user     = useAuthStore(s => s.user)
   const isAdmin  = ['admin', 'supervisor'].includes(user?.role)
+  // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
+  const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
   const [from, setFrom]           = useState(_defaultExpiryFrom())
   const [to, setTo]               = useState(_defaultExpiryTo())
@@ -476,7 +478,7 @@ function PurchaseExpiryAuditTab() {
             </>
           ) : <span className="text-gray-400">لم تُنفّذ مزامنة بعد — شغّل المزامنة لجلب بيانات الشراء (٣ سنوات).</span>}
         </div>
-        {isAdmin && (
+        {canSync && (
           <button
             onClick={() => sync.mutate()}
             disabled={sync.isPending || isRunning}
@@ -942,6 +944,8 @@ const _TIER = {
 function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   const user    = useAuthStore(s => s.user)
   const isAdmin = ['admin', 'supervisor'].includes(user?.role)
+  // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
+  const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
   const [mode, setMode]         = useState(initialMode)
   const [within, setWithin]     = useState(180)
@@ -1101,7 +1105,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
         <span className="text-xs text-gray-500">
           آخر مزامنة: {lastRun ? `${_fmtDate(lastRun.started_at)} — ${lastRun.status === 'running' ? 'جارية…' : `${fmtInt(lastRun.rows_synced)} سطر / ${lastRun.nodes_ok}/${lastRun.nodes_total} فرع`}` : 'لم تُنفّذ بعد'}
         </span>
-        {isAdmin && (
+        {canSync && (
           <button data-tour="batches-main-sync" onClick={() => sync.mutate()} disabled={sync.isPending || lastRun?.status === 'running'}
                   className="px-3 py-1.5 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
             {sync.isPending || lastRun?.status === 'running' ? 'المزامنة جارية…' : '🔄 مزامنة الآن'}

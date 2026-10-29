@@ -114,8 +114,10 @@ SCREENS = [
         'tips': [
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
+            T('الشيك «تمّ الصرف» أو «ملغي» نهائي، وشيكات الخطة لا تتعدل إلا والخطة «نشطة».',
+              'A "cleared" or "cancelled" cheque is final, and the cheques of a plan change only while it is "active".'),
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'finance.payments',
@@ -123,13 +125,17 @@ SCREENS = [
         'title': T('تتبع المدفوعات', 'Payment tracking'),
         'summary': T('تسجيل ومطابقة المدفوعات الخارجية (كاش، انستاباي، فودافون كاش، تحويل بنكي): المبلغ، الفاتورة، العميل، رقم العملية، الفرع، وصورة الإيصال، ثم تأكيدها أو الاعتراض عليها.',
                      'Record and reconcile external payments (cash, Instapay, Vodafone Cash, bank transfer): amount, invoice, customer, transaction number, branch and a receipt photo, then confirm or dispute them.'),
-        'audience': T('المالية والصيادلة.', 'Finance and pharmacists.'),
+        'audience': T('المالية (المشتريات والمدير)؛ الصيدلي للعرض فقط.', 'Finance (purchasing and admins); pharmacists can only view.'),
         'steps': [
             T('«تسجيل دفعة»: طريقة الدفع والمبلغ وإجمالي الفاتورة (أو «دفعة جزئية» مع المتبقي)، كود فاتورة SOFTECH، رقم المرجع، الفرع والتاريخ، وصورة الإيصال.', '"Record payment": method, amount and invoice total (or "partial" with the remaining), SOFTECH invoice code, reference number, branch and date, and the receipt photo.'),
             T('المالية: «تأكيد» بعد التحقق، أو «اعتراض» بسبب.', 'Finance: "Confirm" after checking, or "Dispute" with a reason.'),
         ],
+        'tips': [
+            T('تعديل الدفعة مسموح وهي «انتظار» أو «متنازع عليه» فقط؛ بعد التأكيد أو التسوية تُقفل، والحذف للدفعة المنتظرة فقط.',
+              'A payment can be edited only while "pending" or "disputed"; once confirmed or reconciled it is closed, and only a pending payment can be deleted.'),
+        ],
         'related': ['finance.payment_audit'],
-        'updated': '2026-10-10',
+        'updated': '2026-10-28',
     },
     {
         'key': 'finance.payment_audit',

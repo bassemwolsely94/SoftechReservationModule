@@ -26,6 +26,7 @@ from .models import StaffProfile, ERPUser, UserActivityLog, RoleModuleAccess, RO
 from .serializers import (
     StaffProfileSerializer,
     StaffProfileListSerializer,
+    StaffPickerSerializer,
     StaffProfileUpdateSerializer,
     UserCreateSerializer,
     UserActivityLogSerializer,
@@ -33,7 +34,7 @@ from .serializers import (
 )
 from .middleware import get_current_ip
 from .passwords import password_problem
-from core.permissions import IsAdminRole
+from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
 
 # ── Inline serializer for auth/me ─────────────────────────────────────────────
@@ -322,13 +323,18 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     ordering_fields  = ['user__username', 'role', 'branch__name']
 
     def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated()]
+        if self.action == 'list':
+            return [IsAuthenticated()]        # picker for every screen — slim fields below (Z-4)
+        if self.action == 'retrieve':
+            return [IsAuthenticated(), matrix_permission('users')()]
         return [IsAuthenticated(), IsAdminRole()]
 
     def get_serializer_class(self):
         if self.action == 'list':
-            return StaffProfileListSerializer
+            profile = getattr(self.request.user, 'staff_profile', None)
+            if self.request.user.is_superuser or matrix_allows(profile, 'users', 'view'):
+                return StaffProfileListSerializer
+            return StaffPickerSerializer
         if self.action in ('update', 'partial_update'):
             return StaffProfileUpdateSerializer
         if self.action == 'create':
@@ -427,7 +433,8 @@ class ERPUserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ERPUser.objects.all().order_by('username')
     serializer_class = ERPUserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'users'                          # SOFTECH user list — user management (Z-4)
     filter_backends = [filters.SearchFilter]
     search_fields   = ['username', 'full_name', 'user_id']
     pagination_class = StandardPagination

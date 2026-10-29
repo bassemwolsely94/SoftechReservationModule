@@ -72,6 +72,7 @@ import HelpCenterPage from './pages/HelpCenterPage'
 import HelpManualPage from './pages/HelpManualPage'
 import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
 import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
+import { MOBILE_RESERVATION_ROLES, MOBILE_TRANSFER_ROLES } from './pages/mobile/mobileAccess'
 import MobileNewReservationPage from './pages/mobile/MobileNewReservationPage'
 import MobileReservationDetailPage from './pages/mobile/MobileReservationDetailPage'
 import MobileTransfersPage from './pages/mobile/MobileTransfersPage'
@@ -190,12 +191,14 @@ const queryClient = new QueryClient({
 
 // Bottom-tab navigation for the standalone mobile surfaces (/m). One tab per
 // section; "new" is reached via each list's floating + button (not a tab).
-// `roles` (when present) gates the tab; MobileLayout filters by the user's role.
+// `roles` (when present) gates the tab; MobileLayout filters by the user's role. Reservations /
+// transfers follow the matrix's view grant (Batch 4, Z-11i — delivery / purchasing saw tabs that
+// loaded nothing); roles without reservations land on «لوحتي» (MobileReservationsPage redirects).
 const MOBILE_TABS = [
   { to: '/m/me',           label: 'لوحتي',      icon: '🙋' },
   { to: '/m/pos',          label: 'نقطة البيع', icon: '🧾', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'] },
-  { to: '/m/reservations', label: 'الحجوزات',  icon: '📋' },
-  { to: '/m/transfers',    label: 'التحويلات', icon: '🔀' },
+  { to: '/m/reservations', label: 'الحجوزات',  icon: '📋', roles: MOBILE_RESERVATION_ROLES },
+  { to: '/m/transfers',    label: 'التحويلات', icon: '🔀', roles: MOBILE_TRANSFER_ROLES },
   { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', roles: ['admin', 'pharmacist', 'call_center', 'salesperson', 'purchasing', 'supervisor', 'quality_manager'] },
   { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', roles: ['admin', 'call_center', 'supervisor', 'quality_manager', 'pharmacist'] },

@@ -1,5 +1,5 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import (
     InsuranceClientViewSet, InsuranceSubClientViewSet,
     InsuranceContractViewSet, InsuranceClaimViewSet,
@@ -9,7 +9,7 @@ from .views import (
     InsuranceSeparationListViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-9c)
 router.register('clients',        InsuranceClientViewSet,        basename='insurance-clients')
 router.register('subclients',     InsuranceSubClientViewSet,     basename='insurance-subclients')
 router.register('contracts',      InsuranceContractViewSet,      basename='insurance-contracts')

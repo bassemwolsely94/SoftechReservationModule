@@ -16,7 +16,7 @@ from django.test import override_settings
 from core.middleware.module_access import required
 
 from .fixtures import NON_ADMIN_ROLES, granted
-from .routes import Tripwire, api_routes, is_public, known_public, view_id
+from .routes import Tripwire, api_routes, handles, is_public, known_public, view_id
 
 # Detail routes are called with an id no fixture can create, so a verdict never depends on
 # the database's id sequence (fresh CI database vs reused local one). Until Batches 4/5
@@ -79,10 +79,11 @@ def _call(client, method, path):
         return f'raised {type(exc).__name__}'
 
 
-def sweep(mode: str, clients: dict, roles=NON_ADMIN_ROLES) -> SweepResult:
-    """Run every role (plus admin as the reference caller) over every protected route."""
+def sweep(mode: str, clients: dict, roles=NON_ADMIN_ROLES, prefixes=None) -> SweepResult:
+    """Run every role (plus admin as the reference caller) over every protected route —
+    or only the /api/<prefix>/ routes in `prefixes` (Batch 4 per-module tests)."""
     res = SweepResult()
-    routes = list(protected_routes())
+    routes = [p for p in protected_routes() if prefixes is None or p.split('/')[2] in prefixes]
     previous = logging.root.manager.disable
     logging.disable(logging.CRITICAL)      # thousands of expected RBAC/app warnings
     try:
@@ -90,7 +91,7 @@ def sweep(mode: str, clients: dict, roles=NON_ADMIN_ROLES) -> SweepResult:
             for path in routes:
                 for method in ('GET', 'POST'):
                     need = required(path, method)
-                    if need is None:
+                    if need is None or not handles(path, method):     # no such endpoint (Z-11b)
                         continue
                     admin_code = _call(clients['admin'], method, path)
                     if classify(True, admin_code, admin_code) == 'crash':

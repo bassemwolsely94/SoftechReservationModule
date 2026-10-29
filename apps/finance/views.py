@@ -13,6 +13,10 @@ from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import deny_unless, matrix_permission
+
+FINANCE = matrix_permission('finance')        # every finance view checks the matrix (Batch 4, Z-3)
 from rest_framework.response import Response
 
 from .models import (
@@ -74,7 +78,7 @@ def _period_from_params(request) -> FinancialPeriod | None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def finance_dashboard(request):
     """
     Consolidated financial dashboard.
@@ -141,7 +145,7 @@ def finance_dashboard(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FinancialPeriodListView(generics.ListAPIView):
-    permission_classes  = [IsAuthenticated]
+    permission_classes  = [IsAuthenticated, FINANCE]
     serializer_class    = FinancialPeriodSerializer
     queryset            = FinancialPeriod.objects.all()
     filter_backends     = [filters.OrderingFilter]
@@ -154,7 +158,7 @@ class FinancialPeriodListView(generics.ListAPIView):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class AccountListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = AccountSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['code', 'name', 'name_ar', 'softech_code']
@@ -173,7 +177,7 @@ class AccountListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def account_tree(request):
     """Return root accounts with their children nested (for small COA trees)."""
     roots = Account.objects.filter(parent__isnull=True, is_active=True).order_by('code')
@@ -185,7 +189,7 @@ def account_tree(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FinancialSnapshotListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = FinancialSnapshotSerializer
     filter_backends    = [filters.OrderingFilter]
     ordering_fields    = ['period', 'net_revenue', 'gross_profit']
@@ -212,7 +216,7 @@ class FinancialSnapshotListView(generics.ListAPIView):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def profit_and_loss(request):
     """
     Profit & Loss statement for a period.
@@ -273,7 +277,7 @@ def profit_and_loss(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class JournalEntryListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_number', 'description', 'reference']
     ordering_fields    = ['entry_date', 'total_debit']
@@ -299,7 +303,7 @@ class JournalEntryListView(generics.ListAPIView):
 
 
 class JournalEntryDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = JournalEntrySerializer
     queryset           = JournalEntry.objects.prefetch_related('lines__account')
 
@@ -309,7 +313,7 @@ class JournalEntryDetailView(generics.RetrieveAPIView):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class AccountBalanceListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = AccountBalanceSerializer
     filter_backends    = [filters.OrderingFilter]
     ordering_fields    = ['account__code', 'closing_balance']
@@ -330,7 +334,7 @@ class AccountBalanceListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def trial_balance(request):
     """
     Trial balance for a period.
@@ -370,7 +374,7 @@ def trial_balance(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TreasuryMovementListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = TreasuryMovementSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_number', 'party_name', 'party_code', 'reference']
@@ -395,7 +399,7 @@ class TreasuryMovementListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def cash_flow_summary(request):
     """
     Direct cash flow summary for a period.
@@ -428,7 +432,7 @@ def cash_flow_summary(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ExpenseRecordListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ExpenseRecordSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_ref', 'description', 'vendor', 'reference']
@@ -475,7 +479,7 @@ class ExpenseRecordListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def expense_breakdown(request):
     """
     Expense breakdown by category for a period.
@@ -530,7 +534,7 @@ def expense_breakdown(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def expense_subcategories(request):
     """
     Return distinct sub_category values with totals.
@@ -584,7 +588,7 @@ def expense_subcategories(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FinanceSchemaTableListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = FinanceSchemaTableListSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['table_name', 'inferred_purpose', 'category']
@@ -606,7 +610,7 @@ class FinanceSchemaTableListView(generics.ListAPIView):
 
 
 class FinanceSchemaTableDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = FinanceSchemaTableSerializer
     queryset           = FinanceSchemaTable.objects.all()
 
@@ -621,14 +625,15 @@ class FinanceSchemaTableDetailView(generics.RetrieveUpdateAPIView):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def trigger_discover(request):
     """
     Phase 0 — trigger schema discovery in a background thread.
-    Requires admin/pharmacist role.
+    Requires finance edit (Z-2).
     """
-    if not _is_admin_or_pharmacist(request.user):
-        return Response({'detail': 'Not authorized.'}, status=403)
+    denied = deny_unless(request, 'finance', 'edit')
+    if denied:
+        return denied
 
     from apps.finance.management.commands.discover_finance_schema import Command
 
@@ -651,15 +656,16 @@ def trigger_discover(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def trigger_sync(request):
     """
     Phase 9 — trigger financial sync for a period.
     Body (optional): { "year": 2024, "month": 3 } or { "months": 6 }
-    Requires admin/pharmacist role.
+    Requires finance edit (Z-2).
     """
-    if not _is_admin_or_pharmacist(request.user):
-        return Response({'detail': 'Not authorized.'}, status=403)
+    denied = deny_unless(request, 'finance', 'edit')
+    if denied:
+        return denied
 
     import datetime
     from apps.finance.engine.sync_engine import FinanceSyncEngine
@@ -712,7 +718,7 @@ def trigger_sync(request):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FinanceSyncRunListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = FinanceSyncRunSerializer
     filter_backends    = [filters.OrderingFilter]
     ordering           = ['-started_at']

@@ -154,6 +154,10 @@ SCREENS = [
         'tips': [
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, invoices module): editing and running OCR need "edit", "Confirm", "Reject" and creating a return need "approve", and sending to SOFTECH needs "finalize".'),
+            T('بعد دخول الفاتورة طابور الترحيل أو ترحيلها إلى SOFTECH لا يُعدَّل رأسها ولا سطورها — التصحيح بمرتجع.',
+              'Once an invoice is queued for or posted to SOFTECH its header and lines cannot be edited — correct it with a return.'),
+            T('تعديل فاتورة «مُأكَّدة» (أو فشل ترحيلها) يرجعها «قيد المراجعة» — أكّدها من جديد قبل الترحيل.',
+              'Editing a "confirmed" (or push-failed) invoice puts it back to "review" — confirm it again before sending.'),
             T('لو ظهر «سيتغيّر كود المورد لهذا الصنف» فهذا تعارض في ربط كود المورد بالأصناف — اعتمده فقط لو متأكد.', 'If "this item\'s supplier code will change" appears, it is a supplier-code mapping conflict — approve only if you are sure.'),
             T('لو الترحيل غير مُفعّل تعمل الشاشة في «وضع المعاينة» فقط.', 'If posting is not enabled, the screen works in "preview mode" only.'),
             T('محرك القراءة: «تلقائي» يقرأ أولاً بمحرّك مجاني محلي (Tesseract بالعربية — سريع ودقيق على الفواتير المطبوعة) وبه قوالب أعمدة جاهزة للموزّعين الكبار (رامكو، فارما أوفرسيز) تستخرج الاسم والسعر والخصم والصلاحية؛ ولا يلجأ إلى Gemini (المدفوع) إلا إذا كانت النتيجة المجانية ضعيفة — لتحقيق أقصى استخراج مجاني مع ضمان الجودة. يمكن فرض محرّك معيّن عند رفع الحزمة أو إعادة القراءة. راجع الأسعار دائماً.',
@@ -234,6 +238,6 @@ SCREENS = [
                        'No preview window: each invoice is written as final. Any invoice with errors or warnings is refused.'),
              'open_hint': T('حدّد مربع الاختيار على بطاقات الفواتير المُأكَّدة.', 'Tick the checkbox on confirmed invoice cards.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
 ]

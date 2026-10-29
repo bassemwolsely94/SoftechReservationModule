@@ -27,6 +27,7 @@ ALL_MODULES = [
     'reservations', 'demand', 'transfers', 'followups', 'delivery',
     'customers', 'chronic', 'campaigns', 'vouchers',
     'catalog', 'stockcount', 'shortage',
+    'offers',        # العروض والتخفيضات — under المخزون, not POS (Z-5); checkout evaluation = pos
     'purchasing', 'invoices', 'incentives', 'cheques', 'finance',
     'insurance', 'commerce', 'replacement',
     'callcenter', 'hr', 'approvals', 'analytics', 'dashboard',
@@ -71,7 +72,7 @@ PERMISSIONS = {
         'transfers':    RO,
         'followups':    {'view', 'create', 'edit', 'export', 'assign'},
         'customers':    {'view', 'edit'},           # update notes/contact, no delete
-        'chronic':      RO,
+        'chronic':      {'view', 'edit'},    # classify chronic items (owner 2026-10-29, Z-11i)
         'catalog':      RO,
         'vouchers':     {'view', 'approve'},        # initiate + confirm OTP redemption
         'shortage':     {'view', 'create', 'edit'},
@@ -145,6 +146,7 @@ PERMISSIONS = {
         'catalog':      {'view', 'edit', 'export', 'approve'},
         'transfers':    {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'shortage':     {'view', 'create', 'edit', 'approve', 'export'},
+        'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'stockcount':   RE,
         'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
@@ -217,10 +219,12 @@ PERMISSIONS = {
         'transfers':    {'view', 'approve', 'export'},
         'followups':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'customers':    {'view', 'edit', 'export'},
-        'chronic':      RO,
+        'chronic':      {'view', 'edit'},    # classify chronic items (owner 2026-10-29, Z-11i)
+        'stockcount':   RW,                  # run counts (owner 2026-10-29, Z-11i)
         'catalog':      RO,
         'vouchers':     {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'shortage':     {'view', 'create', 'edit', 'approve', 'export'},
+        'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'callcenter':   {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
         'analytics':    RE,

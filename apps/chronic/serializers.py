@@ -112,7 +112,7 @@ class ItemIngredientMapSerializer(serializers.ModelSerializer):
             'concentration', 'is_primary',
             'mapped_by', 'mapped_by_name', 'mapped_at',
         ]
-        read_only_fields = ['id', 'mapped_at']
+        read_only_fields = ['id', 'mapped_at', 'mapped_by']   # set by the view (Batch 4, Z-10c)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

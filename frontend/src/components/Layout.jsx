@@ -126,7 +126,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/omni/inbox',            icon: '📥', label: 'الصندوق الموحد',  roles: ['admin','call_center','supervisor'] },
       { to: '/omni/accounts',         icon: '📡', label: 'حسابات القنوات',  roles: ['admin','supervisor'] },
-      { to: '/omni/wallboard',        icon: '📊', label: 'لوحة المشرف',     roles: ['admin','supervisor','quality_manager'] },
+      { to: '/omni/wallboard',        icon: '📊', label: 'لوحة المشرف',     roles: ['admin','supervisor','quality_manager','call_center'] },
       { to: '/omni/automations',      icon: '⚙️', label: 'الأتمتة',         roles: ['admin','supervisor'] },
       { to: '/omni/analytics',        icon: '📈', label: 'تحليلات التواصل', roles: ['admin','supervisor','quality_manager'] },
       { to: '/callcenter',            icon: '📞', label: 'الحالات',         roles: ['admin','call_center','supervisor'] },
@@ -143,7 +143,6 @@ const NAV_GROUPS = [
       { to: '/customers/merge',    icon: '🔀', label: 'دمج الأكواد المكررة', roles: ['admin','supervisor','call_center'] },
       { to: '/vouchers',           icon: '🎫', label: 'القسائم',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/vouchers?tab=coupons', icon: '🎟️', label: 'كوبونات الهدايا',   roles: ['admin','supervisor','purchasing','quality_manager'] },
-      { to: '/offers',             icon: '🎁', label: 'العروض والتخفيضات',   roles: ['admin','supervisor','purchasing'] },
       { to: '/loyalty',            icon: '🏆', label: 'النقاط والولاء',      roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
       { to: '/loyalty/branch',     icon: '🔍', label: 'استعلام نقاط الفرع', roles: ['admin','branch','pharmacist','supervisor'] },
       { to: '/referral',           icon: '🔗', label: 'الإحالات',            roles: ['admin','call_center','supervisor'] },
@@ -166,6 +165,7 @@ const NAV_GROUPS = [
       { to: '/ingredient-search',    icon: '🔬', label: 'بحث المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor','call_center','quality_manager'] },
       { to: '/image-enrichment',     icon: '🖼️', label: 'صور المنتجات',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/recommendations',      icon: '🔗', label: 'التوصيات الذكية', roles: ['admin','pharmacist','call_center','purchasing'] },
+      { to: '/offers',               icon: '🎁', label: 'العروض والتخفيضات', roles: ['admin','supervisor','purchasing'] },
     ],
   },
   {

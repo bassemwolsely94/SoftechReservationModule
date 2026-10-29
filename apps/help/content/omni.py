@@ -270,7 +270,8 @@ SCREENS = [
         'title': T('لوحة المشرف الحية', 'Live supervisor wallboard'),
         'summary': T('تتحدث كل 5 ثوانٍ: المكالمات الجارية مع «استماع صامت» و«همس للعامل دون سماع العميل»، إحصاءات القوائم اليوم (مُجابة، مهجورة، متوسط الانتظار والحديث)، حالة العمال، حمل واتساب، والمحادثات غير المُسندة.',
                      'Refreshes every 5 seconds: active calls with "silent listen" and "whisper to the agent without the customer hearing", today\'s queue stats (answered, abandoned, average wait and talk), agent states, WhatsApp load, and unassigned conversations.'),
-        'audience': T('المشرفون والمدير والجودة.', 'Supervisors, admins and quality.'),
+        'audience': T('المشرفون والمدير والجودة والكول سنتر؛ «استماع» و«همس» للمشرفين والمدير فقط.',
+                      'Supervisors, admins, quality and the call center; "listen" and "whisper" are for supervisors and admins only.'),
         'workflows': [],
         'related': ['callcenter.analytics', 'callcenter.pbx'],
         'tour': [
@@ -297,7 +298,7 @@ SCREENS = [
             {'target': 'omni-wallboard-agents', 'label': T('👥 العمال', '👥 Agents'),
              'text': T('كل تحويلة عامل: في مكالمة، متاح، أو غير مسجل.', 'Each agent extension: on a call, available or not registered.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
     {
         'key': 'omni.automations',
@@ -462,8 +463,8 @@ SCREENS = [
              'text': T('ينقل المسودة لـ«بانتظار الموافقة». بعدها مفيش تعديل إلا لو اترفضت.', 'Moves the draft to "Pending approval". No more edits unless it is rejected.'),
              'open_hint': T('افتح حملة «مسودة» ليها نص رسالة.', 'Open a "Draft" campaign that has message text.')},
             {'target': 'omni-campaigns-approve', 'label': T('✅ اعتماد', '✅ Approve'),
-             'text': T('يعتمد الحملة ويسجّل اسمك ووقت الاعتماد. حالياً أي حد يقدر يفتح الحملات يقدر يعتمد، حتى اللي أنشأها.',
-                       'Approves the campaign and records your name and time. Today anyone who can open campaigns can approve, even its creator.'),
+             'text': T('يعتمد الحملة ويسجّل اسمك ووقته. يعتمد ويرفض ويجدول المشرفون والمشتريات والمدير؛ الكول سنتر يكتب الحملة ويطلب الموافقة.',
+                       'Approves it and records your name and time. Supervisors, purchasing and admins approve, reject and schedule; the call center drafts and requests approval.'),
              'warn': T('اعتمد بس بعد ما تراجع النص والجمهور بنفسك — الخطوة الجاية إرسال للعملاء.', 'Approve only after checking the text and audience yourself — the next step sends to customers.'),
              'open_hint': T('افتح حملة «بانتظار الموافقة».', 'Open a "Pending approval" campaign.')},
             {'target': 'omni-campaigns-reject', 'label': T('❌ رفض', '❌ Reject'),
@@ -487,6 +488,6 @@ SCREENS = [
              'warn': T('كل ضغطة ثم إرسال = رسالة للعميل. ماتبعتش نفس الرسالة مرتين.', 'Each click then send = a message to the customer. Never send the same one twice.'),
              'open_hint': T('افتح حملة اتبعتت واختار تبويب «الرسائل».', 'Open a sent campaign and choose the "Messages" tab.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
 ]

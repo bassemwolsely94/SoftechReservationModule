@@ -1,9 +1,9 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from django.urls import path
 from .views import VoucherViewSet, DocumentViewSet, coupon_check
 from . import coupon_views as cv
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-9d)
 router.register('vouchers',  VoucherViewSet,  basename='vouchers')
 
 # Documents use reference_code as lookup key, not pk

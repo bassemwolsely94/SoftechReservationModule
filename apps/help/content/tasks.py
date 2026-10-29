@@ -173,7 +173,9 @@ SCREENS = [
             {'target': 'tasks-list-dashboard', 'label': T('📊 لوحة التحكم', '📊 Dashboard'),
              'text': T('ينقلك للوحة المهام: المتأخر، معدل الإتمام، والتوزيع حسب الفرع.', 'Goes to the tasks dashboard: overdue, completion rate and the split by branch.')},
         ],
-        'updated': '2026-10-26',
+        'tips': [T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
+                   'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
+        'updated': '2026-10-28',
     },
     {
         'key': 'tasks.detail',

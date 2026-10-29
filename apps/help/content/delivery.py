@@ -205,6 +205,8 @@ SCREENS = [
               'If the driver did not record a status in their app, you can record it here; it shows as "manual entry".'),
             T('كل زر بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول التوصيل): «تكليف سائق» يحتاج «إسناد»، «إلغاء» يحتاج «اعتماد»، و«إغلاق» و«تحصيل نقدي» يحتاجوا «إنهاء» أو «اعتماد». لو ظهرت رسالة «ليس لديك صلاحية» اطلبها من المدير.',
               'Every button is checked on the server (Permissions Matrix, delivery module): "Assign driver" needs "assign", "Cancel" needs "approve", and "Close" and "Cash collection" need "finalize" or "approve". If you see "you do not have permission", ask your manager.'),
+            T('بعد خروج الطلب للتوصيل لا تتغير قيمته ولا رسومه ولا أصنافه، والطلب المُسلَّم أو الملغي أو المغلق لا يُعدَّل.',
+              'Once an order is out for delivery its value, fees and items cannot change, and a delivered, cancelled or closed order cannot be edited.'),
         ],
         'related': ['delivery.dispatch', 'delivery.analytics', 'delivery.driver'],
         'tour': [
@@ -266,7 +268,7 @@ SCREENS = [
                        'Opens WhatsApp with a ready message about the order status. It is sent only when you press send in WhatsApp.'),
              'open_hint': T('افتح طلب له رقم هاتف وفي مرحلة تسمح بإبلاغ العميل.', 'Open an order with a phone number at a stage that allows notifying the customer.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'delivery.dispatch',

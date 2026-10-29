@@ -94,7 +94,8 @@ SCREENS = [
         'title': T('موافقات الأسعار والخصومات', 'Price & discount approvals'),
         'summary': T('طلب تعديل سعر أو خصم لصنف، ومراجعة واعتماد الطلبات وتنفيذها في SOFTECH، ومتابعة المعلّق والتدقيق.',
                      'Request a price or discount change for an item, review and approve requests and execute them in SOFTECH, and follow pending items and the audit.'),
-        'audience': T('أي موظف يطلب؛ المدير يعتمد.', 'Any employee requests; the manager approves.'),
+        'audience': T('الصيدلي والمشتريات والمشرف ومدير الجودة يطلبون؛ المدير يعتمد.',
+                      'Pharmacists, purchasing, supervisors and the quality manager request; the manager approves.'),
         'tabs': [
             {'key': 'requests', 'title': T('الطلبات', 'Requests'), 'body': T('الطلبات حسب الحالة مع التعديلات المطلوبة ومن طلبها. «اعتماد» أو «رفض»، و«سجل تغييرات السعر» لكل صنف، و«تراجع» لطلب منفّذ.', 'Requests by status with the requested changes and who asked. "Approve" or "Reject", "Price change log" per item, and "Rollback" for an executed request.')},
             {'key': 'sla', 'title': T('متابعة المعلّقة (SLA)', 'Pending follow-up (SLA)'), 'body': T('الطلبات التي تأخر اعتمادها — لا تترك طلباً معلقاً طويلاً.', 'Requests whose approval is late — do not leave a request waiting long.')},
@@ -174,7 +175,7 @@ SCREENS = [
                        'Writes to SOFTECH HQ for every item in the scan; make sure the HQ values are the right ones.'),
              'open_hint': T('للمدير: تبويب «تدقيق النسخ المتماثل»، ثم اختر فحصاً.', 'Admins: the "Replication audit" tab, then pick a scan.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-27',
     },
     {
         'key': 'pricing.alignment',

@@ -19,6 +19,7 @@ class BankStatementImportSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'status', 'total_lines', 'matched_lines', 'unmatched_lines',
             'error_message', 'imported_at', 'completed_at',
+            'imported_by',          # set on upload (Batch 4, Z-10c — a PATCH rewrote it)
         ]
 
     def get_match_rate(self, obj) -> float:

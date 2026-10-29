@@ -59,7 +59,8 @@ SCREENS = [
         'title': T('مصنّف الأدوية المزمنة', 'Chronic medicine classifier'),
         'summary': T('تحديد أي الأصناف أدوية مزمنة، وإدارة المواد الفعّالة وبروتوكولات المتابعة، وتوليد مهام المتابعة من تاريخ الشراء.',
                      'Decide which items are chronic medicines, manage active ingredients and follow-up protocols, and generate follow-up tasks from purchase history.'),
-        'audience': T('الصيادلة والمدير والمشرفون.', 'Pharmacists, admins and supervisors.'),
+        'audience': T('الصيادلة والمشرفون والكول سنتر والمدير يصنّفون؛ الجودة والمشتريات للاطلاع.',
+                      'Pharmacists, supervisors, the call center and admins classify; quality and purchasing view.'),
         'tabs': [
             {'key': 'classifier', 'title': T('🔬 مصنّف الأصناف', '🔬 Item classifier'),
              'body': T('ابحث عن صنف (اسم، كود، باركود) وصفِّ (غير مصنَّف / مصنَّف / مزمن). «تصنيف»: اربطه بمادة فعّالة موجودة أو أنشئ جديدة (الاسم، ATC، التركيز)، وحدد هل هو دواء مزمن وتصنيف المرض ووسوم الوصفة.',
@@ -132,7 +133,7 @@ SCREENS = [
                        'Confidence is no guarantee. Review any medical field (dose, warnings, interactions) one by one before accepting.'),
              'open_hint': T('تبويب «🤖 الإثراء الذكي»، اختار صنف عنده اقتراحات معلّقة.', '"🤖 AI enrichment" tab, pick an item with pending suggestions.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
     {
         'key': 'chronic.composition',

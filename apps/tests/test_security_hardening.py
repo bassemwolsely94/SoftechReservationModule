@@ -422,8 +422,9 @@ class ModuleAccessMiddlewareTests(TestCase):
     @override_settings(RBAC_ENFORCEMENT='log')
     def test_log_mode_never_blocks(self):
         with self.assertLogs('elrezeiky.rbac', level='WARNING') as logs:
-            r = self._client('viewer').get('/api/sync/status/')
-        self.assertNotEqual(r.status_code, 403)
+            r = self._client('viewer').get(self.URL)      # sync/status is read-open since Z-1
+        # the middleware lets it through (the sync view itself refuses since Z-4)
+        self.assertNotIn('module', r.json() if r.status_code == 403 else {})
         self.assertIn('would-deny', logs.output[0])
 
     @override_settings(RBAC_ENFORCEMENT='enforce')
@@ -431,7 +432,7 @@ class ModuleAccessMiddlewareTests(TestCase):
         from apps.users.models import RoleModuleAccess
         RoleModuleAccess.objects.all().delete()
         module_access.clear_cache()
-        r = self._client('viewer').get('/api/sync/status/')
+        r = self._client('viewer').get(self.URL)
         self.assertNotEqual(r.status_code, 403)
 
     @override_settings(RBAC_ENFORCEMENT='enforce')

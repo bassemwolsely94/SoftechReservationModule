@@ -168,6 +168,8 @@ SCREENS = [
         'tips': [
             T('لا تطلب من العميل إرسال الرمز في رسالة؛ يقرأه لك فقط.', 'Do not ask the customer to forward the code in a message; they only read it to you.'),
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
+            T('بعد استخدام القسيمة أو تخصيصها لا تتغير قيمتها ولا حدودها، والعميل يُحدَّد من «تخصيص» فقط.',
+              'Once a voucher has been used or assigned its value and limits cannot change, and the customer is set only through "Assign".'),
         ],
         'related': ['vouchers.mobile', 'pos.order'],
         'tour': [
@@ -225,7 +227,7 @@ SCREENS = [
              'open_hint': T('تبويب «🎟️ كوبونات الهدايا» ← «الدفعات»، دفعة بانتظار الإدخال. للمسؤول والمشتريات والمشرف.',
                             '"🎟️ Gift coupons" tab → "Batches", a batch waiting to be entered. For admin, purchasing and supervisor.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
     },
     {
         'key': 'vouchers.mobile',

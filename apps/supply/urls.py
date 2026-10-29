@@ -1,12 +1,12 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (AvailabilityBatchViewSet, OrderListViewSet, SupplyCaseViewSet,
                     SupplyDecisionViewSet, freshness, freshness_refresh_purchases, freshness_sync_stock,
                     purchase_price_item, purchase_prices, supplier_code_report, supplier_comparison,
                     supplier_network)
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-7a)
 router.register(r'availability', AvailabilityBatchViewSet, basename='availability-batch')
 router.register(r'cases', SupplyCaseViewSet, basename='supply-case')
 router.register(r'order-list', OrderListViewSet, basename='supply-order-list')

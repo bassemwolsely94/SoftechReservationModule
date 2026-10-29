@@ -1,20 +1,2 @@
 # Owner: Batch 4. Requests by a role the code matrix DENIES that still started a background thread / thread-pool job, HTTP call, socket or subprocess (blocked by the Tripwire). Must reach empty.
 
-call_center POST /api/enrichment/batches/
-call_center POST /api/enrichment/recompute-scores/
-delivery POST /api/enrichment/batches/
-delivery POST /api/enrichment/recompute-scores/
-pharmacist POST /api/finance/trigger-discover/
-pharmacist POST /api/finance/trigger-sync/
-pharmacist POST /api/purchasing/seasonality/refresh/
-pharmacist POST /api/purchasing/sync-items/
-pharmacist POST /api/purchasing/trigger/
-quality_manager POST /api/enrichment/batches/
-quality_manager POST /api/enrichment/recompute-scores/
-salesperson POST /api/enrichment/batches/
-salesperson POST /api/enrichment/recompute-scores/
-supervisor POST /api/enrichment/batches/
-supervisor POST /api/enrichment/recompute-scores/
-supervisor POST /api/forecasting/kpi-board/refresh/
-viewer POST /api/enrichment/batches/
-viewer POST /api/enrichment/recompute-scores/

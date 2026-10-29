@@ -35,6 +35,10 @@ from django.db.models import (
 from django.db.models.functions import ExtractHour, ExtractWeekDay, TruncDate
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
+
+from core.permissions import matrix_permission
+
+ANALYTICS = matrix_permission('analytics')     # Batch 4, Z-9a — was any logged-in user
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -476,7 +480,7 @@ def _net_revenue_from_qs(qs):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def filter_options(request):
     """
     GET /api/analytics/filter-options/
@@ -706,7 +710,7 @@ def filter_options(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def sales_overview(request):
     """
     GET /api/analytics/sales/
@@ -1107,7 +1111,7 @@ def sales_overview(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def customer_analytics(request):
     """GET /api/analytics/customers/"""
     p  = request.query_params
@@ -1225,7 +1229,7 @@ def customer_analytics(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def performance_analytics(request):
     """GET /api/analytics/performance/"""
     p        = request.query_params
@@ -1412,7 +1416,7 @@ def performance_analytics(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def inventory_analytics(request):
     """
     GET /api/analytics/inventory/
@@ -1634,7 +1638,7 @@ def inventory_analytics(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def customer_search(request):
     """
     GET /api/analytics/customer-search/?q=term&limit=20
@@ -1687,7 +1691,7 @@ def customer_search(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def customer_churn(request):
     """
     GET /api/analytics/churn/
@@ -1809,7 +1813,7 @@ def customer_churn(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def branch_contribution(request):
     """
     GET /api/analytics/branch-contribution/
@@ -1945,7 +1949,7 @@ def branch_contribution(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, ANALYTICS])
 def inventory_investment(request):
     """
     GET /api/analytics/inventory-investment/

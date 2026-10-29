@@ -11,7 +11,7 @@ import re
 import threading
 from unittest import mock
 
-from django.urls import URLPattern, URLResolver, get_resolver
+from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve
 from rest_framework.permissions import AllowAny
 
 
@@ -89,6 +89,21 @@ def api_routes(id_value='1'):
         if path.startswith('/api/') and path not in seen:
             seen.add(path)
             yield path, cb
+
+
+def handles(path, method):
+    """Whether the view Django dispatches `path` to implements `method` (Batch 4, Z-11b). A
+    request with a method the view lacks is DRF's 405 — no endpoint, nothing to authorize — but a
+    strict permission class answers 403 first, which the sweep used to count as an overblock."""
+    try:
+        cb = resolve(path).func
+    except Resolver404:
+        return True                      # let the sweep see whatever answers
+    actions = getattr(cb, 'actions', None)
+    if actions:                          # viewset: the router's method → action map
+        return method.lower() in actions
+    cls = getattr(cb, 'cls', None) or getattr(cb, 'view_class', None)
+    return cls is None or hasattr(cls, method.lower())   # APIView / @api_view: one attr per method
 
 
 def known_public(view_id_):

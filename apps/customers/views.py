@@ -2,7 +2,7 @@ from rest_framework import viewsets, filters, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count
 
@@ -19,8 +19,20 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+class _CreateNeedsEdit(BasePermission):
+    """Creating a customer record needs customers edit (Batch 4, Z-9c — any logged-in user could;
+    no screen calls it today). Every other action on this viewset is unchanged."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        if getattr(view, 'action', None) != 'create':
+            return True
+        from core.permissions import matrix_allows
+        return matrix_allows(getattr(request.user, 'staff_profile', None), 'customers', 'edit')
+
+
 class CustomerViewSet(viewsets.ModelViewSet):
-    permission_classes  = [IsAuthenticated]
+    permission_classes  = [IsAuthenticated, _CreateNeedsEdit]
     # search after ordering: exact text first, the chosen sort within each rank
     filter_backends     = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']

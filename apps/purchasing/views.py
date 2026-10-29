@@ -23,6 +23,8 @@ from django.db.models import Sum, Count, Q, F, DecimalField, ExpressionWrapper
 from rest_framework import generics, permissions, filters, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
+
+from .access import PURCHASING, CanReadRunStatus
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -163,11 +165,11 @@ class RunListView(generics.ListAPIView):
     """Recent engine runs."""
     queryset           = DemandCalculationRun.objects.all().order_by('-started_at')[:50]
     serializer_class   = RunSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanReadRunStatus])
 def latest_run(request):
     """
     Return the most recent run (or 404 if none yet).
@@ -199,7 +201,7 @@ INTERRUPTED_MESSAGE = ('توقف التشغيل قبل اكتماله — انق
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanReadRunStatus])
 def active_run(request):
     """
     Return the currently running/pending DemandCalculationRun, if any.
@@ -248,7 +250,7 @@ def active_run(request):
 # ── Summary (server-side — no page-size cap) ──────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def purchasing_summary(request):
     """
     Pre-computed summary stats for the dashboard header cards.
@@ -327,7 +329,7 @@ def _with_season(qs):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def seasonality_status(request):
     """When the seasonality was last computed (+ live progress) — for the refresh button."""
     from .access import can_run_engine
@@ -340,7 +342,7 @@ def seasonality_status(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def seasonality_refresh(request):
     """Pull the missing months from SOFTECH (SELECT only) and recompute — in the background."""
     from .access import can_run_engine
@@ -366,7 +368,7 @@ class MetricsListView(generics.ListAPIView):
       ?ordering=priority|-priority|monthly_avg|gap|coverage_months|...
     """
     serializer_class   = MetricsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['branch', 'abc_class']
     search_fields      = ['item__name', 'item__softech_id']
@@ -408,7 +410,7 @@ class AggregatedListView(generics.ListAPIView):
       ?ordering=total_monthly_value|-total_monthly_value|...
     """
     serializer_class   = AggregatedSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class']
     search_fields      = ['item__name', 'item__softech_id']
@@ -1689,7 +1691,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def export_purchasing(request):
     """
     Download purchasing data as Excel (.xlsx) or CSV.
@@ -1764,7 +1766,7 @@ def export_purchasing(request):
 # ── Manual trigger (background thread) ───────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def trigger_run(request):
     """
     Admin/pharmacist endpoint to trigger an immediate engine run.
@@ -1781,7 +1783,7 @@ def trigger_run(request):
     if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
     if not is_engine_admin(request.user) and (request.data.get('full') or request.data.get('params')):
-        return Response({'detail': 'المزامنة الكاملة وضبط معاملات المحرك للمدير أو الصيدلي فقط — '
+        return Response({'detail': 'المزامنة الكاملة وضبط معاملات المحرك للمدير فقط — '
                                    'استخدم «▶ تشغيل» للتشغيل السريع.'}, status=403)
     logger.info('[trigger_run] engine run requested by %s (full=%s)',
                 request.user.username, bool(request.data.get('full')))
@@ -1815,7 +1817,7 @@ def trigger_run(request):
 # ── Items / catalog sync (on-demand: new items + column updates) ─────────────
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def sync_items_now(request):
     """
     Refresh the item catalog from SOFTECH on demand — new items plus column
@@ -1823,8 +1825,10 @@ def sync_items_now(request):
     archive, tax rates). Runs categories + items + barcodes in a background thread
     (read-only SELECT on SOFTECH). Poll /sync/status/ for progress.
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    # admin, purchasing and the SOFTECH supply groups, as a quick engine run — the screen's refresh
+    # button (Batch 4, Z-11g — overblock review decision 5; was admin only since Z-2)
+    from .access import can_run_engine
+    if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     from apps.sync.tasks import run_items_sync
@@ -1855,7 +1859,7 @@ def sync_items_now(request):
 # ── Catch-up sync (manual override when scheduled 2 AM sync missed SOFTECH) ──
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def catchup_sync(request):
     """
     Manual override for when the scheduled sync didn't reach SOFTECH and sales
@@ -1866,8 +1870,10 @@ def catchup_sync(request):
     Fails fast (503) if SOFTECH is currently unreachable, so the user knows to
     retry later rather than waiting on a silent background failure.
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    # admin, purchasing and the SOFTECH supply groups, as a quick engine run — the screen's refresh
+    # button (Batch 4, Z-11g — overblock review decision 5; was admin only since Z-2)
+    from .access import can_run_engine
+    if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     if DemandCalculationRun.objects.filter(status='running').exists():
@@ -1903,7 +1909,7 @@ def catchup_sync(request):
 # ── Filter options (distinct values for filter dropdowns) ────────────────────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def filter_options(request):
     """
     Return distinct filter option values for the purchasing dashboard dropdowns.
@@ -2051,7 +2057,7 @@ def filter_options(request):
 # ── Engine config (GET = read, PATCH = update) ────────────────────────────────
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def engine_config(request):
     """
     GET  — Return current engine calculation parameters.
@@ -2179,7 +2185,7 @@ class TransferRecommendationListView(generics.ListAPIView):
       ?ordering=priority_score|-priority_score|estimated_value|-estimated_value|quantity|-quantity
     """
     serializer_class   = TransferRecommendationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class', 'status', 'from_branch', 'to_branch']
     search_fields      = ['item__name', 'item__softech_id']
@@ -2206,7 +2212,7 @@ class TransferRecommendationListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_latest_run(request):
     """
     Return the latest successful TransferRecommendationRun linked to the
@@ -2224,7 +2230,7 @@ def transfer_rec_latest_run(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_summary(request):
     """
     Summary stats for the latest transfer recommendation run.
@@ -2322,7 +2328,7 @@ def transfer_rec_summary(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_update_status(request, pk):
     """
     PATCH /api/purchasing/transfer-recs/<pk>/status/
@@ -2376,7 +2382,7 @@ from .serializers import LostSalesRunSerializer                    # noqa: E402
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def lost_sales_latest_run(request):
     """
     GET /api/purchasing/lost-sales/run/
@@ -2394,7 +2400,7 @@ def lost_sales_latest_run(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def lost_sales_summary(request):
     """
     GET /api/purchasing/lost-sales/summary/
@@ -2498,7 +2504,7 @@ def lost_sales_summary(request):
 # ── Advanced (experimental) replenishment — parallel-comparison export ───────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def advanced_export(request):
     """
     Excel with CURRENT vs ADVANCED recommendation side-by-side (Phases A–D).
@@ -2626,7 +2632,7 @@ def advanced_export(request):
 # ── Advanced SUPPLIER pivot — one row per item, per-branch cols, pack rounding ─
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def advanced_pivot_export(request):
     """
     Supplier order sheet from the ADVANCED engine: ONE row per item, branches as

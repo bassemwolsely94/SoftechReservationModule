@@ -885,3 +885,5 @@ MIDDLEWARE += [
 # "elrezeiky.rbac" log is quiet, then enforce. The test runner defaults to off so
 # existing endpoint tests keep exercising view-level permissions only.
 RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# Seconds the role matrix is cached per process; 0 under tests so no test sees another's rows.
+RBAC_GRANTS_TTL = config('RBAC_GRANTS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)

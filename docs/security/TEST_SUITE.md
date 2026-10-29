@@ -11,6 +11,11 @@ code: `apps/tests/security/`
 TEST_DB_NAME=test_elrezeiky_security venv/Scripts/python.exe manage.py test apps.tests.security --keepdb
 ```
 
+The whole project suite: `manage.py test apps`. Name the label on a dev box — a bare
+`manage.py test` discovers from the repo root and also imports git-ignored `scratch/` test
+harnesses, which exec patched module copies and skew every later test (2026-10-29: 57 false
+failures). CI checks out without `scratch/`, so it is unaffected.
+
 Always through `manage.py test` (never pytest): the SOFTECH isolation in `config/settings.py`
 only switches on under `manage.py test`. Creating the test database takes ~6 minutes; `--keepdb`
 reuses it (drop it after migrations change).
@@ -19,7 +24,7 @@ reuses it (drop it after migrations change).
 |---|---|---|
 | Harness self-tests (baseline, pending, tripwire, role fixtures) | `test_harness.py` | ~20 s |
 | Static guards (no DB) | `test_static_guards.py` | ~25–50 s |
-| Role × route sweep, both modes | `test_role_sweep.py` | ~7–9 min |
+| Role × route sweep, both modes | `test_role_sweep.py` | ~7–9 min (~6 min since Z-11b skips methods a view lacks) |
 | Authentication (Batch 3) | `test_auth_*.py`, `test_client_ip.py` | ~2 min |
 
 ## Baselines — the ratchet
@@ -52,6 +57,11 @@ A batch is done when its baselines are empty (or only hold reviewed `# reason:` 
 | `raw_softech_connect` | 0 | 2 ✅ | SOFTECH connection bypassing the read-only kill-switch — must stay empty (`diag_appname` deleted, P-3) |
 | `write_flags_default_true` | 6 | 2 ✅ | write-pattern switch defaulting ON — only reviewed ones left: no SOFTECH write (P-5 turned those off); `AP_RECONCILE_AUTO_APPROVE` stays on (owner confirmed 2026-10-26) |
 | `tracked_secrets` | 2 | 6 | credential-looking literal in a tracked file (1 real: `scripts/smoke_api_live.py`) |
+
+After Batch 4 (2026-10-29): `role_leaks_log` **2** (both reviewed — the config `settings/by_key`
+POSTs, Z-4), `role_overblocks` **352** (every line under a `# reason:`), `role_unproven` **124**,
+`role_crashes` **21** (Batch 7), `role_softech_reach` / `role_outside_reach` /
+`unclassified_api_prefixes` **0**.
 
 Also ratcheted outside the baselines folder:
 
@@ -95,8 +105,11 @@ middleware enforcing and once logging only. Expectations come from the **code** 
   these become real checks.
 - A denied role whose request still tried SOFTECH (`role_softech_reach`) or started a thread,
   HTTP call, socket or subprocess (`role_outside_reach`) is listed — permission came too late.
-- **Known gap:** only GET and POST `{}` are swept. PUT / PATCH / DELETE (the matrix's
-  `edit` / `delete`) are added in Batch 4.
+- **Known gap:** only GET and POST `{}` are swept — PUT / PATCH / DELETE (the matrix's `edit` /
+  `delete`) are still open after Batch 4. Batch 4 covered them with targeted tests instead
+  (per-module `test_rbac_*.py`, the Z-10 mass-assignment attack tests).
+- A method the view does not implement is skipped (`routes.handles`, Z-11b): DRF would answer
+  405, but a strict permission class answers 403 first, which used to read as an overblock.
 - Clients log in with a real Bearer JWT — `force_authenticate()` would hide the user from the
   middleware.
 - Each request runs in a rolled-back savepoint inside the **Tripwire**: SOFTECH connections,
@@ -138,10 +151,37 @@ Tests: `test_auth_*.py`, `test_client_ip.py`.
 - **A-5** passwords: 6 characters only → `AUTH_PASSWORD_VALIDATORS` (10 characters, common, numeric, similar to username) on change, admin reset and create (`apps/users/passwords.py`); create-user no longer answers 500 after saving.
 - **A-6** forged client address: DRF throttles keyed on the whole `X-Forwarded-For`, audit IP its client-written first entry → `NUM_PROXIES` (1 on the VPS; default 1 behind the HTTPS proxy) feeds DRF and `core/client_ip.py`.
 
+## Batch 4 — authorization (2026-10-29)
+
+[Plan](../superpowers/plans/2026-10-27-security-suite-batch-4-authorization.md) ·
+[overblock review](../superpowers/plans/2026-10-28-batch-4-overblock-review.md). Same flow; every
+item a diff the owner approved. Production switches to `RBAC_ENFORCEMENT=enforce` at the VPS
+cutover (owner decision 1). Tests: `test_rbac_*.py`, `test_mass_assignment_*.py`,
+`test_approvals_self_approval.py`, `test_sweep_noise.py`.
+
+- **Z-1 … Z-9** every module's views follow the `RoleModuleAccess` matrix (`matrix_permission` /
+  `MatrixPermission`, "map by screen" — owner decision 6): finance / payments / cheques, users /
+  audit / sync / config, POS / offers / commerce, pricing and approvals, purchasing / procurement /
+  shortage / forecasting / supply / transits / invoices, the customer-data modules, catalog,
+  incentives, HR, analytics, insurance, vouchers, stock count. Per-module matrix seeding (Z-5c).
+  `role_leaks_log` 1391 → 2.
+- **Z-10** mass assignment: workflow-only fields (status, SOFTECH docnumber / branch, amounts,
+  approvers, "who" fields) became read-only or server-set; status moves only through the
+  workflow actions. Closed a supplier-invoice double-post route, POS orders posting into another
+  branch, self-set call-quality scores and free gamification points.
+- **Z-11** the overblock review: `export` is no write grant; the sweep skips methods a view lacks;
+  every kept overblock carries a reason; eight lockouts opened (payment confirm, demand analytics,
+  wallboard, refresh buttons, discrepancy report, audit for quality, stock count / chronic grants
+  via `users.0032`); the approvals engine refuses a requester's own approval; an edit to a
+  confirmed invoice sends it back to review.
+
+Open: the two reviewed config leak lines, the PUT / PATCH / DELETE sweep, who confirmed an
+invoice (`confirmed_by` / audit on confirm), and branch / task visibility scoping (Batch 5).
+
 ## Pending owner decisions
 
 A test exposing a hole whose fix needs the owner's OK (SOFTECH writes, auth, pricing, checkout)
-is marked `@pending('<X>-<n>')` (an expected failure: `P-` Batch 2, `A-` Batch 3) and listed in
+is marked `@pending('<X>-<n>')` (an expected failure: `P-` Batch 2, `A-` Batch 3, `Z-` Batch 4) and listed in
 `apps/tests/security/PENDING.md`. A guard keeps the markers and the list in step; the marker
 comes off when the fix lands.
 

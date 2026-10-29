@@ -34,6 +34,7 @@ from rest_framework.response import Response
 from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core.permissions import matrix_permission
 from .serializers import (
     ForceCloseSerializer,
     InTransitNoteCreateSerializer,
@@ -52,6 +53,12 @@ def _profile(request):
 
 def _is_hq(profile):
     return profile and profile.role in ('admin', 'purchasing', 'call_center')
+
+
+# In-transit transfers = the `transfers` matrix module (Batch 4, Z-7c): reads need view (the
+# branch scoping below is unchanged); notes, receipts and bulk sheet exports need any transfers
+# grant beyond view, as the middleware; force-close / sync keep their admin / purchasing check.
+TRANSFERS = matrix_permission('transfers', post=('create', 'edit', 'approve', 'finalize', 'export'))
 
 
 def _notify_transit(transfer, title, body, notif_type, *, branch=None, include_admins=True):
@@ -83,7 +90,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
     cached SOFTECH data. Write actions are explicit @action decorators.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TRANSFERS]
     filter_backends    = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -775,20 +782,25 @@ from .serializers import (
 
 
 class PickZoneManagePermission(BasePermission):
-    """Read for all authenticated staff; write for admin/purchasing only."""
+    """Read: transfers view (Batch 4, Z-7c — was any staff); classify-items is called from the
+    product screens: catalog view. Write: admin / purchasing only."""
     message = 'إدارة مناطق التجميع متاحة للإدارة والمشتريات فقط'
 
-    # POST actions that only READ (computation, no mutation) — open to all staff
+    # POST actions that only READ (computation, no mutation)
     READONLY_ACTIONS = ('preview', 'classify_items')
 
     def has_permission(self, request, view):
+        from core.permissions import matrix_allows
         profile = _profile(request)
         if not (request.user and request.user.is_authenticated and profile):
             return False
-        if request.method in SAFE_METHODS:
-            return True
-        if getattr(view, 'action', None) in self.READONLY_ACTIONS:
-            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        action = getattr(view, 'action', None)
+        if action == 'classify_items':
+            return matrix_allows(profile, 'catalog', 'view')
+        if request.method in SAFE_METHODS or action in self.READONLY_ACTIONS:
+            return matrix_allows(profile, 'transfers', 'view')
         return profile.role in ('admin', 'purchasing')
 
 

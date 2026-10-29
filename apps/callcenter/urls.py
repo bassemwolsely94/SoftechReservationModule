@@ -1,8 +1,8 @@
 # apps/callcenter/urls.py
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import CallLogViewSet, AddressUpdateViewSet, CustomerCaseViewSet
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-8b)
 router.register(r'calls',           CallLogViewSet,       basename='calllog')
 router.register(r'address-updates', AddressUpdateViewSet, basename='address-update')
 router.register(r'cases',           CustomerCaseViewSet,  basename='customercase')

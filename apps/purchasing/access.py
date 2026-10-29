@@ -11,14 +11,16 @@ Anyone added to / removed from those groups in SOFTECH gains / loses access on t
 next user sync. Inactive SOFTECH users never qualify.
 
   can_supply_write — approve / execute rate pushes, ISRs and توزيعة in /supply
-  can_run_engine   — start a QUICK engine run (▶ تشغيل). Full re-sync, catch-up and
-                     engine settings stay admin / pharmacist only.
+  can_run_engine   — start a QUICK engine run (▶ تشغيل). Full re-sync, catch-up, item
+                     sync and engine settings stay admin only.
 Enforced server-side by the views; the frontend only reads the flags to show buttons.
+The role sets follow the code matrix (purchasing approve / create-edit); the RBAC middleware
+gives supply-group members the purchasing role's grants too (Batch 4, Z-2; owner 2026-10-27).
 """
 from django.conf import settings
 
-SUPPLY_WRITE_ROLES = {'admin', 'supervisor', 'purchasing'}
-ENGINE_ADMIN_ROLES = {'admin', 'pharmacist'}          # full re-sync / settings / overrides
+SUPPLY_WRITE_ROLES = {'admin', 'purchasing'}
+ENGINE_ADMIN_ROLES = {'admin'}                        # full re-sync / settings / overrides
 ENGINE_RUN_ROLES   = ENGINE_ADMIN_ROLES | {'purchasing'}
 
 
@@ -83,3 +85,24 @@ def is_engine_admin(user) -> bool:
     """May run full re-sync / pass engine parameter overrides."""
     return bool(getattr(user, 'is_authenticated', False) and
                 (user.is_superuser or _role(user) in ENGINE_ADMIN_ROLES))
+
+
+# ── DRF permissions (Batch 4, Z-7a) ────────────────────────────────────────────────────────
+# Owner decision 2026-10-28: map by screen. The purchasing screens follow the `purchasing`
+# matrix module (core.permissions.matrix_allows adds the SOFTECH supply groups); the inner
+# checks above (can_supply_write / can_run_engine / is_engine_admin) still decide writes.
+from rest_framework.permissions import BasePermission           # noqa: E402
+
+from core.permissions import matrix_allows, matrix_permission     # noqa: E402
+
+PURCHASING = matrix_permission('purchasing', post=('create', 'edit', 'approve'))
+
+
+class CanReadRunStatus(BasePermission):
+    """The engine's run status (runs/latest, runs/active) is read by Market Shortage too:
+    `purchasing` or `shortage` view."""
+    message = 'ليس لديك صلاحية على هذه الوحدة'
+
+    def has_permission(self, request, view):
+        p = getattr(request.user, 'staff_profile', None)
+        return matrix_allows(p, 'purchasing', 'view') or matrix_allows(p, 'shortage', 'view')

@@ -37,6 +37,7 @@ import logging
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -61,8 +62,17 @@ class SnapshotPagination(PageNumberPagination):
     max_page_size        = 1000
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Stock counts = the `stockcount` matrix module (Batch 4, Z-9c — was any logged-in user): reads
+# need view; opening, counting, uploading and closing need create / edit / finalize; previewing
+# the items only computes (view).
+STOCKCOUNT = matrix_permission('stockcount', post=('create', 'edit', 'finalize'), delete=('edit', 'delete'),
+                               actions={'preview_items': ('view',)})
+
+
 class StockCountSessionViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, STOCKCOUNT]
     pagination_class   = None   # sessions list is small — no pagination needed
 
     # ── Queryset ──────────────────────────────────────────────────────────────
@@ -90,6 +100,12 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return StockCountSessionDetailSerializer
         return StockCountSessionListSerializer
+
+    def update(self, request, *args, **kwargs):
+        # No generic PUT / PATCH (Batch 4, Z-10b): a session moves through generate-snapshot /
+        # upload-results / count-item / close. A PATCH set status = variance_ready and variance_at —
+        # exactly what gamification scores as a completed count — without counting anything.
+        raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)

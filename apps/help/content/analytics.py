@@ -274,9 +274,9 @@ SCREENS = [
             {'target': 'analytics-transfers-discrepancy', 'label': T('تقرير التباينات', 'Discrepancy report'),
              'text': T('آخر 200 سطر مكتمل: المعتمد، المستلم، والفرق. اضغط الصف يفتح طلب التحويل.',
                        'The latest 200 completed lines: approved, received and the difference. Click a row to open the transfer.'),
-             'open_hint': T('تبويب «⚠️ تقرير التباينات» — للأدمن والمشتريات بس.', 'The "⚠️ Discrepancy report" tab — admin and purchasing only.')},
+             'open_hint': T('تبويب «⚠️ تقرير التباينات» — للأدمن والمشتريات والمشرفين.', 'The "⚠️ Discrepancy report" tab — admin, purchasing and supervisors.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
     {
         'key': 'analytics.forecasting',

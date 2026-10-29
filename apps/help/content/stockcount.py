@@ -96,7 +96,8 @@ SCREENS = [
         'title': T('جرد المخزون', 'Stock count'),
         'summary': T('إنشاء جلسات الجرد ومتابعتها خطوة بخطوة عبر أربعة تبويبات: الجلسات ← اللقطة ← العد ← الفروق.',
                      'Create count sessions and run them step by step through four tabs: sessions → snapshot → count → variance.'),
-        'audience': T('الصيادلة ومديرو الفروع والجودة والمشرفون.', 'Pharmacists, branch managers, quality and supervisors.'),
+        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون.',
+                      'Pharmacists and supervisors open and count; quality and purchasing follow and export.'),
         'tabs': [
             {'key': 'sessions', 'title': T('📋 الجلسات', '📋 Sessions'),
              'body': T('كل جلسات الجرد بحالتها وعدد الأصناف والزيادة والنقص والمطابق. «جلسة جديدة»: اسم، كود الفرع، النوع، الفترة، أكواد المستندات، وفلاتر المستخدم والتصنيف. '
@@ -180,7 +181,7 @@ SCREENS = [
              'warn': T('الإغلاق نهائي — مفيش تعديل أو رفع بعده.', 'Closing is final — no edits or uploads after it.'),
              'open_hint': T('تبويب «📉 الفروق» لما الحالة «الفروق جاهزة» (بعد رفع ملف النتائج).', '"📉 Variance" tab when the status is "Variance ready" (after uploading the results file).')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
     },
     {
         'key': 'stockcount.mobile',

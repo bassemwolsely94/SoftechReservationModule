@@ -719,9 +719,17 @@ from .serializers import (
 )
 
 
+from core.permissions import matrix_permission   # noqa: E402
+
+# Variant groups, bundles and item ingredients are catalog edits (Batch 4, Z-9b — any
+# logged-in user could create them); reads need catalog view.
+CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
+                                 delete=('edit', 'delete'))
+
+
 class VariantGroupListCreateView(generics.ListCreateAPIView):
     serializer_class   = VariantGroupSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get_queryset(self):
         qs = CatalogVariantGroup.objects.prefetch_related('members__item')
@@ -742,12 +750,12 @@ class VariantGroupListCreateView(generics.ListCreateAPIView):
 
 class VariantGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = VariantGroupSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     queryset = CatalogVariantGroup.objects.prefetch_related('members__item')
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def add_variant_member(request, group_pk):
     """POST /api/items/variant-groups/{pk}/members/  body: {item, variant_label, sort_order}"""
     from django.shortcuts import get_object_or_404
@@ -759,7 +767,7 @@ def add_variant_member(request, group_pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def remove_variant_member(request, group_pk, member_pk):
     """DELETE /api/items/variant-groups/{pk}/members/{member_pk}/"""
     from django.shortcuts import get_object_or_404
@@ -772,7 +780,7 @@ def remove_variant_member(request, group_pk, member_pk):
 
 class ProductBundleListCreateView(generics.ListCreateAPIView):
     serializer_class   = ProductBundleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get_queryset(self):
         qs = ProductBundle.objects.prefetch_related('items__item')
@@ -796,12 +804,12 @@ class ProductBundleListCreateView(generics.ListCreateAPIView):
 
 class ProductBundleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = ProductBundleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     queryset = ProductBundle.objects.prefetch_related('items__item')
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def add_bundle_item(request, bundle_pk):
     """POST /api/items/bundles/{pk}/items/  body: {item, quantity}"""
     from django.shortcuts import get_object_or_404
@@ -813,7 +821,7 @@ def add_bundle_item(request, bundle_pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def remove_bundle_item(request, bundle_pk, bi_pk):
     """DELETE /api/items/bundles/{pk}/items/{bi_pk}/"""
     from django.shortcuts import get_object_or_404
@@ -828,7 +836,7 @@ def remove_bundle_item(request, bundle_pk, bi_pk):
 # Writes go to the respective module endpoints directly from the frontend.
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_full_intel(request, softech_id):
     """
     Returns every piece of data held about an item across all modules:
@@ -1084,7 +1092,7 @@ def item_full_intel(request, softech_id):
 # ── Item ingredient maps (chronic module write via catalog API) ───────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_ingredients(request, softech_id):
     """
     GET  /api/items/{softech_id}/ingredients/  — list ItemIngredientMap entries
@@ -1154,7 +1162,7 @@ def item_ingredients(request, softech_id):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_ingredient_delete(request, softech_id, map_id):
     """DELETE /api/items/{softech_id}/ingredients/{map_id}/"""
     from django.shortcuts import get_object_or_404

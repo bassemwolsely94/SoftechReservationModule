@@ -37,7 +37,9 @@ SCREENS = [
             {'key': 'advances', 'title': T('💵 السلف', '💵 Advances'), 'body': T('طلب سلفة على الراتب: المبلغ وتاريخ السداد والسبب.', 'A salary advance: amount, repayment date and reason.')},
             {'key': 'expenses', 'title': T('🧾 المصروفات', '🧾 Expenses'), 'body': T('مطالبة مصروفات (مواصلات، وجبات، إقامة، قرطاسية، معدات، مأمورية…) ولو مأمورية: الوجهة والغرض والمغادرة والعودة والمسافة والبدل.', 'An expense claim (transport, meals, lodging, stationery, equipment, errand…) and for an errand: destination, purpose, departure, return, distance and allowance.')},
         ],
-        'tips': [T('الطلب «المسودة» لا يصل لأحد — قدّمه.', 'A "draft" request reaches nobody — submit it.')],
+        'tips': [T('الطلب «المسودة» لا يصل لأحد — قدّمه.', 'A "draft" request reaches nobody — submit it.'),
+                 T('لا يمكنك اختيار نفسك (ولا صاحب الطلب) ضمن الموافقين على الطلب.',
+                   'You cannot pick yourself (or the employee the request is about) as one of its approvers.')],
         'related': ['hr.approvals', 'hr.attendance'],
         'tour': [
             {'target': 'hr-requests-tabs', 'text': T('نوع الطلب: إجازات، أذونات، إضافي، سلف، مصروفات.',
@@ -53,7 +55,7 @@ SCREENS = [
             {'target': 'hr-requests-table', 'text': T('طلباتك وحالتها.',
                                               'Your requests and their status.')},
         ],
-        'updated': '2026-10-10',
+        'updated': '2026-10-28',
     },
     {
         'key': 'hr.approvals',

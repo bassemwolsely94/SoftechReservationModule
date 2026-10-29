@@ -6,7 +6,9 @@
  * Status filter chips + infinite "load more" following the cursor `next` link.
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
+import useAuthStore from '../../store/authStore'
+import { MOBILE_RESERVATION_ROLES } from './mobileAccess'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import api, { reservationsApi } from '../../api/client'
 import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
@@ -68,7 +70,14 @@ function ReservationCard({ r, onOpen }) {
   )
 }
 
+// /m opens here; roles without reservations view go to «لوحتي» instead (Batch 4, Z-11i)
 export default function MobileReservationsPage() {
+  const { user } = useAuthStore()
+  if (!MOBILE_RESERVATION_ROLES.includes(user?.role)) return <Navigate to="/m/me" replace />
+  return <ReservationsList />
+}
+
+function ReservationsList() {
   const navigate = useNavigate()
   const [filter, setFilter] = useState('open')
 
