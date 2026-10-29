@@ -134,14 +134,14 @@ export default function InsurancePrintPage() {
             <p className="text-sm text-gray-500">{claim?.client_name} — {claim?.subclient_name}</p>
           </div>
           <div className="flex gap-2">
-            <button
+            <button data-tour="insurance-print-statistical"
               onClick={exportStatistical}
               disabled={!!exporting}
               title="مسلسل · اسم المريض رباعى · التاريخ · اجمالى الروشتة · اسم الصيدلية · ملاحظات (الجهة + الفئة)"
               className="px-5 py-2.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-50">
               {exporting === 'statistical' ? 'جارٍ التصدير...' : '📊 الاحصائية الشهرية'}
             </button>
-            <button
+            <button data-tour="insurance-print-export-all"
               onClick={() => exportExcel('all')}
               disabled={!!exporting}
               className="px-5 py-2.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
@@ -154,7 +154,7 @@ export default function InsurancePrintPage() {
       <div className="px-6 py-6 grid grid-cols-3 gap-6">
         {/* Left: Cover summary */}
         <div className="col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="insurance-print-cover-summary">
             <h2 className="font-bold text-gray-800 mb-4 text-base">ملخص الغلاف</h2>
 
             <div className="space-y-2 text-sm mb-5">
@@ -227,7 +227,7 @@ export default function InsurancePrintPage() {
                     <p className="text-sm text-gray-600 mt-1">{t.desc}</p>
                   </div>
                 </div>
-                <button
+                <button data-tour="insurance-print-template-excel"
                   onClick={() => exportExcel(t.id)}
                   disabled={!!exporting}
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
@@ -238,7 +238,7 @@ export default function InsurancePrintPage() {
               {/* Layout + sort controls for the يوميات sheet */}
               {t.id === 'daily_detail' && (
                 <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap text-sm">
+                  <div className="flex items-center gap-2 flex-wrap text-sm" data-tour="insurance-print-layout">
                     <span className="text-gray-500">الترتيب:</span>
                     <button onClick={() => setLayout('daily')}
                       className={`px-2.5 py-1 rounded text-xs border ${layout === 'daily' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 text-gray-600'}`}>
@@ -254,7 +254,7 @@ export default function InsurancePrintPage() {
                     </button>
                   </div>
                   {(layout === 'flat' || layout === 'flat_paged') && (
-                    <div className="flex items-center gap-2 flex-wrap text-sm">
+                    <div className="flex items-center gap-2 flex-wrap text-sm" data-tour="insurance-print-sort">
                       <span className="text-gray-500">فرز حسب:</span>
                       <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                         className="border border-gray-300 rounded px-2 py-1 text-xs">

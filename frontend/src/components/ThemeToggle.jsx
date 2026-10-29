@@ -38,6 +38,7 @@ export default function ThemeToggle({ className = '' }) {
   return (
     <button
       type="button"
+      data-tour="general-dashboard-theme"
       onClick={cycle}
       title={NEXT_LABEL[mode]}
       aria-label={NEXT_LABEL[mode]}

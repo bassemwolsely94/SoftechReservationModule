@@ -59,7 +59,7 @@ export default function HelpCenterPage() {
               : 'شرح كل شاشات النظام — دور الشاشة، طريقة الاستخدام، التبويبات، ودورة عمل الموديول. اضغط F1 في أي شاشة لفتح شرحها.'}
           </p>
         </div>
-        <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
+        <div data-tour="general-help-center-lang" className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}
                     className={`px-3 py-1.5 ${lang === l ? 'bg-brand-600 text-white' : 'text-muted hover:bg-surface-3'}`}>
@@ -69,14 +69,14 @@ export default function HelpCenterPage() {
         </div>
       </div>
 
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={label('search', lang)}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={label('search', lang)} data-tour="general-help-center-search"
              className="w-full text-sm bg-surface border border-line rounded-xl px-4 py-2.5 text-content placeholder-faint outline-none focus:border-brand-400" />
 
       {q.trim().length >= 2 ? (
         <SearchResults q={q.trim()} lang={lang} onOpen={(k) => { setQ(''); go({ tab: 'browse', screen: k }) }} />
       ) : (
         <>
-          <div className="flex gap-1 border-b border-line">
+          <div data-tour="general-help-center-tabs" className="flex gap-1 border-b border-line">
             {tabs.map(([k, t]) => (
               <button key={k} type="button" onClick={() => go({ tab: k })}
                       className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-muted hover:text-content'}`}>
@@ -110,7 +110,7 @@ function Browse({ index, lang, go }) {
             <h2 className="text-sm font-bold text-faint">{pick(g.title, lang)}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {mods.map((m) => (
-                <button key={m.key} type="button" onClick={() => go({ tab: 'browse', module: m.key })}
+                <button key={m.key} type="button" onClick={() => go({ tab: 'browse', module: m.key })} data-tour="general-help-center-module-card"
                         className="text-start rounded-xl border border-line bg-surface hover:border-brand-300 hover:shadow-sm p-4 space-y-1.5 transition">
                   <div className="font-semibold text-content">{m.icon} {pick(m.title, lang)}</div>
                   <div className="text-xs text-muted line-clamp-3 leading-5">{pick(m.summary, lang)}</div>
@@ -150,7 +150,7 @@ function ModuleView({ moduleKey, lang, go, canEdit }) {
       <div className="rounded-xl border border-line bg-surface p-5 space-y-2">
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-lg font-bold text-content flex-1">{data.icon} {pick(data.title, lang)}</h2>
-          <a href={`/help/manual?module=${data.key}&lang=${lang}`} target="_blank" rel="noreferrer"
+          <a href={`/help/manual?module=${data.key}&lang=${lang}`} target="_blank" rel="noreferrer" data-tour="general-help-center-print-module"
              className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
             🖨️ {lang === 'en' ? 'Print this module\'s manual' : 'طباعة دليل الموديول'}
           </a>
@@ -198,12 +198,12 @@ function ScreenView({ screenKey, lang, go, index }) {
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-lg font-bold text-content flex-1">{pick(data.title, lang)}</h2>
           {openRoute && (
-            <Link to={openRoute} className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
+            <Link to={openRoute} data-tour="general-help-center-open-screen" className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
               {lang === 'en' ? 'Open this screen' : 'فتح الشاشة'} ↗
             </Link>
           )}
           {openRoute && data.tour?.length > 0 && (
-            <button type="button" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour), 400) }}
+            <button type="button" data-tour="general-help-center-show-me-screen" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour), 400) }}
                     className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
               👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
             </button>

@@ -768,7 +768,7 @@ class HelpUsageTests(TestCase):
         ok = self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': n, 'done': True}, format='json')
         self.assertEqual(ok.status_code, 201)
         self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': 2, 'done': True}, format='json')
-        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'general.me'}, format='json').status_code, 400)
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'no.such_screen'}, format='json').status_code, 400)
         self.ph.get('/api/help/screens/reservations.board/')
         self.assertEqual(self.ph.get('/api/help/usage/').status_code, 403)
         r = self.admin.get('/api/help/usage/?days=7').json()

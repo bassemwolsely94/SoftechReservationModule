@@ -78,7 +78,7 @@ export default function InsurancePrintProfilesPage() {
           <button onClick={() => navigate('/insurance')} className="text-blue-600 text-sm hover:underline">← مطالبات التأمين</button>
           <h1 className="text-xl font-bold text-gray-900 mt-1">تخصيص طباعة المطالبات</h1>
         </div>
-        <button onClick={() => setEditing({ ...BLANK })}
+        <button onClick={() => setEditing({ ...BLANK })} data-tour="insurance-print-profiles-new"
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">+ ملف جديد</button>
       </div>
 
@@ -98,8 +98,8 @@ export default function InsurancePrintProfilesPage() {
                   {p.subclient_name && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 rounded mr-2">{p.subclient_name}</span>}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setEditing(p)} className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200">تعديل</button>
-                  <button onClick={() => del(p.id)} className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</button>
+                  <button onClick={() => setEditing(p)} data-tour="insurance-print-profiles-edit" className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200">تعديل</button>
+                  <button onClick={() => del(p.id)} data-tour="insurance-print-profiles-delete" className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</button>
                 </div>
               </div>
             ))}
@@ -107,7 +107,7 @@ export default function InsurancePrintProfilesPage() {
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             {/* Scope */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-3" data-tour="insurance-print-profiles-scope">
               <div><label className={lbl}>اسم الملف</label>
                 <input className={inp} value={editing.name} onChange={e => set('name', e.target.value)} /></div>
               <div><label className={lbl}>خاص بالفئة (اختياري)</label>
@@ -129,7 +129,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Header sections */}
-            <div>
+            <div data-tour="insurance-print-profiles-header">
               <p className="text-sm font-semibold text-gray-700 mb-2">الترويسة (Header)</p>
               <div className="grid grid-cols-3 gap-3">
                 {[['يمين', 'header_right'], ['وسط', 'header_center'], ['يسار', 'header_left']].map(([t, k]) => (
@@ -151,7 +151,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Typography */}
-            <div>
+            <div data-tour="insurance-print-profiles-fonts">
               <p className="text-sm font-semibold text-gray-700 mb-2">الخطوط والألوان</p>
               <div className="grid grid-cols-4 gap-3">
                 <div><label className={lbl}>الخط</label>
@@ -199,7 +199,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Watermark */}
-            <div>
+            <div data-tour="insurance-print-profiles-watermark">
               <p className="text-sm font-semibold text-gray-700 mb-2">العلامة المائية (شعار باهت)</p>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className={lbl}>صورة PNG (يفضّل فاتحة/شفافة)</label>
@@ -222,7 +222,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             <div className="flex gap-2 pt-2 border-t border-gray-100">
-              <button onClick={save} disabled={saving}
+              <button onClick={save} disabled={saving} data-tour="insurance-print-profiles-save"
                 className="px-5 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
                 {saving ? 'جارٍ الحفظ…' : 'حفظ'}
               </button>

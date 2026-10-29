@@ -65,7 +65,7 @@ export default function CashFlowPage() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-base font-semibold text-gray-700">التدفقات النقدية</h2>
-        <div className="flex gap-2 mr-auto">
+        <div className="flex gap-2 mr-auto" data-tour="finance-cashflow-period">
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="border rounded-lg px-3 py-1.5 text-sm">
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -87,7 +87,7 @@ export default function CashFlowPage() {
       {data && !isLoading && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-4" data-tour="finance-cashflow-kpis">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
               <div className="text-xs text-gray-500 mb-1">إجمالي التدفق الداخل</div>
               <div className="text-xl font-bold text-green-700">↑ {fmt(data.cash_inflow || totalInflow)}</div>
@@ -112,7 +112,7 @@ export default function CashFlowPage() {
           {byMethod.length > 0 ? (
             <div className="grid sm:grid-cols-2 gap-5">
               {/* Inflow */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="finance-cashflow-inflow">
                 <h3 className="text-sm font-semibold text-green-700 mb-4">التدفق الداخل — بطريقة الدفع</h3>
                 <div className="space-y-3">
                   {inflowByMethod.length === 0
@@ -131,7 +131,7 @@ export default function CashFlowPage() {
               </div>
 
               {/* Outflow */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="finance-cashflow-outflow">
                 <h3 className="text-sm font-semibold text-red-600 mb-4">التدفق الخارج — بطريقة الدفع</h3>
                 <div className="space-y-3">
                   {outflowByMethod.length === 0

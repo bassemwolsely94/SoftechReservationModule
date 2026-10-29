@@ -11,6 +11,7 @@ import useAuthStore from '../store/authStore'
 import useHelpStore from '../help/helpStore'
 import { useHelpIndex } from '../help/useHelpIndex'
 import { Workflow } from '../help/HelpArticle'
+import TourRunner from '../help/Tour'
 import { pick, itemText, label } from '../help/text'
 import { fa } from '../utils/flowArrow'
 
@@ -57,24 +58,27 @@ export default function HelpManualPage() {
         @media print { @page { margin: 14mm; } .manual { font-size: 11pt; } }
       `}</style>
 
+      {/* this page sits outside Layout (no HelpPanel), so it mounts the «اعرض لي» runner itself */}
+      <div className="no-print"><TourRunner /></div>
+
       {/* controls — not printed */}
       <div className="no-print sticky top-0 z-10 bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap items-center gap-3 text-sm">
-        <a href="/help" className="text-brand-600 hover:underline">{fa()} {label('guide', lang)}</a>
-        <select value={role} onChange={(e) => set('role', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+        <a href="/help" data-tour="general-help-manual-back" className="text-brand-600 hover:underline">{fa()} {label('guide', lang)}</a>
+        <select data-tour="general-help-manual-role" value={role} onChange={(e) => set('role', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by role —' : '— حسب الدور —'}</option>
           {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r][en ? 1 : 0]}</option>)}
         </select>
-        <select value={module} onChange={(e) => set('module', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+        <select data-tour="general-help-manual-module" value={module} onChange={(e) => set('module', e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
           <option value="">{en ? '— by module —' : '— حسب الموديول —'}</option>
           {(index?.modules || []).map((m) => <option key={m.key} value={m.key}>{m.icon} {pick(m.title, lang)}</option>)}
         </select>
-        <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+        <div data-tour="general-help-manual-lang" className="flex border border-gray-300 rounded-lg overflow-hidden">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => set('lang', l)}
                     className={`px-3 py-1.5 ${lang === l ? 'bg-brand-600 text-white' : 'bg-white'}`}>{l === 'ar' ? 'عربي' : 'English'}</button>
           ))}
         </div>
-        <button type="button" onClick={() => window.print()} disabled={!data}
+        <button type="button" onClick={() => window.print()} disabled={!data} data-tour="general-help-manual-print"
                 className="ms-auto bg-brand-600 text-white rounded-lg px-4 py-1.5 disabled:opacity-50">
           🖨️ {en ? 'Print / save as PDF' : 'طباعة / حفظ PDF'}
         </button>
@@ -94,12 +98,12 @@ export default function HelpManualPage() {
                   ? 'Generated from the in-app help guide — the same text you see when you press F1. Read the chapters in order; each screen lists what it is for, its tabs, how to use it, and common mistakes.'
                   : 'هذا الدليل مأخوذ من «دليل الاستخدام» داخل النظام — نفس الشرح اللي بيظهر لما تضغط F1. اقرأ الفصول بالترتيب؛ كل شاشة فيها دورها، تبويباتها، طريقة استخدامها، والأخطاء الشائعة.'}
               </p>
-              <div className="text-xs text-gray-500">
+              <div data-tour="general-help-manual-updated" className="text-xs text-gray-500">
                 {en ? 'Help last updated' : 'آخر تحديث للشرح'}: <span className="tabnum">{data.updated}</span>
                 {' · '}{en ? 'Printed' : 'تاريخ الطباعة'}: <span className="tabnum">{new Date(data.generated_at).toLocaleDateString('en-GB')}</span>
                 {' · '}{data.screens.length} {en ? 'screens' : 'شاشة'}
               </div>
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div data-tour="general-help-manual-contents" className="border border-gray-200 rounded-lg p-4">
                 <div className="font-bold mb-2">{en ? 'Contents' : 'المحتويات'}</div>
                 <ol className="space-y-1 text-sm list-decimal ps-5">
                   {data.modules.map((m) => (

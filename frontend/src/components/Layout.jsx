@@ -473,6 +473,7 @@ export default function Layout() {
 
           <div className="flex items-center gap-3">
             <button
+              data-tour="general-dashboard-search"
               onClick={() => window.dispatchEvent(new Event('palette:open'))}
               title="بحث شامل (Ctrl+K)"
               className="hidden sm:flex items-center gap-2 text-xs text-faint bg-surface-2 hover:bg-surface-3 border border-line rounded-lg px-2.5 py-1.5 transition-colors"
@@ -492,6 +493,7 @@ export default function Layout() {
             <div className="w-px h-5 bg-line" />
             <NavLink
               to="/security"
+              data-tour="general-security-open"
               title="أمان الحساب — المصادقة الثنائية"
               className="text-faint hover:text-brand-600 transition-colors p-1 rounded-lg hover:bg-brand-50"
             >

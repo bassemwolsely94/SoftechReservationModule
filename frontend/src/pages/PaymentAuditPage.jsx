@@ -52,14 +52,14 @@ function UploadModal({ onClose }) {
         </div>
         <div className="mb-4">
           <label className="block text-xs text-gray-500 mb-1">الملف (CSV / Excel)</label>
-          <input type="file" ref={fileRef} accept=".csv,.xlsx,.xls"
+          <input type="file" ref={fileRef} data-tour="finance-payment-audit-upload-file" accept=".csv,.xlsx,.xls"
             onChange={e => setFile(e.target.files[0])}
             className="w-full text-sm" />
         </div>
         {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button onClick={() => upload.mutate()} disabled={upload.isPending || !file}
+          <button data-tour="finance-payment-audit-upload-save" onClick={() => upload.mutate()} disabled={upload.isPending || !file}
             className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg disabled:opacity-50">
             {upload.isPending ? 'جاري الرفع...' : 'رفع'}
           </button>
@@ -92,17 +92,17 @@ function ResolveModal({ exception, onClose }) {
         <p className="text-sm text-gray-500 mb-4">
           {EXCEPTION_TYPE_LABELS[exception.exception_type] || exception.exception_type} — {exception.amount ? Number(exception.amount).toLocaleString('ar-EG') + ' ج' : ''}
         </p>
-        <textarea value={note} onChange={e => setNote(e.target.value)}
+        <textarea data-tour="finance-payment-audit-note" value={note} onChange={e => setNote(e.target.value)}
           placeholder="ملاحظة التسوية..."
           className="w-full border rounded-lg p-3 text-sm resize-none h-20 mb-4" />
         {err && <p className="text-red-600 text-sm mb-3">{err}</p>}
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button onClick={() => dismiss.mutate()} disabled={dismiss.isPending}
+          <button data-tour="finance-payment-audit-dismiss" onClick={() => dismiss.mutate()} disabled={dismiss.isPending}
             className="px-4 py-2 text-sm text-gray-500 border rounded-lg hover:bg-gray-50 disabled:opacity-50">
             تجاهل
           </button>
-          <button onClick={() => resolve.mutate()} disabled={resolve.isPending}
+          <button data-tour="finance-payment-audit-resolve" onClick={() => resolve.mutate()} disabled={resolve.isPending}
             className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg disabled:opacity-50">
             {resolve.isPending ? 'جاري...' : 'حل الاستثناء'}
           </button>
@@ -146,13 +146,13 @@ export default function PaymentAuditPage() {
           <h1 className="text-2xl font-bold text-gray-900">مراجعة المدفوعات</h1>
           <p className="text-sm text-gray-500 mt-1">كشوف الحساب البنكية · مطابقة المدفوعات · استثناءات</p>
         </div>
-        <button onClick={() => setShowUpload(true)}
+        <button data-tour="finance-payment-audit-upload" onClick={() => setShowUpload(true)}
           className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">
           + رفع كشف حساب
         </button>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6" data-tour="finance-payment-audit-tabs">
         {[
           { key: 'exceptions', label: '⚠️ الاستثناءات' },
           { key: 'statements', label: '🏦 الكشوف البنكية' },
@@ -181,7 +181,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد استثناءات مفتوحة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-payment-audit-exceptions">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -215,7 +215,7 @@ export default function PaymentAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       {ex.status === 'open' && (
-                        <button onClick={() => setResolving(ex)}
+                        <button data-tour="finance-payment-audit-handle" onClick={() => setResolving(ex)}
                           className="text-xs text-brand-600 hover:underline">
                           معالجة
                         </button>
@@ -238,7 +238,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد كشوف حساب مرفوعة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-payment-audit-statements">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -283,6 +283,7 @@ export default function PaymentAuditPage() {
                     <td className="px-4 py-3">
                       {s.status === 'pending' && (
                         <button
+                          data-tour="finance-payment-audit-run-matching"
                           onClick={() => runMatch.mutate(s.id)}
                           disabled={runMatch.isPending}
                           className="text-xs text-brand-600 hover:underline disabled:opacity-50"

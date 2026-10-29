@@ -19,7 +19,7 @@ export default function Journeys({ journeys, lang, canEdit }) {
   if (!journeys?.length) return null
   const en = lang === 'en'
   return (
-    <div className="rounded-xl border border-line bg-surface p-5 space-y-4">
+    <div data-tour="general-help-center-journeys" className="rounded-xl border border-line bg-surface p-5 space-y-4">
       <div>
         <h3 className="text-sm font-bold text-brand-600">🧭 {en ? 'Guided journeys' : 'رحلات العمل'}</h3>
         <p className="text-xs text-muted mt-1 leading-5">
@@ -70,7 +70,7 @@ function JourneyCard({ j, lang, canEdit }) {
           </li>
         ))}
       </ol>
-      <button type="button" onClick={start}
+      <button type="button" onClick={start} data-tour="general-help-center-start-journey"
               className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
         ▶ {en ? 'Start the journey' : 'ابدأ الرحلة'}
       </button>

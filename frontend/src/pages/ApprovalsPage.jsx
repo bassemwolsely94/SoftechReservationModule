@@ -42,7 +42,7 @@ function DecideModal({ request, onClose }) {
         <h3 className="text-lg font-bold mb-1">اتخاذ قرار</h3>
         <p className="text-sm text-gray-500 mb-4">{request.title}</p>
 
-        <div className="flex gap-3 mb-4">
+        <div className="flex gap-3 mb-4" data-tour="hr-approvals-decision">
           {['approved','rejected'].map(d => (
             <button key={d} onClick={() => setDecision(d)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition ${
@@ -56,7 +56,7 @@ function DecideModal({ request, onClose }) {
           ))}
         </div>
 
-        <textarea
+        <textarea data-tour="hr-approvals-notes"
           value={notes} onChange={e => setNotes(e.target.value)}
           placeholder="ملاحظات (اختياري)..."
           className="w-full border rounded-lg p-3 text-sm resize-none h-24 mb-4"
@@ -68,7 +68,7 @@ function DecideModal({ request, onClose }) {
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
             إلغاء
           </button>
-          <button
+          <button data-tour="hr-approvals-confirm"
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
             className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"

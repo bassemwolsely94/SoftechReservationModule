@@ -116,7 +116,16 @@ must not get wrong → add a quiz question.
   2026-10-26 — 27 screens, 15 journeys); `customers`, `vouchers`, `loyalty`, `catalog`, `chronic`, `batches`
   (batch 3, 2026-10-26 — 23 screens, 13 journeys); `shortage`, `replacement`, `callcenter`, `omni` (batch 4,
   2026-10-26 — 19 screens, 11 journeys); `purchasing`, `invoices`, `pricing`, `analytics`, `incentives`
-  (batch 5, 2026-10-26 — 26 screens, 14 journeys). Remove a module from the set in the batch that finishes it.
+  (batch 5, 2026-10-26 — 26 screens, 14 journeys); `general`, `gamification`, `finance`, `insurance`,
+  `commerce`, `hr`, `admin` (batch 6, 2026-10-30 — 38 screens, 386 steps, 22 journeys). **`TOUR_PENDING`
+  is now empty: every screen of every module must have a rich tour and every module a journey.** A new
+  module starts rich; do not add it to the set.
+- Batch 6 journeys: general «يومك الأول في النظام» (first day), «إزاي تلاقي مساعدة» (getting help),
+  broadcast, phone; gamification earn & redeem, managers' rewards/reports/champions, phone; finance month
+  review, cheque plan, external payments, supplier settlement; insurance monthly claim, new payer setup,
+  name separation, item-class fix; hr leave request, mobile day, QA inspection; admin onboard staff, sync
+  check; commerce quotation, hospital grid.
+- `/help/manual` sits outside `Layout` (no `HelpPanel`), so it mounts `TourRunner` itself (`no-print`).
 
 ## «اسأل النظام» (built 2026-10-10)
 
@@ -212,4 +221,8 @@ as they appear on screen («…»).
 
 ## Next steps (proposed, not built)
 
-- Rich tours + journeys for the modules still in `registry.TOUR_PENDING` (batches 2–6, in side-menu order).
+- ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
+- Batch 7: enrich the remaining thin steps (no «label» / «متى؟») in finished modules — most in purchasing.
+- Batch 8: hints mode (hover / focus card on every anchored button from the same tour text) +
+  a once-per-screen «جديد هنا؟ اعرض لي» chip; anchor the main buttons that have none.
+- Batch 9: role product tour «جولة في النظام» across modules, from `/help` and onboarding.

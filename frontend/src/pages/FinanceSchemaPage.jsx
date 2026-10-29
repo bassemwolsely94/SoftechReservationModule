@@ -107,25 +107,27 @@ export default function FinanceSchemaPage() {
         </div>
         <div className="flex gap-2 mr-auto flex-wrap">
           <input
+            data-tour="finance-schema-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="بحث باسم الجدول…"
             className="border rounded-lg px-3 py-1.5 text-sm w-44 focus:ring-2 focus:ring-green-500"
           />
-          <select value={category} onChange={e => setCategory(e.target.value)}
+          <select data-tour="finance-schema-category" value={category} onChange={e => setCategory(e.target.value)}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="">كل الفئات</option>
             {categories.map(c => (
               <option key={c} value={c}>{CATEGORY_AR[c] || c}</option>
             ))}
           </select>
-          <select value={filterCon} onChange={e => setFilterCon(e.target.value)}
+          <select data-tour="finance-schema-confirmed-filter" value={filterCon} onChange={e => setFilterCon(e.target.value)}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="">الكل</option>
             <option value="confirmed">مؤكد ✓</option>
             <option value="unconfirmed">غير مؤكد</option>
           </select>
           <button
+            data-tour="finance-schema-discover"
             onClick={() => discoverMut.mutate()}
             disabled={discoverMut.isPending}
             className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
@@ -137,7 +139,7 @@ export default function FinanceSchemaPage() {
 
       {/* Stats */}
       {!isLoading && tables.length > 0 && (
-        <div className="flex gap-4 text-sm text-gray-500">
+        <div className="flex gap-4 text-sm text-gray-500" data-tour="finance-schema-stats">
           <span>إجمالي: <strong>{tables.length}</strong></span>
           <span>مؤكد: <strong className="text-green-600">{tables.filter(t => t.is_confirmed).length}</strong></span>
           <span>مفعّل للمزامنة: <strong className="text-blue-600">{tables.filter(t => t.sync_enabled).length}</strong></span>
@@ -165,6 +167,7 @@ export default function FinanceSchemaPage() {
           {/* Row header */}
           <div
             className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
+            data-tour="finance-schema-row"
             onClick={() => setExpanded(expanded === t.id ? null : t.id)}
           >
             <span className="text-gray-400">{expanded === t.id ? '▾' : '▸'}</span>
@@ -179,6 +182,7 @@ export default function FinanceSchemaPage() {
 
             {/* Confirmed toggle */}
             <button
+              data-tour="finance-schema-confirm"
               onClick={e => {
                 e.stopPropagation()
                 updateMut.mutate({ id: t.id, data: { is_confirmed: !t.is_confirmed } })
@@ -195,6 +199,7 @@ export default function FinanceSchemaPage() {
 
             {/* Sync enabled toggle */}
             <button
+              data-tour="finance-schema-sync-toggle"
               onClick={e => {
                 e.stopPropagation()
                 updateMut.mutate({ id: t.id, data: { sync_enabled: !t.sync_enabled } })

@@ -76,11 +76,11 @@ export default function CommerceDocumentsPage() {
           <h1 className="text-xl font-bold text-gray-800">المستندات التجارية</h1>
           <p className="text-sm text-gray-500">عروض أسعار · فواتير بيع · شبكات توزيع المستشفيات</p>
         </div>
-        <button onClick={() => { setForm({ doc_type: '', recipient: '', doc_date: new Date().toISOString().slice(0, 10) }); setShowNew(true) }}
+        <button data-tour="commerce-documents-new" onClick={() => { setForm({ doc_type: '', recipient: '', doc_date: new Date().toISOString().slice(0, 10) }); setShowNew(true) }}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">+ مستند جديد</button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div data-tour="commerce-documents-table" className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>{['رقم المستند', 'النوع', 'الجهة', 'التاريخ', 'الحالة', 'البنود', 'الإجمالى', ''].map(h =>
@@ -110,18 +110,18 @@ export default function CommerceDocumentsPage() {
           <div className="bg-white rounded-xl p-5 w-96 max-w-[92vw]" dir="rtl" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-gray-800 mb-3">مستند جديد</h3>
             <label className="text-xs text-gray-600 block mb-1">النوع *</label>
-            <select className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-3"
+            <select data-tour="commerce-documents-type" className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-3"
               value={form.doc_type} onChange={e => setForm(f => ({ ...f, doc_type: e.target.value }))}>
               <option value="">اختر…</option>
               {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <label className="text-xs text-gray-600 block mb-1">الجهة (اختياري)</label>
-            <select className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
+            <select data-tour="commerce-documents-recipient" className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
               value={form.recipient} onChange={e => setForm(f => ({ ...f, recipient: e.target.value }))}>
               <option value="">— بدون —</option>
               {recipients.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
-            <div className="flex gap-2 mb-3">
+            <div data-tour="commerce-documents-new-recipient" className="flex gap-2 mb-3">
               <input className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm" placeholder="+ جهة جديدة (مستشفى)…"
                 value={newRecip} onChange={e => setNewRecip(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRecipient()} />
               <button onClick={addRecipient} disabled={!newRecip.trim()}
@@ -133,7 +133,7 @@ export default function CommerceDocumentsPage() {
             {err && <p className="text-red-600 text-xs mb-2">{err}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowNew(false)} className="px-3 py-2 text-sm text-gray-600">إلغاء</button>
-              <button onClick={create} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">إنشاء وفتح</button>
+              <button data-tour="commerce-documents-create" onClick={create} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">إنشاء وفتح</button>
             </div>
           </div>
         </div>

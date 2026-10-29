@@ -164,13 +164,13 @@ function PanelBody() {
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour)}
+              <button type="button" onClick={() => startTour(data.key, data.tour)} data-tour="general-help-center-panel-show-me"
                       className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
                 👆 {lang === 'en' ? 'Show me' : 'اعرض لي'}
               </button>
             )}
             {data && !term && (data.module?.journeys || []).map((j) => (
-              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)}
+              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)} data-tour="general-help-center-panel-journey"
                       className="text-xs border border-brand-300 text-brand-700 dark:text-brand-300 rounded-lg px-3 py-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/30">
                 🧭 {pick(j.title, lang)}
               </button>

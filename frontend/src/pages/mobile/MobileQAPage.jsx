@@ -67,7 +67,7 @@ export default function MobileQAPage() {
   return (
     <div className="p-3 space-y-3">
       {creating && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+        <div data-tour="hr-qa-new-form" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <h2 className="font-semibold text-gray-700 text-sm">مراجعة جديدة</h2>
           <div>
             <label className="label">القالب</label>
@@ -89,7 +89,7 @@ export default function MobileQAPage() {
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="flex gap-2">
             <button onClick={() => setCreating(false)} className="btn-secondary flex-1">إلغاء</button>
-            <button onClick={start} disabled={busy} className="btn-primary flex-1 disabled:opacity-50">{busy ? '...' : 'ابدأ المراجعة'}</button>
+            <button data-tour="hr-qa-start" onClick={start} disabled={busy} className="btn-primary flex-1 disabled:opacity-50">{busy ? '...' : 'ابدأ المراجعة'}</button>
           </div>
         </div>
       )}
@@ -100,7 +100,7 @@ export default function MobileQAPage() {
         : (
           <div className="space-y-2.5">
             {rows.map(r => (
-              <button key={r.id} onClick={() => navigate(`/m/qa/${r.id}`)}
+              <button key={r.id} data-tour="hr-qa-card" onClick={() => navigate(`/m/qa/${r.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-bold text-sm text-gray-900">{r.branch_name || `فرع ${r.branch}`}</span>
@@ -118,7 +118,7 @@ export default function MobileQAPage() {
         )}
 
       {!creating && (
-        <button onClick={() => { setCreating(true); setError('') }}
+        <button data-tour="hr-qa-new" onClick={() => { setCreating(true); setError('') }}
           className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
           title="مراجعة جديدة">+</button>
       )}

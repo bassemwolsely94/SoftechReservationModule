@@ -130,8 +130,8 @@ export default function MyDashboardPage() {
         subtitle="بياناتك في SOFTECH كمورد وكعميل وكمسؤول بيع + مهامك"
         actions={
           <>
-            <button className="btn-secondary" onClick={() => setShowManage(true)}>🪪 هوياتي</button>
-            <button className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>
+            <button data-tour="general-me-identities" className="btn-secondary" onClick={() => setShowManage(true)}>🪪 هوياتي</button>
+            <button data-tour="general-me-add-widget" className="btn-primary" onClick={() => setShowAdd(true)}>➕ إضافة لوحة</button>
           </>
         }
       />
@@ -262,6 +262,7 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
 
   return (
     <div
+      data-tour="general-me-widget"
       className={`card ${SIZE_SPAN[widget.size] || ''} flex flex-col transition-opacity ${dragging ? 'opacity-40' : ''}`}
       draggable
       onDragStart={(e) => { setDragging(true); onDragStart?.(index); e.dataTransfer.effectAllowed = 'move' }}
@@ -271,7 +272,7 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-gray-300 cursor-move shrink-0 select-none" title="اسحب لإعادة الترتيب">⠿</span>
+          <span data-tour="general-me-widget-drag" className="text-gray-300 cursor-move shrink-0 select-none" title="اسحب لإعادة الترتيب">⠿</span>
           <span className="text-xl shrink-0">{widget.catalog_icon}</span>
           <div className="min-w-0">
             <h3 className="font-bold text-base text-gray-800 truncate">{widget.title || widget.catalog_label}</h3>
@@ -281,14 +282,14 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
-          <button title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
-          <button title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
+          <button data-tour="general-me-widget-size" title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
+          <button data-tour="general-me-widget-refresh" title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
+          <button data-tour="general-me-widget-remove" title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
         </div>
       </div>
 
       {PERIOD_WIDGETS.includes(widget.widget_type) && (
-        <div className="flex gap-1 mb-2 flex-wrap">
+        <div data-tour="general-me-widget-period" className="flex gap-1 mb-2 flex-wrap">
           {[30, 90, 180, 365].map(d => (
             <button key={d}
               className={`text-sm px-2 py-0.5 rounded-full border transition-colors ${period === d ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
@@ -395,7 +396,7 @@ function RevisionControl({ item, kind, widgetId, canEdit, onSaved }) {
           {drift && (
             <button disabled={saving} onClick={() => setRev(true)} className="btn-secondary text-[13px] px-2 py-0.5">إعادة الختم</button>
           )}
-          <button disabled={saving} onClick={() => setRev(!revised)}
+          <button data-tour="general-me-mark-reviewed" disabled={saving} onClick={() => setRev(!revised)}
             className={`text-[13px] px-2 py-0.5 rounded ${revised ? 'btn-secondary' : 'btn-primary'} disabled:opacity-50`}>
             {saving ? '...' : (revised ? 'إلغاء المراجعة' : '✔ تمييز كمُراجَع')}
           </button>
@@ -530,7 +531,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                             placeholder="اكتب ملاحظة (تُكتب في SOFTECH — المركز والفرع)"
                           />
                           <div className="flex gap-1.5">
-                            <button disabled={saving} onClick={() => saveComment(d)}
+                            <button data-tour="general-me-note-save-softech" disabled={saving} onClick={() => saveComment(d)}
                               className="btn-primary text-sm px-3 py-1 disabled:opacity-50">
                               {saving ? '...' : 'حفظ في SOFTECH'}
                             </button>
@@ -543,7 +544,7 @@ function TxnBody({ payload, wide, widgetId, canEdit, onSaved, branches }) {
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-400">📝 ملاحظات</span>
                             {canEdit && (
-                              <button onClick={() => { setDraft(d.comments || ''); setEditing(true) }}
+                              <button data-tour="general-me-note-edit" onClick={() => { setDraft(d.comments || ''); setEditing(true) }}
                                 className="text-gray-400 hover:text-brand-600" title="تعديل الملاحظة">✏️ تعديل</button>
                             )}
                           </div>
@@ -850,12 +851,12 @@ function AddWidgetModal({ onClose, approvedIdentities, onNeedIdentity, onAdded }
       footer={
         <div className="flex gap-2">
           <button className="btn-secondary flex-1" onClick={onClose}>إلغاء</button>
-          <button className="btn-primary flex-1 disabled:opacity-40" disabled={!canAdd || addM.isPending} onClick={() => addM.mutate()}>
+          <button data-tour="general-me-add-confirm" className="btn-primary flex-1 disabled:opacity-40" disabled={!canAdd || addM.isPending} onClick={() => addM.mutate()}>
             {addM.isPending ? <Spinner size="sm" color="white" /> : 'إضافة'}
           </button>
         </div>
       }>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div data-tour="general-me-widget-catalog" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {catalog.map(c => (
           <button key={c.widget_type}
             onClick={() => { setPicked(c); setIdentityId('') }}
@@ -932,7 +933,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
         ))}
       </div>
       <div className="flex gap-2 mb-3">
-        <input className="input flex-1" placeholder="ابحث بالاسم أو الكود…" value={q}
+        <input data-tour="general-me-claim-search" className="input flex-1" placeholder="ابحث بالاسم أو الكود…" value={q}
           onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} />
         <button className="btn-primary" onClick={doSearch} disabled={searching}>{searching ? <Spinner size="sm" color="white" /> : 'بحث'}</button>
       </div>
@@ -945,7 +946,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
               <div className="text-sm text-gray-800 truncate">{r.name}</div>
               <div className="text-sm text-gray-400">كود: {r.person_code} {r.ptcode ? `· نوع ${r.ptcode}` : ''}</div>
             </div>
-            <button className="btn-secondary text-xs shrink-0" disabled={claimM.isPending} onClick={() => claimM.mutate(r)}>
+            <button data-tour="general-me-claim-request" className="btn-secondary text-xs shrink-0" disabled={claimM.isPending} onClick={() => claimM.mutate(r)}>
               اطلب اعتماد
             </button>
           </div>
@@ -967,7 +968,7 @@ function ManageIdentitiesModal({ identities, onClose, onClaimNew, onChanged }) {
   })
   return (
     <Modal open onClose={onClose} title="هوياتي في SOFTECH" maxWidth="max-w-xl"
-      footer={<button className="btn-primary w-full" onClick={onClaimNew}>➕ المطالبة بهوية جديدة</button>}>
+      footer={<button data-tour="general-me-claim-new" className="btn-primary w-full" onClick={onClaimNew}>➕ المطالبة بهوية جديدة</button>}>
       {identities.length === 0 ? (
         <EmptyState title="لا توجد هويات" sub="اطلب هويتك كمورد أو كعميل ليعتمدها المدير" />
       ) : (
@@ -1017,7 +1018,7 @@ function AdminApprovalQueue() {
 
   if (pending.length === 0) return null
   return (
-    <div className="mt-4 card border-amber-200 bg-amber-50/40">
+    <div data-tour="general-me-identity-queue" className="mt-4 card border-amber-200 bg-amber-50/40">
       <SectionTitle icon="🪪">طلبات اعتماد الهويات ({pending.length})</SectionTitle>
       <div className="space-y-2">
         {pending.map(p => (
@@ -1027,7 +1028,7 @@ function AdminApprovalQueue() {
               <div className="text-sm text-gray-400">{KIND_LABEL[p.kind]} · كود {p.person_code}{p.note ? ` · ${p.note}` : ''}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button className="btn-primary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'approve' })}>اعتماد</button>
+              <button data-tour="general-me-identity-approve" className="btn-primary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'approve' })}>اعتماد</button>
               <button className="btn-secondary text-xs" onClick={() => reviewM.mutate({ id: p.id, action: 'reject' })}>رفض</button>
             </div>
           </div>

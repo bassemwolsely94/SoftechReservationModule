@@ -80,7 +80,7 @@ function MeTab({ me, t, lang }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card lg:col-span-2">
+        <div data-tour="gamification-main-level" className="card lg:col-span-2">
           <LevelBar level={me.level} xp={me.xp} t={t} lang={lang} />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             <Kpi label={t('نقاط اليوم', 'Today')} value={signed(me.points?.day)}
@@ -108,7 +108,7 @@ function MeTab({ me, t, lang }) {
           </div>
         </div>
 
-        <div className="card">
+        <div data-tour="gamification-main-leave-nothing" className="card">
           <div className="font-black text-gray-900 mb-2">
             {t('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind')}
           </div>
@@ -121,7 +121,7 @@ function MeTab({ me, t, lang }) {
             <ul className="space-y-2">
               {open.map(i => (
                 <li key={i.key}>
-                  <button onClick={() => navigate(i.route)}
+                  <button data-tour="gamification-main-open-item" onClick={() => navigate(i.route)}
                           className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm border ${i.penalty
                             ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
                     <span className="text-start">{lang === 'en' ? i.label_en : i.label_ar}</span>
@@ -139,7 +139,7 @@ function MeTab({ me, t, lang }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
-          <div className="font-black text-gray-900 mb-3">{t('🪜 سلّم المستويات', '🪜 Level ladder')}</div>
+          <div data-tour="gamification-main-ladder" className="font-black text-gray-900 mb-3">{t('🪜 سلّم المستويات', '🪜 Level ladder')}</div>
           <ol className="space-y-1.5">
             {levels.map(lv => {
               const reached = (me.level?.current?.number ?? 1) >= lv.number
@@ -155,7 +155,7 @@ function MeTab({ me, t, lang }) {
           </ol>
         </div>
         <div className="card">
-          <div className="font-black text-gray-900 mb-3">{t('🕒 آخر النقاط', '🕒 Recent points')}</div>
+          <div data-tour="gamification-main-recent" className="font-black text-gray-900 mb-3">{t('🕒 آخر النقاط', '🕒 Recent points')}</div>
           {(me.recent || []).length === 0 ? (
             <p className="text-sm text-gray-400">{t('لا توجد نقاط بعد.', 'No points yet.')}</p>
           ) : (
@@ -202,7 +202,7 @@ export function LeaderboardTable({ rows, meId, t, lang, compact = false }) {
   }
   const medal = (r) => ({ 1: '🥇', 2: '🥈', 3: '🥉' }[r] || r)
   return (
-    <div className="overflow-x-auto">
+    <div data-tour="gamification-main-leaderboard" className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="text-xs text-gray-500 border-b border-gray-100">
           <tr>
@@ -247,7 +247,7 @@ function LeaderboardTab({ me, t, lang }) {
   })
   return (
     <div className="card space-y-3">
-      <div className="flex flex-wrap gap-2 items-center">
+      <div data-tour="gamification-main-leaderboard-filters" className="flex flex-wrap gap-2 items-center">
         <Segmented value={scope} onChange={setScope} t={t}
                    options={[['branch', 'فرعي', 'My branch'], ['network', 'كل الفروع', 'Network']]} />
         <Segmented value={period} onChange={setPeriod} options={PERIODS} t={t} />
@@ -274,7 +274,7 @@ function BranchesTab({ t }) {
     queryFn: () => gamificationApi.branches({ period }).then(r => r.data),
   })
   return (
-    <div className="card space-y-3">
+    <div data-tour="gamification-main-branches" className="card space-y-3">
       <Segmented value={period} onChange={setPeriod} options={PERIODS} t={t} />
       <p className="text-xs text-gray-500">
         {t('الترتيب بمتوسط نقاط اللاعب النشط — عادل بين الفروع الكبيرة والصغيرة.',
@@ -314,7 +314,7 @@ function BranchesTab({ t }) {
 
 function BadgesTab({ me, t, lang }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div data-tour="gamification-main-badges" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       {(me.badges || []).map(b => (
         <div key={b.key} className={`card text-center ${b.earned ? '' : 'opacity-60'}`}>
           <div className={`text-4xl ${b.earned ? '' : 'grayscale'}`}>{b.icon}</div>
@@ -354,7 +354,7 @@ function RulesTab({ t, lang }) {
     return g
   }, [rules])
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div data-tour="gamification-main-rules" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {Object.entries(groups).map(([cat, list]) => (
         <div key={cat} className="card">
           <div className="font-black text-gray-900 mb-2">{t(...(CATEGORY[cat] || [cat, cat]))}</div>
@@ -406,10 +406,10 @@ function ReportsTab({ t, lang }) {
         <Segmented value={period} onChange={setPeriod} options={PERIODS} t={t} />
         <div className="flex items-center gap-2">
           {err && <span className="text-xs text-red-600">{err}</span>}
-          <button onClick={download} className="btn-secondary text-xs">⬇️ {t('تصدير Excel', 'Export Excel')}</button>
+          <button data-tour="gamification-main-report-export" onClick={download} className="btn-secondary text-xs">⬇️ {t('تصدير Excel', 'Export Excel')}</button>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div data-tour="gamification-main-report-kpis" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Kpi label={t('موظفون مشاركون', 'Active players')} value={fmt(k.players)} />
         <Kpi label={t('نقاط مكتسبة', 'Points earned')} value={fmt(k.earned)} tone="text-emerald-600" />
         <Kpi label={t('خصومات', 'Deductions')} value={fmt(k.lost)} tone="text-red-600" />
@@ -610,8 +610,8 @@ function SettingsTab({ t, lang }) {
 
       <div className="card">
         <div className="flex items-center justify-between mb-2">
-          <div className="font-black">{t('قواعد النقاط', 'Point rules')}</div>
-          <button className="btn-secondary text-xs" onClick={() => runNow.mutate()} disabled={runNow.isPending}>
+          <div data-tour="gamification-main-rules-editor" className="font-black">{t('قواعد النقاط', 'Point rules')}</div>
+          <button data-tour="gamification-main-recalculate" className="btn-secondary text-xs" onClick={() => runNow.mutate()} disabled={runNow.isPending}>
             🔄 {t('إعادة الاحتساب الآن', 'Recalculate now')}
           </button>
         </div>
@@ -636,7 +636,7 @@ function SettingsTab({ t, lang }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
-          <div className="font-black mb-2">{t('المستويات والألقاب', 'Levels and titles')}</div>
+          <div data-tour="gamification-main-levels-editor" className="font-black mb-2">{t('المستويات والألقاب', 'Levels and titles')}</div>
           <ul className="space-y-1.5">
             {levels.map(lv => (
               <LevelRow key={`${lv.number}-${lv.min_xp}-${lv.title_ar}-${lv.title_en}`} lv={lv} t={t}
@@ -645,7 +645,7 @@ function SettingsTab({ t, lang }) {
           </ul>
         </div>
 
-        <div className="card space-y-2">
+        <div data-tour="gamification-main-manual-award" className="card space-y-2">
           <div className="font-black">{t('تقدير يدوي (منح أو خصم)', 'Manual recognition (+/−)')}</div>
           <input className="input-field text-sm" placeholder={t('ابحث عن موظف…', 'Search employee…')}
                  value={q} onChange={e => setQ(e.target.value)} />
@@ -670,7 +670,7 @@ function SettingsTab({ t, lang }) {
       </div>
 
       <div className="card">
-        <div className="font-black mb-2">{t('سجل التعديلات', 'Change log')}</div>
+        <div data-tour="gamification-main-change-log" className="font-black mb-2">{t('سجل التعديلات', 'Change log')}</div>
         <ul className="divide-y divide-gray-100 text-xs max-h-72 overflow-y-auto">
           {changes.map(c => (
             <li key={c.id} className="py-1.5 flex justify-between gap-2">
@@ -728,7 +728,7 @@ export default function GamificationPage() {
                   subtitle={t('كل عمل تنجزه يُحتسب: ارتقِ في المستويات، اجمع الشارات، ولا تترك شيئاً خلفك',
                               'Every job you do counts: climb levels, collect badges, and leave nothing behind')} />
       <div className="px-4 sm:px-6 space-y-4">
-        <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
+        <div data-tour="gamification-main-tabs" className="flex gap-1 overflow-x-auto border-b border-gray-200">
           {tabs.map(([k, ar, en]) => (
             <button key={k} onClick={() => setTab(k)}
                     className={`px-3 py-2 text-sm font-bold whitespace-nowrap border-b-2 -mb-px ${tab === k

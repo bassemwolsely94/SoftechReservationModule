@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import { fa } from '../utils/flowArrow'
 
-function Btn({ children, onClick, variant = 'primary', size = 'sm', disabled, className = '' }) {
+function Btn({ children, onClick, variant = 'primary', size = 'sm', disabled, className = '', 'data-tour': dataTour }) {
   const v = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
     secondary: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50',
@@ -21,7 +21,7 @@ function Btn({ children, onClick, variant = 'primary', size = 'sm', disabled, cl
   }
   const s = { sm: 'px-2.5 py-1 text-xs', md: 'px-4 py-2 text-sm' }
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} data-tour={dataTour}
       className={`inline-flex items-center gap-1 rounded font-medium transition-colors disabled:opacity-50 ${s[size]} ${v[variant]} ${className}`}>
       {children}
     </button>
@@ -94,7 +94,7 @@ function ClientPanel({ selected, onSelect }) {
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-gray-700 text-sm">جهات التأمين</h2>
-        <Btn onClick={openAdd}>+ جديد</Btn>
+        <Btn onClick={openAdd} data-tour="insurance-clients-add-client">+ جديد</Btn>
       </div>
 
       {showForm && (
@@ -112,7 +112,7 @@ function ClientPanel({ selected, onSelect }) {
           </div>
           <div>
             <label className={lbl}>كود العميل في سوفتك</label>
-            <input className={inp} value={form.softech_personcode} onChange={e => setForm(p => ({...p, softech_personcode: e.target.value}))} placeholder="personcode..." />
+            <input className={inp} data-tour="insurance-clients-payer-code" value={form.softech_personcode} onChange={e => setForm(p => ({...p, softech_personcode: e.target.value}))} placeholder="personcode..." />
           </div>
           <div>
             <label className={lbl}>العنوان</label>
@@ -208,7 +208,7 @@ function SubClientPanel({ client, selected, onSelect }) {
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-gray-700 text-sm">الفئات — {client.name_short || client.name}</h2>
-        <Btn onClick={openAdd}>+ فئة</Btn>
+        <Btn onClick={openAdd} data-tour="insurance-clients-add-subclient">+ فئة</Btn>
       </div>
 
       {showForm && (
@@ -228,7 +228,7 @@ function SubClientPanel({ client, selected, onSelect }) {
           </div>
           <div>
             <label className={lbl}>أكواد إضافية (مفصولة بفاصلة)</label>
-            <input className={inp} value={form.additional_personcodes}
+            <input className={inp} value={form.additional_personcodes} data-tour="insurance-clients-extra-codes"
               onChange={e => setForm(p => ({...p, additional_personcodes: e.target.value}))}
               placeholder="كود1,كود2,كود3" />
           </div>
@@ -327,7 +327,7 @@ function ContractPanel({ subclient }) {
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-gray-700 text-sm">العقود — {subclient.name}</h2>
-        <Btn onClick={openAdd}>+ عقد</Btn>
+        <Btn onClick={openAdd} data-tour="insurance-clients-add-contract">+ عقد</Btn>
       </div>
 
       {showForm && (
@@ -352,7 +352,7 @@ function ContractPanel({ subclient }) {
                 onChange={e => setForm(p => ({...p, effective_to: e.target.value}))} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2" data-tour="insurance-clients-contract-rates">
             {[
               ['خصم المحلى %', 'local_discount_pct'],
               ['خصم المستورد %', 'imported_discount_pct'],
@@ -373,7 +373,7 @@ function ContractPanel({ subclient }) {
             <p className="text-xs text-gray-400 mt-0.5">15=تأمين صحي، 10=تعاقدات/آجل</p>
           </div>
           <div className="flex gap-2">
-            <Btn onClick={save} disabled={!form.effective_from || saving} size="md">
+            <Btn onClick={save} disabled={!form.effective_from || saving} size="md" data-tour="insurance-clients-contract-save">
               {saving ? 'جارٍ الحفظ...' : (editId ? 'حفظ التعديل' : 'حفظ العقد')}
             </Btn>
             <Btn onClick={close} variant="secondary" size="md">إلغاء</Btn>
@@ -424,7 +424,7 @@ export default function InsuranceClientsPage() {
         <p className="text-sm text-gray-500 mt-0.5">جهات التأمين — الفئات — العقود ونسب الخصم</p>
       </div>
 
-      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]">
+      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]" data-tour="insurance-clients-columns">
         <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ClientPanel
             selected={selectedClient}

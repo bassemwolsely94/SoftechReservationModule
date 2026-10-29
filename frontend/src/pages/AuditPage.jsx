@@ -145,7 +145,7 @@ function AuditLogsTab() {
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div data-tour="admin-audit-log-filters" className="flex gap-3 mb-4 flex-wrap">
         <input
           className="input-field w-64 text-sm"
           placeholder="🔍 بحث باسم المستخدم، الكيان..."
@@ -175,7 +175,7 @@ function AuditLogsTab() {
           <div>لا توجد سجلات</div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div data-tour="admin-audit-log-table" className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -255,7 +255,7 @@ function ReviewModal({ flag, onClose, onSaved }) {
         {/* Review form */}
         <div>
           <label className="label text-xs">القرار</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div data-tour="admin-audit-decision" className="grid grid-cols-3 gap-2">
             {[
               { v: 'reviewed',  label: '✓ راجعت',       cls: 'border-green-300 bg-green-50 text-green-700' },
               { v: 'dismissed', label: '— تجاهل',        cls: 'border-gray-300 bg-gray-50 text-gray-600' },
@@ -328,7 +328,7 @@ function AbuseFlagsTab() {
     <div>
       {/* Summary KPIs */}
       {summary && summary.open_flags?.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div data-tour="admin-audit-summary" className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           {[
             { label: 'إلغاءات متكررة',   type: 'frequent_cancellations',  color: '#ef4444' },
             { label: 'تعديلات متكررة',   type: 'frequent_edits',           color: '#f59e0b' },
@@ -350,7 +350,7 @@ function AbuseFlagsTab() {
       )}
 
       {/* Filters + scan */}
-      <div className="flex gap-3 mb-4 flex-wrap items-end">
+      <div data-tour="admin-audit-flag-filters" className="flex gap-3 mb-4 flex-wrap items-end">
         <div className="flex gap-1">
           {[
             { v: 'open',     label: 'مفتوح' },
@@ -376,7 +376,7 @@ function AbuseFlagsTab() {
           <option value="info">معلومة</option>
         </select>
         <div className="flex-1" />
-        <button onClick={runScan} disabled={scanning}
+        <button data-tour="admin-audit-scan" onClick={runScan} disabled={scanning}
           className="btn-secondary text-sm disabled:opacity-50">
           {scanning ? '🔍 جارٍ الفحص...' : '🔍 فحص الآن'}
         </button>
@@ -444,7 +444,7 @@ function AbuseFlagsTab() {
                   </div>
 
                   {flag.status === 'open' && (
-                    <button
+                    <button data-tour="admin-audit-review"
                       onClick={() => setReviewing(flag)}
                       className="btn-secondary text-xs px-3 py-1.5 shrink-0">
                       مراجعة
@@ -489,7 +489,7 @@ export default function AuditPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0 mt-3 border-b border-gray-200 -mb-px overflow-x-auto">
+          <div data-tour="admin-audit-tabs" className="flex gap-0 mt-3 border-b border-gray-200 -mb-px overflow-x-auto">
             <button
               onClick={() => setTab('flags')}
               className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${

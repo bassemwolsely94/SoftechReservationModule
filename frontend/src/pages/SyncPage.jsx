@@ -71,7 +71,7 @@ function BranchHealthPanel({ data, onProbe, probing }) {
             {summary.ok}/{summary.total} نقطة متصلة
           </span>
           {onProbe && (
-            <button
+            <button data-tour="admin-sync-probe"
               onClick={onProbe}
               disabled={probing}
               className="btn-secondary text-xs disabled:opacity-50 gap-1"
@@ -203,7 +203,7 @@ export default function SyncPage() {
 
         {/* Scheduler-down warning */}
         {schedulerState && !schedulerState.running && (
-          <div className="card border-r-4 bg-red-50" style={{ borderRightColor: '#ef4444' }}>
+          <div data-tour="admin-sync-scheduler" className="card border-r-4 bg-red-50" style={{ borderRightColor: '#ef4444' }}>
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚠️</span>
               <div>

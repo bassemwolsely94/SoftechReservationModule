@@ -57,7 +57,7 @@ function RewardCard({ r, t, lang, onRedeem, busy }) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   return (
-    <div className={`card flex flex-col ${r.can_request ? '' : 'opacity-75'}`}>
+    <div data-tour="gamification-main-reward-card" className={`card flex flex-col ${r.can_request ? '' : 'opacity-75'}`}>
       <div className="flex items-start gap-3">
         <span className="text-3xl">{r.icon}</span>
         <div className="min-w-0 flex-1">
@@ -74,7 +74,7 @@ function RewardCard({ r, t, lang, onRedeem, busy }) {
       <div className="mt-auto pt-3 flex items-center justify-between gap-2">
         <span className="font-black text-brand-700">{fmt(r.cost)} {t('نقطة', 'pts')}</span>
         {r.can_request
-          ? !open && <button className="btn-primary text-xs" onClick={() => setOpen(true)}>{t('استبدال', 'Redeem')}</button>
+          ? !open && <button data-tour="gamification-main-redeem" className="btn-primary text-xs" onClick={() => setOpen(true)}>{t('استبدال', 'Redeem')}</button>
           : <span className="text-[11px] text-gray-400 text-end">{lang === 'en' ? r.blocked_en : r.blocked_ar}</span>}
       </div>
       {open && (
@@ -82,7 +82,7 @@ function RewardCard({ r, t, lang, onRedeem, busy }) {
           <input className="input-field text-sm" placeholder={t('ملاحظة (اختياري) — مثلاً اليوم المفضل', 'Note (optional) — e.g. preferred date')}
                  value={note} onChange={e => setNote(e.target.value)} maxLength={300} />
           <div className="flex gap-2">
-            <button className="btn-primary text-xs flex-1" disabled={busy}
+            <button data-tour="gamification-main-redeem-confirm" className="btn-primary text-xs flex-1" disabled={busy}
                     onClick={() => onRedeem(r, note, () => { setOpen(false); setNote('') })}>
               {t(`تأكيد — خصم ${fmt(r.cost)} نقطة`, `Confirm — spend ${fmt(r.cost)} pts`)}
             </button>
@@ -130,7 +130,7 @@ export function RewardsTab({ t, lang }) {
   const cats = REWARD_CATEGORIES.filter(([k]) => (data?.rewards || []).some(r => r.category === k))
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div data-tour="gamification-main-wallet" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="card text-center py-3 col-span-2 sm:col-span-1">
           <div className="text-2xl font-black text-brand-700">🎁 {fmt(w?.balance)}</div>
           <div className="text-xs text-gray-500">{t('رصيدك المتاح', 'Available balance')}</div>
@@ -166,7 +166,7 @@ export function RewardsTab({ t, lang }) {
           </div>
         )}
       <div className="card">
-        <div className="font-black text-gray-900 mb-2">{t('🧾 طلباتي', '🧾 My requests')}</div>
+        <div data-tour="gamification-main-my-requests" className="font-black text-gray-900 mb-2">{t('🧾 طلباتي', '🧾 My requests')}</div>
         {(mine?.redemptions || []).length === 0
           ? <p className="text-sm text-gray-400">{t('لم تطلب مكافآت بعد.', 'No requests yet.')}</p>
           : (
@@ -183,7 +183,7 @@ export function RewardsTab({ t, lang }) {
                   <span className="flex items-center gap-2">
                     <StatusChip status={x.status} t={t} />
                     {x.status === 'pending' && (
-                      <button className="text-xs text-red-600 underline" disabled={cancel.isPending}
+                      <button data-tour="gamification-main-cancel-request" className="text-xs text-red-600 underline" disabled={cancel.isPending}
                               onClick={() => cancel.mutate(x.id)}>{t('إلغاء', 'Cancel')}</button>
                     )}
                   </span>
@@ -214,12 +214,12 @@ function RedemptionRow({ x, t, lang, canEdit, onFulfil, onCancel, busy }) {
         <span className="flex items-center gap-2">
           <StatusChip status={x.status} t={t} />
           {x.status === 'pending' && x.approval_request_id && (
-            <Link to="/approvals" className="text-xs text-brand-700 underline">{t('صندوق الموافقات', 'Approvals inbox')}</Link>
+            <Link to="/approvals" data-tour="gamification-main-approvals-link" className="text-xs text-brand-700 underline">{t('صندوق الموافقات', 'Approvals inbox')}</Link>
           )}
           {canEdit && x.status === 'approved' && !mode && (
             <>
-              <button className="btn-primary text-xs" onClick={() => setMode('fulfil')}>{t('تم التسليم', 'Mark delivered')}</button>
-              <button className="btn-secondary text-xs" onClick={() => setMode('cancel')}>{t('إلغاء', 'Cancel')}</button>
+              <button data-tour="gamification-main-mark-delivered" className="btn-primary text-xs" onClick={() => setMode('fulfil')}>{t('تم التسليم', 'Mark delivered')}</button>
+              <button data-tour="gamification-main-cancel-redemption" className="btn-secondary text-xs" onClick={() => setMode('cancel')}>{t('إلغاء', 'Cancel')}</button>
             </>
           )}
         </span>
@@ -264,7 +264,7 @@ export function RedemptionsTab({ t, lang, canEdit }) {
                 ['', 'الكل', 'All']]
   return (
     <div className="card space-y-3">
-      <div className="flex flex-wrap gap-1.5">
+      <div data-tour="gamification-main-redemption-filter" className="flex flex-wrap gap-1.5">
         {tabs.map(([k, ar, en]) => (
           <button key={k} onClick={() => setStatus(k)}
                   className={`text-xs font-bold rounded-full px-3 py-1 border ${status === k ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-600 border-gray-200'}`}>
@@ -349,8 +349,8 @@ export function RewardCatalogEditor({ t, lang }) {
   return (
     <div className="card space-y-2">
       <div className="flex items-center justify-between">
-        <div className="font-black">{t('🎁 كتالوج المكافآت', '🎁 Reward catalog')}</div>
-        {editing !== 'new' && <button className="btn-secondary text-xs" onClick={() => setEditing('new')}>➕ {t('مكافأة جديدة', 'New reward')}</button>}
+        <div data-tour="gamification-main-catalog" className="font-black">{t('🎁 كتالوج المكافآت', '🎁 Reward catalog')}</div>
+        {editing !== 'new' && <button data-tour="gamification-main-new-reward" className="btn-secondary text-xs" onClick={() => setEditing('new')}>➕ {t('مكافأة جديدة', 'New reward')}</button>}
       </div>
       <p className="text-[11px] text-gray-400">
         {t('المكافآت التي تكلف الشركة مالاً أو وقت عمل تبدأ موقوفة — حدّد تكلفتها بالنقاط ثم فعّلها.',

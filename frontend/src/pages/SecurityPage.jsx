@@ -35,7 +35,7 @@ function DisableForm({ onDone }) {
       <input type="text" inputMode="numeric" className="input-field w-full font-mono" dir="ltr"
         placeholder="رمز المصادقة أو رمز استرجاع" value={code} onChange={e => setCode(e.target.value)} />
       {error && <div className="text-sm text-red-600">{error}</div>}
-      <button onClick={submit} disabled={busy}
+      <button data-tour="general-security-disable" onClick={submit} disabled={busy}
         className="bg-red-500 hover:bg-red-600 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50">
         {busy ? 'جارٍ الإيقاف...' : 'إيقاف المصادقة الثنائية'}
       </button>
@@ -60,7 +60,7 @@ export default function SecurityPage() {
       <h1 className="text-lg font-bold text-gray-900 mb-1">أمان الحساب</h1>
       <p className="text-sm text-gray-400 mb-6">المصادقة الثنائية (TOTP) لحماية الدخول من خارج الصيدلية.</p>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <div data-tour="general-security-status" className="bg-white rounded-2xl border border-gray-200 p-6">
         {isLoading ? (
           <div className="text-sm text-gray-400 text-center py-6">جارٍ التحميل...</div>
         ) : enrolling ? (
@@ -71,7 +71,7 @@ export default function SecurityPage() {
               <span className="text-xl">🔒</span>
               <span className="font-semibold">المصادقة الثنائية مفعّلة</span>
             </div>
-            <div className="text-sm text-gray-500">
+            <div data-tour="general-security-codes-left" className="text-sm text-gray-500">
               رموز الاسترجاع المتبقية: <strong>{st.backup_codes_left}</strong>
             </div>
             <hr className="border-gray-100" />
@@ -84,12 +84,12 @@ export default function SecurityPage() {
               <span className="font-semibold">المصادقة الثنائية غير مفعّلة</span>
             </div>
             {st?.required_for_role && (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p data-tour="general-security-required" className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 دورك ({user?.role_label || user?.role}) سيتطلب المصادقة الثنائية عند تفعيل الإلزام.
                 {st.enforcement_on ? ' الإلزام مفعّل حالياً.' : ' يُفضّل تفعيلها الآن.'}
               </p>
             )}
-            <button onClick={() => setEnrolling(true)} className="btn-primary">
+            <button data-tour="general-security-enable" onClick={() => setEnrolling(true)} className="btn-primary">
               تفعيل المصادقة الثنائية
             </button>
           </div>

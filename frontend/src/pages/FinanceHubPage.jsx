@@ -45,7 +45,7 @@ export default function FinanceHubPage() {
         </div>
 
         {/* ── Tab bar ───────────────────────────────────────────────────────── */}
-        <nav className="flex gap-1 overflow-x-auto">
+        <nav className="flex gap-1 overflow-x-auto" data-tour="finance-dashboard-tabs">
           {visibleTabs.map(tab => (
             <NavLink
               key={tab.to}

@@ -57,7 +57,7 @@ export default function CommerceAllocationGrid({ doc, onTotals }) {
   return (
     <div>
       {/* Branch manager */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
+      <div data-tour="commerce-editor-grid-branches" className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-xs text-gray-500">الفروع ({locs.length}):</span>
         {locs.map(l => <span key={l.id} className="text-xs bg-gray-100 text-gray-700 rounded px-2 py-0.5">{l.name}</span>)}
         <input className={`${inp} w-32`} placeholder="+ فرع جديد" value={newBranch}
@@ -66,7 +66,7 @@ export default function CommerceAllocationGrid({ doc, onTotals }) {
           className="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">إضافة فرع</button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+      <div data-tour="commerce-editor-grid" className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>

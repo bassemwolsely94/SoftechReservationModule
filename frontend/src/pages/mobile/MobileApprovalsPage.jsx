@@ -145,7 +145,7 @@ export default function MobileApprovalsPage() {
   return (
     <div className="p-3 space-y-3">
       {/* Segmented toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="flex bg-gray-100 rounded-xl p-1" data-tour="hr-mobile-approvals-tabs">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -163,7 +163,7 @@ export default function MobileApprovalsPage() {
         <h1 className="text-base font-bold text-gray-900">
           {tab === 'hr' ? 'موافقات الموارد البشرية' : 'الموافقات التشغيلية'}
         </h1>
-        {!loading && <span className="text-xs text-gray-400">{toLatin(items.length)} بانتظارك</span>}
+        {!loading && <span data-tour="hr-mobile-approvals-count" className="text-xs text-gray-400">{toLatin(items.length)} بانتظارك</span>}
       </div>
 
       {loading ? (
@@ -175,7 +175,7 @@ export default function MobileApprovalsPage() {
       ) : (
         <div className="space-y-2.5">
           {items.map(it => (
-            <div key={`${it.kind}-${it.id}`} className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div key={`${it.kind}-${it.id}`} data-tour="hr-mobile-approvals-card" className="bg-white rounded-2xl border border-gray-200 p-4">
               <div className="flex items-start justify-between gap-2 mb-1.5">
                 <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                   it.kind === 'pricing' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
@@ -196,11 +196,11 @@ export default function MobileApprovalsPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-3">
-                <button
+                <button data-tour="hr-mobile-approvals-approve"
                   onClick={() => { setTarget({ kind: it.kind, id: it.id, decision: 'approved' }); setNotes(''); setError('') }}
                   className="py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold active:opacity-90"
                 >اعتماد</button>
-                <button
+                <button data-tour="hr-mobile-approvals-reject"
                   onClick={() => { setTarget({ kind: it.kind, id: it.id, decision: 'rejected' }); setNotes(''); setError('') }}
                   className="py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold active:opacity-90"
                 >رفض</button>
@@ -217,7 +217,7 @@ export default function MobileApprovalsPage() {
             <h3 className="font-bold text-gray-800 text-base mb-1 text-center">
               {target.decision === 'approved' ? 'اعتماد الطلب؟' : 'رفض الطلب؟'}
             </h3>
-            <textarea
+            <textarea data-tour="hr-mobile-approvals-notes"
               rows={2}
               className="input-field w-full resize-none mt-3"
               placeholder={target.decision === 'rejected' ? 'سبب الرفض (مستحسن)...' : 'ملاحظة (اختياري)...'}
@@ -228,7 +228,7 @@ export default function MobileApprovalsPage() {
             {error && <div className="text-sm text-red-600 mt-2 text-center">{error}</div>}
             <div className="flex gap-2 mt-4">
               <button onClick={() => setTarget(null)} disabled={saving} className="btn-secondary flex-1 text-sm">إلغاء</button>
-              <button onClick={run} disabled={saving}
+              <button data-tour="hr-mobile-approvals-confirm" onClick={run} disabled={saving}
                 className={`flex-1 text-sm text-white rounded-xl font-medium disabled:opacity-50 ${target.decision === 'approved' ? 'bg-green-600' : 'bg-red-500'}`}>
                 {saving ? 'جارٍ التنفيذ...' : 'تأكيد'}
               </button>

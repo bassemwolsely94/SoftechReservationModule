@@ -29,7 +29,7 @@ export default function MobileGamificationPage() {
   return (
     <div className="p-3 space-y-3" dir={lang === 'en' ? 'ltr' : 'rtl'}>
       <h1 className="text-base font-bold text-gray-900">{t('التحفيز', 'Gamification')}</h1>
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div data-tour="gamification-main-mobile-level" className="bg-white rounded-2xl border border-gray-200 p-4">
         <LevelBar level={me.level} xp={me.xp} t={t} lang={lang} />
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -41,13 +41,13 @@ export default function MobileGamificationPage() {
           </div>
         ))}
       </div>
-      <button onClick={() => navigate('/gamification?tab=rewards')}
+      <button data-tour="gamification-main-mobile-wallet" onClick={() => navigate('/gamification?tab=rewards')}
               className="w-full bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between">
         <span className="text-sm font-bold">{t('🎁 رصيد المكافآت', '🎁 Reward balance')}</span>
         <span className="text-lg font-black text-brand-700">{(me.wallet?.balance ?? 0).toLocaleString('en-US')}</span>
       </button>
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
-        <div className="font-bold text-sm mb-2">{t('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind')}</div>
+        <div data-tour="gamification-main-mobile-open-items" className="font-bold text-sm mb-2">{t('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind')}</div>
         {open.length === 0
           ? <p className="text-sm text-emerald-700">{t('لا شيء ينتظرك ✅', 'Nothing waiting ✅')}</p>
           : open.map(i => (
@@ -58,7 +58,7 @@ export default function MobileGamificationPage() {
           ))}
       </div>
       <div className="bg-white rounded-2xl border border-gray-200 p-2">
-        <div className="font-bold text-sm p-2">{t('🏆 ترتيب فرعي هذا الشهر', '🏆 My branch this month')}</div>
+        <div data-tour="gamification-main-mobile-board" className="font-bold text-sm p-2">{t('🏆 ترتيب فرعي هذا الشهر', '🏆 My branch this month')}</div>
         <LeaderboardTable rows={board?.rows} meId={me.staff_id} t={t} lang={lang} compact />
       </div>
     </div>

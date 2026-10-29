@@ -151,7 +151,7 @@ function Kpis({ d }) {
     { label: 'استثناءات', value: d.exceptions?.total, sub: `حرجة: ${d.exceptions?.by_severity?.critical || 0}`, warn: (d.exceptions?.total || 0) > 0 },
   ]
   return (
-    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3" data-tour="finance-reconciliation-kpis">
       {tiles.map((t, i) => (
         <div key={i} className={`rounded-xl border p-3 ${t.warn ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}>
           <div className="text-xs text-gray-500">{t.label}</div>
@@ -175,7 +175,7 @@ function InvoiceLines({ invoiceId, compact = false }) {
   if (!invoiceId) return null
   return (
     <div className={compact ? '' : 'mt-1'}>
-      <button onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+      <button data-tour="finance-reconciliation-invoice-items" onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
               className="text-[11px] px-2 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
         {open ? '▲ إخفاء الأصناف' : '📦 أصناف الفاتورة'}
       </button>
@@ -288,7 +288,7 @@ function CandidateRow({ c, onApprove, onReject, onWrite, onGroup, onReverse, bus
   const held = c.status === 'proposed' && c.decision_note?.startsWith('يحتاج مراجعة')
   return (
     <div className={`border rounded-lg bg-white ${selected ? 'border-[#022871] ring-1 ring-[#022871]/30' : 'border-gray-200'} ${GRID_MIN}`}>
-      <div className={`${GRID_COLS} px-3 py-2 cursor-pointer hover:bg-gray-50 text-sm`} onClick={() => setOpen(!open)}>
+      <div className={`${GRID_COLS} px-3 py-2 cursor-pointer hover:bg-gray-50 text-sm`} onClick={() => setOpen(!open)} data-tour="finance-reconciliation-row">
         <input type="checkbox" checked={!!selected} onClick={e => e.stopPropagation()} onChange={() => onToggle?.(c)} />
         <div className="min-w-0">
           <span className={`text-[11px] font-semibold border rounded-full px-1.5 py-0.5 whitespace-nowrap ${conf.cls}`}>{Number(c.confidence_score)}% · {conf.label}</span>
@@ -381,12 +381,12 @@ function CandidateRow({ c, onApprove, onReject, onWrite, onGroup, onReverse, bus
           <Evidence ev={c.evidence || []} />
           {c.status === 'proposed' ? (
             <div className="flex gap-2 mt-3 flex-wrap">
-              <button disabled={busy} onClick={() => onApprove(c)} className="px-3 py-1.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">✓ اعتماد {money(c.proposed_amount)}</button>
-              <button disabled={busy} onClick={() => onReject(c)} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50">✕ رفض</button>
+              <button data-tour="finance-reconciliation-approve" disabled={busy} onClick={() => onApprove(c)} className="px-3 py-1.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">✓ اعتماد {money(c.proposed_amount)}</button>
+              <button data-tour="finance-reconciliation-reject" disabled={busy} onClick={() => onReject(c)} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50">✕ رفض</button>
               {grouped && (
                 <>
                   <span className="text-xs text-gray-400 self-center mr-2">المجموعة {c.group_key}:</span>
-                  <button disabled={busy} onClick={() => onGroup(c, 'approve')} className="px-3 py-1.5 text-sm rounded-lg bg-green-50 border border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50">✓ اعتماد المجموعة كاملة</button>
+                  <button data-tour="finance-reconciliation-approve-group" disabled={busy} onClick={() => onGroup(c, 'approve')} className="px-3 py-1.5 text-sm rounded-lg bg-green-50 border border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50">✓ اعتماد المجموعة كاملة</button>
                   <button disabled={busy} onClick={() => onGroup(c, 'reject')} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50">✕ رفض المجموعة</button>
                 </>
               )}
@@ -398,7 +398,7 @@ function CandidateRow({ c, onApprove, onReject, onWrite, onGroup, onReverse, bus
               </div>
               {c.status === 'approved' && c.allocation && (
                 <>
-                  <button disabled={busy} onClick={() => onWrite(c)}
+                  <button data-tour="finance-reconciliation-write-softech" disabled={busy} onClick={() => onWrite(c)}
                           className="px-3 py-1.5 text-sm rounded-lg bg-[#022871] text-white hover:bg-[#03399e] disabled:opacity-50">
                     🖊 كتابة في SOFTECH
                   </button>
@@ -419,7 +419,7 @@ function CandidateRow({ c, onApprove, onReject, onWrite, onGroup, onReverse, bus
                 </>
               )}
               {c.status === 'written' && c.allocation && (
-                <button disabled={busy} onClick={() => onReverse(c)}
+                <button data-tour="finance-reconciliation-reverse-softech" disabled={busy} onClick={() => onReverse(c)}
                         className="px-3 py-1.5 text-sm rounded-lg bg-white border border-orange-300 text-orange-700 hover:bg-orange-50 disabled:opacity-50">
                   ↩ عكس من SOFTECH (مطابقة خاطئة)
                 </button>
@@ -496,7 +496,7 @@ function SelectionBar({ sel, clear, done }) {
     </button>
   )
   return (
-    <div className="sticky top-0 z-20 mb-2 rounded-xl border border-[#022871]/30 bg-sky-50 p-2 shadow-sm">
+    <div className="sticky top-0 z-20 mb-2 rounded-xl border border-[#022871]/30 bg-sky-50 p-2 shadow-sm" data-tour="finance-reconciliation-selection">
       {rows.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap text-sm">
           <span className="font-semibold text-[#022871]">محدد {rows.length}</span>
@@ -742,17 +742,17 @@ function CandidatesTab({ scope }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2 text-sm flex-wrap">
-        <span className="text-gray-500">الحالة:</span>
+        <span className="text-gray-500" data-tour="finance-reconciliation-status">الحالة:</span>
         {STATUSES.map(([k, l]) => (
           <button key={k} onClick={() => setStatus(k)} className={`px-2 py-1 rounded-lg border ${status === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
-        <button onClick={exportReview} disabled={exportingReview} className="mr-auto px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+        <button data-tour="finance-reconciliation-export-review" onClick={exportReview} disabled={exportingReview} className="mr-auto px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           {exportingReview ? 'جارٍ التجهيز…' : '⬇ تصدير المتوسطة والمنخفضة للمراجعة'}
         </button>
         {exportError && <span className="text-red-600 text-xs w-full">{exportError}</span>}
       </div>
       <div className="flex items-center gap-2 mb-2 text-sm flex-wrap">
-        <span className="text-gray-500">الثقة:</span>
+        <span className="text-gray-500" data-tour="finance-reconciliation-confidence">الثقة:</span>
         {['', 'high', 'medium', 'low', 'conflict'].map(k => (
           <button key={k} onClick={() => setConf(k)} className={`px-2 py-1 rounded-lg border ${conf === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>
             {k === '' ? 'الكل' : CONF[k].label}
@@ -760,26 +760,26 @@ function CandidatesTab({ scope }) {
         ))}
         <span className="text-gray-400 mr-auto">{grouped ? '' : (data?.count ?? 0)}</span>
         {status === 'proposed' && (
-          <button disabled={busy} onClick={() => { setBulkResult(null); bulk.mutate() }}
+          <button data-tour="finance-reconciliation-approve-high" disabled={busy} onClick={() => { setBulkResult(null); bulk.mutate() }}
                   className="px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 text-sm">
             {bulk.isPending ? 'جارٍ الاعتماد…' : '✓ اعتماد كل الثقة العالية'}
           </button>
         )}
         {status === 'approved' && (
-          <button disabled={busy} onClick={() => { setWriteResult(null); bulkWrite.mutate() }}
+          <button data-tour="finance-reconciliation-write-softech-all" disabled={busy} onClick={() => { setWriteResult(null); bulkWrite.mutate() }}
                   className="px-3 py-1 rounded-lg bg-[#022871] text-white hover:bg-[#03399e] disabled:opacity-50 text-sm">
             {bulkWrite.isPending ? 'جارٍ الكتابة في SOFTECH…' : '🖊 كتابة كل المعتمد في SOFTECH'}
           </button>
         )}
       </div>
       <div className="flex items-center gap-1 mb-3 text-xs flex-wrap">
-        <span className="text-gray-500 ml-1">طريقة المطابقة:</span>
+        <span className="text-gray-500 ml-1" data-tour="finance-reconciliation-strategy">طريقة المطابقة:</span>
         {STRATS.map(([k, l]) => (
           <button key={k} onClick={() => setStrategy(k)} className={`px-2 py-0.5 rounded-full border ${strategy === k ? 'bg-sky-700 text-white border-sky-700' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
       </div>
       <div className="flex items-center gap-1 mb-3 text-xs flex-wrap">
-        <span className="text-gray-500 ml-1">العرض:</span>
+        <span className="text-gray-500 ml-1" data-tour="finance-reconciliation-view">العرض:</span>
         {[['list', '☰ جدول'], ['invoice', '🧾 مجمّع حسب الفاتورة'], ['payment', '💳 مجمّع حسب السند']].map(([k, l]) => (
           <button key={k} onClick={() => setView(k)} className={`px-2 py-0.5 rounded-lg border ${view === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
@@ -900,7 +900,7 @@ function ExceptionsTab({ scope }) {
   return (
     <div>
       <div className="flex items-center gap-1 mb-2 text-xs flex-wrap">
-        <span className="text-gray-500 ml-1">النوع:</span>
+        <span className="text-gray-500 ml-1" data-tour="finance-reconciliation-exception-type">النوع:</span>
         {EXC_TYPES.map(([k, l]) => (
           <button key={k} onClick={() => setEtype(k)} className={`px-2 py-0.5 rounded-full border ${etype === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
@@ -1045,7 +1045,7 @@ function PartiesTab({ scope }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2 text-sm flex-wrap">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود أو الاسم…"
+        <input data-tour="finance-reconciliation-parties-search" value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود أو الاسم…"
                className="border border-gray-200 rounded-lg px-3 py-1 w-64" />
         <span className="text-gray-500">ترتيب:</span>
         {[['-softech_balance', 'الأعلى رصيدًا'], ['softech_balance', 'الأقل رصيدًا'], ['softech_personcode', 'الكود']].map(([k, l]) => (
@@ -1056,7 +1056,7 @@ function PartiesTab({ scope }) {
       {isLoading ? <div className="text-gray-400 py-8 text-center">جارٍ التحميل…</div> : (
         <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
           {rows.map(p => (
-            <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer" onClick={() => setPc(p.softech_personcode)}>
+            <div key={p.id} data-tour="finance-reconciliation-party" className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer" onClick={() => setPc(p.softech_personcode)}>
               <span className="text-gray-400 w-16">{p.softech_personcode}</span>
               <span className="flex-1 text-gray-700">{p.name || '—'}</span>
               <span className="text-xs text-gray-500">{p.party_type_display}</span>
@@ -1230,7 +1230,7 @@ function UnpaidTab({ scope }) {
               <div className="text-[11px] text-gray-400">{sub}</div>
             </div>
           ))}
-          <button onClick={exportXlsx} disabled={exporting}
+          <button data-tour="finance-reconciliation-unpaid-export" onClick={exportXlsx} disabled={exporting}
                   className="rounded-xl border border-[#022871] text-[#022871] bg-white hover:bg-sky-50 p-3 text-sm font-semibold disabled:opacity-50">
             {exporting ? 'جارٍ التجهيز…' : '⬇ تصدير Excel للإدارة المالية'}
           </button>
@@ -1241,7 +1241,7 @@ function UnpaidTab({ scope }) {
         </div>
       )}
       {exportError && <div className="text-red-600 text-sm">{exportError}</div>}
-      <div className="flex gap-2 text-sm flex-wrap">
+      <div className="flex gap-2 text-sm flex-wrap" data-tour="finance-reconciliation-unpaid-filter">
         {FILTERS.map(([k, l]) => (
           <button key={k} onClick={() => setStatus(k)} className={`px-2 py-1 rounded-lg border ${status === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
@@ -1389,7 +1389,7 @@ function FilterBar({ partyType, filters, setFilters }) {
     </div>
   )
   return (
-    <div className="flex items-start gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-xl p-2 text-sm">
+    <div className="flex items-start gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-xl p-2 text-sm" data-tour="finance-reconciliation-filters">
       <SupplierMultiSelect partyType={partyType} selected={filters.personcodes}
                            onChange={(codes) => setFilters(f => ({ ...f, personcodes: codes }))} />
       {dateRange('تاريخ الفاتورة', 'inv_date_from', 'inv_date_to', 'border-green-200 bg-green-50/60 text-green-900')}
@@ -1455,7 +1455,7 @@ export default function ReconciliationPage() {
     <div className="p-5 space-y-4" dir="rtl">
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-[#022871]">سداد فواتير الموردين — التسوية</h1>
-        <div className="flex gap-1 text-sm">
+        <div className="flex gap-1 text-sm" data-tour="finance-reconciliation-party-type">
           {['supplier', 'customer'].map(t => (
             <button key={t} onClick={() => setPartyType(t)} className={`px-3 py-1 rounded-lg border ${partyType === t ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>
               {t === 'supplier' ? 'موردون' : 'عملاء'}
@@ -1470,7 +1470,7 @@ export default function ReconciliationPage() {
 
       <Kpis d={dash} />
 
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex gap-2 border-b border-gray-200" data-tour="finance-reconciliation-tabs">
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-[#022871] text-[#022871] font-semibold' : 'border-transparent text-gray-500'}`}>{l}</button>
         ))}
