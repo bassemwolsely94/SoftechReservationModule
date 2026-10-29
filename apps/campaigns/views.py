@@ -20,6 +20,7 @@ from apps.customers.models import Customer, PurchaseHistory
 from apps.users.models import StaffProfile
 
 from .models import WhatsAppCampaign, CampaignMessage
+from .permissions import can_approve, DENIED
 from .serializers import (
     WhatsAppCampaignListSerializer,
     WhatsAppCampaignDetailSerializer,
@@ -42,6 +43,17 @@ def _get_staff(request):
         return StaffProfile.objects.get(user=request.user)
     except StaffProfile.DoesNotExist:
         return None
+
+
+def _guard_approver(request):
+    """None when the user holds campaigns/approve, else a 403 Response."""
+    if can_approve(_get_staff(request)):
+        return None
+    return Response({'detail': DENIED}, status=status.HTTP_403_FORBIDDEN)
+
+
+def _detail(campaign, request):
+    return WhatsAppCampaignDetailSerializer(campaign, context={'request': request}).data
 
 
 def _build_audience_qs(target_filter: dict):
@@ -214,6 +226,10 @@ def _enqueue_to_wa_queue(campaign: WhatsAppCampaign):
     Convert pending CampaignMessage rows into WAMessageQueue items so the
     drain_queue() scheduler sends them via WhatsApp Cloud API.
     Only runs when WHATSAPP_TOKEN is configured.
+
+    Called for immediate sends from queue_campaign, and for scheduled campaigns
+    by release_due_scheduled_campaigns() once scheduled_at has passed — never
+    earlier, since drain_queue() sends anything pending.
     """
     from django.conf import settings
     if not getattr(settings, 'WHATSAPP_TOKEN', ''):
@@ -366,13 +382,16 @@ def request_approval(request, pk):
         )
     campaign.status = 'pending_approval'
     campaign.save(update_fields=['status', 'updated_at'])
-    return Response(WhatsAppCampaignDetailSerializer(campaign).data)
+    return Response(_detail(campaign, request))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def approve_campaign(request, pk):
     """pending_approval → approved"""
+    denied = _guard_approver(request)
+    if denied:
+        return denied
     campaign = _get_campaign_or_404(pk)
     if not campaign.can_approve():
         return Response(
@@ -387,13 +406,16 @@ def approve_campaign(request, pk):
     campaign.approved_by = staff
     campaign.approved_at = timezone.now()
     campaign.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
-    return Response(WhatsAppCampaignDetailSerializer(campaign).data)
+    return Response(_detail(campaign, request))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def reject_campaign(request, pk):
     """pending_approval → rejected"""
+    denied = _guard_approver(request)
+    if denied:
+        return denied
     campaign = _get_campaign_or_404(pk)
     if not campaign.can_approve():
         return Response(
@@ -408,13 +430,21 @@ def reject_campaign(request, pk):
     campaign.rejected_by = staff
     campaign.rejection_reason = serializer.validated_data['reason']
     campaign.save(update_fields=['status', 'rejected_by', 'rejection_reason', 'updated_at'])
-    return Response(WhatsAppCampaignDetailSerializer(campaign).data)
+    return Response(_detail(campaign, request))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def queue_campaign(request, pk):
-    """approved → scheduled (if scheduled_at given) or running (immediate)"""
+    """approved → scheduled (if scheduled_at given) or running (immediate)
+
+    Scheduled campaigns only get their CampaignMessage rows now; they reach the
+    WhatsApp send queue when release_due_scheduled_campaigns() runs after
+    scheduled_at (see apps/campaigns/dispatcher.py → drain_queue).
+    """
+    denied = _guard_approver(request)
+    if denied:
+        return denied
     campaign = _get_campaign_or_404(pk)
     if not campaign.can_queue():
         return Response(
@@ -433,31 +463,75 @@ def queue_campaign(request, pk):
         else:
             campaign.status = 'running'
 
-        campaign.save(update_fields=['status', 'scheduled_at', 'updated_at'])
+        campaign.queued_by = _get_staff(request)
+        campaign.save(update_fields=['status', 'scheduled_at', 'queued_by', 'updated_at'])
         _queue_messages(campaign)
 
-    # Non-blocking — enqueue to WAMessageQueue for Cloud API send
-    try:
-        _enqueue_to_wa_queue(campaign)
-    except Exception as exc:
-        logger.warning('queue_campaign: WAMessageQueue enqueue failed (wa.me fallback active): %s', exc)
+    logger.info('Campaign %d queued by %s (%s)', campaign.pk,
+                getattr(request.user, 'username', '?'),
+                f'scheduled {scheduled_at.isoformat()}' if scheduled_at else 'immediate')
 
-    return Response(WhatsAppCampaignDetailSerializer(campaign).data)
+    if not scheduled_at:
+        # Non-blocking — enqueue to WAMessageQueue for Cloud API send
+        try:
+            _enqueue_to_wa_queue(campaign)
+        except Exception as exc:
+            logger.warning('queue_campaign: WAMessageQueue enqueue failed (wa.me fallback active): %s', exc)
+
+    return Response(_detail(campaign, request))
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def cancel_campaign(request, pk):
     """Any cancellable status → cancelled"""
+    denied = _guard_approver(request)
+    if denied:
+        return denied
     campaign = _get_campaign_or_404(pk)
     if not campaign.can_cancel():
         return Response(
             {'detail': 'لا يمكن إلغاء الحملة في حالتها الحالية.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    campaign.status = 'cancelled'
-    campaign.save(update_fields=['status', 'updated_at'])
-    return Response(WhatsAppCampaignDetailSerializer(campaign).data)
+    with transaction.atomic():
+        campaign.status = 'cancelled'
+        campaign.cancelled_by = _get_staff(request)
+        campaign.cancelled_at = timezone.now()
+        campaign.save(update_fields=['status', 'cancelled_by', 'cancelled_at', 'updated_at'])
+        removed, skipped = _withdraw_pending(campaign)
+    _refresh_campaign_counters(campaign)
+    logger.info('Campaign %d cancelled by %s — %d queued sends removed, %d messages skipped',
+                campaign.pk, getattr(request.user, 'username', '?'), removed, skipped)
+    return Response(_detail(campaign, request))
+
+
+def _withdraw_pending(campaign: WhatsAppCampaign):
+    """
+    Stop everything of this campaign that has not gone out yet.
+    WAMessageQueue rows carry no campaign link, so they are matched the way
+    _enqueue_to_wa_queue created them: same conversation (wa_id) + same body,
+    still 'pending'. Rows already 'processing' are mid-send and cannot be stopped.
+    Pending CampaignMessage rows are kept for the record, marked 'skipped'.
+    Returns (queue rows removed, messages skipped).
+    """
+    from apps.whatsapp.models import WAMessageQueue
+    from apps.whatsapp.sender import _normalise_wa_id
+
+    pending = campaign.messages.filter(status='pending')
+    removed = 0
+    for phone, body in pending.values_list('phone_number', 'message_text').iterator(chunk_size=500):
+        if not phone:
+            continue
+        try:
+            wa_id = _normalise_wa_id(phone)
+        except Exception:
+            continue
+        removed += WAMessageQueue.objects.filter(
+            conversation__wa_id=wa_id, body=body, status='pending',
+        ).delete()[0]
+    skipped = pending.update(status='skipped', error_message='أُلغيت الحملة قبل الإرسال')
+    return removed, skipped
 
 
 # ── Messages ──────────────────────────────────────────────────────────────────

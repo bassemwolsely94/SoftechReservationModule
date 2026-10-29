@@ -61,6 +61,10 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
     can_approve          = serializers.BooleanField(read_only=True)
     can_queue            = serializers.BooleanField(read_only=True)
     can_cancel           = serializers.BooleanField(read_only=True)
+    # Per-user: may the requesting user approve / reject / send / cancel (campaigns/approve)?
+    my_can_approve       = serializers.SerializerMethodField()
+    queued_by_name       = serializers.SerializerMethodField()
+    cancelled_by_name    = serializers.SerializerMethodField()
 
     class Meta:
         model = WhatsAppCampaign
@@ -75,7 +79,8 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'approved_by', 'approved_by_name',
             'rejected_by', 'rejected_by_name',
             'rejection_reason',
-            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel',
+            'queued_by', 'queued_by_name', 'cancelled_by', 'cancelled_by_name', 'cancelled_at',
+            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel', 'my_can_approve',
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
         read_only_fields = [
@@ -85,9 +90,27 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_name',
             'approved_by', 'approved_by_name',
             'rejected_by', 'rejected_by_name',
-            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel',
+            'queued_by', 'queued_by_name', 'cancelled_by', 'cancelled_by_name', 'cancelled_at',
+            'can_request_approval', 'can_approve', 'can_queue', 'can_cancel', 'my_can_approve',
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
+
+    def get_my_can_approve(self, obj):
+        from apps.users.models import StaffProfile
+        from .permissions import can_approve
+        request = self.context.get('request')
+        if request is None or not request.user.is_authenticated:
+            return False
+        if '_my_can_approve' not in self.context:
+            profile = StaffProfile.objects.filter(user=request.user).first()
+            self.context['_my_can_approve'] = can_approve(profile)
+        return self.context['_my_can_approve']
+
+    def get_queued_by_name(self, obj):
+        return obj.queued_by.user.get_full_name() if obj.queued_by_id else ''
+
+    def get_cancelled_by_name(self, obj):
+        return obj.cancelled_by.user.get_full_name() if obj.cancelled_by_id else ''
 
     def get_created_by_name(self, obj):
         return obj.created_by.user.get_full_name() if obj.created_by_id else ''
