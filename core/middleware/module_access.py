@@ -152,6 +152,19 @@ def supply_member(profile) -> bool:
         return False
 
 
+def _analytics_write(method):
+    """Analytics routes: a POST computes (export counts, Z-11a); a PUT / PATCH edits and a DELETE
+    deletes, so export does not (Batch 4, Z-12 — it let view + export roles past on all three)."""
+    method = method.upper()
+    if method in ('GET', 'HEAD', 'OPTIONS'):
+        return ('view',)
+    if method in ('PUT', 'PATCH'):
+        return ('edit',)
+    if method == 'DELETE':
+        return ('delete',)
+    return _EXPORT_POST
+
+
 def required(path, method):
     """(module, allowed_actions) the request needs, or None when not checked."""
     parts = path.split('/')
@@ -210,7 +223,7 @@ def required(path, method):
     # Sales targets sit beside the KPI board (analytics; edits keep their role check), and HR
     # self-service is every employee's own filing: any hr grant (Z-9a, map by screen)
     if prefix == 'incentives' and parts[3:4] == ['targets']:
-        return 'analytics', (('view',) if safe else _EXPORT_POST)
+        return 'analytics', _analytics_write(method)
     if (not safe and prefix == 'hr' and (parts[3:5] in (['attendance', 'check-in'], ['attendance', 'check-out'])
                                          or parts[4:5] == ['submit'])):
         return 'hr', ('view',)
@@ -256,7 +269,7 @@ def required(path, method):
         return 'hr', ('view',)
     # Forecasting writes (PUT / PATCH / DELETE too): the views' analyst-role checks decide (Z-7b)
     if prefix == 'forecasting' and not safe:
-        return 'analytics', _EXPORT_POST
+        return 'analytics', _analytics_write(method)
     if safe and (path.startswith(OPEN_READ_PATHS) or path in OPEN_READ_EXACT):
         return None
     if prefix in READ_OPEN_PREFIXES:

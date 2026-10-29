@@ -701,7 +701,7 @@ const STATUS_LABELS = {
   pending: 'انتظار', approved: 'موافق', rejected: 'مرفوض', executed: 'منفّذ',
 }
 
-function TransferRecsTab({ isAdmin }) {
+function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purchasing / supply groups (Z-12b)
   const qc = useQueryClient()
 
   // Standard filters
@@ -885,7 +885,7 @@ function TransferRecsTab({ isAdmin }) {
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }}>فرع المصدر</th>
                 <th colSpan={3} className="px-3 py-1.5 text-center text-indigo-500 border-x border-gray-200"
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }}>فرع الهدف</th>
-                <th colSpan={isAdmin ? 7 : 6}
+                <th colSpan={canReview ? 7 : 6}
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }} />
               </tr>
               {/* Column header row — sticky row 2 (top: 28px to clear row 1) */}
@@ -912,7 +912,7 @@ function TransferRecsTab({ isAdmin }) {
                     title="هامش الربح الإجمالي القياسي">هامش م%</th>
                 <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                     style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>الحالة</th>
-                {isAdmin && (
+                {canReview && (
                   <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                       style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>إجراء</th>
                 )}
@@ -921,7 +921,7 @@ function TransferRecsTab({ isAdmin }) {
             <tbody className="divide-y divide-gray-100">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 16 : 15} className="text-center py-12 text-gray-400">
+                  <td colSpan={canReview ? 16 : 15} className="text-center py-12 text-gray-400">
                     لا توجد توصيات — شغّل المحرك لإنشاء توصيات التحويل
                   </td>
                 </tr>
@@ -959,7 +959,7 @@ function TransferRecsTab({ isAdmin }) {
                       {STATUS_LABELS[rec.status] || rec.status}
                     </span>
                   </td>
-                  {isAdmin && (
+                  {canReview && (
                     <td className="px-3 py-2 text-center">
                       {rec.status === 'pending' && (
                         <div className="flex gap-1 justify-center">
@@ -2676,7 +2676,7 @@ export default function PurchasingDashboard() {
               itemFilters={itemFilters}
             />
           ) : viewTab === 'transfer' ? (
-            <TransferRecsTab isAdmin={isAdmin} />
+            <TransferRecsTab canReview={canRunEngine} />
           ) : (
             <LostSalesTab />
           )}

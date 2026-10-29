@@ -23,6 +23,10 @@ from .routes import Tripwire, api_routes, handles, is_public, known_public, view
 # seed real records, every denied detail request is therefore 'unproven', honestly.
 SWEEP_ID = '987654321'
 
+# Every method the matrix maps: GET → view, POST → a write grant, PUT / PATCH → edit, DELETE →
+# delete (Batch 4, Z-12 — GET / POST only until then). A method the view lacks is skipped.
+METHODS = ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
+
 _OK_ALWAYS = {301, 503}          # trailing-slash redirect / feature switched off — no data
 _REFUSED = {401, 403, 405}
 
@@ -72,7 +76,12 @@ def protected_routes():
 def _call(client, method, path):
     try:
         with transaction.atomic():
-            r = client.post(path, {}, format='json') if method == 'POST' else client.get(path)
+            if method == 'GET':
+                r = client.get(path)
+            elif method == 'DELETE':
+                r = client.delete(path)
+            else:                                       # POST / PUT / PATCH with an empty body
+                r = getattr(client, method.lower())(path, {}, format='json')
             transaction.set_rollback(True)
         return r.status_code
     except Exception as exc:      # raised through the test client
@@ -89,7 +98,7 @@ def sweep(mode: str, clients: dict, roles=NON_ADMIN_ROLES, prefixes=None) -> Swe
     try:
         with override_settings(RBAC_ENFORCEMENT=mode), Tripwire() as tw:
             for path in routes:
-                for method in ('GET', 'POST'):
+                for method in METHODS:
                     need = required(path, method)
                     if need is None or not handles(path, method):     # no such endpoint (Z-11b)
                         continue
