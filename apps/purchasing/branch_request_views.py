@@ -32,6 +32,8 @@ from rest_framework import status as http
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+
+from apps.purchasing.access import PURCHASING
 from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
@@ -125,7 +127,7 @@ def _draft_or_400(req):
 
 # ── list / create ───────────────────────────────────────────────────────────────
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_requests(request):
     from apps.branches.models import Branch
     from apps.purchasing.isr_fulfillment import user_names
@@ -158,7 +160,7 @@ def branch_requests(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_detail(request, pk):
     if not _can_view(request):
         return _deny()
@@ -166,7 +168,7 @@ def branch_request_detail(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_text(request, pk):
     from apps.supply import branch_requests as W
     if not _can_write(request):
@@ -185,7 +187,7 @@ def branch_request_text(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 @parser_classes([MultiPartParser, FormParser])
 def branch_request_ocr(request, pk):
     from django.conf import settings
@@ -213,7 +215,7 @@ def branch_request_ocr(request, pk):
 
 # ── line review ────────────────────────────────────────────────────────────────
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_line(request, pk, lid):
     from apps.catalog.models import Item
     from apps.supply.models import BranchRequestLine as L
@@ -313,7 +315,7 @@ def branch_request_line(request, pk, lid):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_search(request, pk, lid):
     from apps.catalog.models import Item
     from apps.shortage.matching import find_best_matches
@@ -334,7 +336,7 @@ def branch_request_search(request, pk, lid):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_confirm_safe(request, pk):
     from apps.supply.branch_requests import AUTO_SCORE
     from apps.supply.models import BranchRequestLine as L
@@ -357,7 +359,7 @@ def branch_request_confirm_safe(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_confirm(request, pk):
     from apps.supply import branch_requests as W
     if not _can_write(request):
@@ -375,7 +377,7 @@ def branch_request_confirm(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_cancel(request, pk):
     from apps.supply.models import BranchRequest
     if not _can_write(request):
@@ -418,7 +420,7 @@ def _coverage(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_analysis(request, pk):
     from apps.purchasing import isr_fulfillment as F
     if not _can_view(request):
@@ -436,7 +438,7 @@ def branch_request_analysis(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_transfers(request, pk):
     """{coverage} → two linked PROPOSED transfer ISRs per donor (donor → 100 → branch) for
     the plan's «from other branches» quantities. Only CONFIRMED lines move, and live stock
@@ -475,7 +477,7 @@ def branch_request_transfers(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_analysis_export(request, pk):
     from apps.purchasing import isr_fulfillment as F
     if not _can_view(request):

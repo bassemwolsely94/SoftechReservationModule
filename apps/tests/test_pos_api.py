@@ -88,12 +88,11 @@ class PosApiTests(TestCase):
         r = self.cc.post(f'{BASE}{oid}/ready/', {'tenders': [{'pay_type': 'cash', 'amount': '100.00'}]}, format='json')
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_viewer_can_create_but_not_push(self):
-        # CanOperatePosOrders allows any active staff to create
+    def test_viewer_can_neither_create_nor_push(self):
+        # Batch 4, Z-5b: CanOperatePosOrders follows the `pos` matrix (viewer has none)
         r = self.viewer.post(BASE, _payload(self.branch.id), format='json')
-        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
-        oid = r.data['id']
-        # CanPushPosOrders blocks a non-operator role from pushing
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        oid = self.cc.post(BASE, _payload(self.branch.id), format='json').data['id']
         r = self.viewer.post(f'{BASE}{oid}/push/', {}, format='json')
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
 

@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
-from core.permissions import MatrixPermission, deny_unless
+from core.permissions import MatrixPermission, deny_unless, matrix_allows
 from django.db.models import Prefetch
 
 from .models import SystemSetting, DropdownOption, PharmacyProfile
@@ -23,7 +23,7 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
     queryset         = SystemSetting.objects.all()
     permission_classes = [permissions.IsAuthenticated, MatrixPermission]
     rbac_module = 'settings'
-    rbac_actions = {'list': (), 'retrieve': (), 'by_key': (), 'bulk_update': ('edit',)}
+    rbac_actions = {'list': (), 'retrieve': (), 'by_key': ('view',), 'bulk_update': ('edit',)}
 
     def get_serializer_class(self):
         if self.action in ('update', 'partial_update'):
@@ -32,6 +32,10 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # Without settings view only `is_public` settings are readable (Batch 4, Z-4).
+        user = self.request.user
+        if not (user.is_superuser or matrix_allows(getattr(user, 'staff_profile', None), 'settings', 'view')):
+            qs = qs.filter(is_public=True)
         category = self.request.query_params.get('category')
         if category:
             qs = qs.filter(category=category)

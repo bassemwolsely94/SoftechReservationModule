@@ -32,6 +32,7 @@ MODULE_CHOICES = [
     ('catalog',      'كتالوج الأدوية'),
     ('stockcount',   'الجرد الفعلي'),
     ('shortage',     'النواقص'),
+    ('offers',       'العروض والتخفيضات'),   # under المخزون, not POS (Batch 4, Z-5)
     # ── Purchasing & Finance ──────────────────────────────────────────────────
     ('purchasing',   'ذكاء المشتريات'),
     ('invoices',     'فواتير الموردين'),

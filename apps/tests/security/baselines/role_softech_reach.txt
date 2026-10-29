@@ -1,9 +1,3 @@
 # Owner: Batch 4. Requests by a role the code matrix DENIES that still reached a SOFTECH connection attempt
 # (blocked by the test Tripwire; in production they would query or write SOFTECH). Must reach empty.
 
-call_center GET /api/pricing-approvals/replication/item/x/
-delivery GET /api/pricing-approvals/replication/item/x/
-pharmacist GET /api/purchasing/isr/fulfilment/recent/
-pharmacist POST /api/purchasing/catchup/
-salesperson GET /api/pricing-approvals/replication/item/x/
-supervisor GET /api/purchasing/isr/fulfilment/recent/

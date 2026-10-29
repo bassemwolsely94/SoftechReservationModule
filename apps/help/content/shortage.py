@@ -363,8 +363,8 @@ SCREENS = [
             {'target': 'shortage-market-run', 'label': T('🔄 تشغيل المحرك ومزامنة البيانات', '🔄 Run engine and sync data'),
              'text': T('يشغّل محرك الطلب في الخلفية ويحدّث المرشحين. السطر جنبه بيقول آخر تشغيل والمبيعات لحد إمتى.',
                        'Runs the demand engine in the background and refreshes the candidates. The line beside it shows the last run and sales date.'),
-             'when': T('لو المبيعات متأخرة اضغط «⏬ مزامنة المبيعات» الأول. التشغيل للمدير والصيدلي والمشتريات.',
-                       'If sales are behind, press "⏬ Sync sales" first. Running is for admin, pharmacist and purchasing.'),
+             'when': T('لو المبيعات متأخرة اضغط «⏬ مزامنة المبيعات» الأول. التشغيل للمدير والمشتريات وفريق التوريد (مجموعات SOFTECH).',
+                       'If sales are behind, press "⏬ Sync sales" first. Running is for admin, purchasing and the supply team (SOFTECH groups).'),
              'more': T(
                  'جنبه «آخر تشغيل» و«المبيعات حتى» — لو المبيعات متأخرة بيظهر بالأصفر ومعاه زر «⏬ مزامنة المبيعات».\n• وقت التشغيل بيظهر «جارٍ تشغيل المحرك…» بالنسبة، والقوائم بتتحدث لما يخلص.\n• التشغيل مسموح لأدوار معيّنة بس.',
                  'Next to it are "Last run" and "Sales up to" — if sales are behind it turns amber with a "⏬ Sync sales" button.\n• While running it shows "Running the engine…" with a percentage, and the lists refresh when done.\n• Only certain roles may run it.')},
@@ -434,7 +434,7 @@ SCREENS = [
                  'الأعمدة: الخسارة الشهرية، التغطية (المخزون ÷ متوسط الطلب الشهري)، القمع (نزول مبيعات آخر 30 يوم عن المعدل)، وأيام النفاد.\n• «تأكيد» يضيفه للمؤكدة، ولو الربط مع SOFTECH مفعّل بيتعلّم «صنف نواقص» على كارت الصنف هناك.\n• «استبعاد» بيطلب سبب ويقدر يحدد صنف بديل متاح.',
                  'Columns: monthly loss, coverage (stock ÷ average monthly demand), suppression (last-30-day sales drop versus the yearly rate) and stock-out days.\n• "Confirm" adds it to confirmed; when the SOFTECH link is on, the item card there is flagged as a shortage item.\n• "Dismiss" asks for a reason and can name an available matching product.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-27',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -27,27 +27,35 @@ class ReadOrAdminSupervisorWrite(BasePermission):
         return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# PBX = the `callcenter` matrix module (Batch 4, Z-8b — queues, call sessions, live calls and
+# dialling were open to any logged-in user). A user's own extension (my-extension) stays open:
+# the POS screen-pop reads it. Diagnostics / extension map / spy keep admin / supervisor.
+PBX = matrix_permission('callcenter', post=('create', 'edit', 'approve'))
+
+
 class AgentExtensionListView(generics.ListCreateAPIView):
     serializer_class   = AgentExtensionSerializer
-    permission_classes = [IsAuthenticated, ReadOrAdminSupervisorWrite]
+    permission_classes = [IsAuthenticated, PBX, ReadOrAdminSupervisorWrite]
     queryset           = AgentExtension.objects.select_related('staff').filter(is_active=True)
 
 
 class AgentExtensionDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = AgentExtensionSerializer
-    permission_classes = [IsAuthenticated, ReadOrAdminSupervisorWrite]
+    permission_classes = [IsAuthenticated, PBX, ReadOrAdminSupervisorWrite]
     queryset           = AgentExtension.objects.select_related('staff')
 
 
 class QueueListView(generics.ListAPIView):
     serializer_class   = PBXQueueSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
     queryset           = PBXQueue.objects.filter(is_active=True)
 
 
 class CallSessionListView(generics.ListAPIView):
     serializer_class   = CallSessionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
 
     def get_queryset(self):
         qs = CallSession.objects.select_related(
@@ -65,7 +73,7 @@ class CallSessionListView(generics.ListAPIView):
 
 class CallSessionDetailView(generics.RetrieveAPIView):
     serializer_class   = CallSessionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
     queryset           = CallSession.objects.select_related(
         'agent__staff', 'customer', 'queue', 'call_log'
     )
@@ -73,7 +81,7 @@ class CallSessionDetailView(generics.RetrieveAPIView):
 
 class LiveSessionsView(APIView):
     """GET /api/pbx/live/ — active (non-completed) call sessions."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
 
     # ?fresh=1 (POS screen-pop): only calls we can trust are live — the AMI bridge is alive
     # (no hang-up event can arrive without it) and the call started recently.
@@ -93,7 +101,7 @@ class LiveSessionsView(APIView):
 
 class MyExtensionView(APIView):
     """GET /api/pbx/my-extension/ — current user's Asterisk extension."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]                      # own data: open (Z-8b)
 
     def get(self, request):
         profile = getattr(request.user, 'staff_profile', None)
@@ -115,7 +123,7 @@ class IsAdminOrSupervisor(BasePermission):
 
 class BridgeStatusView(APIView):
     """GET /api/pbx/status/ — connection badge (cheap; reads the bridge's row)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
 
     def get(self, request):
         from apps.pbx.models import PBXBridgeStatus
@@ -232,7 +240,7 @@ class DialView(APIView):
     Originates an outbound call from the requesting user's own extension.
     Asterisk rings the agent's desk phone; when answered, it dials the destination.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PBX]
 
     def post(self, request):
         destination = str(request.data.get('destination', '')).strip()

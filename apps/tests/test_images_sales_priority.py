@@ -7,7 +7,6 @@ how much of monthly sales is covered by approved images.
 """
 import datetime
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -88,7 +87,8 @@ class SalesPriorityTests(TestCase):
         self.assertEqual(cov['sold_items_with_image'], 1)
 
     def _get(self, view, path):
-        user = get_user_model().objects.create_user(username='u', password='x')
+        from apps.tests.factories import make_user
+        user = make_user('u', role='purchasing')[0]     # catalog view (Batch 4, Z-9b: was any login)
         req = APIRequestFactory().get(path)
         force_authenticate(req, user=user)
         return view(req)

@@ -24,6 +24,7 @@ from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
 from core.errors import public_error
+from core.permissions import matrix_permission
 
 
 def _staff(user):
@@ -152,7 +153,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset           = SoftechSalesOrder.objects.all().prefetch_related('lines', 'payments')
     serializer_class   = OrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [CanOperatePosOrders]   # PATCH = pos edit, DELETE = pos delete (Z-5b)
 
     def update(self, request, *a, **k):
         order = self.get_object()
@@ -163,7 +164,7 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def return_lookup(request):
     """Preview a finalized invoice for RETURN (read-only, NO order created). Query: ?branch=&invoice=.
     Returns the sale's date + line summary + payments so the cashier can confirm before creating the
@@ -225,7 +226,7 @@ def return_lookup(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def ready_order(request, pk):
     """Validate + compute money fields (pricing.py); optionally accept explicit tenders."""
     order = SoftechSalesOrder.objects.get(pk=pk)
@@ -847,7 +848,7 @@ _REFERRAL_STATUSES = (SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([permissions.IsAuthenticated, matrix_permission('analytics')])   # a report (Z-5b)
 def referral_stats(request):
     """
     Referring-doctor performance: committed POS sales grouped by referral doctor →
@@ -1315,7 +1316,7 @@ def points_preview_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def reference_data(request):
     """Channel/payment/doc-kind → SOFTECH code maps + writer state, for the POS UI."""
     sp = _staff(request.user)

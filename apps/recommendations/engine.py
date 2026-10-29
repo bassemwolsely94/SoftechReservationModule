@@ -211,6 +211,7 @@ def _generate_customer_recs(run, baskets, cutoff, anchor_heap, total_invoices, v
             purchase__doc_code='115',
             purchase__invoice_date__date__gte=recent_cutoff,
             purchase__customer__isnull=False,
+            purchase__customer__is_account_placeholder=False,
             item__isnull=False,
         )
         .values_list('purchase__customer_id', 'item_id', 'quantity')

@@ -14,8 +14,9 @@ Usage:
 
 Notes:
   • Reads SOFTECH (read-only mirror source) — no writeback.
-  • Invoices whose personcode is not in the customer mirror are skipped by
-    sync_sales (walk-ins 1500/1510 + regulars persist, so coverage is high).
+  • sync_sales links each invoice to its PIC customer, or (no PIC) to the placeholder
+    of its sales account (apps/customers/account_link.py) — no invoice is skipped for
+    an unknown customer.
   • Run during off-hours: a 24-month scan of stktrans is heavy on the live ERP.
 """
 from datetime import date

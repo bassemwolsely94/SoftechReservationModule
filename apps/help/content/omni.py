@@ -457,7 +457,8 @@ SCREENS = [
         'title': T('لوحة المشرف الحية', 'Live supervisor wallboard'),
         'summary': T('تتحدث كل 5 ثوانٍ: المكالمات الجارية مع «استماع صامت» و«همس للعامل دون سماع العميل»، إحصاءات القوائم اليوم (مُجابة، مهجورة، متوسط الانتظار والحديث)، حالة العمال، حمل واتساب، والمحادثات غير المُسندة.',
                      'Refreshes every 5 seconds: active calls with "silent listen" and "whisper to the agent without the customer hearing", today\'s queue stats (answered, abandoned, average wait and talk), agent states, WhatsApp load, and unassigned conversations.'),
-        'audience': T('المشرفون والمدير والجودة.', 'Supervisors, admins and quality.'),
+        'audience': T('المشرفون والمدير والجودة والكول سنتر؛ «استماع» و«همس» للمشرفين والمدير فقط.',
+                      'Supervisors, admins, quality and the call center; "listen" and "whisper" are for supervisors and admins only.'),
         'workflows': [],
         'related': ['callcenter.analytics', 'callcenter.pbx'],
         'tour': [
@@ -499,7 +500,7 @@ SCREENS = [
                  'سيبها مفتوحة على شاشة جنبك وقت الشغل — مش محتاج تعمل تحديث، الأرقام بتتجدد كل 5 ثواني.\n• اللوحة للمشرفين والمدير والجودة بس؛ غيرهم بيشوف رسالة «لوحة المشرفين فقط».\n• نتيجة الاستماع أو الهمس بتظهر في شريط تحت العنوان.',
                  'Keep it open on a screen beside you during the shift — no need to refresh, numbers update every 5 seconds.\n• The board is for supervisors, admins and quality only; others see "Supervisors only".\n• The result of a listen or whisper request appears in a bar under the title.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -725,8 +726,8 @@ SCREENS = [
              'text': T('ينقل المسودة لـ«بانتظار الموافقة». بعدها مفيش تعديل إلا لو اترفضت.', 'Moves the draft to "Pending approval". No more edits unless it is rejected.'),
              'open_hint': T('افتح حملة «مسودة» ليها نص رسالة.', 'Open a "Draft" campaign that has message text.')},
             {'target': 'omni-campaigns-approve', 'label': T('✅ اعتماد', '✅ Approve'),
-             'text': T('يعتمد الحملة ويسجّل اسمك ووقت الاعتماد. حالياً أي حد يقدر يفتح الحملات يقدر يعتمد، حتى اللي أنشأها.',
-                       'Approves the campaign and records your name and time. Today anyone who can open campaigns can approve, even its creator.'),
+             'text': T('يعتمد الحملة ويسجّل اسمك ووقته. يعتمد ويرفض ويجدول المشرفون والمشتريات والمدير؛ الكول سنتر يكتب الحملة ويطلب الموافقة.',
+                       'Approves it and records your name and time. Supervisors, purchasing and admins approve, reject and schedule; the call center drafts and requests approval.'),
              'warn': T('اعتمد بس بعد ما تراجع النص والجمهور بنفسك — الخطوة الجاية إرسال للعملاء.', 'Approve only after checking the text and audience yourself — the next step sends to customers.'),
              'open_hint': T('افتح حملة «بانتظار الموافقة».', 'Open a "Pending approval" campaign.')},
             {'target': 'omni-campaigns-reject', 'label': T('❌ رفض', '❌ Reject'),
@@ -777,7 +778,7 @@ SCREENS = [
                  '• مسودة: «📤 طلب الموافقة» (لازم يكون فيها نص رسالة).\n• بانتظار الموافقة: «✅ اعتماد» أو «❌ رفض» مع سبب إجباري. معتمدة: اختار موعد لـ«جدولة الإرسال» أو سيبه فاضي لـ«إرسال فوري».\n• «🚫 إلغاء الحملة» متاح قبل ما تبدأ أو وهي موقوفة. الإرسال الفوري بيبدأ على طول، فراجع النص والجمهور الأول.',
                  '• Draft: "📤 Request approval" (it must have a message text).\n• Pending approval: "✅ Approve" or "❌ Reject" with a required reason. Approved: pick a time to "Schedule sending" or leave it empty for "Send now".\n• "🚫 Cancel campaign" is available before it starts or while paused. Send now starts at once, so check the text and audience first.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

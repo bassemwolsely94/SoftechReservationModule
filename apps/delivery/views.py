@@ -185,9 +185,16 @@ class DriverDetailView(generics.RetrieveUpdateAPIView):
 # Customer location views
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Customer delivery locations = the `delivery` module (Batch 4, Z-9c — viewer could add them):
+# reads need view, adding / editing create or edit, removing edit or delete.
+LOCATIONS = matrix_permission('delivery', post=('create', 'edit'), delete=('edit', 'delete'))
+
+
 class CustomerLocationListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/customers/{customer_id}/locations/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, LOCATIONS]
     serializer_class   = CustomerLocationSerializer
 
     def get_queryset(self):
@@ -203,7 +210,7 @@ class CustomerLocationListView(generics.ListCreateAPIView):
 
 class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET/PATCH/DELETE /api/delivery/locations/{id}/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, LOCATIONS]
     serializer_class   = CustomerLocationSerializer
     queryset = CustomerLocation.objects.all()
 
@@ -288,6 +295,23 @@ class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
         if self.request.method in ('PUT', 'PATCH'):
             return DeliveryOrderCreateSerializer
         return DeliveryOrderSerializer
+
+    # Batch 4, Z-10a: once an order is out for delivery the driver carries its value — amount,
+    # fees, payment method, items, branch and SOFTECH references are closed (they were editable
+    # even after delivery, under the cash collection); a delivered / cancelled / closed order is final.
+    PRE_DISPATCH = {DeliveryOrder.STATUS_CREATED, DeliveryOrder.STATUS_PENDING_REVIEW,
+                    DeliveryOrder.STATUS_PREPARING, DeliveryOrder.STATUS_READY,
+                    DeliveryOrder.STATUS_ASSIGNED, DeliveryOrder.STATUS_DRIVER_ACCEPTED}
+    VALUE_FIELDS = ('branch', 'source_type', 'softech_doc_ref', 'softech_branch_code', 'items_count',
+                    'total_value', 'delivery_fees', 'payment_method', 'items')
+
+    def update(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.is_terminal or (order.status not in self.PRE_DISPATCH
+                                 and any(f in request.data for f in self.VALUE_FIELDS)):
+            return Response({'detail': 'خرج الطلب للتوصيل — لا يمكن تعديل قيمته أو أصنافه.'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().update(request, *args, **kwargs)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

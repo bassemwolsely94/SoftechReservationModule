@@ -1,6 +1,8 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import MatrixPermission
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
@@ -19,10 +21,19 @@ def _is_admin(request):
     return profile and profile.role in ('admin', 'purchasing')
 
 
+def _can_review_staff(request):
+    """The open-flag summary and a staff member's audit trail: also the quality manager, whose
+    job this is (Batch 4, Z-11h — overblock decision 8). Flag review / detection stay _is_admin."""
+    profile = _profile(request)
+    return bool(profile and profile.role in ('admin', 'purchasing', 'quality_manager'))
+
+
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only audit log API — admin only."""
     serializer_class   = AuditLogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module        = 'audit'               # any object's trail = audit view (Batch 4, Z-4)
+    rbac_actions       = {None: ()}            # a method the route lacks: DRF answers 405
     filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields   = ['action', 'model_name', 'user']
     search_fields      = ['user_name', 'object_repr', 'note']
@@ -58,9 +69,9 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     def for_user(self, request):
         """
         GET /api/audit/logs/for-user/?staff_id=5
-        Returns audit trail for a specific staff member — admin only.
+        Returns audit trail for a specific staff member — admin, purchasing, quality manager.
         """
-        if not _is_admin(request):
+        if not _can_review_staff(request):
             return Response({'detail': 'غير مصرح'}, status=403)
         staff_id = request.query_params.get('staff_id')
         if not staff_id:
@@ -73,7 +84,10 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AbuseFlagViewSet(viewsets.ReadOnlyModelViewSet):
     """Abuse flags — admin only."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module        = 'audit'               # Z-4
+    rbac_actions       = {'review': ('approve', 'edit'), 'run_detection': ('create', 'edit'),
+                          None: ()}          # a method the route lacks: DRF answers 405
     filter_backends    = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields   = ['flag_type', 'severity', 'status', 'staff']
     ordering_fields    = ['detected_at', 'severity']
@@ -128,7 +142,7 @@ class AbuseFlagViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """GET /api/audit/flags/summary/ — open flags by type."""
-        if not _is_admin(request):
+        if not _can_review_staff(request):
             return Response({'detail': 'غير مصرح'}, status=403)
 
         from django.db.models import Count

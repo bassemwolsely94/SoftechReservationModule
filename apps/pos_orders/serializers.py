@@ -66,13 +66,19 @@ class OrderSerializer(serializers.ModelSerializer):
             'status', 'client_token', 'softech_docnumber', 'softech_final_docnumber',
             'doc_value', 'doc_value_gross', 'doc_value_cogs', 'doc_value_tax',
             'doc_value_pay', 'patient_payment', 'erp_executed_at', 'erp_error',
+            # the SOFTECH ledger is the order's branch, never client-chosen; the cashier is not
+            # client-set either (Batch 4, Z-10a — a client could post into another branch)
+            'softech_branchcode', 'cashier_usercode',
         ]
-        # Derived from the branch in create() — optional on input (store_code may
-        # be passed to override the per-branch default).
+        # store_code defaults from the branch in create() — optional on input (may be passed to
+        # pick another store of the branch).
         extra_kwargs = {
-            'softech_branchcode': {'required': False},
             'store_code':         {'required': False},
         }
+
+    # Fixed once the order exists (Batch 4, Z-10a): which branch / store it posts to, who sold it,
+    # its channel and kind. Create checks the channel and the seller; a PATCH skipped both.
+    LOCKED_ON_UPDATE = ('branch', 'store_code', 'seller_usercode', 'channel', 'doc_kind', 'return_of_invoice')
 
     def validate_claim(self, claim):
         """examdate (تاريخ الكشف) is written into SOFTECH as a datetime — accept only a real
@@ -105,9 +111,9 @@ class OrderSerializer(serializers.ModelSerializer):
                 raw['examdate'] = {'__dt__': f"{claim['examdate']} 00:00:00"}   # ISO date (validate_claim)
             if raw:
                 validated['source_companies_raw'] = raw
-        # default the SOFTECH branchcode/store from the Branch if not given
+        # the SOFTECH branchcode is always the Branch's; the store defaults from it if not given
         branch = validated.get('branch')
-        if branch and not validated.get('softech_branchcode'):
+        if branch:
             validated['softech_branchcode'] = branch.softech_branch_id
         if branch and not validated.get('store_code'):
             # DEFAULT only: observed storecode == branchcode (e.g. '130'). storecode
@@ -124,3 +130,8 @@ class OrderSerializer(serializers.ModelSerializer):
         for p in payments:
             SoftechSalesOrderPayment.objects.create(order=order, **p)
         return order
+
+    def update(self, instance, validated):
+        for f in self.LOCKED_ON_UPDATE:
+            validated.pop(f, None)
+        return super().update(instance, validated)

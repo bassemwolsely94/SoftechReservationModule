@@ -2,8 +2,8 @@
 apps/tests/test_shortage_rbac.py
 
 The market-shortage (/api/purchasing/shortage/) and phantom-sales
-(/api/purchasing/phantom/) APIs check the RBAC matrix server-side
-(apps.purchasing.shortage_permissions), not just the React RequireRole.
+(/api/purchasing/phantom/) APIs check the RBAC matrix server-side (the `shortage` module,
+security Batch 4 Z-7b), not just the React RequireRole.
 A denied confirm must never reach shortage_writer (the SOFTECH push).
 """
 from unittest import mock
@@ -79,10 +79,12 @@ class SeededMatrixTests(TestCase):
         self.item.refresh_from_db()
         self.assertTrue(self.item.in_shortage)
 
-    def test_purchasing_grant_reads_but_softech_writes_need_shortage_approve(self):
-        # the URLs live under /api/purchasing/, so a purchasing grant opens the screens;
-        # flag / dismiss write to SOFTECH and need shortage/approve itself (security Batch 2)
+    def test_purchasing_grant_alone_does_not_open_market_shortage(self):
+        # the URLs live under /api/purchasing/, but Market Shortage is the `shortage` module
+        # (Batch 4, Z-7b): reads need shortage/view, SOFTECH writes shortage/approve
         _, _, client = make_user('sr_purch', role='purchasing')
+        self.assertEqual(client.get(CANDIDATES).status_code, 403)
+        grant('purchasing', 'shortage', 'view')
         self.assertEqual(client.get(CANDIDATES).status_code, 200)
         with mock.patch(PUSH, return_value=True) as push:
             r = client.post(FLAG, {'item_id': self.item.id}, format='json')
@@ -100,36 +102,12 @@ class SeededMatrixTests(TestCase):
         self.assertEqual(client.get(CANDIDATES).status_code, 200)
         self.assertEqual(client.get(EXPORT, {'view': 'confirmed'}).status_code, 403)
 
-    def test_phantom_review_needs_edit(self):
-        _, _, qm = make_user('sr_qm2', role='quality_manager')
-        self.assertEqual(qm.post(PHANTOM_CONFIRM, {'item_id': self.item.id}, format='json').status_code, 403)
+    def test_export_grant_downloads(self):
+        _, _, client = make_user('sr_qm3', role='quality_manager')
+        self.assertEqual(client.get(EXPORT, {'view': 'confirmed'}).status_code, 200)
+
+    def test_phantom_review_needs_shortage_approve(self):
         _, _, sales = make_user('sr_sales3', role='salesperson')
-        self.assertEqual(sales.post(PHANTOM_CONFIRM, {'item_id': self.item.id}, format='json').status_code, 200)
-
-
-class EmptyMatrixFallbackTests(TestCase):
-    """Matrix never seeded → the old frontend role list decides."""
-
-    def setUp(self):
-        RoleModuleAccess.objects.all().delete()   # data migrations seed a few rows
-        module_access.clear_cache()
-        self.item = make_item(softech_id='SR002')
-
-    def tearDown(self):
-        module_access.clear_cache()
-
-    def test_listed_role_allowed(self):
-        _, _, client = make_user('fb_qm', role='quality_manager')
-        with mock.patch(PUSH, return_value=True) as push:
-            r = client.post(FLAG, {'item_id': self.item.id}, format='json')
-        self.assertEqual(r.status_code, 200, r.content)
-        push.assert_called_once()
-
-    def test_unlisted_role_denied(self):
-        _, _, client = make_user('fb_sales', role='salesperson')
-        with mock.patch(PUSH) as push:
-            r = client.post(FLAG, {'item_id': self.item.id}, format='json')
-        self.assertEqual(r.status_code, 403)
-        push.assert_not_called()
-        self.item.refresh_from_db()
-        self.assertFalse(self.item.in_shortage)
+        self.assertEqual(sales.post(PHANTOM_CONFIRM, {'item_id': self.item.id}, format='json').status_code, 403)
+        _, _, pharm = make_user('sr_pharm2', role='pharmacist')
+        self.assertEqual(pharm.post(PHANTOM_CONFIRM, {'item_id': self.item.id}, format='json').status_code, 200)

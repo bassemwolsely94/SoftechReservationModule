@@ -130,7 +130,8 @@ SCREENS = [
         'title': T('مصنّف الأدوية المزمنة', 'Chronic medicine classifier'),
         'summary': T('تحديد أي الأصناف أدوية مزمنة، وإدارة المواد الفعّالة وبروتوكولات المتابعة، وتوليد مهام المتابعة من تاريخ الشراء.',
                      'Decide which items are chronic medicines, manage active ingredients and follow-up protocols, and generate follow-up tasks from purchase history.'),
-        'audience': T('الصيادلة والمدير والمشرفون.', 'Pharmacists, admins and supervisors.'),
+        'audience': T('الصيادلة والمشرفون والكول سنتر والمدير يصنّفون؛ الجودة والمشتريات للاطلاع.',
+                      'Pharmacists, supervisors, the call center and admins classify; quality and purchasing view.'),
         'tabs': [
             {'key': 'classifier', 'title': T('🔬 مصنّف الأصناف', '🔬 Item classifier'),
              'body': T('ابحث عن صنف (اسم، كود، باركود) وصفِّ (غير مصنَّف / مصنَّف / مزمن). «تصنيف»: اربطه بمادة فعّالة موجودة أو أنشئ جديدة (الاسم، ATC، التركيز)، وحدد هل هو دواء مزمن وتصنيف المرض ووسوم الوصفة.',
@@ -230,7 +231,7 @@ SCREENS = [
                  '• «مادة موجودة» تختار من القائمة، أو «إنشاء جديد» بالاسم الإنجليزي (مطلوب) والعربي وكود ATC والتركيز.\n• علّم «دواء مزمن» واختار «تصنيف المرض المزمن» ووسوم الوصفة.\n• مفيش حاجة بتتحفظ غير بـ«حفظ التصنيف».',
                  '• "Existing ingredient" picks from the list, or "Create new" with the English name (required), Arabic name, ATC code and strength.\n• Tick "Chronic medicine" and pick the "Chronic disease class" and prescription tags.\n• Nothing is saved until "Save classification".')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

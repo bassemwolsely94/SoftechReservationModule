@@ -285,7 +285,9 @@ SCREENS = [
                  'اضغط على مهمة تفتح صفحتها: التفاصيل، قائمة الأعمال، التعليقات والمرفقات.\n• فوق الشاشة عدد المهام والنشطة والمتأخرة والعاجلة.\n• لو القائمة فاضية فيه زر سريع لإنشاء مهمة.',
                  'Click a task to open its page: details, checklist, comments and attachments.\n• The top of the screen shows the total, active, overdue and urgent counts.\n• If the list is empty there is a quick button to create a task.')},
         ],
-        'updated': '2026-10-26',
+        'tips': [T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
+                   'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -3,7 +3,7 @@ apps/stock_audit/views.py — mounted at /api/stock-audit/ (doc 32 Phase 3)
 
   GET  me/                          what this user may do + their branch scope
   GET  summary/                     per check and per branch: open / total / EGP, vs previous period
-  GET  findings/                    filtered, paginated list   (?rule=&branch=&status=&severity=&user=&q=&from=&to=&sort=)
+  GET  findings/                    filtered, paginated list   (?rule=&branch=&status=&severity=&user=&account=&channel=&q=&from=&to=&sort=)
   GET  findings/<id>/               one finding
   POST findings/<id>/review/        {status, note}             review (management approve, or own-branch manager)
   POST findings/bulk-review/        {ids, status, note}
@@ -40,6 +40,7 @@ from .models import (StockAuditAccess, StockAuditFinding, StockAuditRule, StockA
                      StockAuditRun, StockLedgerLine, StockLedgerSyncRun)
 from .params import ParamError, ensure_rules, validate_params
 from .rules import RULES, adjustments_by_user
+from .sales_context import channel_options, personcodes_in_channels, sales_context
 
 logger = logging.getLogger('elrezeiky.stock_audit')
 
@@ -48,8 +49,12 @@ GROUPS = {'sales': ['sale_below_cost', 'duplicate_line', 'price_variance_invoice
           'availability': ['frequent_stockout'],
           'returns': ['return_without_invoice'],
           'timing': ['after_hours_entry']}
-SORTS = {'value': ('value_egp', 'id'), '-value': ('-value_egp', '-id'),
-         'date': ('occurred_at', 'id'), '-date': ('-occurred_at', '-id')}
+# grid column → order_by fields; '-<key>' sorts descending. id breaks ties so paging is stable.
+_SORT_FIELDS = {'date': ('occurred_at',), 'value': ('value_egp',), 'rule': ('rule_code',),
+                'branch': ('branchcode',), 'item': ('item__name', 'itemcode'), 'status': ('status',),
+                'doc': ('doccode', 'docnumber'), 'user': ('softech_user',), 'account': ('personcode',)}
+SORTS = {**{k: (*f, 'id') for k, f in _SORT_FIELDS.items()},
+         **{f'-{k}': (*(f'-{x}' for x in f), '-id') for k, f in _SORT_FIELDS.items()}}
 BULK_MAX = 500
 
 
@@ -100,7 +105,7 @@ def _rule_meta(code):
     return {'code': code, 'number': s.get('number'), 'name_ar': s.get('name_ar', code), 'name_en': s.get('name_en', code)}
 
 
-def _finding_json(f, bnames, unames):
+def _finding_json(f, bnames, unames, sales=None):
     return {
         'id': f.id, 'rule': _rule_meta(f.rule_code), 'severity': f.severity, 'status': f.status,
         'branchcode': f.branchcode, 'branch_name': bnames.get(f.branchcode, {'ar': f.branchcode, 'en': f.branchcode}),
@@ -113,6 +118,7 @@ def _finding_json(f, bnames, unames):
         'review_note': f.review_note, 'reviewed_by': f.reviewed_by.full_name if f.reviewed_by_id else '',
         'reviewed_at': f.reviewed_at, 'first_seen': f.first_seen, 'last_seen': f.last_seen,
         'next_statuses': sorted(StockAuditFinding.TRANSITIONS.get(f.status, ())),
+        'sales': (sales or {}).get(f.id),   # channel / account / PIC on sale & return findings
     }
 
 
@@ -124,10 +130,13 @@ def _filtered(request, acc):
     if rules:
         qs = qs.filter(rule_code__in=rules)
     for param, field in (('branch', 'branchcode'), ('status', 'status'), ('severity', 'severity'),
-                         ('user', 'softech_user')):
+                         ('user', 'softech_user'), ('account', 'personcode')):
         vals = _list(qp.get(param))
         if vals:
             qs = qs.filter(**{f'{field}__in': vals})
+    channels = _list(qp.get('channel'))
+    if channels:
+        qs = qs.filter(personcode__in=personcodes_in_channels(channels))
     q = (qp.get('q') or '').strip()
     if q:
         cond = Q(itemcode=q) | Q(item__name__icontains=q) | Q(message_ar__icontains=q) | Q(personcode=q)
@@ -146,6 +155,7 @@ def me(request):
     data = acc.as_dict()
     data['rules'] = [_rule_meta(c) for c in RULES]
     data['groups'] = GROUPS
+    data['channels'] = channel_options()
     return Response(data)
 
 
@@ -208,7 +218,8 @@ def findings(request):
     pager = _Page()
     page = pager.paginate_queryset(qs, request)
     bnames, unames = _branch_names(), _user_names({f.softech_user for f in page})
-    resp = pager.get_paginated_response([_finding_json(f, bnames, unames) for f in page])
+    sales = sales_context(page)
+    resp = pager.get_paginated_response([_finding_json(f, bnames, unames, sales) for f in page])
     resp.data['totals'] = qs.aggregate(value=Sum('value_egp'), n=Count('id'))
     resp.data['from'], resp.data['to'] = d_from, d_to
     return resp
@@ -230,7 +241,7 @@ def finding_detail(request, pk):
     f = _get_scoped(acc, pk)
     if f is None:
         return Response({'detail': 'غير موجود — Not found'}, status=404)
-    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user})))
+    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user}), sales_context([f])))
 
 
 def _apply_review(f, new_status, note, acc, request):
@@ -270,7 +281,7 @@ def review(request, pk):
     if err:
         return _bad(err)
     f.refresh_from_db()
-    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user})))
+    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user}), sales_context([f])))
 
 
 @api_view(['POST'])
@@ -309,6 +320,7 @@ def export_findings(request):
     qs, d_from, d_to = _filtered(request, acc)
     rows = list(qs.select_related('item')[:20000])
     bnames, unames = _branch_names(), _user_names({f.softech_user for f in rows})
+    sales = sales_context(rows)
     status_ar = dict(StockAuditFinding.STATUS_CHOICES)
     sev_ar = dict(StockAuditFinding.SEVERITY_CHOICES)
     wb = openpyxl.Workbook()
@@ -316,7 +328,8 @@ def export_findings(request):
     ws.title = 'تدقيق حركات المخزون'
     ws.sheet_view.rightToLeft = True
     head = ['الفحص', 'الخطورة', 'الحالة', 'الفرع', 'كود الصنف', 'الصنف', 'نوع المستند', 'رقم المستند',
-            'تاريخ المستند', 'وقت الإدخال', 'المستخدم', 'القيمة (ج.م)', 'المقياس', 'الحد', 'الوصف', 'ملاحظات المراجعة']
+            'تاريخ المستند', 'وقت الإدخال', 'المستخدم', 'القيمة (ج.م)', 'المقياس', 'الحد', 'الوصف', 'ملاحظات المراجعة',
+            'قناة البيع', 'كود الحساب', 'الحساب', 'PIC العميل', 'اسم العميل']
     ws.append(head)
     for c in ws[1]:
         c.font = Font(bold=True, color='FFFFFF')
@@ -332,8 +345,11 @@ def export_findings(request):
             f'{f.softech_user} {unames.get(f.softech_user, "")}'.strip(), float(f.value_egp or 0),
             float(f.metric) if f.metric is not None else None, float(f.threshold) if f.threshold is not None else None,
             f.message_ar, f.review_note,
+            *((lambda s: [s['channel_label'], s['account_code'], s['account_name'], s['pic'], s['pic_name']])(sales[f.id])
+              if f.id in sales else ['', f.personcode, '', '', '']),
         ])
-    for col, width in zip('ABCDEFGHIJKLMNOP', [22, 9, 13, 22, 10, 34, 9, 12, 12, 16, 22, 12, 10, 9, 70, 40]):
+    for col, width in zip('ABCDEFGHIJKLMNOPQRSTU',
+                          [22, 9, 13, 22, 10, 34, 9, 12, 12, 16, 22, 12, 10, 9, 70, 40, 18, 10, 34, 14, 28]):
         ws.column_dimensions[col].width = width
     for r in ws.iter_rows(min_row=2, min_col=12, max_col=12):
         for c in r:

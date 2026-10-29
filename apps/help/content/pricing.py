@@ -237,7 +237,8 @@ SCREENS = [
         'title': T('موافقات الأسعار والخصومات', 'Price & discount approvals'),
         'summary': T('طلب تعديل سعر أو خصم لصنف، ومراجعة واعتماد الطلبات وتنفيذها في SOFTECH، ومتابعة المعلّق والتدقيق.',
                      'Request a price or discount change for an item, review and approve requests and execute them in SOFTECH, and follow pending items and the audit.'),
-        'audience': T('أي موظف يطلب؛ المدير يعتمد.', 'Any employee requests; the manager approves.'),
+        'audience': T('الصيدلي والمشتريات والمشرف ومدير الجودة يطلبون؛ المدير يعتمد.',
+                      'Pharmacists, purchasing, supervisors and the quality manager request; the manager approves.'),
         'tabs': [
             {'key': 'requests', 'title': T('الطلبات', 'Requests'), 'body': T('الطلبات حسب الحالة مع التعديلات المطلوبة ومن طلبها. «اعتماد» أو «رفض»، و«سجل تغييرات السعر» لكل صنف، و«تراجع» لطلب منفّذ.', 'Requests by status with the requested changes and who asked. "Approve" or "Reject", "Price change log" per item, and "Rollback" for an executed request.')},
             {'key': 'sla', 'title': T('متابعة المعلّقة (SLA)', 'Pending follow-up (SLA)'), 'body': T('الطلبات التي تأخر اعتمادها — لا تترك طلباً معلقاً طويلاً.', 'Requests whose approval is late — do not leave a request waiting long.')},
@@ -347,7 +348,7 @@ SCREENS = [
                  '• «اعتماد» بيفتح نافذة فيها مستخدم SOFTECH المرتبط بحسابك، و«اعتماد وتنفيذ في Softech» بيطبّق التعديل فوراً في SOFTECH باسمك وينتشر لكل الفروع. لو حسابك مش مربوط بمستخدم SOFTECH الزر بيتقفل.\n• «رفض» بملاحظة اختيارية، والطلب «الفاشل» ممكن تعتمده تاني.\n• «↩ تراجع» على طلب منفّذ مش بيرجّع حاجة على طول: بيعمل طلب جديد «في الانتظار» بالقيم السابقة محتاج اعتماد.\n• للمدير بس، والسيرفر بيتحقق من الصلاحية، وكل إجراء متسجّل.',
                  '• "Approve" opens a window showing the SOFTECH user linked to your account, and "Approve and execute in Softech" applies the change in SOFTECH at once under your name and spreads it to every branch. If your account has no linked SOFTECH user the button is disabled.\n• "Reject" with an optional note; a "Failed" request can be approved again.\n• "↩ Rollback" on an executed request does not revert anything by itself: it creates a new "Pending" request with the previous values that needs approval.\n• Admins only; the server checks permission and every action is recorded.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-27',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -956,7 +956,7 @@ SCREENS = [
             'كل صنف يُصنَّف في منطقة بهذا الترتيب: تخصيص يدوي للصنف ← ثلاجة ← حد الغوالي ← القواعد بالترتيب (أول تطابق يفوز) ← غير مصنف.',
             'Configure how items are ordered on the "picking sheet" (the walk path in the supplying store) and the "stocking sheet" (the receiving branch\'s shelf order, also used on stock-count sheets). '
             'Each item gets a zone in this order: manual item assignment → fridge → high-value threshold → rules in order (first match wins) → uncategorized.'),
-        'audience': T('الجميع يرى؛ التعديل للمدير والمشتريات.', 'Everyone can view; admin and purchasing edit.'),
+        'audience': T('يراها من له صلاحية التحويلات؛ التعديل للمدير والمشتريات.', 'Anyone with transfers access can view; admin and purchasing edit.'),
         'tabs': [
             {'key': 'zones', 'title': T('المناطق', 'Zones'),
              'body': T('المناطق (مثل: ممر 2، رف B) بترتيب المسار — الأصغر يُجمَّع أولاً. لكل منطقة موقع وتفعيل وأدوار خاصة: «غوالي» (الأصناف فوق حد السعر)، «ثلاجة»، «غير مصنف».',
@@ -1038,7 +1038,7 @@ SCREENS = [
                  'كل صف منطقة: ترتيب المسار، الاسم، الموقع/الرف، الأدوار الخاصة، عدد القواعد والتخصيصات، والتفعيل.\n• الرقم الأصغر بيتجمّع الأول — رتّبهم زي ما الموظف بيمشي فعلاً في المخزن.',
                  'Each zone row: path order, name, location/shelf, special roles, number of rules and assignments, and on/off.\n• The lowest number is picked first — order them the way staff actually walk the store.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

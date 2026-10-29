@@ -17,10 +17,27 @@ def _profile(request):
 
 
 class CanOperatePosOrders(BasePermission):
-    """Create / view POS orders — any active staff member."""
+    """POS orders follow the `pos` matrix (Batch 4, Z-5b): GET view, POST create, PUT/PATCH edit,
+    DELETE delete. PUSH_ROLES only while no `pos` row is seeded (as CanViewPos) — "any active
+    staff" let delivery, purchasing, quality and viewer read and create sale orders, and any
+    logged-in user DELETE any order."""
     def has_permission(self, request, view):
         p = _profile(request)
-        return bool(p and p.is_active)
+        if not (p and p.is_active):
+            return False
+        if p.role == 'admin':
+            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        from core.middleware import module_access
+        if 'pos' not in module_access.seeded_modules():
+            return p.role in PUSH_ROLES                  # no `pos` rows seeded yet (as CanViewPos)
+        from core.permissions import matrix_allows
+        from rest_framework.permissions import SAFE_METHODS
+        m = request.method
+        needed = (('view',) if m in SAFE_METHODS else ('create',) if m == 'POST'
+                  else ('edit',) if m in ('PUT', 'PATCH') else ('delete',))
+        return matrix_allows(p, 'pos', *needed)
 
 
 class CanPushPosOrders(BasePermission):

@@ -65,7 +65,7 @@ def preview_cheque_plan(request):
     Body: { first_due_date, count, total_amount, interval_value, interval_unit }
     Returns list of instalment rows with banking-day-adjusted dates.
     """
-    denied = deny_unless(request, 'cheques', 'view')
+    denied = deny_unless(request, 'cheques', 'create', 'edit')   # planning a plan (Z-3)
     if denied:
         return denied
     req_ser = PlanPreviewRequestSerializer(data=request.data)
@@ -210,6 +210,16 @@ def update_instalment(request, plan_pk, inst_pk):
     if denied:
         return denied
     inst = get_object_or_404(ChequeInstalment, pk=inst_pk, plan_id=plan_pk)
+    # Batch 4, Z-10a: only an active plan's cheques change, and a cleared or cancelled cheque is
+    # final (a PATCH with `edit` put a cleared cheque back to pending); moving a bounced cheque on
+    # is money too → finalize.
+    if inst.plan.status != 'active' or inst.status in ('cleared', 'cancelled'):
+        return Response({'detail': 'لا يمكن تعديل هذا الشيك — الخطة غير نشطة أو الشيك مُغلق.'},
+                        status=status.HTTP_409_CONFLICT)
+    if inst.status == 'bounced' and request.data.get('status', 'bounced') != 'bounced':
+        denied = deny_unless(request, 'cheques', 'finalize')
+        if denied:
+            return denied
     serializer = ChequeInstalmentUpdateSerializer(inst, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()

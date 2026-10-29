@@ -64,7 +64,7 @@ def _build_audience_qs(target_filter: dict):
       min_ltv                  float — minimum lifetime value
       has_whatsapp             bool  — only customers with whatsapp_phone set
     """
-    qs = Customer.objects.filter(is_guest=False)
+    qs = Customer.objects.filter(is_guest=False, is_account_placeholder=False)
 
     # ── RFM Segment ──────────────────────────────────────────────────────────
     segment = target_filter.get('segment')
@@ -259,8 +259,19 @@ def _enqueue_to_wa_queue(campaign: WhatsAppCampaign):
 
 # ── Campaign list / create ────────────────────────────────────────────────────
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# WhatsApp campaigns = the `campaigns` matrix module (Batch 4, Z-8b — was any logged-in user):
+# drafting and previewing need create / edit; approve / reject / queue (= send) need approve;
+# cancelling edit or approve.
+CAMPAIGNS          = matrix_permission('campaigns')
+CAMPAIGNS_DRAFT    = matrix_permission('campaigns', post=('create', 'edit'))
+CAMPAIGNS_APPROVE  = matrix_permission('campaigns', post=('approve',))
+CAMPAIGNS_CANCEL   = matrix_permission('campaigns', post=('edit', 'approve'))
+
+
 class CampaignListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CAMPAIGNS]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -287,7 +298,7 @@ class CampaignListCreateView(generics.ListCreateAPIView):
 # ── Campaign detail / update / delete ────────────────────────────────────────
 
 class CampaignDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CAMPAIGNS]
     serializer_class   = WhatsAppCampaignDetailSerializer
     queryset = WhatsAppCampaign.objects.select_related(
         'created_by__user', 'approved_by__user', 'rejected_by__user', 'featured_item',
@@ -321,7 +332,7 @@ class CampaignDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ── Audience preview ──────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_DRAFT])
 def preview_audience(request, pk):
     """
     POST /api/campaigns/{pk}/preview-audience/
@@ -355,7 +366,7 @@ def preview_audience(request, pk):
 # ── Approval workflow actions ─────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_DRAFT])
 def request_approval(request, pk):
     """Draft → pending_approval"""
     campaign = _get_campaign_or_404(pk)
@@ -370,7 +381,7 @@ def request_approval(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_APPROVE])
 def approve_campaign(request, pk):
     """pending_approval → approved"""
     campaign = _get_campaign_or_404(pk)
@@ -391,7 +402,7 @@ def approve_campaign(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_APPROVE])
 def reject_campaign(request, pk):
     """pending_approval → rejected"""
     campaign = _get_campaign_or_404(pk)
@@ -412,7 +423,7 @@ def reject_campaign(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_APPROVE])
 def queue_campaign(request, pk):
     """approved → scheduled (if scheduled_at given) or running (immediate)"""
     campaign = _get_campaign_or_404(pk)
@@ -446,7 +457,7 @@ def queue_campaign(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS_CANCEL])
 def cancel_campaign(request, pk):
     """Any cancellable status → cancelled"""
     campaign = _get_campaign_or_404(pk)
@@ -464,7 +475,7 @@ def cancel_campaign(request, pk):
 
 class CampaignMessageListView(generics.ListAPIView):
     """GET /api/campaigns/{pk}/messages/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CAMPAIGNS]
     serializer_class   = CampaignMessageSerializer
 
     def get_queryset(self):
@@ -476,7 +487,7 @@ class CampaignMessageListView(generics.ListAPIView):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS])
 def update_message_status(request, pk, msg_pk):
     """PATCH /api/campaigns/{pk}/messages/{msg_pk}/status/ — simulate delivery webhook"""
     try:
@@ -508,7 +519,7 @@ def update_message_status(request, pk, msg_pk):
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CAMPAIGNS])
 def campaign_stats(request, pk):
     """GET /api/campaigns/{pk}/stats/ — quick delivery summary"""
     campaign = _get_campaign_or_404(pk)

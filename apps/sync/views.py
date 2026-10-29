@@ -3,6 +3,10 @@ import logging
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+from core.permissions import matrix_permission
+
+SYNC = matrix_permission('sync')      # sync logs / scheduler state = sync view (Batch 4, Z-4)
 from rest_framework.response import Response
 from rest_framework import status
 from .models import SyncRun, SyncLog
@@ -92,7 +96,7 @@ def trigger_sync(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SYNC])
 def sync_logs(request):
     runs = SyncRun.objects.prefetch_related('logs').order_by('-started_at')[:20]
     return Response(SyncRunSerializer(runs, many=True).data)
@@ -114,7 +118,7 @@ def data_freshness(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SYNC])
 def scheduler_status(request):
     """
     Report whether the background scheduler is alive, based on its heartbeat.

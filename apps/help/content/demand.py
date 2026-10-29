@@ -766,7 +766,8 @@ SCREENS = [
             'أكثر الأصناف ضياعاً، أسباب الضياع، أداء الفروع، أصناف النقص المزمن، ومقارنة الخسارة «المؤكدة» (باسم عميل) بالخسارة «التقديرية» من محرك المشتريات.',
             'Analysis of unmet demand to improve purchasing and revenue: total requests, fulfilled, confirmed lost value, recovered revenue, '
             'most-lost items, loss reasons, branch performance, chronic shortage items, and "confirmed" losses (under a customer) vs the purchasing engine\'s "estimated" losses.'),
-        'audience': T('المشرفون، المشتريات، الإدارة.', 'Supervisors, purchasing, management.'),
+        'audience': T('كل من له صلاحية «عرض» على التحليلات: الإدارة والمشتريات والمشرفون والجودة والكول سنتر والصيادلة.',
+                      'Everyone with Analytics view: management, purchasing, supervisors, quality, the call center and pharmacists.'),
         'steps': [
             T('ابدأ بالأرقام العلوية: نسبة التوريد وقيمة الخسارة المؤكدة والإيراد المسترد.', 'Start with the top numbers: fulfilment rate, confirmed lost value, recovered revenue.'),
             T('«اقتراحات الشراء المدفوعة بطلب العملاء»: أصناف طلبها عملاء حقيقيون مرتبة بالقيمة — اضغط «إرسال للمشتريات» أو «تصدير CSV».',
@@ -831,7 +832,7 @@ SCREENS = [
                  'أصناف طلبها عملاء حقيقيون (مفتوحة + ضائعة) مرتّبة بالقيمة الضائعة المؤكدة.\n• «⬇ تصدير CSV» بينزّل القائمة.\n• «📦 إرسال للمشتريات» بيبعتها اقتراحات شراء للوحة المشتريات — المشتريات هي اللي بتقرر تطلب ولا لأ.',
                  'Items real customers asked for (open + lost), sorted by confirmed lost value.\n• "⬇ Export CSV" downloads the list.\n• "📦 Send to purchasing" sends them as purchase suggestions to the purchasing board — purchasing decides whether to order.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

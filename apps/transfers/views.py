@@ -86,6 +86,15 @@ def _notify(transfer_request, title, body, notif_type, *, branch=None, include_a
         pass
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Branch transfers = the `transfers` matrix module (Batch 4, Z-8c — was any logged-in user):
+# reads need view; requesting and working a transfer need create / edit / approve / finalize;
+# removing an item needs edit. The supply / request side checks and branch scoping below stay.
+TRANSFERS = matrix_permission('transfers', post=('create', 'edit', 'approve', 'finalize'),
+                              delete=('edit', 'delete'))
+
+
 class TransferRequestViewSet(viewsets.ModelViewSet):
     """
     CRUD + state machine for transfer requests.
@@ -110,7 +119,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         messages        GET/POST /{id}/messages/
     """
 
-    permission_classes  = [IsAuthenticated]
+    permission_classes  = [IsAuthenticated, TRANSFERS]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
@@ -1017,12 +1026,12 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         """
         GET /api/transfers/discrepancy-report/
         Returns completed transfers where received_quantity differs from approved_quantity.
-        Requires admin or purchasing role.
+        Admin, purchasing and supervisors (branch oversight — Batch 4, Z-11h, overblock decision 7).
         """
         from django.db.models import F
 
         profile = _profile(request)
-        if not profile or profile.role not in ('admin', 'purchasing'):
+        if not profile or profile.role not in ('admin', 'purchasing', 'supervisor'):
             return Response(
                 {'detail': 'هذا التقرير مخصص للمشرفين ومسؤولي المشتريات فقط'},
                 status=status.HTTP_403_FORBIDDEN,

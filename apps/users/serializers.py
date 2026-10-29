@@ -70,6 +70,21 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
         ]
 
 
+class StaffPickerSerializer(serializers.ModelSerializer):
+    """The staff list for pickers (tasks, demand, HR forms, follow-ups, incentives) shown to roles
+    without `users` view — names and branch only; no phone, e-mail, SOFTECH user or access
+    flags (Batch 4, Z-4)."""
+    username    = serializers.CharField(source='user.username',    read_only=True)
+    full_name   = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(read_only=True)
+    role_label  = serializers.CharField(source='get_role_display', read_only=True)
+
+    class Meta:
+        model  = StaffProfile
+        fields = ['id', 'username', 'full_name', 'role', 'role_label',
+                  'branch', 'branch_name', 'is_active', 'hr_code']
+
+
 class StaffProfileUpdateSerializer(serializers.ModelSerializer):
     """Used by admin to edit a user's role/access."""
     first_name = serializers.CharField(source='user.first_name', required=False)

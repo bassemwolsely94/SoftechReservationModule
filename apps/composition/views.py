@@ -47,6 +47,12 @@ def _forbidden():
     return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Batch 4, Z-8a: every composition call needs chronic view; writes keep _can_edit (catalog edit).
+COMPOSITION = matrix_permission('chronic', post=('view',), edit=('view',), delete=('view',))
+
+
 class StandardPagination(PageNumberPagination):
     page_size             = 50
     page_size_query_param = 'page_size'
@@ -61,7 +67,7 @@ class IngredientClassViewSet(viewsets.ModelViewSet):
     Platform-native; a new class has no SOFTECH code until Track B pushes it to
     basic_data(600). Delete is admin-only and blocked while the class is in use.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, COMPOSITION]
     serializer_class   = IngredientClassSerializer
     pagination_class   = None   # small fixed lookup (~90) — return the full list
 
@@ -124,7 +130,7 @@ class IngredientClassViewSet(viewsets.ModelViewSet):
 
 class SoftechIngredientRawViewSet(viewsets.ReadOnlyModelViewSet):
     """Verbatim SOFTECH activeingredients mirror (the 'before' snapshot)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, COMPOSITION]
     serializer_class   = SoftechIngredientRawSerializer
     pagination_class   = StandardPagination
     queryset           = SoftechIngredientRaw.objects.all()
@@ -149,7 +155,7 @@ class IngredientParseCandidateViewSet(viewsets.ReadOnlyModelViewSet):
       ?molecule=amlodipine (matches proposed molecule OR raw name)
       ?q=...               free text over the raw name
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, COMPOSITION]
     serializer_class   = IngredientParseCandidateSerializer
     pagination_class   = StandardPagination
     queryset           = IngredientParseCandidate.objects.select_related('raw').all()
@@ -348,7 +354,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
           &q=free-text (molecule OR item name)
     Extra: /molecules/ (autocomplete w/ item counts) · /facets/ (dosage forms + classes).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, COMPOSITION]
     serializer_class   = ItemMoleculeIndexSerializer
     pagination_class   = StandardPagination
 

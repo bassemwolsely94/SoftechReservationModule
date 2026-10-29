@@ -1,4 +1,4 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from django.urls import path, include
 from .views import (
     MedicationTagViewSet,
@@ -9,7 +9,7 @@ from .views import (
     TaskGeneratorViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-8a)
 router.register(r'tags',           MedicationTagViewSet,    basename='medication-tag')
 router.register(r'ingredients',    ActiveIngredientViewSet, basename='active-ingredient')
 router.register(r'protocols',      FollowUpProtocolViewSet, basename='followup-protocol')

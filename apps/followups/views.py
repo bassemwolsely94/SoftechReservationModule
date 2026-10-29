@@ -23,6 +23,7 @@ from django.db.models import Q, Sum, Count
 from rest_framework import viewsets, filters, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -41,8 +42,16 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Follow-ups = the `followups` matrix module (Batch 4, Z-8a): reads need view; task actions
+# (call / done / outcome / log-call …) need create or edit. Branch scoping, phone visibility and
+# the admin-only maintenance actions below are unchanged.
+FOLLOWUPS = matrix_permission('followups', post=('create', 'edit'))
+
+
 class ChronicMedicationProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FOLLOWUPS]
     filter_backends    = [WildcardSearchFilter]
     search_fields      = ['item__name', 'item__softech_id']
 
@@ -68,7 +77,7 @@ class ChronicMedicationProfileViewSet(viewsets.ModelViewSet):
 
 
 class FollowUpTaskViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FOLLOWUPS]
     ordering           = ['due_date', '-created_at']
 
     # ── Queryset with full select/prefetch + advanced filtering ───────────────
@@ -263,6 +272,12 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return FollowUpTaskCreateSerializer
         return FollowUpTaskDetailSerializer
+
+    def update(self, request, *args, **kwargs):
+        # No generic PUT / PATCH (Batch 4, Z-10b): a follow-up is assigned through assign and
+        # closed through log-call / outcome / bulk-action. A PATCH set status = done, completed_at
+        # and assigned_to — what scores a follow-up call — without a call.
+        raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
         serializer.save(created_by=_profile(self.request))

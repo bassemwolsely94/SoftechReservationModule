@@ -48,8 +48,9 @@ class AvailabilityBatchSerializer(serializers.ModelSerializer):
             'line_count', 'matched_count', 'confirmed_count', 'created_at', 'updated_at',
             'branch_scope', 'is_locked', 'locked_at', 'locked_by_name', 'lock_note',
         ]
-        # scope / lock change only through their audited actions (scope / lock / unlock)
-        read_only_fields = ['branch_scope', 'locked_at', 'lock_note']
+        # scope / lock change only through their audited actions (scope / lock / unlock); status,
+        # the operator and the duplicate fingerprint are system-set (Batch 4, Z-10b)
+        read_only_fields = ['branch_scope', 'locked_at', 'lock_note', 'status', 'operator', 'raw_fingerprint']
 
     def get_supplier_display(self, obj):
         if obj.supplier_id and obj.supplier:

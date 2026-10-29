@@ -9,6 +9,12 @@ from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import MatrixPermission, deny_unless, matrix_permission
+
+# Enrichment suggestions are catalog edits (Batch 4, Z-9b — any logged-in user could bulk-approve).
+CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
+                                 delete=('edit', 'delete'))
 from rest_framework.response import Response
 
 from apps.catalog.models import Item
@@ -32,7 +38,7 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
     GET  /api/enrichment/enrichments/{id}/     → full enrichment record
     PATCH /api/enrichment/enrichments/{id}/    → manual field update
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     serializer_class   = ItemEnrichmentSerializer
     http_method_names  = ['get', 'patch', 'head', 'options']
 
@@ -137,7 +143,7 @@ class EnrichmentSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
     POST /api/enrichment/suggestions/{id}/reject/  → reject with note
     POST /api/enrichment/suggestions/bulk-approve/ → bulk approve for item
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     serializer_class   = EnrichmentSuggestionSerializer
 
     def get_queryset(self):
@@ -294,8 +300,11 @@ class EnrichmentBatchViewSet(viewsets.ModelViewSet):
     GET  /api/enrichment/batches/{id}/   → batch detail + progress
     POST /api/enrichment/batches/{id}/cancel/ → cancel
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
     serializer_class   = EnrichmentBatchSerializer
+    rbac_module  = 'catalog'                       # starting / cancelling a batch = catalog edit (Z-2)
+    # None = a method the route has no handler for: nothing to protect, DRF answers 405
+    rbac_actions = {'create': ('edit',), 'cancel': ('edit',), None: ()}
 
     def get_queryset(self):
         return EnrichmentBatch.objects.all().order_by('-created_at')
@@ -360,14 +369,14 @@ def _ensure_enrichment_stubs(limit: int = 2_000) -> None:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def completeness_report(request):
     """GET /api/enrichment/report/ — aggregate completeness stats."""
     return Response(get_completeness_report())
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_enrichment_detail(request, item_pk):
     """
     GET /api/enrichment/items/{item_pk}/
@@ -412,7 +421,7 @@ def item_enrichment_detail(request, item_pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def generate_for_item(request, item_pk):
     """
     POST /api/enrichment/items/{item_pk}/generate/
@@ -451,12 +460,15 @@ def generate_for_item(request, item_pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def recompute_scores(request):
     """
     POST /api/enrichment/recompute-scores/
     Triggers a full completeness score recomputation in background.
     """
+    denied = deny_unless(request, 'catalog', 'edit')      # Z-2
+    if denied:
+        return denied
     def _run():
         from apps.enrichment.gap_detector import recompute_all_scores
         recompute_all_scores()

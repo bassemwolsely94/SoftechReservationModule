@@ -91,9 +91,16 @@ class WebhookView(APIView):
 # Conversation list / detail
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# The WhatsApp inbox sits with the call center screens: the `callcenter` matrix module (Batch 4,
+# Z-8b — was any logged-in user); sending needs create / edit / approve. The webhook is unchanged.
+WHATSAPP = matrix_permission('callcenter', post=('create', 'edit', 'approve'))
+
+
 class ConversationListView(generics.ListAPIView):
     serializer_class   = WAConversationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
 
     def get_queryset(self):
         from django.db.models import Q
@@ -118,7 +125,7 @@ class ConversationListView(generics.ListAPIView):
 
 class ConversationDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = WAConversationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
     queryset           = WAConversation.objects.select_related('customer', 'assigned_to')
 
 
@@ -128,7 +135,7 @@ class ConversationDetailView(generics.RetrieveUpdateAPIView):
 
 class MessageListView(generics.ListAPIView):
     serializer_class   = WAMessageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
 
     def get_queryset(self):
         return (
@@ -144,7 +151,7 @@ class MessageListView(generics.ListAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class SendTextView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
 
     def post(self, request, conversation_id):
         try:
@@ -174,7 +181,7 @@ class SendTextView(APIView):
 
 
 class SendTemplateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
 
     def post(self, request, conversation_id):
         try:
@@ -205,5 +212,5 @@ class SendTemplateView(APIView):
 
 class TemplateListView(generics.ListAPIView):
     serializer_class   = WATemplateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, WHATSAPP]
     queryset           = WATemplate.objects.filter(status='approved').order_by('name')
