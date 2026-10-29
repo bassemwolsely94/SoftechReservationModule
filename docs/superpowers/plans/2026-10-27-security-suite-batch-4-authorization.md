@@ -141,8 +141,10 @@ Baselines after Z-11: `role_overblocks` 352 (all reasoned; was 772 with 615 unre
 - `role_leaks_log` empty — **no**: 2 reviewed lines (pharmacist / purchasing POST
   `/api/config/settings/by_key/`, Z-4) remain.
 - `role_softech_reach`, `role_outside_reach`, `unclassified_api_prefixes` empty — **yes**.
-- The sweep covers PUT / PATCH / DELETE — **no**: it still sends GET and POST only (listed under
-  Z-1, never built). Mass assignment (Z-10) was covered by attack tests instead.
+- The sweep covers PUT / PATCH / DELETE — **yes** since Z-12 (2026-10-29): no new leak, crash,
+  SOFTECH or outside reach; it exposed `export` letting forecasting / sales-target PUT / PATCH /
+  DELETE past the middleware (fixed: edit / delete) and one lockout (transfer-recommendation
+  review, Z-12b: purchasing approve). `role_overblocks` 388 (all reasoned), `role_unproven` 462.
 - Overblocks reviewed by the owner — **yes** (Z-11).
 
 Fresh-database run (2026-10-29, `manage.py test apps`, all migrations from scratch): 3,436 tests,
@@ -151,7 +153,7 @@ roles' rows on a fresh install (fixed: it now touches only an already-seeded mod
 the matrix / decision suites pass on a new fresh database, 76/76) and the relink command below.
 Insurance `RbacTests` passes on a fresh database — the earlier failure was the kept test DB.
 
-Open from Batch 4: the two config leak lines, the PUT / PATCH / DELETE sweep, `confirmed_by` /
+Open from Batch 4: the two config leak lines, `confirmed_by` /
 an audit entry on invoice confirm, and another session's `relink_purchase_customers.py` that
 trips `test_no_sql_built_from_text`.
 

@@ -24,7 +24,7 @@ reuses it (drop it after migrations change).
 |---|---|---|
 | Harness self-tests (baseline, pending, tripwire, role fixtures) | `test_harness.py` | ~20 s |
 | Static guards (no DB) | `test_static_guards.py` | ~25–50 s |
-| Role × route sweep, both modes | `test_role_sweep.py` | ~7–9 min (~6 min since Z-11b skips methods a view lacks) |
+| Role × route sweep, both modes | `test_role_sweep.py` | ~8–9 min (5 methods since Z-12; methods a view lacks are skipped) |
 | Authentication (Batch 3) | `test_auth_*.py`, `test_client_ip.py` | ~2 min |
 
 ## Baselines — the ratchet
@@ -59,7 +59,8 @@ A batch is done when its baselines are empty (or only hold reviewed `# reason:` 
 | `tracked_secrets` | 2 | 6 | credential-looking literal in a tracked file (1 real: `scripts/smoke_api_live.py`) |
 
 After Batch 4 (2026-10-29): `role_leaks_log` **2** (both reviewed — the config `settings/by_key`
-POSTs, Z-4), `role_overblocks` **352** (every line under a `# reason:`), `role_unproven` **124**,
+POSTs, Z-4), `role_overblocks` **388** (every line under a `# reason:`), `role_unproven` **462**
+(PUT / PATCH / DELETE on the sweep's made-up id),
 `role_crashes` **21** (Batch 7), `role_softech_reach` / `role_outside_reach` /
 `unclassified_api_prefixes` **0**.
 
@@ -105,9 +106,9 @@ middleware enforcing and once logging only. Expectations come from the **code** 
   these become real checks.
 - A denied role whose request still tried SOFTECH (`role_softech_reach`) or started a thread,
   HTTP call, socket or subprocess (`role_outside_reach`) is listed — permission came too late.
-- **Known gap:** only GET and POST `{}` are swept — PUT / PATCH / DELETE (the matrix's `edit` /
-  `delete`) are still open after Batch 4. Batch 4 covered them with targeted tests instead
-  (per-module `test_rbac_*.py`, the Z-10 mass-assignment attack tests).
+- Every method the matrix maps is swept — GET, POST `{}`, PUT / PATCH `{}` and DELETE (Z-12;
+  GET / POST only before). On the sweep's made-up id most edits / deletes are **unproven** until
+  Batch 5 seeds real records.
 - A method the view does not implement is skipped (`routes.handles`, Z-11b): DRF would answer
   405, but a strict permission class answers 403 first, which used to read as an overblock.
 - Clients log in with a real Bearer JWT — `force_authenticate()` would hide the user from the
@@ -175,7 +176,10 @@ cutover (owner decision 1). Tests: `test_rbac_*.py`, `test_mass_assignment_*.py`
   via `users.0032`); the approvals engine refuses a requester's own approval; an edit to a
   confirmed invoice sends it back to review.
 
-Open: the two reviewed config leak lines, the PUT / PATCH / DELETE sweep, who confirmed an
+- **Z-12** the sweep sends PUT / PATCH / DELETE; analytics edits need edit / delete (not export);
+  transfer-recommendation review follows purchasing approve (Z-12b).
+
+Open: the two reviewed config leak lines, who confirmed an
 invoice (`confirmed_by` / audit on confirm), and branch / task visibility scoping (Batch 5).
 
 ## Pending owner decisions
