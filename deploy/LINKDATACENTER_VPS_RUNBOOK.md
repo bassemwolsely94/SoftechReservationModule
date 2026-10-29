@@ -27,13 +27,13 @@
    │  Workbench /home/bassemwolsely94/work/app  (code editing + tests only:    │
    │  no website, no own DB, read-only DB role, SOFTECH read-only)    │
    │                                                                  │
-   │  WireGuard wg0  10.77.0.1 ───────────────┐                       │
-   └──────────────────────────────────────────┼───────────────────────┘
-                                              │ encrypted tunnel (UDP 51820)
-   ┌──────────────────────────────────────────▼───────────────────────┐
+   │  ZeroTier 10.50.50.77 (primary) · SSTP 10.0.0.77 (backup) ┐      │
+   └───────────────────────────────────────────────────────────┼──────┘
+                         encrypted tunnels (section 5.0)       │
+   ┌───────────────────────────────────────────────────────────▼──────┐
    │  HQ office LAN                                                    │
    │  HQ MikroTik RB1100AHx4 «Bab El Haded HQ» (RouterOS 7.24.5)       │
-   │      wg-vps 10.77.0.2 · src-NAT to 192.168.1.201 (ether4 LAN)     │
+   │      ZT 10.50.50.1 / SSTP 10.0.0.1 · src-NAT to 192.168.1.201     │
    │      only Sybase/PBX ports                                        │
    │      → SOFTECH HQ  192.168.1.8:5000 (Sybase ASE)                  │
    │      → branch nodes 192.168.3.x / .4.x / .30.x / .70.x :5000      │
@@ -1007,8 +1007,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable elrezeiky-web          # start it after the data restore (section 10)
 # the scheduler is NOT enabled yet — only at cutover (section 11)
 ```
-Add `After=redis-server.service wg-quick@wg0.service` to both `[Unit]` sections, so they start
-after Redis and the VPN on reboot.
+Add `After=redis-server.service zerotier-one.service elrezeiky-tunnel-watch.service` to both
+`[Unit]` sections, so they start after Redis and the VPN on reboot. (Not `wg-quick@wg0`:
+WireGuard is dormant and disabled — section 5.0.)
 
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
@@ -1019,8 +1020,10 @@ sudo sed -i 's#YOUR_DOMAIN_OR_IP#elrezeikyapp.dawalvry.com#g; s#YOUR_DOMAIN#elre
 sudo ln -s /etc/nginx/sites-available/elrezeiky /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
-`/admin/` is limited to private ranges — over the VPN your laptop (10.77.0.10) is inside 10/8,
-so Django admin works only via VPN. Good.
+`/admin/` is limited to private ranges. Through the public name your request arrives from a
+public address and is refused; over ZeroTier your laptop (a 10.50.50.x member, section 13.3) is
+inside 10/8, so open Django admin at `https://10.50.50.77/admin/` (accept the name warning) —
+admin works only via the VPN. Good.
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
@@ -1187,7 +1190,7 @@ sudo -u elrezeiky crontab -e
 (Add `elrezeiky`'s password to `/opt/elrezeiky/.pgpass`, `localhost:5432:elrezeiky_db:elrezeiky:<pw>`, chmod 600.)
 
 **Off-site copy is mandatory** — a backup on the same VPS dies with the VPS. Choose one:
-- Pull nightly to an HQ machine over the VPN: `rsync -a elrezeiky@10.77.0.1:/opt/elrezeiky/backups/ D:\Backups\erp\` (via WSL/rsync or WinSCP scripting).
+- Pull nightly to an HQ machine over the VPN: `rsync -a elrezeiky@10.50.50.77:/opt/elrezeiky/backups/ D:\Backups\erp\` (via WSL/rsync or WinSCP scripting).
 - Or SolidCP **Tools → Backup** for the whole space on a schedule (check the retention LDC gives you).
 - Test a restore once a month: `createdb elrezeiky_restore_test` → `pg_restore` last night's dump into it → spot-check row counts → `dropdb elrezeiky_restore_test`. A backup you never restored is a hope, not a backup.
 
@@ -1197,8 +1200,10 @@ sudo -u elrezeiky crontab -e
 - `journalctl -u elrezeiky-web -u elrezeiky-scheduler --since "1 hour ago" -p err`
 - Disk: `df -h` (alert at 80%). RAM: `htop` / `free -h`.
 - External uptime: free UptimeRobot / Better Stack ping of `https://elrezeikyapp.dawalvry.com/` every 5 min → e-mail/WhatsApp.
-- VPN: if `wg show` handshake is older than ~3 min, every sync fails. The MikroTik netwatch
-  (5.2 g) logs it on the router side; on the VPS add a cron `ping -c1 10.77.0.2 || <alert>` if you want.
+- VPN: if both tunnels are down, every sync fails. `sudo journalctl -t elrezeiky-tunnel` shows
+  every ZeroTier ⇄ SSTP switch; `ip route get 192.168.1.8` shows which one carries traffic now.
+  The MikroTik netwatch (host 10.50.50.77, 5.0) logs it on the router side; on the VPS add a cron
+  `ping -c1 10.50.50.1 || ping -c1 10.0.0.1 || <alert>` if you want.
 - Log rotation: app logs rotate themselves (`SafeTimedRotatingFileHandler`); journald is capped
   — set `SystemMaxUse=2G` in `/etc/systemd/journald.conf`.
 
@@ -1207,13 +1212,14 @@ sudo -u elrezeiky crontab -e
 Cockpit is a free web panel from the Ubuntu/Red Hat world. In a browser you get:
 - **Overview:** CPU, memory, swap, disk and network graphs, with history.
 - **Services:** the status of `elrezeiky-web`, `elrezeiky-scheduler`, `elrezeiky-ocr`,
-  PostgreSQL, Redis, Nginx and WireGuard, each with **Restart / Stop / Start** buttons and its
-  own logs.
+  PostgreSQL, Redis, Nginx and the VPN (`zerotier-one`, `elrezeiky-sstp`,
+  `elrezeiky-tunnel-watch`), each with **Restart / Stop / Start** buttons and its own logs.
 - **Logs:** every service's log in one place, filtered by service, time and errors only.
 - **Terminal:** a server terminal inside the browser (for the runbook commands).
 - **Accounts:** server users and passwords.
 
-It is reachable **only through the WireGuard VPN**, on `https://10.77.0.1:9090`. It is never
+It is reachable **only through the VPN**, on `https://10.50.50.77:9090` (ZeroTier) or
+`https://10.0.0.77:9090` (SSTP backup). It is never
 open to the internet: the panel controls the whole server, so it gets the same protection as
 Django admin.
 
@@ -1237,23 +1243,26 @@ sudo nano /etc/systemd/system/cockpit.socket.d/listen.conf
 ```ini
 [Socket]
 ListenStream=
-ListenStream=10.77.0.1:9090
+ListenStream=10.50.50.77:9090
+ListenStream=10.0.0.77:9090
 FreeBind=yes
 ```
 The empty `ListenStream=` removes the default "all addresses". `FreeBind=yes` lets Cockpit start
-at boot even if WireGuard comes up a second later.
+at boot even if ZeroTier or SSTP comes up a second later.
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now cockpit.socket
-sudo ss -ltnp | grep 9090        # must show 10.77.0.1:9090 — NOT 0.0.0.0 or *
+sudo ss -ltnp | grep 9090        # must show 10.50.50.77:9090 + 10.0.0.77:9090 — NOT 0.0.0.0 or *
 ```
 
 #### c) Firewall on the VPS
 
-Open 9090 on the tunnel interface only, for your admin addresses:
+Open 9090 on the tunnel interfaces only, for your admin addresses. The ZeroTier network is
+shared with other staff members, so allow **individual addresses**, never the whole 10.50.50.0/24:
 ```bash
-sudo ufw allow in on wg0 from 10.77.0.0/24 to any port 9090 proto tcp     # VPN peers (your laptop)
-sudo ufw allow in on wg0 from <office admin PC IP> to any port 9090 proto tcp
+sudo ufw allow in on ztu7tnet2q from <your laptop ZeroTier IP> to any port 9090 proto tcp
+sudo ufw allow in on ztu7tnet2q from <office admin PC IP> to any port 9090 proto tcp
+sudo ufw allow in on sstp-hq    from <office admin PC IP> to any port 9090 proto tcp
 sudo ufw status numbered
 ```
 Port 9090 is never opened on the public interface. If you try `https://<VPS public IP>:9090`
@@ -1263,15 +1272,15 @@ from outside, it must not answer.
 
 | From | How |
 |---|---|
-| **Your laptop, anywhere** | Connect your WireGuard peer (10.77.0.10, section 13.3) → `https://10.77.0.1:9090` |
-| **An admin PC in the HQ office** | Goes through the MikroTik tunnel. Add one rule on the router (below). The PC's default gateway must be the MikroTik, or it needs a route `10.77.0.0/24 → 192.168.1.201` |
+| **Your laptop, anywhere** | ZeroTier connected (section 13.3) → `https://10.50.50.77:9090` |
+| **An admin PC in the HQ office** | Goes through the MikroTik. Add one rule on the router (below). The PC's default gateway must be the MikroTik, or it needs a route `10.50.50.77/32 → 192.168.1.201` |
 
 MikroTik rule for office admin PCs (only these addresses, only Cockpit and SSH):
 ```routeros
 /ip firewall address-list
 add list=elrezeiky-vps-admins address=<office admin PC IP> comment="may open Cockpit / SSH on the VPS"
 /ip firewall filter
-add chain=forward src-address-list=elrezeiky-vps-admins out-interface=wg-vps protocol=tcp dst-port=9090,22 action=accept comment="Admins -> VPS Cockpit/SSH"
+add chain=forward src-address-list=elrezeiky-vps-admins dst-address-list=elrezeiky-vps-sources protocol=tcp dst-port=9090,22 action=accept comment="Admins -> VPS Cockpit/SSH"
 ```
 Drag it next to the other `VPS:` rules. Also check that the router's standard
 **"accept established,related"** forward rule sits **above** the `VPS: nothing else on the LAN`
@@ -1321,7 +1330,7 @@ services only. Nothing else.
 | Data stopped refreshing (freshness bar old) | Services → `elrezeiky-scheduler` → log → **Restart** |
 | Invoice OCR stuck / `paddleocr` unavailable | Services → `elrezeiky-ocr` → **Restart** |
 | Server feels slow | Overview → memory/swap/CPU graphs; Services → sort by memory |
-| Every sync failing | Services → `wg-quick@wg0` (the VPN) → log; then the MikroTik |
+| Every sync failing | Services → `elrezeiky-tunnel-watch` (which tunnel is active) → `zerotier-one` / `elrezeiky-sstp` → log; then the MikroTik |
 
 ⚠ **Never** click **Stop** on `elrezeiky-scheduler` and leave it stopped without telling the
 team: every sync and engine stops. **Never** start a scheduler anywhere else. **Restart**
@@ -1441,9 +1450,10 @@ cd /home/bassemwolsely94/work/app
    (`C:\Users\basse\.claude\projects\<this project>\memory\`) to the matching folder under
    `/home/bassemwolsely94/.claude/projects/` (the folder name follows the server path, e.g.
    `-home-bassemwolsely94-work-app`), so the project memory comes along.
-3. **Your own WireGuard peer** (laptop = `10.77.0.10`) to reach the server privately from
-   anywhere (Django admin is VPN-only). Add a `[Peer]` on the VPS with
-   `AllowedIPs = 10.77.0.10/32`; the laptop's config uses `AllowedIPs = 10.77.0.1/32`.
+3. **Your laptop on ZeroTier** to reach the server privately from anywhere (Django admin and
+   Cockpit are VPN-only). Join network `8d1c312afae365aa` in the ZeroTier app, authorise the
+   laptop in my.zerotier.com with a **fixed IP**, then reach the VPS at `10.50.50.77`. Other
+   staff share this network, so the VPS firewall (12.3 c) names your laptop's IP, not the range.
 
 ### 13.4 Seeing a change before it goes live
 
@@ -1558,5 +1568,5 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 - [ ] 9 systemd, nginx, TLS, frontend build — snapshot
 - [ ] 10 Rehearsal restore verified (checklist 10.2)
 - [ ] 11 Cutover in order 11.1 → 11.9 — snapshot
-- [ ] 12 Nightly backups + off-site copy + uptime monitor; Cockpit on 10.77.0.1:9090 (VPN only, `ss` shows no 0.0.0.0:9090), MikroTik admin rule, `bassemwolsely94` password set
+- [ ] 12 Nightly backups + off-site copy + uptime monitor; Cockpit on 10.50.50.77 / 10.0.0.77 :9090 (VPN only, `ss` shows no 0.0.0.0:9090), MikroTik admin rule, `bassemwolsely94` password set
 - [ ] 13 Workbench (read-only grants, `.env`, harmless-proof), VS Code Remote, Claude Code, `release.sh`
