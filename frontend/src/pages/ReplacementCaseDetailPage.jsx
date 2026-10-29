@@ -32,7 +32,7 @@ function Rail({ c }) {
     ['المطابقة', c.status === 'reconciled' || c.status === 'closed'],
   ]
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div data-tour="replacement-detail-rail" className="flex items-center gap-1 flex-wrap">
       {steps.map(([label, ok], i) => (
         <div key={label} className="flex items-center gap-1">
           <span className={`text-xs px-2.5 py-1 rounded-full border ${ok
@@ -87,7 +87,7 @@ function TreeNode({ node, depth, onDecide, busy }) {
           </div>
           {node.status === 'proposed' && <Evidence items={node.evidence} />}
           {canDecide && (
-            <div className="flex gap-2 mt-1.5">
+            <div data-tour="replacement-detail-confirm-link" className="flex gap-2 mt-1.5">
               <button disabled={busy} onClick={() => onDecide(node.casedoc_id, true)}
                       className="text-xs px-3 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-50">✓ تأكيد أنها فاتورة المريض</button>
               <button disabled={busy} onClick={() => onDecide(node.casedoc_id, false)}
@@ -120,7 +120,7 @@ function ExceptionRow({ e, onDecide, busy }) {
       )}
       {e.resolution && <div className="text-xs text-emerald-700 mt-1">✓ {e.resolution} {e.resolved_by_name && `— ${e.resolved_by_name}`}</div>}
       {open && (
-        <div className="flex gap-2 mt-2 items-center">
+        <div data-tour="replacement-detail-resolve-exception" className="flex gap-2 mt-2 items-center">
           <input value={note} onChange={(x) => setNote(x.target.value)} placeholder="ملاحظة / سبب الحل"
                  className="border border-gray-300 rounded-lg px-2 py-1 text-xs flex-1" />
           {e.status === 'open' && (
@@ -163,7 +163,7 @@ export default function ReplacementCaseDetailPage() {
     <div className="p-4 space-y-4" dir="rtl">
       <div className="text-xs"><Link to="/replacement" className="text-blue-700">← كل الحالات</Link></div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div data-tour="replacement-detail-header" className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -187,7 +187,7 @@ export default function ReplacementCaseDetailPage() {
               {c.supplier_tier_pct && ` (فئة المورد ${Number(c.supplier_tier_pct)}%)`}
             </div>
           </div>
-          <div className="flex gap-4">
+          <div data-tour="replacement-detail-balance" className="flex gap-4">
             <div className="text-center"><div className="text-[11px] text-gray-500">الرصيد</div><div className="text-2xl font-bold tabular-nums">{money(c.entitlement)}</div></div>
             <div className="text-center"><div className="text-[11px] text-gray-500">المتبقي</div>
               <div className={`text-2xl font-bold tabular-nums ${Number(c.outstanding) > 0.01 ? 'text-rose-700' : 'text-emerald-700'}`}>{money(c.outstanding)}</div></div>
@@ -204,9 +204,27 @@ export default function ReplacementCaseDetailPage() {
         </div>
       </div>
 
+      {c.status === 'unclaimed' && (
+        <div data-tour="replacement-detail-unclaimed" className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
+          <span className="text-rose-800">
+            فاتورة شراء على مورد البدل أُدخلت في SOFTECH بدون تسجيل حالة هنا أولاً. الرصيد والسندات متابَعة، لكنها تحتاج حالة.
+          </span>
+          {c.workflow?.claimed_by
+            ? <Link to={`/replacement/${c.workflow.claimed_by.id}`} className="text-blue-700">قيد الاستلام بالحالة {c.workflow.claimed_by.number} ←</Link>
+            : c.workflow?.claimable && (
+              <Link to={`/replacement/new?claim=${c.id}`} className="px-3 py-1.5 rounded-lg bg-rose-600 text-white">استلام في حالة جديدة</Link>)}
+        </div>
+      )}
+      {c.workflow?.claim_of && (
+        <div className="text-xs text-gray-600">
+          حالة لاستلام «شراء بدون حالة» <Link to={`/replacement/${c.workflow.claim_of.id}`} className="text-blue-700 font-mono">{c.workflow.claim_of.number}</Link>
+          {' '}— تُربط فاتورة الشراء تلقائياً بعد الاعتماد.
+        </div>
+      )}
+
       {msg && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-3 py-2">{msg}</div>}
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div data-tour="replacement-detail-tabs" className="flex gap-1 border-b border-gray-200">
         {TABS.filter(([k]) => k !== 'workflow' || live).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
                   className={`px-4 py-2 text-sm -mb-px border-b-2 ${activeTab === k ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-gray-500'}`}>
@@ -214,7 +232,7 @@ export default function ReplacementCaseDetailPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
+        <button data-tour="replacement-detail-rebuild" disabled={busy} onClick={() => rebuild.mutate()} className="text-xs text-gray-500 px-2" title="إعادة بناء الحالة من بيانات SOFTECH (قراءة فقط)">⟳ إعادة البناء</button>
       </div>
 
       {activeTab === 'workflow' && <WorkflowPanel c={c} />}

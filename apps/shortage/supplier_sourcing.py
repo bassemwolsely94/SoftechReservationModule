@@ -29,9 +29,17 @@ def _open():
     return SoftechConnector(profile=profile).connect()
 
 
-def _chunks(seq, n=400):
+_MAX_PARAMS = 400   # bound parameters per statement (proven live elsewhere)
+
+
+def _chunks(seq, n=_MAX_PARAMS):
     for i in range(0, len(seq), n):
         yield seq[i:i + n]
+
+
+def _marks(values) -> str:
+    """'?, ?, ?' — one bound-parameter marker per value, for an IN (...) list."""
+    return ', '.join('?' for _ in values)
 
 
 def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool = True,
@@ -48,17 +56,19 @@ def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool
     if not codes:
         return out
 
-    # SQL filter that keeps only official/main suppliers (and any explicit restrict).
-    supp_filter = ''
+    # Filter that keeps only official/main suppliers (and any explicit restrict) —
+    # supplier codes are bound parameters like every other value below.
+    supp_params = []
     if restrict_supplier:
-        supp_filter = f" AND {{col}}='{str(restrict_supplier).strip()}'"
+        supp_params = [str(restrict_supplier).strip()]
     elif main_only:
         from apps.invoices.suppliers import main_personcodes
         mains = main_personcodes()
         if not mains:
             return out   # nothing flagged main → nothing to process
-        inl = ','.join("'" + c.replace("'", "''") + "'" for c in sorted(mains))
-        supp_filter = f" AND {{col}} IN ({inl})"
+        supp_params = sorted(str(c) for c in mains)
+    supp_filter = f' AND {{col}} IN ({_marks(supp_params)})' if supp_params else ''
+    item_chunk = max(1, _MAX_PARAMS - len(supp_params) - 1)   # room for branch + suppliers
 
     conn = _open()
     try:
@@ -67,11 +77,10 @@ def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool
         supp_names: dict[str, str] = {}
 
         # 1. suppliers-per-item + vendor code (itemssuppliers) ─────────────────
-        for chunk in _chunks(codes):
-            inlist = ','.join("'" + c.replace("'", "''") + "'" for c in chunk)
+        for chunk in _chunks(codes, item_chunk):
             sql = (f"SELECT itemcode, suppcode, suppitemcode FROM itemssuppliers "
-                   f"WHERE itemcode IN ({inlist})" + supp_filter.format(col='suppcode'))
-            cur.execute(sql)
+                   f"WHERE itemcode IN ({_marks(chunk)})" + supp_filter.format(col='suppcode'))
+            cur.execute(sql, list(chunk) + supp_params)
             for ic, sc, code in cur.fetchall():
                 ic = str(ic).strip(); sc = str(sc).strip()
                 out[ic]['suppliers'][sc] = {'code': (str(code).strip() if code else ''), 'name': ''}
@@ -79,16 +88,16 @@ def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool
 
         # 2. purchase history: last supplier + cost per item (stktrans⋈stktransm)
         if with_history:
-            for chunk in _chunks(codes):
-                inlist = ','.join("'" + c.replace("'", "''") + "'" for c in chunk)
+            for chunk in _chunks(codes, item_chunk):
                 cur.execute(
                     f"SELECT t.itemcode, m.cust_branch_code, t.transprice, t.docdate "
                     f"FROM stktrans t, stktransm m "
                     f"WHERE t.branchcode=m.branchcode AND t.doccode=m.doccode "
                     f"AND t.docnumber=m.docnumber AND t.doccode='10' "
-                    f"AND t.branchcode='{branch}' AND t.itemcode IN ({inlist}) "
+                    f"AND t.branchcode=? AND t.itemcode IN ({_marks(chunk)}) "
                     f"AND t.docdate > convert(datetime,'{_HISTORY_SINCE}')"
-                    + supp_filter.format(col='m.cust_branch_code'))
+                    + supp_filter.format(col='m.cust_branch_code'),
+                    [str(branch)] + list(chunk) + supp_params)
                 for ic, sc, cost, ddate in cur.fetchall():
                     ic = str(ic).strip(); sc = str(sc).strip()
                     try:
@@ -112,9 +121,8 @@ def build_sourcing(itemcodes, *, restrict_supplier: str = '', with_history: bool
         # 3. supplier names (personsdata) ─────────────────────────────────────
         if supp_names:
             for chunk in _chunks(list(supp_names)):
-                inlist = ','.join("'" + c.replace("'", "''") + "'" for c in chunk)
                 cur.execute(f"SELECT personcode, personname FROM personsdata "
-                            f"WHERE personcode IN ({inlist})")
+                            f"WHERE personcode IN ({_marks(chunk)})", list(chunk))
                 for pc, nm in cur.fetchall():
                     supp_names[str(pc).strip()] = str(nm or '').strip()
             for rec in out.values():

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
+import { fa } from '../utils/flowArrow'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -221,7 +222,7 @@ function UserDrawer({ user, branches, onClose, onSaved }) {
                 value={form.password}
                 onChange={e => set('password', e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
               />
               {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.join(' ')}</p>}
@@ -411,7 +412,7 @@ function ResetPasswordModal({ user, onClose }) {
     e.preventDefault()
     setError('')
     if (newPw !== confirm) { setError('كلمتا المرور غير متطابقتين'); return }
-    if (newPw.length < 6) { setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return }
+    if (newPw.length < 10) { setError('كلمة المرور يجب أن تكون 10 أحرف على الأقل'); return }
     mutation.mutate()
   }
 
@@ -426,7 +427,7 @@ function ResetPasswordModal({ user, onClose }) {
             placeholder="كلمة المرور الجديدة"
             value={newPw}
             onChange={e => setNewPw(e.target.value)}
-            required minLength={6}
+            required minLength={10}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
           <input
@@ -515,7 +516,7 @@ function ActivityLogModal({ user, onClose }) {
                     {log.note && <p className="text-gray-500 text-xs mt-0.5">{log.note}</p>}
                     {log.old_value && log.new_value && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {JSON.stringify(log.old_value)} → {JSON.stringify(log.new_value)}
+                        {JSON.stringify(log.old_value)} {fa()} {JSON.stringify(log.new_value)}
                       </p>
                     )}
                     {log.ip_address && <p className="text-xs text-gray-400">{log.ip_address}</p>}

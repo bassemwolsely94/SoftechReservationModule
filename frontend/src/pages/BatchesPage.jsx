@@ -9,6 +9,7 @@ import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -244,7 +245,7 @@ function RebalanceWorklistTab() {
         <table className="w-full text-sm text-right">
           <thead className="text-xs text-gray-500 bg-gray-50 border-b">
             <tr><th className="px-2 py-2">الصنف</th><th>التشغيلة</th><th>الصلاحية</th><th>من فرع</th><th>إلى فرع</th>
-              <th>الكمية</th><th>القيمة (تكلفة)</th><th>البيع/شهر (من → إلى)</th><th></th></tr>
+              <th>الكمية</th><th>القيمة (تكلفة)</th><th>البيع/شهر (من {fa()} إلى)</th><th></th></tr>
           </thead>
           <tbody>
             {data.rows.map(r => {
@@ -258,11 +259,11 @@ function RebalanceWorklistTab() {
                   <td>{r.to_branch_name}</td>
                   <td className="font-semibold">{r.qty}</td>
                   <td>{fmt(r.value)}</td>
-                  <td className="text-xs text-gray-500">{r.source_rate_month} → {r.target_rate_month}</td>
+                  <td className="text-xs text-gray-500">{r.source_rate_month} {fa()} {r.target_rate_month}</td>
                   <td>
                     {done ? <span className="text-xs text-emerald-700">✓ {done}</span>
                       : data.can_create && r.item_id && r.from_branch_id && r.to_branch_id
-                        ? <button onClick={() => create.mutate(r)} disabled={create.isPending}
+                        ? <button data-tour="batches-main-rescue-transfer" onClick={() => create.mutate(r)} disabled={create.isPending}
                                   className="px-2 py-1 text-xs bg-brand-600 text-white rounded-lg disabled:opacity-50">مسودة تحويل</button>
                         : null}
                   </td>
@@ -282,6 +283,8 @@ function PurchaseExpiryAuditTab() {
   const navigate = useNavigate()
   const user     = useAuthStore(s => s.user)
   const isAdmin  = ['admin', 'supervisor'].includes(user?.role)
+  // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
+  const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
   const [from, setFrom]           = useState(_defaultExpiryFrom())
   const [to, setTo]               = useState(_defaultExpiryTo())
@@ -475,7 +478,7 @@ function PurchaseExpiryAuditTab() {
             </>
           ) : <span className="text-gray-400">لم تُنفّذ مزامنة بعد — شغّل المزامنة لجلب بيانات الشراء (٣ سنوات).</span>}
         </div>
-        {isAdmin && (
+        {canSync && (
           <button
             onClick={() => sync.mutate()}
             disabled={sync.isPending || isRunning}
@@ -515,6 +518,7 @@ function PurchaseExpiryAuditTab() {
           <span className="text-gray-600">الموجود بالمخزون فقط</span>
         </label>
         <button
+          data-tour="batches-main-audit-generate"
           onClick={() => candidates.mutate()}
           disabled={candidates.isPending || !from || !to}
           className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
@@ -701,7 +705,7 @@ function PurchaseExpiryAuditTab() {
                     <td className="px-3 py-3 text-gray-500 text-xs">{r.producer || '—'}</td>
                     <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches_in_stock || []).join('، ') || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 text-xs">
-                      {_fmtDate(r.earliest_entered_expiry)} → {_fmtDate(r.latest_entered_expiry)}
+                      {_fmtDate(r.earliest_entered_expiry)} {fa()} {_fmtDate(r.latest_entered_expiry)}
                     </td>
                     <td className="px-3 py-3">{r.entry_count}</td>
                     <td className="px-3 py-3">
@@ -713,6 +717,7 @@ function PurchaseExpiryAuditTab() {
                           mdRequested.has(r.item_code)
                             ? <span className="text-green-600 text-xs">✓ طُلب الخصم</span>
                             : <button
+                                data-tour="batches-main-request-discount"
                                 onClick={() => {
                                   const below = r.unit_cost != null && r.markdown_net_price != null && r.markdown_net_price < r.unit_cost
                                   if (window.confirm(
@@ -939,6 +944,8 @@ const _TIER = {
 function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   const user    = useAuthStore(s => s.user)
   const isAdmin = ['admin', 'supervisor'].includes(user?.role)
+  // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
+  const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
   const [mode, setMode]         = useState(initialMode)
   const [within, setWithin]     = useState(180)
@@ -1056,7 +1063,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       </div>
 
       {/* Server-side scope + sync */}
-      <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <div data-tour="batches-main-scope" className="flex flex-wrap items-center gap-2 mb-3 text-sm">
         {modeSwitch && (
           <select value={mode} onChange={e => setMode(e.target.value)} className="border rounded-lg px-2 py-1.5">
             <option value="near">قرب الانتهاء</option>
@@ -1098,8 +1105,8 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
         <span className="text-xs text-gray-500">
           آخر مزامنة: {lastRun ? `${_fmtDate(lastRun.started_at)} — ${lastRun.status === 'running' ? 'جارية…' : `${fmtInt(lastRun.rows_synced)} سطر / ${lastRun.nodes_ok}/${lastRun.nodes_total} فرع`}` : 'لم تُنفّذ بعد'}
         </span>
-        {isAdmin && (
-          <button onClick={() => sync.mutate()} disabled={sync.isPending || lastRun?.status === 'running'}
+        {canSync && (
+          <button data-tour="batches-main-sync" onClick={() => sync.mutate()} disabled={sync.isPending || lastRun?.status === 'running'}
                   className="px-3 py-1.5 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
             {sync.isPending || lastRun?.status === 'running' ? 'المزامنة جارية…' : '🔄 مزامنة الآن'}
           </button>
@@ -1107,7 +1114,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       </div>
 
       {/* Client-side filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
+      <div data-tour="batches-main-filters" className="flex flex-wrap items-center gap-2 mb-3 bg-white rounded-xl border border-gray-200 p-3 text-sm">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم / الكود…"
                className="border rounded-lg px-3 py-1.5 flex-1 min-w-[9rem]" />
         <select value={medType} onChange={e => setMedType(e.target.value)} className="border rounded-lg px-2 py-1.5 max-w-[11rem]">
@@ -1125,12 +1132,12 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
           قيمة معرّضة للخطر: <b className="text-red-600">{fmtNum(totalVar)} ج</b>
           {isFetching && <span className="mr-2 text-xs text-gray-400">جاري التحميل…</span>}
         </p>
-        <div className="flex items-center gap-2">
-          <button onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending || view.length === 0}
+        <div data-tour="batches-main-actions" className="flex items-center gap-2">
+          <button data-tour="batches-main-export" onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending || view.length === 0}
                   className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
           </button>
-          <button onClick={() => spawn.mutate()} disabled={spawn.isPending || !branch || view.length === 0}
+          <button data-tour="batches-main-count" onClick={() => spawn.mutate()} disabled={spawn.isPending || !branch || view.length === 0}
                   title={!branch ? 'اختر فرعًا لبدء جرد مادي' : ''}
                   className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
             {spawn.isPending ? 'جاري الإنشاء…' : '▶️ بدء جرد مادي'}
@@ -1142,7 +1149,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       {view.length === 0 ? (
         <div className="text-center py-14 text-gray-400">لا توجد أصناف — تأكد من تشغيل مزامنة صلاحية المخزون.</div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div data-tour="batches-main-table" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 select-none">
@@ -1182,7 +1189,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
                   <td className="px-3 py-3 text-gray-500 text-xs">{r.origin || '—'}</td>
                   <td className="px-3 py-3 text-gray-500 text-xs">{(r.branches || []).join('، ') || '—'}</td>
                   <td className="px-3 py-3">
-                    <button onClick={() => setDisposalRow(r)}
+                    <button data-tour="batches-main-disposal-draft" onClick={() => setDisposalRow(r)}
                             className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
                             title="إتلاف / مرتجع">🗑️ إتلاف/مرتجع</button>
                   </td>
@@ -1363,9 +1370,9 @@ function DisposalTab() {
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-1">
                       {r.status === 'draft' && canApprove &&
-                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'approved' })} className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700">اعتماد</button>}
+                        <button data-tour="batches-main-disposal-approve" onClick={() => setStatus.mutate({ id: r.id, status: 'approved' })} className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700">اعتماد</button>}
                       {r.status === 'approved' && canApprove &&
-                        <button onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
+                        <button data-tour="batches-main-disposal-done" onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
                       {r.status !== 'cancelled' && r.status !== 'done' &&
                         <button onClick={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
                     </div>
@@ -1393,14 +1400,14 @@ export default function BatchesPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <div className="mb-6">
+      <div data-tour="batches-main-header" className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">إدارة الدفعات (FEFO)</h1>
         <p className="text-sm text-gray-500 mt-1">مراقبة انتهاء الصلاحية · نظام الصرف الأول انتهاء أولاً</p>
       </div>
 
       {/* KPI cards — live from the stkbalexpiry mirror (all nodes) */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div data-tour="batches-main-kpis" className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <KpiCard label="أصناف تنتهي خلال 30 يوم"  value={fmtInt(summary.lt_30?.items)}  sub={`${fmtNum(summary.lt_30?.value)} ج`}  color="text-red-600" />
           <KpiCard label="خلال 90 يوم"              value={fmtInt(summary.lt_90?.items)}  sub={`${fmtNum(summary.lt_90?.value)} ج`}  color="text-amber-600" />
           <KpiCard label="خلال 180 يوم"             value={fmtInt(summary.lt_180?.items)} sub={`${fmtNum(summary.lt_180?.value)} ج`} color="text-yellow-600" />
@@ -1410,7 +1417,7 @@ export default function BatchesPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div data-tour="batches-main-tabs" className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {[
           { key: 'alerts', label: '🚨 قرب الانتهاء' },
           { key: 'list',   label: '📦 أرصدة الصلاحية (كل الفروع)' },

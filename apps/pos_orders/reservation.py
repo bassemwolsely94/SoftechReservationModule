@@ -113,6 +113,8 @@ def _conn(order):
 
 def probe_reservation(order, sale_docnumber, seller=None):
     """Execute the real حجز INSERTs in a transaction, verify, then ROLL BACK (zero residue)."""
+    from core.softech_switches import require_probes
+    require_probes('pos_orders.reservation.probe_reservation')    # real DML on SOFTECH (Batch 2, P-7)
     seller = seller or order.seller_usercode or getattr(settings, 'POS_DEFAULT_SELLER_USERCODE', '')
     conn = _conn(order)
     try:

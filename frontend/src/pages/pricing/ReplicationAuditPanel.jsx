@@ -97,7 +97,7 @@ export default function ReplicationAuditPanel() {
           className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           {[7, 14, 30, 60, 90].map(d => <option key={d} value={d}>{d} يوم</option>)}
         </select>
-        <button onClick={() => runScan.mutate()} disabled={runScan.isPending}
+        <button data-tour="pricing-approvals-replication-scan" onClick={() => runScan.mutate()} disabled={runScan.isPending}
           className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">
           {runScan.isPending ? 'جاري الفحص…' : 'تشغيل الفحص الآن'}
         </button>
@@ -169,7 +169,7 @@ export default function ReplicationAuditPanel() {
                 </button>
               </>
             )}
-            <button onClick={() => repair.mutate({ scan_id: activeScan, mode: 'restamp' })}
+            <button data-tour="pricing-approvals-replication-repair" onClick={() => repair.mutate({ scan_id: activeScan, mode: 'restamp' })}
               disabled={repair.isPending}
               className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-60">
               إعادة مزامنة كل الفجوات

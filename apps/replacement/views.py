@@ -28,6 +28,15 @@ def _staff(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+def _by_staff(qs):
+    """[{name, n}] of cases per creator (full_name is a property → named in Python)."""
+    from apps.users.models import StaffProfile
+    rows = list(qs.values('created_by').annotate(n=Count('id')).order_by('-n'))
+    staff = {s.pk: s for s in StaffProfile.objects.filter(pk__in=[r['created_by'] for r in rows if r['created_by']])}
+    return [{'name': staff[r['created_by']].full_name if r['created_by'] in staff else '—', 'n': r['n']}
+            for r in rows]
+
+
 def _filter_cases(request, qs):
     p = request.query_params
     q = (p.get('q') or '').strip()
@@ -111,7 +120,36 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                             'amount': str(e['amount'] or 0)} for e in exc],
             'last_run': RunSerializer(ReconstructionRun.objects.first()).data
             if ReconstructionRun.objects.exists() else None,
+            'adoption': self._adoption(qs),
         })
+
+    @staticmethod
+    def _adoption(qs):
+        """Entry-first adoption per cut-over branch: purchases that came from a case entered first
+        vs «شراء بدون حالة», and who posted the case-less ones (SOFTECH usercode on the purchase)."""
+        from apps.purchasing.isr_fulfillment import user_label, user_names
+        from . import config as C
+        out = []
+        for code in sorted(C.get('ENTRY_FIRST_FROM')):
+            start = C.entry_first_from(code)
+            base = qs.filter(branchcode=code, purchase_date__gte=start, purchase_ref__isnull=False) \
+                .exclude(status=RC.STATUS_CANCELLED)
+            live = base.filter(origin=RC.ORIGIN_LIVE)
+            un = base.filter(status=RC.STATUS_UNCLAIMED)
+            n_live, n_un = live.count(), un.count()
+            by_user = list(un.values('purchase_invoice__usercode').annotate(n=Count('id'), value=Sum('entitlement'))
+                           .order_by('-n'))
+            names = user_names(u['purchase_invoice__usercode'] for u in by_user)
+            out.append({
+                'branchcode': code, 'from': start.isoformat(), 'entered_first': n_live, 'unclaimed': n_un,
+                'unclaimed_value': str(un.aggregate(s=Sum('entitlement'))['s'] or 0),
+                'rate': round(100 * n_live / (n_live + n_un), 1) if (n_live + n_un) else None,
+                'unclaimed_by_user': [{'usercode': u['purchase_invoice__usercode'] or '',
+                                       'label': user_label(u['purchase_invoice__usercode'], names),
+                                       'n': u['n'], 'value': str(u['value'] or 0)} for u in by_user],
+                'entered_by_staff': _by_staff(live),
+            })
+        return out
 
     def get_serializer_context(self):
         return {**super().get_serializer_context(), 'staff': _staff(self.request)}
@@ -183,13 +221,18 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
             if branch is None:
                 raise ValidationError('الفرع مطلوب.')
             sale = PurchaseHistory.objects.filter(pk=d['from_sale']).first() if d.get('from_sale') else None
+            claim = None
+            if d.get('claim_of'):
+                claim = self.get_queryset().filter(pk=d['claim_of']).first()    # branch scope
+                if claim is None:
+                    raise ValidationError('سجل «شراء بدون حالة» غير موجود.')
             return W.create_case(user=_staff(request), branch=branch, source_type=d.get('source_type', ''),
                                  settlement_mode=d.get('settlement_mode', 'products'),
                                  softech_pic=(d.get('softech_pic') or '').strip(),
                                  contract_personcode=(d.get('contract_personcode') or '').strip(),
                                  items=d.get('items') or [], is_shortage_item=bool(d.get('is_shortage_item')),
                                  prescription_no=d.get('prescription_no', ''), approval_no=d.get('approval_no', ''),
-                                 notes=d.get('notes', ''), from_sale=sale, request=request)
+                                 notes=d.get('notes', ''), from_sale=sale, claim_of=claim, request=request)
         resp = self._do(run)
         if resp.status_code == 200:
             resp.status_code = status.HTTP_201_CREATED
@@ -262,7 +305,7 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
 
     @action(detail=True, methods=['post'], url_path='prepare-purchase')
     def prepare_purchase(self, request, pk=None):
-        return self._step(request, pk, LG.prepare_purchase)
+        return self._step(request, pk, LG.prepare_purchase, expiries=request.data.get('expiries') or {})
 
     @action(detail=True, methods=['post'], url_path='prepare-contract-sale')
     def prepare_contract_sale(self, request, pk=None):
@@ -278,17 +321,155 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         return self._step(request, pk, lambda case_id, **kw: LG.post(case_id, op_id, **kw),
                           force=bool(request.data.get('force')))
 
+    # ── B3: cash handed to the patient ───────────────────────────────────────
+    @action(detail=True, methods=['post'], url_path='payouts')
+    def request_payout(self, request, pk=None):
+        from . import cash
+        return self._step(request, pk, cash.request_payout, amount=request.data.get('amount'),
+                          note=request.data.get('note', ''))
+
+    @action(detail=True, methods=['post'], url_path=r'payouts/(?P<payout_id>\d+)/cancel')
+    def cancel_payout(self, request, pk=None, payout_id=None):
+        from . import cash
+        self.get_object()                                     # branch scope (404 outside)
+        return self._do(lambda: cash.cancel_payout(int(pk), int(payout_id), user=_staff(request),
+                                                   version=request.data.get('version'),
+                                                   reason=request.data.get('reason', ''), request=request))
+
+    @action(detail=True, methods=['post'], url_path=r'payouts/(?P<payout_id>\d+)/confirm')
+    def confirm_payout(self, request, pk=None, payout_id=None):
+        from . import cash
+        self.get_object()
+        return self._do(lambda: cash.confirm_payout(int(pk), int(payout_id), user=_staff(request),
+                                                    version=request.data.get('version'),
+                                                    reference=request.data.get('reference', ''), request=request))
+
+    # ── B4: reversals and corrections (native supplier return, approved here) ─
+    @action(detail=True, methods=['post'], url_path='reversals')
+    def request_reversal(self, request, pk=None):
+        from . import reversal
+        return self._step(request, pk, reversal.request_reversal, kind=request.data.get('kind', ''),
+                          reason=request.data.get('reason', ''), amount=request.data.get('amount'))
+
+    @action(detail=True, methods=['post'], url_path=r'reversals/(?P<rr_id>\d+)/(?P<verb>approve|reject|cancel)')
+    def act_reversal(self, request, pk=None, rr_id=None, verb=None):
+        from . import reversal
+        self.get_object()                                     # branch scope (404 outside)
+        user, version, note = _staff(request), request.data.get('version'), request.data.get('note', '')
+        if verb == 'cancel':
+            fn = lambda: reversal.cancel_reversal(int(pk), int(rr_id), user=user, version=version,
+                                                  reason=note, request=request)
+        else:
+            fn = lambda: reversal.decide_reversal(int(pk), int(rr_id), user=user, version=version,
+                                                  approve=verb == 'approve', note=note, request=request)
+        return self._do(fn)
+
+    @action(detail=True, methods=['post'], url_path='insurer-rejection')
+    def insurer_rejection(self, request, pk=None):
+        from . import reversal
+        return self._step(request, pk, reversal.record_insurer_rejection, note=request.data.get('note', ''))
+
+    # ── B2: balance in Customer 360 / POS, and funding a POS order from it ────
+    def _call(self, fn, render):
+        """Same error mapping as _do, for services that do not return a case."""
+        try:
+            return Response(render(fn()))
+        except ValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        except PermissionDenied as e:
+            return Response({'detail': str(e) or 'غير مسموح.'}, status=status.HTTP_403_FORBIDDEN)
+
+    def _scoped_order(self, request, order_id):
+        """The POS order, only inside the viewer's branches (404 outside — same rule as cases)."""
+        from apps.pos_orders.models import SoftechSalesOrder
+        qs = SoftechSalesOrder.objects.filter(pk=order_id)
+        staff = _staff(request)
+        ids = staff.accessible_branch_ids if staff and not request.user.is_superuser else None
+        if staff is None and not request.user.is_superuser:
+            return None
+        return (qs if ids is None else qs.filter(branch_id__in=ids)).first()
+
+    @action(detail=False, methods=['get'], url_path='patient-balance')
+    def patient_balance(self, request):
+        """GET ?pic=&branch= — the patient's redeemable بدل balance (live cases) + historical open, for staff."""
+        from . import redemption
+        out = redemption.patient_balance(request.query_params.get('pic'), staff=_staff(request),
+                                         branch_id=request.query_params.get('branch') or None)
+        return Response(out or {'total_available': '0', 'cases': [], 'historical': {'count': 0, 'amount': '0'}})
+
+    @action(detail=False, methods=['get'], url_path='patient-orders')
+    def patient_orders(self, request):
+        """GET ?pic=&branch= — the patient's open POS cash / delivery orders that can still be funded."""
+        from apps.pos_orders.models import SoftechSalesOrder
+        from . import redemption
+        pic = (request.query_params.get('pic') or '').strip()
+        if not pic:
+            return Response({'results': []})
+        qs = SoftechSalesOrder.objects.filter(softech_pic__iexact=pic, channel__in=['cash', 'delivery'],
+                                              status__in=redemption.FUNDABLE_ORDER_STATUSES)
+        if request.query_params.get('branch'):
+            qs = qs.filter(branch_id=request.query_params['branch'])
+        staff = _staff(request)
+        ids = staff.accessible_branch_ids if staff and not request.user.is_superuser else None
+        if ids is not None:
+            qs = qs.filter(branch_id__in=ids)
+        rows = []
+        for o in qs.order_by('-id')[:20]:
+            funded = redemption.order_funding(o)
+            rows.append({'id': o.pk, 'channel': o.channel, 'status': o.status, 'status_label': o.get_status_display(),
+                         'created_at': o.created_at, 'total': str(redemption.order_total(o)),
+                         'lines': o.lines.count(),
+                         'funded_by': [{'case': op.case.number, 'case_id': op.case_id,
+                                        'amount': str(op.expected_value)} for op in funded]})
+        return Response({'results': rows})
+
+    @action(detail=False, methods=['post'], url_path='fund-order')
+    def fund_order(self, request):
+        """POST {order, cases?:[id…]} — fund a POS order from the patient's live balance."""
+        from . import redemption
+        if self._scoped_order(request, request.data.get('order')) is None:
+            return Response({'detail': 'الطلب غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+        return self._call(
+            lambda: redemption.fund_order(int(request.data['order']), user=_staff(request),
+                                          case_ids=request.data.get('cases') or None, request=request),
+            lambda ops: {'funded': [{'case': op.case.number, 'case_id': op.case_id, 'amount': str(op.expected_value),
+                                     'topup': op.result.get('customer_topup', '0')} for op in ops]})
+
+    @action(detail=False, methods=['post'], url_path='unfund-order')
+    def unfund_order(self, request):
+        """POST {order, reason} — release the balance reserved on an unsettled POS order."""
+        from . import redemption
+        if self._scoped_order(request, request.data.get('order')) is None:
+            return Response({'detail': 'الطلب غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+        return self._call(
+            lambda: redemption.unfund_order(int(request.data['order']), user=_staff(request),
+                                            reason=request.data.get('reason', ''), request=request),
+            lambda n: {'released': n})
+
     @action(detail=False, methods=['get'], url_path='patient-sales')
     def patient_sales(self, request):
-        """Recent CONTRACT sales of a patient at a branch — to start a case from the prescription."""
+        """Recent CONTRACT sales of a patient at a branch — to start a case from the prescription.
+        `pic` may be the SOFTECH PIC or a mobile number (Customer 360 identity); a mobile shared by
+        several customers returns `patients` to choose from and no sales."""
         from datetime import timedelta
         from django.utils import timezone
-        from apps.customers.models import PurchaseHistory
+        from apps.customers.models import Customer, PurchaseHistory
         from . import config as C
         pic = (request.query_params.get('pic') or '').strip()
         branch = request.query_params.get('branch')
         if not pic:
-            return Response({'results': []})
+            return Response({'results': [], 'patients': []})
+        patients = []
+        digits = ''.join(ch for ch in pic if ch.isdigit())
+        if digits == pic.replace(' ', '').lstrip('+') and len(digits) >= 8:       # a phone number
+            tail = digits[-10:]
+            found = (Customer.objects.filter(Q(phone__endswith=tail) | Q(phone_alt__endswith=tail)
+                                             | Q(whatsapp_phone__endswith=tail))
+                     .exclude(softech_pic='').values('softech_pic', 'name', 'phone')[:10])
+            patients = [{'pic': f['softech_pic'], 'name': f['name'], 'phone': f['phone']} for f in found]
+            if len(patients) != 1:
+                return Response({'results': [], 'patients': patients})
+            pic = patients[0]['pic']
         qs = (PurchaseHistory.objects.filter(softech_phcode__iexact=pic, doc_code='115',
                                              sales_channel__in=C.CONTRACT_CHANNELS,
                                              invoice_date__gte=timezone.now() - timedelta(days=60))
@@ -307,7 +488,7 @@ class ReplacementCaseViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                     'public_price': str(l.list_price or l.item.pack_price or 0), 'contract_price': str(l.unit_price)})
                 a['qty'] += l.quantity
             return [{**a, 'qty': str(a['qty'])} for a in agg.values()]
-        return Response({'results': [{
+        return Response({'pic': pic, 'patients': patients, 'results': [{
             'id': s.pk, 'branch': s.branch_id, 'branchcode': s.branch.softech_branch_id, 'docnumber': s.docnumber,
             'date': s.invoice_date.date().isoformat() if s.invoice_date else None, 'total': str(s.total_amount),
             'contract': s.cust_branch_code, 'lines': lines(s)} for s in qs]})

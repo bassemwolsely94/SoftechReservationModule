@@ -37,7 +37,7 @@ const STATUS_ORDER = ['pending', 'available', 'contacted', 'confirmed', 'fulfill
 
 function FilterBar({ filters, onChange, branches }) {
   return (
-    <div className="card mb-4 flex flex-wrap gap-3 items-center" dir="rtl">
+    <div className="card mb-4 flex flex-wrap gap-3 items-center" dir="rtl" data-tour="reservations-list-filters">
       <input
         type="text"
         placeholder="بحث بالاسم أو الرقم..."
@@ -144,7 +144,7 @@ function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
         <div className="h-4 border-r border-brand-200" />
 
         {/* Change status — only valid forward transitions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="reservations-list-bulk-status">
           <select
             className="input-field text-xs py-1 w-48"
             value={bulkStatus}
@@ -173,6 +173,7 @@ function BulkToolbar({ selectedIds, selectedReservations, onClear, onAction }) {
         <button
           disabled={loading}
           onClick={handleExport}
+          data-tour="reservations-list-export"
           className="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
         >
           📥 تصدير Excel
@@ -283,7 +284,7 @@ export default function ReservationsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/reservations/new')} className="btn-primary flex items-center gap-2">
+          <button onClick={() => navigate('/reservations/new')} className="btn-primary flex items-center gap-2" data-tour="reservations-list-new">
             <span className="text-lg">+</span>
             حجز جديد
           </button>
@@ -311,7 +312,7 @@ export default function ReservationsPage() {
       )}
 
       {/* Table */}
-      <div className={`card p-0 overflow-hidden transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
+      <div data-tour="reservations-list-table" className={`card p-0 overflow-hidden transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
         {isError ? (
           <div className="p-10 text-center">
             <div className="text-3xl mb-2">⚠️</div>
@@ -326,10 +327,10 @@ export default function ReservationsPage() {
             <div className="text-gray-500 font-medium">لا توجد حجوزات مطابقة للفلاتر</div>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" data-tour="reservations-list-table">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="px-3 py-3">
+                <th className="px-3 py-3" data-tour="reservations-list-select">
                   <input
                     type="checkbox"
                     checked={allSelected}

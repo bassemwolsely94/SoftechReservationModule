@@ -82,6 +82,8 @@ def write_pos_cancel_batch(*, dry_run=None, limit=2000, min_age_minutes=360):
 
     if dry_run is None:
         dry_run = not write_enabled()
+    if not dry_run and not write_enabled():    # the writer refuses on its own (Batch 2, P-9)
+        raise RuntimeError('POS_CANCEL_WRITE_ENABLED is off — refusing a live pos_cancel write.')
 
     from datetime import timedelta
     cutoff = timezone.now() - timedelta(minutes=max(0, int(min_age_minutes)))

@@ -33,7 +33,7 @@ function DriverPerformanceTab({ dateFrom, dateTo, branchId }) {
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="overflow-x-auto rounded-xl border border-gray-200" data-tour="delivery-analytics-drivers">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs">
             <tr>
@@ -321,13 +321,13 @@ export default function DeliveryAnalyticsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">تحليلات التوصيل</h1>
+          <h1 className="text-2xl font-bold text-gray-800" data-tour="delivery-analytics-header">تحليلات التوصيل</h1>
           <p className="text-sm text-gray-500 mt-0.5">أداء السائقين · المناطق · الورديات · رضا العملاء</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center gap-3">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center gap-3" data-tour="delivery-analytics-filters">
         {[
           {l:'اليوم',f:_today(),t:_today()},
           {l:'٧ أيام',f:_daysAgo(7),t:_today()},
@@ -346,7 +346,7 @@ export default function DeliveryAnalyticsPage() {
         <span className="text-gray-400 text-xs">—</span>
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
           className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-brand-400 focus:outline-none" />
-        <select value={branchId} onChange={e => setBranchId(e.target.value)}
+        <select value={branchId} onChange={e => setBranchId(e.target.value)} data-tour="delivery-analytics-branch"
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-brand-400 focus:outline-none">
           <option value="">كل الفروع</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
@@ -354,7 +354,7 @@ export default function DeliveryAnalyticsPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="flex border-b border-gray-200 gap-1">
+      <div className="flex border-b border-gray-200 gap-1" data-tour="delivery-analytics-tabs">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -368,7 +368,7 @@ export default function DeliveryAnalyticsPage() {
       </div>
 
       {/* Tab content */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="delivery-analytics-content">
         {ActiveComponent && (
           <ActiveComponent dateFrom={dateFrom} dateTo={dateTo} branchId={branchId} />
         )}

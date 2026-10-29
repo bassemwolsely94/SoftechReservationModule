@@ -304,6 +304,9 @@ class ProcurementEngineRun(models.Model):
     alerts_generated  = models.PositiveIntegerField(default=0)
     error_message  = models.TextField(blank=True)
     triggered_by   = models.CharField(max_length=50, blank=True)
+    # {'step', 'steps', 'message'} while running — shown as the screen's progress bar
+    # (the scheduler runs in another process, so this lives on the row, not in a cache)
+    progress       = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-started_at']

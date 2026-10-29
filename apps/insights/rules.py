@@ -127,6 +127,28 @@ def _seg_stats(ctx, channels, *, user=None, branch_id=None, max_total=None, min_
             'avg_txn': (val / D(txn)) if txn else Decimal('0')}
 
 
+
+def analytics_excluded_items():
+    """Pseudo/non-retail items kept OUT of item-level findings (insights AND stock audit, doc 32):
+    loyalty coupons and customer gifts. Owner-editable SystemSettings:
+      • analytics_excluded_item_keywords — item-name keywords (default COUPON/كوبون/هدايا/هدية)
+      • analytics_excluded_medicine_types — general-category codes (default 60 = client gifts)
+    Returns an Item queryset (empty when both settings are blank)."""
+    from apps.config.models import SystemSetting
+    from django.db.models import Q
+    from apps.catalog.models import Item
+    kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون,هدايا,هدية') or '').split(',') if k.strip()]
+    xtypes = [t.strip() for t in str(SystemSetting.get('analytics_excluded_medicine_types', '60') or '').split(',') if t.strip()]
+    if not (kws or xtypes):
+        return Item.objects.none()
+    q = Q()
+    for k in kws:
+        q |= Q(name__icontains=k)
+    if xtypes:
+        q |= Q(medicine_type__in=xtypes)
+    return Item.objects.filter(q)
+
+
 class Ctx:
     """Shared context + cached config for one run."""
     def __init__(self, period_type, start, end):
@@ -173,16 +195,7 @@ class Ctx:
         #  • analytics_excluded_medicine_types  — general-category codes (default 60 = client gifts)
         # Both feed ONE excluded_item_ids set used by item-level SALES and STOCK rules.
         from apps.config.models import SystemSetting
-        from django.db.models import Q
-        from apps.catalog.models import Item
-        kws = [k.strip() for k in str(SystemSetting.get('analytics_excluded_item_keywords', 'COUPON,كوبون,هدايا,هدية') or '').split(',') if k.strip()]
-        xtypes = [t.strip() for t in str(SystemSetting.get('analytics_excluded_medicine_types', '60') or '').split(',') if t.strip()]
-        q = Q()
-        for k in kws:
-            q |= Q(name__icontains=k)
-        if xtypes:
-            q |= Q(medicine_type__in=xtypes)
-        self.excluded_item_ids = set(Item.objects.filter(q).values_list('id', flat=True)) if (kws or xtypes) else set()
+        self.excluded_item_ids = set(analytics_excluded_items().values_list('id', flat=True))
         # Owner-tunable money floors shared by several rules:
         #  • bulk_cash_floor  — a CASH invoice at/above this counts as a "bulk cash" sale.
         #  • basket_bulk_floor — invoices at/above this are EXCLUDED from basket-size stats

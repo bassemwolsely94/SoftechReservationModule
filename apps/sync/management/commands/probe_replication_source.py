@@ -37,6 +37,15 @@ class Command(BaseCommand):
     help = 'Determine SOFTECH item replication source (items vs britems)'
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('probe_replication_source')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
@@ -83,6 +92,25 @@ class Command(BaseCommand):
                 out(f'  BR{bc} read error: {str(e)[:60]}')
 
         # ── STEP 1: plant distinct markers at HQ ──────────────────────────────
+        # Snapshot every row the steps below write (Batch 2, P-14). Rows go back newest first:
+        # HQ items (its trigger re-stamps britems), then HQ britems, then each branch's items.
+        # A branch whose row can't be read is left out of step 2 — never written blind.
+        for bc in list(test_branches):
+            b = branch_objs.get(bc)
+            if not b:
+                continue
+            try:
+                guards.track(lambda b=b: get_branch_connection(b.db_host, b.db_port or 5000),
+                             'items', {'itemcode': ITEM}, ('pharmacydiscp', 'posdiscp', 'usercode'), node=bc)
+            except Exception as e:
+                out(f'  BR{bc} snapshot error, branch skipped: {str(e)[:60]}')
+                test_branches.remove(bc)
+        for bc in test_branches:
+            guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.britems', {'itemcode': ITEM, 'branchcode': bc},
+                         ('pharmacydiscp', 'itemsaleprice', 'trans_time'))
+        guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': ITEM},
+                     ('itemsaleprice', 'pharmacydiscp', 'posdiscp', 'usercode'))
+
         sec('STEP 1: Plant markers — HQ items pharm=33/pos=22, HQ britems pharm=44')
         conn = get_sybase_connection(); cur = conn.cursor()
         cur.execute('UPDATE SOFTECHDB9.dbo.items SET pharmacydiscp=33, posdiscp=22, usercode=? '
@@ -149,34 +177,8 @@ class Command(BaseCommand):
 
         # ── STEP 3: revert everything ─────────────────────────────────────────
         sec('STEP 3: Revert all changes')
-        conn = get_sybase_connection(); cur = conn.cursor()
-        cur.execute('UPDATE SOFTECHDB9.dbo.items SET itemsaleprice=?, pharmacydiscp=?, posdiscp=?, usercode=? '
-                    'WHERE itemcode=?',
-                    [float(hq_orig[0] or 0), float(hq_orig[1] or 0), float(hq_orig[2] or 0),
-                     hq_orig[3], ITEM])
-        for bc, vals in britems_orig.items():
-            try:
-                cur.execute('UPDATE SOFTECHDB9.dbo.britems SET pharmacydiscp=?, itemsaleprice=?, trans_time=? '
-                            'WHERE itemcode=? AND branchcode=?',
-                            [float(vals[0] or 0), float(vals[1] or 0), vals[2], ITEM, bc])
-            except Exception as e:
-                out(f'  britems[{bc}] revert error: {str(e)[:50]}')
-        conn.close()
-        out('  HQ items + britems reverted.')
-
-        for bc in test_branches:
-            b = branch_objs.get(bc)
-            orig = branch_orig.get(bc)
-            if not b or not orig:
-                continue
-            try:
-                conn = get_branch_connection(b.db_host, b.db_port or 5000)
-                cur = conn.cursor()
-                cur.execute('UPDATE items SET pharmacydiscp=?, posdiscp=? WHERE itemcode=?',
-                            [orig[1], orig[2], ITEM])
-                conn.close()
-                out(f'  BR{bc} reverted to pharm={orig[1]} pos={orig[2]}')
-            except Exception as e:
-                out(f'  BR{bc} revert error: {str(e)[:50]}')
+        # HQ items, HQ britems (trans_time as a literal — it could not be bound) and each branch's
+        # items incl. usercode — the old revert did neither (Batch 2, P-14)
+        guards.restore_all()
 
         out('\nDONE.')

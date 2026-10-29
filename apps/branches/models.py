@@ -155,6 +155,13 @@ class BranchSettings(models.Model):
         help_text='إلغاء التفعيل يوقف جميع إشعارات الفرع',
     )
 
+    # ── Working hours (local time, every day) — see apps/branches/hours.py ─────
+    # Used by the stock audit's after-hours check (doc 32, check 9). Our own setting;
+    # SOFTECH has no branch hours, so this is never synced.
+    is_24h        = models.BooleanField(default=False, verbose_name='يعمل 24 ساعة')
+    working_hours = models.JSONField(default=list, blank=True, verbose_name='مواعيد العمل',
+                                     help_text='[{"from": "08:00", "to": "01:00"}] — optional "label", "doccodes"')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

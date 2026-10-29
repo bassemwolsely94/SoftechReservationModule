@@ -1,9 +1,13 @@
 """
 apps/loyalty/views.py
 """
+from datetime import timedelta
+
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -151,6 +155,11 @@ class AdjustPointsView(APIView):
         if not settings.LOYALTY_SOFTECH_WRITE_ENABLED:
             return Response({'detail': 'تعديل نقاط الشراء في SOFTECH معطّل حالياً من إعدادات النظام',
                              'error_code': 'loyalty_softech_writes_disabled'}, status=503)
+        if not reason:
+            return Response({'detail': 'السبب مطلوب لتعديل نقاط الشراء'}, status=400)
+        cap = settings.LOYALTY_MAX_MANUAL_ADJUST
+        if abs(delta) > cap:
+            return Response({'detail': f'أقصى تعديل يدوي {cap} نقطة في المرة'}, status=400)
         softech_pic = customer.softech_pic
         if not softech_pic:
             return Response(
@@ -174,37 +183,50 @@ class AdjustPointsView(APIView):
                 status=400,
             )
 
-        balance_before = account.softech_points_balance
-        success        = True
-        error_message  = ''
-        balance_after  = balance_before
+        # One write at a time per customer (row lock), and never the same adjustment twice:
+        # an identical attempt (customer, points, reason) inside the window is refused —
+        # FAILED attempts included, because the writer can fail after SOFTECH accepted the
+        # INSERT (read-back), so a blind retry could post the points a second time.
+        with transaction.atomic():
+            account = LoyaltyAccount.objects.select_for_update().get(pk=account.pk)
+            since = timezone.now() - timedelta(seconds=settings.LOYALTY_DUPLICATE_WINDOW_SECONDS)
+            if SoftechPointsLog.objects.filter(customer=customer, delta=delta, reason=reason,
+                                               created_at__gte=since).exists():
+                return Response(
+                    {'detail': 'تم تسجيل نفس التعديل لهذا العميل منذ قليل — راجع سجل النقاط قبل الإعادة',
+                     'error_code': 'loyalty_duplicate_adjustment'}, status=409)
 
-        try:
-            balance_after = adjust_softech_points(
-                softech_pic, delta, reason=reason, operator=operator
+            balance_before = account.softech_points_balance
+            success        = True
+            error_message  = ''
+            balance_after  = balance_before
+
+            try:
+                balance_after = adjust_softech_points(
+                    softech_pic, delta, reason=reason, operator=operator
+                )
+            except Exception as exc:
+                success       = False
+                error_message = str(exc)
+
+            # Immutable audit log for every SOFTECH write attempt
+            SoftechPointsLog.objects.create(
+                customer       = customer,
+                softech_pic    = softech_pic,
+                delta          = delta,
+                reason         = reason,
+                balance_before = balance_before,
+                balance_after  = balance_after,
+                success        = success,
+                error_message  = error_message,
+                created_by     = staff,
             )
-        except Exception as exc:
-            success       = False
-            error_message = str(exc)
 
-        # Immutable audit log for every SOFTECH write attempt
-        SoftechPointsLog.objects.create(
-            customer       = customer,
-            softech_pic    = softech_pic,
-            delta          = delta,
-            reason         = reason,
-            balance_before = balance_before,
-            balance_after  = balance_after,
-            success        = success,
-            error_message  = error_message,
-            created_by     = staff,
-        )
+            if not success:
+                return Response({'detail': error_message}, status=502)
 
-        if not success:
-            return Response({'detail': error_message}, status=502)
-
-        account.softech_points_balance = balance_after
-        account.save(update_fields=['softech_points_balance', 'updated_at'])
+            account.softech_points_balance = balance_after
+            account.save(update_fields=['softech_points_balance', 'updated_at'])
 
         return Response({
             'adjust_type':           'purchase',

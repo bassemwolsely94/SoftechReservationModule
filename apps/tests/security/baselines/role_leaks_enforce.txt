@@ -1,0 +1,2 @@
+# Owner: Batch 4. Role × route requests the matrix denies that leaked while RBAC_ENFORCEMENT=enforce.
+# Empty on 2026-10-26: the middleware closes every mapped module. Must stay empty.

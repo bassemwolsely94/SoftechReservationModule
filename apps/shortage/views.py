@@ -29,6 +29,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -372,8 +373,16 @@ def _ocr_gemini(image_file, api_key: str) -> tuple:
         return None, None, None, None
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Branch shortage lists = the `shortage` matrix module (Batch 4, Z-9c — was any logged-in user):
+# reads need view; lists, items, OCR / voice import need create / edit / approve; removing an
+# item needs edit.
+SHORTAGE_LISTS = matrix_permission('shortage', post=('create', 'edit', 'approve'), delete=('edit', 'delete'))
+
+
 class ShortageListViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SHORTAGE_LISTS]
 
     def get_queryset(self):
         qs = ShortageList.objects.select_related('branch', 'created_by__user').annotate(
@@ -396,6 +405,12 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return ShortageListDetailSerializer
         return ShortageListSerializer
+
+    def update(self, request, *args, **kwargs):
+        # No generic PUT / PATCH (Batch 4, Z-10b): a list moves through submit / resolve and its
+        # items through their own actions. A PATCH set status = submitted (scored as a shortage
+        # submission) and could move the list to another branch.
+        raise MethodNotAllowed(request.method)
 
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
@@ -794,6 +809,9 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         """Single-supplier purchase order carrying THAT supplier's own item codes."""
         from .export import export_supplier_po
         sl = self.get_object()
+        # SOFTECH personcodes are digits/letters only; also keeps the filename header clean.
+        if not re.fullmatch(r'[0-9A-Za-z\-]{1,20}', suppcode or ''):
+            return Response({'detail': 'كود المورد غير صالح'}, status=status.HTTP_400_BAD_REQUEST)
         supplier_name = request.query_params.get('name', '')
         resp = HttpResponse(
             export_supplier_po(sl, suppcode, supplier_name),

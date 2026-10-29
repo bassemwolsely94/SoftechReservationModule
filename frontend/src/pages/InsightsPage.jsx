@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { insightsApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const PERIODS = { day: 'يومي', week: 'أسبوعي', mtd: 'حتى تاريخه', month: 'شهري' }
 
@@ -175,7 +176,7 @@ export default function InsightsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {view === 'reports' && (
-            <div className="flex rounded-lg bg-gray-100 p-0.5">
+            <div className="flex rounded-lg bg-gray-100 p-0.5" data-tour="analytics-insights-domain">
               <button onClick={() => { setDomain('sales'); setSelId(null) }}
                 className={`px-3 py-1.5 text-sm rounded-md ${domain === 'sales' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>🧾 المبيعات</button>
               <button onClick={() => { setDomain('purchasing'); setSelId(null) }}
@@ -183,7 +184,7 @@ export default function InsightsPage() {
             </div>
           )}
           {canEditRules && (
-            <div className="flex rounded-lg bg-gray-100 p-0.5">
+            <div className="flex rounded-lg bg-gray-100 p-0.5" data-tour="analytics-insights-view">
               <button onClick={() => setView('reports')}
                 className={`px-3 py-1.5 text-sm rounded-md ${view === 'reports' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>📋 التقارير</button>
               <button onClick={() => setView('rules')}
@@ -192,7 +193,7 @@ export default function InsightsPage() {
           )}
 
           {view === 'reports' && (<>
-          <div className="flex rounded-lg bg-gray-100 p-0.5">
+          <div className="flex rounded-lg bg-gray-100 p-0.5" data-tour="analytics-insights-period">
             {Object.entries(PERIODS).map(([k, v]) => (
               <button key={k} onClick={() => changePeriod(k)}
                 className={`px-3 py-1.5 text-sm rounded-md ${period === k ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>{v}</button>
@@ -218,7 +219,7 @@ export default function InsightsPage() {
                 <button type="button" onClick={() => setRange(mtdBounds(shiftYm(curYm, 1)))}
                   disabled={curYm >= thisYm}
                   className="px-2 py-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:opacity-30" title="الشهر التالي">›</button>
-                <span className="text-[11px] text-gray-400">({range.start} → {range.end} · {span} يوم)</span>
+                <span className="text-[11px] text-gray-400">({range.start} {fa()} {range.end} · {span} يوم)</span>
               </div>
             )
           })()}
@@ -255,7 +256,7 @@ export default function InsightsPage() {
           )}
 
           {canRun && (
-            <button onClick={() => gen.mutate()} disabled={gen.isPending || !spanOk} className="btn-primary text-sm disabled:opacity-40"
+            <button data-tour="analytics-insights-generate" onClick={() => gen.mutate()} disabled={gen.isPending || !spanOk} className="btn-primary text-sm disabled:opacity-40"
               title={spanOk ? '' : 'المدة غير صالحة'}>
               {gen.isPending ? 'جارٍ التوليد…' : '⚙️ توليد التقرير'}
             </button>
@@ -267,12 +268,12 @@ export default function InsightsPage() {
       {/* Data-freshness / completeness bar — latest date AND interior gaps inside the period */}
       {view === 'reports' && fresh && (
         fresh.complete ? (
-          <div className="mb-4 text-xs rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100">
+          <div data-tour="analytics-insights-freshness" className="mb-4 text-xs rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100">
             🕒 بيانات {domain === 'purchasing' ? 'المشتريات' : 'المبيعات'} مكتملة حتى <b>{fresh.src_through || '—'}</b> — بلا فجوات داخل الفترة.
             {fresh.last_sync_at && <span className="text-emerald-500"> · آخر مزامنة {new Date(fresh.last_sync_at).toLocaleString('ar-EG')}</span>}
           </div>
         ) : (
-          <div className="mb-4 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 space-y-1">
+          <div data-tour="analytics-insights-freshness" className="mb-4 text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 space-y-1">
             {!fresh.covered && fresh.gap_days > 0 && (
               <div>⚠️ بيانات {domain === 'purchasing' ? 'المشتريات' : 'المبيعات'} محدّثة حتى <b>{fresh.src_through || '—'}</b> فقط — ناقص <b>{fresh.gap_days}</b> يوم عن نهاية الفترة ({range.end}).</div>
             )}
@@ -283,7 +284,7 @@ export default function InsightsPage() {
             <div className="flex items-center gap-2 pt-1">
               <span>الأرقام أقل من الواقع لهذه الأيام.</span>
               {canEditRules && (
-                <button onClick={() => backfill.mutate()} disabled={backfilling || backfill.isPending}
+                <button data-tour="analytics-insights-backfill" onClick={() => backfill.mutate()} disabled={backfilling || backfill.isPending}
                   className="px-2.5 py-1 rounded-md bg-amber-600 text-white text-[11px] font-bold disabled:opacity-50">
                   {backfilling ? '⏳ جارٍ التعبئة…' : `🔄 تعبئة الأيام الناقصة (${domain === 'purchasing' ? 'المشتريات' : 'المبيعات'})`}
                 </button>
@@ -301,14 +302,14 @@ export default function InsightsPage() {
 
       {view === 'rules' ? <RulesEditor /> : (
       <div className="grid md:grid-cols-[260px_1fr] gap-4">
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="analytics-insights-list">
           {isLoading ? <div className="text-gray-400 text-sm py-8 text-center">جارٍ التحميل…</div>
             : reports.length === 0 ? <div className="text-gray-400 text-sm py-8 text-center">لا توجد تقارير</div>
             : reports.map(r => (
               <button key={r.id} onClick={() => setSelId(r.id)}
                 className={`w-full text-right p-3 rounded-xl border transition ${selId === r.id ? 'border-blue-400 bg-blue-50/40' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-gray-800 text-sm">{r.period_start}{r.period_start !== r.period_end ? ` → ${r.period_end}` : ''}</span>
+                  <span className="font-bold text-gray-800 text-sm">{r.period_start}{r.period_start !== r.period_end ? ` ${fa()} ${r.period_end}` : ''}</span>
                   <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{r.findings_count} ملاحظة</span>
                 </div>
                 <div className="text-[11px] text-gray-400 mt-0.5">{PERIODS[r.period_type]}{r.sent_at ? ' · أُرسل ✓' : ''}</div>
@@ -409,7 +410,7 @@ function RulesEditor() {
                     })}
                   </div>
 
-                  <button
+                  <button data-tour="analytics-insights-rule-save"
                     onClick={() => save.mutate({ id: r.id, data: { threshold: d.threshold, enabled: d.enabled, periods: d.periods } })}
                     disabled={!dirty || save.isPending}
                     className={`text-xs px-3 py-1 rounded-lg ${savedId === r.id ? 'bg-emerald-100 text-emerald-700'
@@ -481,7 +482,7 @@ function ReportView({ id }) {
     <div className="space-y-4">
       {/* ── scope selector: whole chain / one branch / one salesperson ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
+        <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm" data-tour="analytics-insights-scope">
           {Object.entries(SCOPES).map(([k, v]) => (
             <button key={k} onClick={() => changeScope(k)}
               className={`px-3 py-1.5 rounded-md ${scopeType === k ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>{v}</button>
@@ -505,13 +506,13 @@ function ReportView({ id }) {
       {needsKey && !scopeKey ? null : !rep ? (
         <div className="text-gray-400 text-sm py-8 text-center">{isFetching ? 'جارٍ التحميل…' : 'لا توجد بيانات'}</div>
       ) : (<>
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <div data-tour="analytics-insights-report" className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
             <button onClick={() => setLang('ar')} className={`px-3 py-1 rounded-md ${lang === 'ar' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>عربي</button>
             <button onClick={() => setLang('en')} className={`px-3 py-1 rounded-md ${lang === 'en' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>English</button>
           </div>
-          <button onClick={copy} className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
+          <button data-tour="analytics-insights-copy" onClick={copy} className="text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
             {copied ? '✓ نُسخ' : '📋 نسخ (واتساب)'}
           </button>
         </div>
@@ -522,7 +523,7 @@ function ReportView({ id }) {
       </div>
 
       {rep.findings?.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4" data-tour="analytics-insights-findings">
           <div className="flex items-center justify-between mb-2">
             <div className="font-bold text-gray-800 text-sm">الملاحظات ({rep.findings.length})</div>
             <button onClick={copyFindings} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">

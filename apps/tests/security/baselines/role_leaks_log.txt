@@ -1,0 +1,8 @@
+# Owner: Batch 4 (authorization). Role × route requests the code matrix DENIES that the VIEW let through
+# while RBAC_ENFORCEMENT=log (today's production mode). Batch 4 is done when this file is empty.
+# Format: <role> <METHOD> <path>
+
+# reason: Z-4 — settings look-up by key is a READ sent as POST; pharmacist and
+# purchasing hold settings view (the sweep counts every POST as a write)
+pharmacist POST /api/config/settings/by_key/
+purchasing POST /api/config/settings/by_key/

@@ -16,6 +16,15 @@ class Command(BaseCommand):
     help = 'Investigate britems/r3britems replication tables'
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('investigate_britems')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
@@ -192,6 +201,7 @@ class Command(BaseCommand):
             cur.close()
             orig = float(r[0] or 0)
             test = orig + 1
+            guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': '127397'}, ('posdiscp', 'usercode'))
             cur = conn.cursor()
             cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp = ?, usercode = ? WHERE itemcode = ?',
                         [test, '00099', '127397'])
@@ -312,16 +322,7 @@ class Command(BaseCommand):
                 out(f'    ERROR: {str(e)[:80]}')
 
         # ── REVERT ────────────────────────────────────────────────────────────
-        if orig is not None:
-            try:
-                cur = conn.cursor()
-                cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp = ? WHERE itemcode = ?',
-                            [orig, '127397'])
-                conn.close()
-                out(f'\n  Reverted posdiscp to {orig}')
-            except Exception as e:
-                out(f'\n  Revert ERROR: {e}')
-        else:
-            conn.close()
+        conn.close()
+        guards.restore_all()      # posdiscp AND usercode, as they were (Batch 2, P-14)
 
         out(f'\nComplete: {datetime.datetime.now().isoformat()}')

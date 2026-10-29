@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { omniApi, pbxApi } from '../api/client'
+import useAuthStore from '../store/authStore'
 
 const STATE_META = {
   ringing:     { label: 'يرن',        cls: 'bg-yellow-100 text-yellow-700' },
@@ -33,6 +34,9 @@ function Kpi({ label, value, accent = 'text-gray-800' }) {
 
 export default function OmniWallboardPage() {
   const [spyMsg, setSpyMsg] = useState(null)
+  const { user } = useAuthStore()
+  // listen / whisper = the PBX spy endpoint, admin / supervisor only (agents see the board — Z-11f)
+  const canSpy = ['admin', 'supervisor'].includes(user?.role)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['omni-wallboard'],
@@ -62,7 +66,7 @@ export default function OmniWallboardPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-5" dir="rtl">
-      <div className="flex items-center justify-between">
+      <div data-tour="omni-wallboard-header" className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">📊 لوحة المشرف الحية</h1>
         <span className="text-xs text-gray-400">تحديث كل 5 ثوانٍ</span>
       </div>
@@ -77,7 +81,7 @@ export default function OmniWallboardPage() {
       )}
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3" data-tour="omni-wallboard-kpis">
         <Kpi label="مكالمات جارية" value={live_calls.length} accent="text-green-600" />
         <Kpi label="مكالمات اليوم" value={today.total} />
         <Kpi label="مُجابة" value={today.answered} accent="text-green-600" />
@@ -90,10 +94,10 @@ export default function OmniWallboardPage() {
       </div>
 
       {/* Live calls */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden" data-tour="omni-wallboard-calls">
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-bold text-gray-700 text-sm">☎️ المكالمات الحية</h2>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400" data-tour="omni-wallboard-whatsapp">
             واتساب: {accounts.connected}/{accounts.total} متصل ·
             غير مقروء {conversations.wa_unread}
           </span>
@@ -132,12 +136,12 @@ export default function OmniWallboardPage() {
                     </td>
                     <td className="px-2 py-2 text-gray-600 tabular-nums">{mmss(c.seconds)}</td>
                     <td className="px-4 py-2 text-left whitespace-nowrap">
-                      {c.state === 'answered' && c.agent_ext ? (
+                      {canSpy && c.state === 'answered' && c.agent_ext ? (
                         <>
-                          <button onClick={() => spy(c.agent_ext, 'listen')}
+                          <button data-tour="omni-wallboard-listen" onClick={() => spy(c.agent_ext, 'listen')}
                                   className="text-xs text-gray-500 hover:text-indigo-600 ml-2"
                                   title="استماع صامت">🎧 استماع</button>
-                          <button onClick={() => spy(c.agent_ext, 'whisper')}
+                          <button data-tour="omni-wallboard-whisper" onClick={() => spy(c.agent_ext, 'whisper')}
                                   className="text-xs text-gray-500 hover:text-indigo-600"
                                   title="همس للعامل دون سماع العميل">🗣️ همس</button>
                         </>
@@ -153,7 +157,7 @@ export default function OmniWallboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Queues today */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden" data-tour="omni-wallboard-queues">
           <h2 className="font-bold text-gray-700 text-sm px-4 py-2.5 border-b border-gray-100">
             📋 القوائم اليوم
           </h2>
@@ -188,7 +192,7 @@ export default function OmniWallboardPage() {
         </div>
 
         {/* Agents */}
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200" data-tour="omni-wallboard-agents">
           <h2 className="font-bold text-gray-700 text-sm px-4 py-2.5 border-b border-gray-100">
             👥 العمال
           </h2>

@@ -400,6 +400,17 @@
   to   { opacity: 0; transform: translateX(100%); }
 }
 
+/* «اعرض لي» tour: the highlighted element pulses a few times, then keeps a steady ring */
+@keyframes tourPulse {
+  0%   { box-shadow: 0 0 0 0 rgb(var(--tour-ring) / 0.55); }
+  100% { box-shadow: 0 0 0 14px rgb(var(--tour-ring) / 0); }
+}
+.tour-pulse { animation: tourPulse 1.1s ease-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-pulse { animation: none; }
+  .tour-ring  { outline-width: 3px !important; }
+}
+
 /* ─── Animation classes (supplement Tailwind) ───────────────────────────────── */
 .animate-fade-in     { animation: fadeIn     0.25s ease-out both; }
 .animate-slide-in    { animation: slideIn    0.22s ease-out both; }
@@ -482,4 +493,23 @@ thead th {
   .overflow-x-auto:has(> table),
   .overflow-auto:has(> table),
   .overflow-y-auto:has(> table) { max-height: none; }
+}
+
+/* ─── «اعرض لي» tour: zoom into each highlighted area, then a soft pulse ───── */
+@keyframes tour-zoom {
+  from { transform: scale(1.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes tour-pulse {
+  0%, 100% { outline: 0 solid rgba(59, 130, 246, 0.0); outline-offset: 2px; }
+  50%      { outline: 6px solid rgba(59, 130, 246, 0.25); outline-offset: 4px; }
+}
+@keyframes tour-card-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.tour-spot { animation: tour-zoom 420ms cubic-bezier(.2,.8,.2,1), tour-pulse 1.8s ease-in-out 420ms 3; }
+.tour-card { animation: tour-card-in 260ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot, .tour-card { animation: none; }
 }

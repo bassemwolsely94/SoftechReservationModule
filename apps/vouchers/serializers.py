@@ -121,6 +121,11 @@ class VoucherCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'valid_until': 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء'})
         return data
 
+    def update(self, instance, validated):
+        # the customer is set at issue or through assign, which needs the assign grant (Z-10a)
+        validated.pop('customer', None)
+        return super().update(instance, validated)
+
 
 # ── VoucherAssignment ─────────────────────────────────────────────────────────
 

@@ -92,6 +92,9 @@ const GroupIcon = ({ id, size = 20 }) => {
 }
 
 // ── Navigation data ───────────────────────────────────────────────────────────
+/** «اعرض لي» anchor of a side-menu item: '/pos/exceptions' → 'nav-pos-exceptions'. */
+const navTourId = (to) => 'nav-' + to.replace(/^\//, '').replace(/[^a-z0-9]+/g, '-').replace(/-$/, '')
+
 const NAV_GROUPS = [
   {
     id: 'home', label: 'الرئيسية', section: null,
@@ -126,7 +129,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/omni/inbox',            icon: '📥', label: 'الصندوق الموحد',  roles: ['admin','call_center','supervisor'] },
       { to: '/omni/accounts',         icon: '📡', label: 'حسابات القنوات',  roles: ['admin','supervisor'] },
-      { to: '/omni/wallboard',        icon: '📊', label: 'لوحة المشرف',     roles: ['admin','supervisor','quality_manager'] },
+      { to: '/omni/wallboard',        icon: '📊', label: 'لوحة المشرف',     roles: ['admin','supervisor','quality_manager','call_center'] },
       { to: '/omni/automations',      icon: '⚙️', label: 'الأتمتة',         roles: ['admin','supervisor'] },
       { to: '/omni/analytics',        icon: '📈', label: 'تحليلات التواصل', roles: ['admin','supervisor','quality_manager'] },
       { to: '/callcenter',            icon: '📞', label: 'الحالات',         roles: ['admin','call_center','supervisor'] },
@@ -143,7 +146,6 @@ const NAV_GROUPS = [
       { to: '/customers/merge',    icon: '🔀', label: 'دمج الأكواد المكررة', roles: ['admin','supervisor','call_center'] },
       { to: '/vouchers',           icon: '🎫', label: 'القسائم',             roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/vouchers?tab=coupons', icon: '🎟️', label: 'كوبونات الهدايا',   roles: ['admin','supervisor','purchasing','quality_manager'] },
-      { to: '/offers',             icon: '🎁', label: 'العروض والتخفيضات',   roles: ['admin','supervisor','purchasing'] },
       { to: '/loyalty',            icon: '🏆', label: 'النقاط والولاء',      roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
       { to: '/loyalty/branch',     icon: '🔍', label: 'استعلام نقاط الفرع', roles: ['admin','branch','pharmacist','supervisor'] },
       { to: '/referral',           icon: '🔗', label: 'الإحالات',            roles: ['admin','call_center','supervisor'] },
@@ -155,6 +157,7 @@ const NAV_GROUPS = [
       { to: '/products',             icon: '💊', label: 'المنتجات',        roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/inventory',            icon: '🗃️', label: 'لوحة المخزون',   roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
       { to: '/batches',              icon: '🧪', label: 'الدفعات والانتهاء', roles: ['admin','pharmacist','purchasing','quality_manager','supervisor'] },
+      { to: '/stock-audit',          icon: '🔎', label: 'تدقيق حركات المخزون', roles: ['admin','supervisor','quality_manager'], cap: 'can_stock_audit' },
       { to: '/shortage',             icon: '🚨', label: 'النواقص',         roles: ['admin','pharmacist','call_center','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/market-shortage',      icon: '📉', label: 'نواقص السوق',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
       { to: '/phantom-sales',        icon: '🩹', label: 'مبيعات وهمية',    roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
@@ -165,6 +168,7 @@ const NAV_GROUPS = [
       { to: '/ingredient-search',    icon: '🔬', label: 'بحث المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor','call_center','quality_manager'] },
       { to: '/image-enrichment',     icon: '🖼️', label: 'صور المنتجات',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/recommendations',      icon: '🔗', label: 'التوصيات الذكية', roles: ['admin','pharmacist','call_center','purchasing'] },
+      { to: '/offers',               icon: '🎁', label: 'العروض والتخفيضات', roles: ['admin','supervisor','purchasing'] },
     ],
   },
   {
@@ -265,6 +269,16 @@ export default function Layout() {
     if (activeRouteGroup) setPinnedGroup(activeRouteGroup)
   }, [activeRouteGroup])
 
+  // «اعرض لي» workflow tours open the menu group of a page to point at its item
+  useEffect(() => {
+    const onShow = (e) => {
+      const g = groupForPath(e.detail || '', visibleGroups)
+      if (g) { setRailOnly(false); setHoverGroup(null); setPinnedGroup(g) }
+    }
+    window.addEventListener('help:nav-show', onShow)
+    return () => window.removeEventListener('help:nav-show', onShow)
+  }, [visibleGroups])
+
   // Clicking a desktop (OS) notification → navigate to the linked record
   useEffect(() => {
     const onNav = (e) => { if (e.detail) navigate(e.detail) }
@@ -319,13 +333,14 @@ export default function Layout() {
           </div>
 
           {/* Group icons */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col items-center gap-0.5 scrollbar-hide">
+          <div data-tour="shell-rail" className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col items-center gap-0.5 scrollbar-hide">
             {visibleGroups.map(group => {
               const isActive = displayedGroupId === group.id
               const hasActiveRoute = activeRouteGroup === group.id
               return (
                 <button
                   key={group.id}
+                  data-tour={`nav-group-${group.id}`}
                   onMouseEnter={() => handleRailEnter(group.id)}
                   onMouseLeave={handleRailLeave}
                   onClick={() => { handleGroupClick(group.id); if (railOnly) setRailOnly(false) }}
@@ -419,11 +434,12 @@ export default function Layout() {
               </div>
 
               {/* Items */}
-              <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+              <nav data-tour="shell-nav-panel" className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
                 {displayedGroup.items.map(item => (
                   <NavLink
                     key={item.to}
                     to={item.to}
+                    data-tour={navTourId(item.to)}
                     end={item.to === '/procurement'}
                     onClick={() => setHoverGroup(null)}
                     className={({ isActive }) =>
@@ -472,6 +488,7 @@ export default function Layout() {
 
           <div className="flex items-center gap-3">
             <button
+              data-tour="shell-search"
               onClick={() => window.dispatchEvent(new Event('palette:open'))}
               title="بحث شامل (Ctrl+K)"
               className="hidden sm:flex items-center gap-2 text-xs text-faint bg-surface-2 hover:bg-surface-3 border border-line rounded-lg px-2.5 py-1.5 transition-colors"
@@ -491,6 +508,7 @@ export default function Layout() {
             <div className="w-px h-5 bg-line" />
             <NavLink
               to="/security"
+              data-tour="shell-security"
               title="أمان الحساب — المصادقة الثنائية"
               className="text-faint hover:text-brand-600 transition-colors p-1 rounded-lg hover:bg-brand-50"
             >

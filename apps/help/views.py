@@ -32,6 +32,28 @@ def _staff_name(staff):
     return (user.get_full_name() or user.username) if user else ''
 
 
+def change_notes(screens, overrides):
+    """screen key → {'ar', 'en'} «what changed» for the CURRENT help version: the
+    trainer's one-line note on their latest save when that save is the newest change,
+    else the repo's `change_note` (written by developers with the `updated` date)."""
+    latest = {}
+    for r in (HelpRevision.objects.filter(action=HelpRevision.ACTION_SAVE)
+              .exclude(public_note='').order_by('screen_key', '-created_at')
+              .values('screen_key', 'public_note', 'created_at')):
+        latest.setdefault(r['screen_key'], r)
+    out = {}
+    for k, s in screens.items():
+        o = overrides.get(k)
+        repo_date = s.get('updated') or ''
+        r = latest.get(k)
+        if o is not None and r and o.updated_at.date().isoformat() >= repo_date \
+                and r['created_at'] >= o.updated_at - timezone.timedelta(minutes=1):
+            out[k] = {'ar': r['public_note'], 'en': r['public_note']}
+        elif s.get('change_note') and (o is None or repo_date >= o.updated_at.date().isoformat()):
+            out[k] = s['change_note']
+    return out
+
+
 def _updated(screen, override):
     """Date the text last changed (repo date, or the trainer's save if newer)."""
     d = screen.get('updated') or ''
@@ -55,6 +77,29 @@ def _brief(s, modules):
             'summary': s['summary'], 'module_title': m.get('title'), 'icon': m.get('icon', '')}
 
 
+def _journeys_for(request, module_key, screens, overrides=None):
+    """The module's journeys this person may run (role filter), trainer text applied,
+    each step with the routes of its screen (shell-filtered) and a param-free 'route'
+    the card can open with «روح للشاشة» (None for record pages)."""
+    role = getattr(_profile(request), 'role', '') or ''
+    if overrides is None:
+        overrides = {o.screen_key: o for o in HelpOverride.objects.filter(screen_key__startswith='journey:')}
+    out = []
+    for jid, j in registry.journeys().items():
+        if j['module'] != module_key or (j.get('roles') and role not in j['roles'] and role != 'admin'):
+            continue
+        ov = overrides.get(registry.journey_override_key(jid))
+        eff = registry.effective_journey(j, ov)
+        steps = []
+        for st in eff['steps']:
+            routes = registry.journey_routes(j, screens[st['screen']])
+            steps.append({**st, 'routes': routes,
+                          'route': next((r for r in routes if ':' not in r), None),
+                          'screen_title': screens[st['screen']]['title']})
+        out.append({**eff, 'steps': steps, 'edited': ov is not None})
+    return out
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def index(request):
@@ -62,6 +107,7 @@ def index(request):
     center: modules (grouped), screens (key, routes, title, updated, tab keys)."""
     modules, screens = registry.load()
     ov = _overrides()
+    notes = change_notes(screens, ov)
     return Response({
         'groups': [{'key': k, 'title': {'ar': ar, 'en': en}} for k, ar, en in registry.GROUPS],
         'modules': [{
@@ -75,7 +121,10 @@ def index(request):
             'tabs': [t['key'] for t in s.get('tabs') or []],
             'has_tour': bool(s.get('tour')),
             'updated': _updated(s, ov.get(s['key'])),
+            'change_note': notes.get(s['key']),
         } for s in screens.values()],
+        'flows': [{'id': fid, 'module': f['module'], 'title': f['title'], 'mobile': bool(f.get('mobile'))}
+                  for fid, f in _flows_effective(modules).items()],
         'can_edit': _can_edit(_profile(request)),
     })
 
@@ -89,9 +138,23 @@ def module_detail(request, key):
         return Response({'detail': 'not found'}, status=404)
     ov = _overrides()
     return Response({
-        **{k: v for k, v in m.items() if k != 'screens'},
+        **{k: v for k, v in m.items() if k not in ('screens', 'flows')},
+        'flows': _module_flows(m['key']),
         'screens': [_brief(registry.effective(screens[k], ov.get(k)), modules) for k in m['screens']],
+        'journeys': _journeys_for(request, key, screens, ov),
     })
+
+
+def _flows_effective(modules):
+    from . import training
+    return training.flows_effective(modules)
+
+
+def _module_flows(module_key):
+    """A module's workflow tours as users run them (trainers' text applied)."""
+    from . import training
+    return [training.flow_brief(fid, f) for fid, f in training.flows_effective().items()
+            if f['module'] == module_key]
 
 
 def _screen_payload(request, key, s, modules, screens, override):
@@ -101,14 +164,20 @@ def _screen_payload(request, key, s, modules, screens, override):
     workflows = m.get('workflows') or []
     if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
         workflows = [w for w in workflows if w.get('key') in s['workflows']]
+    all_ov = {o.screen_key: o for o in HelpOverride.objects.filter(
+        screen_key__in=[key, s.get('tour_continue') or ''])}
     payload = {
         **{k: v for k, v in eff.items() if k != 'workflows'},
+        'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
-                   'summary': m.get('summary'), 'workflows': workflows},
+                   'summary': m.get('summary'), 'workflows': workflows,
+                   'flows': _module_flows(m['key']) if m else [],
+                   'journeys': _journeys_for(request, m.get('key'), screens)},
         'siblings': [_brief(registry.effective(screens[k], None), modules)
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],
         'updated': _updated(s, override),
+        'change_note': change_notes({key: s}, {key: override} if override else {}).get(key),
         'can_edit': can_edit,
         'override': None,
     }
@@ -167,7 +236,9 @@ def screen_detail(request, key):
     HelpRevision.objects.create(
         screen_key=key, action=HelpRevision.ACTION_SAVE, before=before,
         after={f: registry.effective(s, override).get(f) for f in registry.EDITABLE_FIELDS},
-        note=str(request.data.get('note', ''))[:300], staff=profile)
+        note=str(request.data.get('note', ''))[:300],
+        public_note=' '.join(str(request.data.get('public_note', '') or '').split())[:120],
+        staff=profile)
     return Response(_screen_payload(request, key, s, modules, screens, override))
 
 
@@ -177,6 +248,27 @@ def _is_t(v, required=True):
     if not all(isinstance(v.get(l, ''), str) for l in ('ar', 'en')):
         return False
     return bool((v.get('ar') or '').strip()) if required else True
+
+
+def _validate_steps(name, steps):
+    """«اعرض لي» / journey steps from a trainer: a target, the step text, and only the
+    known optional text parts, each bilingual-shaped and within the length limits."""
+    if not isinstance(steps, list):
+        return [f'{name}: يجب أن تكون قائمة']
+    errors = []
+    for i, t in enumerate(steps):
+        if not isinstance(t, dict) or not isinstance(t.get('target'), str) or not _is_t(t.get('text')):
+            errors.append(f'{name}[{i}]: نص الخطوة مطلوب')
+            continue
+        for k in registry.TOUR_TEXT_KEYS:
+            v = t.get(k)
+            if v in (None, ''):
+                continue
+            if not _is_t(v, required=False):
+                errors.append(f'{name}[{i}].{k}: صيغة غير صالحة')
+            elif any(len(v.get(l) or '') > registry.TOUR_LIMITS[k] for l in ('ar', 'en')):
+                errors.append(f'{name}[{i}].{k}: النص أطول من {registry.TOUR_LIMITS[k]} حرف')
+    return errors
 
 
 def _validate_edit(data):
@@ -210,12 +302,7 @@ def _validate_edit(data):
                         or not _is_t(t.get('title')) or not _is_t(t.get('body')):
                     errors.append(f'tabs[{i}]: العنوان والشرح مطلوبان')
     if 'tour' in data:
-        if not isinstance(data['tour'], list):
-            errors.append('tour: يجب أن تكون قائمة')
-        else:
-            for i, t in enumerate(data['tour']):
-                if not isinstance(t, dict) or not isinstance(t.get('target'), str) or not _is_t(t.get('text')):
-                    errors.append(f'tour[{i}]: نص الخطوة مطلوب')
+        errors += _validate_steps('tour', data['tour'])
     if 'faq' in data:
         if not isinstance(data['faq'], list):
             errors.append('faq: يجب أن تكون قائمة')
@@ -375,6 +462,7 @@ def manual(request):
             out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
                                 'summary': m['summary'], 'workflows': m.get('workflows') or []})
         item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item['buttons'] = [{'text': t['text'], 'more': t.get('more')} for t in eff.get('tour') or []]
         item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
                     steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
                     tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])
@@ -432,16 +520,23 @@ def ask(request):
 def tour_event(request):
     """The frontend reports a finished or abandoned «اعرض لي» tour:
     {screen_key, reached (steps seen), done (bool)} — for the trainers' usage report."""
-    _, screens = registry.load()
-    key = str(request.data.get('screen_key', ''))
-    s = screens.get(key)
-    if s is None or not s.get('tour'):
+    modules, screens = registry.load()
+    key = str(request.data.get('screen_key', ''))[:80]
+    if key.startswith('flow:'):
+        f = registry.flows(modules).get(key)   # step count is fixed by the code
+        total = len(f['steps']) if f else 0
+    elif key.startswith('journey:'):
+        j = registry.journeys().get(key[len('journey:'):])
+        total = len(j['steps']) if j else 0
+    else:
+        total = len(registry.tour_flow(key, screens)) if key in screens and screens[key].get('tour') else 0
+    if not total:
         return Response({'detail': 'unknown tour'}, status=400)
     try:
-        reached = max(1, min(int(request.data.get('reached', 1)), len(s['tour'])))
+        reached = max(1, min(int(request.data.get('reached', 1)), total))
     except (TypeError, ValueError):
         reached = 1
-    done = bool(request.data.get('done')) and reached == len(s['tour'])
+    done = bool(request.data.get('done')) and reached == total
     _log(HelpEvent.KIND_TOUR, request, screen_key=key, query='done' if done else '', results=reached)
     return Response({'ok': True}, status=status.HTTP_201_CREATED)
 
@@ -479,18 +574,29 @@ def usage(request):
             t['done'] += 1
         else:
             t['stops'][e['results'] or 1] = t['stops'].get(e['results'] or 1, 0) + 1
+    ov = _overrides()
     tour_rows = []
-    for k, s in screens.items():
-        if not s.get('tour'):
-            continue
+    runs = [(k, s['title'], registry.tour_flow(k, screens, ov), 'screen') for k, s in screens.items() if s.get('tour')]
+    runs += [(k, f['title'], [{**st, 'screen': None, 'flow': k[5:], 'i': i} for i, st in enumerate(f['steps'])], 'flow')
+             for k, f in training.flows_effective(modules).items()]
+    runs += [(registry.journey_override_key(jid), j['title'],
+              [{**st, 'journey': jid, 'i': i} for i, st in enumerate(j['steps'])], 'journey')
+             for jid, j in registry.journeys().items()]
+    for k, title, steps, kind in runs:
         t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
         stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None
+        # people stop AFTER step `stop`, so the step they did not get past is the next one
+        weak = steps[stop] if stop is not None and stop < len(steps) else None
         tour_rows.append({
-            'screen_key': k, 'title': s['title'], 'steps': len(s['tour']),
+            'screen_key': k, 'title': title, 'steps': len(steps), 'flow': kind == 'flow', 'kind': kind,
             'runs': t['runs'], 'done': t['done'],
             'done_pct': round(100 * t['done'] / t['runs']) if t['runs'] else None,
-            # the step most people stopped after (the next one is probably unclear / not visible)
             'common_stop': stop,
+            # where to fix it: that step's own screen + index (None for workflow tours)
+            'weak_step': (None if not weak else
+                          {'journey': weak['journey'], 'i': weak['i']} if weak.get('journey') else
+                          {'screen': weak['screen'], 'i': weak['i']} if weak.get('screen') else
+                          {'flow': weak['flow'], 'i': weak['i']}),
         })
     tour_rows.sort(key=lambda r: (r['runs'] > 0, r['done_pct'] if r['done_pct'] is not None else 101))
     return Response({
@@ -501,3 +607,64 @@ def usage(request):
                       'on_paths': on_path.get(k, [])} for k in unopened],
         'tours': tour_rows,
     })
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def journey_detail(request, jid):
+    """A module journey; trainers (help/edit) edit its title / summary / step text the
+    same way as a screen's help (stored as HelpOverride 'journey:<module>.<key>')."""
+    j = registry.journeys().get(jid)
+    if j is None:
+        return Response({'detail': 'not found'}, status=404)
+    okey = registry.journey_override_key(jid)
+    override = HelpOverride.objects.filter(screen_key=okey).select_related('updated_by__user').first()
+
+    def payload(ov):
+        _, screens = registry.load()
+        listed = _journeys_for(request, j['module'], screens, {okey: ov} if ov else {})
+        eff = next((x for x in listed if x['id'] == jid), registry.effective_journey(j, ov))
+        out = {**eff, 'can_edit': _can_edit(_profile(request)), 'override': None}
+        if ov is not None:
+            out['override'] = {'updated_at': ov.updated_at, 'updated_by': _staff_name(ov.updated_by),
+                               'base_changed': ov.base_hash != registry.journey_hash(j)}
+        return out
+
+    if request.method == 'GET':
+        return Response(payload(override))
+
+    profile = _profile(request)
+    if not _can_edit(profile):
+        return Response({'detail': 'ليس لديك صلاحية تعديل الشرح'}, status=403)
+
+    def texts(x):
+        return {'title': x.get('title'), 'summary': x.get('summary'), 'steps': x.get('steps')}
+    before = texts(registry.effective_journey(j, override))
+
+    if request.method == 'DELETE':
+        if override is None:
+            return Response({'detail': 'لا يوجد تعديل للرجوع عنه'}, status=400)
+        override.delete()
+        note = (request.data or {}).get('note', '') if isinstance(request.data, dict) else ''
+        HelpRevision.objects.create(screen_key=okey, action=HelpRevision.ACTION_REVERT, before=before,
+                                    after=texts(j), note=str(note)[:300], staff=profile)
+        return Response(payload(None))
+
+    data = request.data.get('data')
+    if not isinstance(data, dict):
+        return Response({'detail': 'محتوى غير صالح', 'errors': ['data must be an object']}, status=400)
+    errors = [f'{f}: النص العربي مطلوب' for f in ('title', 'summary') if f in data and not _is_t(data[f])]
+    if 'steps' in data:
+        errors += _validate_steps('steps', data['steps'])
+    if errors:
+        return Response({'detail': 'محتوى غير صالح', 'errors': errors}, status=400)
+    if override is None:
+        override = HelpOverride(screen_key=okey)
+    override.data = {f: data[f] for f in ('title', 'summary', 'steps') if f in data}
+    override.base_hash = registry.journey_hash(j)
+    override.updated_by = profile
+    override.save()
+    HelpRevision.objects.create(screen_key=okey, action=HelpRevision.ACTION_SAVE, before=before,
+                                after=texts(registry.effective_journey(j, override)),
+                                note=str(request.data.get('note', ''))[:300], staff=profile)
+    return Response(payload(override))

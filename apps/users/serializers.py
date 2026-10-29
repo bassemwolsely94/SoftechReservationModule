@@ -70,6 +70,21 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
         ]
 
 
+class StaffPickerSerializer(serializers.ModelSerializer):
+    """The staff list for pickers (tasks, demand, HR forms, follow-ups, incentives) shown to roles
+    without `users` view — names and branch only; no phone, e-mail, SOFTECH user or access
+    flags (Batch 4, Z-4)."""
+    username    = serializers.CharField(source='user.username',    read_only=True)
+    full_name   = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(read_only=True)
+    role_label  = serializers.CharField(source='get_role_display', read_only=True)
+
+    class Meta:
+        model  = StaffProfile
+        fields = ['id', 'username', 'full_name', 'role', 'role_label',
+                  'branch', 'branch_name', 'is_active', 'hr_code']
+
+
 class StaffProfileUpdateSerializer(serializers.ModelSerializer):
     """Used by admin to edit a user's role/access."""
     first_name = serializers.CharField(source='user.first_name', required=False)
@@ -119,7 +134,7 @@ class StaffProfileUpdateSerializer(serializers.ModelSerializer):
 class UserCreateSerializer(serializers.Serializer):
     """ERP-first user creation."""
     username   = serializers.CharField(max_length=50)
-    password   = serializers.CharField(min_length=6, write_only=True)
+    password   = serializers.CharField(write_only=True)      # rules in validate() (A-5)
     role       = serializers.ChoiceField(choices=[r[0] for r in StaffProfile._meta.get_field('role').choices])
     branch     = serializers.PrimaryKeyRelatedField(
         queryset=__import__('apps.branches.models', fromlist=['Branch']).Branch.objects.all(),
@@ -141,6 +156,20 @@ class UserCreateSerializer(serializers.Serializer):
                 f'المستخدم "{value}" موجود بالفعل في النظام.'
             )
         return value
+
+    def validate(self, attrs):
+        from .passwords import password_problem
+        probe = User(username=attrs.get('username', ''), email=attrs.get('email', ''),
+                     first_name=attrs.get('first_name', ''), last_name=attrs.get('last_name', ''))
+        problem = password_problem(attrs.get('password', ''), probe)
+        if problem:
+            raise serializers.ValidationError({'password': [problem]})
+        return attrs
+
+    def to_representation(self, instance):
+        # create() returns a StaffProfile; this serializer's own fields (username, password)
+        # aren't on it, so the reply crashed with 500 after the user was saved (A-5).
+        return StaffProfileSerializer(instance, context=self.context).data
 
     def create(self, validated_data):
         from .models import ERPUser

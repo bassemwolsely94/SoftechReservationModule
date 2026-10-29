@@ -237,7 +237,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
 
           {/* Customer identity */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3" data-tour="demand-list-create-customer">
             <div className="text-xs font-bold text-blue-700">هوية العميل</div>
 
             {/* PIC / Customer search — auto-fills fields below when a known customer is found */}
@@ -283,7 +283,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
 
           {/* Branch + source + priority */}
-          <div className="grid grid-cols-3 gap-3">
+          <div data-tour="demand-new-details" className="grid grid-cols-3 gap-3">
             <div>
               <label className="label text-xs">الفرع *</label>
               <BranchSelect
@@ -310,7 +310,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
 
           {/* Items */}
-          <div>
+          <div data-tour="demand-list-create-items">
             <label className="label text-xs mb-2">الأصناف المطلوبة *</label>
             {/* Pass selected=null always so widget resets after each pick (items go to the list below) */}
             <ItemSearchWidget
@@ -421,7 +421,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-            <button onClick={handleSubmit}
+            <button onClick={handleSubmit} data-tour="demand-list-create-submit"
               disabled={submitting || items.length === 0}
               className="btn-primary text-sm disabled:opacity-50">
               {submitting ? 'جارٍ...' : '📋 تسجيل الطلب'}
@@ -481,7 +481,7 @@ function BulkBar({ count, staff, busy, onAssign, onFlag, onCancel, onClear }) {
       <span className="text-sm font-bold text-brand-700">{count} طلب محدد</span>
       <div className="flex-1" />
       <CanDo module="demand" action="assign">
-        <select className="input-field text-xs w-44" value={assignee} onChange={e => setAssignee(e.target.value)}>
+        <select className="input-field text-xs w-44" data-tour="demand-list-bulk-assign" value={assignee} onChange={e => setAssignee(e.target.value)}>
           <option value="">تعيين إلى...</option>
           {staff.map(s => (
             <option key={s.id} value={s.id}>{s.full_name || s.username || `#${s.id}`}</option>
@@ -491,11 +491,11 @@ function BulkBar({ count, staff, busy, onAssign, onFlag, onCancel, onClear }) {
           className="btn-secondary text-xs px-3 disabled:opacity-50">تعيين</button>
       </CanDo>
       <CanDo module="demand" action="edit">
-        <button disabled={busy} onClick={onFlag}
+        <button disabled={busy} onClick={onFlag} data-tour="demand-list-bulk-send-purchasing"
           className="btn-secondary text-xs px-3 disabled:opacity-50">📦 إرسال للمشتريات</button>
       </CanDo>
       <CanDo module="demand" action="delete">
-        <button disabled={busy} onClick={onCancel}
+        <button disabled={busy} onClick={onCancel} data-tour="demand-list-bulk-cancel"
           className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">إلغاء</button>
       </CanDo>
       <button onClick={onClear} className="text-xs text-gray-400 hover:text-gray-600 px-2">مسح التحديد</button>
@@ -640,7 +640,7 @@ useEffect(() => {
             </button>
             <button
               onClick={() => navigate('/demand/dashboard')}
-              className="btn-secondary text-sm">
+              className="btn-secondary text-sm" data-tour="demand-list-dashboard">
               📊 لوحة الطلب الضائع
             </button>
             <CanDo module="demand" action="create">
@@ -672,7 +672,7 @@ useEffect(() => {
   value={searchInput}
   onChange={e => setSearchInput(e.target.value)}
 />
-            <select className="input-field w-36 text-xs" value={filters.priority}
+            <select className="input-field w-36 text-xs" data-tour="demand-list-priority" value={filters.priority}
               onChange={e => setFilters(p => ({ ...p, priority: e.target.value }))}>
               <option value="">كل الأولويات</option>
               {Object.entries(PRIORITY_CFG).map(([v, c]) => (
@@ -689,7 +689,7 @@ useEffect(() => {
                 className="w-52"
               />
             )}
-            <select className="input-field w-40 text-xs" value={filters.sla_breached}
+            <select className="input-field w-40 text-xs" data-tour="demand-list-sla" value={filters.sla_breached}
               onChange={e => setFilters(p => ({ ...p, sla_breached: e.target.value }))}>
               <option value="">كل الطلبات</option>
               <option value="true">⚠ SLA تجاوز فقط</option>
@@ -745,7 +745,7 @@ useEffect(() => {
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     <th className="px-3 py-3 w-10">
-                      <input type="checkbox" className="w-4 h-4 accent-brand-600 cursor-pointer"
+                      <input type="checkbox" className="w-4 h-4 accent-brand-600 cursor-pointer" data-tour="demand-list-select"
                         checked={allSelected} onChange={toggleAll} />
                     </th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">رقم الطلب</th>

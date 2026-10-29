@@ -23,6 +23,8 @@ from django.db.models import Sum, Count, Q, F, DecimalField, ExpressionWrapper
 from rest_framework import generics, permissions, filters, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
+
+from .access import PURCHASING, CanReadRunStatus
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -163,11 +165,11 @@ class RunListView(generics.ListAPIView):
     """Recent engine runs."""
     queryset           = DemandCalculationRun.objects.all().order_by('-started_at')[:50]
     serializer_class   = RunSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanReadRunStatus])
 def latest_run(request):
     """
     Return the most recent run (or 404 if none yet).
@@ -194,8 +196,12 @@ def latest_run(request):
     return Response(data)
 
 
+INTERRUPTED_MESSAGE = ('توقف التشغيل قبل اكتماله — انقطعت العملية التي كانت تشغّله (إعادة تشغيل السيرفر أو إيقافه) '
+                       'ولم يسجَّل أي تقدم لمدة 20 دقيقة. البيانات المعروضة من آخر تشغيل ناجح — أعد «▶ تشغيل».')
+
+
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanReadRunStatus])
 def active_run(request):
     """
     Return the currently running/pending DemandCalculationRun, if any.
@@ -216,7 +222,8 @@ def active_run(request):
     # Auto-expire runs with NO ACTIVITY for > 20 minutes (updated_at, bumped on
     # every progress/phase save). Activity-based so a long-but-progressing run
     # (e.g. a big catch-up backfill) is never wrongly expired, while a truly
-    # hung/crashed run still gets cleaned up.
+    # hung/crashed run still gets cleaned up. A silent stop like this means the process
+    # running it was ended (server restart / shutdown) — a real error records itself.
     cutoff = _tz.now() - _dt.timedelta(minutes=20)
     stale_count = DemandCalculationRun.objects.filter(
         status__in=('running', 'pending'),
@@ -224,7 +231,7 @@ def active_run(request):
     ).update(
         status='failed',
         finished_at=_tz.now(),
-        error_message='Run timed out — auto-expired after 20 minutes with no completion',
+        error_message=INTERRUPTED_MESSAGE,
     )
     if stale_count:
         logger.warning('[active_run] Auto-expired %d stale run(s)', stale_count)
@@ -243,7 +250,7 @@ def active_run(request):
 # ── Summary (server-side — no page-size cap) ──────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def purchasing_summary(request):
     """
     Pre-computed summary stats for the dashboard header cards.
@@ -304,6 +311,49 @@ def purchasing_summary(request):
     })
 
 
+def _with_season(qs):
+    """The item's seasonal index + remarks for the month we are in (owner 2026-10-25),
+    annotated so the column sorts. Display only — the rates do not use it."""
+    from django.db.models import Case, DecimalField, F, OuterRef, Subquery, Value, When
+    from django.db.models.functions import Coalesce
+    from django.utils import timezone
+    from .models import ItemSeasonality
+    row = ItemSeasonality.objects.filter(item_id=OuterRef('item_id'), month=timezone.localdate().month)
+    one = Value(1, output_field=DecimalField(max_digits=6, decimal_places=3))
+    return (qs.annotate(season_index=Subquery(row.values('index')[:1]),
+                        season_stable=Subquery(row.values('stable')[:1]),
+                        season_note=Subquery(row.values('note')[:1]))
+              # sorting trusts only STABLE indexes: none / unstable = a normal month (×1.00), so years
+              # that disagree never top the list (the cell still shows them, marked ⚠)
+              .annotate(season_sort=Coalesce(Case(When(season_stable=True, then=F('season_index'))), one)))
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
+def seasonality_status(request):
+    """When the seasonality was last computed (+ live progress) — for the refresh button."""
+    from .access import can_run_engine
+    from . import seasonality
+    f = seasonality.freshness()
+    pr = f.get('progress') or {}
+    return Response({**f, 'can_refresh': can_run_engine(request.user),
+                     'pct': round(100 * pr['step'] / pr['steps']) if pr.get('steps') else None,
+                     'months_back': seasonality.MONTHS_BACK})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
+def seasonality_refresh(request):
+    """Pull the missing months from SOFTECH (SELECT only) and recompute — in the background."""
+    from .access import can_run_engine
+    from . import seasonality
+    if not can_run_engine(request.user):
+        return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+    started = seasonality.start_background(f'purchasing:{request.user.username}')
+    return Response({'detail': 'بدأ تحديث الموسمية.' if started else 'يوجد تحديث جارٍ بالفعل.', 'running': True},
+                    status=status.HTTP_202_ACCEPTED)
+
+
 # ── Per-branch metrics ────────────────────────────────────────────────────────
 
 class MetricsListView(generics.ListAPIView):
@@ -318,14 +368,14 @@ class MetricsListView(generics.ListAPIView):
       ?ordering=priority|-priority|monthly_avg|gap|coverage_months|...
     """
     serializer_class   = MetricsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['branch', 'abc_class']
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
         'priority', 'monthly_avg', 'gap', 'coverage_months',
         'monthly_value', 'current_stock', 'in_transit_qty', 'abc_class',
-        'rate_30d', 'rate_90d', 'rate_365d', 'safety_stock',
+        'rate_30d', 'rate_90d', 'rate_365d', 'safety_stock', 'season_sort',
     ]
     ordering = ['-priority']
 
@@ -334,7 +384,7 @@ class MetricsListView(generics.ListAPIView):
         if not run:
             return ItemDemandMetrics.objects.none()
 
-        qs = (
+        qs = _with_season(
             ItemDemandMetrics.objects
             .filter(run=run)
             .select_related('item', 'item__category', 'branch')
@@ -360,13 +410,13 @@ class AggregatedListView(generics.ListAPIView):
       ?ordering=total_monthly_value|-total_monthly_value|...
     """
     serializer_class   = AggregatedSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class']
     search_fields      = ['item__name', 'item__softech_id']
     ordering_fields    = [
         'total_monthly_value', 'total_monthly_avg', 'total_gap',
-        'total_current_stock', 'cumulative_pct', 'abc_class',
+        'total_current_stock', 'cumulative_pct', 'abc_class', 'season_sort',
     ]
     ordering = ['-total_monthly_value']
 
@@ -375,7 +425,7 @@ class AggregatedListView(generics.ListAPIView):
         if not run:
             return ItemDemandAggregated.objects.none()
 
-        qs = (
+        qs = _with_season(
             ItemDemandAggregated.objects
             .filter(run=run)
             .select_related('item', 'item__category')
@@ -1058,7 +1108,11 @@ def _export_xlsx_pivot_v2(run, request, filename):
       [ 68-72]  Rank coverage ASC  (5 cols — branches 130-170)
       [ 73-77]  Rank deficit DESC  (5 cols — branches 130-170)
       [ 78-85]  Summary calcs      (8 cols)
-      [ 86-119] Empty placeholders (34 cols)
+      [ 86-119] Empty placeholders (29 cols)
+
+    Seasonality (5 cols) sits right after the item info, before branch 100: this month's
+    index + stable flag, next month's index + stable flag, the note — info only, never
+    changes الفرق.
 
     Ranks are cross-branch per item (e.g. Rank 1 = branch with highest rate
     for this item), NOT cross-item within a branch.
@@ -1130,6 +1184,20 @@ def _export_xlsx_pivot_v2(run, request, filename):
     PCT_HFILL  = _f('6A1B9A');  PCT_DFILL  = _f('F3E5F5')
     RNK_HFILL  = _f('006064');  RNK_DFILL  = _f('E0F7FA')
     SUM_HFILL  = _f('B71C1C');  SUM_DFILL  = _f('FCE4EC')
+    SEA_HFILL  = _f('37474F');  SEA_DFILL  = _f('ECEFF1')
+
+    # ── Seasonality (this month, network index) — info only, as on the screen ─
+    from django.utils import timezone as _tz
+    from . import seasonality as _seas
+    from .models import ItemSeasonality
+    _month = _tz.localdate().month
+    _next_month = _month % 12 + 1
+    _season_month, _next_name = _seas.AR_MONTHS[_month], _seas.AR_MONTHS[_next_month]
+    _season = {(s.item_id, s.month): s for s in
+               ItemSeasonality.objects.filter(item_id__in=item_order, month__in=(_month, _next_month))
+                                      .only('item_id', 'month', 'index', 'stable', 'note')}
+    SEA_HDRS = [f'موسمية-{_season_month}', f'ثبات-{_season_month}',
+                f'موسمية-{_next_name}', f'ثبات-{_next_name}', 'ملاحظات-الموسمية']
 
     ABC_FILLS = {
         'A': _f('E8F5E9'), 'B': _f('E3F2FD'),
@@ -1155,6 +1223,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         #   itemcode, itemname, price, cost
         [7, 14, 12, 16, 12, 9, 8, 16, 10, 18, 8, 14, 9, 34, 9, 9]
         + [12, 26, 22, 20, 34, 34]                   # 6 flags: shortage, match, phantom, spike, cheaper, bonus
+        + [10, 10, 10, 10, 60]                       # 5 seasonality
         + [10, 10, 10, 9, 10, 9]                     # 6 branch-100 cols (+in-transit)
         + [10, 10, 10, 9, 9, 10, 10, 9] * 5          # 40 (8 cols × 5 branches)
         + [11, 11, 11, 10, 11, 10]                   # 6 totals (+in-transit)
@@ -1163,7 +1232,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         + [8]  * 5                                   # 5 rank-coverage
         + [8]  * 5                                   # 5 rank-deficit
         + [13, 13, 13, 13, 16, 16, 13, 13]           # 8 summary
-        + [5]  * 34                                  # 34 empty
+        + [5]  * 29                                  # 29 empty
     )
     assert len(_cw) == 138, f'Expected 138 cols, got {len(_cw)}'
     for ci, w in enumerate(_cw, start=1):
@@ -1193,6 +1262,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
     # ── 5. Row 1 — Group headers ──────────────────────────────────────────────
     row1 = (
         [_hdr('بيانات الصنف', HDR_FILL)] * 22
+        + [_hdr('الموسمية', SEA_HFILL)] * 5
         + [_hdr(BL('100'),      B100_HFILL)] * 6
     )
     for bi, b in enumerate(branches_no100):
@@ -1204,7 +1274,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         + [_hdr('ترتيب التغطية', RNK_HFILL)] * 5
         + [_hdr('ترتيب الفجوة', RNK_HFILL)] * 5
         + [_hdr('مؤشرات محسوبة', SUM_HFILL)] * 8
-        + [_blank()] * 34
+        + [_blank()] * 29
     )
     ws.append(row1)
 
@@ -1271,6 +1341,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
     ]
 
     row2 = [_hdr(h, HDR_FILL,   SFNT) for h in ITEM_HDRS]
+    row2 += [_hdr(h, SEA_HFILL, SFNT) for h in SEA_HDRS]
     row2 += [_hdr(h, B100_HFILL, SFNT) for h in B100_HDRS]
     for bi, b in enumerate(branches_no100):
         hfill = BGRP_HFILLS[bi % len(BGRP_HFILLS)]
@@ -1286,7 +1357,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
     for b in branches_no100:
         row2.append(_hdr(f'{b.softech_branch_id}.RankDeficit',  RNK_HFILL, SFNT))
     row2 += [_hdr(h, SUM_HFILL, SFNT) for h in SUM_HDRS]
-    row2 += [_blank()] * 34
+    row2 += [_blank()] * 29
     ws.append(row2)
 
     # ── 7. Data rows ──────────────────────────────────────────────────────────
@@ -1450,17 +1521,17 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
         # [0-15] Item info — classifications shown as LABELS (not codes),
         # grouped supplier → producer → family.
-        _cat = item.category
+        from apps.catalog import item_columns as _ic
         # الارشيف = itemarchive. Archived items are excluded at sync, so this is
         # always 0. (Discontinued items are is_active=False but NOT archived —
         # they are flagged via the separate امر-التوريد column below.)
         row.append(_cell(0,                                                   item_fill, '#,##0'))
         # تصنيف عام = نوع الدواء (main category): Medicine / Cosmetics / Others…
-        row.append(_cell(item.medicine_type_name_ar or item.medicine_type_name or '', item_fill))
+        row.append(_cell(_ic.medicine_type(item),                            item_fill))
         # الشكل الصيدلى = dosage form (catalog Category label)
-        row.append(_cell((_cat.name_ar or _cat.name) if _cat else '',         item_fill))
+        row.append(_cell(_ic.dosage_form(item),                              item_fill))
         # الشكل/الوحدة = shape label
-        row.append(_cell(item.shape_name_ar or item.shape_name or '',         item_fill))
+        row.append(_cell(_ic.shape(item),                                    item_fill))
         # تصنيف الخصم = contract discount classification label
         row.append(_cell(item.store_classif_name or '',                       item_fill))
         # امر التوريد = discontinued flag (itemnomoreuse): 1 = موقوف
@@ -1473,7 +1544,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(item.producer_name or '',                             item_fill))
         # العائلة — family (numeric code kept + name LABEL)
         row.append(_cell(item.family_code   or '',                             item_fill))
-        row.append(_cell(item.family_name_ar or item.family_name or '',        item_fill))
+        row.append(_cell(_ic.family(item),                                   item_fill))
         row.append(_cell(item.softech_id,                                      item_fill))
         row.append(_cell(item.name,                                            item_fill))
         row.append(_cell(pack_price,                                           item_fill, '#,##0.00'))
@@ -1516,6 +1587,17 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(_bf.cheaper_label(_ch), CHEAPER_FILL) if _ch else _cell('', item_fill))
         _fx = _focx.get(iid)
         row.append(_cell(_bf.foc_label(_fx), FOC_FILL) if _fx else _cell('', item_fill))
+
+        # الموسمية — this month + next month (index numeric so it sorts / filters;
+        # blank = not enough history), then this month's note
+        for _mo in (_month, _next_month):
+            _se = _season.get((iid, _mo))
+            _sidx = float(_se.index) if _se is not None and _se.index is not None else None
+            row.append(_cell(_sidx, SEA_DFILL, '"×"0.00'))
+            row.append(_cell('' if _sidx is None else ('مستقر' if _se.stable else '⚠ غير مستقر'),
+                             SEA_DFILL, align=CTR_ALIGN))
+        _se = _season.get((iid, _month))
+        row.append(_cell(_se.note if _se is not None else '', SEA_DFILL))
 
         # [11-16] Branch 100 (6 cols — no coverage/priority)
         if branch_100 and branch_100.id in branch_data:
@@ -1590,8 +1672,8 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(transfer_qty,             SUM_DFILL, '#,##0.00'))
         row.append(_cell(transfer_value,           SUM_DFILL, '#,##0.00'))
 
-        # [86-119] Empty (34 cols)
-        row += [_blank()] * 34
+        # [86-119] Empty (29 cols)
+        row += [_blank()] * 29
 
         ws.append(row)
 
@@ -1609,7 +1691,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def export_purchasing(request):
     """
     Download purchasing data as Excel (.xlsx) or CSV.
@@ -1684,13 +1766,13 @@ def export_purchasing(request):
 # ── Manual trigger (background thread) ───────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def trigger_run(request):
     """
     Admin/pharmacist endpoint to trigger an immediate engine run.
 
-    Runs in a background daemon thread so the HTTP response returns
-    immediately (within ~1 second) without waiting for the 15–135s run.
+    Runs in a separate `run_engine_job` process (background.py) so the HTTP
+    response returns at once and a web-server restart cannot kill the run.
     The client should poll GET /api/purchasing/runs/latest/ to track progress.
 
     Returns the newly-created DemandCalculationRun (status='running').
@@ -1701,7 +1783,7 @@ def trigger_run(request):
     if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
     if not is_engine_admin(request.user) and (request.data.get('full') or request.data.get('params')):
-        return Response({'detail': 'المزامنة الكاملة وضبط معاملات المحرك للمدير أو الصيدلي فقط — '
+        return Response({'detail': 'المزامنة الكاملة وضبط معاملات المحرك للمدير فقط — '
                                    'استخدم «▶ تشغيل» للتشغيل السريع.'}, status=403)
     logger.info('[trigger_run] engine run requested by %s (full=%s)',
                 request.user.username, bool(request.data.get('full')))
@@ -1715,68 +1797,27 @@ def trigger_run(request):
             status=409,
         )
 
-    full_backfill    = request.data.get('full', False)
+    full_backfill    = bool(request.data.get('full', False))
     param_overrides  = request.data.get('params', {})   # optional per-run overrides
 
-    def _run_engine():
-        run = None
-        try:
-            from .engine import DemandEngine
-            if bool(full_backfill):
-                # Full sync also refreshes the CATALOG first (new items + price /
-                # itemtrans / امر التوريد / tax updates) so the engine reads the
-                # freshest Item rows. Create the run up front (like catch-up) with a
-                # 'catalog' phase so the dashboard banner tracks it, then hand it to
-                # the engine as one continuous run.
-                from apps.purchasing.models import DemandCalculationRun
-                from django.utils import timezone as _tz
-                run = DemandCalculationRun.objects.create(
-                    status='running', calc_date=_tz.localdate(),
-                    progress={'phase': 'catalog', 'pct': 0,
-                              'message': 'تحديث كتالوج الأصناف من SOFTECH…'},
-                )
-                try:
-                    from apps.sync.tasks import run_items_sync
-                    run_items_sync()
-                except Exception:
-                    logger.exception('[trigger_run] catalog refresh failed (continuing to sales sync)')
-                DemandEngine(param_overrides=param_overrides).run(
-                    full_backfill=True, existing_run=run)
-            else:
-                DemandEngine(param_overrides=param_overrides).run(full_backfill=False)
-        except Exception as exc:
-            logger.exception('Background engine run failed: %s', exc)
-            if run is not None and run.status == 'running':
-                from django.utils import timezone as _tz
-                run.status = 'failed'
-                run.error_message = str(exc)[:500]
-                run.finished_at = _tz.now()
-                run.save(update_fields=['status', 'error_message', 'finished_at'])
-        finally:
-            # Background threads are NOT part of Django's request/response cycle,
-            # so Django never auto-closes their DB connections.  Explicitly release
-            # all connections this thread holds so PostgreSQL slots are freed.
-            from django.db import connections as _dj_connections
-            _dj_connections.close_all()
-
-    thread = threading.Thread(target=_run_engine, daemon=True, name='demand-engine')
-    thread.start()
-
-    # Return the run object created by the engine (poll for completion)
-    import time
-    for _ in range(20):          # wait up to 2 s for the DB row to appear
-        time.sleep(0.1)
-        run = DemandCalculationRun.objects.filter(status='running').last()
-        if run:
-            return Response(RunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
-
-    return Response({'detail': 'تم بدء التشغيل في الخلفية'}, status=status.HTTP_202_ACCEPTED)
+    # The run is created here (so the banner sees it at once) and driven by a separate
+    # `run_engine_job` process — a web-server restart can no longer kill it (background.py).
+    from django.utils import timezone as _tz
+    from . import background
+    run = DemandCalculationRun.objects.create(
+        status='running', calc_date=_tz.localdate(),
+        progress=({'phase': 'catalog', 'pct': 0, 'message': 'تحديث كتالوج الأصناف من SOFTECH…'}
+                  if full_backfill else {}),
+    )
+    if not background.start(run, 'full' if full_backfill else 'quick', param_overrides):
+        return Response({'detail': run.error_message, 'run': RunSerializer(run).data}, status=503)
+    return Response(RunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
 
 
 # ── Items / catalog sync (on-demand: new items + column updates) ─────────────
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def sync_items_now(request):
     """
     Refresh the item catalog from SOFTECH on demand — new items plus column
@@ -1784,8 +1825,10 @@ def sync_items_now(request):
     archive, tax rates). Runs categories + items + barcodes in a background thread
     (read-only SELECT on SOFTECH). Poll /sync/status/ for progress.
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    # admin, purchasing and the SOFTECH supply groups, as a quick engine run — the screen's refresh
+    # button (Batch 4, Z-11g — overblock review decision 5; was admin only since Z-2)
+    from .access import can_run_engine
+    if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     from apps.sync.tasks import run_items_sync
@@ -1816,19 +1859,21 @@ def sync_items_now(request):
 # ── Catch-up sync (manual override when scheduled 2 AM sync missed SOFTECH) ──
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def catchup_sync(request):
     """
     Manual override for when the scheduled sync didn't reach SOFTECH and sales
     went stale. Runs a robust CHUNKED sales backfill (any gap size, no timeout)
-    then a normal engine run — in a background thread. Poll /runs/latest/ +
+    then a normal engine run — in a separate process (background.py). Poll /runs/latest/ +
     /runs/active/ to track progress (same as the normal trigger).
 
     Fails fast (503) if SOFTECH is currently unreachable, so the user knows to
     retry later rather than waiting on a silent background failure.
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    # admin, purchasing and the SOFTECH supply groups, as a quick engine run — the screen's refresh
+    # button (Batch 4, Z-11g — overblock review decision 5; was admin only since Z-2)
+    from .access import can_run_engine
+    if not can_run_engine(request.user):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     if DemandCalculationRun.objects.filter(status='running').exists():
@@ -1839,7 +1884,7 @@ def catchup_sync(request):
         )
 
     # Fail fast if SOFTECH is down — the whole point is it may be unreachable.
-    from .catchup import softech_reachable, run_catchup
+    from .catchup import softech_reachable
     if not softech_reachable():
         return Response(
             {'detail': 'تعذّر الوصول إلى SOFTECH حالياً — أعد المحاولة عند توفّر الاتصال'},
@@ -1855,24 +1900,16 @@ def catchup_sync(request):
         progress={'phase': 'backfill', 'pct': 0, 'message': 'بدء مزامنة التعويض…'},
     )
 
-    def _worker(run_id):
-        try:
-            run_catchup(run_id=run_id)
-        except Exception as exc:
-            logger.exception('[catchup] background catch-up failed: %s', exc)
-        finally:
-            from django.db import connections as _conns
-            _conns.close_all()
-
-    threading.Thread(target=_worker, args=(run.pk,), daemon=True,
-                     name='purchasing-catchup').start()
+    from . import background
+    if not background.start(run, 'catchup'):
+        return Response({'detail': run.error_message, 'run': RunSerializer(run).data}, status=503)
     return Response(RunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
 
 
 # ── Filter options (distinct values for filter dropdowns) ────────────────────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def filter_options(request):
     """
     Return distinct filter option values for the purchasing dashboard dropdowns.
@@ -2020,7 +2057,7 @@ def filter_options(request):
 # ── Engine config (GET = read, PATCH = update) ────────────────────────────────
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def engine_config(request):
     """
     GET  — Return current engine calculation parameters.
@@ -2148,7 +2185,7 @@ class TransferRecommendationListView(generics.ListAPIView):
       ?ordering=priority_score|-priority_score|estimated_value|-estimated_value|quantity|-quantity
     """
     serializer_class   = TransferRecommendationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, PURCHASING]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['abc_class', 'status', 'from_branch', 'to_branch']
     search_fields      = ['item__name', 'item__softech_id']
@@ -2175,7 +2212,7 @@ class TransferRecommendationListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_latest_run(request):
     """
     Return the latest successful TransferRecommendationRun linked to the
@@ -2193,7 +2230,7 @@ def transfer_rec_latest_run(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_summary(request):
     """
     Summary stats for the latest transfer recommendation run.
@@ -2291,7 +2328,7 @@ def transfer_rec_summary(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def transfer_rec_update_status(request, pk):
     """
     PATCH /api/purchasing/transfer-recs/<pk>/status/
@@ -2299,10 +2336,11 @@ def transfer_rec_update_status(request, pk):
     Approve or reject a single transfer recommendation.
     Body: { "status": "approved" | "rejected", "notes": "..." }
 
-    Restricted to admin and pharmacist roles.
+    Purchasing approve: admin, purchasing and the SOFTECH supply groups (owner 2026-10-29, Batch 4
+    Z-12b — a hard-coded admin / pharmacist list left the purchasing team out of its own screen).
     """
-    profile = getattr(request.user, 'staff_profile', None)
-    if not profile or profile.role not in ('admin', 'pharmacist'):
+    from core.permissions import matrix_allows
+    if not matrix_allows(getattr(request.user, 'staff_profile', None), 'purchasing', 'approve'):
         return Response({'detail': 'غير مصرح'}, status=403)
 
     try:
@@ -2345,7 +2383,7 @@ from .serializers import LostSalesRunSerializer                    # noqa: E402
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def lost_sales_latest_run(request):
     """
     GET /api/purchasing/lost-sales/run/
@@ -2363,7 +2401,7 @@ def lost_sales_latest_run(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def lost_sales_summary(request):
     """
     GET /api/purchasing/lost-sales/summary/
@@ -2467,7 +2505,7 @@ def lost_sales_summary(request):
 # ── Advanced (experimental) replenishment — parallel-comparison export ───────
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def advanced_export(request):
     """
     Excel with CURRENT vs ADVANCED recommendation side-by-side (Phases A–D).
@@ -2595,7 +2633,7 @@ def advanced_export(request):
 # ── Advanced SUPPLIER pivot — one row per item, per-branch cols, pack rounding ─
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, PURCHASING])
 def advanced_pivot_export(request):
     """
     Supplier order sheet from the ADVANCED engine: ONE row per item, branches as

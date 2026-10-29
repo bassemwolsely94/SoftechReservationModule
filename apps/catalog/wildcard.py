@@ -69,6 +69,25 @@ def pattern(q: str) -> str:
     return '%' + '%'.join(_esc(s.upper()) for s in p['segments']) + '%' if p['segments'] else '%'
 
 
+def text_matches(text, q: str) -> bool:
+    """Plain-text check with the same rules as the screens' wildcardMatch (utils/wildcard.js):
+    the parts in the order typed, OR every word in any order; case-insensitive. Used where a
+    server export must apply exactly the filter the grid applied."""
+    p = parse(q)
+    if not p['segments']:
+        return True
+    hay = str(text or '').lower()
+    at = 0
+    for s in p['segments']:
+        i = hay.find(s.lower(), at)
+        if i < 0:
+            break
+        at = i + len(s)
+    else:
+        return True
+    return all(t.lower() in hay for t in p['terms'])
+
+
 def literal_pattern(q: str) -> str:
     """Exactly what was typed, % and * taken LITERALLY — the 'exact text first' tier."""
     return '%' + _esc(parse(q)['raw'].upper()) + '%'

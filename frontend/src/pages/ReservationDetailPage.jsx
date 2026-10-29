@@ -845,7 +845,7 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
   }
 
   return (
-    <div className="card border-2 animate-fade-in" style={{ borderColor: cfg.border }}>
+    <div className="card border-2 animate-fade-in" style={{ borderColor: cfg.border }} data-tour="reservations-detail-erp">
 
       {/* ── Header row ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-4">
@@ -1080,6 +1080,7 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
           <div className="flex flex-col items-end gap-1">
             <button
               onClick={runCheck}
+              data-tour="reservations-detail-erp-check"
               disabled={checking || cooldown > 0}
               title={cooldown > 0 ? `يمكن إعادة الفحص بعد ${cooldown} ثانية` : ''}
               className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
@@ -1634,6 +1635,7 @@ export default function ReservationDetailPage() {
                     }
                   }}
                   className="text-sm px-3 py-1.5 rounded-lg font-medium border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                  data-tour="reservations-detail-to-lost"
                   title="تحويل إلى طلب ضائع للتتبع والاسترداد"
                 >
                   📥 تحويل لطلب ضائع

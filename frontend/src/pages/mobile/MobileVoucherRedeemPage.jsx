@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { vouchersApi } from '../../api/client'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 export default function MobileVoucherRedeemPage() {
   const [voucher, setVoucher] = useState(null)
@@ -68,14 +69,14 @@ export default function MobileVoucherRedeemPage() {
   if (step === 'list') {
     return (
       <div className="p-3 space-y-3">
-        <h1 className="text-base font-bold text-gray-900">صرف قسيمة</h1>
+        <h1 data-tour="vouchers-mobile-header" className="text-base font-bold text-gray-900">صرف قسيمة</h1>
         {isLoading ? <MobileLoading />
           : isError ? <MobileError text="تعذّر تحميل القسائم" onRetry={refetch} />
           : vouchers.length === 0 ? <MobileEmpty icon="🎫" text="لا توجد قسائم فعّالة" />
           : (
-            <div className="space-y-2.5">
+            <div data-tour="vouchers-mobile-list" className="space-y-2.5">
               {vouchers.map(v => (
-                <button key={v.id} onClick={() => pick(v)}
+                <button data-tour="vouchers-mobile-voucher" key={v.id} onClick={() => pick(v)}
                   className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">
                   <div className="font-bold text-sm text-gray-900">{v.name || v.title || `قسيمة #${v.id}`}</div>
                   <div className="flex flex-wrap gap-1.5 mt-1">
@@ -97,7 +98,7 @@ export default function MobileVoucherRedeemPage() {
   if (step === 'done') {
     return (
       <div className="p-3 space-y-4">
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center space-y-2">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center space-y-2" data-tour="vouchers-mobile-done">
           <div className="text-4xl">✅</div>
           <h2 className="font-bold text-gray-800">تم التحقق وإنشاء مستند الصرف</h2>
           {doc?.document_number && <p className="text-sm text-gray-500">مستند: <span className="font-mono">{doc.document_number}</span></p>}
@@ -111,7 +112,7 @@ export default function MobileVoucherRedeemPage() {
   // ── Steps: form + otp ──
   return (
     <div className="p-3 space-y-3">
-      <button onClick={reset} className="text-sm text-gray-500">→ الرجوع للقسائم</button>
+      <button onClick={reset} className="text-sm text-gray-500">{ba()} الرجوع للقسائم</button>
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="font-bold text-sm text-gray-900">{voucher.name || voucher.title || `قسيمة #${voucher.id}`}</div>
       </div>
@@ -120,7 +121,7 @@ export default function MobileVoucherRedeemPage() {
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <div>
             <label className="label">هاتف العميل *</label>
-            <input className="input-field w-full" dir="ltr" inputMode="tel" type="tel" placeholder="01xxxxxxxxx"
+            <input data-tour="vouchers-mobile-phone" className="input-field w-full" dir="ltr" inputMode="tel" type="tel" placeholder="01xxxxxxxxx"
               value={phone} onChange={e => setPhone(e.target.value)} />
           </div>
           <div>
@@ -148,7 +149,7 @@ export default function MobileVoucherRedeemPage() {
             </div>
           )}
           {error && <div className="text-sm text-red-600">{error}</div>}
-          <button onClick={sendOtp} disabled={busy} className="btn-primary w-full py-3 disabled:opacity-50">
+          <button data-tour="vouchers-mobile-otp-send" onClick={sendOtp} disabled={busy} className="btn-primary w-full py-3 disabled:opacity-50">
             {busy ? 'جارٍ الإرسال...' : 'إرسال رمز التحقق'}
           </button>
         </div>
@@ -158,13 +159,13 @@ export default function MobileVoucherRedeemPage() {
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <p className="text-sm text-gray-500 text-center">أُرسل رمز للعميل على {phone}. أدخله للتأكيد.</p>
           {otpInfo?.whatsapp_url && (
-            <a href={otpInfo.whatsapp_url} target="_blank" rel="noreferrer"
+            <a data-tour="vouchers-mobile-whatsapp" href={otpInfo.whatsapp_url} target="_blank" rel="noreferrer"
               className="block text-center text-sm bg-green-50 text-green-700 border border-green-200 rounded-xl py-2 font-medium">💬 إرسال عبر واتساب</a>
           )}
-          <input className="input-field w-full text-center text-2xl tracking-[0.4em] font-mono" dir="ltr"
+          <input data-tour="vouchers-mobile-code" className="input-field w-full text-center text-2xl tracking-[0.4em] font-mono" dir="ltr"
             inputMode="numeric" placeholder="------" value={code} onChange={e => setCode(e.target.value)} />
           {error && <div className="text-sm text-red-600 text-center">{error}</div>}
-          <button onClick={verify} disabled={busy} className="btn-primary w-full py-3 disabled:opacity-50">
+          <button data-tour="vouchers-mobile-verify" onClick={verify} disabled={busy} className="btn-primary w-full py-3 disabled:opacity-50">
             {busy ? 'جارٍ التحقق...' : 'تحقق وصرف'}
           </button>
           <button onClick={() => { setStep('form'); setError('') }} className="text-xs text-gray-400 w-full">← تغيير الرقم</button>

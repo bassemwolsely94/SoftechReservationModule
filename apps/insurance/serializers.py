@@ -151,6 +151,9 @@ class InsuranceClaimSupplementSerializer(serializers.ModelSerializer):
     class Meta:
         model  = InsuranceClaimSupplement
         fields = '__all__'
+        # the claim and author are set by the view; grouping by the billing-group actions
+        # (Batch 4, Z-10a — a PATCH moved a supplement onto another, even a locked, claim)
+        read_only_fields = ['claim', 'created_by', 'billing_group', 'is_manually_edited']
 
 
 class InsuranceClaimManualRxSerializer(serializers.ModelSerializer):

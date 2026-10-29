@@ -33,8 +33,23 @@ Content format (one file per module, see content/reservations.py for a full exam
         'related': ['demand.list'],           # other screen keys
         'workflows': ['order'],               # optional — show only these module workflows
                                               # (default: all of the module's)
+        'tour':   [{'target': 'reservations-board-new',   # «اعرض لي»: data-tour anchor
+                    'label': T(..),           # optional: the button text exactly as on screen
+                    'text': T(..),            # what it does (required)
+                    'when': T(..),            # optional: when to use it / what happens next
+                    'warn': T(..),            # optional ⚠: the costly mistake (required for
+                                              # push / approve / discount … anchors, see TOUR_WARN_WORDS)
+                    'open_hint': T(..)}],     # optional: how to make the element appear
         'updated': '2026-10-10',              # bump when the text changes → "new" badge
     }]
+
+A module may also have 'journeys' — guided walks through a whole process across screens:
+
+    'journeys': [{'key': 'lifecycle', 'title': T(..), 'summary': T(..),
+                  'shell': 'desktop',         # or 'mobile' (/m/…) — a journey never mixes them
+                  'roles': ['pharmacist'],    # optional; empty = everyone
+                  'steps': [{'screen': 'reservations.new', 'target': '…', 'perm': 'reservations',
+                             'label' / 'text' / 'when' / 'warn' / 'open_hint': like tour steps}]}]
 
 T(ar, en) is just {'ar': ar, 'en': en}. Every text must have both languages.
 """
@@ -47,6 +62,23 @@ from functools import lru_cache
 from .content import MODULE_FILES
 
 EDITABLE_FIELDS = ('title', 'summary', 'audience', 'steps', 'tabs', 'tips', 'faq', 'notes', 'tour')
+
+# «اعرض لي» steps: the text parts a trainer may edit (target / screen / perm follow the code)
+TOUR_TEXT_KEYS = ('label', 'text', 'when', 'warn', 'open_hint', 'more')
+# route / wait / nav: cross-page steps («اعرض لي» flows, list → detail continuation) —
+# see tour_flow() below
+TOUR_STEP_KEYS = {'target', *TOUR_TEXT_KEYS, 'route', 'wait', 'nav'}
+JOURNEY_STEP_KEYS = TOUR_STEP_KEYS | {'screen', 'perm'}
+# more = the longer explanation shown under the step (help tours)
+TOUR_LIMITS = {'label': 40, 'text': 160, 'when': 160, 'warn': 160, 'open_hint': 160, 'more': 600}
+# a step on a button whose anchor has one of these words must carry a ⚠ warning
+TOUR_WARN_WORDS = {'push', 'post', 'approve', 'reject', 'discount', 'send', 'cancel', 'delete',
+                   'close', 'settle', 'writeback', 'softech', 'flush'}
+# modules whose tours are not rewritten to the rich format yet (limits / ⚠ / full
+# coverage not enforced for them); each batch removes the modules it finishes
+TOUR_PENDING = {
+    'general', 'gamification', 'finance', 'insurance', 'commerce', 'hr', 'admin',
+}
 
 GROUPS = [
     ('home',       'الرئيسية',      'Home'),
@@ -98,11 +130,80 @@ def _merge_tabs(base_tabs, edited_tabs):
     return out
 
 
+def _step_text(base, edited):
+    """A step with the trainer's text parts on top (only the parts the trainer filled)."""
+    if not isinstance(edited, dict):
+        return dict(base)
+    return {**base, **{k: edited[k] for k in TOUR_TEXT_KEYS
+                       if isinstance(edited.get(k), dict) and (edited[k].get('ar') or '').strip()}}
+
+
 def _merge_tour(base_tour, edited_tour):
-    """Like tabs: the steps and their targets follow the code; trainers edit the text."""
-    edited = {t.get('target'): t for t in (edited_tour or []) if isinstance(t, dict)}
-    return [{**t, **({'text': edited[t['target']]['text']} if edited.get(t['target'], {}).get('text') else {})}
-            for t in base_tour or []]
+    """Like tabs: the steps and their targets follow the code; trainers edit the text
+    (every text part: label / text / when / warn / open_hint / more).
+    Matched by position AND target first (a tour may point at the same element twice, e.g.
+    "this is the list" then "open a row"); an edit saved before steps were added still
+    applies to a step whose target appears once. A step the code replaced keeps the repo text."""
+    edited = [t for t in (edited_tour or []) if isinstance(t, dict)]
+    base = list(base_tour or [])
+    counts = {}
+    for t in base:
+        counts[t['target']] = counts.get(t['target'], 0) + 1
+    used, out = set(), []
+    for i, t in enumerate(base):
+        e = None
+        if i < len(edited) and edited[i].get('target') == t['target']:
+            e = i
+        elif counts[t['target']] == 1:
+            e = next((n for n, x in enumerate(edited) if x.get('target') == t['target'] and n not in used), None)
+        if e is not None:
+            used.add(e)
+        out.append(_step_text(t, edited[e] if e is not None else None))
+    return out
+
+
+@lru_cache(maxsize=1)
+def journeys():
+    """→ {'<module>.<key>': journey} for every module journey, in file order."""
+    modules, _ = load()
+    out = {}
+    for m in modules.values():
+        for j in m.get('journeys') or []:
+            jid = f"{m['key']}.{j['key']}"
+            out[jid] = {**j, 'id': jid, 'module': m['key']}
+    return out
+
+
+def journey_routes(journey, screen):
+    """The screen's routes in the journey's shell (desktop or /m/ mobile)."""
+    mobile = journey.get('shell') == 'mobile'
+    return [r for r in screen['routes'] if r.startswith('/m/') == mobile]
+
+
+def journey_hash(journey):
+    payload = {'title': journey.get('title'), 'summary': journey.get('summary'), 'steps': journey.get('steps')}
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def journey_override_key(jid):
+    return f'journey:{jid}'
+
+
+def effective_journey(journey, override=None):
+    """The journey as users see it. Trainers edit step text only; an edit applies to a
+    step only while the same index still has the same target (code moved → dropped)."""
+    j = dict(journey)
+    data = getattr(override, 'data', None) or {}
+    for f in ('title', 'summary'):
+        if data.get(f):
+            j[f] = data[f]
+    edited = data.get('steps') or []
+    steps = []
+    for i, st in enumerate(journey['steps']):
+        e = edited[i] if i < len(edited) and isinstance(edited[i], dict) else None
+        steps.append(_step_text(st, e if e and e.get('target') == st['target'] else None))
+    j['steps'] = steps
+    return j
 
 
 def effective(screen, override=None):
@@ -219,3 +320,35 @@ def retrieve(question, screens, modules, limit=5, prefer=None):
             scored.append((score, s))
     scored.sort(key=lambda r: -r[0])
     return [s for _, s in scored[:limit]]
+
+
+# ── «اعرض لي» flows ───────────────────────────────────────────────────────────
+# A tour step: {target, text, route?, wait?, nav?}
+#   route — the page the step lives on (router pattern); the runner navigates there when it
+#           has no :params. Screen-tour steps without it live on the page the tour started on.
+#   wait  — the step waits for the user to open that page (e.g. click a row → '/x/:id'),
+#           then continues on it.
+#   nav   — open the side-menu group of this path first (to point at its menu item).
+# A screen may set `tour_continue: '<screen key>'`: after its own steps (the last one should
+# `wait` for that screen), the other screen's tour follows — list → detail as one flow.
+
+def tour_flow(key, screens, overrides=None):
+    """The full tour run from a screen: its own (effective) steps, then the continued
+    screen's steps. Each step carries `screen` and `i` (its index in that screen's own
+    tour) so usage can point a trainer at the exact text to fix."""
+    ov = overrides or {}
+    s = screens[key]
+    out = [{**st, 'screen': key, 'i': i} for i, st in enumerate(effective(s, ov.get(key)).get('tour') or [])]
+    nxt = s.get('tour_continue')
+    if out and nxt in screens:
+        n = screens[nxt]
+        route = n['routes'][0]
+        out += [{**st, 'route': st.get('route') or route, 'screen': nxt, 'i': i}
+                for i, st in enumerate(effective(n, ov.get(nxt)).get('tour') or [])]
+    return out
+
+
+def flows(modules):
+    """{'flow:<module>.<key>': flow} for every module workflow tour."""
+    return {f"flow:{m['key']}.{f['key']}": {**f, 'module': m['key']}
+            for m in modules.values() for f in m.get('flows') or []}

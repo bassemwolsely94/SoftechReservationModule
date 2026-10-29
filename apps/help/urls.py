@@ -1,6 +1,7 @@
 """apps/help/urls.py — mounted at /api/help/"""
 from django.urls import path
 
+from . import glossary
 from . import onboarding_views as ob
 from . import views
 
@@ -17,9 +18,18 @@ urlpatterns = [
     path('modules/<str:key>/', views.module_detail, name='help-module'),
     path('screens/<str:key>/', views.screen_detail, name='help-screen'),
     path('screens/<str:key>/revisions/', views.screen_revisions, name='help-screen-revisions'),
+    path('journeys/<str:jid>/', views.journey_detail, name='help-journey'),
     path('onboarding/', ob.my_path, name='help-onboarding'),
     path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
     path('onboarding/team/', ob.team, name='help-onboarding-team'),
+    path('onboarding/remind/', ob.remind, name='help-onboarding-remind'),
+    path('first-day/', ob.first_day, name='help-first-day'),
+    path('whats-new/', ob.whats_new, name='help-whats-new'),
+    path('notes-log/', ob.notes_log, name='help-notes-log'),
+    path('notes-check/', ob.notes_check, name='help-notes-check'),
+    path('glossary/', glossary.glossary, name='help-glossary'),
+    path('glossary/<int:pk>/', glossary.glossary_term, name='help-glossary-term'),
+    path('glossary/scan/', glossary.scan, name='help-glossary-scan'),
     path('training/<str:kind>/<str:key>/', ob.training_edit, name='help-training-edit'),
     path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),
     path('quizzes/<str:module_key>/submit/', ob.quiz_submit, name='help-quiz-submit'),

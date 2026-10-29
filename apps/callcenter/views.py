@@ -48,6 +48,16 @@ def _is_supervisor_or_admin(profile):
 # CallLogViewSet
 # ─────────────────────────────────────────────────────────────────────────────
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Call center = the `callcenter` matrix module (Batch 4, Z-8b — was any logged-in user, branch
+# staff saw their branch's calls and cases): reads need view; writes need create / edit /
+# approve; removing an item or attachment needs edit. Call quality scoring keeps its own role
+# check (admin / supervisor / quality manager / call center): the matrix asks only view there.
+CALLCENTER = matrix_permission('callcenter', post=('create', 'edit', 'approve'), delete=('edit', 'delete'),
+                               actions={'quality': ('view',)})
+
+
 class CallLogViewSet(viewsets.ModelViewSet):
     """
     Full CRUD for call logs.
@@ -55,7 +65,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
       - call_center / supervisor / admin: full access to all logs
       - branch staff: own logs only
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
@@ -68,7 +78,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = CallLog.objects.select_related(
             'customer', 'handled_by__user', 'branch',
-            'reservation', 'followup_task', 'case',
+            'reservation', 'followup_task', 'case', 'pbx_session',
         ).prefetch_related('address_updates', 'attachments', 'items__item')
 
         profile = _profile(self.request)
@@ -92,20 +102,56 @@ class CallLogViewSet(viewsets.ModelViewSet):
             return CallLogCreateSerializer
         return CallLogDetailSerializer
 
-    def perform_create(self, serializer):
-        profile = _profile(self.request)
-        call = serializer.save(
-            handled_by=profile,
-            branch=profile.branch if profile else None,
-        )
+    def create(self, request, *args, **kwargs):
+        """
+        One CallLog per PBX call: if this save matches a PBX session on the
+        agent's extension, merge into the PBX's log (or attach to the live
+        session) instead of creating a duplicate row.
+        """
+        from django.db import transaction
+        from apps.pbx.linking import find_session_for_agent_call
 
+        profile = _profile(request)
+        session = find_session_for_agent_call(
+            profile, request.data.get('phone_number', ''),
+            request.data.get('pbx_session_id') or None,
+        )
+        existing = session.call_log if session else None
+
+        serializer = CallLogCreateSerializer(
+            instance=existing, data=request.data, partial=existing is not None)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            if existing is not None:
+                # PBX facts win for duration/recording; agent owns the rest
+                call = serializer.save(
+                    handled_by=profile, source='merged',
+                    duration_seconds=existing.duration_seconds or serializer.validated_data.get('duration_seconds', 0),
+                    recording_url=existing.recording_url or serializer.validated_data.get('recording_url', ''),
+                )
+            else:
+                call = serializer.save(
+                    handled_by=profile,
+                    branch=profile.branch if profile else None,
+                    source='manual',
+                )
+                if session is not None:
+                    session.call_log = call
+                    session.save(update_fields=['call_log', 'updated_at'])
+        self._after_create(call, profile, merged=existing is not None)
+
+        data = CallLogDetailSerializer(call, context={'request': request}).data
+        return Response(data, status=201)
+
+    def _after_create(self, call, profile, merged=False):
         # Audit log (non-blocking)
         try:
             from apps.audit.models import AuditLog
             AuditLog.log(
-                'call_log_created',
+                'call_log_merged' if merged else 'call_log_created',
                 user=profile,
-                note=f'Call log created: {call.phone_number}',
+                note=(f'Call log {"merged into PBX log" if merged else "created"}: '
+                      f'{call.phone_number} (#{call.pk})'),
             )
         except Exception:
             pass
@@ -345,7 +391,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         # Recent calls for this number (regardless of which customer is selected)
         recent = CallLog.objects.filter(
             phone_number__endswith=tail
-        ).select_related('handled_by__user').order_by('-called_at')[:5]
+        ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
         result['recent_calls'] = CallLogListSerializer(recent, many=True).data
 
         return Response(result)
@@ -416,6 +462,26 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
         return Response({'queued': True, 'call_id': call.pk})
 
+    @action(detail=True, methods=['post'], url_path='transcribe')
+    def transcribe(self, request, pk=None):
+        """
+        POST /api/callcenter/calls/{id}/transcribe/
+        Recording → voice_transcript → AI summary, in the background.
+        """
+        call = self.get_object()
+        from apps.callcenter.serializers import call_has_recording
+        from apps.pbx.recordings import ensure_recording
+        ensure_recording(getattr(call, 'pbx_session', None))
+        if not call_has_recording(call):
+            return Response({'detail': 'لا يوجد تسجيل لهذه المكالمة'}, status=400)
+        if call.voice_transcript and not request.data.get('force'):
+            return Response({'detail': 'تم تفريغ هذه المكالمة من قبل'}, status=409)
+
+        from threading import Thread
+        from apps.omni.transcription import transcribe_call_log
+        Thread(target=transcribe_call_log, args=(call.pk,), daemon=True).start()
+        return Response({'queued': True, 'call_id': call.pk}, status=202)
+
     # ── Case management from call ─────────────────────────────────────────────
 
     @action(detail=True, methods=['post'], url_path='create-case')
@@ -476,41 +542,41 @@ class CallLogViewSet(viewsets.ModelViewSet):
     def create_followup(self, request, pk=None):
         """
         POST /api/callcenter/calls/{id}/create-followup/
-        Body: { due_date, notes, item_id (opt) }
-        Creates a FollowUpTask linked to the call's customer.
+        Body: { due_date, task_type?, reminder_at?, notes?, item_id? }
+        Creates a FollowUpTask linked to the call's customer. Validated by the same
+        serializer as the standalone follow-up create (task type choices, dates), so
+        the modal's «نوع المهمة» and «⏰ موعد التذكير» are kept on both paths.
         """
         call = self.get_object()
         if not call.customer:
             return Response({'detail': 'لا يمكن إنشاء متابعة بدون عميل مرتبط'}, status=400)
-
-        due_date = request.data.get('due_date')
-        notes    = request.data.get('notes', '')
-        item_id  = request.data.get('item_id')
-
-        if not due_date:
+        if not request.data.get('due_date'):
             return Response({'detail': 'due_date مطلوب'}, status=400)
 
+        from apps.followups.serializers import FollowUpTaskCreateSerializer
         profile = _profile(request)
+        data = {
+            'customer':    call.customer.pk,
+            'branch':      call.branch_id,
+            'assigned_to': profile.pk if profile else None,
+            'due_date':    request.data.get('due_date'),
+            'notes':       request.data.get('notes', '') or '',
+        }
+        for f in ('task_type', 'reminder_at'):
+            if request.data.get(f):
+                data[f] = request.data.get(f)
+        if request.data.get('item_id'):
+            data['item'] = request.data.get('item_id')
+        ser = FollowUpTaskCreateSerializer(data=data)
+        if not ser.is_valid():
+            return Response({'detail': 'بيانات المتابعة غير صالحة', 'errors': ser.errors}, status=400)
         try:
-            from apps.followups.models import FollowUpTask
-            kwargs = {
-                'customer':    call.customer,
-                'due_date':    due_date,
-                'notes':       notes,
-                'assigned_to': profile,
-                'branch':      call.branch,
-                'status':      'pending',
-            }
-            if item_id:
-                from apps.catalog.models import Item
-                kwargs['item'] = Item.objects.filter(pk=item_id).first()
-            task = FollowUpTask.objects.create(**kwargs)
-
+            task = ser.save(status='pending')
             # Link call to this follow-up
             call.followup_task = task
             call.save(update_fields=['followup_task'])
-
-            return Response({'created': True, 'task_id': task.pk, 'due_date': str(task.due_date)}, status=201)
+            return Response({'created': True, 'task_id': task.pk, 'due_date': str(task.due_date),
+                             'task_type': task.task_type}, status=201)
         except Exception as e:
             return Response({'detail': f'فشل إنشاء المتابعة: {public_error(request, e)}'}, status=500)
 
@@ -599,10 +665,18 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='pending-callbacks')
     def pending_callbacks(self, request):
-        qs = CallLog.objects.filter(
-            status='callback',
-            callback_due__lte=timezone.now(),
-        ).select_related('customer', 'handled_by__user').order_by('callback_due')
+        """
+        GET /api/callcenter/calls/pending-callbacks/
+        ?mode=overdue  (default) — only callbacks past their due time
+        ?mode=all      — all scheduled callbacks, sorted by callback_due
+        """
+        mode = request.query_params.get('mode', 'overdue')
+        qs = CallLog.objects.filter(status='callback').select_related(
+            'customer', 'handled_by__user', 'pbx_session'
+        )
+        if mode != 'all':
+            qs = qs.filter(callback_due__lte=timezone.now())
+        qs = qs.order_by('callback_due')
 
         profile = _profile(request)
         if profile and profile.role not in ('admin', 'call_center', 'supervisor'):
@@ -894,7 +968,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
     """
     CRUD for CustomerCase with state-machine actions.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['status', 'category', 'priority', 'branch', 'assigned_to']
     search_fields      = ['case_number', 'title', 'description', 'customer__name', 'customer__phone']
@@ -1165,7 +1239,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
 
 class AddressUpdateViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only global list of address updates — admin / call_center only."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     serializer_class   = AddressUpdateSerializer
     filter_backends    = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields   = ['status', 'customer']

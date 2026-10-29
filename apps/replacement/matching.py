@@ -310,7 +310,7 @@ def select_funding(voucher: dict, receipts: list[dict], patient_phcode: str,
                 if _minutes(r.get('trans_time'), v_time) is not None
                 and -C.get('ANON_AUTO_BEFORE_MIN') <= _minutes(r.get('trans_time'), v_time) <= C.get('ANON_AUTO_AFTER_MIN')
                 and v_amt * C.get('ANON_AUTO_MIN_RATIO') <= _d(r['amount']) <= v_amt + absorb]
-        if len(auto) == 1:
+        if C.get('ANON_AUTO_CONFIRM') and len(auto) == 1:
             pick = auto[0]
             m = _minutes(pick.get('trans_time'), v_time)
             total = _d(pick['amount'])

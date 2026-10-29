@@ -22,6 +22,7 @@ import useAuthStore from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -253,6 +254,7 @@ function DetailPanel({ transit, onClose, onAction }) {
       <div
         className="w-full max-w-2xl bg-white shadow-2xl overflow-y-auto flex flex-col"
         dir="rtl"
+        data-tour="transfers-transit-drawer"
       >
         {/* Header */}
         <div
@@ -278,7 +280,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             </div>
             <div className="text-sm text-gray-600">
               <span className="font-semibold">{transit.supplying_branch_name}</span>
-              <span className="text-gray-400 mx-2">→</span>
+              <span className="text-gray-400 mx-2">{fa()}</span>
               <span className="font-semibold">{transit.receiving_branch_name}</span>
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
@@ -298,8 +300,14 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Status row */}
-        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm">
+        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm" data-tour="transfers-transit-status">
           <StatusBadge status={transit.transit_status} />
+          {transit.manually_received_at && !transit.erp_received_date && (
+            <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-semibold"
+                  title="تم تسجيل الاستلام هنا — في انتظار مستند الاستلام (25) من SOFTECH للمطابقة">
+              ⏳ مستلم محلياً — في انتظار تأكيد SOFTECH
+            </span>
+          )}
           {transit.cancellation_available && (
             <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-semibold">
               ↩️ الإلغاء متاح حتى {fmtDate(transit.cancellation_expires_at)}
@@ -327,6 +335,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           )}
           <div className="flex-1" />
           <button
+            data-tour="transfers-transits-picking"
             onClick={() => handleExportSheet('picking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة التجميع — بمسار مخزن المصدر (Excel)'}
@@ -336,6 +345,7 @@ function DetailPanel({ transit, onClose, onAction }) {
             {exporting === 'picking' ? 'جارٍ التصدير...' : 'ورقة التجميع'}
           </button>
           <button
+            data-tour="transfers-transits-stocking"
             onClick={() => handleExportSheet('stocking')}
             disabled={!!exporting || !transit.item_count}
             title={!transit.item_count ? 'لا توجد بيانات أصناف بعد — انتظر المزامنة' : 'ورقة الترصيص — بترتيب أرفف الفرع المستلم (Excel)'}
@@ -347,7 +357,7 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-6 gap-4">
+        <div className="flex border-b border-gray-100 px-6 gap-4" data-tour="transfers-transits-detail-tabs">
           {[
             { key: 'items',    label: `الأصناف (${transit.item_count})` },
             ...(hasRecon ? [{ key: 'recon', label: `مطابقة 125↔25${reconCount ? ` (${reconCount})` : ''}` }] : []),
@@ -373,7 +383,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Items tab */}
           {tab === 'items' && (
-            <div className="px-6 py-4">
+            <div className="px-6 py-4" data-tour="transfers-transit-items">
               {transit.fefo_warning?.length > 0 && (
                 <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <div className="font-bold text-amber-800 text-sm mb-1">
@@ -487,7 +497,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Reconciliation tab (125 issued ↔ 25 received) */}
           {tab === 'recon' && (
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-6 py-4 space-y-4" data-tour="transfers-transit-recon">
               {/* Summary banner */}
               <div className={`rounded-xl px-4 py-3 border ${
                 transit.has_discrepancy
@@ -600,7 +610,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           {tab === 'notes' && (
             <div className="px-6 py-4 space-y-3">
               {/* Add note form */}
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-tour="transfers-transit-notes">
                 <textarea
                   className="flex-1 border border-gray-200 rounded-xl p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-200"
                   rows={2}
@@ -671,11 +681,12 @@ function DetailPanel({ transit, onClose, onAction }) {
 
         {/* Actions footer */}
         {transit.transit_status === 'in_transit' && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3" data-tour="transfers-transit-actions">
 
             {/* Mark Received (receiving branch or admin) */}
             {(isAdmin || isReceivingBranch) && (
               <button
+                data-tour="transfers-transits-receive"
                 onClick={() => markReceived.mutate('')}
                 disabled={markReceived.isPending}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50"
@@ -695,6 +706,7 @@ function DetailPanel({ transit, onClose, onAction }) {
                   onChange={e => setCloseReason(e.target.value)}
                 />
                 <button
+                  data-tour="transfers-transits-force-close"
                   onClick={() => forceClose.mutate()}
                   disabled={closeReason.trim().length < 10 || forceClose.isPending}
                   className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2 rounded-xl text-sm border border-red-200 transition-colors disabled:opacity-40"
@@ -738,6 +750,20 @@ function FiltersBar({ filters, setFilters, branches }) {
           <option key={k} value={k}>{v.icon} {v.label}</option>
         ))}
       </select>
+
+      {/* Received here but SOFTECH's receipt (doc 25) not seen yet — alerts point here */}
+      <button
+        type="button"
+        data-tour="transfers-transits-awaiting-erp"
+        onClick={() => setFilters(f => (f.awaiting_erp
+          ? { ...f, awaiting_erp: undefined, transit_status: 'in_transit' }
+          : { ...f, awaiting_erp: '1', transit_status: '' }))}
+        className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filters.awaiting_erp
+          ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50'}`}
+        title="تحويلات اتسجّل استلامها هنا ولسه مستند الاستلام (25) مش متسجّل في SOFTECH"
+      >
+        ⏳ بانتظار تأكيد SOFTECH
+      </button>
 
       {/* Supplying branch */}
       <select
@@ -844,6 +870,7 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
               <th className="px-3 py-3 w-8">
                 <input
                   type="checkbox"
+                  data-tour="transfers-transits-select"
                   className="accent-brand-600 cursor-pointer"
                   title="تحديد الكل (لتصدير ورقة تجميع موحدة)"
                   checked={items.length > 0 && items.every(i => checkedIds.has(i.id))}
@@ -861,11 +888,12 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
               return (
                 <tr
                   key={tr.id}
+                  data-tour="transfers-transits-row"
                   onClick={() => onRowClick(tr)}
                   className="cursor-pointer hover:bg-brand-50 transition-colors"
                   style={{ borderRight: `3px solid ${p.dot}` }}
                 >
-                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-3" onClick={e => e.stopPropagation()} data-tour="transfers-transits-row-check">
                     <input
                       type="checkbox"
                       className="accent-brand-600 cursor-pointer"
@@ -1165,6 +1193,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         {checkedIds.size > 0 && (
           <>
             <button
+              data-tour="transfers-transits-bulk-sheets"
               onClick={() => exportSheetBulk('picking')}
               disabled={!!exporting}
               title="بمسار مخزن المصدر"
@@ -1189,6 +1218,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
           </>
         )}
         <Link
+          data-tour="transfers-transits-pick-zones"
           to="/pick-zones"
           className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           title="إدارة مناطق التجميع وقواعد التصنيف"
@@ -1206,6 +1236,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
         </button>
         {isAdmin && (
           <button
+            data-tour="transfers-transits-sync"
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
             className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"

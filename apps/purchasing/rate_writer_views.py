@@ -15,18 +15,20 @@ import logging
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+
+from apps.purchasing.access import PURCHASING
 from rest_framework.response import Response
 from rest_framework import status as http
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.purchasing.models import SalesRatePush
+from apps.supply.permissions import CanOperateSupply
 from . import rate_writer
 
 logger = logging.getLogger(__name__)
 
 # Roles allowed to approve / execute a live SOFTECH rate write.
-WRITE_ROLES = {'admin', 'supervisor', 'purchasing'}
 
 
 def _staff(request):
@@ -73,7 +75,7 @@ def _line_dict(ln):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def pushes_list(request):
     from apps.purchasing.isr_fulfillment import user_names
     qs = list(SalesRatePush.objects.select_related('created_by', 'approved_by').all()[:100])
@@ -90,13 +92,23 @@ def _detail_payload(p):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def push_detail(request, pk):
     return Response(_detail_payload(get_object_or_404(SalesRatePush, pk=pk)))
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, PURCHASING, CanOperateSupply])
+def push_export(request, pk):
+    """One rate batch as Excel, with «بيانات الصنف» (apps/supply/tab_exports.py). Read-only.
+    Same access as the other /supply exports (the detail view's IsAuthenticated-only is a known gap)."""
+    from apps.supply.tab_exports import rate_push_excel, xlsx_response
+    p = get_object_or_404(SalesRatePush, pk=pk)
+    return xlsx_response(rate_push_excel(p), f'sales_rates_{p.pk}.xlsx')
+
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def propose(request):
     """Build a dry-run proposal (READ-ONLY against SOFTECH) and persist it as a
     SalesRatePush(status=proposed). Body: {branch: [...], item: [...]} — both optional."""
@@ -122,7 +134,7 @@ def propose(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def approve(request, pk):
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك باعتماد دفعات المعدلات.'}, status=http.HTTP_403_FORBIDDEN)
@@ -139,7 +151,7 @@ def approve(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def execute(request, pk):
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك بتنفيذ الكتابة إلى SOFTECH.'}, status=http.HTTP_403_FORBIDDEN)

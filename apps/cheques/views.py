@@ -13,6 +13,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.permissions import MatrixPermission, deny_unless
+
 from apps.users.models import StaffProfile
 from .engine import preview_plan, compute_instalment_dates
 from .models import EgyptianHoliday, ChequePlan, ChequeInstalment
@@ -63,6 +65,9 @@ def preview_cheque_plan(request):
     Body: { first_due_date, count, total_amount, interval_value, interval_unit }
     Returns list of instalment rows with banking-day-adjusted dates.
     """
+    denied = deny_unless(request, 'cheques', 'create', 'edit')   # planning a plan (Z-3)
+    if denied:
+        return denied
     req_ser = PlanPreviewRequestSerializer(data=request.data)
     req_ser.is_valid(raise_exception=True)
     d = req_ser.validated_data
@@ -80,7 +85,8 @@ def preview_cheque_plan(request):
 # ── Plans CRUD ────────────────────────────────────────────────────────────────
 
 class PlanListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'cheques'
 
     def get_serializer_class(self):
         return ChequePlanCreateSerializer if self.request.method == 'POST' else ChequePlanListSerializer
@@ -116,7 +122,9 @@ class PlanListCreateView(generics.ListCreateAPIView):
 
 
 class PlanDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'cheques'
+    rbac_delete = ('edit', 'delete')     # only draft / cancelled plans can be deleted
 
     def get_serializer_class(self):
         if self.request.method in ('PUT', 'PATCH'):
@@ -159,6 +167,9 @@ class PlanDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 def activate_plan(request, pk):
     """draft → active"""
+    denied = deny_unless(request, 'cheques', 'approve')
+    if denied:
+        return denied
     plan = get_object_or_404(ChequePlan, pk=pk)
     if plan.status != 'draft':
         return Response({'detail': 'الخطة ليست في حالة مسودة.'}, status=400)
@@ -173,6 +184,9 @@ def activate_plan(request, pk):
 @permission_classes([IsAuthenticated])
 def cancel_plan(request, pk):
     """any → cancelled (if no cleared cheques)"""
+    denied = deny_unless(request, 'cheques', 'approve')
+    if denied:
+        return denied
     plan = get_object_or_404(ChequePlan, pk=pk)
     if plan.instalments.filter(status='cleared').exists():
         return Response(
@@ -190,7 +204,22 @@ def cancel_plan(request, pk):
 @permission_classes([IsAuthenticated])
 def update_instalment(request, plan_pk, inst_pk):
     """PATCH /api/cheques/plans/{pk}/instalments/{inst_pk}/"""
+    # marking a cheque cleared / bounced moves money → needs finalize
+    money = request.data.get('status') in ('cleared', 'bounced') or 'cleared_at' in request.data
+    denied = deny_unless(request, 'cheques', 'finalize' if money else 'edit')
+    if denied:
+        return denied
     inst = get_object_or_404(ChequeInstalment, pk=inst_pk, plan_id=plan_pk)
+    # Batch 4, Z-10a: only an active plan's cheques change, and a cleared or cancelled cheque is
+    # final (a PATCH with `edit` put a cleared cheque back to pending); moving a bounced cheque on
+    # is money too → finalize.
+    if inst.plan.status != 'active' or inst.status in ('cleared', 'cancelled'):
+        return Response({'detail': 'لا يمكن تعديل هذا الشيك — الخطة غير نشطة أو الشيك مُغلق.'},
+                        status=status.HTTP_409_CONFLICT)
+    if inst.status == 'bounced' and request.data.get('status', 'bounced') != 'bounced':
+        denied = deny_unless(request, 'cheques', 'finalize')
+        if denied:
+            return denied
     serializer = ChequeInstalmentUpdateSerializer(inst, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
@@ -214,6 +243,9 @@ def treasury_dashboard(request):
     GET /api/cheques/treasury/
     Returns summary KPIs + upcoming cheques (next 30 days) + overdue.
     """
+    denied = deny_unless(request, 'cheques', 'view')
+    if denied:
+        return denied
     today = date.today()
     in_30 = today.replace(day=today.day) if False else \
         (today.replace(month=today.month + 1) if today.month < 12

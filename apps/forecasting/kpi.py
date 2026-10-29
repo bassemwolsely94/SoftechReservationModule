@@ -434,11 +434,19 @@ class KpiResolver:
                  .values('softech_invoice_id').distinct().count())
             return Decimal(n)
 
+        def distinct_pics():
+            # distinct PIC (customers) handled by CC agents across ALL branches
+            n = (self._ph_qs(None, start, end, softech_user=agents)
+                 .filter(doc_code='115').exclude(softech_phcode='')
+                 .values('softech_phcode').distinct().count())
+            return Decimal(n)
+
         return {
             K.M_CASH_DELIVERY: net_amount(),     # CC net sales (المبيعات)
             K.M_GROSS_PROFIT:  net_profit(),     # الربحية
             K.M_BEAUTY:        net_beauty(),     # التجميل
-            K.M_CUSTOMERS:     distinct_orders(),# عدد العملاء (= distinct invoices, per owner)
+            K.M_CUSTOMERS:     distinct_orders(),# عدد الطلبات (= distinct invoices)
+            K.M_PIC_COUNT:     distinct_pics(),  # عدد العملاء (= distinct PIC across branches)
         }
 
     # ── public: full month for one branch (rollup builder) ─────────────────────

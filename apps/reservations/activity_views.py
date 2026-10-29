@@ -1,5 +1,7 @@
 from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
+
+from core.permissions import matrix_permission
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .activity_models import ActivityLog
@@ -29,7 +31,8 @@ class ActivityLogCreateSerializer(serializers.ModelSerializer):
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, matrix_permission(
+    'reservations', post=('create', 'edit', 'approve', 'finalize'))])     # Z-8a
 def reservation_activity(request, reservation_id):
     """GET activity log for a reservation. POST to add a new entry."""
     staff = getattr(request.user, 'staff_profile', None)

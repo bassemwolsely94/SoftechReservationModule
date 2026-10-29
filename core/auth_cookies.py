@@ -68,6 +68,15 @@ class CookieJWTAuthentication(JWTAuthentication):
         validated = self.get_validated_token(raw)
         return self.get_user(validated), validated
 
+    def get_user(self, validated_token):
+        """A disabled staff account is refused at once, not when its token expires (Batch 3, A-3)."""
+        from rest_framework.exceptions import AuthenticationFailed
+        from apps.users.sessions import account_active
+        user = super().get_user(validated_token)
+        if not account_active(user):
+            raise AuthenticationFailed('الحساب موقوف', code='user_inactive')
+        return user
+
 
 def user_from_request(request):
     """Header or cookie JWT → user, without the CSRF check (read-only callers

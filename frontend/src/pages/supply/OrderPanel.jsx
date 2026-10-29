@@ -136,7 +136,7 @@ export default function OrderPanel({ lines: initialLines, supplierId, supplierNa
         <button type="button" onClick={() => excelM.mutate()} disabled={!payloadLines.length || excelM.isPending}
           className={btnGhost}>{excelM.isPending ? 'جارٍ التصدير…' : 'Excel'}</button>
         {!commitM.data ? (
-          <button type="button" onClick={() => commitM.mutate()}
+          <button data-tour="purchasing-supply-order-record" type="button" onClick={() => commitM.mutate()}
             disabled={!payloadLines.length || commitM.isPending || missingReason} className={btnPrimary}>
             {commitM.isPending ? 'جارٍ التسجيل…' : 'تسجيل الطلب'}
           </button>

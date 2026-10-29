@@ -41,16 +41,19 @@ def resolve_codes(conn, personcode: str, codes) -> dict:
     wanted = sorted({str(c).strip() for c in (codes or []) if str(c).strip()})
     if not supp or not wanted:
         return {}
-    inlist = ','.join("'" + c.replace("'", "''") + "'" for c in wanted)
+    # Printed codes come from OCR of an uploaded invoice — always bound, never pasted.
+    by_code: dict[str, set] = {}
     cur = conn.cursor()
     try:
-        cur.execute(f"SELECT suppitemcode, itemcode FROM itemssuppliers "
-                    f"WHERE suppcode=? AND suppitemcode IN ({inlist})", [supp])
-        by_code: dict[str, set] = {}
-        for sc, ic in cur.fetchall():
-            if sc is None or ic is None:
-                continue
-            by_code.setdefault(str(sc).strip(), set()).add(str(ic).strip())
+        for i in range(0, len(wanted), 399):            # 399 codes + suppcode per statement
+            chunk = wanted[i:i + 399]
+            marks = ','.join('?' for _ in chunk)
+            cur.execute(f"SELECT suppitemcode, itemcode FROM itemssuppliers "
+                        f"WHERE suppcode=? AND suppitemcode IN ({marks})", [supp] + chunk)
+            for sc, ic in cur.fetchall():
+                if sc is None or ic is None:
+                    continue
+                by_code.setdefault(str(sc).strip(), set()).add(str(ic).strip())
     finally:
         cur.close()
     # keep only codes that resolve to exactly ONE item
@@ -80,7 +83,7 @@ def _all_others(conn, personcode: str, code: str, itemcode: str):
 
 
 def inject_mapping(conn, personcode: str, itemcode: str, suppitemcode: str, *,
-                   commit: bool = False, approved: bool = False) -> dict:
+                   commit: bool = False, approved: bool = False, actor=None) -> dict:
     """Write ``suppitemcode`` onto the supplier↔item row (UPDATE if the link exists,
     INSERT a minimal link if not), keeping the vendor code ↔ item map 1:1.
 
@@ -94,6 +97,11 @@ def inject_mapping(conn, personcode: str, itemcode: str, suppitemcode: str, *,
 
     Every write verifies BOTH invariants (target carries the code, no other item
     does) before commit. ``commit=False`` runs it all and rolls back (safe probe)."""
+    if commit and not write_enabled():           # the writer refuses on its own (Batch 2, P-9)
+        raise RuntimeError('INVOICE_SUPPLIER_ITEM_WRITE_ENABLED is off — refusing to write itemssuppliers.')
+    if not commit:                               # the dry run executes the real batch, then rolls back
+        from core.softech_switches import require_probes
+        require_probes('invoices.supplier_items.inject_mapping (dry run)')
     supp = str(personcode or '').strip()
     item = str(itemcode or '').strip()
     code = str(suppitemcode or '').strip()
@@ -171,6 +179,12 @@ select @done as done, @others as others
     done = _i(row[0]) if row else 0
     remaining_others = _i(row[1], -1) if row else -1
     ok = (done == 1 and remaining_others == 0)
+    if commit and ok:                                      # who / old → new vendor code (Batch 2, P-16)
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_supplier_mapping_written', actor=actor,
+                            before={'suppitemcode': current, 'on_other_items': others},
+                            after={'suppitemcode': code}, suppcode=supp, itemcode=item,
+                            link_action=action, approved=bool(approved))
     return {'ok': ok, 'action': action, 'verified': ok, 'committed': bool(commit and ok),
             'discrepancies': discrepancies if approved else [], 'approved': bool(approved)}
 

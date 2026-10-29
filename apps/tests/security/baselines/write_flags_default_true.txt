@@ -1,0 +1,12 @@
+# Owner: Batch 2 (needs owner OK). Switches matching the settings' write-flag pattern that default to True.
+# SOFTECH writes must default off; reviewed non-SOFTECH feature switches stay with a '# reason:' line.
+
+# reason: feeds the A/P writer (approves matches in our mirror only); the SOFTECH write itself is gated by AP_RECONCILE_WRITER_ENABLED (default False). Owner confirmed 2026-10-26: stays True.
+AP_RECONCILE_AUTO_APPROVE
+
+# reason: scheduler/feature switches, READ-ONLY vs SOFTECH (docs 11/25/29/32) — not SOFTECH writes
+CUSTOMER_MERGE_QUEUE_ENABLED
+CUSTOMER_STATUS_DRIFT_CHECK_ENABLED
+GAMIFICATION_ENABLED
+REPLACEMENT_DAILY_CHECK_ENABLED
+STOCK_AUDIT_ENABLED

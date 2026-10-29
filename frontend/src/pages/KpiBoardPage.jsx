@@ -4,7 +4,7 @@
  * targets are the EDITABLE SalesTargets (inline edit, or bulk «اعتمد من سيناريو»).
  * % is achievement vs the target pro-rated to the latest COMPLETE data day.
  */
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { kpiApi, targetsApi, forecastApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -68,7 +68,7 @@ function TargetCell({ c, branchId, metric, isCount, canEdit, onSave, strong }) {
     )
   }
   return (
-    <td onClick={canEdit ? start : undefined}
+    <td data-tour="analytics-kpi-board-target-cell" onClick={canEdit ? start : undefined}
         title={canEdit ? 'اضغط لتعديل الهدف' : undefined}
         className={`px-2 py-2.5 text-center tabular-nums ${strong ? 'text-gray-500' : 'text-gray-400'} ${canEdit ? 'cursor-pointer hover:bg-blue-50/60' : ''}`}>
       {fmt(c.target, isCount)}
@@ -80,7 +80,7 @@ function TargetCell({ c, branchId, metric, isCount, canEdit, onSave, strong }) {
 function MetricPct({ c }) {
   const pace = PACE[c.pace] || {}
   return (
-    <td className={`px-2 py-2.5 text-center tabular-nums ${pctColor(c.pct)}`}>
+    <td data-tour="analytics-kpi-board-pct" className={`px-2 py-2.5 text-center tabular-nums ${pctColor(c.pct)}`}>
       {c.pct == null ? '—' : `${c.pct}%`}
       {c.pace && c.pace !== 'pending' && (
         <span className={`block text-[9px] rounded px-1 mt-0.5 ${pace.cls}`}>{pace.label}</span>
@@ -94,17 +94,21 @@ function MtdTarget({ c, isCount }) {
   return <td className="px-2 py-2.5 text-center tabular-nums text-indigo-600">{fmt(c.target_todate, isCount)}</td>
 }
 
-// The 3 sub-headers repeated per metric: full-month target · MTD target · % .
-function SubHeaders({ metrics }) {
+// The sub-headers repeated per metric. Clickable (sortable) when onSort is given.
+const SUB_COLS = [['actual', 'محقق'], ['target_todate', 'حتى تاريخه'], ['target', 'تارجت الشهر'], ['pct', '% التحقيق']]
+function SubHeaders({ metrics, sort, onSort }) {
+  const arrow = (m, f) => (sort && sort.metric === m && sort.field === f) ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
   return (
     <tr className="bg-gray-50/60 text-[11px] text-gray-400">
       <th className="sticky right-0 bg-gray-50/60"></th>
       {metrics.map(m => (
         <Fragment key={m.key}>
-          <th className="px-2 py-1 font-medium border-r border-gray-100">محقق</th>
-          <th className="px-2 py-1 font-medium text-indigo-500">حتى تاريخه</th>
-          <th className="px-2 py-1 font-medium">تارجت الشهر</th>
-          <th className="px-2 py-1 font-medium">% التحقيق</th>
+          {SUB_COLS.map(([f, label], i) => (
+            <th key={f} onClick={onSort ? () => onSort(m.key, f) : undefined}
+              className={`px-2 py-1 font-medium ${i === 0 ? 'border-r border-gray-100' : ''} ${f === 'target_todate' ? 'text-indigo-500' : ''} ${onSort ? 'cursor-pointer hover:text-gray-700 select-none' : ''}`}>
+              {label}{arrow(m.key, f)}
+            </th>
+          ))}
         </Fragment>
       ))}
     </tr>
@@ -208,6 +212,22 @@ export default function KpiBoardPage() {
   const metrics = data?.metrics || []
   const onSave = (p) => saveTarget.mutate(p)
 
+  // sortable grid — click a sub-header to sort branches by that metric's column
+  const [sort, setSort] = useState(null)
+  const onSort = (metric, field) => setSort(s =>
+    (s && s.metric === metric && s.field === field)
+      ? (s.dir === 'desc' ? { metric, field, dir: 'asc' } : null)
+      : { metric, field, dir: 'desc' })
+  const sortedBranches = useMemo(() => {
+    const arr = [...(data?.branches || [])]
+    if (sort) arr.sort((a, b) => {
+      const av = Number(a.cells[sort.metric]?.[sort.field] ?? 0)
+      const bv = Number(b.cells[sort.metric]?.[sort.field] ?? 0)
+      return sort.dir === 'asc' ? av - bv : bv - av
+    })
+    return arr
+  }, [data, sort])
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
@@ -225,23 +245,23 @@ export default function KpiBoardPage() {
           {canEdit && (
             <>
               <span className="w-px h-6 bg-gray-200 mx-1" />
-              <select className="input-field !w-auto" value={pullSid} onChange={e => setPullSid(e.target.value)}
+              <select data-tour="analytics-kpi-board-scenario" className="input-field !w-auto" value={pullSid} onChange={e => setPullSid(e.target.value)}
                       title="اعتمد الأهداف من سيناريو تنبؤ">
                 <option value="">اعتمد من سيناريو…</option>
                 {branchScenarios.map(s => <option key={s.id} value={s.id}>{s.name} ({s.model_label || s.model})</option>)}
               </select>
-              <button onClick={() => pullSid && pull.mutate(pullSid)} disabled={!pullSid || pull.isPending}
+              <button data-tour="analytics-kpi-board-approve" onClick={() => pullSid && pull.mutate(pullSid)} disabled={!pullSid || pull.isPending}
                       className="text-sm px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
                 {pull.isPending ? '…' : 'اعتماد'}
               </button>
             </>
           )}
           <span className="w-px h-6 bg-gray-200 mx-1" />
-          <select className="input-field !w-auto" value={exportModel} onChange={e => setExportModel(e.target.value)}
+          <select data-tour="analytics-kpi-board-export-model" className="input-field !w-auto" value={exportModel} onChange={e => setExportModel(e.target.value)}
                   title="نموذج التنبؤ للتارجت في ملف الإكسل">
             {EXPORT_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
-          <button onClick={handleExport} disabled={exporting}
+          <button data-tour="analytics-kpi-board-export" onClick={handleExport} disabled={exporting}
                   className="btn-primary !py-2 whitespace-nowrap disabled:opacity-60">
             {exporting ? '… جارٍ' : '⬇️ تصدير إكسل'}
           </button>
@@ -250,8 +270,10 @@ export default function KpiBoardPage() {
 
       {/* data freshness + sync (like التقارير السردية) */}
       {data && (
+        <div data-tour="analytics-kpi-board-freshness">
         <DataFreshnessBar dataThrough={data.data_through} daysElapsed={data.days_elapsed}
           daysTotal={data.days_total} canEdit={canEdit} invalidateKeys={[['kpi-board', year, month]]} />
+        </div>
       )}
       <p className="text-[11px] text-gray-400 mb-2">
         الترتيب: محقق · حتى تاريخه (الهدف المحسوب حتى اليوم) · تارجت الشهر (الهدف الكامل) · % التحقيق (= المحقق ÷ حتى تاريخه). كل الأرقام بنظام الشهر حتى تاريخه (MTD).
@@ -278,10 +300,10 @@ export default function KpiBoardPage() {
                   <th key={m.key} className="px-3 py-3 text-center font-bold border-r border-gray-100" colSpan={4}>{m.label}</th>
                 ))}
               </tr>
-              <SubHeaders metrics={metrics} />
+              <SubHeaders metrics={metrics} sort={sort} onSort={onSort} />
             </thead>
             <tbody>
-              {data.branches.map(b => (
+              {sortedBranches.map(b => (
                 <tr key={b.branch_id} className="border-t border-gray-50 hover:bg-gray-50/40">
                   <td className="px-4 py-2.5 sticky right-0 bg-white">
                     <div className="font-bold text-gray-800">{b.name}</div>

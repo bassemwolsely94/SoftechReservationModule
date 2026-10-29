@@ -13,6 +13,8 @@ the encrypted procs `sp_expirytrans` / `sp_stkbalexpiry_from_stkbal`; we only RE
 This is the same table the dispense (تسليم حجز 180) modal reads, and the absence of any
 rows for an item means it is out of stock → the reservation (حجز 80) pathway applies.
 """
+from decimal import Decimal, ROUND_HALF_UP
+
 from config.sybase import get_branch_connection
 
 _SQL = ("SELECT itemexpirydate, itemqty, batchno FROM stkbalexpiry "
@@ -100,3 +102,36 @@ def batch_action(batches, batch_required=False, stockable=True):
             return {'action': 'auto_select', 'batch': batches[0]}
         return {'action': 'must_select', 'batch': None}
     return {'action': 'optional', 'batch': None}
+
+
+def _q5(x):
+    """5-dp ROUND_HALF_UP — the same precision SOFTECH stores strip quantities at (transqty)."""
+    return float(Decimal(str(x)).quantize(Decimal('0.00001'), rounding=ROUND_HALF_UP))
+
+
+def fefo_split(batches, need):
+    """Pure FEFO split (earliest expiry first) — the rule behind the POS automatic batch split.
+
+    `batches` as returned by `_parse_rows` (already expiry-ascending); `need` = quantity to cover.
+    Returns {'picks': [{expiry, batchno, qty, available}], 'shortfall': float}. Each pick takes
+    min(remaining, available) at 5 dp; batches with qty <= 0 are skipped, zero picks omitted.
+    It NEVER reserves: a shortfall is only reported — the cashier reserves it explicitly
+    («حجز الباقي»), so no reservation line is ever created silently.
+    """
+    remaining = Decimal(str(_q5(need or 0)))
+    picks = []
+    if remaining <= 0:
+        return {'picks': [], 'shortfall': 0}
+    for b in batches:
+        if remaining <= 0:
+            break
+        avail = Decimal(str(_q5(b.get('qty') or 0)))
+        if avail <= 0:
+            continue
+        take = min(remaining, avail)
+        if take <= 0:
+            continue
+        picks.append({'expiry': b.get('expiry'), 'batchno': b.get('batchno') or '',
+                      'qty': float(take), 'available': float(avail)})
+        remaining -= take
+    return {'picks': picks, 'shortfall': float(remaining) if remaining > 0 else 0}

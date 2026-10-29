@@ -35,6 +35,13 @@ def _get_profile(request):
         return None
 
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Chronic classification = the `chronic` matrix module (Batch 4, Z-8a): reads need view; every
+# write — tags, ingredients, protocols, item classification, task generation — needs edit.
+CHRONIC = matrix_permission('chronic', post=('edit',), edit=('edit',), delete=('edit',))
+
+
 class StandardPagination(PageNumberPagination):
     page_size            = 30
     page_size_query_param = 'page_size'
@@ -46,7 +53,7 @@ class StandardPagination(PageNumberPagination):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MedicationTagViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
     serializer_class   = MedicationTagSerializer
     queryset           = MedicationTag.objects.all().order_by('tag_type', 'name')
 
@@ -71,7 +78,7 @@ class MedicationTagViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ActiveIngredientViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
     queryset = ActiveIngredient.objects.prefetch_related(
         'ingredient_tags__tag', 'item_maps', 'followup_protocols'
     ).all()
@@ -159,7 +166,7 @@ class ActiveIngredientViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class FollowUpProtocolViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
     serializer_class   = FollowUpProtocolSerializer
     queryset = FollowUpProtocol.objects.select_related(
         'active_ingredient', 'created_by__user'
@@ -183,7 +190,7 @@ class FollowUpProtocolViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ItemIngredientMapViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
     serializer_class   = ItemIngredientMapSerializer
     queryset = ItemIngredientMap.objects.select_related(
         'item', 'active_ingredient', 'mapped_by__user'
@@ -200,6 +207,9 @@ class ItemIngredientMapViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        serializer.save(mapped_by=_get_profile(self.request))
+
+    def perform_update(self, serializer):
         serializer.save(mapped_by=_get_profile(self.request))
 
 
@@ -219,7 +229,7 @@ class ItemClassifierViewSet(viewsets.ViewSet):
     NOTE: stktransm.phcode = customer personcode (e.g. 04HD1006).
           Item classification is per-item via ItemIngredientMap.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
     pagination_class   = StandardPagination
 
     def _base_qs(self):
@@ -408,7 +418,7 @@ class TaskGeneratorViewSet(viewsets.ViewSet):
     POST /api/chronic/task-generator/preview/  — dry-run, return counts
     POST /api/chronic/task-generator/generate/ — actually create tasks
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CHRONIC]
 
     def _run(self, request, dry_run: bool):
         from .task_generator import generate_tasks_for_period

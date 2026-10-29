@@ -3,6 +3,10 @@ import logging
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+from core.permissions import matrix_permission
+
+SYNC = matrix_permission('sync')      # sync logs / scheduler state = sync view (Batch 4, Z-4)
 from rest_framework.response import Response
 from rest_framework import status
 from .models import SyncRun, SyncLog
@@ -92,7 +96,7 @@ def trigger_sync(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SYNC])
 def sync_logs(request):
     runs = SyncRun.objects.prefetch_related('logs').order_by('-started_at')[:20]
     return Response(SyncRunSerializer(runs, many=True).data)
@@ -114,7 +118,7 @@ def data_freshness(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SYNC])
 def scheduler_status(request):
     """
     Report whether the background scheduler is alive, based on its heartbeat.
@@ -219,4 +223,62 @@ def branch_health(request):
         'branches': nodes,
         'nodes':    nodes,
         'chronic_threshold': CHRONIC_THRESHOLD,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def softech_load(request):
+    """
+    What the platform asks of SOFTECH (doc 30): logins, queries, rows and time over
+    the last ?hours= (default 24, max 720), grouped by job/source, calling code and
+    server, plus an hourly series. Admin only. Counts from other processes (the
+    scheduler) are saved about once a minute.
+    """
+    from django.db.models import Sum, Max
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.users.permissions import IsAdminRole
+    from apps.branches.models import Branch
+    from . import softech_load as sl
+    from .models import SoftechLoadStat
+
+    if not IsAdminRole().has_permission(request, None):
+        return Response({'detail': 'admin only'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        hours = max(1, min(int(request.query_params.get('hours', 24)), 720))
+    except (TypeError, ValueError):
+        hours = 24
+    sl.flush()   # include this process's latest counts
+
+    since = timezone.now() - timedelta(hours=hours)
+    qs = SoftechLoadStat.objects.filter(hour__gte=since.replace(minute=0, second=0, microsecond=0))
+    fields = ('connects', 'connect_failures', 'connect_ms', 'queries', 'query_errors', 'query_ms', 'rows')
+    sums = {f: Sum(f) for f in fields}
+
+    def rows_by(key, limit=None):
+        out = []
+        for r in qs.values(key).annotate(**sums, max_query_ms=Max('max_query_ms')).order_by('-query_ms', '-connects'):
+            out.append({k: (r[k] or 0) if k != key else r[k] for k in r})
+        return out[:limit] if limit else out
+
+    host_names = {}
+    for b in Branch.objects.exclude(db_host='').only('db_host', 'name', 'name_ar', 'softech_branch_id'):
+        host_names[b.db_host] = f'{b.softech_branch_id} {b.name_ar or b.name}'
+    nodes = rows_by('node')
+    for n in nodes:
+        kind, _, host = n['node'].partition(' ')
+        n['label'] = 'HQ' if n['node'] == 'HQ' else f"{kind} · {host_names.get(host, host)}"
+
+    totals = qs.aggregate(**sums, max_query_ms=Max('max_query_ms'))
+    hourly = [{'hour': r['hour'].isoformat(), **{f: r[f] or 0 for f in ('connects', 'queries', 'rows', 'query_ms')}}
+              for r in qs.values('hour').annotate(**sums).order_by('hour')]
+    return Response({
+        'hours': hours,
+        'enabled': sl.enabled(),
+        'totals': {k: v or 0 for k, v in totals.items()},
+        'by_scope': rows_by('scope', 40),
+        'by_caller': rows_by('caller', 40),
+        'by_node': nodes,
+        'hourly': hourly,
     })

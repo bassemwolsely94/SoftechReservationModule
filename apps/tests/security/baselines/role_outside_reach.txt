@@ -1,0 +1,2 @@
+# Owner: Batch 4. Requests by a role the code matrix DENIES that still started a background thread / thread-pool job, HTTP call, socket or subprocess (blocked by the Tripwire). Must reach empty.
+

@@ -85,8 +85,9 @@ class RoleMaskingApiTests(TestCase):
         MarginConfig.get_solo()
         self.body = {'basket': [{'softech_id': 'MG2', 'qty': 1, 'unit_price': 100}]}
 
-    def test_purchasing_sees_cost(self):
-        _, _, client = make_user('mg_purch', role='purchasing')
+    def test_cost_visible_role_sees_cost(self):
+        # checkout evaluate is a POS call (Z-5b): supervisor = POS + cost-visible
+        _, _, client = make_user('mg_purch', role='supervisor')
         r = client.post('/api/offers/evaluate/', self.body, format='json')
         self.assertEqual(r.status_code, 200)
         self.assertIn('cogs', r.data['margin']['lines'][0])
@@ -106,7 +107,7 @@ class RoleMaskingApiTests(TestCase):
 
 class MarginConfigApiTests(TestCase):
     def test_get(self):
-        _, _, client = make_user('mc_user', role='pharmacist')
+        _, _, client = make_user('mc_user', role='purchasing')     # offers module (Z-5a)
         r = client.get('/api/offers/margin-config/')
         self.assertEqual(r.status_code, 200)
         self.assertIn('min_margin_percent', r.data)

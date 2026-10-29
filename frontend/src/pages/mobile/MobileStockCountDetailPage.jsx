@@ -12,6 +12,7 @@ import { stockCountApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -81,16 +82,16 @@ export default function MobileStockCountDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/stock-count')} className="text-sm text-gray-500">→ الرجوع للجلسات</button>
+      <button onClick={() => navigate('/m/stock-count')} className="text-sm text-gray-500">{ba()} الرجوع للجلسات</button>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="stockcount-mobile-progress">
         <div className="flex items-center justify-between gap-2">
           <h1 className="font-bold text-base text-gray-900">{s.name || s.title || `جرد #${s.id}`}</h1>
           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{s.status_label || s.status}</span>
         </div>
         <div className="text-xs text-gray-400 mt-1">{s.branch_name || s.branch_name_ar || ''}</div>
         {total > 0 && (
-          <div className="mt-2.5">
+          <div className="mt-2.5" data-tour="stockcount-mcount-progress">
             <div className="flex justify-between text-[11px] text-gray-500 mb-1">
               <span>تم جرد {toLatin(counted)} من {toLatin(total)}</span><span>{toLatin(pct)}%</span>
             </div>
@@ -101,24 +102,24 @@ export default function MobileStockCountDetailPage() {
 
       {/* Live count entry */}
       {canCount ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5" data-tour="stockcount-mobile-count">
           <h2 className="font-semibold text-gray-700 text-sm">📷 جرد صنف (مسح/بحث)</h2>
           <ItemSearchWidget selected={item} onSelect={(it) => { setItem(it); setError(''); setTimeout(() => qtyRef.current?.focus(), 50) }} onClear={() => setItem(null)} />
           {item && (
-            <div className="flex gap-2 items-end">
+            <div className="flex gap-2 items-end" data-tour="stockcount-mcount-qty">
               <div className="flex-1">
                 <label className="label">الكمية المعدودة</label>
                 <input ref={qtyRef} type="number" min="0" inputMode="decimal" className="input-field w-full"
                   value={qty} onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCount() }} />
               </div>
-              <button onClick={submitCount} disabled={busy} className="btn-primary px-5 py-2.5 disabled:opacity-50">
+              <button onClick={submitCount} disabled={busy} data-tour="stockcount-mobile-save" className="btn-primary px-5 py-2.5 disabled:opacity-50">
                 {busy ? '...' : 'تسجيل'}
               </button>
             </div>
           )}
           {error && <div className="text-sm text-red-600">{error}</div>}
           {last && (
-            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm">
+            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm" data-tour="stockcount-mcount-result">
               <div className="font-medium text-gray-800 break-words">{last.item_name}</div>
               {last.queued ? (
                 <div className="text-xs mt-1 text-blue-600">📴 سيُسجَّل عند عودة الاتصال</div>
@@ -144,7 +145,7 @@ export default function MobileStockCountDetailPage() {
       {!['draft', 'snapshot_taken', 'exported'].includes(s.status) && (
         <>
           <input className="input-field w-full" placeholder="بحث في الأصناف..." value={search} onChange={e => setSearch(e.target.value)} />
-          <div className="flex gap-2">
+          <div className="flex gap-2" data-tour="stockcount-mobile-filters">
             {FILTERS.map(f => (
               <button key={f.v} onClick={() => setVariance(f.v)}
                 className={`flex-1 px-2 py-1.5 rounded-full text-xs font-medium ${variance === f.v ? 'bg-brand-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{f.l}</button>

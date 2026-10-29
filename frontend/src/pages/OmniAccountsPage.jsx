@@ -47,7 +47,7 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
   const ch = CHANNEL_META[acc.channel] || { icon: '💠', label: acc.channel }
   const st = STATUS_META[acc.status] || {}
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col gap-3" dir="rtl">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col gap-3" dir="rtl" data-tour="omni-accounts-card">
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <p className="font-bold text-gray-800 truncate">
@@ -58,13 +58,13 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
           </p>
           <p className="text-xs text-gray-500 mt-0.5" dir="ltr">{acc.phone_or_handle}</p>
         </div>
-        <span className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full shrink-0 ${st.cls || ''}`}>
+        <span data-tour="omni-accounts-status" className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full shrink-0 ${st.cls || ''}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${st.dot || ''}`} />
           {st.label || acc.status}
         </span>
       </div>
 
-      <div className="grid grid-cols-4 gap-1 text-center">
+      <div className="grid grid-cols-4 gap-1 text-center" data-tour="omni-accounts-load">
         {[
           ['محادثات', acc.stats?.threads],
           ['اليوم', acc.stats?.messages_today],
@@ -78,7 +78,7 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex items-center justify-between text-xs text-gray-500" data-tour="omni-accounts-heartbeat">
         <span>{PROVIDER_LABEL[acc.provider] || acc.provider}</span>
         <span>نبضة: {heartbeatAgo(acc.last_heartbeat_at)}</span>
       </div>
@@ -89,13 +89,13 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
         <span className="text-gray-400">{acc.branch_name || 'كل الفروع'}</span>
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-gray-100">
-        <button onClick={() => onEdit(acc)}
+      <div data-tour="omni-accounts-actions" className="flex gap-2 pt-1 border-t border-gray-100">
+        <button data-tour="omni-accounts-edit" onClick={() => onEdit(acc)}
                 className="flex-1 text-xs text-gray-600 hover:text-indigo-600 py-1">
           ✏️ تعديل
         </button>
         {acc.channel === 'whatsapp' && (
-          <button onClick={() => onProbe(acc)} disabled={probing === acc.id}
+          <button data-tour="omni-accounts-probe" onClick={() => onProbe(acc)} disabled={probing === acc.id}
                   className="flex-1 text-xs text-gray-600 hover:text-indigo-600 py-1 disabled:opacity-50">
             {probing === acc.id ? '⏳ فحص...' : '🩺 فحص الاتصال'}
           </button>
@@ -188,7 +188,7 @@ function AccountModal({ acc, onClose }) {
           </label>
         </div>
 
-        <label className="block text-xs text-gray-500">
+        <label className="block text-xs text-gray-500" data-tour="omni-accounts-token">
           Access Token {isEdit && acc.has_credentials ? '(اتركه فارغاً للإبقاء على الحالي)' : '(اختياري — env كبديل)'}
           <input value={form.token} onChange={set('token')} dir="ltr" type="password"
                  placeholder="EAAG..."
@@ -202,7 +202,7 @@ function AccountModal({ acc, onClose }) {
                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm mt-1" />
         </label>
 
-        <div className="flex items-center gap-4 text-sm text-gray-600">
+        <div className="flex items-center gap-4 text-sm text-gray-600" data-tour="omni-accounts-default">
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={form.is_default} onChange={set('is_default')} />
             الحساب الافتراضي للإرسال
@@ -220,7 +220,7 @@ function AccountModal({ acc, onClose }) {
         )}
 
         <div className="flex gap-2 pt-2">
-          <button onClick={() => save.mutate()}
+          <button data-tour="omni-accounts-save" onClick={() => save.mutate()}
                   disabled={!form.name.trim() || !form.phone_or_handle.trim() || save.isPending}
                   className="flex-1 bg-indigo-600 text-white rounded px-3 py-2 text-sm disabled:opacity-50">
             {save.isPending ? 'جاري الحفظ...' : 'حفظ'}
@@ -264,14 +264,14 @@ export default function OmniAccountsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-4">
+      <div data-tour="omni-accounts-header" className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-gray-800">📡 حسابات القنوات</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {accounts.length} حساب — {connected} متصل
           </p>
         </div>
-        <button onClick={() => setModal({})}
+        <button data-tour="omni-accounts-new" onClick={() => setModal({})}
                 className="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm">
           + حساب جديد
         </button>
@@ -298,7 +298,7 @@ export default function OmniAccountsPage() {
           <p>لا توجد حسابات — أضف رقم واتساب أول</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div data-tour="omni-accounts-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {accounts.map(acc => (
             <AccountCard key={acc.id} acc={acc}
                          onEdit={setModal} onProbe={probe} probing={probing} />

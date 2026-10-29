@@ -133,7 +133,7 @@ class CampaignDispatcher:
         from apps.customers.models import Customer
 
         f = self.campaign.target_filter or {}
-        qs = Customer.objects.filter(is_guest=False).exclude(phone='')
+        qs = Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
 
         if f.get('segment'):
             segments = f['segment'] if isinstance(f['segment'], list) else [f['segment']]

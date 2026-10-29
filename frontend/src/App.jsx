@@ -56,6 +56,7 @@ import InsuranceItemOverridesPage from './pages/InsuranceItemOverridesPage'
 import InsuranceSeparationListsPage from './pages/InsuranceSeparationListsPage'
 import MyIncentivesPage from './pages/MyIncentivesPage'
 import GamificationPage from './pages/GamificationPage'
+import StockAuditPage from './pages/StockAuditPage'
 import UserManagementPage from './pages/UserManagementPage'
 import PermissionsMatrixPage from './pages/PermissionsMatrixPage'
 import PickZonesPage from './pages/PickZonesPage'
@@ -71,6 +72,7 @@ import HelpCenterPage from './pages/HelpCenterPage'
 import HelpManualPage from './pages/HelpManualPage'
 import MobilePOSOrderPage from './pages/mobile/MobilePOSOrderPage'
 import MobileReservationsPage from './pages/mobile/MobileReservationsPage'
+import { MOBILE_RESERVATION_ROLES, MOBILE_TRANSFER_ROLES } from './pages/mobile/mobileAccess'
 import MobileNewReservationPage from './pages/mobile/MobileNewReservationPage'
 import MobileReservationDetailPage from './pages/mobile/MobileReservationDetailPage'
 import MobileTransfersPage from './pages/mobile/MobileTransfersPage'
@@ -124,6 +126,7 @@ import TransfersAnalyticsPage from './pages/TransfersAnalyticsPage'
 // Operations — previously missing routes
 import CallCenterPage from './pages/CallCenterPage'
 import CasesPage from './pages/CasesPage'
+import CallbackQueuePage from './pages/CallbackQueuePage'
 import AuditPage from './pages/AuditPage'
 import FollowUpsPage from './pages/FollowUpsPage'
 import DemandPage from './pages/DemandPage'
@@ -188,12 +191,14 @@ const queryClient = new QueryClient({
 
 // Bottom-tab navigation for the standalone mobile surfaces (/m). One tab per
 // section; "new" is reached via each list's floating + button (not a tab).
-// `roles` (when present) gates the tab; MobileLayout filters by the user's role.
+// `roles` (when present) gates the tab; MobileLayout filters by the user's role. Reservations /
+// transfers follow the matrix's view grant (Batch 4, Z-11i — delivery / purchasing saw tabs that
+// loaded nothing); roles without reservations land on «لوحتي» (MobileReservationsPage redirects).
 const MOBILE_TABS = [
   { to: '/m/me',           label: 'لوحتي',      icon: '🙋' },
   { to: '/m/pos',          label: 'نقطة البيع', icon: '🧾', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'] },
-  { to: '/m/reservations', label: 'الحجوزات',  icon: '📋' },
-  { to: '/m/transfers',    label: 'التحويلات', icon: '🔀' },
+  { to: '/m/reservations', label: 'الحجوزات',  icon: '📋', roles: MOBILE_RESERVATION_ROLES },
+  { to: '/m/transfers',    label: 'التحويلات', icon: '🔀', roles: MOBILE_TRANSFER_ROLES },
   { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', roles: ['admin', 'pharmacist', 'call_center', 'salesperson', 'purchasing', 'supervisor', 'quality_manager'] },
   { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', roles: ['admin', 'call_center', 'supervisor', 'quality_manager', 'pharmacist'] },
@@ -351,6 +356,7 @@ export default function App() {
             {/* ── Call Center & Follow-Ups ─────────────────────────────── */}
             <Route path="callcenter"            element={<CallCenterPage />} />
             <Route path="callcenter/cases"      element={<CasesPage />} />
+            <Route path="callcenter/callbacks"  element={<CallbackQueuePage />} />
             <Route path="callcenter/analytics"  element={<CallCenterAnalyticsPage />} />
             <Route path="followups"             element={<FollowUpsPage />} />
             <Route path="followups/reminders"   element={<RefillRemindersPage />} />
@@ -443,6 +449,8 @@ export default function App() {
             {/* invoices + incentives guarded below in Administration section */}
             <Route path="my-incentives" element={<MyIncentivesPage />} />
             <Route path="gamification"  element={<GamificationPage />} />
+            {/* stock-transactions audit (doc 32): management + named branch managers — gated server-side */}
+            <Route path="stock-audit"   element={<StockAuditPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />

@@ -1,9 +1,9 @@
 """
-WhatsApp campaign workflow (apps/campaigns): approve / reject / send / cancel need
-'campaigns/approve'; a scheduled campaign stays out of the WhatsApp send queue until
-its time; cancelling removes everything still pending. Before 2026-10-26 any logged-in
-user could approve and send, a scheduled campaign was queued for sending at once, and
-cancel only changed the status.
+WhatsApp campaign workflow (apps/campaigns): approve / reject / send need 'campaigns/approve'
+and cancelling 'edit' or 'approve' (security Batch 4, Z-8b); a scheduled campaign stays out of
+the WhatsApp send queue until its time; cancelling removes everything still pending. Before
+2026-10-26 a scheduled campaign was queued for sending at once and cancel only changed the
+status.
 """
 from datetime import timedelta
 
@@ -57,7 +57,6 @@ class CampaignWorkflowTests(TestCase):
 
         c2 = self._campaign('approved')
         self.assertEqual(self.cc.post(self._url(c2, 'queue'), {}, format='json').status_code, 403)
-        self.assertEqual(self.cc.post(self._url(c2, 'cancel'), {}, format='json').status_code, 403)
         c2.refresh_from_db()
         self.assertEqual(c2.status, 'approved')
         self.assertFalse(c2.messages.exists())
@@ -86,12 +85,16 @@ class CampaignWorkflowTests(TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertFalse(r.data['my_can_approve'])
 
-    def test_empty_matrix_falls_back_to_seeded_roles(self):
-        RoleModuleAccess.objects.filter(module='campaigns').delete()
-        module_access.clear_cache()
-        c = self._campaign('pending_approval')
-        self.assertEqual(self.cc.post(self._url(c, 'approve'), {}, format='json').status_code, 403)
-        self.assertEqual(self.sup.post(self._url(c, 'approve'), {}, format='json').status_code, 200)
+    def test_drafter_may_cancel_and_sees_it(self):
+        # Batch 4 Z-8b: whoever edits campaigns may also cancel one (not only approvers)
+        c = self._campaign('approved')
+        r = self.cc.get(f'/api/campaigns/{c.pk}/')
+        self.assertTrue(r.data['my_can_cancel'])
+        r = self.cc.post(self._url(c, 'cancel'), {}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        c.refresh_from_db()
+        self.assertEqual(c.status, 'cancelled')
+        self.assertEqual(c.cancelled_by.user.username, 'camp_cc')
 
     # ── scheduling ───────────────────────────────────────────────────────────
     def test_scheduled_campaign_not_in_wa_queue_before_its_time(self):

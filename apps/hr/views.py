@@ -18,7 +18,8 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import (
@@ -48,6 +49,22 @@ def _is_manager(profile):
     return profile.role in ('admin', 'supervisor', 'purchasing')
 
 
+class _ManagerWrites(BasePermission):
+    """Shift templates and assignments are planned by managers (Batch 4, Z-9a): any staff member
+    could create an assignment — for anyone, themselves included — or edit a template, because
+    the only check ran after validation (template create) or not at all."""
+    message = 'يمكن للمديرين فقط إدارة الشيفتات.'
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        if request.method in SAFE_METHODS:
+            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        profile = getattr(request.user, 'staff_profile', None)
+        return bool(profile and _is_manager(profile))
+
+
 def _subject_kwargs(request, d):
     """Resolve the on-behalf-of subject + nominated approvers from validated data.
 
@@ -64,6 +81,10 @@ def _subject_kwargs(request, d):
     else:
         subject_staff = profile         # self-service
     approvers = list(StaffProfile.objects.filter(pk__in=d.get('approver_ids') or [], is_active=True))
+    # Batch 4, Z-10c: the requester (or the employee the request is about) cannot be one of its
+    # approvers — the nominated step accepted a requester approving their own request.
+    if any(a in (profile, subject_staff) for a in approvers if a is not None):
+        raise ValidationError({'approver_ids': ['لا يمكن أن تكون أنت (أو صاحب الطلب) من يوافق على الطلب.']})
     return {
         'submitted_by':     profile,
         'subject_staff':    subject_staff,
@@ -375,7 +396,7 @@ class ShiftTemplateViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                             mixins.CreateModelMixin, mixins.UpdateModelMixin,
                             viewsets.GenericViewSet):
     """GET/POST/PATCH /api/hr/shifts/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _ManagerWrites]
     serializer_class   = ShiftTemplateSerializer
 
     def get_queryset(self):
@@ -398,7 +419,7 @@ class ShiftAssignmentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                               mixins.CreateModelMixin,
                               viewsets.GenericViewSet):
     """GET/POST /api/hr/shift-assignments/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _ManagerWrites]
     serializer_class   = ShiftAssignmentSerializer
 
     def get_queryset(self):

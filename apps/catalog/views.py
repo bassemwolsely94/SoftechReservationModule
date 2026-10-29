@@ -442,7 +442,9 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         from apps.catalog.wildcard import item_search, parse
         tiers = item_search(q, limit=50)
         results = _search_rows(tiers, branch_id)
-        if not any(r.get('tier') != 'approx' for r in results):
+        # no_live=1 (the POS) → never read SOFTECH live during a sale; PG catalog only.
+        no_live = request.query_params.get('no_live') == '1'
+        if not no_live and not any(r.get('tier') != 'approx' for r in results):
             live = _softech_live_search('%' + '%'.join(parse(q)['segments']).lower() + '%', branch_id)
             if live:
                 have = {r['softech_id'] for r in results}
@@ -458,6 +460,11 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
                         results.append(exp_r)
                         already_ids.add(exp_r['softech_id'])
 
+        if request.query_params.get('network') == '1':
+            from apps.catalog.pos_search import enrich_rows, stock_as_of
+            enrich_rows(results, branch_id)
+            return Response({'results': results, 'count': len(results),
+                             'stock_as_of': stock_as_of()})
         return Response({'results': results, 'count': len(results)})
 
 
@@ -490,19 +497,39 @@ def _search_rows(tiers, branch_id) -> list:
             'source': 'pg_catalog', 'item_id': item.id, 'tier': tier,
             'qty_at_branch': stock.get(item.id, 0.0) if branch_id else None,
         }
+        row.update(_unit_fields(item))
         if tier in ('learned', 'sound', 'approx'):
             row[tier] = True
         rows.append(row)
     return rows
 
 
+def _unit_fields(item) -> dict:
+    """Pack/unit facts the POS needs to add a search row as a line (Q = strips modal,
+    non-stock lines, mandatory batch). None when the item isn't in the PG catalog."""
+    if item is None:
+        return {'pack_qty': None, 'unit_name': None,
+                'is_stockable': None, 'batch_required': None}
+    return {'pack_qty': item.pack_qty, 'unit_name': item.unit_name,
+            'is_stockable': bool(item.is_stockable),
+            'batch_required': bool(item.batch_required)}
+
+
 _SOFTECH_SEARCH_BREAKER = 'catalog:softech_search_down'
+_SOFTECH_SEARCH_CACHE = 'catalog:softech_search:'
+_SOFTECH_SEARCH_TTL = 180       # seconds — results found
+_SOFTECH_SEARCH_MISS_TTL = 60   # seconds — nothing found
 
 
 def _softech_live_search(like_q: str, branch_id) -> list:
     """SOFTECH items LIKE the pattern that the PG catalog doesn't have yet (just created,
     not synced). A failure trips a 5-minute breaker — no waiting on a down server."""
     from django.core.cache import cache
+    import hashlib
+    cache_key = _SOFTECH_SEARCH_CACHE + hashlib.sha1(like_q.encode('utf-8'), usedforsecurity=False).hexdigest()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return _finish_live_rows([dict(r) for r in cached], branch_id)
     if cache.get(_SOFTECH_SEARCH_BREAKER):
         return []
     try:
@@ -530,12 +557,24 @@ def _softech_live_search(like_q: str, branch_id) -> list:
             'requires_fridge': bool(row[9]) if row[9] else False,
             'medicine_type': str(row[10]).strip() if row[10] else '',
             'source': 'softech', 'item_id': None, 'tier': 'ordered',
-            'qty_at_branch': 0.0 if branch_id else None,
         })
-    pg = {i.softech_id: i.id for i in Item.objects.filter(
+    # Same pattern again within a few minutes (typing, paging, a colleague) is answered
+    # from here instead of another login + items scan (doc 30 F10). Misses expire sooner
+    # so a just-created SOFTECH item still shows up quickly.
+    cache.set(cache_key, out, _SOFTECH_SEARCH_TTL if out else _SOFTECH_SEARCH_MISS_TTL)
+    return _finish_live_rows([dict(r) for r in out], branch_id)
+
+
+def _finish_live_rows(out, branch_id):
+    """Per-request part of a live result: branch column, link to our catalog row and
+    the pack/unit facts the POS needs (best effort: unsynced items → None)."""
+    pg = {i.softech_id: i for i in Item.objects.filter(
         softech_id__in=[r['softech_id'] for r in out if r['softech_id']], is_active=True)}
     for r in out:
-        r['item_id'] = pg.get(r['softech_id'])
+        r['qty_at_branch'] = 0.0 if branch_id else None
+        it = pg.get(r['softech_id'])
+        r['item_id'] = it.id if it else None
+        r.update(_unit_fields(it))
     return out
 
 
@@ -638,6 +677,7 @@ def _expand_disease_query(q: str) -> list:
                         'item_id':         item.id,
                         'qty_at_branch':   None,
                         'match_type':      'ingredient',
+                        **_unit_fields(item),
                         'ingredient':      m.active_ingredient.name,
                     })
             return results
@@ -677,6 +717,7 @@ def _expand_disease_query(q: str) -> list:
                 'item_id':         item.id,
                 'qty_at_branch':   None,
                 'match_type':      'disease',
+                **_unit_fields(item),
                 'chronic_class':   chronic_class,
                 'ingredient':      m.active_ingredient.name,
             })
@@ -696,9 +737,17 @@ from .serializers import (
 )
 
 
+from core.permissions import matrix_permission   # noqa: E402
+
+# Variant groups, bundles and item ingredients are catalog edits (Batch 4, Z-9b — any
+# logged-in user could create them); reads need catalog view.
+CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
+                                 delete=('edit', 'delete'))
+
+
 class VariantGroupListCreateView(generics.ListCreateAPIView):
     serializer_class   = VariantGroupSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get_queryset(self):
         qs = CatalogVariantGroup.objects.prefetch_related('members__item')
@@ -719,12 +768,12 @@ class VariantGroupListCreateView(generics.ListCreateAPIView):
 
 class VariantGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = VariantGroupSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     queryset = CatalogVariantGroup.objects.prefetch_related('members__item')
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def add_variant_member(request, group_pk):
     """POST /api/items/variant-groups/{pk}/members/  body: {item, variant_label, sort_order}"""
     from django.shortcuts import get_object_or_404
@@ -736,7 +785,7 @@ def add_variant_member(request, group_pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def remove_variant_member(request, group_pk, member_pk):
     """DELETE /api/items/variant-groups/{pk}/members/{member_pk}/"""
     from django.shortcuts import get_object_or_404
@@ -749,7 +798,7 @@ def remove_variant_member(request, group_pk, member_pk):
 
 class ProductBundleListCreateView(generics.ListCreateAPIView):
     serializer_class   = ProductBundleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get_queryset(self):
         qs = ProductBundle.objects.prefetch_related('items__item')
@@ -773,12 +822,12 @@ class ProductBundleListCreateView(generics.ListCreateAPIView):
 
 class ProductBundleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class   = ProductBundleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
     queryset = ProductBundle.objects.prefetch_related('items__item')
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def add_bundle_item(request, bundle_pk):
     """POST /api/items/bundles/{pk}/items/  body: {item, quantity}"""
     from django.shortcuts import get_object_or_404
@@ -790,7 +839,7 @@ def add_bundle_item(request, bundle_pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def remove_bundle_item(request, bundle_pk, bi_pk):
     """DELETE /api/items/bundles/{pk}/items/{bi_pk}/"""
     from django.shortcuts import get_object_or_404
@@ -805,7 +854,7 @@ def remove_bundle_item(request, bundle_pk, bi_pk):
 # Writes go to the respective module endpoints directly from the frontend.
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_full_intel(request, softech_id):
     """
     Returns every piece of data held about an item across all modules:
@@ -1061,7 +1110,7 @@ def item_full_intel(request, softech_id):
 # ── Item ingredient maps (chronic module write via catalog API) ───────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_ingredients(request, softech_id):
     """
     GET  /api/items/{softech_id}/ingredients/  — list ItemIngredientMap entries
@@ -1131,7 +1180,7 @@ def item_ingredients(request, softech_id):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_ingredient_delete(request, softech_id, map_id):
     """DELETE /api/items/{softech_id}/ingredients/{map_id}/"""
     from django.shortcuts import get_object_or_404

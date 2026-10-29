@@ -58,6 +58,7 @@ class Notification(models.Model):
         ('demand_follow_up',          '📅 متابعة طلب'),
         ('demand_back_in_stock',      '🔔 صنف مطلوب عاد للمخزون'),
         ('demand_sla_breach',         '⏰ تجاوز SLA طلب'),
+        ('case_sla_breach',           '⏰ تجاوز SLA حالة عميل'),
         # ── Chatter ───────────────────────────────────────────────────────────
         ('chatter_mention',           '💬 ذِكر في تعليق'),
         ('mention',                   '@ ذِكر'),
@@ -137,6 +138,7 @@ class Notification(models.Model):
         # Demand-intake SLA breach (TD-C003) — alarms even though it rides the
         # quiet demand module feed (same pattern as mentions above).
         'demand_sla_breach',
+        'case_sla_breach',
     }
     # notification_type → category. Anything not listed is 'global'.
     TYPE_CATEGORY = {

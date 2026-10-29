@@ -36,10 +36,25 @@ from .serializers import (
 )
 from . import service
 from core.errors import public_error
+from core.permissions import deny_unless
 
 
 def _profile(request):
     return getattr(request.user, 'staff_profile', None)
+
+
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Lost demand = the `demand` matrix module (Batch 4, Z-8c — was any logged-in user): records need
+# view; capture and follow-up need create / edit / approve / finalize (the per-action deny_unless
+# checks below stay); removing an item needs edit. The dashboard family is an analytics page
+# (role sets inside unchanged), the purchase-suggestion push purchasing work, the shelf QR a
+# product-page print (catalog view).
+DEMAND           = matrix_permission('demand', post=('create', 'edit', 'approve', 'finalize'),
+                                     delete=('edit', 'delete'))
+DEMAND_ANALYTICS = matrix_permission('analytics')
+DEMAND_PUSH      = matrix_permission('purchasing', post=('create', 'edit', 'approve'))
+SHELF_QR         = matrix_permission('catalog')
 
 
 class DemandViewSet(viewsets.ModelViewSet):
@@ -74,7 +89,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         erp_lookup          GET  /erp-lookup/?phone=X&phcode=Y
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DEMAND]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['status', 'priority', 'branch', 'source', 'assigned_to']
     search_fields      = [
@@ -230,6 +245,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def fulfill(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'finalize')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = FulfillSerializer(data=request.data)
@@ -244,6 +262,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def lost(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'edit')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = LostSerializer(data=request.data)
@@ -258,6 +279,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
+        denied = deny_unless(request, 'demand', 'delete')
+        if denied:
+            return denied
         demand  = self.get_object()
         profile = _profile(request)
         s = TransitionSerializer(data=request.data)
@@ -570,7 +594,7 @@ class DemandViewSet(viewsets.ModelViewSet):
 # ── Demand Dashboard ──────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def demand_dashboard(request):
     """
     GET /api/demand/dashboard/
@@ -579,8 +603,8 @@ def demand_dashboard(request):
     Roles: admin, purchasing, call_center
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
 
     try:
         window_days = max(1, min(int(request.query_params.get('days', 30)), 365))
@@ -797,7 +821,7 @@ def demand_dashboard(request):
 # ── Lost-value reconciliation (Phase 2) ───────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def lost_value_reconciliation(request):
     """
     GET /api/demand/lost-value-reconciliation/
@@ -811,8 +835,8 @@ def lost_value_reconciliation(request):
     Roles: admin, purchasing, call_center.
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
 
     from django.db.models import Max
     from apps.catalog.models import Item
@@ -910,7 +934,7 @@ def _purchase_suggestion_rows(item_ids=None):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def purchase_suggestions(request):
     """
     GET /api/demand/purchase-suggestions/
@@ -920,8 +944,8 @@ def purchase_suggestions(request):
     highest-confidence buy signal — a named human asked. Roles: admin, purchasing.
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
     rows = _purchase_suggestion_rows()
     return Response({
         'generated_at': timezone.now().isoformat(),
@@ -931,7 +955,7 @@ def purchase_suggestions(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_PUSH])
 def push_purchase_suggestions(request):
     """
     POST /api/demand/purchase-suggestions/push/   body: {item_ids?: [...]}
@@ -970,7 +994,7 @@ def push_purchase_suggestions(request):
 # ── Capture leaderboard (data-discipline nudge) ───────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def capture_leaderboard(request):
     """
     GET /api/demand/capture-leaderboard/?days=30
@@ -980,8 +1004,8 @@ def capture_leaderboard(request):
     Roles: admin, supervisor, purchasing, call_center.
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'supervisor', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
     try:
         days = max(1, min(int(request.query_params.get('days', 30)), 365))
     except (ValueError, TypeError):
@@ -1024,7 +1048,7 @@ def capture_leaderboard(request):
 # ── Substitution-acceptance analytics ─────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def substitution_analytics(request):
     """
     GET /api/demand/substitution-analytics/?days=90
@@ -1034,8 +1058,8 @@ def substitution_analytics(request):
     stock and which dead SKU to drop. Roles: admin, purchasing, call_center.
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
     try:
         days = max(1, min(int(request.query_params.get('days', 90)), 365))
     except (ValueError, TypeError):
@@ -1073,7 +1097,7 @@ def substitution_analytics(request):
 # ── Price-objection feedback ──────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, DEMAND_ANALYTICS])
 def price_objections(request):
     """
     GET /api/demand/price-objections/?days=90
@@ -1082,8 +1106,8 @@ def price_objections(request):
     sensitivity signal for the pricing team. Roles: admin, purchasing.
     """
     profile = _profile(request)
-    if not profile or profile.role not in ('admin', 'purchasing', 'call_center'):
-        return Response({'detail': 'غير مصرح'}, status=403)
+    # analytics view (DEMAND_ANALYTICS) decides; a hard-coded role list used to refuse the analytics
+    # viewers the matrix grants (Batch 4, Z-11e — overblock review decision 3)
     try:
         days = max(1, min(int(request.query_params.get('days', 90)), 365))
     except (ValueError, TypeError):
@@ -1197,7 +1221,7 @@ def public_demand_interest(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHELF_QR])
 def shelf_qr(request):
     """Staff: generate a printable shelf QR that deep-links to the notify page for
     an item at a branch. GET /api/demand/shelf-qr/?item=&branch="""

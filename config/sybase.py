@@ -130,6 +130,71 @@ def _apply_query_timeout(stmt, timeout=None):
         pass  # not all drivers honor it; LOGIN_TIMEOUT still bounds connect
 
 
+# jConnect resolves column TYPE NAMES lazily: for SOFTECH's user-defined datatypes
+# RowFormatToken.getColumnTypeName runs a hidden callable statement whose query timeout
+# is 0 (wait forever). If a branch drops the session at that moment the read blocks for
+# good — 2026-10-27 the 05:30 stock_expiry_sync stalled 13 min on a flapping branch 150
+# and another scheduler thread stayed blocked in this call for 5+ hours.
+# RawDbio re-arms SO_TIMEOUT from each statement's own timeout on every read, so a
+# socket timeout cannot be set from outside; a watchdog CLOSES the socket instead,
+# which unblocks the read with an exception the caller's per-node try/except handles.
+SYBASE_METADATA_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_METADATA_TIMEOUT', 60))
+
+
+class SybaseDeadlineExceeded(Exception):
+    """A driver call outlived its watchdog deadline; the connection was aborted."""
+
+
+def _jfield(obj, name):
+    """Read a (private/protected) Java field, searching up the class hierarchy."""
+    cls = obj.getClass()
+    while cls is not None:
+        try:
+            f = cls.getDeclaredField(name)
+        except Exception:
+            cls = cls.getSuperclass()
+            continue
+        f.setAccessible(True)
+        return f.get(obj)
+    raise AttributeError(name)
+
+
+def abort_connection(java_conn):
+    """Close the jConnect connection's TCP socket from any thread — unblocks a hung
+    read. The connection is unusable afterwards. Returns True when the socket closed."""
+    try:
+        conn = getattr(java_conn, '_jc', java_conn)          # unwrap the read-only proxy
+        dbio = _jfield(_jfield(_jfield(conn, '_protocol'), '_inStreamMgr'), '_dbio')
+        _jfield(dbio, '_socket').close()
+        return True
+    except Exception as exc:
+        logger.warning('[sybase] could not abort connection: %s', str(exc)[:120])
+        return False
+
+
+def _with_deadline(java_conn, seconds, fn, what='driver call'):
+    """Run fn(); if it is still running after `seconds`, abort the connection so the
+    blocked read raises instead of hanging the thread (and its scheduler job)."""
+    fired = threading.Event()
+
+    def _kill():
+        fired.set()
+        logger.warning('[sybase] %s exceeded %ss — aborting connection', what, seconds)
+        abort_connection(java_conn)
+
+    timer = threading.Timer(seconds, _kill)
+    timer.daemon = True
+    timer.start()
+    try:
+        return fn()
+    except Exception as exc:
+        if fired.is_set():
+            raise SybaseDeadlineExceeded(f'{what} exceeded {seconds}s; connection aborted') from exc
+        raise
+    finally:
+        timer.cancel()
+
+
 # Branch Sybase servers reach HQ over an intermittent VPN/link, so driver.connect()
 # fails transiently ~half the time and then succeeds on a retry. Bound, short-backoff
 # retries smooth that over without masking a genuinely-down host (each attempt is still
@@ -153,8 +218,10 @@ class SoftechReadOnlyError(RuntimeError):
     """Raised when a write is attempted while SOFTECH_READ_ONLY is on."""
 
 
-_SQL_LITERAL_RE  = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"")
-_SQL_COMMENT_RE  = re.compile(r'--[^\n]*|/\*.*?\*/', re.S)
+# Literals and comments in ONE left-to-right pass: whichever starts first wins, so a '--'
+# or '/*' inside a quoted string can't swallow the rest of the statement (and a quote inside
+# a comment can't open a fake literal).
+_SQL_LITERAL_OR_COMMENT_RE = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|--[^\n]*|/\*.*?\*/", re.S)
 _SQL_READ_STARTS = frozenset({
     'SELECT', 'SET', 'DECLARE', 'USE', 'PRINT',
     'BEGIN', 'COMMIT', 'ROLLBACK', 'SAVE', 'IF', 'WHILE',
@@ -173,8 +240,9 @@ def softech_read_only() -> bool:
 
 def is_read_only_sql(sql) -> bool:
     """True when `sql` is a plain read that is safe under SOFTECH_READ_ONLY."""
-    text = _SQL_COMMENT_RE.sub(' ', str(sql or ''))
-    text = _SQL_LITERAL_RE.sub("''", text).strip().lstrip('(').strip()
+    text = _SQL_LITERAL_OR_COMMENT_RE.sub(
+        lambda m: "''" if m.group(0)[0] in '\'"' else ' ', str(sql or ''))
+    text = text.strip().lstrip('(').strip()
     if not text:
         return False
     first = re.split(r'[\s(;]+', text, maxsplit=1)[0].upper()
@@ -194,30 +262,38 @@ def _refuse_if_write(sql):
 
 
 class _ReadOnlyStatement:
-    """java.sql.Statement proxy: checks every SQL string it is handed."""
+    """java.sql.Statement / PreparedStatement proxy: checks every SQL string it is handed
+    (a prepared statement's SQL was checked at prepare time, so its no-argument execute()
+    passes) and never hands out the raw connection."""
 
-    def __init__(self, stmt):
+    def __init__(self, stmt, conn=None):
         self._stmt = stmt
+        self._conn = conn            # the guarded connection proxy this statement came from
 
-    def execute(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.execute(sql, *args)
+    def _call(self, method, args):
+        if args and isinstance(args[0], str):
+            _refuse_if_write(args[0])
+        return getattr(self._stmt, method)(*args)
 
-    def executeQuery(self, sql):
-        _refuse_if_write(sql)
-        return self._stmt.executeQuery(sql)
+    def execute(self, *args):
+        return self._call('execute', args)
 
-    def executeUpdate(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.executeUpdate(sql, *args)
+    def executeQuery(self, *args):
+        return self._call('executeQuery', args)
 
-    def executeLargeUpdate(self, sql, *args):
-        _refuse_if_write(sql)
-        return self._stmt.executeLargeUpdate(sql, *args)
+    def executeUpdate(self, *args):
+        return self._call('executeUpdate', args)
 
-    def addBatch(self, sql):
-        _refuse_if_write(sql)
-        return self._stmt.addBatch(sql)
+    def executeLargeUpdate(self, *args):
+        return self._call('executeLargeUpdate', args)
+
+    def addBatch(self, *args):
+        return self._call('addBatch', args)
+
+    def getConnection(self):
+        if self._conn is None:
+            raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
+        return self._conn
 
     def __getattr__(self, name):
         return getattr(self._stmt, name)
@@ -234,11 +310,19 @@ class _ReadOnlyJavaConnection:
             pass
 
     def createStatement(self, *args):
-        return _ReadOnlyStatement(self._jc.createStatement(*args))
+        return _ReadOnlyStatement(self._jc.createStatement(*args), self)
 
     def prepareStatement(self, sql, *args):
         _refuse_if_write(sql)
-        return self._jc.prepareStatement(sql, *args)
+        return _ReadOnlyStatement(self._jc.prepareStatement(sql, *args), self)
+
+    def setReadOnly(self, flag):
+        if not flag:
+            raise SoftechReadOnlyError('SOFTECH is in read-only mode; it cannot be switched off per connection.')
+        self._jc.setReadOnly(True)
+
+    def unwrap(self, *args):
+        raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
 
     def prepareCall(self, sql, *args):
         _refuse_if_write(f'EXEC {sql}')   # callable statements are procedures — never reads
@@ -265,13 +349,22 @@ def _branch_host(db_host, db_port):
     return host, (int(port) if port else db_port)
 
 
+def _load():
+    """Telemetry hooks (apps/sync/softech_load.py) — imported lazily, never fatal."""
+    from apps.sync import softech_load
+    return softech_load
+
+
 def _connect_with_retry(driver, jdbc_url, props, label=''):
     """driver.connect() with bounded retries for the flaky branch link."""
     last_exc = None
     for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
+        t0, failed = time.monotonic(), False
         try:
             return _guard(driver.connect(jdbc_url, props))
         except Exception as exc:
+            failed = True
+            _load().record_connect(label, (time.monotonic() - t0) * 1000, False)
             last_exc = exc
             logger.warning(
                 '[sybase] connect attempt %d/%d failed%s: %s',
@@ -280,6 +373,9 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
             )
             if attempt < SYBASE_CONNECT_ATTEMPTS:
                 time.sleep(SYBASE_CONNECT_RETRY_DELAY)
+        finally:
+            if not failed:
+                _load().record_connect(label, (time.monotonic() - t0) * 1000, True)
     raise last_exc
 
 
@@ -308,7 +404,7 @@ def get_sybase_connection(charset=None):
         pass
     jdbc_url = 'jdbc:sybase:Tds:' + host + ':' + str(port) + '/SOFTECHDB9'
     driver = SybDriver()
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ'))
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ'), node='HQ')
 
 
 def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=None):
@@ -351,7 +447,8 @@ def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=N
         pass
     jdbc_url = f'jdbc:sybase:Tds:{db_host}:{db_port}/{db_name}'
     driver   = SybDriver()
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=f'branch {db_host}'))
+    label = f'branch {db_host}'
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=label), node=label)
 
 
 def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
@@ -386,7 +483,10 @@ def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
             DriverManager.setLoginTimeout(lt)
         except Exception:
             pass
-        conn = SybDriver().connect(jdbc_url, props)   # single attempt (no retry)
+        try:
+            conn = SybDriver().connect(jdbc_url, props)   # single attempt (no retry)
+        finally:
+            _load().record_connect(f'probe {host}', (time.time() - t0) * 1000, conn is not None)
         stmt = conn.createStatement()
         _apply_query_timeout(stmt, lt)
         rs = stmt.execute('SELECT 1')
@@ -503,8 +603,9 @@ def _convert_date(val):
 
 
 class CursorWrapper:
-    def __init__(self, java_conn):
+    def __init__(self, java_conn, node=''):
         self._conn      = java_conn
+        self._node      = node
         self._rs        = None
         self._stmt      = None
         # Cached column-type list — populated lazily after execute(); persists
@@ -531,7 +632,15 @@ class CursorWrapper:
         """
         self._col_types = None   # reset cached metadata for the new result set
         self._rs        = None   # default: no result set until confirmed
+        t0 = time.monotonic()
+        try:
+            self._execute(sql, params, timeout)
+        except Exception:
+            _load().record_query(self._node, (time.monotonic() - t0) * 1000, False)
+            raise
+        _load().record_query(self._node, (time.monotonic() - t0) * 1000, True)
 
+    def _execute(self, sql, params, timeout):
         if params:
             # PreparedStatement: driver substitutes ? at the JDBC level
             self._stmt = self._conn.prepareStatement(sql)
@@ -581,7 +690,11 @@ class CursorWrapper:
         """Lazily build and cache column-type list from the current ResultSet."""
         if self._col_types is None:
             meta = self._rs.getMetaData()
-            self._col_types = self._build_type_sets(meta, meta.getColumnCount())
+            # the type-name lookup is the one driver read with no query timeout
+            self._col_types = _with_deadline(
+                self._conn, SYBASE_METADATA_TIMEOUT_SECONDS,
+                lambda: self._build_type_sets(meta, meta.getColumnCount()),
+                what='column-type metadata')
         return self._col_types
 
     # ── Row conversion ────────────────────────────────────────────────────────
@@ -633,32 +746,37 @@ class CursorWrapper:
         """
         if self._rs is None:
             return []
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
         rows = []
         for _ in range(size):
             if not self._rs.next():
                 break
             rows.append(self._convert_row(col_types))
+        _load().record_fetch(self._node, len(rows), (time.monotonic() - t0) * 1000)
         return rows
 
     def fetchall(self):
         """Fetch all remaining rows from the current result set."""
         if self._rs is None:
             return []
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
         rows = []
         while self._rs.next():
             rows.append(self._convert_row(col_types))
+        _load().record_fetch(self._node, len(rows), (time.monotonic() - t0) * 1000)
         return rows
 
     def fetchone(self):
         """Fetch the next single row, or None if exhausted or absent."""
         if self._rs is None:
             return None
+        t0 = time.monotonic()
         col_types = self._ensure_col_types()
-        if self._rs.next():
-            return self._convert_row(col_types)
-        return None
+        row = self._convert_row(col_types) if self._rs.next() else None
+        _load().record_fetch(self._node, 1 if row is not None else 0, (time.monotonic() - t0) * 1000)
+        return row
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -670,11 +788,12 @@ class CursorWrapper:
 
 
 class ConnectionWrapper:
-    def __init__(self, java_conn):
+    def __init__(self, java_conn, node=''):
         self._conn = java_conn
+        self.node  = node
 
     def cursor(self):
-        return CursorWrapper(self._conn)
+        return CursorWrapper(self._conn, self.node)
 
     # ── Real transaction control (opt-in; used only by audited writeback paths) ──
     # Reads remain autocommit. A caller that needs atomicity wraps its statements:
@@ -755,6 +874,11 @@ class SoftechConnector:
 
         host = os.environ.get(f'{prefix}HOST') or settings.SYBASE_HOST
         port = os.environ.get(f'{prefix}PORT') or getattr(settings, 'SYBASE_PORT', '5000')
+        if getattr(settings, 'SOFTECH_BRANCH_HOST_OVERRIDE', ''):
+            # Staging: HQ is the box's own SYBASE_HOST — never a real SOFTECH_<PROFILE>_HOST
+            # that may have been copied from .env.example.
+            host = settings.SYBASE_HOST
+            port = getattr(settings, 'SYBASE_PORT', '5000')
 
         _ensure_jvm()
         jpype.imports.registerDomain('com')
@@ -773,8 +897,9 @@ class SoftechConnector:
 
         jdbc_url = f'jdbc:sybase:Tds:{host}:{port}/SOFTECHDB9'
         driver = SybDriver()
-        java_conn = _connect_with_retry(driver, jdbc_url, props, label=f'profile {self._profile}')
-        self._conn = ConnectionWrapper(java_conn)
+        label = 'HQ' if host == settings.SYBASE_HOST else f'profile {self._profile}'
+        java_conn = _connect_with_retry(driver, jdbc_url, props, label=label)
+        self._conn = ConnectionWrapper(java_conn, node=label)
         logger.debug('[SoftechConnector] connected profile=%s host=%s', self._profile, host)
         return self
 
@@ -831,22 +956,29 @@ class SoftechConnector:
         cur.execute(sql, params or [])
         return cur.fetchall()
 
-    # ── Transaction helpers (PostgreSQL-side only — never Sybase) ─────────────
-    # SOFTECH is read-only. These helpers exist only for the rare case where
-    # a subclass needs to wrap multiple PostgreSQL writes that depend on a
-    # Sybase read result.  They are no-ops on the Sybase connection itself.
+    # ── Transaction helpers — REAL, on the Sybase connection ───────────────────
+    # These used to be no-ops ("SOFTECH is read-only"), but DML does run through this
+    # connector (rehearsals, diagnostics): code that called begin_transaction() …
+    # rollback() believed it was rolling back while every statement autocommitted —
+    # probe_ap_writeback --rehearse committed real cheques rows (Batch 2, P-12).
+    # They now delegate to ConnectionWrapper: autocommit off → one transaction.
 
     def begin_transaction(self):
-        """No-op on Sybase (read-only). Provided for interface completeness."""
-        logger.debug('[SoftechConnector] begin_transaction — no-op on Sybase')
+        """Start ONE transaction on the Sybase connection (autocommit off)."""
+        self._require_conn().begin()
 
     def commit(self):
-        """No-op on Sybase (read-only)."""
-        logger.debug('[SoftechConnector] commit — no-op on Sybase')
+        """Commit the open transaction and restore autocommit."""
+        self._require_conn().commit()
 
     def rollback(self):
-        """No-op on Sybase (read-only)."""
-        logger.debug('[SoftechConnector] rollback — no-op on Sybase')
+        """Roll back the open transaction and restore autocommit."""
+        self._require_conn().rollback()
+
+    def _require_conn(self):
+        if self._conn is None:
+            raise RuntimeError('SoftechConnector: not connected — call connect() first')
+        return self._conn
 
     # ── Health check ──────────────────────────────────────────────────────────
 

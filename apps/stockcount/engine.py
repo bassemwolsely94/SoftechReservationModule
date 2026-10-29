@@ -22,6 +22,7 @@ Supported doccodes
 """
 import logging
 import random
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from decouple import config
@@ -87,7 +88,7 @@ LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic
     ON ic.itemsclassifcode = i.itemclassifcode
 {user_join}
 WHERE st.doccode IN ({doccodes})
-  AND st.branchcode = '{branch}'
+  AND st.branchcode = ?
   AND st.docdate >= '{date_from} 00:00:00'
   AND st.docdate <  DATEADD(day, 1, CONVERT(DATETIME, '{date_to}'))
   {user_filter}
@@ -100,7 +101,7 @@ SELECT
     sb.itemcode,
     SUM(CONVERT(DECIMAL(14,3), ISNULL(sb.nowqty, 0))) AS total_qty
 FROM SOFTECHDB9.dbo.stkbal sb
-WHERE sb.branchcode = '{branch}'
+WHERE sb.branchcode = ?
   AND sb.storecode NOT IN {excluded}
   AND sb.itemcode IN ({item_codes})
 GROUP BY sb.itemcode"""
@@ -118,7 +119,7 @@ JOIN SOFTECHDB9.dbo.items i
     ON i.itemcode = sb.itemcode
 LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic
     ON ic.itemsclassifcode = i.itemclassifcode
-WHERE sb.branchcode = '{branch}'
+WHERE sb.branchcode = ?
   AND sb.storecode NOT IN {excluded}
   {category_filter}
 GROUP BY sb.itemcode, i.itemname, i.itemmedicine,
@@ -139,7 +140,7 @@ JOIN SOFTECHDB9.dbo.items i
     ON i.itemcode = sb.itemcode
 LEFT JOIN SOFTECHDB9.dbo.itemsclassif ic
     ON ic.itemsclassifcode = i.itemclassifcode
-WHERE sb.branchcode = '{branch}'
+WHERE sb.branchcode = ?
   AND sb.storecode NOT IN {excluded}
   AND sb.itemcode IN ({item_codes})
 GROUP BY sb.itemcode, i.itemname, i.itemmedicine,
@@ -154,12 +155,12 @@ def _sybase():
     return get_sybase_connection()
 
 
-def _run(sql: str) -> list:
-    """Execute SQL on Sybase and return all rows as plain Python lists."""
+def _run(sql: str, params=None) -> list:
+    """Execute SQL on Sybase (values bound as ? parameters) and return all rows."""
     conn = _sybase()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
+        cur.execute(sql, params or None)
         return cur.fetchall()
     finally:
         conn.close()
@@ -180,9 +181,23 @@ def _to_str(val, default='') -> str:
     return str(val).strip()
 
 
-def _quoted_list(values) -> str:
-    """Format a Python list as SQL IN clause content: 'A','B','C' """
-    return ', '.join(f"'{v}'" for v in values)
+def _as_date(value) -> date:
+    """A real date from a date/datetime or 'YYYY-MM-DD' text — ValueError otherwise."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value).strip())
+
+
+def _marks(values) -> str:
+    """'?, ?, ?' — one bound-parameter marker per value, for an IN (...) list."""
+    return ', '.join('?' for _ in values)
+
+
+# Bound parameters per statement. 400 is proven live (discount_approvals/replication.py,
+# finance/queries/sybase_reconciliation.py) and stays under Sybase's AND/OR cap.
+_IN_CHUNK = 400
 
 
 # ── Item extraction — transaction mode ───────────────────────────────────────
@@ -210,22 +225,27 @@ def fetch_transaction_items(
             "    AND sm.docnumber  = st.docnumber\n"
             "    AND sm.docdate    = st.docdate"
         )
-        user_filter = f"AND sm.usercode = '{user_code}'"
+        user_filter = "AND sm.usercode = ?"
     else:
         user_join   = ''
         user_filter = ''
 
+    # Dates stay literals — ASE 12.5 plans a bound date range on stktrans badly (see
+    # procurement purchases_query: 14.7 s bound vs 1.6 s literal) — but only ever as the
+    # ISO form of a real date, so nothing else can reach the SQL. Everything else is bound.
     sql = _SQL_TRANSACTION_ITEMS.format(
-        doccodes    = _quoted_list(doccodes),
-        branch      = branch_code,
-        date_from   = date_from,
-        date_to     = date_to,
+        doccodes    = _marks(doccodes),
+        date_from   = _as_date(date_from).isoformat(),
+        date_to     = _as_date(date_to).isoformat(),
         user_join   = user_join,
         user_filter = user_filter,
         excluded    = _EXCLUDED_STORES,
     )
+    params = [str(d) for d in doccodes] + [branch_code]
+    if user_code:
+        params.append(user_code)
 
-    rows = _run(sql)
+    rows = _run(sql, params)
     return [
         {
             'item_code':     _to_str(r[0]),
@@ -248,17 +268,12 @@ def fetch_stock_balance(branch_code: str, item_codes: list) -> dict:
     if not item_codes:
         return {}
 
-    # Sybase may have limits on IN clause; chunk into batches of 500
+    # Sybase caps parameters / ANDs per statement — chunk the IN list
     result = {}
-    batch_size = 500
-    for i in range(0, len(item_codes), batch_size):
-        batch = item_codes[i: i + batch_size]
-        sql = _SQL_STOCK_BALANCE.format(
-            branch      = branch_code,
-            item_codes  = _quoted_list(batch),
-            excluded    = _EXCLUDED_STORES,
-        )
-        for row in _run(sql):
+    for i in range(0, len(item_codes), _IN_CHUNK):
+        batch = item_codes[i: i + _IN_CHUNK]
+        sql = _SQL_STOCK_BALANCE.format(item_codes=_marks(batch), excluded=_EXCLUDED_STORES)
+        for row in _run(sql, [branch_code] + list(batch)):
             code = _to_str(row[0])
             qty  = _to_dec(row[1])
             result[code] = result.get(code, Decimal('0')) + qty
@@ -271,17 +286,11 @@ def fetch_full_stock(branch_code: str, category_filter: str = '') -> list:
     Return all items with positive balance at this branch.
     Returns list of dicts: {item_code, item_name, item_medicine, category_name, qty}
     """
-    cat_clause = ''
-    if category_filter:
-        cat_clause = f"AND i.itemclassifcode = '{category_filter}'"
+    cat_clause = 'AND i.itemclassifcode = ?' if category_filter else ''
+    sql = _SQL_FULL_STOCK.format(excluded=_EXCLUDED_STORES, category_filter=cat_clause)
+    params = [branch_code] + ([category_filter] if category_filter else [])
 
-    sql = _SQL_FULL_STOCK.format(
-        branch          = branch_code,
-        excluded        = _EXCLUDED_STORES,
-        category_filter = cat_clause,
-    )
-
-    rows = _run(sql)
+    rows = _run(sql, params)
     return [
         {
             'item_code':     _to_str(r[0]),
@@ -308,15 +317,10 @@ def fetch_filtered_stock(branch_code: str, item_codes: list) -> list:
         return []
 
     result = []
-    batch_size = 500
-    for i in range(0, len(item_codes), batch_size):
-        batch = item_codes[i: i + batch_size]
-        sql = _SQL_FILTERED_STOCK.format(
-            branch     = branch_code,
-            item_codes = _quoted_list(batch),
-            excluded   = _EXCLUDED_STORES,
-        )
-        for r in _run(sql):
+    for i in range(0, len(item_codes), _IN_CHUNK):
+        batch = item_codes[i: i + _IN_CHUNK]
+        sql = _SQL_FILTERED_STOCK.format(item_codes=_marks(batch), excluded=_EXCLUDED_STORES)
+        for r in _run(sql, [branch_code] + list(batch)):
             if r[0]:
                 result.append({
                     'item_code':     _to_str(r[0]),

@@ -14,6 +14,13 @@ from rest_framework.response import Response
 from .models import Offer
 from .serializers import OfferSerializer
 from .permissions import CanManageOffers
+from apps.pos_orders.permissions import CanOperatePosOrders
+from core.permissions import matrix_permission
+
+# Managing offers = matrix module `offers` (CanManageOffers on the viewset); the checkout's
+# evaluate / apply = `pos` (Batch 4, Z-5a).
+OFFERS          = matrix_permission('offers')
+OFFERS_EDIT     = matrix_permission('offers', post=('create', 'edit'))
 from .engine import evaluate_offers
 
 
@@ -122,7 +129,7 @@ def _decimalify(plan):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([CanOperatePosOrders])   # checkout = pos (Z-5b)
 def evaluate(request):
     """
     POST { basket: [{softech_id, qty, unit_price}], customer, branch, channel }
@@ -205,7 +212,7 @@ FIELD_VALUE_PAIRS = {
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS])
 def target_fields(request):
     """Whitelisted selector fields (key, label, type, ops, has_values) for the config UI."""
     from .targeting import FIELDS
@@ -222,7 +229,7 @@ def target_fields(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS])
 def field_values(request):
     """Distinct {value,label} for a code field, so the UI can multi-select from real
     values (e.g. all producers). ?field=producer_code&q=<filter>."""
@@ -250,7 +257,7 @@ def field_values(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS_EDIT])
 def target_preview(request):
     """
     Resolve a selector spec → count + sample of matching items (config preview).
@@ -285,7 +292,7 @@ def target_preview(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([CanOperatePosOrders])   # checkout = pos (Z-5b)
 def apply_to_order(request):
     """
     Attach the offer plan onto a real POS order (PG only; no SOFTECH). Gated behind
@@ -305,7 +312,7 @@ def apply_to_order(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS])
 def manual_matches(request):
     """
     List detected historical manual-promo matches (read-only). Filters:
@@ -342,7 +349,7 @@ def manual_matches(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS_EDIT])
 def run_manual_detection(request):
     """Trigger a detection scan (admin/supervisor/purchasing). Read-only vs SOFTECH."""
     p = _profile(request)
@@ -361,7 +368,7 @@ def run_manual_detection(request):
 
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, OFFERS])
 def margin_config(request):
     """Margin-protection floor (singleton). PATCH is admin-only."""
     from .models import MarginConfig

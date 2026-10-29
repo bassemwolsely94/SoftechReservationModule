@@ -8,6 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { qaApi } from '../../api/client'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
+import { ba } from '../../utils/flowArrow'
 
 const RESULTS = [
   { v: 'pass', l: 'مطابق', on: 'bg-green-600 text-white', off: 'text-green-700 border-green-300' },
@@ -61,7 +62,7 @@ export default function MobileQADetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/qa')} className="text-sm text-gray-500">→ الرجوع للمراجعات</button>
+      <button onClick={() => navigate('/m/qa')} className="text-sm text-gray-500">{ba()} الرجوع للمراجعات</button>
 
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex items-center justify-between gap-2">
@@ -88,7 +89,7 @@ export default function MobileQADetailPage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div data-tour="hr-qa-item-result" className="grid grid-cols-3 gap-1.5">
                   {RESULTS.map(opt => (
                     <button key={opt.v} onClick={() => setResult(i, opt.v)}
                       className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${r.result === opt.v ? `${opt.on} border-transparent` : `bg-white ${opt.off}`}`}>
@@ -113,7 +114,7 @@ export default function MobileQADetailPage() {
             <textarea rows={2} className="input-field w-full resize-none" value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600 text-center">{error}</div>}
-          <div className="flex gap-2">
+          <div data-tour="hr-qa-save" className="flex gap-2">
             <button onClick={() => save(false)} disabled={busy} className="btn-secondary flex-1 disabled:opacity-50">حفظ كمسودة</button>
             <button onClick={() => save(true)} disabled={busy || answered === 0} className="btn-primary flex-1 py-3 disabled:opacity-50">
               {busy ? '...' : '✅ إرسال'}

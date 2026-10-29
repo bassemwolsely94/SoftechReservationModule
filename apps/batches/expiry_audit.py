@@ -311,6 +311,11 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
 
 # ── Current-stock resolver (live SOFTECH) ────────────────────────────────────
 
+def _marks(values) -> str:
+    """'?, ?, ?' — one bound-parameter marker per value, for an IN (...) list."""
+    return ', '.join('?' for _ in values)
+
+
 def _stock_in_arrivals(branch_codes, item_codes, timeout=_QUERY_TIMEOUT):
     """
     Return {(branch_code, item_code): [(date, qty), ...] sorted NEWEST first}
@@ -324,17 +329,18 @@ def _stock_in_arrivals(branch_codes, item_codes, timeout=_QUERY_TIMEOUT):
         return {}
 
     out = {}
-    doccodes = ', '.join(f"'{d}'" for d in ARRIVAL_DOCCODES)
-    branches = ', '.join(f"'{b}'" for b in branch_codes)
+    # Every code is a bound parameter; item chunks leave room for doccodes + branches.
+    doccodes = [str(d) for d in ARRIVAL_DOCCODES]
+    branches = [str(b) for b in branch_codes]
+    item_chunk = max(1, _SUPPLIER_CHUNK - len(doccodes) - len(branches))
     conn = get_sybase_connection()
     try:
-        for chunk in _chunks(list(item_codes), _SUPPLIER_CHUNK):
-            items = ', '.join(f"'{c}'" for c in chunk)
+        for chunk in _chunks(list(item_codes), item_chunk):
             sql = QUERY_STOCK_IN_MOVEMENTS.format(
-                doccodes=doccodes, branches=branches, items=items)
+                doccodes=_marks(doccodes), branches=_marks(branches), items=_marks(chunk))
             cur = conn.cursor()
             try:
-                cur.execute(sql, timeout=timeout)
+                cur.execute(sql, doccodes + branches + [str(c) for c in chunk], timeout=timeout)
                 rows = cur.fetchall()
             finally:
                 cur.close()

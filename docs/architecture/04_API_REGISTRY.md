@@ -50,6 +50,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/items/{id}/` | GET | Item detail + stock levels per branch |
 | `/api/items/{id}/stock/` | GET | Stock breakdown per branch |
 | `/api/items/search/` | GET | Quick search (name, barcode, softech_id) |
+| `/api/items/softech-search/?network=1` | GET | POS search rows: thumb, strength, `branch_stock`, `next_action`, `stock_as_of` (quarantine stores 102/103/105 excluded) |
 | `/api/items/categories/` | GET | Category list |
 | `/api/items/bundles/` | GET, POST | Product bundles |
 | `/api/items/bundles/{id}/` | GET, PUT, DELETE | Bundle detail |
@@ -448,6 +449,19 @@ Default pagination: CursorPagination (50 items)
 | `/api/pos-orders/{id}/ready/` | POST | Mark ready → enqueue for push |
 | `/api/pos-orders/{id}/push/` | POST | Push to SOFTECH (`stktransm5`/`stktrans5`/`branchesales5`) |
 | `/api/pos-orders/{id}/cancel/` | POST | Cancel (pre-push) |
+| `/api/pos-orders/contract-assist/config/` | GET | Contract-entry field config (`ContractEntryConfig`) — POS Speed Wave T4; `CanViewPos` |
+| `/api/pos-orders/contract-assist/patients/` | GET | Recent patients for a contract/branch (indexed `cust_branch_code`) |
+| `/api/pos-orders/contract-assist/history/` | GET | Patient's previous contract orders (repeat-order, lines re-validated) |
+| `/api/pos-orders/contract-assist/field-values/` | GET | Suggested values for free-text contract fields |
+| `/api/pos-orders/contract-assist/approval-check/` | GET | Approval-number reuse check — warning only, never a block |
+| `/api/pos-orders/fefo-split/` | POST | Deterministic FEFO batch split + shortfall advisory (read-only; `CanViewPos`) |
+
+## POS SPEED WAVE (cross-module endpoints)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/customers/address-suggest/` | GET | Address suggestions for the phone-first Add-customer tab |
+| `/api/composition/alternatives/` | GET | Verified alternatives (`ItemMoleculeIndex.source='approved'` only), `CanViewPos`; powers the F7 panel |
 
 ## INSURANCE  `/api/insurance/`  *(DRF router)*
 
@@ -558,6 +572,9 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/feedback/` | POST / GET | Any staff: vote + comment. GET (help/edit): feedback list (`open=1`) |
 | `/api/help/feedback/{id}/resolve/` | POST | Mark a comment handled (help/edit) |
 | `/api/help/stats/?days=` | GET | Trainers' dashboard: opens by screen/role, votes, searches, «اسأل النظام» questions (unanswered first) (help/edit) |
+| `/api/help/onboarding/remind/` | POST | `{staff_ids}` — «🔔 تذكير» to people stuck on their training path (help/edit; own branches; 3-day cool-down per person; recorded in HelpReminder). → `{sent, skipped[{id, reason}]}`. Team rows now carry `stuck`, `last_reminded_at` |
+| `/api/help/whats-new/` | GET / POST | Home «الجديد» card: recent (7 days) help changes on the person's path or screens they used, with `read`; `unread` count. POST = «تمام، شفتها» (all read) |
+| `/api/help/first-day/?mobile=1` | GET / POST | «ابدأ من هنا» cards: `show`, `hidden`, progress, system tour (+done), next path screen, role's workflow tours (+done; mobile or desktop), next quiz. POST `{hidden}` hides / shows them for this person |
 | `/api/help/tour-event/` | POST | Tour runner reports an ended «اعرض لي» tour `{screen_key, reached, done}` → `HelpEvent(kind=tour)` |
 | `/api/help/usage/?days=` | GET | Trainers (help/edit): screens whose help nobody opened (+ which role paths include them), tour runs / finished % / common stop step / never run |
 | `/api/help/ask/` | POST | «اسأل النظام» `{question, lang, screen_key}` → answer written only from the retrieved help articles (Gemini, `GEMINI_API_KEY` → `_2` fallback), `found`, `ai`, `sources` (only articles that were sent), `articles` (always — the fallback when no model). 30 / staff / hour (429). Logged as `HelpEvent(kind=ask)` |
@@ -565,7 +582,7 @@ Default pagination: CursorPagination (50 items)
 | `/api/help/onboarding/?role=` | GET | My training path (`ROLE_PATHS[my role]`): screens with state `todo`/`done`/`changed`, module quizzes + my best score, progress %, `learned` map. `role=` preview only for help/edit |
 | `/api/help/onboarding/learned/` | POST | `{screen_key, done}` — «فهمت هذه الشاشة» on/off (stores the help version read) |
 | `/api/help/onboarding/team/?role=&branch=` | GET | Team completion per staff member (help/edit; limited to the caller's accessible branches) |
-| `/api/help/training/{path\|quiz}/{role\|module}/` | GET / PUT / DELETE | Trainers (help/edit): the path or quiz as edited (quiz answers included) + history; PUT `{data: {screens}\|{questions}, note}` saves a trainer version (validated); DELETE `{note}` reverts to the repo version |
+| `/api/help/training/{path\|quiz\|flow}/{role\|module\|module.flow}/` | GET / PUT / DELETE | Trainers (help/edit): the path, quiz (answers included) or workflow-tour text as edited + history; PUT `{data: {screens}\|{questions}\|{title, summary, steps}, note}` saves a trainer version (validated; flow steps must keep the code's targets); DELETE `{note}` reverts to the repo version |
 | `/api/help/quizzes/{module}/` | GET | Quiz questions, options shuffled per person, **no answers** |
 | `/api/help/quizzes/{module}/submit/` | POST | `{answers: [option id \| null]}` → server-graded score, pass (≥ `PASS_PERCENT`), per-question answer + explanation; saves `HelpQuizAttempt` |
 
@@ -593,7 +610,7 @@ Default pagination: CursorPagination (50 items)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/transits/` (`{id}/`, `mark-received/`) | GET, POST | In-transit (doccode-125) transfers |
+| `/api/transits/` (`{id}/`, `mark-received/`) | GET, POST | In-transit (doccode-125) transfers. `mark-received` = local receipt only (no SOFTECH write); kept by the sync until SOFTECH's doc 25 confirms/reconciles it. List filter `?awaiting_erp=1` = received locally, no 25 yet |
 | `/api/transits/{id}/export-picking\|export-stocking/` | GET | ورقة التجميع / ورقة الترصيص export (+ bulk POST) |
 | `/api/transits/pick-zones\|pick-rules\|item-overrides/` | GET, POST | Classification config (per location+purpose) |
 | `/api/transits/settings\|preview\|uncategorized\|classify-items\|seed-defaults/` | GET, POST | Threshold, preview, bulk classify |

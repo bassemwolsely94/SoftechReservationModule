@@ -26,13 +26,15 @@ from .models import StaffProfile, ERPUser, UserActivityLog, RoleModuleAccess, RO
 from .serializers import (
     StaffProfileSerializer,
     StaffProfileListSerializer,
+    StaffPickerSerializer,
     StaffProfileUpdateSerializer,
     UserCreateSerializer,
     UserActivityLogSerializer,
     ERPUserSerializer,
 )
 from .middleware import get_current_ip
-from core.permissions import IsAdminRole
+from .passwords import password_problem
+from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
 
 # ── Inline serializer for auth/me ─────────────────────────────────────────────
@@ -50,6 +52,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     # the frontend only uses these to show menus/buttons — the views enforce them.
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
+    can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
@@ -62,6 +65,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.purchasing.access import can_run_engine
         return can_run_engine(obj.user)
 
+    def get_can_stock_audit(self, obj):
+        from apps.stock_audit.access import can_open
+        return can_open(obj.user)
+
     class Meta:
         model  = StaffProfile
         fields = [
@@ -71,7 +78,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit',
         ]
 
 
@@ -197,6 +204,8 @@ def refresh_view(request):
     raw = body_token or request.COOKIES.get(REFRESH_COOKIE)
     if not raw:
         return Response({'detail': 'لا توجد جلسة'}, status=status.HTTP_401_UNAUTHORIZED)
+    if not _refresh_owner_active(raw):           # a disabled account never renews (Batch 3, A-3)
+        return clear_auth_cookies(Response({'detail': 'الحساب موقوف'}, status=status.HTTP_401_UNAUTHORIZED))
     ser = TokenRefreshSerializer(data={'refresh': raw})
     try:
         ser.is_valid(raise_exception=True)
@@ -207,6 +216,20 @@ def refresh_view(request):
     data = ser.validated_data
     resp = Response(data if body_token else {'ok': True})
     return set_auth_cookies(resp, data.get('access'), data.get('refresh'))
+
+
+def _refresh_owner_active(raw) -> bool:
+    """False when the refresh token belongs to a disabled account. An unreadable token passes
+    through — the refresh serializer rejects it with its own message."""
+    from rest_framework_simplejwt.exceptions import TokenError
+    from rest_framework_simplejwt.settings import api_settings
+    from .sessions import account_active
+    try:
+        uid = RefreshToken(raw).get(api_settings.USER_ID_CLAIM)
+    except TokenError:
+        return True
+    user = User.objects.select_related('staff_profile').filter(**{api_settings.USER_ID_FIELD: uid}).first()
+    return account_active(user)
 
 
 @api_view(['POST'])
@@ -253,10 +276,11 @@ def change_password_view(request):
     if new_pw != confirm:
         return Response({'error': 'كلمة المرور الجديدة وتأكيدها غير متطابقتين'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if len(new_pw) < 6:
-        return Response({'error': 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'}, status=status.HTTP_400_BAD_REQUEST)
-
     user = request.user
+    problem = password_problem(new_pw, user)             # 10 chars + Django's checks (A-5)
+    if problem:
+        return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
+
     if not user.check_password(old_pw):
         return Response({'error': 'كلمة المرور القديمة غير صحيحة'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -266,14 +290,9 @@ def change_password_view(request):
     # Gap-2: Blacklist all outstanding refresh tokens so the old password's
     # sessions cannot be renewed.  The current access token (up to 1 hour
     # remaining) still works — that's the irreducible JWT trade-off.
-    try:
-        from rest_framework_simplejwt.token_blacklist.models import (
-            OutstandingToken, BlacklistedToken,
-        )
-        for token in OutstandingToken.objects.filter(user=user):
-            BlacklistedToken.objects.get_or_create(token=token)
-    except Exception:
-        pass  # blacklist app not installed — skip silently
+    # (Remembered devices are cancelled too: their token fingerprints the password — A-3.)
+    from .sessions import end_sessions
+    end_sessions(user)
 
     profile = getattr(user, 'staff_profile', None)
     ip      = get_current_ip() or request.META.get('REMOTE_ADDR')
@@ -304,13 +323,18 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     ordering_fields  = ['user__username', 'role', 'branch__name']
 
     def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated()]
+        if self.action == 'list':
+            return [IsAuthenticated()]        # picker for every screen — slim fields below (Z-4)
+        if self.action == 'retrieve':
+            return [IsAuthenticated(), matrix_permission('users')()]
         return [IsAuthenticated(), IsAdminRole()]
 
     def get_serializer_class(self):
         if self.action == 'list':
-            return StaffProfileListSerializer
+            profile = getattr(self.request.user, 'staff_profile', None)
+            if self.request.user.is_superuser or matrix_allows(profile, 'users', 'view'):
+                return StaffProfileListSerializer
+            return StaffPickerSerializer
         if self.action in ('update', 'partial_update'):
             return StaffProfileUpdateSerializer
         if self.action == 'create':
@@ -349,11 +373,14 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         """Admin resets a user's password to a given value."""
         profile  = self.get_object()
         new_pw   = request.data.get('new_password', '')
-        if len(new_pw) < 6:
-            return Response({'error': 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'}, status=status.HTTP_400_BAD_REQUEST)
+        problem  = password_problem(new_pw, profile.user)  # 10 chars + Django's checks (A-5)
+        if problem:
+            return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
 
         profile.user.set_password(new_pw)
         profile.user.save(update_fields=['password'])
+        from .sessions import end_sessions              # the old password's sessions end (A-3)
+        end_sessions(profile.user)
 
         actor = getattr(request.user, 'staff_profile', None)
         ip    = get_current_ip() or request.META.get('REMOTE_ADDR')
@@ -371,6 +398,9 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         profile = self.get_object()
         profile.is_active = not profile.is_active
         profile.save(update_fields=['is_active'])
+        if not profile.is_active:                       # disabling logs the account out (A-3)
+            from .sessions import end_sessions
+            end_sessions(profile.user)
 
         actor  = getattr(request.user, 'staff_profile', None)
         ip     = get_current_ip() or request.META.get('REMOTE_ADDR')
@@ -403,7 +433,8 @@ class ERPUserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ERPUser.objects.all().order_by('username')
     serializer_class = ERPUserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'users'                          # SOFTECH user list — user management (Z-4)
     filter_backends = [filters.SearchFilter]
     search_fields   = ['username', 'full_name', 'user_id']
     pagination_class = StandardPagination

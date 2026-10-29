@@ -2,7 +2,7 @@ from rest_framework import viewsets, filters, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count
 
@@ -19,8 +19,20 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
+class _CreateNeedsEdit(BasePermission):
+    """Creating a customer record needs customers edit (Batch 4, Z-9c — any logged-in user could;
+    no screen calls it today). Every other action on this viewset is unchanged."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        if getattr(view, 'action', None) != 'create':
+            return True
+        from core.permissions import matrix_allows
+        return matrix_allows(getattr(request.user, 'staff_profile', None), 'customers', 'edit')
+
+
 class CustomerViewSet(viewsets.ModelViewSet):
-    permission_classes  = [IsAuthenticated]
+    permission_classes  = [IsAuthenticated, _CreateNeedsEdit]
     # search after ordering: exact text first, the chosen sort within each rank
     filter_backends     = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
     filterset_fields    = ['softech_ptclassifcode', 'preferred_branch', 'segment', 'churn_segment']
@@ -30,10 +42,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
     ordering            = ['name']
 
     def get_queryset(self):
-        return Customer.objects.select_related(
+        qs = Customer.objects.select_related(
             'preferred_branch', 'created_by__user',
             'health_profile',       # prevents N+1 on is_chronic / detected_conditions
         ).prefetch_related('notes__created_by__user')
+        if self.action == 'list':
+            # sales-account placeholders (Walk-In 1510 …) are not people; still openable by id
+            qs = qs.filter(is_account_placeholder=False)
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -82,6 +98,19 @@ class CustomerViewSet(viewsets.ModelViewSet):
             limit = 6
         data = _recognize(request.query_params.get('q', ''), limit=max(1, limit))
         return Response(data)
+
+    # ── GET /api/customers/address-suggest/?field=area|district|landmark&q=&area= ──
+    @action(detail=False, methods=['get'], url_path='address-suggest')
+    def address_suggest(self, request):
+        """Autocomplete for the POS new-customer address fields (values already stored)."""
+        from .address_suggest import FIELDS, address_suggest as _suggest
+        field = request.query_params.get('field', '')
+        if field not in FIELDS:
+            return Response({'detail': 'field must be one of: ' + ', '.join(FIELDS)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        out = _suggest(field, request.query_params.get('q', ''),
+                       area=request.query_params.get('area', ''), limit=10)
+        return Response({'results': out})
 
     # ── GET /api/customers/{id}/purchases/ ────────────────────────────────────
 
@@ -256,7 +285,19 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='pos-summary')
     def pos_summary(self, request, pk=None):
         from .pos_summary import build_pos_summary
-        return Response(build_pos_summary(self.get_object()))
+        customer = self.get_object()
+        data = build_pos_summary(customer)
+        # بدل الروشتة balance — staff with the replacement «view» right only, never printed for the
+        # patient (owner D14). ?branch= marks what is redeemable at this POS. Non-fatal.
+        try:
+            from apps.replacement.redemption import patient_balance
+            bal = patient_balance(customer.softech_pic, staff=getattr(request.user, 'staff_profile', None),
+                                  branch_id=request.query_params.get('branch') or None)
+            if bal and (bal['cases'] or bal['historical']['count']):
+                data['replacement'] = bal
+        except Exception:
+            pass
+        return Response(data)
 
     # ── GET /api/customers/{id}/receipt/?invoice=  ·  POST .../receipt/ {channel}
     # Unified digital receipt payload + channel delivery (honest stubs).

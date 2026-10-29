@@ -136,10 +136,9 @@ def run_full_sync(full_history=False):
 # run_full_sync, so there is no behavioural divergence — only scheduling.
 #
 # Eventual consistency note: sync_sales(RECENT) re-pulls today+yesterday every
-# run and skips lines whose customer/item isn't in the local map yet. A brand-new
-# customer's or item's first sale is therefore skipped once and re-caught on the
-# next fast tick after the slow lane imports them — no data is lost, worst-case
-# delay is one slow interval.
+# run. A sale whose PIC customer isn't imported yet lands on the account's
+# placeholder customer and is re-linked to the person on a later tick (or by the
+# 03:45 7-day sales_history_catchup) once the slow lane imports them.
 
 def _maybe_sync_permissions(conn, sync_run):
     """
@@ -1280,10 +1279,12 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
         return 0
 
     # ── Pre-load lookup dicts once ────────────────────────────────────────────
-    customer_map = {
-        c.softech_id: c.id
-        for c in Customer.objects.filter(softech_id__isnull=False).only('id', 'softech_id')
-    }
+    # Buyer = the invoice PIC (sm.phcode → Customer.softech_pic); no PIC → the account's
+    # placeholder (st.personcode). Never personcode → Customer.softech_id (a per-branch PIC
+    # serial — that linked invoices to random people until 2026-10-28).
+    from apps.customers.account_link import CustomerLinker
+    linker = CustomerLinker(conn)
+    linker.prepare({str(r[0]).strip() for r in rows})
 
     # sm.ptcode [13] and sm.ptclassifcode [14] are read directly from each invoice row —
     # these are the AUTHORITATIVE source for sales channel (قناة البيع / نوع العميل).
@@ -1328,7 +1329,8 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
         for (personcode, branchcode, doccode, docnumber, docdate), lines in batch:
             # docnumber is already normalised (integer string) from the grouping step.
             try:
-                customer_id = customer_map.get(personcode)
+                inv_pic     = str(lines[0][11] or '').strip() if len(lines[0]) > 11 else ''
+                customer_id = linker.resolve(inv_pic, personcode)
                 branch_id   = branch_map.get(branchcode)
                 if not customer_id or not branch_id:
                     continue
@@ -1417,6 +1419,7 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
                         store_code=store_code,
                         cust_branch_code=cust_branch_code,
                         softech_phcode=phcode,         # sm.phcode — customer PIC per invoice
+                        softech_personcode=personcode, # st.personcode — sales account
                     )
                     lines_by_inv_id[inv_id] = line_tuples
 
@@ -1437,7 +1440,7 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
                 'total_amount', 'doc_code', 'docnumber', 'softech_user',
                 'sales_channel', 'sales_person_type',
                 'store_code', 'cust_branch_code',
-                'softech_phcode',
+                'softech_phcode', 'softech_personcode',
             ],
             batch_size=500,
         )
@@ -1742,10 +1745,57 @@ def _poll_erp_matches():
         'supplying_branch', 'requesting_branch',
     )
 
+    # One SOFTECH login for the whole cycle (doc 30 F4 — was one per transfer).
+    # If the shared connection drops, reconnect and retry that transfer once, so a
+    # lost link is never recorded as "document not found".
+    from config.sybase import get_sybase_connection
+    shared = {'conn': None}
+
+    def _conn():
+        if shared['conn'] is None:
+            shared['conn'] = get_sybase_connection()
+        return shared['conn']
+
+    def _drop():
+        if shared['conn'] is not None:
+            try:
+                shared['conn'].close()
+            except Exception:
+                pass
+        shared['conn'] = None
+
+    try:
+        return _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                                      ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage)
+    finally:
+        _drop()
+
+
+def _poll_erp_matches_loop(pending_qs, _conn, _drop, ERPMatcher, apply_match_result,
+                           ERP_MATCH_UPDATE_FIELDS, TransferRequestMessage):
     checked = 0
     for tr in pending_qs:
         try:
-            result = ERPMatcher(tr).run()
+            try:
+                conn = _conn()
+            except Exception as exc:
+                logger.warning(f'_poll_erp_matches: SOFTECH not reachable, stopping cycle: {exc}')
+                break
+            matcher = ERPMatcher(tr, conn=conn)
+            result = matcher.run()
+            if matcher.shared_conn_failed:
+                _drop()
+                try:
+                    matcher = ERPMatcher(tr, conn=_conn())
+                except Exception as exc:
+                    logger.warning(f'_poll_erp_matches: reconnect failed, stopping cycle: {exc}')
+                    break
+                result = matcher.run()
+                if matcher.shared_conn_failed:
+                    _drop()
+                    logger.warning(f'_poll_erp_matches: SOFTECH error on retry for TR {tr.request_number}; '
+                                   f'left pending for the next cycle')
+                    continue
             apply_match_result(tr, result)
 
             match_status = result['status']
@@ -1893,6 +1943,11 @@ def _write_heartbeat():
         )
     except Exception as exc:
         logger.debug('[scheduler] heartbeat write failed: %s', exc)
+    try:
+        from apps.sync import softech_load
+        softech_load.flush()   # save SOFTECH load counts at least once a minute
+    except Exception as exc:
+        logger.debug('[scheduler] softech load flush failed: %s', exc)
 
 
 def _run_segment_customers():
@@ -1917,6 +1972,15 @@ def _run_insights(period):
 
 def _insights_daily():
     _run_insights('day')
+
+
+def _help_training_digest():
+    """In-app help: weekly training digest to supervisors (apps/help/digest.py)."""
+    try:
+        from apps.help import digest
+        digest.send_weekly()
+    except Exception as exc:
+        logger.warning('help_training_digest failed: %s', exc)
 
 
 def _help_announce_training():
@@ -1957,13 +2021,29 @@ def _run_inflation_reminder():
         logger.error('[APScheduler] inflation reminder failed: %s', exc)
 
 
+def _run_seasonality_refresh():
+    """Seasonality (owner 2026-10-25): once a month has closed, pull it from SOFTECH (SELECT
+    only) and recompute the index — checked every 6 h so a machine that was asleep catches
+    up (apps/purchasing/seasonality.py)."""
+    try:
+        from apps.purchasing import seasonality
+        run = seasonality.scheduled_tick()
+        if run is not None:
+            logger.info('[APScheduler] seasonality %s (%s months, %s items)', run.status, run.months_pulled, run.items)
+    except Exception as exc:
+        logger.error('[APScheduler] seasonality refresh failed: %s', exc)
+
+
 def _run_procurement_refresh():
     """Keep procurement.PurchaseLine current so the purchasing insight rules aren't stale.
-    Short lookback (the engine upserts) — runs just before the daily insight report."""
+    Catch-up (owner 2026-10-24): checked every 30 min, runs only when the last success is
+    older than 20 h and pulls every day since it — a 06:45-only cron was skipped whenever
+    the machine was asleep, and purchases froze at 18-10 (apps/procurement/refresh.py)."""
     try:
-        from django.core.management import call_command
-        call_command('run_procurement_engine', days=14, triggered_by='scheduler', verbosity=0)
-        logger.info('[APScheduler] procurement refresh done')
+        from apps.procurement import refresh
+        run = refresh.scheduled_tick()
+        if run is not None:
+            logger.info('[APScheduler] procurement refresh %s (%s days)', run.status, run.period_days)
     except Exception as exc:
         logger.error('[APScheduler] procurement refresh failed: %s', exc)
 
@@ -2081,6 +2161,53 @@ def _run_stock_expiry_sync():
         logger.info('[APScheduler] stock-expiry sync done')
     except Exception as exc:
         logger.error('[APScheduler] stock-expiry sync failed: %s', exc)
+
+
+def _run_stock_ledger_sync(days=3):
+    """Doc 32: mirror stktrans (all doccodes) from HQ — replaces the last `days` docdate
+    days — then run the audit checks. READ-ONLY vs SOFTECH. Off with STOCK_AUDIT_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'STOCK_AUDIT_ENABLED', True):
+        return
+    try:
+        from django.core.management import call_command
+        call_command('sync_stock_ledger', days=days, verbosity=0,
+                     triggered_by='scheduler' if days <= 3 else 'scheduler-catchup')
+        logger.info('[APScheduler] stock-ledger sync done (%s days)', days)
+        # checks run right after the mirror refresh (our tables only)
+        from apps.stock_audit.engine import run_stock_audit
+        run_stock_audit(triggered_by='scheduler')
+    except Exception as exc:
+        logger.error('[APScheduler] stock-ledger sync failed: %s', exc)
+
+
+def _run_sales_history_catchup(days=7):
+    """Re-sync the last `days` docdate days of PurchaseHistory with the bounded window query.
+    The fast lane only re-reads today + yesterday, so a day missed while the sync or a branch
+    link was down never came back (15 & 22 Oct 2026 lost 1,063 documents). Idempotent upsert;
+    also re-links invoices whose PIC customer was imported after the sale. READ-ONLY vs SOFTECH."""
+    from .sybase_queries import QUERY_CUSTOMER_SALES_LINES_WINDOW
+    today = timezone.localdate()
+    start, end = today - _dt.timedelta(days=days), today + _dt.timedelta(days=1)
+    sync_run = SyncRun.objects.create(status='running')
+    conn = None
+    try:
+        conn = get_sybase_connection()
+        n = sync_sales(conn, sync_run, query=QUERY_CUSTOMER_SALES_LINES_WINDOW.format(
+            start=start.strftime('%Y%m%d'), end=end.strftime('%Y%m%d')))
+        sync_run.status, sync_run.records_synced = 'success', n
+        logger.info('[APScheduler] sales-history catch-up done: %s invoices (%s → %s)', n, start, end)
+    except Exception as exc:
+        sync_run.status, sync_run.error_message = 'failed', str(exc)[:500]
+        logger.error('[APScheduler] sales-history catch-up failed: %s', exc)
+    finally:
+        sync_run.completed_at = timezone.now()
+        sync_run.save()
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _run_refill_reminders():
@@ -2769,6 +2896,28 @@ def _escalate_overdue_approvals():
         logger.error('[APScheduler] escalate_overdue_approvals failed: %s', exc)
 
 
+def _escalate_breached_cases():
+    """Every hour — customer cases past their SLA deadline → escalated + notify. Non-fatal."""
+    try:
+        from apps.callcenter.sla import backfill_missing_sla, escalate_breached_cases
+        backfilled = backfill_missing_sla()
+        count = escalate_breached_cases()
+        if count or backfilled:
+            logger.info('[APScheduler] escalate_breached_cases: %d escalated, %d backfilled',
+                        count, backfilled)
+    except Exception as exc:
+        logger.error('[APScheduler] escalate_breached_cases failed: %s', exc)
+
+
+def _whisper_tick():
+    """Every 15 min — launch the nightly Whisper runner (own process) when in its window."""
+    try:
+        from apps.callcenter.whisper import maybe_launch_runner
+        maybe_launch_runner()
+    except Exception as exc:
+        logger.error('[APScheduler] whisper tick failed: %s', exc)
+
+
 def _run_forecast_job():
     """
     Daily at 02:30 Cairo (after customer segmentation, before near-expiry scan).
@@ -2812,34 +2961,6 @@ def _drain_wa_queue():
         logger.error('[APScheduler] _drain_wa_queue failed: %s', exc)
 
 
-def _flush_pos_orders():
-    """Retry POS orders queued during a SOFTECH/branch outage. Idempotent + gated."""
-    try:
-        from apps.pos_orders import writer
-        if not writer.writer_enabled():
-            return
-        from apps.pos_orders.models import SoftechSalesOrder
-        qs = (SoftechSalesOrder.objects
-              .filter(status=SoftechSalesOrder.STATUS_QUEUED)
-              .select_related('branch').order_by('created_at')[:50])
-        for order in qs:
-            try:
-                writer.push_order(order, dry_run=False)
-            except Exception as exc:
-                logger.warning('[APScheduler] pos flush order %s: %s', order.pk, exc)
-    except Exception as exc:
-        logger.error('[APScheduler] _flush_pos_orders failed: %s', exc)
-
-
-def _reconcile_pos_orders():
-    """Flip pushed → settled by reading the branch DB (read-only)."""
-    try:
-        from apps.pos_orders.reconcile import run_reconcile
-        run_reconcile()
-    except Exception as exc:
-        logger.error('[APScheduler] _reconcile_pos_orders failed: %s', exc)
-
-
 def start_scheduler():
     global _scheduler
     if _scheduler and _scheduler.running:
@@ -2853,6 +2974,14 @@ def start_scheduler():
     _slow_min = int(getattr(_dj_settings, 'SYNC_SLOW_MINUTES', 60))
 
     _scheduler = BackgroundScheduler(timezone='Africa/Cairo')
+    # File everything each job asks of SOFTECH under its job id (doc 30 telemetry).
+    from apps.sync import softech_load as _sl
+    _add_job = _scheduler.add_job
+
+    def _scoped_add_job(func, *args, **kwargs):
+        name = kwargs.get('id') or getattr(func, '__name__', 'job')
+        return _add_job(_sl.scoped(func, f'job:{name}'), *args, **kwargs)
+    _scheduler.add_job = _scoped_add_job
     # FAST lane — stock + sales + reactive hooks (cheap, high-frequency).
     _scheduler.add_job(
         run_fast_sync,
@@ -3081,6 +3210,28 @@ def start_scheduler():
         misfire_grace_time=300,
     )
 
+    # Customer-case SLA escalation — every hour
+    _scheduler.add_job(
+        _escalate_breached_cases,
+        'interval',
+        hours=1,
+        id='escalate_breached_cases',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
+    # Whisper nightly transcription — checks every 15 min, runs only inside its window
+    _scheduler.add_job(
+        _whisper_tick,
+        'interval',
+        minutes=15,
+        id='whisper_tick',
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+
     # Sales forecast engine — daily at 02:30 Cairo (after segmentation at 02:00)
     _scheduler.add_job(
         _run_forecast_job,
@@ -3103,16 +3254,9 @@ def start_scheduler():
         misfire_grace_time=30,
     )
 
-    # POS writeback resilience — flush orders queued during a SOFTECH/branch outage,
-    # then reconcile pushed→settled. Both are no-ops when POS_WRITER_ENABLED is off.
-    _scheduler.add_job(
-        _flush_pos_orders, 'interval', minutes=2, id='pos_flush_queued',
-        replace_existing=True, max_instances=1, misfire_grace_time=60,
-    )
-    _scheduler.add_job(
-        _reconcile_pos_orders, 'interval', minutes=5, id='pos_reconcile',
-        replace_existing=True, max_instances=1, misfire_grace_time=120,
-    )
+    # (POS flush + reconcile are registered ONCE, above, as pos_orders_flush /
+    # pos_orders_reconcile — a second copy here made two jobs push the same queue.
+    # Security Batch 2 P-11 = doc 30 F7.)
     # Rebuild the current month's branch + call-center KPI rollups (06:30) so the KPI
     # board, forecast scenarios and targets stay fresh — and the CC call-count pulls
     # from the live Issabel CDR automatically once DB access is granted.
@@ -3129,8 +3273,12 @@ def start_scheduler():
     # Refresh procurement.PurchaseLine before the insight reports so the purchasing
     # rules (price-creep, supplier concentration, etc.) run on current data.
     _scheduler.add_job(
-        _run_procurement_refresh, 'cron', hour=6, minute=45, id='procurement_refresh',
-        replace_existing=True, max_instances=1, misfire_grace_time=1800,
+        _run_procurement_refresh, 'interval', minutes=30, id='procurement_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
+    )
+    _scheduler.add_job(
+        _run_seasonality_refresh, 'interval', hours=6, id='seasonality_refresh',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     # Incrementally mirror new purchase-expiry entries (main suppliers) right after
     # the procurement refresh — keeps the near-expiry physical audit report current.
@@ -3165,6 +3313,21 @@ def start_scheduler():
     # Daily multi-node stkbalexpiry mirror sweep (FEFO near-expiry / expired tabs).
     _scheduler.add_job(
         _run_stock_expiry_sync, 'cron', hour=5, minute=30, id='stock_expiry_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Stock Transactions Audit ledger (doc 32): every 2 h from 08:00 replaces the last 3 days;
+    # 03:15 catch-up replaces 7 days + prunes beyond STOCK_AUDIT_WINDOW_DAYS.
+    _scheduler.add_job(
+        _run_stock_ledger_sync, 'cron', hour='8-23/2', minute=10, id='stock_ledger_sync',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
+    )
+    _scheduler.add_job(
+        _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
+        kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Sales history catch-up — 03:45 re-syncs the last 7 days (the fast lane only re-reads 2).
+    _scheduler.add_job(
+        _run_sales_history_catchup, 'cron', hour=3, minute=45, id='sales_history_catchup',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
@@ -3240,6 +3403,10 @@ def start_scheduler():
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
+    _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)
+        _help_training_digest, 'cron', day_of_week='sun', hour=8, minute=40, id='help_training_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
     _scheduler.add_job(   # in-app help: tell staff about training changes (cheap)
         _help_announce_training, 'cron', minute=20, id='help_announce_training',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,

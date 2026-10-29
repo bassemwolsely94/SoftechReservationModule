@@ -31,6 +31,7 @@ from .targeting import resolve_offer_items
 # offer_by_percent is a percent(0)/amount(1) FLAG, always '0' in the data → keep '0'.
 _TYPE_MAP = {'gift': 1, 'spend_threshold': 3, 'percent': 2}
 _FAR_FUTURE = datetime(2099, 12, 31)
+LOCK_KEY = 7_301_010      # pg advisory lock: one promo write at a time (MAX(offersno)+1) — P-15
 
 
 def promo_write_enabled():
@@ -134,20 +135,49 @@ def apply_channel_b(offer, *, actor=None, commit=False, confirm=False):
     uc = (getattr(actor, 'softech_user_id', '') or '').strip()
     if not uc:
         return {'applied': False, 'error': 'no_softech_user', 'plan': plan}
-    return _write_specialoffer(plan, uc)
+    res = _write_specialoffer(plan, uc)
+    if res.get('applied'):                                 # who / which offersno (Batch 2, P-16)
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_promo_written', actor=actor, obj=offer,
+                            after={'written': res.get('written'), 'rows': plan['rows']}, usercode=uc)
+    return res
 
 
 def _write_specialoffer(plan, usercode):
-    """Live INSERT — called ONLY after all four gates pass. Read-back verified."""
+    """Live INSERT — called ONLY after all four gates pass. One writer at a time (Batch 2, P-15)."""
+    from apps.vouchers.coupon_dashboard import pg_lock
+    with pg_lock(LOCK_KEY) as got:
+        if not got:
+            return {'applied': False, 'error': 'busy',
+                    'detail': 'كتابة عرض أخرى إلى سوفتك قيد التنفيذ — أعد المحاولة بعد لحظات.'}
+        return _insert_specialoffer(plan, usercode)
+
+
+def _insert_specialoffer(plan, usercode):
+    """Read-back verified, in ONE transaction (a failure half-way used to leave half an offer).
+    An identical live offer already in SOFTECH is reused, not inserted again — every click used
+    to add one more offer for the cashier to apply (Batch 2, P-15)."""
     from config.sybase import get_sybase_connection
 
     conn = get_sybase_connection()
     cur = conn.cursor()
     written = []
+    conn.begin()
     try:
         cur.execute('SELECT ISNULL(MAX(offersno),0) FROM SOFTECHDB9.dbo.specialoffers')
         offersno = int(cur.fetchone()[0]) + 1
         for row in plan['rows']:
+            cur.execute('SELECT offersno FROM SOFTECHDB9.dbo.specialoffers WHERE branchcode = ? '
+                        'AND specialoffertype = ? AND specialoffer_itemcode = ? AND bonus_itemcode = ? '
+                        'AND bonus_itemqty = ? AND itemqty_from = ? AND itemqty_to = ? '
+                        'AND specialoffer_finishdate = ?',
+                        [row['branchcode'], row['specialoffertype'], row['specialoffer_itemcode'],
+                         row['bonus_itemcode'], row['bonus_itemqty'], row['itemqty_from'],
+                         row['itemqty_to'], row['specialoffer_finishdate']])
+            same = cur.fetchone()
+            if same:
+                written.append({'offersno': int(same[0]), 'ok': True, 'existing': True})
+                continue
             cols = ('branchcode, specialoffer_startdate, specialoffer_finishdate, specialoffertype, '
                     'specialoffer_itemcode, itemqty_from, itemqty_to, bonus_itemcode, bonus_itemqty, '
                     'offer_by_percent, offersno, offer_lastupdate, storecode, producercode, classifcode')
@@ -169,6 +199,12 @@ def _write_specialoffer(plan, usercode):
             written.append({'offersno': offersno, 'ok': ok})
             offersno += 1
         conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         try:
             conn.close()

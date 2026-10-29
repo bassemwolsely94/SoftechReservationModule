@@ -62,27 +62,22 @@ class JWTAuthMiddleware(BaseMiddleware):
     @database_sync_to_async
     def _get_user_from_token(self, token: str):
         try:
-            from rest_framework_simplejwt.tokens import UntypedToken
-            from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+            from rest_framework_simplejwt.tokens import AccessToken
             from rest_framework_simplejwt.settings import api_settings
             from django.contrib.auth import get_user_model
+            from apps.users.sessions import account_active
 
             User = get_user_model()
 
-            # Validate the token — raises on invalid/expired
-            UntypedToken(token)
-
-            # Decode without re-validating (already validated above)
-            import jwt as pyjwt
-            decoded = pyjwt.decode(
-                token,
-                options={'verify_signature': False},
-                algorithms=['HS256'],
-            )
-            user_id = decoded.get(api_settings.USER_ID_CLAIM)
+            # An ACCESS token only — signature, expiry and token type checked together.
+            # UntypedToken also took a 7-day refresh token, blacklisted or not (Batch 3, A-4).
+            user_id = AccessToken(token).get(api_settings.USER_ID_CLAIM)
             if not user_id:
                 return AnonymousUser()
-            user = User.objects.get(**{api_settings.USER_ID_FIELD: user_id})
+            user = User.objects.select_related('staff_profile').get(
+                **{api_settings.USER_ID_FIELD: user_id})
+            if not account_active(user):        # a disabled account is refused at once (A-3/A-4)
+                return AnonymousUser()
             return user
 
         except Exception as exc:

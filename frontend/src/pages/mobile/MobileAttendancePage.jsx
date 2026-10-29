@@ -63,13 +63,13 @@ export default function MobileAttendancePage() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
+      <div data-tour="hr-attendance-status" className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
         <div className="text-4xl mb-1">{open ? '🟢' : rec ? '✅' : '🕐'}</div>
         <div className="text-sm text-gray-500">
           {open ? 'أنت مسجّل حضور الآن' : rec ? 'أنهيت يومك' : 'لم تسجّل الحضور بعد'}
         </div>
         {rec && (
-          <div className="mt-3 text-sm text-gray-700 space-y-1.5">
+          <div data-tour="hr-attendance-times" className="mt-3 text-sm text-gray-700 space-y-1.5">
             <div className="flex items-center justify-center gap-2">
               <span className="text-gray-400">حضور:</span>
               <span className="font-medium">{fmtTime(rec.check_in_at)}</span>
@@ -90,12 +90,12 @@ export default function MobileAttendancePage() {
 
       {!rec || open ? (
         open ? (
-          <button onClick={() => act('out')} disabled={busy}
+          <button data-tour="hr-attendance-check-out" onClick={() => act('out')} disabled={busy}
             className="w-full py-4 rounded-2xl bg-red-500 text-white text-base font-bold disabled:opacity-50">
             {busy ? 'جارٍ تحديد الموقع...' : '🚪 تسجيل الانصراف'}
           </button>
         ) : (
-          <button onClick={() => act('in')} disabled={busy}
+          <button data-tour="hr-attendance-check-in" onClick={() => act('in')} disabled={busy}
             className="w-full py-4 rounded-2xl bg-brand-600 text-white text-base font-bold disabled:opacity-50">
             {busy ? 'جارٍ تحديد الموقع...' : '📍 تسجيل الحضور'}
           </button>
@@ -104,7 +104,7 @@ export default function MobileAttendancePage() {
         <div className="text-center text-xs text-gray-400">تم تسجيل حضورك وانصرافك اليوم</div>
       )}
 
-      <p className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
+      <p data-tour="hr-attendance-geofence-note" className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
     </div>
   )
 }

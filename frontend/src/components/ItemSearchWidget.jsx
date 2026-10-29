@@ -20,11 +20,22 @@
  *  className             — extra classes on the root wrapper
  *  autoFocus             — auto-focus the input on mount
  *  disabled              — disable the widget
+ *
+ * POS variant (variant="pos", used by /pos and /m/pos only — default rendering is untouched):
+ *  branchId              — current branch (PK); results carry its stock + network branch pills
+ *  onAction(kind, item, extra) — kind 'transfer' | 'reserve' | 'demand' (row next-action buttons)
+ *  onAlternatives(item)  — reserved for the alternatives wave
+ *  customerId            — current customer, for «آخر شراء لهذا العميل» in the preview
+ *  sheet                 — mobile: preview opens as a bottom sheet instead of a side panel
+ *  Keys: ↑/↓ move · Enter add · ArrowRight toggles the preview · Esc closes preview, then list.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import api from '../api/client'
+import api, { itemsApi } from '../api/client'
 import AdvancedItemSearchModal from './AdvancedItemSearchModal'
+import PosResultRow from '../pos/search/PosResultRow'
+import PosItemPreview from '../pos/search/PosItemPreview'
+import StockAge from '../pos/search/StockAge'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -172,10 +183,19 @@ export default function ItemSearchWidget({
   className     = '',
   autoFocus     = false,
   disabled      = false,
+  variant       = 'default',
+  branchId      = null,
+  onAction      = null,
+  onAlternatives = null,   // pos variant: F7 / row button → verified alternatives panel
+  customerId    = null,
+  sheet         = false,
 }) {
+  const isPos = variant === 'pos'
   const [q, setQ]               = useState('')
   const [open, setOpen]         = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [sel, setSel]           = useState(0)          // pos: highlighted row
+  const [previewOn, setPreviewOn] = useState(false)    // pos: side preview / bottom sheet
   const inputRef                = useRef(null)
   const dropdownRef             = useRef(null)
 
@@ -197,21 +217,27 @@ export default function ItemSearchWidget({
   // already handles partial matches. Full wildcard syntax is available in the advanced modal.
   const [debouncedQ, setDebouncedQ] = useState('')
   useEffect(() => {
-    const cleaned = q.replace(/\*/g, '').trim()
-    if (cleaned.length < 2) { setDebouncedQ(''); return }
+    // pos variant keeps * / % (wildcard search rules); the default widget strips them as before.
+    const cleaned = isPos ? q.trim() : q.replace(/\*/g, '').trim()
+    if (cleaned.replace(/[*%]/g, '').length < 2) { setDebouncedQ(''); return }
     const t = setTimeout(() => setDebouncedQ(cleaned), 280)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, isPos])
 
-  const { data: results = [], isFetching } = useQuery({
-    queryKey: ['item-search-widget', debouncedQ],
-    queryFn: () =>
-      api.get('/items/', { params: { search: debouncedQ, page_size: 10 } })
-        .then(r => r.data.results || r.data),
+  const { data: found, isFetching, isPlaceholderData } = useQuery({
+    queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ],
+    queryFn: () => isPos
+      ? itemsApi.wildcardSearch(debouncedQ, branchId, { network: true, noLive: true })
+          .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null }))
+      : api.get('/items/', { params: { search: debouncedQ, page_size: 10 } })
+          .then(r => ({ rows: r.data.results || r.data, asOf: null })),
     enabled: debouncedQ.length >= 2,
     staleTime: 15_000,
     keepPreviousData: true,
   })
+  const results = found?.rows || []
+  const stockAsOf = found?.asOf ?? null
+  const hasPosData = isPos && found !== undefined
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -227,12 +253,73 @@ export default function ItemSearchWidget({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // new result set → highlight the first row, close the preview
+  useEffect(() => { setSel(0); setPreviewOn(false) }, [debouncedQ, branchId])
+
+  // pos: the rows on screen belong to an OLDER query while the debounce/fetch catches up, so an
+  // Enter pressed then is queued for the typed text and acts only on ITS fresh first row (a scanner
+  // typing a code + Enter adds that code's item, never the previous result's highlighted row).
+  const typedQ = isPos ? q.trim() : q.replace(/\*/g, '').trim()
+  const resultsStale = typedQ !== debouncedQ || isFetching || !!isPlaceholderData
+  const [enterFor, setEnterFor] = useState(null)
+
   const handleSelect = useCallback((item) => {
     setOpen(false)
     setQ('')
     setDebouncedQ('')
+    setPreviewOn(false)
     onSelect(item)
   }, [onSelect])
+
+  const handleAction = useCallback((kind, item, extra) => {
+    setOpen(false)
+    setQ('')
+    setDebouncedQ('')
+    setPreviewOn(false)
+    onAction?.(kind, item, extra)
+  }, [onAction])
+
+  // the queued Enter fires once the typed query's own rows are in
+  useEffect(() => {
+    if (enterFor == null) return
+    if (typedQ !== enterFor) { setEnterFor(null); return }       // typing went on → drop it
+    if (resultsStale) return
+    setEnterFor(null)
+    if (results[0]) handleSelect(results[0])
+  }, [enterFor, typedQ, resultsStale, results])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // keep the highlighted row in view while arrowing
+  useEffect(() => {
+    if (!isPos || !open) return
+    dropdownRef.current?.querySelector(`[data-idx="${sel}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [sel, isPos, open, results])
+
+  function onPosKeyDown(e) {
+    const listOpen = open && debouncedQ.length >= 2 && results.length > 0
+    if (e.key === 'Escape') {
+      if (previewOn) { e.preventDefault(); e.stopPropagation(); setPreviewOn(false) }
+      else if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false) }
+      return
+    }
+    if (e.key === 'Enter' && resultsStale) {
+      e.preventDefault()
+      if (typedQ.replace(/[*%]/g, '').length >= 2) setEnterFor(typedQ)
+      return
+    }
+    if (!listOpen) return
+    if (e.key === 'F7' && onAlternatives) {           // F7 (also stops Chrome's caret-browsing prompt)
+      const it = results[Math.min(sel, results.length - 1)]
+      if (it) { e.preventDefault(); e.stopPropagation(); setOpen(false); onAlternatives(it) }
+      return
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(s + 1, results.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(s - 1, 0)) }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); setPreviewOn(p => !p) }   // physical → key
+    else if (e.key === 'Enter') {
+      const it = results[Math.min(sel, results.length - 1)]
+      if (it) { e.preventDefault(); handleSelect(it) }
+    }
+  }
 
   const handleClear = useCallback(() => {
     setQ('')
@@ -272,6 +359,7 @@ export default function ItemSearchWidget({
             placeholder={placeholder}
             value={q}
             onChange={e => { setQ(e.target.value); setOpen(true) }}
+            onKeyDown={isPos ? onPosKeyDown : undefined}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             autoFocus={autoFocus}
@@ -309,7 +397,9 @@ export default function ItemSearchWidget({
       {/* Hint */}
       <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 flex-wrap">
         <BarcodeIcon />
-        اسم · كود · باركود (قارئ ضوئي متوافق) · لا حاجة لـ * (البحث الجزئي تلقائي) ·
+        {isPos
+          ? 'اسم · كود · باركود · * أو % لأي حروف · ↑↓ تنقّل · Enter إضافة · → معاينة · F7 بدائل · Esc إغلاق ·'
+          : 'اسم · كود · باركود (قارئ ضوئي متوافق) · لا حاجة لـ * (البحث الجزئي تلقائي) ·'}
         <button
           type="button"
           onClick={() => setShowAdvanced(true)}
@@ -318,10 +408,44 @@ export default function ItemSearchWidget({
         >
           🔍 بحث متقدم (Ctrl+F1)
         </button>
+        {isPos && hasPosData && <StockAge asOf={stockAsOf} className="ms-auto" />}
       </p>
 
       {/* Dropdown */}
-      {showDropdown && (
+      {showDropdown && isPos && (
+        <div ref={dropdownRef} role="listbox"
+             className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 flex overflow-hidden">
+          <div className="flex-1 min-w-0 max-h-[34rem] overflow-y-auto">
+            {results.length > 0 ? results.map((item, i) => (
+              <PosResultRow key={item.softech_id || item.id || i} index={i} item={item}
+                hereBranchId={branchId} selected={i === sel}
+                onAdd={handleSelect} onAction={handleAction}
+                onAlternatives={onAlternatives ? (it) => { setOpen(false); onAlternatives(it) } : null}
+                onPreview={() => { if (sel === i) setPreviewOn(p => !p); else { setSel(i); setPreviewOn(true) } }} />
+            )) : (
+              <div className="px-4 py-4 text-sm text-gray-400 text-center">
+                {isFetching ? 'جارٍ البحث...' : 'لا توجد نتائج — جرب باسم مختلف أو الكود أو الباركود'}
+              </div>
+            )}
+          </div>
+          {previewOn && !sheet && results[sel] && (
+            <PosItemPreview item={results[sel]} hereBranchId={branchId} customerId={customerId}
+              className="w-72 shrink-0 border-s border-gray-100 bg-white max-h-[34rem] overflow-y-auto" />
+          )}
+        </div>
+      )}
+      {isPos && previewOn && sheet && results[sel] && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/30" onMouseDown={() => setPreviewOn(false)}>
+          <div className="w-full bg-white rounded-t-2xl max-h-[75vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+            <PosItemPreview item={results[sel]} hereBranchId={branchId} customerId={customerId} />
+            <div className="p-3 pt-0">
+              <button type="button" onClick={() => handleSelect(results[sel])}
+                      className="w-full rounded-lg bg-brand-600 text-white py-2 text-sm font-medium">إضافة للأمر</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDropdown && !isPos && (
         <div
           ref={dropdownRef}
           className="absolute z-30 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-64 overflow-y-auto"

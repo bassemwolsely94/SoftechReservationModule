@@ -3,7 +3,7 @@ from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
 from django.db import transaction
@@ -62,8 +62,36 @@ class ReservationFilter(django_filters.FilterSet):
         fields = ['status', 'status__in', 'priority', 'branch', 'assigned_to']
 
 
+class ReservationsPermission(BasePermission):
+    """Reservations = the `reservations` matrix module (Batch 4, Z-8a): reads need view; creating
+    and working a reservation (status, lines, images, downpayments, share) needs create / edit /
+    approve / finalize; removing a line or image needs edit, deleting a reservation delete. The
+    analytics report sits under Analytics: analytics view. Branch scoping is unchanged."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        from core.permissions import matrix_allows
+        m = request.method
+        if view is not None and not hasattr(view, m.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        p = getattr(request.user, 'staff_profile', None)
+        action = getattr(view, 'action', None)
+        if action == 'analytics':
+            return matrix_allows(p, 'analytics', 'view')
+        if m in SAFE_METHODS:
+            needed = ('view',)
+        elif m == 'POST':
+            needed = ('create', 'edit', 'approve', 'finalize')
+        elif m in ('PUT', 'PATCH'):
+            needed = ('edit',)
+        else:
+            needed = ('delete',) if action == 'destroy' else ('edit', 'delete')
+        return matrix_allows(p, 'reservations', *needed)
+
+
 class ReservationViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReservationsPermission]
     filter_backends = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_class = ReservationFilter
     search_fields = [

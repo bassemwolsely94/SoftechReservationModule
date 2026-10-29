@@ -1,6 +1,6 @@
 # 32 — Stock Transactions Audit (تدقيق حركات المخزون)
 
-**Status:** DESIGN APPROVED (D1, D2, D3) 2026-10-26 · Phase 0 probe DONE (§14) · Phase 1 not started.
+**Status:** DESIGN APPROVED (D1, D2, D3) 2026-10-26 · Phase 0 probe DONE (§14) · **Phases 1–4 BUILT — all 9 active checks live** (§15–18). Optional later: daily digest of new critical findings; link to the monitoring timeline (Phase 5).
 **Date:** 2026-10-26
 **Replaces:** the Power Query workbook `Power Query\Stock Transations Audit\Stock Transactions Audit.xlsx`
 (weekly `stktrans_*.csv` / `stkbal_*.csv` exports from `D:\Stock Transations Audit\`).
@@ -83,18 +83,20 @@ instead of adding columns to `PurchaseHistoryLine`.
 **D2 — New app `apps/stock_audit`.** It holds the ledger, rules, overrides, findings, engine, API and help content.
 `apps/audit` stays the generic action trail.
 
-**D3 — Branch working hours.** `Branch` has no hours today. Add `working_hours` (JSON per weekday:
-`{"sat": ["09:00","24:00"], …, "fri": ["13:00","24:00"]}`) and `is_24h` (bool). Migration on our
-own `branches` table only (not SOFTECH). Editable in the existing branch settings screen.
+**D3 — Branch working hours.** **As built:** `is_24h` + `working_hours` (time windows, the same every day; a window
+may apply to some doccodes only) on `BranchSettings` — our own per-branch config table — instead of `Branch`, which is
+filled by the SOFTECH branch sync, so no synced table changes. Editable in Settings → branches (§18).
 
 ---
 
 ## 5. Data model (`apps/stock_audit`)
 
-**`StockLedgerLine`** — read-only mirror, rolling **365 days** (setting `stock_audit_window_days`, owner decision 2026-10-26).
-Natural key (docnumbers collide across branch/doctype — see memory "docnumber collisions"):
-`(node_branch, branchcode, doccode, docnumber, docdate, itemcode, trans_time, line_seq)`, where `line_seq` is
-the ordinal of identical rows inside one sync batch. Upsert by that key, so re-runs are idempotent.
+**`StockLedgerLine`** — read-only mirror, rolling **365 days** (`STOCK_AUDIT_WINDOW_DAYS`, owner decision 2026-10-26).
+**BUILT (Phase 1).** `stktrans` has no line id, and two identical rows are two real lines, so there is no upsert
+key: each sync **replaces whole `docdate` days** (delete + insert for `[d1, d2)` in one transaction). Re-runs are
+idempotent, lines edited or deleted in SOFTECH inside the window are picked up, and a failed chunk keeps its old
+rows. Documents are always identified by `(branchcode, doccode, docnumber, docdate)` (docnumbers collide across
+branch/doctype). `docnumber`/`r_docnumber`/`s_docnumber` are stored as integers (SOFTECH `decimal(10,0)`).
 Fields: `branchcode, storecode, doccode, docnumber, docdate (date), trans_time (datetime), itemcode → item FK,
 transqty, transprice, transprice_total, newqty, newcostprice, itemsaleprice, itemsalestax, itemsaleprice_tax,
 custdiscp, specialdiscp, pharmacydiscp, bonusqty, itemexpirydate, personcode, usercode, r_doccode,
@@ -132,14 +134,14 @@ All values are editable chain-wide and per branch. EGP values are at **cost** un
 | # | Code | Rule (deterministic) | Default params | Severity |
 |---|---|---|---|---|
 | 1 | `sale_below_cost` | doccode 115; **unit price net of VAT** = `transprice / (1 + additionaldiscp/100)` < `newcostprice` (§14 B). Loss % = (cost − price)/cost; loss EGP = (cost − price) × qty. **Excluded:** credit/contract channels and customers in the `excluded_personcodes` list (free packs), excluded items (insights keywords), qty ≤ 0 | `min_loss_pct=5`, `min_loss_egp=20`, `excluded_personcodes=['4785','4283']` | warning; **critical** ≥ 30% or ≥ 500 EGP (critical also requires the warning floors) |
-| 2 | `duplicate_line` | Same branch, doccode, item, qty, price, and **same expiry**, on two lines whose `trans_time` differs by ≤ N min. Not a duplicate: a 115 and a 30 for the same item/qty (a correction); two lines of one document with different expiries | `window_min=20` | warning |
+| 2 | `duplicate_line` | **As built (§15):** (b) two documents of the same type, branch and customer with **identical line sets** (item, qty, price, expiry), the first entered ≤ N min before the others, documents with < `cross_doc_min_lines` lines ignored (single-item repeat sales are normal); skipped when one of the 115 copies was returned (correction). (a) the same line repeated inside one document is **off by default** (`include_same_document`) | `window_min=20`, `cross_doc_min_lines=2`, `include_same_document=false`, `doccodes=all` | warning |
 | 3 | `price_variance_invoice` | doccode 115; per (branch, docnumber, docdate, item): max/min unit price > ratio. Lines with unit price < floor ignored | `ratio=1.10`, `min_price_egp=1` | info; warning > 1.5 |
-| 4 | `cost_fluctuation` | Purchase unit cost (doccode 10 net line cost) per (item, branch) vs the **previous** purchase of the same item at that branch within N days; change either way | `change_pct=20`, `lookback_days=90` | info; warning > 50% |
+| 4 | `cost_fluctuation` | **As built (§17):** purchase (10) unit cost vs the previous purchase of the same item at the same branch **from the same supplier**, in an earlier document within `lookback_days`; free-goods lines (`pharmacydiscp = 100`) and the بدل الروشتة virtual suppliers excluded | `change_pct=20`, `warning_pct=50`, `lookback_days=90`, `same_supplier_only=true`, `excluded_suppliers=[4469..4472]` | info; warning > 50% |
 | 5 | `stock_adjustment` | doccodes 50 / 150 / 160 (configurable). Flag (item, branch) with ≥ K entries in N days, **or** a single entry ≥ V EGP. Always produces a per-user ranking (no flag needed) | `doccodes=[50,150,160]`, `count=3`, `days=30`, `single_egp=500` | warning; critical ≥ 2,000 EGP |
 | 6 | `frequent_stockout` | `newqty = 0` after a 115/125/150/180 line; medicine (`medicine_type='10'`); count per (item, branch) in N days; only items with `monthly_qty` ≥ M | `count=3`, `days=30`, `min_monthly_qty=1` | info |
 | 7 | `overstock` | **Link only** → existing purchasing coverage screen, pre-filtered to the branch | — | — |
 | 8 | ~~`backdated_entry`~~ | **DROPPED** (owner decision 2026-10-26): it found 0 lines in 180 days because SOFTECH sets `docdate` at save time (§14 E). The number is kept, so the other checks keep their numbers | — | — |
-| 9 | `after_hours_entry` | `trans_time` outside the branch's `working_hours` for that weekday, beyond a grace period. `is_24h` branches skipped. Optional doccode filter | `grace_min=30`, `doccodes=all` | info |
+| 9 | `after_hours_entry` | **As built (§18):** a document whose first line was entered outside its branch's `BranchSettings` hours (local time) by more than `grace_min`; one finding per document; a window may apply to some doccodes only; `is_24h` / no hours → not checked | `grace_min=30`, `warning_after_min=120`, `doccodes=all`, `excluded_users=[]` | info; warning > 2 h |
 | 10 | `return_without_invoice` | doccode 30: (a) `r_docnumber` empty/0 → no invoice; (b) Σ returned qty for (branch, r_docnumber, r_docdate, item) > sold qty on that 115 invoice. **`r_doccode` is unreliable (0/blank), so matching always assumes 115** (§14 C). If the original is older than the ledger window, look it up once from SOFTECH (read-only) and cache it | — | warning; **critical** when over-returned |
 | 11 | `adjustment_after_count` | A 50/150 line on an item covered by a stock-count session at that branch within H hours **after** `snapshot_at`, where the adjustment **does not match** the counted variance (different direction, or qty differs by > tolerance, or the item counted as OK). Posting the counted result is normal and is not flagged | `hours=48`, `qty_tolerance=0` | warning |
 
@@ -160,14 +162,15 @@ Notes:
 
 1. **Ledger sync** `sync_stock_ledger` — **from HQ only.** Phase 0 showed that HQ holds every branch's lines
    (branch 160: an exact match, 158,430 = 158,430; other nodes differ by ≤ 3 rows of replication lag). The sync is
-   incremental by **`docdate` day boundary** (indexed; `trans_time` is not indexed), re-reading the last 2 days, so
-   late rows are never missed. The upsert key keeps re-reads idempotent. Prune lines older than the window nightly.
+   by **`docdate` range** (index `stktrans_60` = docdate, doccode; `trans_time` is not indexed), in 7-day chunks
+   that each replace their days. Command: `sync_stock_ledger [--days 3 | --backfill | --from --to]`.
 2. **Engine** `run_stock_audit [--days N] [--rule CODE] [--branch X]` — loads effective params per branch,
    runs the enabled rules over the window, upserts findings, writes a `StockAuditRun`.
-3. **Schedule** (APScheduler, gated by `STOCK_AUDIT_ENABLED`): ledger sync every 2 h during the day plus a
-   catch-up at 03:00; engine after each sync.
+3. **Schedule** (APScheduler, gated by `STOCK_AUDIT_ENABLED`, BUILT): `stock_ledger_sync` every 2 h 08:10–22:10
+   replaces the last 3 days; `stock_ledger_catchup` 03:15 replaces 7 days and prunes beyond the window. The engine
+   (Phase 2) runs after each sync.
 4. **Refresh button** on the screen: a forced sync + run for the selected branches, with a progress bar.
-5. Freshness domain `stock_audit` (last ledger sync per node, last engine run).
+5. Freshness domain `stock_audit` (BUILT: reads `StockLedgerSyncRun`, 120-min cadence; Phase 2 adds the last engine run).
 
 ---
 
@@ -235,7 +238,8 @@ A daily digest of **new critical** findings to quality manager + supervisor via 
 - Override merge (defaults ⊕ branch), params schema validation, threshold changes audited.
 - Idempotency: running the engine twice gives the same findings; a dismissed finding stays dismissed; it is
   reopened when its value grows.
-- Ledger upsert key: colliding docnumbers on different branches/doccodes don't merge.
+- Ledger day-replace (BUILT, `apps/tests/test_stock_audit_ledger.py`): idempotent re-runs, identical lines kept,
+  SOFTECH deletions disappear, days outside the range untouched, failed chunk keeps old rows (partial), prune.
 - Permissions: branch scoping, edit-thresholds role, export role.
 - Workbook parity: run the rules on the Dec-2024 CSV week and compare counts with the workbook's
   sheets; every difference is explained by a documented exclusion.
@@ -248,10 +252,10 @@ A daily digest of **new critical** findings to quality manager + supervisor via 
 | Phase | Content | Writes |
 |---|---|---|
 | **0 — Probe** (read-only) | Ledger row counts per node for 180 days; confirm VAT basis for check 1; confirm `r_docnumber` population on 30 lines; sample free-pack personcodes | none |
-| **1 — Ledger** | `apps/stock_audit` + `StockLedgerLine` + `sync_stock_ledger` + freshness domain | Postgres only |
-| **2 — Engine + thresholds** | Rules/overrides/runs/findings models, engine, checks 1, 2, 3, 5 + workbook parity test | Postgres only |
-| **3 — Screen** | `/stock-audit` tabs, review workflow, settings tab, Excel, help | — |
-| **4 — Remaining checks** | Branch working hours (D3), checks 4, 6, 9, 10, 11, link for 7, digest notification | Postgres only |
+| **1 — Ledger** ✅ BUILT 2026-10-26 | `apps/stock_audit` + `StockLedgerLine` + `StockLedgerSyncRun` + `sync_stock_ledger` + scheduler + freshness domain | Postgres only |
+| **2 — Engine + thresholds** ✅ BUILT 2026-10-26 | Rules/overrides/runs/findings models, engine, checks 1, 2, 3, 5, live comparison with the workbook rules (§15) | Postgres only |
+| **3 — Screen** ✅ BUILT 2026-10-26 | API, `/stock-audit` (summary, sales & prices, adjustments + per-user ranking, settings), review workflow, branch overrides, `StockAuditAccess`, Excel, help | Postgres only |
+| **4 — Remaining checks** ✅ BUILT 2026-10-26 | Branch working hours (D3, on `BranchSettings`), checks 4, 6, 9, 10, 11, link for 7 · digest notification not built | Postgres only |
 | **5 — Monitoring link** | Finding → employee investigation timeline | — |
 
 ---
@@ -270,7 +274,7 @@ Answered 2026-10-26:
 5. **Check 5 doccodes:** 50 + 150 + 160 (write-off included).
 
 Still open (not blocking Phases 1–3):
-2. **Branch working hours** — per-weekday hours for each branch, and which branches are 24 h (needed by Phase 4, check 9).
+2. **Branch working hours** — answered 2026-10-26 (§18).
 
 ---
 
@@ -305,4 +309,144 @@ so this check cannot find anything. → Check 8 is on hold pending your decision
 **Bug found in passing — FIXED 2026-10-26:** `apps/batches/stock_expiry.py:63` called
 `branch.effective_db_port()`, but it is a property → `'int' object is not callable` for every branch node, so the
 FEFO stock-expiry mirror can only refresh HQ. Fixed (property passed, not called) with regression tests in `test_purchase_expiry_audit.py`; the first full sweep synced 6/6 nodes, 44,916 rows. Every earlier run had been HQ-only.
+
+---
+
+## 15. Phase 2 as built (2026-10-26)
+
+**Code:** `apps/stock_audit/rules.py` (pure checks + `RULES` registry with defaults and schemas),
+`params.py` (validation, defaults ⊕ chain ⊕ branch merge, `ensure_rules`), `engine.py` (`run_stock_audit`),
+command `run_stock_audit [--days 30] [--rule X] [--branch X] [--seed]`, migration `stock_audit/0002`.
+The scheduler runs the engine right after every ledger sync (same `STOCK_AUDIT_ENABLED` switch).
+The insights excluded-items settings are now one shared function, `insights.rules.analytics_excluded_items()`,
+used by both modules. Tests: `apps/tests/test_stock_audit_engine.py` (rules, false-positive cases, params, lifecycle).
+
+**Engine behaviour:**
+- Findings are keyed `(rule_code, dedup_key)`; the key is built from the document, item, time and price, never from a
+  ledger id (ids change when a day is replaced) and never from quantity (a quantity edited in SOFTECH updates the
+  same finding). Candidates that share a key in one run (split-expiry lines of one invoice) are merged: values
+  summed, highest severity kept.
+- Re-runs refresh value, evidence and `last_seen`. They never change the review status, except that a dismissed
+  finding whose value grows by more than 50% is reopened with a note.
+- Check 1 uses the sales channel of the invoice from the sales mirror (`PurchaseHistory.sales_channel` →
+  `ChannelBucketMap`) to skip the `credit` bucket (`excluded_channel_buckets`, editable).
+- Check 5 reads its own `days` lookback (30), even when the engine window is shorter.
+- Staff: `StaffProfile.softech_user_id` = SOFTECH usercode (58 of 114 users seen are linked today).
+
+**First live run, last 30 days, compared with the workbook's own rules on the same lines:**
+
+| Check | Workbook rule | Ours | Why |
+|---|---|---|---|
+| 1 Below cost | 594 lines | 106 (9 critical) · 7,693 EGP | 187 free-pack lines (4785, 4283) excluded; 5% / 20 EGP floors; **+76 lines found only because VAT is removed** |
+| 2 Duplicates | 1,587 groups | 6 identical documents · 684 EGP | The workbook grouped any two sales of one item at one price within 20 min (ordinary repeat sales) |
+| 3 Price variance | 4 | 4 | Same; no near-zero prices in this window |
+| 5 Adjustments | (count + qty only) | 31 single entries ≥ 500 EGP (2 critical) · 28,156 EGP | No item reached 3 adjustments in 30 days |
+
+**Check 2 change from the approved design.** Same-document repeats were 138 sales + 32 purchases in 30 days.
+136 of 138 and 32 of 32 were saved in the same second, with stock falling one unit per line (e.g. 1429 → 1428).
+That is SOFTECH saving an item scanned once per unit, not a double posting, so part (a) is off by default.
+It can be switched on chain-wide or per branch (`include_same_document`).
+
+---
+
+## 16. Phase 3 as built (2026-10-26)
+
+**API** `/api/stock-audit/` (`apps/stock_audit/views.py`, `urls.py`): `me`, `summary`, `findings` (+ detail,
+`review`, `bulk-review` ≤ 500, `export` xlsx), `by-user`, `rules` (+ `PUT rules/<code>/`,
+`PUT|DELETE rules/<code>/overrides/<branch>/`), `access` (+ `candidates`, `revoke`), `refresh` (background:
+3-day ledger re-read + engine, one at a time), `runs`. Every rule is enforced in `apps/stock_audit/access.py`.
+
+**Access (owner decision):**
+| Who | Sees | Review | Export | Thresholds | Grants |
+|---|---|---|---|---|---|
+| admin | all branches | ✔ | ✔ | ✔ | ✔ |
+| quality_manager (`stock_audit` view/approve/export/edit) | all | ✔ | ✔ | ✔ | — |
+| supervisor (`stock_audit` view/approve/export) | all | ✔ | ✔ | — | — |
+| named branch manager (`StockAuditAccess`, any role) | own branches only (home + extra) | ✔ | ✔ | — | — |
+| everyone else | nothing (403) | | | | |
+
+RBAC module `stock_audit` added (`users.MODULE_CHOICES`, `seed_permissions`); migration `stock_audit/0004` creates
+only the stock_audit rows, so no other module's permissions change. `/api/auth/me/` carries `can_stock_audit`, which
+shows the sidebar item to a named branch manager without opening it to every pharmacist.
+
+**Review moves** (`StockAuditFinding.TRANSITIONS`): open → reviewed / dismissed / escalated; escalated → reviewed /
+dismissed; reviewed → open; dismissed → open. A note is required for every move except → reviewed. Each move appends a
+dated line to `review_note` and writes `AuditLog` (`stock_audit_finding_reviewed`). Threshold, override and access
+changes write `stock_audit_rule_changed`, `stock_audit_override_changed`, `stock_audit_access_granted/revoked`.
+
+**Screen** `/stock-audit` (`frontend/src/pages/StockAuditPage.jsx`), sidebar «المخزون → تدقيق حركات المخزون»:
+freshness bar (`stock_audit`) + «🔄 تحديث الآن» (management); tabs «📊 ملخص» (cards per check vs previous period,
+branch × check matrix that opens the filtered list), «🧾 المبيعات والأسعار» (checks 1–3), «⚖️ تسويات المخزون»
+(check 5 + per-user ranking), «⚙️ الإعدادات» (chain thresholds, branch overrides — empty = same as chain — and,
+for admin, named branch managers). Rows expand inline with the message, the original SOFTECH lines and the review
+buttons; `useGridKeyboard` (↑↓, Space, Enter, Ctrl+A); bulk review; Excel with branch names.
+
+**Help:** `apps/help/content/stock_audit.py` — module, finding workflow, journey «مراجعة يومية», 4 tabs, 15-step tour.
+
+**Tests:** `apps/tests/test_stock_audit_api.py` (18): scoping per role and per named branch manager, sidebar flag,
+review moves and notes, bulk review across branches, threshold edit/validation/override, grant/revoke, export
+scoped with branch names, ranking, refresh.
+
+---
+
+## 17. Phase 4 as built (2026-10-26) — checks 4, 6, 10, 11
+
+**Code:** four pure rules in `apps/stock_audit/rules.py`; `engine.build_context` now also supplies medicine items,
+monthly rates and current stock (`catalog.ItemStock`), the sales and total returns behind each referenced invoice
+(`_return_references`, from the mirror), and counted stock-count rows (`_counted_rows`, `stockcount.StockCountSnapshot`,
+expiry audits excluded). A rule's lookback can start before the report window (`lookback_from: report_from`, check 4)
+or count back from today (checks 5 and 6). Screen: checks 4 → «المبيعات والأسعار», 11 → «تسويات المخزون», new tabs
+«📦 توافر المخزون» (6 + link to `/inventory` «📦 الفائض» for check 7) and «↩️ المرتجعات» (10). Help updated.
+
+**Definitions as built:**
+- **4** — see §6. Same supplier only by default; free goods and suppliers 4469–4472 excluded.
+- **6** — `newqty = 0` after 115/125/150/180 on a medicine (`medicine_type = '10'`), ≥ 3 times in 30 days, rate ≥ 1/month;
+  one finding per item per month; value 0 (info), current stock shown.
+- **10** — (a) no `r_docnumber`; (b) item not on the referenced 115 invoice (`r_doccode` ignored, always 115);
+  (c) Σ all returns against that invoice > sold qty (critical). A reference older than the mirror (365 days) is skipped.
+- **11** — net 50/150 within 48 h after a count snapshot covering the item ≠ counted difference (counted − expected);
+  posting exactly the counted difference is not flagged; an adjustment on an item that counted OK is.
+
+**First live run (30 days):**
+
+| Check | Findings | Note |
+|---|---|---|
+| 4 Cost fluctuation | 177 (16 warning) · 23,734 EGP | First run without the fixes: 739 — see below |
+| 6 Frequent stock-outs | 279 (info) | ~46 per branch |
+| 10 Returns | 3 (no invoice, all branch 130) | No over-returns in the window |
+| 11 Adjustment ≠ count | 0 | Only one counted session exists in `stockcount` |
+
+**Check 4 changes from the design, found on live data.** (1) SOFTECH writes free goods as a separate line with
+`pharmacydiscp = 100` and a small **non-zero** price (the VAT on the free goods, e.g. 3.89), so "price > 0" did not
+exclude them; every 400–600% "jump" was a normal line against a free-goods line. (2) Of the remaining 670 changes,
+505 compared two different suppliers — e.g. a 50%-discount buy-back from 4069 against a 17% discount from 4883 — which is
+the supplier price comparison screen's job, and many lines were from the بدل الروشتة virtual suppliers 4469–4472
+(buy-backs, not supply). Same-supplier, without those: 178. Comparing cost relative to list price changed little
+(168), so it was not added. Both switches are editable on the settings tab.
+
+---
+
+## 18. Check 9 and branch working hours (2026-10-26)
+
+**Hours (owner, 2026-10-26)** — `BranchSettings.is_24h` + `working_hours` (list of windows, local time, every day;
+`apps/branches/hours.py` validates and measures; editable in Settings → branches → «🕘 مواعيد العمل»; seeded by
+`branches/0010`):
+
+| Branch | Hours |
+|---|---|
+| 160 | 24 hours (not checked) |
+| 130, 140, 150 | 08:00 – 01:00 |
+| 170 | 08:00 – 00:30 |
+| 100 (HQ) | warehouse 08:00 – 21:00 (normally until 18:00, overtime until 21:00 treated as normal) · call center 09:00 – 24:00 for doccodes **110, 125, 170** (transfers to branches + expense issues; owner-confirmed) |
+
+The HQ call-center document list was confirmed by the owner on 2026-10-26: transfers to branches (110, 125) and
+expense issues (170) only. Sales, returns and reservations at HQ follow the warehouse hours.
+
+**Rule** `after_hours_entry`: the document's first line time vs the windows that apply to its doccode, ± `grace_min`
+(30). One finding per document, value = Σ |qty| × cost. Warning beyond `warning_after_min` (120). `excluded_users`
+lets admin accounts be left out (empty by default).
+
+**First live run (30 days):** 61 documents (15 warning); 62 after the call-center list was narrowed (one HQ sale at 21:50). Branch 170: 44 (sales entered after 01:00; mostly users 1702
+and 10). Branch 100: 16 night purchase batches by user 1509 «BASSEM» (e.g. 6 Oct, 03:12, 200-line documents — admin/IT
+bulk work; add 1509 to `excluded_users` if it should not be audited). 130/140/150: none beyond the grace period.
 

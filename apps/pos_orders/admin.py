@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SoftechSalesOrder, SoftechSalesOrderLine, SoftechSalesOrderPayment
+from .models import SoftechSalesOrder, SoftechSalesOrderLine, SoftechSalesOrderPayment, ContractEntryConfig
 
 
 class LineInline(admin.TabularInline):
@@ -20,3 +20,14 @@ class SoftechSalesOrderAdmin(admin.ModelAdmin):
     search_fields = ('softech_pic', 'customer_name', 'softech_docnumber', 'softech_final_docnumber')
     readonly_fields = ('erp_payload', 'erp_readback', 'erp_executed_at', 'client_token')
     inlines = [LineInline, PaymentInline]
+
+
+@admin.register(ContractEntryConfig)
+class ContractEntryConfigAdmin(admin.ModelAdmin):
+    list_display = ('personcode', 'per_visit_columns', 'approval_column', 'updated_by', 'updated_at')
+    search_fields = ('personcode',)
+    readonly_fields = ('updated_by', 'updated_at')
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)

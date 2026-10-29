@@ -17,6 +17,15 @@ class Command(BaseCommand):
     help = 'Probe remote topology + replication queue behavior'
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('probe_repl_queue')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
@@ -100,6 +109,7 @@ class Command(BaseCommand):
         # change itemsaleprice to a genuinely new value
         new_price = orig_price + 7 if orig_price else 50
         out(f'\n  >>> UPDATE HQ items.itemsaleprice {orig_price} -> {new_price}')
+        guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': ITEM}, ('itemsaleprice', 'usercode'))
         cur.execute('UPDATE SOFTECHDB9.dbo.items SET itemsaleprice=?, usercode=? WHERE itemcode=?',
                     [new_price, '00099', ITEM])
         conn.close()
@@ -139,7 +149,7 @@ class Command(BaseCommand):
             out('    -> Neither r3britems nor britems changed; replication queue is elsewhere/external')
 
         # revert
-        cur.execute('UPDATE SOFTECHDB9.dbo.items SET itemsaleprice=? WHERE itemcode=?', [orig_price, ITEM])
         conn.close()
+        guards.restore_all()      # sale price AND usercode (Batch 2, P-14)
         out(f'\n  Reverted itemsaleprice to {orig_price}')
         out('\nDONE.')

@@ -9,10 +9,17 @@ class BranchSettingsSerializer(serializers.ModelSerializer):
             'id', 'branch',
             'allow_reservations', 'allow_transfers',
             'allow_vouchers', 'allow_stockcount', 'allow_shortage',
-            'notifications_enabled',
+            'notifications_enabled', 'is_24h', 'working_hours',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'branch', 'created_at', 'updated_at']
+
+    def validate_working_hours(self, value):
+        from .hours import HoursError, validate_windows
+        try:
+            return validate_windows(value)
+        except HoursError as e:
+            raise serializers.ValidationError(str(e))
 
 
 class BranchSerializer(serializers.ModelSerializer):

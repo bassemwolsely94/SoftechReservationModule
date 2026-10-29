@@ -1,6 +1,7 @@
 """
 python manage.py test_replication_cycle --mode plant
 python manage.py test_replication_cycle --mode verify
+python manage.py test_replication_cycle --mode restore
 
 Proves that a single HQ items UPDATE replicates to all branches via the
 SSB9 service bus (~30 min cycle).
@@ -8,13 +9,15 @@ SSB9 service bus (~30 min cycle).
 plant : record every branch's current state for the test item, then write
         distinctive markers to HQ items (posdiscp/pharmacydiscp/itemsaleprice).
 verify: re-read every branch and report which picked up the markers.
+restore: put HQ items back from the plant snapshot (only while the markers are still there —
+        never over a real edit made since) and drop the state file.
 
 State is stored in a JSON file between the two runs.
 """
 import json
 import os
 import datetime
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 ITEM = '127397'
 STATE_FILE = os.path.join(os.path.dirname(__file__), '_repl_test_state.json')
@@ -29,14 +32,23 @@ class Command(BaseCommand):
     help = 'Plant/verify a HQ->branch replication cycle test'
 
     def add_arguments(self, parser):
-        parser.add_argument('--mode', required=True, choices=['plant', 'verify'])
+        parser.add_argument('--mode', required=True, choices=['plant', 'verify', 'restore'])
 
     def handle(self, *args, **options):
+        if options['mode'] in ('plant', 'restore'):    # these modes write to SOFTECH (Batch 2, P-7)
+            from core.softech_switches import command_require_probes
+            command_require_probes(f"test_replication_cycle --mode {options['mode']}")
+        if options['mode'] == 'plant' and os.path.exists(STATE_FILE):
+            # A second plant would record the markers as the "originals" (Batch 2, P-14).
+            raise CommandError(f'A plant is still out ({STATE_FILE}) — run --mode restore first.')
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
         def out(t=''):
             self.stdout.write(str(t).encode('ascii', 'replace').decode('ascii'))
+
+        if options['mode'] == 'restore':
+            return self._restore(get_sybase_connection, out)
 
         branches = list(Branch.objects.filter(
             is_operational=True, db_host__isnull=False
@@ -71,6 +83,19 @@ class Command(BaseCommand):
                     out(f'BR{b.softech_branch_id} read ERROR: {str(e)[:60]}')
                     branch_orig[b.softech_branch_id] = None
 
+            state = {
+                'planted_at': datetime.datetime.now().isoformat(),
+                'item': ITEM,
+                'markers': {'pos': MARK_POS, 'pharm': MARK_PHARM, 'price': MARK_PRICE},
+                'hq_orig': hq_orig,
+                'branch_orig': branch_orig,
+            }
+            # Originals saved BEFORE the markers go in, so a crash after the write can still be
+            # restored (Batch 2, P-14).
+            with open(STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+            out(f'\nState saved -> {STATE_FILE}')
+
             # write markers to HQ items (the exact thing the module/ERP does)
             conn = get_sybase_connection(); cur = conn.cursor()
             cur.execute(
@@ -79,18 +104,8 @@ class Command(BaseCommand):
             )
             conn.close()
             out(f'\n>>> Planted markers on HQ items: pos={MARK_POS} pharm={MARK_PHARM} price={MARK_PRICE}')
-
-            state = {
-                'planted_at': datetime.datetime.now().isoformat(),
-                'item': ITEM,
-                'markers': {'pos': MARK_POS, 'pharm': MARK_PHARM, 'price': MARK_PRICE},
-                'hq_orig': hq_orig,
-                'branch_orig': branch_orig,
-            }
-            with open(STATE_FILE, 'w') as f:
-                json.dump(state, f, indent=2)
-            out(f'\nState saved -> {STATE_FILE}')
-            out('Now wait ~30 min for the SSB9 service-bus cycle, then run --mode verify')
+            out('Now wait ~30 min for the SSB9 service-bus cycle, then run --mode verify, '
+                'then --mode restore (the markers include a SALE PRICE, chain-wide)')
 
         else:  # verify
             if not os.path.exists(STATE_FILE):
@@ -131,3 +146,33 @@ class Command(BaseCommand):
                 out('PARTIAL: some branches replicated; others may be mid-cycle or offline')
             else:
                 out('NOT YET: no branch has picked up the change (cycle may not have run)')
+            out('The markers are still live chain-wide — run --mode restore when done.')
+
+    def _restore(self, get_sybase_connection, out):
+        """Put HQ items back from the plant snapshot — only while it still holds the markers."""
+        from core.softech_probe_restore import restore_sql
+        if not os.path.exists(STATE_FILE):
+            out('No plant state found — nothing to restore.'); return
+        with open(STATE_FILE) as f:
+            state = json.load(f)
+        m, o, item = state['markers'], state['hq_orig'], state.get('item', ITEM)
+        conn = get_sybase_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute('SELECT posdiscp, pharmacydiscp, itemsaleprice FROM SOFTECHDB9.dbo.items WHERE itemcode=?', [item])
+            r = cur.fetchone()
+            now = {'pos': float(r[0] or 0), 'pharm': float(r[1] or 0), 'price': float(r[2] or 0)} if r else None
+            if not now or any(abs(now[k] - float(m[k])) >= 0.01 for k in ('pos', 'pharm', 'price')):
+                raise CommandError(
+                    f'HQ item {item} no longer holds the markers (now {now}) — it was edited after the '
+                    f'{state.get("planted_at", "?")} plant. NOT overwriting that edit with the old originals '
+                    f'{o}; check by hand, then delete {STATE_FILE}.')
+            sql, params = restore_sql('SOFTECHDB9.dbo.items', {'itemcode': item}, {
+                'posdiscp': o['pos'], 'pharmacydiscp': o['pharm'], 'itemsaleprice': o['price'],
+                'usercode': o.get('user') or None})
+            cur.execute(sql, params)
+            cur.close()
+        finally:
+            conn.close()
+        os.remove(STATE_FILE)
+        out(f'Restored HQ items {item} -> {o}; the next replication cycle carries it to the branches.')

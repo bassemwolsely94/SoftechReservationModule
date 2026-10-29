@@ -1,6 +1,8 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+
+from core.permissions import MatrixPermission, deny_unless, matrix_allows
 from django.db.models import Prefetch
 
 from .models import SystemSetting, DropdownOption, PharmacyProfile
@@ -19,7 +21,9 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
     POST /api/config/settings/by_key/       → bulk fetch by key names
     """
     queryset         = SystemSetting.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, MatrixPermission]
+    rbac_module = 'settings'
+    rbac_actions = {'list': (), 'retrieve': (), 'by_key': ('view',), 'bulk_update': ('edit',)}
 
     def get_serializer_class(self):
         if self.action in ('update', 'partial_update'):
@@ -28,6 +32,10 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # Without settings view only `is_public` settings are readable (Batch 4, Z-4).
+        user = self.request.user
+        if not (user.is_superuser or matrix_allows(getattr(user, 'staff_profile', None), 'settings', 'view')):
+            qs = qs.filter(is_public=True)
         category = self.request.query_params.get('category')
         if category:
             qs = qs.filter(category=category)
@@ -66,7 +74,9 @@ class DropdownOptionViewSet(viewsets.ModelViewSet):
     POST /api/config/dropdowns/reorder/              → bulk reorder
     """
     queryset           = DropdownOption.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, MatrixPermission]
+    rbac_module = 'settings'
+    rbac_actions = {'list': (), 'retrieve': ()}
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -204,6 +214,9 @@ def pharmacy_profile(request):
     from apps.branches.models import Branch
 
     if request.method == 'PATCH':
+        denied = deny_unless(request, 'settings', 'edit')
+        if denied:
+            return denied
         profile = PharmacyProfile.get()
         allowed = {
             'name_ar', 'name_en', 'tagline_ar', 'website',

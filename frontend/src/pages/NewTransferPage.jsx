@@ -12,6 +12,7 @@ import { transfersApi, branchesApi, itemsApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import useTransferPrefill from '../hooks/useTransferPrefill'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export default function NewTransferPage() {
       .then(res => setItemStocks(prev => ({ ...prev, [item.id]: res.data || [] })))
       .catch(() => {})
   }
+  useTransferPrefill({ setSupplying: setDestinationBranch, addItem })   // POS «تحويل من …» link
   function updateItem(idx, field, value) {
     setItems(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
   }
@@ -213,7 +215,7 @@ export default function NewTransferPage() {
                         {[1,2,3].map(i => <div key={i} className="h-5 w-20 bg-gray-200 rounded animate-pulse" />)}
                       </div>
                     ) : (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5" data-tour="transfers-new-stock">
                         {destinationBranch && (
                           <>
                             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ring-2 ${stockColor(supplyRow?.quantity_on_hand ?? 0)}`}>

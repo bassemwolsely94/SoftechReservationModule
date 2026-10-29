@@ -131,7 +131,7 @@ function EngineStatusStrip({ onTriggerSuccess }) {
   const st = run ? RUN_STATUS[run.status] : null
 
   return (
-    <div className="border-b border-gray-100 bg-white px-6 py-4">
+    <div className="border-b border-gray-100 bg-white px-6 py-4" data-tour="catalog-recommendations-status">
       <div className="flex flex-wrap items-center gap-4">
         {/* Status badge */}
         <div className="flex items-center gap-2">
@@ -167,14 +167,16 @@ function EngineStatusStrip({ onTriggerSuccess }) {
 
         {/* Trigger controls (admin only) */}
         {isAdmin && (
-          <div className="flex items-center gap-2 mr-auto">
+          <div data-tour="catalog-recommendations-run-controls" className="flex items-center gap-2 mr-auto">
             <button
+              data-tour="catalog-recommendations-settings"
               onClick={() => setShowConfig(v => !v)}
               className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
             >
               ⚙️ إعدادات
             </button>
             <button
+              data-tour="catalog-recommendations-run"
               onClick={() => triggerMutation.mutate()}
               disabled={triggerMutation.isLoading || run?.status === 'running'}
               className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium
@@ -257,17 +259,18 @@ function FBTPairsTab() {
   return (
     <div dir="rtl">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
+      <div data-tour="catalog-recommendations-fbt-toolbar" className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
         <div className="relative flex-1 min-w-48">
           <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 pointer-events-none text-sm">🔍</span>
           <input
+            data-tour="catalog-recommendations-fbt-search"
             value={search}
             onChange={handleSearch}
             placeholder="ابحث باسم الصنف أو كوده…"
             className="w-full border border-gray-200 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
           />
         </div>
-        <select value={ordering} onChange={e => setOrdering(e.target.value)}
+        <select data-tour="catalog-recommendations-fbt-sort" value={ordering} onChange={e => setOrdering(e.target.value)}
           className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
           {SORT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -276,7 +279,7 @@ function FBTPairsTab() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div data-tour="catalog-recommendations-fbt-table" className="overflow-x-auto">
         {isLoading ? (
           <div className="p-12 text-center text-gray-400">جارٍ التحميل…</div>
         ) : rows.length === 0 ? (
@@ -394,6 +397,7 @@ function CustomerRecsTab() {
       <div className="relative max-w-md mb-6">
         <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 pointer-events-none">👤</span>
         <input
+          data-tour="catalog-recommendations-customer-search"
           value={query}
           onChange={handleQueryChange}
           placeholder="اسم العميل أو رقم الهاتف…"
@@ -438,7 +442,7 @@ function CustomerRecsTab() {
             </div>
             <div className="flex items-center gap-3">
               {/* Clinical safety toggle */}
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs" data-tour="catalog-recommendations-safety">
                 <input
                   type="checkbox"
                   checked={clinicalFilter}
@@ -608,7 +612,7 @@ export default function RecommendationsPage() {
     <div dir="rtl" className="flex flex-col h-full bg-gray-50 min-h-screen">
 
       {/* Page header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      <div data-tour="catalog-recommendations-header" className="bg-white border-b border-gray-100 px-6 py-5">
         <h1 className="text-xl font-black text-gray-900">محرك التوصيات الذكية</h1>
         <p className="text-xs text-gray-500 mt-0.5">
           اقترانات الأصناف FBT · التوصيات الشخصية للعملاء
@@ -622,8 +626,8 @@ export default function RecommendationsPage() {
       <LatestRunKpis />
 
       {/* Tab bar */}
-      <div className="bg-white border-b border-gray-100 px-6">
-        <div className="flex gap-1 -mb-px">
+      <div className="bg-white border-b border-gray-100 px-6" data-tour="catalog-recommendations-tabs">
+        <div data-tour="catalog-recommendations-tabs" className="flex gap-1 -mb-px">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors

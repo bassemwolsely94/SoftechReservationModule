@@ -212,7 +212,7 @@ def list_tiers():
     }
 
 
-def apply_classification_changes(plan, usercode):
+def apply_classification_changes(plan, usercode, *, actor=None):
     """
     Write classification codes (origin / contract-discount tier) to SOFTECH items
     — the "fix the stale label" path. Each plan entry may target a DIFFERENT tier
@@ -223,12 +223,14 @@ def apply_classification_changes(plan, usercode):
     plan: [ {item_id, origin_code?, store_classif?}, ... ]
     Returns (error_or_None, [ {softech_id, ok, error?}, ... ]).
     ADMIN-only + a valid SOFTECH usercode must be enforced by the caller.
+    Every verified item → one AuditLog row (who, old → new class) — Batch 2, P-16.
     """
     from django.conf import settings
     from config.sybase import get_sybase_connection
     from apps.catalog.models import Item
+    from core.softech_audit import audit_softech_write
 
-    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', False):
         return 'كتابة الأصناف إلى SOFTECH معطّلة (PRICING_SOFTECH_WRITE_ENABLED=False)', []
     if not plan:
         return 'لا توجد تغييرات', []
@@ -265,10 +267,14 @@ def apply_classification_changes(plan, usercode):
                     str(row[i] or '').strip() == set_cols[i][2] for i in range(len(set_cols))
                 )
                 if ok:
+                    before = {df: getattr(it, df) for _, df, _ in set_cols}
                     for _, django_field, v in set_cols:
                         setattr(it, django_field, v)
                     it.save(update_fields=[df for _, df, _ in set_cols])
                     results.append({'softech_id': it.softech_id, 'ok': True})
+                    audit_softech_write('softech_item_class_written', actor=actor, obj=it, before=before,
+                                        after={df: v for _, df, v in set_cols}, usercode=str(usercode),
+                                        softech_id=it.softech_id)
                 else:
                     results.append({'softech_id': it.softech_id, 'ok': False, 'error': 'read-back mismatch'})
             except Exception as exc:
@@ -338,7 +344,7 @@ def preview_new_tier(kind, label, code=None):
     }
 
 
-def create_new_tier(kind, label, usercode, code=None):
+def create_new_tier(kind, label, usercode, code=None, *, actor=None):
     """
     Create a new lookup tier (COPY template → override code + description).
     Read-back verified. Returns (error_or_None, {code, ok}).
@@ -348,6 +354,9 @@ def create_new_tier(kind, label, usercode, code=None):
         return 'نوع غير صالح', None
     if not label or not str(label).strip():
         return 'الاسم مطلوب', None
+    from django.conf import settings
+    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', False):   # same switch as apply_classification_changes
+        return 'إنشاء فئة جديدة في SOFTECH معطّل (PRICING_SOFTECH_WRITE_ENABLED=False)', None
     from config.sybase import get_sybase_connection
     spec = LOOKUP_TABLES[kind]
     conn = get_sybase_connection(); cur = conn.cursor()
@@ -395,6 +404,10 @@ def create_new_tier(kind, label, usercode, code=None):
         except Exception: pass
     if not ok:
         return 'لم يُؤكَّد الإدراج (read-back)', None
+    from core.softech_audit import audit_softech_write          # Batch 2, P-16
+    audit_softech_write('softech_tier_created', actor=actor,
+                        after={'table': spec['table'], 'code': new_code, 'label': str(label)},
+                        usercode=str(usercode))
     return None, {'code': new_code, 'table': spec['table'], 'ok': True}
 
 

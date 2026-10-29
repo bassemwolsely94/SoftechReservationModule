@@ -183,6 +183,20 @@ class KpiExportTests(TestCase):
         eng = ForecastEngine(); eng.generate(sc); eng.commit(sc, created_by=None)
         self.assertTrue(AuditLog.objects.filter(action='sales_target_committed').exists())
 
+    def test_partial_month_projection(self):
+        from apps.forecasting.engine import ForecastEngine
+        from datetime import date
+        from calendar import monthrange
+        eng = ForecastEngine()
+        today = date.today()
+        # a completed past month passes through unchanged
+        self.assertEqual(eng._project_full_month(Decimal('1000'), 2025, 1), Decimal('1000'))
+        # current in-progress month, data complete through day 10 → scaled to full month
+        eng._latest_complete_date = lambda y, m: date(today.year, today.month, 10)
+        total = monthrange(today.year, today.month)[1]
+        self.assertEqual(eng._project_full_month(Decimal('1000'), today.year, today.month),
+                         Decimal('1000') * total / 10)
+
     def test_profit_margin_rule(self):
         # معامل الربحية target = ~23.5% of the cash-sales target (owner rule)
         from apps.forecasting.models import ForecastScenario, ForecastResult

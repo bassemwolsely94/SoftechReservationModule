@@ -24,6 +24,15 @@ class Command(BaseCommand):
         parser.add_argument('itemcode', nargs='?', default='127397')
 
     def handle(self, *args, **options):
+        # Every SOFTECH row this probe touches goes back — all columns, usercode included —
+        # even when it crashes half-way (Batch 2, P-14).
+        from core.softech_probe_restore import RowGuards
+        with RowGuards(self.stdout.write) as guards:
+            self._investigate(guards, *args, **options)
+
+    def _investigate(self, guards, *args, **options):
+        from core.softech_switches import command_require_probes
+        command_require_probes('investigate_replication')    # writes to SOFTECH (Batch 2, P-7)
         from config.sybase import get_sybase_connection, get_branch_connection
         from apps.branches.models import Branch
 
@@ -253,6 +262,7 @@ class Command(BaseCommand):
             test_val = orig_val + 1
 
             out(f'\n  Writing test value: posdiscp {orig_val} -> {test_val}')
+            guards.track(get_sybase_connection, 'SOFTECHDB9.dbo.items', {'itemcode': itemcode}, ('posdiscp', 'usercode'))
             cur = conn.cursor()
             cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp = ?, usercode = ? WHERE itemcode = ?',
                         [test_val, '00099', itemcode])
@@ -408,16 +418,7 @@ class Command(BaseCommand):
 
         # ── Revert test write ─────────────────────────────────────────────────
         section('Reverting test write')
-        if orig_val is not None:
-            try:
-                cur = conn.cursor()
-                cur.execute('UPDATE SOFTECHDB9.dbo.items SET posdiscp = ?, usercode = ? WHERE itemcode = ?',
-                            [orig_val, '00099', itemcode])
-                conn.close()
-                out(f'  Reverted posdiscp back to {orig_val}')
-            except Exception as e:
-                out(f'  Revert ERROR: {e}')
-        else:
-            conn.close()
+        conn.close()
+        guards.restore_all()      # posdiscp AND the original usercode (was left '00099') (Batch 2, P-14)
 
         out(f'\nInvestigation complete: {datetime.datetime.now().isoformat()}')

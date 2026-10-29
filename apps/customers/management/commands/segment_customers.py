@@ -338,7 +338,7 @@ class Command(BaseCommand):
 
         total = changed = 0
 
-        for customer in Customer.objects.only(
+        for customer in Customer.objects.filter(is_account_placeholder=False).only(
             'id', 'created_at',
             'segment', 'ltv', 'last_visit_date',
             'days_since_last_visit', 'purchase_count_90d',

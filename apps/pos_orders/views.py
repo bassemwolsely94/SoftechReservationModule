@@ -19,11 +19,12 @@ from rest_framework.response import Response
 
 from .models import SoftechSalesOrder, CHANNEL_TO_PTCLASSIF, PAYTYPE_TO_SOFTECH, DOCKIND_TO_DOCCODE
 from .serializers import OrderSerializer
-from .permissions import CanOperatePosOrders, CanPushPosOrders
+from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
 from core.errors import public_error
+from core.permissions import matrix_permission
 
 
 def _staff(user):
@@ -152,7 +153,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset           = SoftechSalesOrder.objects.all().prefetch_related('lines', 'payments')
     serializer_class   = OrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [CanOperatePosOrders]   # PATCH = pos edit, DELETE = pos delete (Z-5b)
 
     def update(self, request, *a, **k):
         order = self.get_object()
@@ -163,7 +164,7 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def return_lookup(request):
     """Preview a finalized invoice for RETURN (read-only, NO order created). Query: ?branch=&invoice=.
     Returns the sale's date + line summary + payments so the cashier can confirm before creating the
@@ -225,7 +226,7 @@ def return_lookup(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def ready_order(request, pk):
     """Validate + compute money fields (pricing.py); optionally accept explicit tenders."""
     order = SoftechSalesOrder.objects.get(pk=pk)
@@ -319,6 +320,7 @@ def push_order(request, pk):
     except ValueError as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     result['live'] = (not dry)
+    _audit_pos(request, 'softech_pos_order_pushed', order, result)
     # Out-of-stock rejection (we don't write حجز) → 400 with the OOS lines (matches native منع الصرف).
     if result.get('stock_errors'):
         return Response({**result, 'detail': 'أصناف غير متوفرة بالرصيد — لا يمكن الإرسال.',
@@ -351,11 +353,24 @@ def push_order(request, pk):
 @permission_classes([CanPushPosOrders])
 def cancel_order(request, pk):
     order = SoftechSalesOrder.objects.get(pk=pk)
+    before = order.status
     try:
         writer.cancel_order(order)
     except (ValueError, writer.WriterDisabled) as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    from core.softech_audit import audit_softech_write          # who cancelled (Batch 2, P-16)
+    audit_softech_write('softech_pos_order_cancelled', actor=request.user, obj=order,
+                        before={'status': before}, after={'status': order.status})
     return Response(OrderSerializer(order).data)
+
+
+def _audit_pos(request, action, order, result, **extra):
+    """Who pushed this sale into SOFTECH (Batch 2, P-16) — only when it really wrote. Kept in
+    the views: the checkout writer (push_order) is not touched."""
+    if isinstance(result, dict) and result.get('wrote_to_softech'):
+        from core.softech_audit import audit_softech_write
+        audit_softech_write(action, actor=request.user, obj=order,
+                            after={'docnumber': result.get('docnumber'), 'mode': result.get('mode')}, **extra)
 
 
 def build_order_whatsapp_message(order):
@@ -833,7 +848,7 @@ _REFERRAL_STATUSES = (SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_
 
 
 @api_view(['GET'])
-@permission_classes([CanOperatePosOrders])
+@permission_classes([permissions.IsAuthenticated, matrix_permission('analytics')])   # a report (Z-5b)
 def referral_stats(request):
     """
     Referring-doctor performance: committed POS sales grouped by referral doctor →
@@ -915,6 +930,40 @@ def batch_availability_view(request):
     return Response({'item': item, 'store': store, 'stockable': stockable, 'batches': batches,
                      'batch_required': bool(batch_required),
                      'batch_action': verdict['action'], **summarize(batches)})
+
+
+FEFO_SPLIT_MAX_BATCHES = 50
+
+
+@api_view(['POST'])
+@permission_classes([CanViewPos])
+def fefo_split_view(request):
+    """
+    POST {"batches": [{expiry, batchno, qty}], "need": n} → {"picks": [...], "shortfall": x}
+    Pure FEFO split for the POS automatic batch split (Speed Wave Task 6). The batches are the
+    ones the client already received from `batches/` for this item add — NO SOFTECH read here,
+    so qty edits re-split without touching the branch node. Never creates a reservation.
+    """
+    from .batch_availability import fefo_split
+    data = request.data if isinstance(request.data, dict) else {}
+    raw = data.get('batches')
+    if not isinstance(raw, list):
+        return Response({'detail': 'batches يجب أن تكون قائمة.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(raw) > FEFO_SPLIT_MAX_BATCHES:
+        return Response({'detail': 'عدد التشغيلات أكبر من المسموح.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        need = float(data.get('need'))
+        batches = [{'expiry': (str(b.get('expiry'))[:10] if b.get('expiry') else None),
+                    'batchno': str(b.get('batchno') or '').strip(),
+                    'qty': float(b.get('qty') or 0)} for b in raw]
+    except (TypeError, ValueError, AttributeError):
+        return Response({'detail': 'بيانات غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    import math
+    if not math.isfinite(need) or need < 0 or not all(math.isfinite(b['qty']) for b in batches):
+        return Response({'detail': 'الكمية المطلوبة غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    # FEFO = earliest expiry first; a batch without an expiry goes last (stable for equal dates).
+    batches.sort(key=lambda b: (b['expiry'] is None, b['expiry'] or ''))
+    return Response(fefo_split(batches, need))
 
 
 @api_view(['GET'])
@@ -1166,6 +1215,7 @@ def flush_now(request):
             res = writer.push_order(order, dry_run=False)
         except Exception as e:
             failed += 1; results.append({'id': order.pk, 'error': str(e)}); continue
+        _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
         if res.get('queued'):
             queued += 1
         elif res.get('ok') or res.get('already_pushed'):
@@ -1266,7 +1316,7 @@ def points_preview_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([CanOperatePosOrders])
 def reference_data(request):
     """Channel/payment/doc-kind → SOFTECH code maps + writer state, for the POS UI."""
     sp = _staff(request.user)
@@ -1285,3 +1335,69 @@ def reference_data(request):
         'default_branch': (sp.branch_id if sp and sp.branch_id else None),   # auto-select the seller's branch
         'note': 'SOFTECH writes are disabled (no test instance). /push returns a dry-run plan.',
     })
+
+
+# ── Contract (تعاقد) fast-entry assist — read-only, PG only (POS Speed Wave) ──────────────────
+def _assist_customer(request):
+    pc = (request.query_params.get('customer') or '').strip()
+    if not pc:
+        raise ValidationError({'customer': 'مطلوب'})
+    return pc
+
+
+def _int_param(request, name):
+    v = request.query_params.get(name)
+    try:
+        return int(v) if v not in (None, '') else None
+    except ValueError:
+        raise ValidationError({name: 'رقم غير صالح'})
+
+
+@api_view(['GET'])
+@permission_classes([CanViewPos])
+def contract_assist_config(request):
+    from . import contract_history as ch
+    return Response(ch.entry_config(_assist_customer(request)))
+
+
+@api_view(['GET'])
+@permission_classes([CanViewPos])
+def contract_assist_patients(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    return Response({'results': ch.patient_suggest(pc, request.query_params.get('q', ''))})
+
+
+@api_view(['GET'])
+@permission_classes([CanViewPos])
+def contract_assist_history(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    patient = (request.query_params.get('patient') or '').strip()
+    if not patient:
+        raise ValidationError({'patient': 'مطلوب'})
+    return Response({'results': ch.recent_prescriptions(
+        pc, patient, branch_id=_int_param(request, 'branch'))})
+
+
+@api_view(['GET'])
+@permission_classes([CanViewPos])
+def contract_assist_field_values(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    try:
+        vals = ch.field_values(pc, request.query_params.get('column', ''),
+                               request.query_params.get('q', ''))
+    except ValueError:
+        raise ValidationError({'column': 'عمود غير معروف'})
+    return Response({'results': vals})
+
+
+@api_view(['GET'])
+@permission_classes([CanViewPos])
+def contract_assist_approval_check(request):
+    from . import contract_history as ch
+    pc = _assist_customer(request)
+    matches = ch.approval_reused(pc, request.query_params.get('value', ''),
+                                 exclude_order_id=_int_param(request, 'exclude_order'))
+    return Response({'reused': bool(matches), 'matches': matches})

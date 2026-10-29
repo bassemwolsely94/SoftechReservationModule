@@ -20,6 +20,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi, branchesApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
+import { useToast } from '../components/ui'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -382,10 +384,60 @@ function EngineRunProgress({ run }) {
   )
 }
 
+
+// ── Seasonality (owner 2026-10-25) — the item's index for the month we are in ─────────────
+// Computed on the server (apps/purchasing/seasonality.py) from 48 months of SOFTECH sales,
+// bulk invoices excluded; display only — the rates do not use it.
+function SeasonCell({ row }) {
+  const v = row.season_index == null ? null : Number(row.season_index)
+  if (v == null) return <span className="text-gray-300 text-xs" title={row.season_note || ''}>—</span>
+  const up = v >= 1.15, down = v <= 0.85
+  return (
+    <span title={row.season_note || ''}
+      className={`text-xs font-bold ${up ? 'text-emerald-700' : down ? 'text-sky-700' : 'text-gray-500'}`}>
+      {up ? '▲' : down ? '▼' : ''}×{v.toFixed(2)}{row.season_stable === false ? <span className="text-amber-600"> ⚠</span> : ''}
+    </span>
+  )
+}
+
+function SeasonNote({ row }) {
+  return <span className="text-[11px] text-gray-500 block truncate" title={row.season_note || ''}>{row.season_note || '—'}</span>
+}
+
+function SeasonalityBar({ onDone }) {
+  const qc = useQueryClient()
+  const q = useQuery({
+    queryKey: ['purchasing-seasonality'],
+    queryFn: () => purchasingApi.seasonality().then(r => r.data),
+    refetchInterval: (query) => (query?.state?.data?.running ? 5000 : 120000),
+  })
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    if (wasRunning.current && q.data && !q.data.running) onDone?.()
+    wasRunning.current = !!q.data?.running
+  }, [q.data, onDone])
+  const m = useMutation({ mutationFn: () => purchasingApi.seasonalityRefresh(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing-seasonality'] }) })
+  const d = q.data
+  if (!d) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-1.5 text-[11px] text-gray-500 border-b border-gray-100">
+      <span title="مؤشر الموسمية = مبيعات الشهر مقارنة باتجاه 12 شهراً حوله، متوسط 3 سنوات، بعد استبعاد فواتير البيع الكبيرة">
+        الموسمية: {d.at ? `محسوبة من ${d.months_back} شهراً حتى ${String(d.through || '').slice(0, 7)} · ${d.items} صنف` : 'لم تُحسب بعد'}
+      </span>
+      {d.can_refresh && (
+        <button data-tour="purchasing-engine-seasonality" type="button" className="underline hover:text-brand-600 disabled:opacity-40"
+          disabled={d.running || m.isPending} onClick={() => m.mutate()}
+          title="سحب الشهور الناقصة من SOFTECH (قراءة فقط) وإعادة الحساب">⟳ تحديث الموسمية</button>)}
+      {d.running && <span className="text-brand-600">{d.progress?.message || 'جارٍ الحساب…'} {d.pct != null ? `${d.pct}%` : ''}</span>}
+    </div>
+  )
+}
+
 // ── Aggregated (ABC) Tab ──────────────────────────────────────────────────────
 
 // Default widths: [item_name, code, ABC, avg/mo, stock, gap, val/mo, m%, n%, cum%, branches]
-const AGG_WIDTHS_DEFAULT = [260, 90, 70, 100, 100, 100, 140, 90, 90, 90, 100]
+const AGG_WIDTHS_DEFAULT = [260, 90, 70, 100, 100, 100, 140, 90, 90, 90, 100, 110, 280]
 
 function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters = {} }) {
   const [colW, onResizeStart] = useColWidths(AGG_WIDTHS_DEFAULT)
@@ -410,8 +462,11 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
 
   const rows = data || []
   const totalW = colW.reduce((a, b) => a + b, 0)
+  const monthName = rows[0]?.season_month || ''
 
   return (
+    <>
+    <SeasonalityBar />
     <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 360px)', minHeight: '280px' }}>
       {isFetching && (
         <div className="text-xs text-gray-400 px-4 py-1 animate-pulse">جارٍ التحديث...</div>
@@ -430,12 +485,14 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
             <PlainTh align="center" titleProp="هامش الربح الصافي = (متوسط سعر البيع الفعلي − سعر الشراء) / سعر البيع القياسي" width={colW[8]} onResizeStart={e => onResizeStart(e, 8)}>هامش ص%</PlainTh>
             <PlainTh align="center"                                                                                       width={colW[9]}  onResizeStart={e => onResizeStart(e, 9)}>تراكمي%</PlainTh>
             <PlainTh align="center"                                                                                       width={colW[10]} onResizeStart={e => onResizeStart(e, 10)}>فروع</PlainTh>
+            <SortTh label={`موسمية ${monthName}`} field="-season_sort" current={ordering} onSort={onSort} align="center" width={colW[11]} onResizeStart={e => onResizeStart(e, 11)} title="مؤشر الموسمية للشهر الحالي: ×1.00 = شهر عادي، ×1.25 = أعلى من المتوسط 25% (⚠ = السنوات غير متسقة)" />
+            <PlainTh titleProp="ملاحظات وتحفظات: عدد السنوات، اتساقها، المبيعات الكبيرة المستبعدة، والشهر التالي" width={colW[12]} onResizeStart={e => onResizeStart(e, 12)}>ملاحظات الموسمية</PlainTh>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {rows.length === 0 && (
             <tr>
-              <td colSpan={11} className="text-center py-12 text-gray-400">لا توجد بيانات — شغّل المحرك أولاً</td>
+              <td colSpan={13} className="text-center py-12 text-gray-400">لا توجد بيانات — شغّل المحرك أولاً</td>
             </tr>
           )}
           {rows.map(row => (
@@ -470,18 +527,21 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
                   <span className="text-red-400 font-medium"> ({row.branches_with_gap} ناقص)</span>
                 )}
               </td>
+              <td className="px-3 py-2 text-center"><SeasonCell row={row} /></td>
+              <td className="px-3 py-2"><SeasonNote row={row} /></td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
 // ── Per-Branch Tab ────────────────────────────────────────────────────────────
 
 // Widths: [item, ABC, branch, 30d, 90d, 365d, avg/mo, safety, stock, in-transit, coverage, gap, priority, status, last_sale, m%, n%]
-const BRANCH_WIDTHS_DEFAULT = [260, 70, 120, 90, 90, 90, 110, 90, 100, 90, 90, 90, 90, 100, 100, 90, 90]
+const BRANCH_WIDTHS_DEFAULT = [260, 70, 120, 90, 90, 90, 110, 90, 100, 90, 90, 90, 90, 100, 100, 90, 90, 110, 280]
 
 function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemFilters = {} }) {
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -508,9 +568,11 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
   })
 
   const rows = data || []
+  const monthName = rows[0]?.season_month || ''
 
   return (
     <div>
+      <SeasonalityBar />
       {/* Branch filter + needs-purchase toggle */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white border-b border-gray-100">
         <select
@@ -560,12 +622,14 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
                 <PlainTh align="center"                                                                              width={colW[14]} onResizeStart={e => onResizeStart(e, 14)}>آخر بيع</PlainTh>
                 <PlainTh align="center" titleProp="هامش الربح الإجمالي القياسي"                                      width={colW[15]} onResizeStart={e => onResizeStart(e, 15)}>هامش م%</PlainTh>
                 <PlainTh align="center" titleProp="هامش الربح الصافي بعد الخصم"                                      width={colW[16]} onResizeStart={e => onResizeStart(e, 16)}>هامش ص%</PlainTh>
+                <SortTh label={`موسمية ${monthName}`} field="-season_sort" current={ordering} onSort={onSort} align="center" width={colW[17]} onResizeStart={e => onResizeStart(e, 17)} title="مؤشر الموسمية للصنف على الشبكة للشهر الحالي (⚠ = السنوات غير متسقة)" />
+                <PlainTh titleProp="ملاحظات وتحفظات الموسمية" width={colW[18]} onResizeStart={e => onResizeStart(e, 18)}>ملاحظات الموسمية</PlainTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={17} className="text-center py-12 text-gray-400">لا توجد نتائج</td>
+                  <td colSpan={19} className="text-center py-12 text-gray-400">لا توجد نتائج</td>
                 </tr>
               )}
               {rows.map(row => (
@@ -613,6 +677,8 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches, runId, itemF
                     <MarginCell pct={row.net_margin_pct}
                       title={`هامش صافي | إيرادات فعلية: ${fmt(row.net_sales_revenue||0,0)} ج.م`} />
                   </td>
+                  <td className="px-3 py-2 text-center"><SeasonCell row={row} /></td>
+                  <td className="px-3 py-2"><SeasonNote row={row} /></td>
                 </tr>
               ))}
             </tbody>
@@ -635,7 +701,7 @@ const STATUS_LABELS = {
   pending: 'انتظار', approved: 'موافق', rejected: 'مرفوض', executed: 'منفّذ',
 }
 
-function TransferRecsTab({ isAdmin }) {
+function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purchasing / supply groups (Z-12b)
   const qc = useQueryClient()
 
   // Standard filters
@@ -819,7 +885,7 @@ function TransferRecsTab({ isAdmin }) {
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }}>فرع المصدر</th>
                 <th colSpan={3} className="px-3 py-1.5 text-center text-indigo-500 border-x border-gray-200"
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }}>فرع الهدف</th>
-                <th colSpan={isAdmin ? 7 : 6}
+                <th colSpan={canReview ? 7 : 6}
                     style={{ position: 'sticky', top: 0, zIndex: 21, backgroundColor: '#f3f4f6' }} />
               </tr>
               {/* Column header row — sticky row 2 (top: 28px to clear row 1) */}
@@ -846,7 +912,7 @@ function TransferRecsTab({ isAdmin }) {
                     title="هامش الربح الإجمالي القياسي">هامش م%</th>
                 <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                     style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>الحالة</th>
-                {isAdmin && (
+                {canReview && (
                   <th className="px-3 py-2 text-center border-b border-gray-200 whitespace-nowrap"
                       style={{ position: 'sticky', top: 28, zIndex: 20, backgroundColor: '#f9fafb' }}>إجراء</th>
                 )}
@@ -855,7 +921,7 @@ function TransferRecsTab({ isAdmin }) {
             <tbody className="divide-y divide-gray-100">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 16 : 15} className="text-center py-12 text-gray-400">
+                  <td colSpan={canReview ? 16 : 15} className="text-center py-12 text-gray-400">
                     لا توجد توصيات — شغّل المحرك لإنشاء توصيات التحويل
                   </td>
                 </tr>
@@ -893,11 +959,11 @@ function TransferRecsTab({ isAdmin }) {
                       {STATUS_LABELS[rec.status] || rec.status}
                     </span>
                   </td>
-                  {isAdmin && (
+                  {canReview && (
                     <td className="px-3 py-2 text-center">
                       {rec.status === 'pending' && (
                         <div className="flex gap-1 justify-center">
-                          <button
+                          <button data-tour="purchasing-engine-transfer-approve"
                             onClick={() => handleReview(rec.id, 'approved')}
                             disabled={reviewMutation.isLoading}
                             className="text-xs px-2 py-0.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
@@ -1418,9 +1484,9 @@ const VIEW_TABS = [
 export default function PurchasingDashboard() {
   const { user }   = useAuthStore()
   const qc         = useQueryClient()
-  const isAdmin    = ['admin', 'pharmacist'].includes(user?.role)
+  const isAdmin    = user?.role === 'admin'
   // quick engine run («▶ تشغيل») also for the Purchasing role + SOFTECH supply groups;
-  // full re-sync / catch-up / items sync / ⚙ settings stay admin-pharmacist (server-enforced)
+  // full re-sync / catch-up / items sync / ⚙ settings stay admin only (server-enforced, Z-2)
   const canRunEngine = isAdmin || user?.role === 'purchasing' || !!user?.can_run_engine
 
   const [viewTab,   setViewTab]   = useState('agg')
@@ -1455,6 +1521,8 @@ export default function PurchasingDashboard() {
   const [isFullTrigger,    setIsFullTrigger]    = useState(false)
   const [preTriggerRunId,  setPreTriggerRunId]  = useState(null)
   const wasRunning = useRef(false)
+  const runningId = useRef(null)
+  const toast      = useToast()
 
   // Fast-poll window: 12 min for full-sync (365d ≈ 8 min), 5 min for incremental
   const maxPollMs = isFullTrigger ? 12 * 60_000 : 5 * 60_000
@@ -1479,18 +1547,29 @@ export default function PurchasingDashboard() {
   useEffect(() => {
     if (isRunning) {
       wasRunning.current = true
+      runningId.current = activeRunData?.id ?? runningId.current
     } else if (wasRunning.current) {
       wasRunning.current = false
+      const finishedId = runningId.current
+      runningId.current = null
       setTriggerTime(null)
       setPreTriggerRunId(null)
       // Small delay so DB writes settle before we re-fetch
       setTimeout(() => {
         qc.invalidateQueries(['purchasing-run-latest'])
         qc.invalidateQueries(['purchasing-summary'])
+        qc.invalidateQueries(['purchasing-run-last-attempt'])
         // Table rows auto-refresh when runId changes (they key on runId)
+        // One alert with the outcome of the run this page watched (the run itself
+        // happens on the server — nothing runs on the user's PC).
+        purchasingApi.lastAttempt().then(({ data: r }) => {
+          if (!r || (finishedId && r.id !== finishedId)) return
+          if (r.status === 'success') toast.success('✓ اكتمل تشغيل المحرك', 'تم تحديث توصيات الشراء بأحدث البيانات.')
+          else if (r.status === 'failed') toast.error('✗ فشل تشغيل المحرك', r.error_message || '', 10_000)
+        }).catch(() => {})
       }, 1_500)
     }
-  }, [isRunning, qc])
+  }, [isRunning, qc])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Latest successful run (drives table data) ─────────────────────────────
   // Poll at 15s while waiting for engine; otherwise every 5 minutes.
@@ -1898,7 +1977,7 @@ export default function PurchasingDashboard() {
                   </label>
                   <label className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-semibold text-gray-600">حد الصيغة (≥)</span>
-                    <span className="text-[10px] text-gray-400">الفعّال ≥ هذا → تقريب لأعلى</span>
+                    <span className="text-[10px] text-gray-400">الفعّال ≥ هذا {fa()} تقريب لأعلى</span>
                     <input
                       type="number" step="0.5" min="0.5" max="10"
                       value={params?.ss_high_threshold ?? ''}
@@ -1935,7 +2014,7 @@ export default function PurchasingDashboard() {
                           <span className="text-red-700 font-semibold">≥ {high}</span>
                           <span className="text-gray-500">تقريب لأعلى<br/><span className="text-[10px]">⌈فعّال⌉</span></span>
                           <span className="text-red-700 font-bold">
-                            مثال: {high} → {Math.ceil(high * m)}, {high * 2} → {Math.ceil(high * 2 * m)}
+                            مثال: {high} {fa()} {Math.ceil(high * m)}, {high * 2} {fa()} {Math.ceil(high * 2 * m)}
                           </span>
                         </div>
 
@@ -2006,7 +2085,7 @@ export default function PurchasingDashboard() {
                       return (
                         <div key={avg} className="flex justify-between text-gray-600 py-0.5 border-b border-gray-50">
                           <span>متوسط <b>{avg}</b>/شهر</span>
-                          <span>→ أمان <b className="text-amber-700">{ss}</b> <span className="text-gray-400">({tier})</span></span>
+                          <span>{fa()} أمان <b className="text-amber-700">{ss}</b> <span className="text-gray-400">({tier})</span></span>
                         </div>
                       )
                     })}
@@ -2128,9 +2207,9 @@ export default function PurchasingDashboard() {
                         <div key={avg} className="flex justify-between text-gray-600 border-b border-gray-50 py-0.5">
                           <span>متوسط <b>{avg}</b>/شهر</span>
                           <span className="tabular-nums">
-                            A→<b className="text-emerald-700">{tgt(avg, cA)}</b> &nbsp;
-                            B→<b className="text-amber-700">{tgt(avg, cB)}</b> &nbsp;
-                            C→<b className="text-sky-700">{tgt(avg, cC)}</b>
+                            A{fa()}<b className="text-emerald-700">{tgt(avg, cA)}</b> &nbsp;
+                            B{fa()}<b className="text-amber-700">{tgt(avg, cB)}</b> &nbsp;
+                            C{fa()}<b className="text-sky-700">{tgt(avg, cC)}</b>
                           </span>
                         </div>
                       ))
@@ -2308,7 +2387,7 @@ export default function PurchasingDashboard() {
                   <div className="border-t border-gray-100 pt-2">
                     <p className="text-xs text-gray-400 mb-1.5">تصدير المحوري (مطابق لنموذج Power Query) — يستخدم إعداد التعبئة أعلاه</p>
 
-                    <button
+                    <button data-tour="purchasing-engine-pivot-export"
                       onClick={() => handleExport('xlsx', 'pivot')}
                       className="w-full text-xs px-2 py-1.5 rounded-lg bg-indigo-600 text-white
                                  hover:bg-indigo-700 font-semibold flex items-center justify-center gap-1.5"
@@ -2356,10 +2435,10 @@ export default function PurchasingDashboard() {
 
             {canRunEngine && (
               <div className="flex items-center gap-2 flex-wrap">
-                {isAdmin && (<>
+                <>
                 {/* ── Catch-up ── robust chunked backfill for when the scheduled
                     sync missed SOFTECH and sales went stale. Emphasised when stale. */}
-                <button
+                <button data-tour="purchasing-engine-catchup"
                   onClick={() => {
                     if (isRunning || catchupMutation.isLoading) return
                     if (!window.confirm(
@@ -2382,8 +2461,10 @@ export default function PurchasingDashboard() {
                   {salesStale && !catchupMutation.isLoading && ` (${saleStaleDays}ي)`}
                 </button>
 
-                {/* ── Full Sync 365d ── re-syncs the complete rolling year from SOFTECH */}
-                <button
+                {/* ── Full Sync 365d ── re-syncs the complete rolling year from SOFTECH (admin only;
+                    catch-up and the items sync follow the engine-run rule — Z-11g) */}
+                {isAdmin && (
+                <button data-tour="purchasing-engine-full-sync"
                   onClick={() => {
                     if (isRunning) return
                     if (!window.confirm(
@@ -2399,6 +2480,7 @@ export default function PurchasingDashboard() {
                 >
                   🔄 مزامنة كاملة
                 </button>
+                )}
 
                 {/* ── Items catalog sync ── new items + price/itemtrans/امر التوريد updates */}
                 <button
@@ -2417,13 +2499,13 @@ export default function PurchasingDashboard() {
                 >
                   {(itemsSyncMutation.isLoading || itemsSyncRunId != null) ? '⏳ جارٍ...' : '📦 مزامنة الأصناف'}
                 </button>
-                </>)}
+                </>
 
                 {/* ── Settings + Quick Run ── */}
                 <div className="flex items-center rounded-lg overflow-hidden border border-brand-600 shadow-sm">
                   {/* ⚙ Settings — opens params modal (admin/pharmacist only) */}
                   {isAdmin && (
-                  <button
+                  <button data-tour="purchasing-engine-settings"
                     onClick={() => setParamsOpen(true)}
                     className="text-xs px-2.5 py-1.5 bg-white text-brand-700 hover:bg-brand-50
                                border-r border-brand-200 transition-colors"
@@ -2594,7 +2676,7 @@ export default function PurchasingDashboard() {
               itemFilters={itemFilters}
             />
           ) : viewTab === 'transfer' ? (
-            <TransferRecsTab isAdmin={isAdmin} />
+            <TransferRecsTab canReview={canRunEngine} />
           ) : (
             <LostSalesTab />
           )}

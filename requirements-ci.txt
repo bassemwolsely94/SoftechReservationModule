@@ -13,6 +13,7 @@ APScheduler==3.10.4
 python-decouple==3.8
 django-filter==23.5
 Pillow>=10.3.0
+numpy>=1.26               # apps/invoices preprocess/ocr/engines (imported directly, not only via easyocr)
 django-extensions==3.2.3
 qrcode>=8.0
 pyotp>=2.9.0
@@ -24,3 +25,8 @@ PyJWT>=2.8.0
 pywebpush>=2.0.0
 python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
 JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT
+
+# Security suite tooling (CI only — docs/security/TEST_SUITE.md)
+coverage>=7.4
+bandit>=1.7.8
+pip-audit>=2.7

@@ -195,7 +195,7 @@ function ActionBar({ demand, onAction, loading }) {
       {/* Assign — new only, admin/CC/supervisor */}
       <CanDo module="demand" action="assign">
         {canAssign && !assignForm && (
-          <button disabled={loading} onClick={() => setAssignForm(true)}
+          <button disabled={loading} onClick={() => setAssignForm(true)} data-tour="demand-detail-assign"
             className="text-sm px-4 py-2 rounded-lg font-semibold text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
             style={{ background: BLUE }}>
             👤 تعيين
@@ -272,7 +272,7 @@ function ActionBar({ demand, onAction, loading }) {
       {/* Lost */}
       <CanDo module="demand" action="edit">
         {canLost && !lostForm && (
-          <button onClick={() => setLostForm(true)}
+          <button onClick={() => setLostForm(true)} data-tour="demand-detail-lost"
             className="text-sm px-4 py-2 rounded-lg font-semibold text-white" style={{ background: RED }}>
             بيع ضائع
           </button>
@@ -304,7 +304,7 @@ function ActionBar({ demand, onAction, loading }) {
       {/* ERP lookup / enrich — admin/purchasing only */}
       <CanDo module="demand" action="approve">
         {!demand.phcode && (
-          <button onClick={() => onAction('erpLookup', {})}
+          <button onClick={() => onAction('erpLookup', {})} data-tour="demand-detail-erp"
             className="btn-secondary text-xs">
             بحث في ERP
           </button>
@@ -314,7 +314,7 @@ function ActionBar({ demand, onAction, loading }) {
       {/* Cancel */}
       <CanDo module="demand" action="delete">
         {canCancel && (
-          <button onClick={() => { if (window.confirm('إلغاء الطلب؟')) onAction('cancel', {}) }}
+          <button onClick={() => { if (window.confirm('إلغاء الطلب؟')) onAction('cancel', {}) }} data-tour="demand-detail-cancel"
             className="btn-ghost text-xs text-gray-400 hover:text-red-500">
             إلغاء الطلب
           </button>
@@ -676,7 +676,7 @@ function ItemsTab({ demand, onRefresh }) {
       )}
 
       {isEditable && !adding && (
-        <button onClick={() => setAdding(true)} className="btn-secondary text-sm">
+        <button onClick={() => setAdding(true)} className="btn-secondary text-sm" data-tour="demand-detail-item-add">
           + إضافة صنف
         </button>
       )}
@@ -798,7 +798,7 @@ function FollowUpsTab({ demand, onRefresh }) {
                   )}
                 </div>
                 {!isDone && (
-                  <button onClick={() => complete(fu.id)}
+                  <button onClick={() => complete(fu.id)} data-tour="demand-detail-followup-complete"
                     className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg hover:bg-green-700 shrink-0">
                     ✓ أكملت
                   </button>
@@ -810,7 +810,7 @@ function FollowUpsTab({ demand, onRefresh }) {
       )}
 
       {!showAdd ? (
-        <button onClick={() => setShowAdd(true)} className="btn-secondary text-sm">
+        <button onClick={() => setShowAdd(true)} className="btn-secondary text-sm" data-tour="demand-detail-followup-add">
           + إضافة متابعة
         </button>
       ) : (
@@ -934,7 +934,7 @@ function LogsTab({ demand, onRefresh }) {
       </div>
 
       {/* Compose */}
-      <div className="border border-gray-200 rounded-xl p-3">
+      <div className="border border-gray-200 rounded-xl p-3" data-tour="demand-detail-log-compose">
         <div className="flex gap-1 mb-2">
           {LOG_TYPE_OPTIONS.map(t => (
             <button key={t.value} onClick={() => setLogType(t.value)}

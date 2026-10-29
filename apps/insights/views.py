@@ -14,9 +14,15 @@ from .engine import InsightEngine
 logger = logging.getLogger('elrezeiky')
 ANALYST_ROLES = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Narrative reports are the analytics module (Batch 4, Z-9a — was any logged-in user): every
+# call needs analytics view; generating / backfilling / editing rules keep their role checks.
+INSIGHTS = matrix_permission('analytics', post=('view',), edit=('view',), delete=('view',))
+
 
 class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, INSIGHTS]
     queryset = InsightRun.objects.prefetch_related('findings').order_by('-period_start', '-created_at')
 
     def get_serializer_class(self):
@@ -224,7 +230,7 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class InsightRuleViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, INSIGHTS]
     serializer_class = InsightRuleSerializer
 
     def get_queryset(self):

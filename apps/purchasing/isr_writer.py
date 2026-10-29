@@ -36,6 +36,10 @@ logger = logging.getLogger('elrezeiky.purchasing')
 
 # Store codes excluded from "current stock" (quarantine/expiry) — same as the engine.
 _EXCLUDED_STORES = {'102', '103', '105'}
+HQ_CODE = '100'      # the main warehouse (was referenced below but never defined → NameError)
+
+
+LOCK_ISR_PUSH = 7_301_006   # pg advisory lock, × 1e6 + IsrPush pk: one push of a draft at a time (P-15)
 
 
 class WriterDisabled(RuntimeError):
@@ -299,39 +303,36 @@ def push_isr(branchcode, *, run=None, dry_run=True, positive_only=True,
         plan.update(mode='empty', wrote_to_softech=False)
         return plan
 
-    if not writer_enabled() or dry_run:
-        plan.update(mode='dry_run', wrote_to_softech=False)
-        logger.info('[isr_writer] DRY-RUN branch=%s (enabled=%s) — %d lines',
-                    branchcode, writer_enabled(), plan['line_count'])
-        return plan
-
-    from apps.branches.models import Branch
-    from config.sybase import get_branch_connection
-    branch = Branch.objects.get(softech_branch_id=str(branchcode))
-    usercode = _service_usercode()
-    conn = None
-    try:
-        conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
-                                     branch.db_name or 'SOFTECHDB9')
-        w = _write_isr(conn, branchcode, branchcode, plan["lines"], usercode, do_commit=True)
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-    plan.update(mode='commit', wrote_to_softech=bool(w['verified']), readback=w,
-                isrdocnumber=w['isrdocnumber'])
-    logger.info('[isr_writer] COMMIT branch=%s isr=%s verified=%s (%d/%d lines)',
-                branchcode, w['isrdocnumber'], w['verified'], w['lines_found'], w['lines_expected'])
+    if not dry_run:
+        # The direct write had no IsrPush record, no duplicate guard and no audit — every run
+        # wrote a NEW ISR (Batch 2, P-15). ISRs reach SOFTECH only as recorded drafts:
+        # create_proposal → approve → push_isr_record (/supply, generate_isr --auto-approve).
+        raise WriterDisabled('push_isr writes no ISR any more — push a recorded draft (/supply or '
+                             'generate_isr --auto-approve).')
+    plan.update(mode='dry_run', wrote_to_softech=False)
+    logger.info('[isr_writer] DRY-RUN branch=%s (enabled=%s) — %d lines',
+                branchcode, writer_enabled(), plan['line_count'])
     return plan
 
 
 # ── push an APPROVED IsrPush record's snapshot to SOFTECH (israpp=1) ────────────
-def push_isr_record(isr_push, *, executed_by=None):
+def push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     """Write an APPROVED IsrPush's stored line snapshot to SOFTECH (stockisrm header
     israpp=1 + stockisr lines), record the allocated isrdocnumber, update the record.
-    Gate + status checked before any SOFTECH connection."""
+    Gate + status checked before any SOFTECH connection. One push of a draft at a time:
+    an advisory lock per draft, and the status is re-read inside it — a caller's stale
+    APPROVED copy never writes a second ISR (Batch 2, P-15)."""
+    if not writer_enabled():
+        raise WriterDisabled('ISR_WRITER_ENABLED is off — refusing to push ISR.')
+    from apps.vouchers.coupon_dashboard import pg_lock
+    with pg_lock(LOCK_ISR_PUSH * 1_000_000 + isr_push.pk) as got:
+        if not got:
+            raise ValueError('هذا الطلب قيد الترحيل من عملية أخرى — لم يُرحَّل مرة ثانية.')
+        isr_push.refresh_from_db()
+        return _push_isr_record(isr_push, executed_by=executed_by, force_reason=force_reason)
+
+
+def _push_isr_record(isr_push, *, executed_by=None, force_reason=''):
     from apps.purchasing.models import IsrPush
     from apps.branches.models import Branch
     from config.sybase import get_branch_connection
@@ -343,6 +344,9 @@ def push_isr_record(isr_push, *, executed_by=None):
     lines = isr_push.lines_snapshot or []
     if not lines:
         raise ValueError('لا توجد أسطر في المقترح.')
+    # never the same ISR twice; a forwarding leg never before its feeding leg (isr_guards)
+    from apps.purchasing import isr_guards
+    isr_guards.check_push(isr_push, user=executed_by, force_reason=force_reason)
 
     branch = Branch.objects.get(softech_branch_id=isr_push.branchcode)
     usercode = _service_usercode()
@@ -369,6 +373,11 @@ def push_isr_record(isr_push, *, executed_by=None):
         isr_push.readback = w
         isr_push.error = f'verify/commit failed: {w}'[:300]
     isr_push.save(update_fields=['status', 'isrdocnumber', 'pushed_at', 'readback', 'error'])
+    if isr_push.status == IsrPush.STATUS_PUSHED:                # who pushed it (Batch 2, P-16)
+        from core.softech_audit import audit_softech_write
+        audit_softech_write('softech_isr_pushed', actor=executed_by, obj=isr_push,
+                            after={'isrdocnumber': w.get('isrdocnumber'), 'lines': len(lines)},
+                            route=f'{isr_push.branchcode}→{isr_push.dest_branchcode or isr_push.branchcode}')
     logger.info('[isr_writer] push_isr_record %s → isr=%s status=%s',
                 isr_push.pk, w.get('isrdocnumber'), isr_push.status)
     return isr_push
@@ -427,39 +436,66 @@ def build_items_plan(node_branch, items):
 
 # ── create a proposal (PG only) + optional auto-approve+push ────────────────────
 def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None, linked=None,
-                      coverage_months=None):
+                      coverage_months=None, params=None, origin_isr=None, origin_request=None,
+                      origin_donor='', notes=''):
+    """Save one PROPOSED draft. Guards (isr_guards, doc 30 phase A): the route must be valid
+    (never HQ → HQ); a GENERAL draft (no origin request) supersedes an older proposed draft
+    on the same route and is refused while an approved one waits there. Drafts tied to a
+    branch request / WhatsApp request keep their own per-request rules (DB constraints)."""
+    from django.db import transaction
     from apps.purchasing.models import IsrPush
     from apps.branches.models import Branch
+    from apps.purchasing import isr_guards
     if not lines:
         return None
+    isr_guards.validate_route(kind, source, dest)
     docvalue = sum(float(l['itemqty']) * float(l['itemcostprice']) for l in lines)
     branch = Branch.objects.filter(softech_branch_id=str(source)).first()
-    return IsrPush.objects.create(
-        branch=branch, branchcode=str(source), dest_branchcode=str(dest), kind=kind,
-        run_id=run_id, status=IsrPush.STATUS_PROPOSED, line_count=len(lines),
-        docvalue=round(docvalue, 3), lines_snapshot=lines, created_by=created_by, linked_push=linked,
-        coverage_months=coverage_months)
+    general = origin_isr is None and origin_request is None
+    with transaction.atomic():
+        older = isr_guards.check_route_free(kind, source, dest) if general else []
+        isr_guards.retire(older, user=created_by)        # one live draft per route, always
+        p = IsrPush.objects.create(
+            branch=branch, branchcode=str(source), dest_branchcode=str(dest), kind=kind,
+            run_id=run_id, status=IsrPush.STATUS_PROPOSED, line_count=len(lines),
+            docvalue=round(docvalue, 3), lines_snapshot=lines, created_by=created_by, linked_push=linked,
+            coverage_months=coverage_months, params=params or {}, origin_isr=origin_isr,
+            origin_request=origin_request, origin_donor=origin_donor or '', notes=notes or '')
+        isr_guards.link_superseded(older, p)
+    return p
 
 
 def create_proposal(branchcode, *, created_by=None, max_lines=None, run=None, from_hq=False,
-                    coverage_months=None):
-    """Replenishment proposal for a branch's needs (engine gaps). from_hq=True →
-    source=HQ 100 (HQ prepares, branch receives, kind=hq_to_branch); else self
-    (branchcode==dest, kind=self). coverage_months re-scales the order qty (see
-    build_plan). PG only. Returns IsrPush or None."""
+                    coverage_months=None, rule='engine', rule_data=None, return_plan=False):
+    """Replenishment proposal for a branch's needs. from_hq=True → source=HQ 100 (HQ
+    prepares, branch receives, kind=hq_to_branch); else self (branchcode==dest, kind=self).
+      rule='softech' (the /supply screen, owner 2026-10-24): SOFTECH's rule read live from
+        server 100 — max − stock − transit, < 0.16 pack → 0, whole packs, HQ stock options
+        and the screen filters (isr_softech.py). rule_data = the screen's settings.
+      rule='engine': the engine gap, re-scaled by coverage_months (see build_plan).
+    Writes PG only. Returns IsrPush or None (with return_plan: (IsrPush|None, plan))."""
     from apps.purchasing.models import IsrPush
-    plan = build_plan(branchcode, run=run, max_lines=max_lines, coverage_months=coverage_months)
+    if rule == 'softech':
+        from apps.purchasing import isr_softech
+        data = dict(rule_data or {})
+        data.setdefault('coverage_months', coverage_months)
+        plan = isr_softech.build_plan(branchcode, data, max_lines=max_lines)
+        params = {k: plan[k] for k in ('rule', 'settings', 'stats', 'as_of', 'transit_days')}
+    else:
+        plan = build_plan(branchcode, run=run, max_lines=max_lines, coverage_months=coverage_months)
+        params = {'rule': 'engine'}
     if not plan['lines']:
-        return None
+        return (None, plan) if return_plan else None
     source = '100' if from_hq else str(branchcode)
     kind = IsrPush.KIND_HQ_TO_BRANCH if from_hq else IsrPush.KIND_SELF
-    return _persist_proposal(source=source, dest=str(branchcode), kind=kind,
-                             lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,
-                             coverage_months=plan.get('coverage_months'))
+    p = _persist_proposal(source=source, dest=str(branchcode), kind=kind,
+                          lines=plan['lines'], run_id=plan.get('run_id'), created_by=created_by,
+                          coverage_months=plan.get('coverage_months'), params=params)
+    return (p, plan) if return_plan else p
 
 
 def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
-                                min_qty=1.0, max_pairs=None, created_by=None):
+                                min_qty=1.0, max_pairs=None, created_by=None, skipped=None):
     """Read a TransferRecommendationRun (latest if None), group items by (surplus A →
     deficit B), and create two linked ISR proposals per pair. Returns a list of dicts
     {from, to, items, leg1_id, leg2_id}. Shared by the /supply endpoint + CLI command."""
@@ -492,7 +528,12 @@ def generate_transfers_from_run(*, run=None, from_branch=None, to_branch=None,
     for (a, b), items in sorted(pairs.items(), key=lambda kv: -len(kv[1])):
         if max_pairs and len(out) >= max_pairs:
             break
-        leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by)
+        try:
+            leg1, leg2 = create_transfer_proposals(a, b, items, created_by=created_by)
+        except ValueError as exc:                # a guard refused this route (isr_guards)
+            if skipped is not None:
+                skipped.append({'route': f'{a} ← {b}', 'path': [a, b], 'reason': str(exc)})
+            continue
         if leg1 or leg2:
             out.append({'from': a, 'to': b, 'items': len(items),
                         'leg1_id': (leg1.id if leg1 else None),
@@ -504,23 +545,36 @@ def create_transfer_proposals(from_branch, to_branch, items, *, created_by=None)
     """L2: two linked ISR proposals for a surplus→HQ→deficit allocation.
       Leg 1: source=from_branch (surplus, prepares), dest=100 (HQ receives)  [branch_to_hq]
       Leg 2: source=100 (HQ prepares),      dest=to_branch (deficit receives) [hq_to_branch]
-    items = [(itemcode, qty)]. Returns (leg1, leg2) IsrPush, or (None, None) if empty."""
+    items = [(itemcode, qty)]. Returns (leg1, leg2) IsrPush, or (None, None) if empty.
+    A pair that TOUCHES HQ needs one leg only (2026-10-24: the transfer engine also pairs
+    branch → 100 and 100 → branch; two legs made a «100 → 100» ISR). Same branch → nothing."""
+    from django.db import transaction
     from apps.purchasing.models import IsrPush
-    leg1_lines = build_items_plan(str(from_branch), items)   # nowqty from surplus branch
-    leg2_lines = build_items_plan('100', items)              # nowqty from HQ
+    src, dst = str(from_branch), str(to_branch)
+    if src == dst:
+        return None, None
+    if dst == HQ_CODE:                                       # surplus branch → HQ only
+        return _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
+                                 lines=build_items_plan(src, items), created_by=created_by), None
+    if src == HQ_CODE:                                       # HQ → deficit branch only
+        return None, _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
+                                       lines=build_items_plan(HQ_CODE, items), created_by=created_by)
+    leg1_lines = build_items_plan(src, items)                # nowqty from surplus branch
+    leg2_lines = build_items_plan(HQ_CODE, items)            # nowqty from HQ
     if not leg1_lines and not leg2_lines:
         return None, None
-    leg1 = _persist_proposal(source=str(from_branch), dest='100', kind=IsrPush.KIND_BRANCH_TO_HQ,
-                             lines=leg1_lines, created_by=created_by)
-    leg2 = _persist_proposal(source='100', dest=str(to_branch), kind=IsrPush.KIND_HQ_TO_BRANCH,
-                             lines=leg2_lines, created_by=created_by, linked=leg1)
-    if leg1 and leg2:
-        leg1.linked_push = leg2
-        leg1.save(update_fields=['linked_push'])
+    with transaction.atomic():                               # both legs or neither
+        leg1 = _persist_proposal(source=src, dest=HQ_CODE, kind=IsrPush.KIND_BRANCH_TO_HQ,
+                                 lines=leg1_lines, created_by=created_by)
+        leg2 = _persist_proposal(source=HQ_CODE, dest=dst, kind=IsrPush.KIND_HQ_TO_BRANCH,
+                                 lines=leg2_lines, created_by=created_by, linked=leg1)
+        if leg1 and leg2:
+            leg1.linked_push = leg2
+            leg1.save(update_fields=['linked_push'])
     return leg1, leg2
 
 
-def create_distribution_proposals(*, categories=None, limit=None, created_by=None):
+def create_distribution_proposals(*, categories=None, limit=None, created_by=None, skipped=None):
     """L3 توزيعة: turn distribution suggestions into ISR proposals, grouped by route.
       • HQ source (100)  → ONE HQ→branch ISR (kind=hq_to_branch) with all its items.
       • branch source A  → two-leg (A→HQ, HQ→branch) via create_transfer_proposals.
@@ -540,18 +594,23 @@ def create_distribution_proposals(*, categories=None, limit=None, created_by=Non
     created = []
     for (src, dest), item_map in routes.items():
         items = list(item_map.items())
-        if src == HQ_CODE:
-            lines = build_items_plan(HQ_CODE, items)
-            p = _persist_proposal(source=HQ_CODE, dest=dest, kind=IsrPush.KIND_HQ_TO_BRANCH,
-                                  lines=lines, created_by=created_by)
-            if p:
-                created.append({'route': f'HQ⟶{dest}', 'kind': 'hq_to_branch',
-                                'ids': [p.id], 'items': len(items)})
-        else:
+        try:
+            if src == HQ_CODE:
+                lines = build_items_plan(HQ_CODE, items)
+                p = _persist_proposal(source=HQ_CODE, dest=dest, kind=IsrPush.KIND_HQ_TO_BRANCH,
+                                      lines=lines, created_by=created_by)
+                if p:
+                    created.append({'route': f'{HQ_CODE} ← {dest}', 'path': [HQ_CODE, dest], 'kind': 'hq_to_branch',
+                                    'ids': [p.id], 'items': len(items)})
+                continue
             leg1, leg2 = create_transfer_proposals(src, dest, items, created_by=created_by)
-            if leg1 or leg2:
-                created.append({'route': f'{src}⟶HQ⟶{dest}', 'kind': 'transfer',
-                                'ids': [x.id for x in (leg1, leg2) if x], 'items': len(items)})
+        except ValueError as exc:                # a guard refused this route (isr_guards)
+            if skipped is not None:
+                skipped.append({'route': f'{src} ← {dest}', 'path': [src, dest], 'reason': str(exc)})
+            continue
+        if leg1 or leg2:
+            created.append({'route': f'{src} ← {HQ_CODE} ← {dest}', 'path': [src, HQ_CODE, dest], 'kind': 'transfer',
+                            'ids': [x.id for x in (leg1, leg2) if x], 'items': len(items)})
     return created
 
 
@@ -608,6 +667,10 @@ def approve_isr(branchcode, isrdocnumber, *, executed_by=None):
             conn.close()
         except Exception:
             pass
+    from core.softech_audit import audit_softech_write          # Batch 2, P-16
+    audit_softech_write('softech_isr_approved', actor=executed_by, before={'israpp': 1 if already else 0},
+                        after={'israpp': 1 if approved else 0}, branchcode=str(branchcode),
+                        isrdocnumber=int(isrdocnumber))
     logger.info('[isr_writer] approve isr=%s branch=%s approved=%s (was %s)',
                 isrdocnumber, branchcode, approved, 'approved' if already else 'pending')
     return {'ok': bool(approved), 'isrdocnumber': int(isrdocnumber),
@@ -617,6 +680,8 @@ def approve_isr(branchcode, isrdocnumber, *, executed_by=None):
 def probe_approve_isr(branchcode, isrdocnumber, *, confirm=False):
     """Rehearse the approval with ZERO residue: read israpp, set 1, readback, then
     RESTORE the original israpp. Ignores the gate (always restores). confirm=True."""
+    from core.softech_switches import require_probes
+    require_probes('purchasing.isr_writer.probe_approve_isr')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_approve_isr requires confirm=True (real UPDATE, then restores).')
     from apps.branches.models import Branch
@@ -635,13 +700,17 @@ def probe_approve_isr(branchcode, isrdocnumber, *, confirm=False):
             return res
         orig = int(row[0] or 0)
         res['original_israpp'] = orig
-        cur.execute("UPDATE stockisrm SET israpp=1 WHERE branchcode=? AND isrdocnumber=?",
-                    [str(branchcode), int(isrdocnumber)])
-        cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
-                    [str(branchcode), int(isrdocnumber)])
-        res['write_landed'] = int(cur.fetchone()[0] or 0) == 1
-        cur.execute("UPDATE stockisrm SET israpp=? WHERE branchcode=? AND isrdocnumber=?",
-                    [orig, str(branchcode), int(isrdocnumber)])
+        try:
+            cur.execute("UPDATE stockisrm SET israpp=1 WHERE branchcode=? AND isrdocnumber=?",
+                        [str(branchcode), int(isrdocnumber)])
+            cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
+                        [str(branchcode), int(isrdocnumber)])
+            res['write_landed'] = int(cur.fetchone()[0] or 0) == 1
+        finally:
+            # ALWAYS put the original israpp back — a failed readback must not leave a
+            # pending ISR approved in SOFTECH (Batch 2, P-13).
+            cur.execute("UPDATE stockisrm SET israpp=? WHERE branchcode=? AND isrdocnumber=?",
+                        [orig, str(branchcode), int(isrdocnumber)])
         cur.execute("SELECT israpp FROM stockisrm WHERE branchcode=? AND isrdocnumber=?",
                     [str(branchcode), int(isrdocnumber)])
         res['restored'] = int(cur.fetchone()[0] or 0) == orig
@@ -663,6 +732,8 @@ def probe_isr_write(branchcode, *, sample_n=3, confirm=False):
     INSERTs + verify, then ROLLBACK. Reveals the allocated isrdocnumber and whether
     the inserts land (trigger behaviour) before any live commit. Requires confirm=True.
     """
+    from core.softech_switches import require_probes
+    require_probes('purchasing.isr_writer.probe_isr_write')    # real DML on SOFTECH (Batch 2, P-7)
     if not confirm:
         raise ValueError('probe_isr_write requires confirm=True (real INSERTs, then rolls back).')
     plan = build_plan(branchcode, max_lines=sample_n)

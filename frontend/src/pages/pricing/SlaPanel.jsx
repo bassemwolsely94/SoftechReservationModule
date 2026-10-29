@@ -71,7 +71,7 @@ export default function SlaPanel({ onOpen }) {
                 </td>
                 <td className="px-3 py-2 text-xs text-gray-600">{r.requested_by}</td>
                 <td className="px-3 py-2">
-                  <button onClick={() => onOpen?.(r.id)}
+                  <button data-tour="pricing-approvals-sla-review" onClick={() => onOpen?.(r.id)}
                     className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700">مراجعة</button>
                 </td>
               </tr>

@@ -12,6 +12,8 @@ from rest_framework.decorators import action, api_view, permission_classes as pe
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.permissions import matrix_permission
+
 from apps.insurance.permissions import CommerceModuleAccess
 
 from .models import (
@@ -47,7 +49,7 @@ class _FlagGate:
 
 
 @api_view(['GET'])
-@perm_classes([IsAuthenticated])
+@perm_classes([IsAuthenticated, matrix_permission('commerce')])   # only the commerce page asks (Z-5b)
 def commerce_status(request):
     """Lightweight flag probe for the frontend nav."""
     return Response({'enabled': _enabled(),

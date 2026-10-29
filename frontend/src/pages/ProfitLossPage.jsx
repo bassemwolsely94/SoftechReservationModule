@@ -53,7 +53,7 @@ export default function ProfitLossPage() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-base font-semibold text-gray-700">قائمة الأرباح والخسائر</h2>
-        <div className="flex gap-2 mr-auto">
+        <div data-tour="finance-pnl-period" className="flex gap-2 mr-auto">
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="border rounded-lg px-3 py-1.5 text-sm">
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -71,14 +71,14 @@ export default function ProfitLossPage() {
       {data && !isLoading && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-w-2xl">
           {/* Header */}
-          <div className="bg-green-700 text-white px-4 py-3">
+          <div data-tour="finance-pnl-header" className="bg-green-700 text-white px-4 py-3">
             <div className="font-bold text-base">قائمة الأرباح والخسائر</div>
             <div className="text-sm text-green-200">
               {data.period} — {data.branch || 'موحد (جميع الفروع)'}
             </div>
           </div>
 
-          <table className="w-full">
+          <table data-tour="finance-pnl-statement" className="w-full">
             <tbody>
               {/* Revenue */}
               <PnlRow label="الإيرادات" bold separator />
@@ -120,7 +120,7 @@ export default function ProfitLossPage() {
           </table>
 
           {!data.is_complete && (
-            <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+            <div data-tour="finance-pnl-partial" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
               ⚠ بيانات جزئية — بعض مصادر البيانات لم تُزامن بعد
             </div>
           )}

@@ -3,6 +3,49 @@
  * Display only: every number shown here was computed by the backend engine.
  * Latin digits throughout (module-wide convention — no Arabic-Indic numerals).
  */
+import { useMemo, useState } from 'react'
+
+// ── Sortable tables (owner 2026-10-24: every table in the module sorts on every column) ──
+// useSort(rows, getters): getters = { key: row => value }. Click a header: ascending →
+// descending → back to the original order. Blanks always last; text sorts Arabic-aware.
+const blank = v => v === null || v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))
+
+export function compareValues(a, b) {
+  const ea = blank(a), eb = blank(b)
+  if (ea || eb) return ea === eb ? 0 : (ea ? 1 : -1)
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  const na = Number(a), nb = Number(b)
+  if (a !== '' && b !== '' && !Number.isNaN(na) && !Number.isNaN(nb)
+      && typeof a !== 'boolean' && typeof b !== 'boolean') return na - nb
+  return String(a).localeCompare(String(b), 'ar', { numeric: true })
+}
+
+export function useSort(rows, getters, initial = null) {
+  const [sort, setSort] = useState(initial)              // { key, dir: 1 | -1 } | null
+  const onSort = (key) => setSort(s => (!s || s.key !== key) ? { key, dir: 1 }
+    : s.dir === 1 ? { key, dir: -1 } : null)
+  const sorted = useMemo(() => {
+    const list = rows || []
+    const get = sort && getters[sort.key]
+    if (!get) return list
+    return list.map((r, i) => [r, i]).sort((x, y) => {
+      const va = get(x[0]), vb = get(y[0])
+      if (blank(va) !== blank(vb)) return blank(va) ? 1 : -1  // blanks last in BOTH directions
+      return (compareValues(va, vb) * sort.dir) || (x[1] - y[1])
+    }).map(x => x[0])
+  }, [rows, sort]) // eslint-disable-line react-hooks/exhaustive-deps
+  return { sorted, sort, onSort }
+}
+
+export function SortTh({ k, sort, onSort, className = '', title, children }) {
+  const on = sort?.key === k
+  return (
+    <th title={title} onClick={() => onSort(k)} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
+      className={`cursor-pointer select-none whitespace-nowrap hover:text-primary ${on ? 'text-primary' : ''} ${className}`}>
+      {children}<span className="ms-1 text-[10px] opacity-70">{on ? (sort.dir === 1 ? '▲' : '▼') : '↕'}</span>
+    </th>
+  )
+}
 
 const TONES = {
   gray:    'bg-gray-100 text-gray-700 border-gray-200',

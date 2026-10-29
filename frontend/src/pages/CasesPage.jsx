@@ -9,6 +9,7 @@ import { callCenterApi, customersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -334,7 +335,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
           )}
 
           {/* Note input row with @mention */}
-          <div className="relative">
+          <div className="relative" data-tour="callcenter-cases-note">
             <div className="flex gap-1.5">
               <div className="flex-1 relative">
                 <textarea
@@ -411,25 +412,25 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
           {/* State machine buttons */}
           <div className="flex gap-2 flex-wrap" data-tour="callcenter-cases-actions">
             {cas.status === 'open' && (
-              <button onClick={() => doAction(callCenterApi.cases.assign, { staff_id: user?.staff_id || user?.id })}
+              <button onClick={() => doAction(callCenterApi.cases.assign, { staff_id: user?.staff_id || user?.id })} data-tour="callcenter-cases-start"
                 className="btn-secondary text-xs py-1.5 px-2">
                 ⚙️ بدء المعالجة
               </button>
             )}
             {['open','working','waiting'].includes(cas.status) && !showResolve && (
-              <button onClick={() => setShowResolve(true)}
+              <button onClick={() => setShowResolve(true)} data-tour="callcenter-cases-resolve"
                 className="btn-secondary text-xs py-1.5 px-2">
                 ✅ حل الحالة
               </button>
             )}
             {cas.status === 'resolved' && (
-              <button onClick={() => doAction(callCenterApi.cases.close)}
+              <button onClick={() => doAction(callCenterApi.cases.close)} data-tour="callcenter-cases-close"
                 className="btn-secondary text-xs py-1.5 px-2">
                 🔒 إغلاق
               </button>
             )}
             {cas.status === 'resolved' && !cas.csat_score && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1" data-tour="callcenter-cases-csat">
                 <select className="input-field text-xs py-1.5 w-24" value={csatScore}
                   onChange={e => setCsatScore(e.target.value)}>
                   <option value="">CSAT</option>
@@ -737,7 +738,7 @@ export default function CasesPage() {
                           <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
                             <span>👤 {c.customer_name}</span>
                             {c.branch_name && <span>🏥 {c.branch_name}</span>}
-                            {c.assigned_to_name && <span>→ {c.assigned_to_name}</span>}
+                            {c.assigned_to_name && <span>{fa()} {c.assigned_to_name}</span>}
                             <span className={pm.cls}>{pm.label}</span>
                             {c.age_hours != null && <span>⏱️ {c.age_hours}س</span>}
                           </div>
@@ -764,7 +765,7 @@ export default function CasesPage() {
                 <span className="text-sm text-gray-500 self-center">صفحة {page}</span>
                 <button disabled={!hasNext} onClick={() => setPage(p => p + 1)}
                   className="btn-secondary text-sm disabled:opacity-40">
-                  التالي →
+                  التالي {fa()}
                 </button>
               </div>
             )}

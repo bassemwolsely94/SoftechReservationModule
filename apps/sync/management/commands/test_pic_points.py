@@ -30,6 +30,9 @@ class Command(BaseCommand):
                             help='Points to add for the write test (default: 1, then reversed)')
 
     def handle(self, *args, **options):
+        if not options.get('dry_run'):    # this mode writes to SOFTECH (Batch 2, P-7)
+            from core.softech_switches import command_require_probes
+            command_require_probes('test_pic_points (without --dry-run)')
         pic     = options['pic'].strip()
         dry_run = options['dry_run']
         delta   = abs(options['delta'])   # always positive; we test both +/- ourselves

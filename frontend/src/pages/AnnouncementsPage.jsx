@@ -37,11 +37,11 @@ export default function AnnouncementsPage() {
     <div className="p-6 max-w-3xl mx-auto" dir="rtl">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📢 الإعلانات الداخلية</h1>
+          <h1 className="text-2xl font-bold text-gray-900" data-tour="general-announcements-header">📢 الإعلانات الداخلية</h1>
           <p className="text-sm text-gray-500 mt-0.5">تعميمات الإدارة للفروع مع تأكيد القراءة</p>
         </div>
         {canBroadcast && (
-          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm" data-tour="general-announcements-new">
             {showForm ? 'إغلاق' : '+ إعلان جديد'}
           </button>
         )}
@@ -54,7 +54,7 @@ export default function AnnouncementsPage() {
       ) : items.length === 0 ? (
         <div className="text-center py-16 text-gray-400">لا توجد إعلانات</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="general-announcements-list">
           {items.map(a => {
             const mine = a.author === user?.staff_profile_id || ['admin', 'supervisor'].includes(user?.role)
             return (
@@ -71,8 +71,8 @@ export default function AnnouncementsPage() {
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {a.is_read
                       ? <span className="text-[11px] text-emerald-600 font-medium">✓ مقروء</span>
-                      : <button onClick={() => ack.mutate(a.id)} className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 font-medium">تأكيد القراءة</button>}
-                    {mine && <button onClick={() => setStatsFor(a.id)} className="text-[11px] text-gray-500 hover:text-gray-800">📊 من قرأ</button>}
+                      : <button onClick={() => ack.mutate(a.id)} data-tour="general-announcements-ack" className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 font-medium">تأكيد القراءة</button>}
+                    {mine && <button onClick={() => setStatsFor(a.id)} data-tour="general-announcements-stats" className="text-[11px] text-gray-500 hover:text-gray-800">📊 من قرأ</button>}
                     {mine && <button onClick={() => del.mutate(a.id)} className="text-[11px] text-gray-300 hover:text-red-500">حذف</button>}
                   </div>
                 </div>

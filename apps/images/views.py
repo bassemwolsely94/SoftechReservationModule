@@ -38,6 +38,13 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import matrix_permission
+
+# Product images = the catalog module (Batch 4, Z-9b): reads need view, jobs / uploads / review
+# need catalog edit / approve (any logged-in user could start bulk image jobs).
+CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
+                                 delete=('edit', 'delete'))
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -53,7 +60,7 @@ from .serializers import (
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
 class JobListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get(self, request):
         qs = ImageSearchJob.objects.select_related('item', 'triggered_by').order_by('-created_at')
@@ -97,7 +104,7 @@ class JobListCreateView(APIView):
 
 
 class JobDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get(self, request, pk):
         try:
@@ -108,7 +115,7 @@ class JobDetailView(APIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def cancel_job(request, pk):
     try:
         job = ImageSearchJob.objects.get(pk=pk)
@@ -123,7 +130,7 @@ def cancel_job(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def bulk_create_jobs(request):
     """
     POST {
@@ -171,7 +178,7 @@ def bulk_create_jobs(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def revise_all(request):
     """
     POST { limit: 200, priority: 3, min_score: 0.0 }
@@ -219,7 +226,7 @@ def revise_all(request):
 # ── Candidates ────────────────────────────────────────────────────────────────
 
 class CandidateListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CATALOG_EDIT]
 
     def get(self, request):
         qs = ImageCandidate.objects.select_related('item', 'reviewed_by').order_by('-total_score')
@@ -255,7 +262,7 @@ class CandidateListView(APIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def review_candidate(request, pk):
     """POST { action: 'approve'|'reject', note: '...', set_primary: true }"""
     try:
@@ -288,7 +295,7 @@ def review_candidate(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def redownload_candidate(request, pk):
     try:
         candidate = ImageCandidate.objects.select_related('item').get(pk=pk)
@@ -334,7 +341,7 @@ def redownload_candidate(request, pk):
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def images_report(request):
     from apps.product_experience.models import ProductMedia
 
@@ -348,7 +355,10 @@ def images_report(request):
     jobs_failed    = ImageSearchJob.objects.filter(status='failed').count()
     coverage_pct   = round(with_image / total * 100, 1) if total else 0
 
+    from .pipeline import sales_coverage
+
     return Response({
+        **sales_coverage(),
         'total_items':      total,
         'items_with_image': with_image,
         'coverage_pct':     coverage_pct,
@@ -361,20 +371,27 @@ def images_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def review_queue(request):
-    qs        = (ImageCandidate.objects
-                 .filter(status='pending_review')
-                 .select_related('item')
-                 .order_by('-total_score'))
+    """Pending candidates, best-selling items first; best image first within an item."""
+    from .pipeline import sales_ranks
+
     page_size = min(int(request.query_params.get('page_size', 30)), 100)
-    return Response(ImageCandidateSerializer(qs[:page_size], many=True, context={'request': request}).data)
+    ranks     = sales_ranks()
+    rows      = list(ImageCandidate.objects
+                     .filter(status='pending_review')
+                     .values_list('id', 'item_id', 'total_score'))
+    rows.sort(key=lambda r: (-(ranks[r[1]]['score'] if r[1] in ranks else -1), r[1], -(r[2] or 0), r[0]))
+    ids   = [r[0] for r in rows[:page_size]]
+    by_id = ImageCandidate.objects.select_related('item').in_bulk(ids)
+    page  = [by_id[i] for i in ids if i in by_id]
+    return Response(ImageCandidateSerializer(page, many=True, context={'request': request}).data)
 
 
 # ── Product image search (filterable item list with image status) ──────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def product_image_search(request):
     """
     GET /api/images/products/search/
@@ -486,7 +503,7 @@ def product_image_search(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def item_candidates(request, item_pk):
     """
     GET /api/images/products/{item_pk}/candidates/
@@ -514,7 +531,7 @@ def item_candidates(request, item_pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def upload_product_image(request, item_pk):
     """
     POST /api/images/products/{item_pk}/upload/
@@ -578,7 +595,7 @@ def upload_product_image(request, item_pk):
 # ── Product gallery management ─────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def product_gallery(request, item_pk):
     """
     GET /api/images/products/{item_pk}/gallery/
@@ -611,7 +628,7 @@ def product_gallery(request, item_pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def set_primary_image(request, item_pk, media_pk):
     """
     POST /api/images/products/{item_pk}/set-primary/{media_pk}/
@@ -643,7 +660,7 @@ def set_primary_image(request, item_pk, media_pk):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def reorder_images(request, item_pk):
     """
     PATCH /api/images/products/{item_pk}/reorder/
@@ -663,7 +680,7 @@ def reorder_images(request, item_pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def delete_image(request, item_pk, media_pk):
     """DELETE /api/images/products/{item_pk}/images/{media_pk}/"""
     from apps.product_experience.models import ProductMedia
@@ -687,7 +704,7 @@ def delete_image(request, item_pk, media_pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def learning_insights(request):
     """
     GET /api/images/insights/
@@ -723,7 +740,7 @@ def learning_insights(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CATALOG_EDIT])
 def filter_meta(request):
     """Return distinct category and producer lists for UI filter dropdowns."""
     from apps.catalog.models import Category

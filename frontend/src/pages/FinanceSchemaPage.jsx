@@ -105,7 +105,7 @@ export default function FinanceSchemaPage() {
           <h2 className="text-base font-semibold text-gray-700">اكتشاف المخطط — Phase 0</h2>
           <p className="text-xs text-gray-400">الجداول المكتشفة في SOFTECH ذات الصلة المالية</p>
         </div>
-        <div className="flex gap-2 mr-auto flex-wrap">
+        <div data-tour="finance-schema-filters" className="flex gap-2 mr-auto flex-wrap">
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -125,7 +125,7 @@ export default function FinanceSchemaPage() {
             <option value="confirmed">مؤكد ✓</option>
             <option value="unconfirmed">غير مؤكد</option>
           </select>
-          <button
+          <button data-tour="finance-schema-discover"
             onClick={() => discoverMut.mutate()}
             disabled={discoverMut.isPending}
             className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
@@ -137,7 +137,7 @@ export default function FinanceSchemaPage() {
 
       {/* Stats */}
       {!isLoading && tables.length > 0 && (
-        <div className="flex gap-4 text-sm text-gray-500">
+        <div data-tour="finance-schema-stats" className="flex gap-4 text-sm text-gray-500">
           <span>إجمالي: <strong>{tables.length}</strong></span>
           <span>مؤكد: <strong className="text-green-600">{tables.filter(t => t.is_confirmed).length}</strong></span>
           <span>مفعّل للمزامنة: <strong className="text-blue-600">{tables.filter(t => t.sync_enabled).length}</strong></span>
@@ -163,7 +163,7 @@ export default function FinanceSchemaPage() {
             ${t.is_confirmed ? 'border-green-200' : 'border-gray-200'}`}
         >
           {/* Row header */}
-          <div
+          <div data-tour="finance-schema-row"
             className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
             onClick={() => setExpanded(expanded === t.id ? null : t.id)}
           >
@@ -178,7 +178,7 @@ export default function FinanceSchemaPage() {
             <span className="text-xs text-gray-400">{t.row_count?.toLocaleString('en-US')} صف</span>
 
             {/* Confirmed toggle */}
-            <button
+            <button data-tour="finance-schema-confirm"
               onClick={e => {
                 e.stopPropagation()
                 updateMut.mutate({ id: t.id, data: { is_confirmed: !t.is_confirmed } })
@@ -194,7 +194,7 @@ export default function FinanceSchemaPage() {
             </button>
 
             {/* Sync enabled toggle */}
-            <button
+            <button data-tour="finance-schema-sync"
               onClick={e => {
                 e.stopPropagation()
                 updateMut.mutate({ id: t.id, data: { sync_enabled: !t.sync_enabled } })

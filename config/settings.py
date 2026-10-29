@@ -69,6 +69,7 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
                 return value.strip().lower() in ('1', 'true', 'yes', 'on')
             return cast(value) if (cast and isinstance(value, str)) else value
         return _env_config(key, *args, **kwargs)
+
 if not SECRET_KEY or SECRET_KEY.startswith('change-me'):
     if DEBUG or _RUNNING_TESTS:
         SECRET_KEY = SECRET_KEY or 'dev-only-insecure-' + os.urandom(16).hex()
@@ -95,6 +96,12 @@ if BEHIND_HTTPS_PROXY:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+# Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
+# The client address is the NUM_PROXIES-th entry from the right; with 0 the header is ignored.
+# Used by core.client_ip (audit IPs) and DRF's throttles (Batch 3, A-6; owner 2026-10-27: 1 on
+# the VPS). Defaults to 1 behind the HTTPS proxy — with 0 there, every user would share
+# nginx's 127.0.0.1 and one login-throttle bucket.
+NUM_PROXIES = config('NUM_PROXIES', default=1 if BEHIND_HTTPS_PROXY else 0, cast=int)
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
 # Secure flag on the JWT cookies (core/auth_cookies.py). On by default whenever the
 # site is served over HTTPS; off only for plain-HTTP LAN deployments.
@@ -184,6 +191,7 @@ INSTALLED_APPS = [
     'apps.help',           # In-app help (دليل الاستخدام) — repo content + trainer edits
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
+    'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
 ]
 
 MIDDLEWARE = [
@@ -289,6 +297,8 @@ REST_FRAMEWORK = {
     # Gap-1: Throttle classes applied per-view; no global throttle to avoid
     # breaking authenticated API endpoints.
     'DEFAULT_THROTTLE_CLASSES': [],
+    # Throttles key on the real client, not the client-written X-Forwarded-For (A-6).
+    'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',   # max 10 login attempts per IP per minute
         # Customer portal (external) magic-link request + token exchange
@@ -344,6 +354,17 @@ LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Africa/Cairo'
 USE_I18N = True
 USE_TZ = True
+
+# ── PASSWORDS ─────────────────────────────────────────────────────────────────
+# 10 characters plus Django's checks (Batch 3, A-5; owner 2026-10-27). Applied by
+# apps.users.passwords on change-password, admin reset and user create.
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 10}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -412,14 +433,18 @@ if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast
     for _k in ('SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST'):
         os.environ.pop(_k, None)
 
-# Per-feature switches for the SOFTECH writes that had none (default ON = today's
-# behaviour). Set one to False to stop that single write in production without
-# the all-or-nothing SOFTECH_READ_ONLY. Checked in the view AND in the writer, so
-# scheduled jobs and management commands obey them too.
-PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # approved price/discount + classification UPDATE items
-REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=True, cast=bool)       # restamp/push items to branches (manual + scheduled)
-LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=True, cast=bool)    # manual purchase-points INSERT picpoints
-PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=True, cast=bool)   # stktransm.comments / cheques.chequenote
+# Per-feature switches for these SOFTECH writes. Like every other SOFTECH writer they
+# default OFF: a write runs only where the environment deliberately turns it on
+# (.env / production env — see .env.example). Checked in the view AND in the writer,
+# so scheduled jobs and management commands obey them too.
+PRICING_SOFTECH_WRITE_ENABLED   = config('PRICING_SOFTECH_WRITE_ENABLED', default=False, cast=bool)   # approved price/discount + classification UPDATE items
+REPLICATION_REPAIR_ENABLED      = config('REPLICATION_REPAIR_ENABLED', default=False, cast=bool)      # restamp/push items to branches (manual + scheduled)
+LOYALTY_SOFTECH_WRITE_ENABLED   = config('LOYALTY_SOFTECH_WRITE_ENABLED', default=False, cast=bool)   # manual purchase-points INSERT picpoints
+PERSONAL_COMMENT_WRITE_ENABLED  = config('PERSONAL_COMMENT_WRITE_ENABLED', default=False, cast=bool)  # stktransm.comments / cheques.chequenote
+# SOFTECH rehearsals and diagnostics (core/softech_switches.py): invoice «probe», coupon
+# «batch-probe», clone_purchase, every writer probe_* and every diagnostic command mode that
+# writes — real DML rolled back or restored; production triggers still fire, locks are held.
+SOFTECH_PROBES_ENABLED          = config('SOFTECH_PROBES_ENABLED', default=False, cast=bool)
 
 # Roles allowed to manually add/deduct customer loyalty points (POST
 # /api/loyalty/customers/<id>/adjust/ — purchase points write SOFTECH picpoints).
@@ -427,6 +452,10 @@ LOYALTY_ADJUST_ROLES = frozenset(
     r.strip() for r in config('LOYALTY_ADJUST_ROLES', default='admin,supervisor,call_center').split(',')
     if r.strip()
 )
+# Purchase-points safety: largest manual adjustment per request (±), and how long an
+# identical adjustment (customer, points, reason) is refused as a probable double post.
+LOYALTY_MAX_MANUAL_ADJUST         = config('LOYALTY_MAX_MANUAL_ADJUST', default=1000, cast=int)
+LOYALTY_DUPLICATE_WINDOW_SECONDS  = config('LOYALTY_DUPLICATE_WINDOW_SECONDS', default=120, cast=int)
 # Default per-statement timeout (seconds) for INTERACTIVE queries — bounds an
 # HTTP request against a slow/blocked Sybase read. jConnect enforces this as a
 # socket read-timeout (fires as JZ0T3 on fetch), so keep it snappy.
@@ -441,6 +470,9 @@ SYBASE_SYNC_QUERY_TIMEOUT = config('SYBASE_SYNC_QUERY_TIMEOUT', default=300, cas
 # rarely. See apps/sync/tasks.py run_fast_sync / run_slow_sync.
 SYNC_FAST_MINUTES = config('SYNC_FAST_MINUTES', default=5, cast=int)
 SYNC_SLOW_MINUTES = config('SYNC_SLOW_MINUTES', default=60, cast=int)
+# SOFTECH load telemetry (doc 30): count logins / queries / rows per job and caller,
+# saved hourly in SoftechLoadStat and shown on /sync. Off under tests (they turn it on).
+SOFTECH_LOAD_TELEMETRY = config('SOFTECH_LOAD_TELEMETRY', default=not _RUNNING_TESTS, cast=bool)
 # Module SOFTECH writes are attributed to each approver's OWN real usercode
 # (synced from the SOFTECH users table). Repairs preserve the item's original
 # editor. No fabricated/service ERP user is used — every write maps to a real
@@ -556,6 +588,35 @@ POS_DISCOUNT_AUTHORITY = config('POS_DISCOUNT_AUTHORITY', default=True, cast=boo
 # writer only PREPARES + builds a dry-run plan; nothing is sent to SOFTECH. Flip
 # to True ONLY after validating the live path against SOFTECH_TEST_HOST (the final
 # insert fires SOFTECH's stock-receive + weighted-avg-cost + supplier-balance triggers).
+# Structured-OCR engine for supplier invoices: 'auto' (Gemini if GEMINI_API_KEY
+# set, else the best free local engine — Tesseract+Arabic, then easyOCR),
+# 'gemini', 'tesseract' or 'easyocr'. Lets the pharmacy run invoice extraction at
+# zero API cost. See apps/invoices/engines.py.
+INVOICE_OCR_ENGINE      = config('INVOICE_OCR_ENGINE', default='auto')
+# In 'auto' mode, run the free engine first and escalate to Gemini only when the
+# free result's quality score (fraction of lines with a name + a plausible price)
+# is below this threshold. Higher = escalate more often (more accuracy, more cost).
+INVOICE_OCR_ESCALATE_THRESHOLD = config('INVOICE_OCR_ESCALATE_THRESHOLD', default=0.6, cast=float)
+# PDF render resolution. 300 DPI is Tesseract's sweet spot for printed Arabic;
+# raise for tiny print, lower for speed. Applies to the invoice-bundle renderer.
+INVOICE_PDF_DPI         = config('INVOICE_PDF_DPI', default=300, cast=int)
+# Pre-enhance scanned pages before free OCR (autocontrast + deskew + upscale).
+INVOICE_OCR_ENHANCE     = config('INVOICE_OCR_ENHANCE', default=True, cast=bool)
+# Extra, opt-in image-perfecting steps (applied by preprocess.enhance_for_ocr AFTER
+# the base enhance). Each is off by default — turn on and A/B via the benchmark,
+# since the best combination is scan-quality dependent and they cost time.
+INVOICE_OCR_EQUALIZE    = config('INVOICE_OCR_EQUALIZE', default=False, cast=bool)   # histogram equalize (uneven lighting)
+INVOICE_OCR_SHARPEN     = config('INVOICE_OCR_SHARPEN', default=False, cast=bool)    # unsharp mask (soft/blurry scans)
+INVOICE_OCR_BINARIZE    = config('INVOICE_OCR_BINARIZE', default=False, cast=bool)   # Sauvola adaptive binarization (faint/shadowed scans)
+# Field voting: also run RapidOCR and prefer its digits for the numeric columns
+# (slower — adds a second OCR pass — but more accurate prices). Off by default.
+INVOICE_OCR_FIELD_VOTING = config('INVOICE_OCR_FIELD_VOTING', default=False, cast=bool)
+# Tesseract (free local OCR). The binary path and a tessdata dir that contains
+# ara.traineddata (+ eng). On Windows the binary is usually at
+# 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'. Leave TESSDATA_PREFIX blank
+# to use the binary's bundled tessdata (must already include Arabic).
+TESSERACT_CMD             = config('TESSERACT_CMD', default='')
+TESSERACT_TESSDATA_PREFIX = config('TESSERACT_TESSDATA_PREFIX', default='')
 INVOICE_WRITER_ENABLED  = config('INVOICE_WRITER_ENABLED', default=False, cast=bool)
 INVOICE_WRITER_PROFILE  = config('INVOICE_WRITER_PROFILE', default='test')   # test|prod
 INVOICE_DEFAULT_USERCODE = config('INVOICE_DEFAULT_USERCODE', default='')    # fallback buyer usercode
@@ -668,6 +729,11 @@ POINTS_REMOVAL_BATCH_MAX     = config('POINTS_REMOVAL_BATCH_MAX', default=50, ca
 # (maker-checker: the one who marks a pair cannot approve it).
 CUSTOMER_MERGE_QUEUE_ENABLED = config('CUSTOMER_MERGE_QUEUE_ENABLED', default=True, cast=bool)
 
+# Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
+# every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.
+STOCK_AUDIT_ENABLED     = config('STOCK_AUDIT_ENABLED', default=True, cast=bool)
+STOCK_AUDIT_WINDOW_DAYS = config('STOCK_AUDIT_WINDOW_DAYS', default=365, cast=int)
+
 # Gamification (apps/gamification) — points / levels / badges / rankings, recognition only.
 # Scheduler scores today every 30 min and closes yesterday at 00:20. Reads our tables only.
 GAMIFICATION_ENABLED = config('GAMIFICATION_ENABLED', default=True, cast=bool)
@@ -728,6 +794,22 @@ AMI_HOST   = config('AMI_HOST', default='127.0.0.1')
 AMI_PORT   = config('AMI_PORT', default=5038, cast=int)
 AMI_USER   = config('AMI_USER', default='')
 AMI_SECRET = config('AMI_SECRET', default='')
+AMI_DIAL_CONTEXT = config('AMI_DIAL_CONTEXT', default='')
+# Recordings over SFTP (read-only download of single files from the monitor dir)
+PBX_RECORDINGS_ROOT          = config('PBX_RECORDINGS_ROOT', default='/var/spool/asterisk/monitor')
+PBX_RECORDINGS_SFTP_HOST     = config('PBX_RECORDINGS_SFTP_HOST', default='')
+PBX_RECORDINGS_SFTP_PORT     = config('PBX_RECORDINGS_SFTP_PORT', default=22, cast=int)
+PBX_RECORDINGS_SFTP_USER     = config('PBX_RECORDINGS_SFTP_USER', default='')
+PBX_RECORDINGS_SFTP_PASSWORD = config('PBX_RECORDINGS_SFTP_PASSWORD', default='')
+PBX_RECORDINGS_SFTP_KEY_FILE = config('PBX_RECORDINGS_SFTP_KEY_FILE', default='')
+
+# ── Call transcription ────────────────────────────────────────────────────────
+CALLCENTER_AUTO_TRANSCRIBE             = config('CALLCENTER_AUTO_TRANSCRIBE', default=False, cast=bool)
+CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS = config('CALLCENTER_AUTO_TRANSCRIBE_MIN_SECONDS', default=20, cast=int)
+WHISPER_ENABLED     = config('WHISPER_ENABLED', default=False, cast=bool)
+WHISPER_MIN_SECONDS = config('WHISPER_MIN_SECONDS', default=20, cast=int)
+WHISPER_MODEL_DIR   = config('WHISPER_MODEL_DIR', default='')
+WHISPER_EXTRA_TERMS = [t.strip() for t in config('WHISPER_EXTRA_TERMS', default='').split(',') if t.strip()]
 
 # ── Frontend base URL ─────────────────────────────────────────────────────────
 FRONTEND_BASE_URL = config('FRONTEND_BASE_URL', default='https://app.elrezeiky.com')
@@ -768,6 +850,26 @@ GEMINI_RPM     = config('GEMINI_RPM',      default=10, cast=float)   # free tier
 GEMINI_API_KEY_2 = config('GEMINI_API_KEY_2', default='')
 GEMINI_MODEL_2   = config('GEMINI_MODEL_2',   default='gemini-2.5-flash')
 #
+# Mistral vision OCR (paid; never hits the Gemini free-tier daily cap). Registered
+# as the 'mistral' engine; active only when this key is set + `mistralai` installed.
+MISTRAL_API_KEY  = config('MISTRAL_API_KEY',  default='')
+MISTRAL_OCR_MODEL = config('MISTRAL_OCR_MODEL', default='pixtral-12b-latest')
+#
+# Generic self-hosted / OpenAI-compatible VLM OCR endpoint. Point this at a served
+# vision model (PaddleOCR-VL, Qwen2.5-VL, Nanonets-OCR2, …) via vLLM / Ollama / HF
+# TGI / any /v1/chat/completions server, and it registers as the 'vlm' engine for
+# A/B in the benchmark (--engine vlm). Empty URL = engine disabled.
+VLM_OCR_URL      = config('VLM_OCR_URL',   default='')     # e.g. http://gpu-box:8000/v1/chat/completions
+VLM_OCR_MODEL    = config('VLM_OCR_MODEL', default='')     # the served model id
+VLM_OCR_KEY      = config('VLM_OCR_KEY',   default='')     # bearer token if the server needs one
+#
+# PaddleOCR box sidecar — PaddlePaddle has NO Python 3.14 wheel, so PaddleOCR
+# PP-OCRv5 runs in a SEPARATE Python ≤3.12 venv as a tiny local HTTP server
+# (see ocr_sidecar/). Set this URL and the `paddleocr` engine reads boxes from it
+# and feeds them through the SAME band/template pipeline as Tesseract. Empty = the
+# in-process paddleocr is used instead (only works where paddlepaddle is installable).
+PADDLE_OCR_URL   = config('PADDLE_OCR_URL', default='')     # e.g. http://127.0.0.1:8077/boxes
+#
 # Provider 3 — OpenAI fallback (https://platform.openai.com/api-keys)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_MODEL   = config('OPENAI_MODEL',   default='gpt-4o-mini')
@@ -786,3 +888,5 @@ MIDDLEWARE += [
 # "elrezeiky.rbac" log is quiet, then enforce. The test runner defaults to off so
 # existing endpoint tests keep exercising view-level permissions only.
 RBAC_ENFORCEMENT = config('RBAC_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# Seconds the role matrix is cached per process; 0 under tests so no test sees another's rows.
+RBAC_GRANTS_TTL = config('RBAC_GRANTS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)

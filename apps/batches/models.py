@@ -426,6 +426,23 @@ class StockExpirySyncRun(models.Model):
         self.save(update_fields=['status', 'finished_at', 'nodes_total', 'nodes_ok',
                                  'nodes_failed', 'rows_synced', 'detail'])
 
+    @classmethod
+    def fail_stale(cls, older_than_minutes=60):
+        """Close runs left 'running' by a hung or restarted process (a full sweep takes
+        minutes) so the history never shows a run in progress forever. Returns the count."""
+        from datetime import timedelta
+        from django.utils import timezone as _tz
+        now = _tz.now()
+        stale = cls.objects.filter(status='running',
+                                   started_at__lt=now - timedelta(minutes=older_than_minutes))
+        n = 0
+        for run in stale:
+            run.detail = {**(run.detail or {}),
+                          'fatal': 'لم يكتمل — توقفت العملية أو أُعيد تشغيلها (stale: never finished)'}
+            run.finish('failed')
+            n += 1
+        return n
+
 
 class ExpiryDisposalRecord(models.Model):
     """

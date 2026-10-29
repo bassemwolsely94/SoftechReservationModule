@@ -27,7 +27,7 @@
  */
 import { useState, useRef, useMemo, useCallback } from 'react'
 
-function SortIcon({ active, dir }) {
+export function SortIcon({ active, dir }) {
   if (!active) {
     return (
       <span className="inline-block opacity-25 ml-1 text-[10px] leading-none">↕</span>

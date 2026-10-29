@@ -9,8 +9,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { customersApi } from '../api/client'
+import useBranchLabels from '../hooks/useBranchLabels'
 
 export default function CustomerDrawer() {
+  const bl = useBranchLabels()
   const [id, setId] = useState(null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -104,6 +106,25 @@ export default function CustomerDrawer() {
             {data.loyalty?.enrolled && (
               <Section title="الولاء">
                 <div className="text-content"><span className="tabnum font-bold">{data.loyalty.points_balance}</span> نقطة</div>
+              </Section>
+            )}
+
+            {/* بدل الروشتة — staff only (server decides), never printed for the patient */}
+            {data.replacement && (
+              <Section title="رصيد البدل">
+                {Number(data.replacement.total_available) > 0 && (
+                  <div className="text-content"><span className="tabnum font-bold">{Number(data.replacement.total_available).toLocaleString('ar-EG')}</span> ج.م متاح</div>
+                )}
+                {data.replacement.cases.map((c) => (
+                  <a key={c.id} href={`/replacement/${c.id}`} className="block text-[11px] text-blue-700">
+                    {c.number} · {bl(c.branchcode)} · {Number(c.available).toLocaleString('ar-EG')}
+                  </a>
+                ))}
+                {data.replacement.historical.count > 0 && (
+                  <div className="text-[11px] text-muted">
+                    أرصدة تاريخية للمراجعة: {data.replacement.historical.count} · {Number(data.replacement.historical.amount).toLocaleString('ar-EG')} ج.م
+                  </div>
+                )}
               </Section>
             )}
 

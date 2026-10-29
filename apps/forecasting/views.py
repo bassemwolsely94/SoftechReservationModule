@@ -10,7 +10,7 @@ from datetime import date
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -41,9 +41,26 @@ def _is_analyst(request):
     return sp and sp.role in ANALYST_ROLES
 
 
+class CanUseForecasting(BasePermission):
+    """Forecasting is the `analytics` module (owner decision 2026-10-28, Batch 4 Z-7b): reads
+    need analytics view; every write also needs an analyst role (ANALYST_ROLES) — the inner
+    _guard / _is_analyst checks stay. Was: any logged-in user, and the seasonality / accuracy
+    viewsets let anyone create, edit or delete records."""
+    message = 'ليس لديك صلاحية على هذه الوحدة'
+
+    def has_permission(self, request, view):
+        from core.permissions import matrix_allows
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        sp = _staff(request)
+        if not matrix_allows(sp, 'analytics', 'view'):
+            return False
+        return request.method in SAFE_METHODS or bool(sp and sp.role in ANALYST_ROLES)
+
+
 class SeasonalityIndexViewSet(viewsets.ModelViewSet):
     serializer_class   = SeasonalityIndexSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get_queryset(self):
         qs    = SeasonalityIndex.objects.select_related('item', 'category')
@@ -80,7 +97,7 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 
 class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = ForecastRunSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
     queryset           = ForecastRun.objects.select_related('triggered_by').order_by('-started_at')
 
     @action(detail=False, methods=['post'], url_path='trigger')
@@ -106,7 +123,7 @@ class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ForecastAccuracyViewSet(viewsets.ModelViewSet):
     serializer_class   = ForecastAccuracySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get_queryset(self):
         qs     = ForecastAccuracy.objects.select_related('item', 'branch')
@@ -174,7 +191,7 @@ class KpiBoardView(APIView):
     """GET /api/forecasting/kpi-board/?year=&month= — branch KPI grid + chain totals.
     Targets come from the editable SalesTargets; % is achievement vs the target PRO-RATED
     to the latest complete data day (owner convention, == legacy sheet H/I)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get(self, request):
         from apps.branches.models import Branch
@@ -276,7 +293,8 @@ class KpiBoardView(APIView):
     # Call-center KPI set (sales / profit / beauty / orders / calls).
     CC_METRICS = [
         KpiActualRollup.M_CASH_DELIVERY, KpiActualRollup.M_GROSS_PROFIT,
-        KpiActualRollup.M_BEAUTY, KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_CALL_COUNT,
+        KpiActualRollup.M_BEAUTY, KpiActualRollup.M_CUSTOMERS,
+        KpiActualRollup.M_PIC_COUNT, KpiActualRollup.M_CALL_COUNT,
     ]
 
     def _call_center_block(self, year, month, cell, m_start, m_end):
@@ -292,13 +310,14 @@ class KpiBoardView(APIView):
         tgt = {t['metric']: (float(t['target_value'] or 0), t['id']) for t in SalesTarget.objects.filter(
             scope_type=SalesTarget.SCOPE_BRANCH, branch=cc, metric__in=self.CC_METRICS,
             period_start__lte=m_end, period_end__gte=m_start).values('id', 'metric', 'target_value')}
-        # CC labels: "customers" here means order count; keep generic labels + is_count.
+        # CC labels: M_CUSTOMERS = order count; M_PIC_COUNT = distinct customers (PIC).
         cc_labels = dict(KpiActualRollup.METRIC_LABELS)
         cc_labels[KpiActualRollup.M_CUSTOMERS] = 'عدد الطلبات'
+        cc_labels[KpiActualRollup.M_PIC_COUNT] = 'عدد العملاء'
+        count_metrics = (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_PIC_COUNT, KpiActualRollup.M_CALL_COUNT)
         return {
             'branch_id': cc.id,
-            'metrics': [{'key': m, 'label': cc_labels.get(m, m),
-                         'is_count': m in (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_CALL_COUNT)}
+            'metrics': [{'key': m, 'label': cc_labels.get(m, m), 'is_count': m in count_metrics}
                         for m in self.CC_METRICS],
             'cells': {m: cell(actual.get(m, 0.0), *tgt.get(m, (0.0, None))) for m in self.CC_METRICS},
         }
@@ -307,12 +326,13 @@ class KpiBoardView(APIView):
 class KpiRefreshView(APIView):
     """POST — rebuild the CURRENT month's branch + call-center rollups in the background
     so the KPI board reflects the latest synced SOFTECH data on demand."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def post(self, request):
-        sp = getattr(request.user, 'staff_profile', None)
-        if not (sp and sp.role in ANALYST_ROLES):
-            return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
+        from core.permissions import deny_unless
+        denied = deny_unless(request, 'purchasing', 'edit', 'create')   # /api/forecasting/ = purchasing (Z-2)
+        if denied:
+            return denied
         import threading
         from datetime import date
 
@@ -343,7 +363,7 @@ class KpiSheetExportView(APIView):
     Streams the legacy-format KPI target workbook (one sheet per model) built from
     the forecast engine (targets) + KpiActualRollup (achieved). Read-only.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get(self, request):
         import io
@@ -405,7 +425,7 @@ class KpiSheetExportView(APIView):
 class ForecastScenarioViewSet(viewsets.ModelViewSet):
     """CRUD + generate + commit for forecast scenarios (analyst roles only to mutate)."""
     serializer_class   = ForecastScenarioSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
     queryset = (ForecastScenario.objects
                 .select_related('created_by')
                 .prefetch_related('factors')
@@ -522,7 +542,7 @@ class ForecastScenarioViewSet(viewsets.ModelViewSet):
 class ForecastReferenceView(APIView):
     """GET grounded reference values; POST (analyst) recomputes them / sets fresh inflation.
     Body: {real_growth?, inflation?, inflation_source?}."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get(self, request):
         from apps.forecasting import references as R
@@ -550,7 +570,7 @@ class ForecastReferenceView(APIView):
 
 class GrowthView(APIView):
     """GET /api/forecasting/growth/?metric=&year=&period=&period_type=&comparison=&branch=&salesperson=&category="""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
 
     def get(self, request):
         from apps.forecasting.growth import GrowthService
@@ -581,7 +601,7 @@ class GrowthView(APIView):
 class BacktestViewSet(viewsets.ReadOnlyModelViewSet):
     """Browse backtest runs; POST run/ to execute a new one (analyst roles)."""
     serializer_class   = BacktestRunSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
     queryset = BacktestRun.objects.prefetch_related('results').order_by('-created_at')
 
     def _guard(self):
@@ -624,7 +644,7 @@ class ProfitExclusionViewSet(viewsets.ModelViewSet):
     board / engine after the next rollup rebuild (build_kpi_rollups).
     """
     serializer_class   = ProfitExclusionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanUseForecasting]
     queryset = ProfitExclusion.objects.select_related('item').order_by('item__softech_id')
 
     def _guard(self):

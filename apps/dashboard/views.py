@@ -113,8 +113,9 @@ def dashboard_summary(request):
 
     # ── Customer stats + churn intelligence ──────────────────────────────────
     customers = {
-        'total': Customer.objects.count(),
+        'total': Customer.objects.filter(is_account_placeholder=False).count(),
         'new_this_month': Customer.objects.filter(
+            is_account_placeholder=False,
             created_at__year=today.year,
             created_at__month=today.month
         ).count(),

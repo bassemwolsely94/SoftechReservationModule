@@ -252,6 +252,13 @@ class CallQualityScoreSerializer(serializers.ModelSerializer):
 # CallLog — extended
 # ─────────────────────────────────────────────────────────────────────────────
 
+def call_has_recording(call) -> bool:
+    if call.recording_url:
+        return True
+    session = getattr(call, 'pbx_session', None)
+    return bool(session and (session.recording_url or session.recording_path))
+
+
 class CallLogListSerializer(serializers.ModelSerializer):
     customer_name   = serializers.CharField(source='customer.name',        read_only=True)
     customer_segment = serializers.CharField(source='customer.segment',    read_only=True, default=None)
@@ -263,6 +270,8 @@ class CallLogListSerializer(serializers.ModelSerializer):
     duration_label  = serializers.CharField(read_only=True)
     whatsapp_url    = serializers.CharField(read_only=True)
     has_case        = serializers.SerializerMethodField()
+    has_recording   = serializers.SerializerMethodField()
+    has_transcript  = serializers.SerializerMethodField()
 
     class Meta:
         model  = CallLog
@@ -280,10 +289,18 @@ class CallLogListSerializer(serializers.ModelSerializer):
             'case', 'has_case',
             'quality_score',
             'ai_sentiment', 'ai_urgency',
+            'ai_summary', 'ai_next_action',
+            'has_recording', 'has_transcript',
         ]
 
     def get_has_case(self, obj):
         return obj.case_id is not None
+
+    def get_has_recording(self, obj):
+        return call_has_recording(obj)
+
+    def get_has_transcript(self, obj):
+        return bool(obj.voice_transcript)
 
 
 class CallLogDetailSerializer(serializers.ModelSerializer):
@@ -330,7 +347,11 @@ class CallLogDetailSerializer(serializers.ModelSerializer):
             'called_at', 'updated_at', 'callback_due', 'needs_callback',
             'address_updates', 'attachments',
         ]
-        read_only_fields = ['called_at', 'updated_at']
+        # quality_score mirrors the supervisor's CallQualityScore (quality action); the handler and
+        # AI fields are set by the system (Batch 4, Z-10b — an agent could score their own call)
+        read_only_fields = ['called_at', 'updated_at', 'quality_score', 'handled_by',
+                            'ai_summary', 'ai_intent', 'ai_sentiment', 'ai_urgency',
+                            'ai_next_action', 'ai_processed_at']
 
     def get_ai_sentiment_label(self, obj):
         labels = {'positive': 'إيجابي 😊', 'neutral': 'محايد 😐', 'negative': 'سلبي 😟'}

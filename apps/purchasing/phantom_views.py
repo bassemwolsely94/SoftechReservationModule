@@ -23,6 +23,12 @@ from django.utils import timezone
 from apps.catalog.models import Item
 from . import phantom as P
 from apps.catalog.wildcard import wq
+from core.permissions import matrix_permission
+
+# Batch 4, Z-7b: the review list is a report (`analytics` view); confirming / excluding /
+# resetting a flag changes the engine's input — the Market Shortage reviewers (`shortage` approve).
+PHANTOM_READ   = matrix_permission('analytics')
+PHANTOM_REVIEW = matrix_permission('shortage', post=('approve',))
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +77,7 @@ _FIELDS = ('id', 'softech_id', 'name', 'medicine_type', 'medicine_type_name_ar',
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_READ])
 def phantom_candidates(request):
     qs = _apply_filters(Item.objects.filter(is_phantom_substitution=True), request).only(*_FIELDS)
     rows = [_row(it) for it in qs]
@@ -82,7 +88,7 @@ def phantom_candidates(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_READ])
 def phantom_excluded(request):
     qs = _apply_filters(Item.objects.filter(phantom_override='excluded'), request).only(*_FIELDS)
     rows = [_row(it) for it in qs]
@@ -91,7 +97,7 @@ def phantom_excluded(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_READ])
 def phantom_summary(request):
     flagged = Item.objects.filter(is_phantom_substitution=True)
     confirmed = flagged.filter(phantom_override='confirmed').count()
@@ -108,7 +114,7 @@ def phantom_summary(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_READ])
 def phantom_med_types(request):
     seen, opts = set(), []
     for it in (Item.objects.filter(is_phantom_substitution=True)
@@ -126,7 +132,7 @@ def _get_item(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_REVIEW])
 def phantom_confirm(request):
     """Human confirms it IS phantom — sticky flag that survives ratio dips."""
     it = _get_item(request)
@@ -144,7 +150,7 @@ def phantom_confirm(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_REVIEW])
 def phantom_exclude(request):
     """Human marks NOT phantom → unflag and keep it off the list (override='excluded')."""
     it = _get_item(request)
@@ -162,7 +168,7 @@ def phantom_exclude(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PHANTOM_REVIEW])
 def phantom_reset(request):
     """Clear a human override → back to auto; recompute the flag from the current ratio."""
     it = _get_item(request)

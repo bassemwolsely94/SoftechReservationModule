@@ -16,7 +16,7 @@ class CaseListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReplacementCase
         fields = ['id', 'number', 'source_type', 'source_label', 'status', 'status_label',
-                  'settlement_mode', 'mode_label', 'origin', 'branchcode', 'branch_name',
+                  'settlement_mode', 'mode_label', 'origin', 'branch', 'branchcode', 'branch_name',
                   'softech_pic', 'patient_name', 'contract_personcode', 'supplier_personcode',
                   'supplier_name', 'purchase_docnumber', 'purchase_date', 'public_value',
                   'contract_value', 'entitlement', 'applied_deduction_pct', 'supplier_tier_pct',
@@ -168,10 +168,19 @@ class CaseDetailSerializer(CaseListSerializer):
         from .workflow import approval_route
         staff = self.context.get('staff')
         live = obj.origin == ReplacementCase.ORIGIN_LIVE
-        out = {'live': live, 'posting_enabled': legs.posting_enabled(),
+        out = {'live': live, 'posting_enabled': legs.posting_enabled(obj),
                'created_by': obj.created_by.full_name if obj.created_by_id else '',
                'approved_by': obj.approved_by.full_name if obj.approved_by_id else '',
                'approved_at': obj.approved_at, 'locked': bool(obj.locked_at)}
+        # entry-first: an unclaimed record ↔ the live case claiming it
+        if obj.claim_of_id:
+            out['claim_of'] = {'id': obj.claim_of_id, 'number': obj.claim_of.number}
+        claimer = ReplacementCase.objects.filter(claim_of=obj).exclude(status=ReplacementCase.STATUS_CANCELLED) \
+            .only('id', 'number').first()
+        if claimer:
+            out['claimed_by'] = {'id': claimer.pk, 'number': claimer.number}
+        if obj.status == ReplacementCase.STATUS_UNCLAIMED:
+            out['claimable'] = claimer is None and bool(staff) and authz.allows(staff, 'create')
         if obj.approval_request_id:
             r = obj.approval_request
             out['approval'] = {'id': r.pk, 'status': r.status, 'step': r.current_step_order,
@@ -182,6 +191,34 @@ class CaseDetailSerializer(CaseListSerializer):
         if live:
             out['available'] = {k: str(v) for k, v in legs.available(obj).items()}
             out['voucher_instruction'] = legs.voucher_instruction(obj)
+            # B4: reversals (reason + approval → native supplier return) and the change-of-mind window
+            from . import reversal as REV
+            out['reversals'] = [{
+                'id': r.pk, 'kind': r.kind, 'kind_label': r.get_kind_display(), 'reason': r.reason,
+                'amount': str(r.amount), 'balance_used': r.balance_used, 'status': r.status,
+                'status_label': r.get_status_display(), 'note': r.note, 'created_at': r.created_at,
+                'requested_by': r.requested_by.full_name if r.requested_by_id else '',
+                'decided_by': r.decided_by.full_name if r.decided_by_id else '',
+                'supplier_return': r.supplier_return.label if r.supplier_return_id else '',
+                'can_decide': (r.status == r.ST_AWAITING and bool(staff) and r.requested_by_id != staff.pk
+                               and authz.allows(staff, 'approve')),
+                'instruction': REV.instruction(obj, r) if r.status == r.ST_APPROVED else None,
+            } for r in obj.reversals.select_related('requested_by', 'decided_by', 'supplier_return')]
+            sale = (obj.documents.filter(role='contract_sale', status='confirmed').select_related('document')
+                    .order_by('document__docdate').first())
+            if sale:
+                out['contract_return_until'] = REV.change_of_mind_until(sale.document.docdate).isoformat()
+            # B3: cash handed to the patient — instruction → native voucher → handover confirmation
+            from .cash import instruction
+            out['payouts'] = [{
+                'id': p.pk, 'amount': str(p.amount), 'status': p.status, 'status_label': p.get_status_display(),
+                'note': p.note, 'requested_by': p.requested_by.full_name if p.requested_by_id else '',
+                'created_at': p.created_at, 'voucher': p.voucher.label if p.voucher_id else '',
+                'voucher_usercode': p.voucher_usercode, 'voucher_box': p.voucher_box, 'paid_at': p.paid_at,
+                'confirmed_by': p.confirmed_by.full_name if p.confirmed_by_id else '', 'confirmed_at': p.confirmed_at,
+                'reference': p.reference, 'cancel_reason': p.cancel_reason,
+                'instruction': instruction(obj, p) if p.status == p.ST_INSTRUCTED else None,
+            } for p in obj.payouts.select_related('voucher', 'requested_by', 'confirmed_by')]
         own = staff is not None and obj.created_by_id == staff.pk
         out['can'] = {a: bool(staff) and authz.allows(staff, a) for a in ('create', 'edit', 'approve', 'post')}
         out['can']['approve'] = out['can']['approve'] and not own          # maker-checker

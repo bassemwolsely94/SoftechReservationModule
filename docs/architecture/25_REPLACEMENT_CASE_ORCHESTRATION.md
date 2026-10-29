@@ -569,6 +569,156 @@ vouchers and receipts are verified against SOFTECH every day. Off with `REPLACEM
 
 Tests: `apps/tests/test_replacement_native_links.py` (17).
 
+## 20. Entry-first (B0, built 2026-10-26)
+
+**Owner 2026-10-26:** switch from the matcher building cases to staff *initiating and entering* every case
+first; the matcher only verifies. Owner answers recorded in §16.3.
+
+| Change | Where |
+|---|---|
+| Per-branch cut-over `ENTRY_FIRST_FROM` (default `{'130': '2026-11-01'}`); `is_entry_first(branch, day)` | `config.py` |
+| A virtual-supplier purchase on/after the cut-over with no live case → reconstruction still books it (ledger, vouchers, I-1) but as status **`unclaimed` «شراء بدون حالة»** + HIGH `caseless_purchase` (evidence: SOFTECH `usercode`). Before the cut-over / other branches: unchanged. | `reconstruct.reconstruct_invoice` §7 |
+| **Claim**: `create_case(claim_of=…)` (same branch, unclaimed, not already claimed; items prefilled from the purchase lines). Submit refuses a rule whose supplier ≠ the purchase supplier. On approval (auto or approver, workspace or /approvals inbox) `legs.attach_claimed_purchase` links the purchase through the existing native-link path; the unclaimed record is retired with compensating entries even if someone had reviewed it (edge decisions survive). Cancelling a claim frees the record. | `workflow.py`, `legs.py`, `ReplacementCase.claim_of` (migration 0006) |
+| **Live cases verify, never guess**: voucher funding uses only the receipts declared on the case (`_own_receipts`). A voucher without declared receipts → cash for a cash case; cash + INFO for mixed; unclassified + WARNING `undeclared_redemption` for products. Reconstruction no longer overwrites a live case's settlement mode. | `reconstruct._fund_voucher` |
+| Native purchase dated before the case was entered → `backdated_entry` (WARNING ≤ 3 days same month, HIGH beyond; INFO on a claim, which was approved through the backdate band). | `reconstruct` §7 |
+| Anonymous receipt auto-confirm (p0-v4) **OFF** (`ANON_AUTO_CONFIRM=False`, Q5). `RULES_VERSION` p0-v5. The ≈427 historical auto-confirmed links revert to *proposed* on their next rebuild. | `config.py`, `matching.select_funding` |
+| Redemption customer (Q5): a linked native product sale must carry the patient's PIC or «عميل تبديل» (blank refused); a prepared product order needs a PIC on the case. | `legs.link_native_product_sale`, `prepare_product_sale` |
+| Approval matrix (Q3): cash/mixed → supervisor, **manager when the balance (upper bound of the cash part) > 1,500**; rate lowered → supervisor, **manager > 5 pp**; claim **backdate**: same day none, ≤ 3 days same month supervisor, older / across month-end manager; value band unchanged (auto ≤ 500, manager > 500). | `workflow.approval_route`, `config.APPROVAL_*` |
+| Patient lookup by **PIC or mobile** (phone / alt / WhatsApp, last 10 digits); a shared number returns `patients` to choose from. | `views.patient_sales`, `/replacement/new` |
+| Adoption on `/replacement`: per cut-over branch — entered first vs unclaimed (count, value), rate, unclaimed per SOFTECH user (`user_label`), entered per staff. Click → unclaimed list. | `views._adoption`, `ReplacementCasesPage` |
+| UI: unclaimed banner + «استلام في حالة جديدة» (no modal) on the record; claim banner + prefill (type/mode from the supplier, branch, PIC, items) on `/replacement/new?claim=<id>`; claim links both ways. | `ReplacementCaseDetailPage`, `ReplacementNewCasePage` |
+
+Tests: `apps/tests/test_replacement_entry_first.py` (17) — unclaimed vs historical, claim end-to-end
+(auto-link, retire, nightly no duplicate), prefill, guards, supplier mismatch, declared-only funding,
+cash live voucher, anonymous refusal, PIC required, backdated link, cash / override / backdate bands,
+mobile lookup, adoption + claim API. 99 replacement tests + 47 help tests green.
+
+**Not changed:** nothing is written to SOFTECH; vouchers stay native (Q2); the daily job schedule.
+**Before 2026-11-01:** the scheduler must be running on the server (`replacement_daily_check` 08:40) —
+on the dev box the last rebuild is 2026-10-02.
+
+## 21. B1 — purchase-writer pilot readiness (built 2026-10-26, writes still OFF)
+
+**Golden comparison (read-only):** `manage.py replacement_purchase_golden BR/NO/YYYY-MM-DD …` reads a
+native virtual-supplier purchase (SELECT only, branch + doccode + number + date), rebuilds it through the
+exact case path (`legs.build_purchase_invoice` → `invoices.writer.build_plan`) in a rolled-back PG
+transaction and diffs every column we send. Save-time fields are listed as ignored, not hidden
+(`golden.IGNORED_*`). Reports: `exports/replacement_golden_*.json` (git-ignored).
+
+**Result on live data, 10 documents** (130/12095 Samra + 4471/4470/4469/4472/4069 on 130/140/150/160/170):
+header identical, totals identical (≤ 0.003 rounding). Line differences:
+
+| Field | Lines | Status |
+|---|---|---|
+| `itemexpirydate` — native always carries the box expiry, we sent NULL | 29/29 | **fixed**: expiry per replaced item captured on the purchase leg; required for a live post (the invoices `expiry_required` validation would also block it) |
+| `custdiscp` — native 1.0, we sent 0 | all lines, also on a normal-supplier purchase (130/12561, 4883) | **fixed** (see probe below): the replacement purchase sends `custdiscp=1.0` via the writer's `line_extra` hook (`legs.PURCHASE_LINE_EXTRA`, same mechanism as `vouchers/coupon_push.py`). The shared OCR purchase writer still sends 0 — separate follow-up. |
+| VAT items (14 %): native posts `itemsalestax` 0, sale price = public, full % (e.g. 250 / 50 %); the writer's engine splits the tax out (219.30 / 17.50 / 43 %) | 3 | **fixed — owner option A (2026-10-26)**: a buy-back from a patient carries no input VAT, so VAT lines post in SOFTECH's own buy-back form (tax 0, sale price with tax = public, discount = the rule %). Native evidence: 2,058 of 2,060 taxable virtual-supplier lines in 90 days on all 5 branches are tax 0. Done per line by `legs.purchase_line_extra` through the writer's `line_extra` hook, which now also accepts a function of the line (a dict, as gift coupons use, works unchanged). The pre-write guard checks the posted form (tax 0, public = approved public, % = approved %). Shared OCR pricing untouched. |
+| `storecode2` 1 / `promtype` 2 on item 106911 (150/19087) | 1 | **accepted**: a rare native variant (4 of 871 lines on 130 in 60 days); ours (0 / 1) is the norm |
+
+**Rollback probe — branch 130, 2026-10-26 23:00–23:07 (owner go; branch quiet: 0 documents in the
+previous 30 min).** Samra's purchase rebuilt through the case path (LOKELMA 100186 on 4472, 5,700, expiry
+2028-09-09) inserted into stktransm/stktrans in ONE unchained transaction, read back after the triggers,
+then `rollback tran`. Before = after: purchase counter 12561, stock 0, supplier 4472 balance 3,476,134.25, no
+document beyond the counter; no PG residue.
+1. With the generic template: ok (1/1 lines, err 0) but post-trigger `custdiscp` = 0 → no trigger sets it; the
+   screen sends it. Native distribution on 130 (60 days): 862 lines 1.0 / 9 lines 0.0 (other entry paths).
+2. With `custdiscp=1.0`: post-trigger line **identical** to native 12095 on every column except save-time ones.
+   Header differs only on `table_dumped` (replication timestamp) and `cashiercode` (native: 271 empty / 21 = user
+   / 3 other → empty is the norm).
+
+Golden sample after the `custdiscp` fix: 7 of 10 identical; after VAT option A: **9 of 10 identical**, the 10th
+differs only on the accepted `storecode2`/`promtype` variant.
+
+**Safeguards added:**
+- Per-branch gate: a live post needs `REPLACEMENT_POSTING_ENABLED` **and** the case branch in
+  `REPLACEMENT_POSTING_BRANCHES` (default empty). The UI shows the per-case state.
+- Pre-write guard `legs.precheck_purchase` (dry run and live): supplier = rule supplier, the writer's computed
+  total = approved balance (±0.05), same items / quantities / unit cost, no bonus line, VAT lines in buy-back form (tax 0, approved public and %), and (live)
+  every expiry. On failure nothing is sent; the op fails with a HIGH `posting_failed`.
+- The purchase carries the poster's SOFTECH user (`StaffProfile.softech_user_id`), never the writer default
+  `'1'`; a live post without one is refused. (POS orders already carry `seller_usercode`.)
+- Tests: `apps/tests/test_replacement_pilot.py` (13). 112 replacement tests green.
+
+**Pilot runbook (branch 130) — nothing below happens without the owner's explicit go:**
+1. ~~Resolve `custdiscp`~~ and ~~VAT-item pricing~~ (both done 2026-10-26). Re-run the golden sample on the
+   latest native purchases right before go-live.
+2. Confirm the scheduler runs `replacement_daily_check` on the server (verification of every posted leg).
+3. Map the pilot staff: `softech_user_id` on each StaffProfile, `ReplacementGrant.can_post` for 1–2 people.
+4. Settings on the server: `INVOICE_WRITER_ENABLED=True`, `REPLACEMENT_POSTING_ENABLED=True`,
+   `REPLACEMENT_POSTING_BRANCHES=('130',)`. Leave POS writer settings unchanged.
+5. One supervised case per leg (products, cash): approve → capture expiry → post purchase → check in SOFTECH
+   (doc, stock, supplier balance) → cashier voucher natively → next-day daily check `posted_verified`.
+6. Rollback = remove `'130'` from the branch list (instant); posted documents are corrected natively by a
+   supplier return, never deleted.
+
+## 22. B2 — balance in Customer 360 / POS, and funding a POS order (built 2026-10-26)
+
+One service, `apps/replacement/redemption.py`; no second balance — every figure is `legs.available()`.
+
+| Piece | Behaviour |
+|---|---|
+| `patient_balance(pic, staff, branch_id)` | Live cases with a posted/linked purchase, products or mixed, available > 0, inside the viewer's branches → `total_available` (redeemable at `branch_id` only) + per-case rows; reconstructed open balances shown as `historical` (count, amount) **for review only** (their patient is a matcher's guess). `None` without the replacement «view» right. |
+| Customer 360 | `GET /customers/{id}/pos-summary/?branch=` adds `replacement` for allowed staff only (owner D14: never printed for the patient). Shown in the Customer-360 drawer («رصيد البدل», branch-labelled, links to the cases) and as a «رصيد بدل» chip in the POS customer strip (`CustomerMomentBar`, desktop + mobile, this branch only). |
+| `fund_order(order, user, case_ids?)` | Cash / delivery POS order, not settled/cancelled, on a PIC; cases: same branch, live, not cash-only, `post` right; oldest first or the named order; top-up ≤ `MAX_TOPUP_PCT` of the pool. Creates one `PostingOperation` per case (`{case}:pos:{order}`, `result.from_pos`) — the same record a workspace product order uses. **The order's lines, prices and tenders are not touched.** Idempotent. `legs.post` refuses a POS-funded op (the POS pushes the order). |
+| `unfund_order(order, reason)` | Cancels the ops (reason required) until the cashier settles; after that a correction is a return (B4). |
+| Verification | Unchanged path: when the cashier settles, the reconciler sets `softech_final_docnumber`; `reconstruct._own_receipts` owns the receipt; the سداد voucher marks the op `posted_verified`. |
+| API | `GET patient-balance/`, `GET patient-orders/` (open fundable orders + who funds them), `POST fund-order/`, `POST unfund-order/` under `/api/replacement/cases/`; orders outside the viewer's branches → 404. |
+| UI | Case workspace → product leg: «تمويل من الرصيد» / «إلغاء التمويل» per open POS order of the patient (no modal). |
+
+Not built (stop-and-ask, CLAUDE.md: checkout): a «fund from بدل» switch inside the POS submit flow itself, which
+would let the cashier fund while selling instead of from the case page.
+
+Tests: `apps/tests/test_replacement_redemption.py` (8). 122 replacement tests + customer pos-summary tests green.
+
+## 23. B3 — cash handed to the patient (built 2026-10-27)
+
+Owner Q2: the cashier makes the سداد voucher natively; no voucher writer. `apps/replacement/cash.py` +
+model `CashPayout` (migration 0007, replacement tables only).
+
+| Step | Behaviour |
+|---|---|
+| Instruction | `request_payout(case, amount)` on a live **cash / mixed** case with its purchase linked; amount ≤ `legs.available`; reserves the amount (available() subtracts open instructions). Covered by the case approval (cash band on the whole balance: supervisor, manager > 1,500). Products-only cases refuse — owner rule: supplier return + new purchase at the cash rate (B4). Cancel with a reason while not paid. |
+| Cashier instruction | Supplier, purchase invoice, amount and the voucher note «صرف نقدي من فاتورة رقم …» (internal note only, D14), shown per instruction in the case workspace. |
+| Daily check | A voucher on a live cash/mixed case with no declared product receipt is matched to an open instruction of the same amount (oldest, created on/before the voucher date) → status `paid` with the voucher's SOFTECH user, cash box and time. Exceptions: **`cash_without_instruction`** (HIGH), **`payout_amount_mismatch`** (HIGH, instruction left open), **`voucher_by_creator`** (HIGH: voucher user = case creator's SOFTECH user above `APPROVAL_CASH_MANAGER_ABOVE`), `payout_not_executed` (WARNING after `PAYOUT_EXECUTE_DAYS` = 2), `payout_not_confirmed` (INFO after `PAYOUT_CONFIRM_DAYS` = 1). An existing link is never re-decided. |
+| Handover | The employee who handed the cash confirms (`confirm_payout`, optional reference) → `confirmed`. |
+| API / UI | `POST cases/{id}/payouts/`, `…/payouts/{pid}/cancel/`, `…/payouts/{pid}/confirm/`; workspace section «٤ — الصرف النقدي للمريض» (no modal). |
+
+**Not verifiable yet:** that the voucher was made under the cashier of the *active shift*. No shift / box-closing
+data is mirrored; the voucher's SOFTECH user and cash box are recorded on the payout so the check can be added
+as soon as the shift screens are decoded (D7 — owner screenshots).
+
+Tests: `apps/tests/test_replacement_cash.py` (8). 130 replacement tests green.
+
+## 24. B4 — returns, reversals and corrections (built 2026-10-27)
+
+Reversal, never deletion; every SOFTECH document is posted natively. `apps/replacement/reversal.py` +
+model `ReversalRequest` (migration 0008, replacement tables only).
+
+| Event (prompt §5 B4) | As built |
+|---|---|
+| Wrong %, wrong Rx, processed twice, products → cash, change of mind, other | `request_reversal(kind, reason, amount≤balance)` — reason required; one open request per case; refused while product funding or cash instructions are open, and when the balance is already used up («return the product sales first»). Approval on the existing inbox (band G): **supervisor**, **manager** once any balance was used; maker ≠ checker in the workspace and in the outcome hook (`self_approval`). Approved → case `reversing` (no new funding / cash / product orders) + supplier-return instruction (amount, supplier, reference = the purchase). |
+| Native supplier return (doccode 120) | Already booked to the ledger by reconstruction step 5; the daily check now matches it to the approved request (±0.05) → `executed`, case `reversed` when no balance remains. **`return_without_approval`** and **`reversal_amount_mismatch`** are HIGH; `reversal_not_executed` after `REVERSAL_EXECUTE_DAYS` (3). Re-purchase at the right rate = a new case (B0 flow). |
+| Insurance contract sale cancelled | Live cases now watch their linked contract sale (same patient / branch / items, `LIVE_RETURN_WATCH_DAYS` = 45): full return → `contract_void` + **`contract_cancelled` HIGH**; partial → `contract_partially_returned` WARNING. |
+| Patient changes mind | `change_of_mind_until(sale)` = 7 days **and** same month (Q4), shown on the case; a contract return after it → `late_contract_return` WARNING. |
+| Replacement sale returned / home delivery failed | A return of one of the case's own product receipts → `product_sale_returned` WARNING. **How the balance is restored in SOFTECH is an open owner question — detection only.** |
+| Insurer rejects later | `record_insurer_rejection(note)` → `insurer_rejected` (INFO, acknowledged so the daily check keeps it); nothing reversed ("what's done is done"). |
+
+API: `POST cases/{id}/reversals/`, `…/reversals/{rid}/approve|reject|cancel/`, `…/insurer-rejection/`. UI:
+workspace section «٥ — العكس والتصحيح» (no modal). `reset_reconstructed` truncates the new table too.
+
+Tests: `apps/tests/test_replacement_reversal.py` (9). 139 replacement tests green.
+
+### 16.3 Owner answers 2026-10-26
+
+| # | Decision |
+|---|---|
+| Q1 | Matrix confirmed: insurance Rx 30 % products (4471) / 40 % cash (4470) / 25 % shortage (4472); insurance meds not dispensed by us 40 % products (4470) / 50 % cash (4469); non-insurance clients 40 % products (**3068**) / 50 % cash (**4069**) — mapping confirmed. |
+| Q2 | Cash vouchers stay native at the cashier; the module links and checks them. No voucher writer (D11 reaffirmed). |
+| Q3 | Approvals: value auto ≤ 500 / manager > 500 · cash supervisor always, manager > 1,500 · rate lowered supervisor ≤ 5 pp, manager above · backdate same day auto, ≤ 3 days supervisor, older or across month-end manager · reversal supervisor, manager if any balance used. |
+| Q4 | Change of mind: contract sale returnable within 7 days **and** before month end. |
+| Q5 | Redemption sales on the patient's PIC or «عميل تبديل» only; historical anonymous receipts stay *proposed* for review. |
+| B0 | Entry-first; unclaimed purchases kept as a claimable record (option A); branch 130 cut-over 2026-11-01. |
+
 ## 16. Owner decisions (2026-09-28)
 
 | # | Decision |

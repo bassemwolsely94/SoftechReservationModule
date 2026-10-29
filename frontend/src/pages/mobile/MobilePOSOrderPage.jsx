@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
+import PosImageSearch from '../../pos/search/PosImageSearch'
+import PosAlternatives from '../../pos/search/PosAlternatives'
+import { Icon } from '../../pos/design'
 import PrescriptionOcrModal from '../../components/PrescriptionOcrModal'
 import PicHistoryModal from '../../components/PicHistoryModal'
 import CustomerMomentBar from '../../components/CustomerMomentBar'
@@ -10,7 +13,9 @@ import CustomerTypePicker from '../../components/CustomerTypePicker'
 import SalespersonPicker from '../../components/SalespersonPicker'
 import POSCustomerModal from '../../components/POSCustomerModal'
 import UnitsQtyModal from '../../components/UnitsQtyModal'
+import FefoGroupChip from '../../pos/batch/FefoGroupChip'
 import { QueueIndicator, numFieldHandlers, STEP_HINT } from '../POSOrderPage'
+import ContractAssist, { ClaimField } from '../../pos/contract/ContractAssist'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../../hooks/useGuidedFlow'
 
@@ -28,6 +33,11 @@ export default function MobilePOSOrderPage() {
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
+  const [showImg, setShowImg] = useState(false)   // full-screen image search
+  const [imgSeed, setImgSeed] = useState('')
+  const [altItem, setAltItem] = useState(null)   // verified-alternatives bottom sheet
+  const openImages = () => { setImgSeed(document.querySelector('[data-tour="pos-mobile-search"] input')?.value || ''); setShowImg(true) }
+  const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('[data-tour="pos-mobile-search"] input')?.focus(), 0) }
   const [showHistory, setShowHistory] = useState(false)
   const [guided, setGuided] = useState(false)
   const [unitsIdx, setUnitsIdx] = useState(-1)   // line index whose Q (units) sheet is open
@@ -101,7 +111,11 @@ export default function MobilePOSOrderPage() {
 
       {/* product search + barcode + favorites */}
       <div data-tour="pos-mobile-search" className="p-3 bg-white border-b space-y-2">
-        <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
+        <div className="flex gap-2 items-start">
+          <div className="flex-1 min-w-0"><ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" /></div>
+          <button onClick={openImages} title="بحث بالصور" aria-label="بحث بالصور"
+                  className="px-3 py-2 rounded border border-gray-300 bg-white text-gray-600 shrink-0"><Icon name="image" size={18} /></button>
+        </div>
         <div className="flex gap-2">
           <input placeholder="مسح باركود ⏎" className="flex-1 border rounded px-2 py-2 text-sm"
                  onKeyDown={e => { if (e.key === 'Enter') { P.addByBarcode(e.target.value.trim()); e.target.value = '' } }} />
@@ -119,7 +133,7 @@ export default function MobilePOSOrderPage() {
           </div>
         )}
         {/* intelligence layer — same as desktop (customer context · suggestions · offers · opportunities) */}
-        {histCustomerId && <CustomerMomentBar customerId={histCustomerId} />}
+        {histCustomerId && <CustomerMomentBar customerId={histCustomerId} branchId={P.branch} />}
         <PicSuggestions P={P} />
         <OffersPanel P={P} />
         <BasketIntelPanel itemCodes={P.lines.map(l => l.softech_itemcode).filter(Boolean)}
@@ -131,7 +145,11 @@ export default function MobilePOSOrderPage() {
       {/* cart */}
       <div data-tour="pos-mobile-cart" className="bg-white">
         {!P.lines.length && <div className="text-center text-gray-400 py-8">لا أصناف بعد</div>}
-        {P.lines.map((l, i) => {
+        {P.lines.map((line, i) => {
+          // an automatic FEFO split is ONE card (its head); the other batch lines are folded in
+          if (P.fefoHidden(i)) return null
+          const g = P.fefoGroupAt(i)
+          const l = g ? { ...line, qty: g.qty, available_expiry_qty: g.available } : line
           const net = +(l.item_sale_price * (1 - l.cust_discp / 100)) * l.qty
           return (
             <div key={i} className="border-b">
@@ -143,18 +161,20 @@ export default function MobilePOSOrderPage() {
                   </div>
                   <div className="text-xs text-gray-500">
                     {l.softech_itemcode} · {Number(l.qty)}×{money(l.item_sale_price)}
-                    {' · '}{l.is_reservation ? <span className="bg-amber-100 text-amber-800 px-1 rounded">حجز</span> : (l.item_expiry || 'بدون تشغيلة')}
+                    {' · '}{l.is_reservation ? <span className="bg-amber-100 text-amber-800 px-1 rounded">حجز</span> : g ? null : (l.item_expiry || 'بدون تشغيلة')}
                     {P.suggest.map[l.softech_itemcode] != null &&
                       <button onClick={e => { e.stopPropagation(); P.applySuggested(i) }} className="text-emerald-700 mr-1">· مقترح {P.suggest.map[l.softech_itemcode]}%</button>}
                   </div>
                 </div>
                 <div className="text-left"><div className="font-mono">{money(net)}</div><button onClick={e => { e.stopPropagation(); P.removeLine(i) }} className="text-red-500 text-xs">حذف</button></div>
               </div>
+              {g && <div className="px-3 pb-2 -mt-1"><FefoGroupChip g={g} P={P} /></div>}
               {open === i && (
                 <div className="px-3 pb-3 grid grid-cols-3 gap-2 bg-gray-50">
                   <Fld l="الكمية">
                     <div className="flex items-center gap-1">
-                      <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                      <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                      {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                       {l.pack_qty > 1 && (
                         <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                                 className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
@@ -174,7 +194,7 @@ export default function MobilePOSOrderPage() {
                   <Fld l="العبوة"><input value={l.unit_name || 'علبة'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد متاح"><input value={l.available_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
                   <Fld l="رصيد صلاحية"><input value={l.available_expiry_qty ?? '—'} readOnly className="minp bg-gray-100" /></Fld>
-                  <Fld l="رقم الباتش"><input value={l.batchno || '—'} readOnly className="minp bg-gray-100" /></Fld>
+                  <Fld l="رقم الباتش"><input value={(g ? g.batchnos.filter(Boolean).join(' · ') : l.batchno) || '—'} readOnly className="minp bg-gray-100" /></Fld>
                 </div>
               )}
             </div>
@@ -209,8 +229,8 @@ export default function MobilePOSOrderPage() {
         </div>
         <MPointsBadge P={P} />
         <div className="grid grid-cols-4 gap-2 text-xs">
-          <button onClick={() => setSheet('pay')} className="py-2 rounded border">السداد ({P.tenders.length})</button>
-          <button onClick={P.parkOrder} className="py-2 rounded border">⏸ تعليق</button>
+          <button onClick={() => setSheet('pay')} data-tour="pos-mobile-pay" className="py-2 rounded border">السداد ({P.tenders.length})</button>
+          <button onClick={P.parkOrder} data-tour="pos-mobile-park" className="py-2 rounded border">⏸ تعليق</button>
           <button onClick={() => setSheet('parked')} className="py-2 rounded border">المعلّقة ({P.parked.length})</button>
           <button onClick={() => setSheet('receipt')} disabled={!P.lines.length} className="py-2 rounded border disabled:opacity-40">🧾 إيصال</button>
         </div>
@@ -218,8 +238,8 @@ export default function MobilePOSOrderPage() {
           <button onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
           <button data-tour="pos-mobile-preview" onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
           {P.ref?.writer_enabled
-            ? <button onClick={() => P.submit(true)} disabled={P.busy} className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
-            : <button disabled className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}
+            ? <button onClick={() => P.submit(true)} disabled={P.busy} data-tour="pos-mobile-send" className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
+            : <button disabled data-tour="pos-mobile-send" className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}
         </div>
       </div>
 
@@ -342,8 +362,9 @@ export default function MobilePOSOrderPage() {
       {/* contract / patient + doctor / Rx */}
       {sheet === 'contract' && (
         <Sheet onClose={() => setSheet(null)} title="بيانات التعاقد / المريض">
+          <ContractAssist P={P} mobile />
           {CONTRACT_EMP_FIELDS.map(({ key, label, type }) => (
-            <M key={key} l={label}><input type={type || 'text'} value={P.claim[key] || ''} onChange={e => P.setClaim({ ...P.claim, [key]: e.target.value })} className="minp" /></M>
+            <M key={key} l={label}><ClaimField P={P} k={key} type={type} className="minp" /></M>
           ))}
           <M l="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => P.setClaim({ ...P.claim, claimdate: e.target.value })} className="minp" /></M>
           <M l="الطبيب المُحيل"><input value={P.doctorName} onChange={e => P.setDoctorName(e.target.value)} className="minp" /></M>
@@ -378,6 +399,10 @@ export default function MobilePOSOrderPage() {
 
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
       {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
+      <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
+                      initialQuery={imgSeed} onPick={P.addItem} />
+      {altItem && <PosAlternatives sheet item={altItem} branchId={P.branch} onClose={() => setAltItem(null)}
+                                   onPick={(it) => { P.addItem(it); setAltItem(null) }} />}
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
@@ -481,23 +506,32 @@ function MGCustomer({ P, onOpenPic }) {
 }
 function MGItems({ P }) {
   const [unitsIdx, setUnitsIdx] = useState(-1)
+  const [altItem, setAltItem] = useState(null)   // own state: this component is outside MobilePOSOrderPage
   return (
     <div className="space-y-2 max-w-md mx-auto">
-      <ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
+      {altItem && <PosAlternatives sheet item={altItem} branchId={P.branch} onClose={() => setAltItem(null)}
+                                   onPick={(it) => { P.addItem(it); setAltItem(null) }} />}
+      <ItemSearchWidget variant="pos" sheet branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={setAltItem} placeholder="ابحث بالاسم / الكود / الباركود…" />
       {!P.lines.length && <div className="text-center text-gray-400 text-sm py-6">أضف الأصناف بالبحث بالأعلى</div>}
       {unitsIdx >= 0 && P.lines[unitsIdx] && (
         <UnitsQtyModal P={P} i={unitsIdx} onClose={() => setUnitsIdx(-1)} />
       )}
-      {P.lines.map((l, i) => (
+      {P.lines.map((line, i) => {
+        if (P.fefoHidden(i)) return null           // folded into its FEFO group's card
+        const g = P.fefoGroupAt(i)
+        const l = g ? { ...line, qty: g.qty } : line
+        return (
         <div key={i} className="border rounded p-2">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium flex-1">{l.item_name}</span>
             <button onClick={() => P.removeLine(i)} className="text-red-500 px-1">✕</button>
           </div>
+          {g && <FefoGroupChip g={g} P={P} className="mt-0.5" />}
           <div className="grid grid-cols-3 gap-2 mt-1">
             <Fld l="كمية (عبوة)">
               <div className="flex items-center gap-1">
-                <input type="number" step="any" value={l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} title={STEP_HINT} {...numFieldHandlers({ P, i, k: 'qty', step: 1 })} onChange={e => P.setLine(i, 'qty', e.target.value)} className="minp pos-num" />
+                {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                 {l.pack_qty > 1 && (
                   <button onClick={() => setUnitsIdx(i)} title="إدخال الكمية بالوحدات/الشرائط (Q)"
                           className="shrink-0 text-xs border rounded px-2 py-1 text-gray-600 bg-white">Q</button>
@@ -513,15 +547,17 @@ function MGItems({ P }) {
             </Fld>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 function MGClaim({ P }) {
   return (
     <div className="space-y-2 max-w-md mx-auto">
+      <ContractAssist P={P} mobile />
       {CONTRACT_EMP_FIELDS.map(({ key, label, type }) => (
-        <Fld key={key} l={label}><input type={type || 'text'} value={P.claim[key] || ''} onChange={e => P.setClaim({ ...P.claim, [key]: e.target.value })} className="minp" /></Fld>
+        <Fld key={key} l={label}><ClaimField P={P} k={key} type={type} className="minp" /></Fld>
       ))}
       <Fld l="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => P.setClaim({ ...P.claim, claimdate: e.target.value })} className="minp" /></Fld>
     </div>

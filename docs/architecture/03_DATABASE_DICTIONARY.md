@@ -2782,7 +2782,7 @@ Tables prefixed with their Django app name.
 | cancellation_available | bool | |
 | alert_notification_count / last_alert_sent_at / last_alert_level | int/datetime/varchar | Aging alerts |
 | internal_notes | text | |
-| manually_received_at / manually_received_by_id | datetime/FK | |
+| manually_received_at / manually_received_by_id | datetime/FK | Local «تسجيل الاستلام» (never written to SOFTECH). The sync keeps `transit_status='received'` while no doc 25 exists, and keeps re-checking these rows; once SOFTECH's 25 appears its result (received / erp_mismatch) and reconciliation win. UI shows «⏳ مستلم محلياً — في انتظار تأكيد SOFTECH». After `transit_local_receipt_alert_days` (SystemSetting, default 3, 0 = off) without a 25 → daily alert to the receiving branch + admins (`last_alert_level='local'`, note + audit); grid filter `?awaiting_erp=1`. |
 | force_close_reason / force_closed_by_id | text/FK | |
 | first_seen_at / last_synced_at / updated_at | datetime | |
 
@@ -3318,6 +3318,8 @@ Tables prefixed with their Django app name.
 | staff_id | FK users_staffprofile | |
 | created_at | timestamptz | indexed |
 
+Also `public_note` (≤120): one line for users — «what changed» — shown in «الجديد» and the home card; `note` stays the internal reason.
+
 ### help_helpfeedback  ("was this helpful?")
 `screen_key`, `tab`, `helpful` (bool), `comment`, `lang`, `staff_id`, `role`, `resolved`, `created_at`.
 
@@ -3331,7 +3333,13 @@ Tables prefixed with their Django app name.
 `staff_id`, `module_key`, `score`, `total`, `passed` (≥ `onboarding.PASS_PERCENT`), `answers` (JSON: chosen option index per question), `version` (quiz fingerprint answered; a pass counts only while it equals the current quiz's version), `created_at`.
 
 ### help_helptrainingoverride  (trainer's version of a training path / quiz)
-`kind` (`path` / `quiz`), `key` (role / module), `data` (JSON `{screens: [...]}` or `{questions: [{q, options, answer, explain}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
+`kind` (`path` / `quiz` / `flow`), `key` (role / module / `<module>.<flow key>`), `data` (JSON `{screens: [...]}`, `{questions: [{q, options, answer, explain}]}` or `{title, summary, steps: [{target, text}]}`), `base_hash` (repo version edited), `updated_by_id`, `updated_at`. Unique (`kind`, `key`). History in `help_helprevision` (`screen_key` = `path:<role>` / `quiz:<module>`).
+
+### help_helpreminder  (supervisor «تذكير» to someone stuck on their training path)
+`staff_id` (who was reminded), `sent_by_id`, `percent` (their progress then), `created_at`. Audit trail + 3-day cool-down.
+
+### help_helppreference  (per-person help preferences)
+`staff_id` (one-to-one StaffProfile), `first_day_hidden_at` (the person hid the «ابدأ من هنا» home cards), `whats_new_seen_at` («تمام، شفتها» on the home «الجديد» card — help changes up to then count as read), `updated_at`.
 
 ### help_helptrainingsnapshot  (what staff were last told about their training)
 `kind` (`path` / `quiz`), `key` (role / module), `data` (path: list of screen keys; quiz: version string), `updated_at`. Unique (`kind`, `key`). Compared hourly by `help_announce_training` to notify only changes.

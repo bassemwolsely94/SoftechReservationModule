@@ -180,21 +180,119 @@ class HelpContentCoverageTests(SimpleTestCase):
             for g in [self.modules[s['module']].get('group')]:
                 self.assertIn(g, [k for k, _, _ in registry.GROUPS], key)
 
-    def test_tour_targets_exist_in_the_frontend(self):
-        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
-        so renaming/removing an anchor fails CI instead of silently breaking a tour."""
+    def _anchors(self):
+        """Every data-tour anchor in frontend/src, plus the side-menu anchors Layout.jsx
+        generates: nav-group-<group id> and nav-<path> (navTourId) for every NAV_GROUPS item,
+        and mnav-<path> for the mobile tabs. Sets self.nav_paths (the menu's paths)."""
         src = Path(settings.BASE_DIR) / 'frontend' / 'src'
         anchors = set()
         for f in list(src.rglob('*.jsx')) + list(src.rglob('*.js')):
             anchors.update(re.findall(r'data-tour="([a-z0-9-]+)"', f.read_text(encoding='utf-8')))
+        layout = (src / 'components' / 'Layout.jsx').read_text(encoding='utf-8')
+        nav_block = layout[layout.index('const NAV_GROUPS'):]
+        nav_block = nav_block[:nav_block.index('\n]\n')]
+        self.nav_paths = set(re.findall(r"\bto:\s*'([^']+)'", nav_block))
+        anchors |= {'nav-group-' + g for g in re.findall(r"\bid:\s*'([a-z0-9_-]+)'", nav_block)}
+        anchors |= {'nav-' + re.sub(r'-$', '', re.sub(r'[^a-z0-9]+', '-', p.lstrip('/'))) for p in self.nav_paths}
+        app_src = APP_JSX.read_text(encoding='utf-8')
+        tabs = app_src[app_src.index('MOBILE_TABS'):]
+        tabs = tabs[:tabs.index('\n]\n')]
+        anchors |= {'mnav-' + re.sub(r'-$', '', re.sub(r'[^a-z0-9]+', '-', re.sub(r'^/m/?', '', p)))
+                    for p in re.findall(r"\bto:\s*'(/m/[^']*)'", tabs)}
+        return anchors
+
+    def _check_rich_step(self, where, st, allowed):
+        """Rich-step rules for modules out of TOUR_PENDING: only known keys, every text
+        part bilingual and short, and a ⚠ warning on costly buttons."""
+        self.assertLessEqual(set(st), allowed, f'{where}: unknown step keys')
+        for k in registry.TOUR_TEXT_KEYS:
+            if k in st:
+                for lang in ('ar', 'en'):
+                    self.assertTrue((st[k].get(lang) or '').strip(), f'{where}.{k}: missing {lang}')
+                    self.assertLessEqual(len(st[k][lang]), registry.TOUR_LIMITS[k],
+                                         f'{where}.{k}.{lang}: longer than {registry.TOUR_LIMITS[k]}')
+        words = set(st['target'].split('-')) & registry.TOUR_WARN_WORDS
+        if words:
+            self.assertIn('warn', st, f'{where}: anchor says {sorted(words)} — add a ⚠ warn')
+
+    def test_tour_targets_exist_in_the_frontend(self):
+        """«اعرض لي» steps highlight [data-tour="…"] elements — each must exist in the code,
+        so renaming/removing an anchor fails CI instead of silently breaking a tour.
+        Step pages (route / wait) must be real routes, `nav` a real menu path, and a
+        screen's `tour_continue` must follow a last step that waits for that screen."""
+        anchors = self._anchors()
+        routes = app_routes()
+
+        def check(where, steps, allowed):
+            bad = []
+            self.assertTrue(steps, where)
+            for i, st in enumerate(steps):
+                w = f'{where}[{i}]'
+                self.assertTrue({'target', 'text'} <= set(st) <= allowed, f'{w}: {sorted(set(st) - allowed)}')
+                if st['target'] not in anchors:
+                    bad.append(f'{w}: {st["target"]}')
+                for f in ('route', 'wait'):
+                    if st.get(f) and st[f] not in routes:
+                        bad.append(f'{w}: {f} {st[f]} is not a route in App.jsx')
+                if st.get('nav') and st['nav'] not in self.nav_paths:
+                    bad.append(f'{w}: nav {st["nav"]} is not a side-menu item')
+            return bad
+
         missing = []
         for key, s in self.screens.items():
-            for i, st in enumerate(s.get('tour') or []):
-                self.assertEqual(set(st), {'target', 'text'}, f'{key}.tour[{i}]')
-                if st['target'] not in anchors:
-                    missing.append(f'{key}: {st["target"]}')
-        self.assertEqual(missing, [], 'Tour targets with no data-tour anchor in frontend/src')
-        self.assertTrue(any(s.get('tour') for s in self.screens.values()), 'no tours at all')
+            if s.get('tour'):
+                missing += check(f'{key}.tour', s['tour'], registry.TOUR_STEP_KEYS)
+            nxt = s.get('tour_continue')
+            if nxt:
+                self.assertIn(nxt, self.screens, f'{key}: tour_continue')
+                self.assertTrue(self.screens[nxt].get('tour'), f'{key}: {nxt} has no tour to continue with')
+                self.assertIn(s['tour'][-1].get('wait'), self.screens[nxt]['routes'],
+                              f'{key}: last step must wait for a route of {nxt}')
+        for m in self.modules.values():
+            for f in m.get('flows') or []:
+                self.assertTrue(f.get('key') and f.get('title'), m['key'])
+                missing += check(f"{m['key']}.flows.{f['key']}", f['steps'], registry.TOUR_STEP_KEYS)
+        self.assertEqual(missing, [], 'Broken tour steps')
+        no_tour = [k for k, s in self.screens.items() if not s.get('tour')]
+        self.assertEqual(no_tour, [], 'Every screen needs a «اعرض لي» tour (add data-tour anchors + tour steps)')
+
+    def test_rich_tours_in_finished_modules(self):
+        """Modules out of TOUR_PENDING: every screen has a tour of rich steps."""
+        self.assertLessEqual(registry.TOUR_PENDING, set(self.modules), 'TOUR_PENDING has unknown modules')
+        for key, s in self.screens.items():
+            if s['module'] in registry.TOUR_PENDING:
+                continue
+            self.assertTrue(s.get('tour'), f'{key}: no «اعرض لي» tour')
+            for i, st in enumerate(s['tour']):
+                self._check_rich_step(f'{key}.tour[{i}]', st, registry.TOUR_STEP_KEYS)
+
+    def test_journeys_valid(self):
+        """Module journeys: real screens and anchors, one shell, valid roles / perms, and a
+        hint wherever the user must open a record (no param-free route to go to)."""
+        from apps.users.models import MODULE_CHOICES, ROLE_CHOICES
+        anchors = self._anchors()
+        roles = {r for r, _ in ROLE_CHOICES}
+        perms = {m for m, _ in MODULE_CHOICES}
+        for jid, j in registry.journeys().items():
+            self.assertIn(j.get('shell', 'desktop'), ('desktop', 'mobile'), jid)
+            self.assertLessEqual(set(j.get('roles') or []), roles, f'{jid}: unknown role')
+            self.assertGreaterEqual(len(j['steps']), 3, f'{jid}: a journey needs at least 3 steps')
+            for i, st in enumerate(j['steps']):
+                where = f'{jid}.steps[{i}]'
+                self.assertIn(st.get('screen'), self.screens, f'{where}: unknown screen')
+                self.assertIn(st['target'], anchors, f'{where}: no data-tour anchor')
+                routes = registry.journey_routes(j, self.screens[st['screen']])
+                self.assertTrue(routes, f'{where}: screen has no {j.get("shell", "desktop")} route')
+                if all(':' in r for r in routes):
+                    self.assertIn('open_hint', st, f'{where}: record page — add open_hint')
+                if 'perm' in st:
+                    self.assertIn(st['perm'], perms, f'{where}: unknown RBAC module')
+                self._check_rich_step(where, st, registry.JOURNEY_STEP_KEYS)
+
+    def test_finished_modules_have_journeys(self):
+        for key, m in self.modules.items():
+            if key not in registry.TOUR_PENDING:
+                self.assertTrue(m.get('journeys'), f'{key}: no journey (رحلة عمل)')
 
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
@@ -544,6 +642,32 @@ class TrainingEditTests(TestCase):
         bad = c.put('/api/help/screens/reservations.board/', {'data': {'tour': [{'target': 'x'}]}}, format='json')
         self.assertEqual(bad.status_code, 400)
 
+    def test_tour_explanation_editable(self):
+        """`more` (the longer explanation under a step's headline): the trainer's when they
+        wrote one, else the repo's; a wrong shape is refused."""
+        c = self._client('admin', 'tr_more')
+        _, screens = registry.load()
+        base = screens['reservations.board']['tour']
+        edited = [{'target': base[0]['target'], 'text': base[0]['text'],
+                   'more': {'ar': 'شرح المدرب الأطول', 'en': 'Trainer explanation'}},
+                  {'target': base[1]['target'], 'text': base[1]['text'], 'more': {'ar': '', 'en': ''}}]
+        r = c.put('/api/help/screens/reservations.board/', {'data': {'tour': edited}}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        tour = r.json()['tour']
+        self.assertEqual(tour[0]['more']['ar'], 'شرح المدرب الأطول')
+        self.assertEqual(tour[1].get('more'), base[1].get('more'))          # empty → repo text kept
+        bad = [{'target': base[0]['target'], 'text': base[0]['text'], 'more': 'نص'}]
+        self.assertEqual(c.put('/api/help/screens/reservations.board/', {'data': {'tour': bad}},
+                               format='json').status_code, 400)
+        # workflow tours too
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        cur = c.get(url).json()['current']
+        cur['steps'][1]['more'] = {'ar': 'شرح أطول للوحة', 'en': 'Longer board text'}
+        self.assertEqual(c.put(url, {'data': cur}, format='json').status_code, 200)
+        f = next(x for x in c.get('/api/help/modules/reservations/').json()['flows']
+                 if x['id'] == 'flow:reservations.lifecycle')
+        self.assertEqual(f['steps'][1]['more']['ar'], 'شرح أطول للوحة')
+
     def test_path_edit_applies_and_reverts(self):
         from apps.help.content import onboarding
         from apps.help.models import HelpRevision
@@ -707,19 +831,853 @@ class HelpUsageTests(TestCase):
 
     def test_tour_events_and_report(self):
         _, screens = registry.load()
-        n = len(screens['reservations.board']['tour'])
+        n = len(registry.tour_flow('reservations.board', screens))   # board + continued detail steps
+        self.assertGreater(n, len(screens['reservations.board']['tour']))
         ok = self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': n, 'done': True}, format='json')
         self.assertEqual(ok.status_code, 201)
         self.ph.post('/api/help/tour-event/', {'screen_key': 'reservations.board', 'reached': 2, 'done': True}, format='json')
-        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'general.me'}, format='json').status_code, 400)
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'nope.screen'}, format='json').status_code, 400)
         self.ph.get('/api/help/screens/reservations.board/')
         self.assertEqual(self.ph.get('/api/help/usage/').status_code, 403)
         r = self.admin.get('/api/help/usage/?days=7').json()
         row = next(t for t in r['tours'] if t['screen_key'] == 'reservations.board')
         self.assertEqual((row['runs'], row['done'], row['done_pct'], row['common_stop']), (2, 1, 50, 2))
+        # the step people did not get past (index 2) maps back to its own screen's text
+        self.assertEqual(row['weak_step'], {'screen': 'reservations.board', 'i': 2})
         unopened = {u['screen_key'] for u in r['unopened']}
         self.assertNotIn('reservations.board', unopened)
         self.assertIn('pos.order', unopened)
         pos = next(u for u in r['unopened'] if u['screen_key'] == 'pos.order')
         self.assertIn('pharmacist', pos['on_paths'])
         self.assertTrue(any(t['runs'] == 0 for t in r['tours']))
+        self.assertTrue(any(t['flow'] for t in r['tours']))
+        # workflow tours report too
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'flow:general.system', 'reached': 3},
+                                      format='json').status_code, 201)
+        self.assertEqual(self.ph.post('/api/help/tour-event/', {'screen_key': 'flow:general.nope'},
+                                      format='json').status_code, 400)
+
+    def test_screen_payload_carries_flow_and_module_tours(self):
+        r = self.ph.get('/api/help/screens/reservations.board/?log=0').json()
+        screens_in_flow = {st['screen'] for st in r['tour_flow']}
+        self.assertEqual(screens_in_flow, {'reservations.board', 'reservations.detail'})
+        detail_steps = [st for st in r['tour_flow'] if st['screen'] == 'reservations.detail']
+        self.assertTrue(all(st['route'] == '/reservations/:id' for st in detail_steps))
+        self.assertTrue(any(f['id'] == 'flow:reservations.lifecycle' for f in r['module']['flows']))
+        m = self.ph.get('/api/help/modules/general/').json()
+        self.assertTrue(any(f['id'] == 'flow:general.system' for f in m['flows']))
+
+
+class TourMergeTests(SimpleTestCase):
+    def test_same_target_twice_edited_independently(self):
+        base = [{'target': 'a', 'text': {'ar': '1', 'en': '1'}}, {'target': 'a', 'wait': '/x/:id', 'text': {'ar': '2', 'en': '2'}}]
+        edited = [{'target': 'a', 'text': {'ar': 'جديد', 'en': 'new'}}, {'target': 'a', 'text': {'ar': '', 'en': ''}}]
+        out = registry._merge_tour(base, edited)
+        self.assertEqual(out[0]['text']['ar'], 'جديد')
+        self.assertEqual(out[1]['text']['ar'], '2')
+        self.assertEqual(out[1]['wait'], '/x/:id')
+        # a step the code replaced keeps the repo text
+        self.assertEqual(registry._merge_tour([{'target': 'b', 'text': {'ar': 'r', 'en': 'r'}}], edited)[0]['text']['ar'], 'r')
+
+
+class FlowEditTests(TestCase):
+    """Trainers edit workflow-tour text (title, summary, step text); steps stay the code's."""
+
+    def setUp(self):
+        branch = make_branch()
+        u1, _, _ = make_user('fe_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('fe_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u1)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def test_edit_apply_validate_revert(self):
+        from apps.help.models import HelpRevision
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        self.assertEqual(self.ph.get(url).status_code, 403)
+        cur = self.t.get(url).json()['current']
+        cur['title'] = {'ar': 'دورة الحجز (نسخة المدرب)', 'en': 'Reservation (trainer)'}
+        cur['steps'][2]['text'] = {'ar': 'نص أوضح للخطوة', 'en': 'Clearer step text'}
+        r = self.t.put(url, {'data': cur, 'note': 'أوضح'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        flows = self.ph.get('/api/help/modules/reservations/').json()['flows']
+        f = next(x for x in flows if x['id'] == 'flow:reservations.lifecycle')
+        self.assertEqual(f['title']['ar'], 'دورة الحجز (نسخة المدرب)')
+        self.assertEqual(f['steps'][2]['text']['ar'], 'نص أوضح للخطوة')
+        self.assertEqual(f['steps'][2]['wait'], '/reservations/new')     # behaviour kept from the code
+        # steps are fixed by the code: wrong count / moved target rejected
+        bad = dict(cur, steps=cur['steps'][:-1])
+        self.assertEqual(self.t.put(url, {'data': bad}, format='json').status_code, 400)
+        bad = dict(cur, steps=[dict(cur['steps'][0], target='other')] + cur['steps'][1:])
+        self.assertEqual(self.t.put(url, {'data': bad}, format='json').status_code, 400)
+        self.assertEqual(self.t.delete(url, {'note': 'رجوع'}, format='json').status_code, 200)
+        f = next(x for x in self.ph.get('/api/help/modules/reservations/').json()['flows']
+                 if x['id'] == 'flow:reservations.lifecycle')
+        self.assertNotEqual(f['title']['ar'], 'دورة الحجز (نسخة المدرب)')
+        self.assertEqual(HelpRevision.objects.filter(screen_key='flow:reservations.lifecycle').count(), 2)
+        self.assertEqual(self.t.get('/api/help/training/flow/nope.x/').status_code, 404)
+
+    def test_index_lists_flows_with_mobile_flag(self):
+        flows = self.ph.get('/api/help/').json()['flows']
+        ids = {f['id']: f for f in flows}
+        for fid in ('flow:pos.order', 'flow:demand.lifecycle', 'flow:delivery.lifecycle',
+                    'flow:reservations.mobile', 'flow:transfers.mobile', 'flow:demand.mobile'):
+            self.assertIn(fid, ids)
+        self.assertTrue(ids['flow:reservations.mobile']['mobile'])
+        self.assertFalse(ids['flow:reservations.lifecycle']['mobile'])
+
+
+class FirstDayTests(TestCase):
+    """«أول يوم»: cards on the home page until the path is complete or hidden."""
+
+    def setUp(self):
+        branch = make_branch()
+        user, self.profile, _ = make_user('fd_sales', role='salesperson', branch=branch)
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+
+    def test_cards_for_a_new_person(self):
+        from apps.help.content import onboarding
+        d = self.c.get('/api/help/first-day/').json()
+        self.assertTrue(d['show'])
+        self.assertEqual(d['role'], 'salesperson')
+        self.assertEqual(d['system_tour']['id'], 'flow:general.system')
+        self.assertFalse(d['system_tour']['done'])
+        self.assertEqual(d['next_screen']['key'], onboarding.ROLE_PATHS['salesperson'][0])
+        ids = [f['id'] for f in d['flows']]
+        self.assertTrue(ids)
+        self.assertTrue(all(not f['mobile'] for f in d['flows']))
+        self.assertNotIn('flow:pos.exceptions', ids)          # not a salesperson's tour
+        self.assertIsNotNone(d['quiz'])
+        m = self.c.get('/api/help/first-day/?mobile=1').json()
+        self.assertIsNone(m['system_tour'])                   # the system tour is desktop
+        self.assertTrue(all(f['mobile'] for f in m['flows']))
+
+    def test_done_ticks_and_next_screen_move(self):
+        from apps.help.content import onboarding
+        n = len(registry.flows(registry.load()[0])['flow:general.system']['steps'])
+        self.c.post('/api/help/tour-event/', {'screen_key': 'flow:general.system', 'reached': n, 'done': True},
+                    format='json')
+        first = onboarding.ROLE_PATHS['salesperson'][0]
+        self.c.post('/api/help/onboarding/learned/', {'screen_key': first}, format='json')
+        d = self.c.get('/api/help/first-day/').json()
+        self.assertTrue(d['system_tour']['done'])
+        self.assertEqual(d['next_screen']['key'], onboarding.ROLE_PATHS['salesperson'][1])
+
+    def test_hide_and_complete(self):
+        from unittest import mock
+        self.assertEqual(self.c.post('/api/help/first-day/', {'hidden': True}, format='json').json(), {'hidden': True})
+        self.assertFalse(self.c.get('/api/help/first-day/').json()['show'])
+        self.c.post('/api/help/first-day/', {'hidden': False}, format='json')
+        self.assertTrue(self.c.get('/api/help/first-day/').json()['show'])
+        # a finished path hides it by itself
+        with mock.patch('apps.help.training.path', return_value=['general.help_center']), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            self.c.post('/api/help/onboarding/learned/', {'screen_key': 'general.help_center'}, format='json')
+            d = self.c.get('/api/help/first-day/').json()
+        self.assertEqual(d['progress']['percent'], 100)
+        self.assertFalse(d['show'])
+
+
+class TrainingDigestTests(TestCase):
+    """Weekly digest: right recipients, branch scope, finished / stuck / failed /
+    retake lists, once per week, can be switched off."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        from .factories import make_branch2
+        self.b1, self.b2 = make_branch(), make_branch2()
+        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
+        _, self.sup, _ = make_user('dg_sup', role='supervisor', branch=self.b1)
+        u, self.ph, _ = make_user('dg_ph', role='pharmacist', branch=self.b1)
+        _, self.other, _ = make_user('dg_other', role='pharmacist', branch=self.b2)
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+
+    def _age(self, profile, days):
+        from django.utils import timezone
+        profile.user.date_joined = timezone.now() - timezone.timedelta(days=days)
+        profile.user.save(update_fields=['date_joined'])
+
+    def test_recipients_and_scope(self):
+        from apps.help import digest
+        self.assertIn(self.sup, digest.recipients())
+        self.assertNotIn(self.ph, digest.recipients())
+        names = {r['id'] for r in digest.summary_for(self.sup)['stuck']} | \
+            {r['id'] for r in digest.summary_for(self.sup)['failed']}
+        s = digest.summary_for(self.sup)
+        self.assertEqual(s['team'], 1)                 # only branch 1, not the supervisor themself
+        self.assertNotIn(self.other.id, names)
+
+    def test_stuck_failed_and_text(self):
+        from apps.help import digest
+        from apps.help.content import onboarding
+        self._age(self.ph, 10)
+        wrong = [(q['answer'] + 1) % len(q['options']) for q in onboarding.QUIZZES['pos']]
+        self.c.post('/api/help/quizzes/pos/submit/', {'answers': wrong}, format='json')
+        s = digest.summary_for(self.sup)
+        self.assertEqual([r['id'] for r in s['failed']], [self.ph.id])
+        self.assertEqual(s['stuck'], [])                # a quiz attempt today = activity
+        title, body = digest.render(s)
+        self.assertIn('ملخص التدريب', title)
+        self.assertIn('رسبوا', body)
+        # no activity for 7+ days and joined long ago → stuck
+        from apps.help.models import HelpQuizAttempt
+        from django.utils import timezone
+        HelpQuizAttempt.objects.update(created_at=timezone.now() - timezone.timedelta(days=9))
+        self.assertEqual([r['id'] for r in digest.summary_for(self.sup)['stuck']], [self.ph.id])
+
+    def test_new_joiner_not_stuck_and_finished_this_week(self):
+        from unittest import mock
+        from apps.help import digest
+        self.assertEqual(digest.summary_for(self.sup)['stuck'], [])     # joined today
+        with mock.patch('apps.help.training.path', return_value=['general.help_center']), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            self.c.post('/api/help/onboarding/learned/', {'screen_key': 'general.help_center'}, format='json')
+            s = digest.summary_for(self.sup)
+        self.assertEqual([r['id'] for r in s['finished_this_week']], [self.ph.id])
+        self.assertEqual(s['complete'], 1)
+
+    def test_sent_once_a_week_and_switch_off(self):
+        from apps.config.models import SystemSetting
+        from apps.help import digest
+        from apps.notifications.models import Notification
+        self.assertEqual(len(digest.send_weekly()), 1)
+        digest.send_weekly()
+        self.assertEqual(Notification.objects.filter(recipient=self.sup, title__contains='ملخص التدريب').count(), 1)
+        self.assertEqual(digest.send_weekly(dry_run=True)[0][0], self.sup)
+        SystemSetting.objects.update_or_create(key='help_training_digest_enabled',
+                                               defaults={'value': 'false', 'value_type': 'boolean'})
+        self.assertEqual(digest.send_weekly(), [])
+
+    def test_names_capped(self):
+        from apps.help import digest
+        rows = [{'name': f'موظف {i}', 'progress': {'percent': 10}} for i in range(8)]
+        self.assertIn('و3 غيرهم', digest._names(rows))
+
+
+class RemindTests(TestCase):
+    """«تذكير»: help/edit only, own branches only, 3-day cool-down, recorded, gentle
+    notification to the person, re-shows their «ابدأ من هنا» cards."""
+
+    def setUp(self):
+        from apps.users.models import RoleModuleAccess
+        from .factories import make_branch2
+        from django.utils import timezone
+        self.b1, self.b2 = make_branch(), make_branch2()
+        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
+        su, self.sup, _ = make_user('rm_sup', role='supervisor', branch=self.b1)
+        _, self.ph, _ = make_user('rm_ph', role='pharmacist', branch=self.b1)
+        _, self.other, _ = make_user('rm_other', role='pharmacist', branch=self.b2)
+        for p in (self.ph, self.other):
+            p.user.date_joined = timezone.now() - timezone.timedelta(days=20)
+            p.user.save(update_fields=['date_joined'])
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(su)}')
+
+    def test_team_marks_stuck(self):
+        rows = {r['id']: r for r in self.c.get('/api/help/onboarding/team/').json()}
+        self.assertTrue(rows[self.ph.id]['stuck'])
+        self.assertIsNone(rows[self.ph.id]['last_reminded_at'])
+
+    def test_remind_records_notifies_and_cools_down(self):
+        from apps.help.models import HelpPreference, HelpReminder
+        from apps.notifications.models import Notification
+        HelpPreference.objects.create(staff=self.ph, first_day_hidden_at='2026-01-01T00:00:00Z')
+        r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(r['sent'], [self.ph.id])
+        n = Notification.objects.get(recipient=self.ph, title__contains='تذكير بالتدريب')
+        self.assertIn('مساري التدريبي', n.body)
+        self.assertEqual(HelpReminder.objects.get(staff=self.ph).sent_by, self.sup)
+        self.assertIsNone(HelpPreference.objects.get(staff=self.ph).first_day_hidden_at)
+        again = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(again['sent'], [])
+        self.assertEqual(HelpReminder.objects.count(), 1)
+        rows = {x['id']: x for x in self.c.get('/api/help/onboarding/team/').json()}
+        self.assertIsNotNone(rows[self.ph.id]['last_reminded_at'])
+
+    def test_scope_permission_and_validation(self):
+        from apps.help.models import HelpReminder
+        r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.other.id]}, format='json').json()
+        self.assertEqual(r['sent'], [])                       # another branch
+        self.assertEqual(self.c.post('/api/help/onboarding/remind/', {'staff_ids': 'x'}, format='json').status_code, 400)
+        u, _, _ = make_user('rm_ph2', role='pharmacist', branch=self.b1)
+        c2 = APIClient()
+        c2.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.assertEqual(c2.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').status_code, 403)
+        self.assertFalse(HelpReminder.objects.exists())
+
+    def test_finished_not_reminded(self):
+        from unittest import mock
+        with mock.patch('apps.help.training.path', return_value=[]), \
+             mock.patch('apps.help.training.quizzes', return_value={}):
+            r = self.c.post('/api/help/onboarding/remind/', {'staff_ids': [self.ph.id]}, format='json').json()
+        self.assertEqual(r['sent'], [])
+        self.assertEqual(r['skipped'][0]['reason'], 'خلّص التدريب')
+
+
+class WhatsNewTests(TestCase):
+    """Home «الجديد»: recent help changes that matter to the person; read on the server."""
+
+    def setUp(self):
+        from django.utils import timezone
+        u, self.p, _ = make_user('wn_sales', role='salesperson', branch=make_branch())
+        u.date_joined = timezone.now() - timezone.timedelta(days=60)
+        u.save(update_fields=['date_joined'])
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        today = timezone.localdate()
+        self.recent = today.isoformat()
+        self.old = (today - timezone.timedelta(days=30)).isoformat()
+
+    def _versions(self, recent_keys):
+        _, screens = registry.load()
+        return {k: (self.recent if k in recent_keys else self.old) for k in screens}
+
+    def test_relevant_recent_unread_then_read(self):
+        from unittest import mock
+        from apps.help.content import onboarding
+        on_path = onboarding.ROLE_PATHS['salesperson'][1]
+        off_path = 'finance.pnl'
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions({on_path, off_path})):
+            d = self.c.get('/api/help/whats-new/').json()
+            self.assertEqual([x['key'] for x in d['items']], [on_path])    # finance is not theirs
+            self.assertEqual(d['unread'], 1)
+            # opening that screen's help marks it read
+            self.c.get(f'/api/help/screens/{on_path}/')
+            d = self.c.get('/api/help/whats-new/').json()
+            self.assertEqual(d['unread'], 0)
+            self.assertTrue(d['items'][0]['read'])
+            # a screen whose help they opened becomes relevant too
+            self.c.get(f'/api/help/screens/{off_path}/?log=1')
+            keys = [x['key'] for x in self.c.get('/api/help/whats-new/').json()['items']]
+            self.assertIn(off_path, keys)
+
+    def test_dismiss_all_and_old_changes(self):
+        from unittest import mock
+        from apps.help.content import onboarding
+        keys = set(onboarding.ROLE_PATHS['salesperson'][:3])
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(keys)):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 3)
+            self.assertEqual(self.c.post('/api/help/whats-new/').json(), {'unread': 0})
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 0)
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(set())):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['items'], [])
+
+    def test_newcomer_sees_no_flood(self):
+        from unittest import mock
+        from django.utils import timezone
+        from apps.help.content import onboarding
+        self.p.user.date_joined = timezone.now()
+        self.p.user.save(update_fields=['date_joined'])
+        keys = set(onboarding.ROLE_PATHS['salesperson'])
+        with mock.patch('apps.help.onboarding_views._versions', return_value=self._versions(keys)):
+            self.assertEqual(self.c.get('/api/help/whats-new/').json()['unread'], 0)
+
+
+class ChangeNoteTests(TestCase):
+    """One-line «what changed» note: trainer's public note on the latest save, else the
+    repo change_note; shown in the index («الجديد»), the screen and the home card."""
+
+    def setUp(self):
+        u, _, _ = make_user('cn_admin', role='admin', branch=make_branch())
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.key = 'reservations.board'
+        # start from a screen without a developer note (the trainer's note is what is tested)
+        from unittest import mock
+        _, screens = registry.load()
+        patcher = mock.patch.dict(screens[self.key])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        screens[self.key].pop('change_note', None)
+
+    def _note(self):
+        idx = {s['key']: s for s in self.c.get('/api/help/').json()['screens']}
+        return idx[self.key]['change_note']
+
+    def test_trainer_note_shown_then_cleared_by_a_later_plain_save(self):
+        self.assertIsNone(self._note())
+        r = self.c.put(f'/api/help/screens/{self.key}/',
+                       {'data': {'summary': {'ar': 'شرح أوضح', 'en': ''}}, 'note': 'سبب داخلي',
+                        'public_note': '  زر   تصدير جديد  '}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['change_note']['ar'], 'زر تصدير جديد')     # whitespace tidied
+        self.assertEqual(self._note()['ar'], 'زر تصدير جديد')
+        from apps.help.models import HelpRevision
+        rev = HelpRevision.objects.get(screen_key=self.key)
+        self.assertEqual((rev.note, rev.public_note), ('سبب داخلي', 'زر تصدير جديد'))
+        # a later save without a note: the old note no longer describes the current version
+        import time; time.sleep(0.01)
+        from apps.help.models import HelpOverride
+        from django.utils import timezone
+        HelpRevision.objects.update(created_at=timezone.now() - timezone.timedelta(minutes=5))
+        self.c.put(f'/api/help/screens/{self.key}/', {'data': {'summary': {'ar': 'تاني', 'en': ''}}}, format='json')
+        HelpOverride.objects.filter(screen_key=self.key).update(updated_at=timezone.now())
+        self.assertIsNone(self._note())
+
+    def test_repo_note(self):
+        idx = {s['key']: s for s in self.c.get('/api/help/').json()['screens']}
+        self.assertTrue(idx['general.help_center']['change_note']['ar'])
+        r = self.c.get('/api/help/screens/general.help_center/?log=0').json()
+        self.assertEqual(r['change_note'], idx['general.help_center']['change_note'])
+
+    def test_note_on_home_card(self):
+        from unittest import mock
+        from django.utils import timezone
+        self.c.put(f'/api/help/screens/{self.key}/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'عمود جديد'}, format='json')
+        from apps.users.models import StaffProfile
+        p = StaffProfile.objects.get(user__username='cn_admin')
+        p.user.date_joined = timezone.now() - timezone.timedelta(days=60)
+        p.user.save(update_fields=['date_joined'])
+        # only this screen counts as changed (the card shows 20 items at most)
+        from apps.help import onboarding_views
+        real = onboarding_views._versions()
+        only = {k: (v if k == self.key else '2000-01-01') for k, v in real.items()}
+        with mock.patch('apps.help.onboarding_views._versions', return_value=only):
+            items = {x['key']: x for x in self.c.get('/api/help/whats-new/').json()['items']}
+        self.assertEqual(items[self.key]['change_note']['ar'], 'عمود جديد')
+
+
+class TrainingPublicNoteTests(TestCase):
+    """The trainer's one-line «what changed» on path / quiz / workflow-tour saves: added
+    to the notification those changes send; shown on the workflow tour's card."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.t, _ = self._client('admin', 'tp_admin')
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c, profile
+
+    def test_path_note_in_notification_and_history(self):
+        from apps.help.content import onboarding
+        from apps.help.models import HelpRevision
+        from apps.notifications.models import Notification
+        _, seller = self._client('salesperson', 'tp_sales')
+        new = onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']
+        r = self.t.put('/api/help/training/path/salesperson/',
+                       {'data': {'screens': new}, 'note': 'داخلي', 'public_note': ' ابدأ  بالمهام '}, format='json')
+        self.assertEqual(r.json()['notified'], 1)
+        n = Notification.objects.get(recipient=seller, title__contains='مسارك')
+        self.assertIn('الجديد: ابدأ بالمهام', n.body)
+        self.assertNotIn('داخلي', n.body)
+        self.assertEqual(r.json()['revisions'][0]['public_note'], 'ابدأ بالمهام')
+        self.assertEqual(HelpRevision.objects.get(screen_key='path:salesperson').public_note, 'ابدأ بالمهام')
+
+    def test_quiz_note_in_notification(self):
+        from apps.help.content import onboarding
+        from apps.notifications.models import Notification
+        c, ph = self._client('pharmacist', 'tp_ph')
+        right = [q['answer'] for q in onboarding.QUIZZES['pos']]
+        c.post('/api/help/quizzes/pos/submit/', {'answers': right}, format='json')
+        q = {'q': {'ar': 'سؤال؟', 'en': 'Q?'}, 'options': [{'ar': 'أ', 'en': 'A'}, {'ar': 'ب', 'en': 'B'}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': 'Because'}}
+        self.t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}, 'public_note': 'سؤال عن المرتجعات'},
+                   format='json')
+        n = Notification.objects.get(recipient=ph, title__contains='أعد الاختبار')
+        self.assertTrue(n.body.endswith('الجديد: سؤال عن المرتجعات'))
+
+    def test_no_note_keeps_message(self):
+        from apps.help import notify
+        self.assertEqual(notify._with_note('نص.', ''), 'نص.')
+
+    def test_flow_note_on_cards_until_revert_or_old(self):
+        from apps.help.models import HelpRevision
+        from django.utils import timezone
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        fid = 'flow:reservations.lifecycle'
+        card = lambda: next(x for x in self.t.get('/api/help/modules/reservations/').json()['flows'] if x['id'] == fid)
+        self.assertIsNone(card()['change_note'])
+        cur = self.t.get(url).json()['current']
+        cur['steps'][0]['text'] = {'ar': 'نص أوضح', 'en': ''}
+        self.t.put(url, {'data': cur, 'public_note': 'خطوة أوضح للبداية'}, format='json')
+        self.assertEqual(card()['change_note']['ar'], 'خطوة أوضح للبداية')
+        # older than two weeks → no longer «new»
+        HelpRevision.objects.filter(screen_key=fid).update(created_at=timezone.now() - timezone.timedelta(days=15))
+        self.assertIsNone(card()['change_note'])
+        HelpRevision.objects.filter(screen_key=fid).update(created_at=timezone.now())
+        # a revert clears it (the note described the trainer's version)
+        self.t.delete(url, {'public_note': 'ignored'}, format='json')
+        self.assertIsNone(card()['change_note'])
+        self.assertEqual(HelpRevision.objects.filter(screen_key=fid, action='revert').get().public_note, '')
+
+
+class NotesLogTests(TestCase):
+    """«📝 إيه الجديد» for trainers: last 30 days of one-line notes from screens, paths,
+    quizzes and tours together, with each line's state; also in the weekly digest."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('nl_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('nl_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _trainer_items(self):
+        r = self.t.get('/api/help/notes-log/')
+        self.assertEqual(r.status_code, 200)
+        return [x for x in r.json()['items'] if x['source'] == 'trainer']
+
+    def test_lists_all_kinds_with_state(self):
+        from apps.help.content import onboarding
+        self.assertEqual(self.ph.get('/api/help/notes-log/').status_code, 403)
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'عمود جديد'}, format='json')
+        self.t.put('/api/help/training/path/salesperson/',
+                   {'data': {'screens': onboarding.ROLE_PATHS['salesperson'] + ['tasks.list']},
+                    'public_note': 'المهام اتضافت'}, format='json')
+        url = '/api/help/training/flow/reservations.lifecycle/'
+        cur = self.t.get(url).json()['current']
+        self.t.put(url, {'data': cur, 'public_note': 'جولة أوضح'}, format='json')
+        items = {x['kind']: x for x in self._trainer_items()}
+        self.assertEqual(set(items), {'screen', 'path', 'flow'})
+        self.assertEqual((items['screen']['note'], items['screen']['state']), ('عمود جديد', 'shown'))
+        self.assertEqual(items['path']['state'], 'sent')
+        self.assertIn('البائع', items['path']['title']['ar'])
+        self.assertEqual(items['flow']['state'], 'shown')
+        self.assertTrue(items['flow']['staff'])
+        # a later save without a note → the older line is replaced
+        self.t.put(url, {'data': cur}, format='json')
+        items = {x['kind']: x for x in self._trainer_items()}
+        self.assertEqual(items['flow']['state'], 'replaced')
+
+    def test_older_than_window_left_out(self):
+        from apps.help.models import HelpRevision
+        from django.utils import timezone
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'قديم'}, format='json')
+        HelpRevision.objects.update(created_at=timezone.now() - timezone.timedelta(days=31))
+        self.assertEqual(self._trainer_items(), [])
+        r = self.t.get('/api/help/notes-log/?days=40').json()
+        self.assertEqual(r['days'], 40)
+        self.assertEqual([x['note'] for x in r['items'] if x['source'] == 'trainer'], ['قديم'])
+
+    def test_repo_notes_included(self):
+        items = self.t.get('/api/help/notes-log/?days=90').json()['items']
+        self.assertTrue(any(x['source'] == 'repo' and x['key'] == 'general.help_center' for x in items))
+
+    def test_digest_line(self):
+        from apps.help import digest
+        s = {'team': 2, 'complete': 0, 'finished_this_week': [], 'stuck': [], 'failed': [], 'retake': [],
+             'notes': [{'title': {'ar': f'شاشة {i}'}, 'note': f'سطر {i}'} for i in range(5)]}
+        _, body = digest.render(s)
+        self.assertIn('📝 اتحدّث في التدريب (5): شاشة 0: «سطر 0»', body)
+        self.assertIn('و2 غيرها', body)
+        _, body = digest.render({**s, 'notes': []})
+        self.assertNotIn('📝', body)
+
+
+class NoteCheckTests(TestCase):
+    """Gentle hints on the «إيه الجديد» note while typing: big edit with no note, a
+    generic note, the same change worded differently elsewhere. Never blocks a save."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('nc_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('nc_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _check(self, kind, key, note, data):
+        r = self.t.post('/api/help/notes-check/', {'kind': kind, 'key': key, 'note': note, 'data': data}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        return {h['code']: h for h in r.json()['hints']}
+
+    def test_rules_unit(self):
+        from apps.help import notecheck
+        self.assertEqual(notecheck.normalize('إضافةُ زرّ'), 'اضافه زر')
+        self.assertEqual(notecheck.words('زرار Excel'), {'زر', 'اكسل'})
+        self.assertGreaterEqual(notecheck.similarity('زر تصدير اكسل جديد', 'زرار تصدير Excel في القائمة'), 0.6)
+        self.assertLess(notecheck.similarity('زر تصدير جديد', 'عمود الفرع المستلم'), 0.6)
+        self.assertEqual(notecheck.changed_parts({'a': {'ar': 'x'}, 'b': None}, {'a': {'ar': 'x'}, 'b': {'ar': ''}}), 0)
+        self.assertEqual(notecheck.changed_parts([{'ar': 'x'}], [{'ar': 'y'}, {'ar': 'z'}]), 2)
+
+    def test_big_screen_edit_without_note(self):
+        self.assertEqual(self.ph.post('/api/help/notes-check/', {'kind': 'screen', 'key': 'reservations.board'},
+                                      format='json').status_code, 403)
+        key = 'reservations.board'
+        cur = self.t.get(f'/api/help/screens/{key}/?log=0').json()
+        draft = {'title': cur['title'], 'summary': {'ar': 'جديد 1', 'en': ''}, 'steps': cur['steps']}
+        self.assertEqual(self._check('screen', key, '', draft), {})            # one part: fine
+        draft['tips'] = [{'ar': 'نصيحة أ', 'en': ''}, {'ar': 'نصيحة ب', 'en': ''}, {'ar': 'نصيحة ج', 'en': ''}]
+        draft['tips'] = (cur.get('tips') or []) + draft['tips']
+        self.assertIn('big_empty', self._check('screen', key, '', draft))
+        self.assertNotIn('big_empty', self._check('screen', key, 'نصايح جديدة للحجز', draft))
+        self.assertEqual(self.t.post('/api/help/notes-check/', {'kind': 'screen', 'key': 'nope'},
+                                     format='json').status_code, 404)
+
+    def test_path_and_quiz_without_note(self):
+        from apps.help.content import onboarding
+        base = onboarding.ROLE_PATHS['salesperson']
+        self.assertIn('big_empty', self._check('path', 'salesperson', '', {'screens': base + ['tasks.list']}))
+        self.assertEqual(self._check('path', 'salesperson', '', {'screens': base[:2]}), {})    # removal: no news
+        q = {'q': {'ar': 'سؤال؟', 'en': ''}, 'options': [{'ar': 'أ', 'en': ''}, {'ar': 'ب', 'en': ''}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': ''}}
+        self.assertIn('big_empty', self._check('quiz', 'pos', '', {'questions': [q]}))
+        self.assertEqual(self._check('quiz', 'pos', '', {'questions': onboarding.QUIZZES['pos']}), {})
+
+    def test_vague_note(self):
+        cur = self.t.get('/api/help/screens/reservations.board/?log=0').json()
+        self.assertIn('vague', self._check('screen', 'reservations.board', 'تعديلات بسيطة', {'title': cur['title']}))
+        self.assertNotIn('vague', self._check('screen', 'reservations.board', 'زر تصدير جديد', {'title': cur['title']}))
+
+    def test_similar_note_elsewhere_offers_its_wording(self):
+        self.t.put('/api/help/screens/reservations.board/',
+                   {'data': {'summary': {'ar': 'x', 'en': ''}}, 'public_note': 'زر تصدير اكسل جديد في القائمة'},
+                   format='json')
+        cur = self.t.get('/api/help/screens/transfers.list/?log=0').json()
+        hints = self._check('screen', 'transfers.list', 'زرار تصدير إكسل جديد فوق', {'title': cur['title']})
+        self.assertIn('similar', hints)
+        self.assertEqual(hints['similar']['suggestion'], 'زر تصدير اكسل جديد في القائمة')
+        # the same wording → consistent, nothing to say; own screen's note is skipped
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'زر تصدير اكسل جديد في القائمة',
+                                                {'title': cur['title']}))
+        self.assertNotIn('similar', self._check('screen', 'reservations.board', 'زرار تصدير إكسل جديد فوق', {}))
+        # unrelated note → no hint
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'عمود الفرع المستلم', {'title': cur['title']}))
+        # sharing only «زر … جديد» is a different change (print, not export)
+        self.assertNotIn('similar', self._check('screen', 'transfers.list', 'زر طباعة جديد', {'title': cur['title']}))
+
+
+class GlossaryTests(TestCase):
+    """«قاموس المصطلحات»: trainers keep agreed words + words to avoid (audited); the note
+    hints point out avoided words in a note (offering the fixed note) and in help text."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('gl_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('gl_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+
+    def _add(self, **data):
+        return self.t.post('/api/help/glossary/', data, format='json')
+
+    def test_crud_validation_permissions_and_history(self):
+        from apps.help.models import HelpRevision
+        self.assertEqual(self.ph.post('/api/help/glossary/', {'preferred': 'x', 'avoid': 'y'}, format='json').status_code, 403)
+        r = self._add(preferred='الكاشير', avoid='الخزنة، الخزينة', why='اسم الشاشة')
+        self.assertEqual(r.status_code, 201, r.content)
+        tid = r.json()['id']
+        self.assertEqual(r.json()['avoid'], ['الخزنة', 'الخزينة'])
+        self.assertEqual(self._add(preferred='كاشير', avoid='كاش').status_code, 400)          # same word twice
+        self.assertEqual(self._add(preferred='حجز', avoid='').status_code, 400)
+        self.assertEqual(self._add(preferred='حجز', avoid='الحجز').status_code, 400)          # avoid = preferred
+        self.assertEqual(self._add(preferred='حجز', avoid='طلب', modules=['nope']).status_code, 400)
+        self.assertEqual(self.ph.put(f'/api/help/glossary/{tid}/', {}, format='json').status_code, 403)
+        r = self.t.put(f'/api/help/glossary/{tid}/', {'preferred': 'الكاشير', 'avoid': ['الخزنة']}, format='json')
+        self.assertEqual(r.json()['avoid'], ['الخزنة'])
+        g = self.ph.get('/api/help/glossary/').json()                # everyone may read; no usage scan
+        self.assertFalse(g['can_edit'])
+        self.assertNotIn('uses', g['terms'][0])
+        self.assertEqual(self.t.delete(f'/api/help/glossary/{tid}/').status_code, 204)
+        self.assertEqual(list(HelpRevision.objects.filter(screen_key=f'glossary:{tid}').order_by('id')
+                              .values_list('action', flat=True)), ['save', 'save', 'revert'])
+
+    def test_uses_counts_screens_in_scope(self):
+        from apps.help import notecheck, registry
+        _, screens = registry.load()
+        # a word the current help surely uses
+        tid = self._add(preferred='بند', avoid=['الشاشة']).json()['id']
+        u = next(t for t in self.t.get('/api/help/glossary/').json()['terms'] if t['id'] == tid)['uses']
+        self.assertGreater(u['count'], 0)
+        self.t.put(f'/api/help/glossary/{tid}/', {'preferred': 'بند', 'avoid': ['الشاشة'], 'modules': ['pos']},
+                   format='json')
+        u2 = next(t for t in self.t.get('/api/help/glossary/').json()['terms'] if t['id'] == tid)['uses']
+        self.assertLess(u2['count'], u['count'])
+        self.assertTrue(all(screens[k]['module'] == 'pos' for k in u2['screens']))
+
+    def test_hints_in_note_and_text(self):
+        self._add(preferred='الكاشير', avoid=['الخزنة'])
+        self._add(preferred='حجز', avoid=['طلب'], modules=['reservations'])
+        check = lambda key, note, data: {h['code']: h for h in self.t.post(
+            '/api/help/notes-check/', {'kind': 'screen', 'key': key, 'note': note, 'data': data},
+            format='json').json()['hints']}
+        h = check('reservations.board', 'زر جديد للخزنة', {})
+        self.assertEqual(h['term']['suggestion'], 'زر جديد للكاشير')
+        h = check('reservations.board', 'طلب جديد', {'tips': [{'ar': 'افتح الطلب من هنا', 'en': ''}]})
+        self.assertEqual(h['term']['suggestion'], 'حجز جديد')
+        self.assertIn('«طلب»', h['term_text']['text'])
+        # «طلب» is only avoided in reservations
+        h = check('purchasing.supply', 'طلب جديد', {})
+        self.assertNotIn('term', h)
+        # the agreed word itself is not flagged
+        self.assertNotIn('term', check('reservations.board', 'شاشة الكاشير', {}))
+
+    def test_unit_matching(self):
+        from apps.help import notecheck as n
+        T = [{'preferred': 'الكاشير', 'avoid': ['الخزنة'], 'modules': []}]
+        self.assertEqual([(a, c) for _, a, c in n.find_terms('روح للخزنة، والخزنة مقفولة', T)], [('الخزنة', 2)])
+        self.assertEqual(n.find_terms('خزنات', T), [])            # another word, not a prefix form
+        self.assertEqual(n.fix_note('اتغيّر «الخزنة».', T), 'اتغيّر «الكاشير».')
+        self.assertIsNone(n.fix_note('مفيش حاجة', T))
+
+
+class GlossaryApplyTests(TestCase):
+    """«طبّق القاموس»: the server lists every avoided word in a screen draft with its
+    place, sentence and replacement; it changes nothing (the editor applies accepted
+    ones to its draft and the normal save records them)."""
+
+    def setUp(self):
+        branch = make_branch()
+        u, _, _ = make_user('ga_admin', role='admin', branch=branch)
+        u2, _, _ = make_user('ga_ph', role='pharmacist', branch=branch)
+        self.t, self.ph = APIClient(), APIClient()
+        self.t.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u)}')
+        self.ph.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(u2)}')
+        self.t.post('/api/help/glossary/', {'preferred': 'الكاشير', 'avoid': ['الخزنة']}, format='json')
+        self.t.post('/api/help/glossary/', {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع'],
+                                            'modules': ['reservations']}, format='json')
+
+    def test_unit_places_and_apply(self):
+        from apps.help import notecheck as n
+        T = [{'preferred': 'الكاشير', 'avoid': ['الخزنة']}, {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع']}]
+        txt = 'روح للخزنة وادفع. بعدها الطلب يتأكد، وأمر بيع جديد. الكاشير هنا!'
+        occ = n.occurrences(txt, T)
+        self.assertEqual([(o['match'], o['replacement']) for o in occ],
+                         [('للخزنة', 'للكاشير'), ('الطلب', 'الحجز'), ('وأمر بيع', 'وحجز')])
+        self.assertTrue(all(txt[o['start']:o['end']] == o['match'] for o in occ))
+        self.assertEqual(n.apply(txt, occ), 'روح للكاشير وادفع. بعدها الحجز يتأكد، وحجز جديد. الكاشير هنا!')
+
+    def test_scan_screen_draft(self):
+        from apps.help.models import HelpOverride, HelpRevision
+        url = '/api/help/glossary/scan/'
+        draft = {'title': {'ar': 'لوحة الحجوزات', 'en': ''},
+                 'steps': [{'text': {'ar': 'افتح الطلب من الجدول. ثم ادفع في الخزنة', 'en': 'order'}, 'roles': ['x']}],
+                 'faq': [{'q': {'ar': 'فين الطلب؟', 'en': ''}, 'a': {'ar': 'في الكاشير', 'en': ''}}]}
+        self.assertEqual(self.ph.post(url, {'screen_key': 'reservations.board', 'data': draft}, format='json').status_code, 403)
+        r = self.t.post(url, {'screen_key': 'reservations.board', 'data': draft}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        items = r.json()['items']
+        self.assertEqual([(i['path'], i['match'], i['replacement']) for i in items], [
+            (['steps', 0, 'text', 'ar'], 'الطلب', 'الحجز'),
+            (['steps', 0, 'text', 'ar'], 'الخزنة', 'الكاشير'),
+            (['faq', 0, 'q', 'ar'], 'الطلب', 'الحجز'),
+        ])
+        first = items[0]
+        self.assertEqual((first['before'], first['after']), ('افتح ', ' من الجدول.'))
+        self.assertEqual(items[1]['before'], 'ثم ادفع في ')
+        # «طلب» is only avoided in reservations
+        r = self.t.post(url, {'screen_key': 'purchasing.supply', 'data': draft}, format='json')
+        self.assertEqual([i['match'] for i in r.json()['items']], ['الخزنة'])
+        # read-only: nothing saved
+        self.assertFalse(HelpOverride.objects.exists())
+        self.assertFalse(HelpRevision.objects.exclude(screen_key__startswith='glossary:').exists())
+        self.assertEqual(self.t.post(url, {'screen_key': 'nope', 'data': {}}, format='json').status_code, 404)
+        self.assertEqual(self.t.post(url, {'screen_key': 'reservations.board', 'data': []}, format='json').status_code, 400)
+
+
+class JourneyApiTests(TestCase):
+    """Journeys are served with the module / screen help (role-filtered), edited by
+    trainers like screen help (versioned, revertible), and counted in the usage report."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.jid = next(iter(registry.journeys()))
+        self.j = registry.journeys()[self.jid]
+
+    def _client(self, role, name):
+        user, profile, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c
+
+    def test_module_and_screen_payload_carry_journeys(self):
+        c = self._client('admin', 'jr_admin')
+        m = c.get(f'/api/help/modules/{self.j["module"]}/').json()
+        row = next(x for x in m['journeys'] if x['id'] == self.jid)
+        self.assertEqual(len(row['steps']), len(self.j['steps']))
+        for st in row['steps']:
+            self.assertIn('routes', st)
+            self.assertTrue(st['route'] is None or ':' not in st['route'])
+        screen = self.j['steps'][0]['screen']
+        sp = c.get(f'/api/help/screens/{screen}/?log=0').json()
+        self.assertIn(self.jid, [x['id'] for x in sp['module']['journeys']])
+
+    def test_role_filter(self):
+        limited = [(jid, j) for jid, j in registry.journeys().items() if j.get('roles')]
+        if not limited:
+            self.skipTest('no role-limited journey')
+        jid, j = limited[0]
+        other = next(r for r in ('viewer', 'delivery', 'purchasing', 'pharmacist') if r not in j['roles'])
+        c = self._client(other, 'jr_other')
+        ids = [x['id'] for x in c.get(f'/api/help/modules/{j["module"]}/').json()['journeys']]
+        self.assertNotIn(jid, ids)
+
+    def test_edit_and_revert(self):
+        t = self._client('admin', 'jr_tr')
+        learner = self._client('pharmacist', 'jr_ph')
+        url = f'/api/help/journeys/{self.jid}/'
+        steps = [dict(st) for st in self.j['steps']]
+        steps[0] = {**steps[0], 'text': {'ar': 'نص المدرب', 'en': 'Trainer text'}}
+        steps[1] = {**steps[1], 'target': 'moved-elsewhere', 'text': {'ar': 'لا يطبق', 'en': 'not applied'}}
+        self.assertEqual(learner.put(url, {'data': {'steps': steps}}, format='json').status_code, 403)
+        r = t.put(url, {'data': {'steps': steps}, 'note': 'أوضح'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        got = r.json()['steps']
+        self.assertEqual(got[0]['text']['ar'], 'نص المدرب')
+        self.assertEqual(got[1]['text'], self.j['steps'][1]['text'])          # target mismatch → ignored
+        self.assertEqual(got[0]['target'], self.j['steps'][0]['target'])
+        self.assertTrue(HelpRevision.objects.filter(screen_key=f'journey:{self.jid}').exists())
+        long = [{**steps[0], 'warn': {'ar': 'x' * 200, 'en': 'x'}}]
+        self.assertEqual(t.put(url, {'data': {'steps': long}}, format='json').status_code, 400)
+        r = t.delete(url, {'note': 'رجوع'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['steps'][0]['text'], self.j['steps'][0]['text'])
+        self.assertEqual(t.get('/api/help/journeys/nope.x/').status_code, 404)
+
+    def test_old_tour_override_keeps_new_fields(self):
+        """A trainer edit saved before rich steps (text only) keeps the repo's label/when/warn."""
+        _, screens = registry.load()
+        key, s = next((k, s) for k, s in screens.items() if any('when' in st for st in s.get('tour') or []))
+        st = next(x for x in s['tour'] if 'when' in x)
+        ov = HelpOverride(screen_key=key, data={'tour': [{'target': st['target'], 'text': {'ar': 'م', 'en': 'm'}}]})
+        eff = next(x for x in registry.effective(s, ov)['tour'] if x['target'] == st['target'])
+        self.assertEqual(eff['text']['ar'], 'م')
+        self.assertEqual(eff['when'], st['when'])
+
+    def test_journey_tour_event_and_usage(self):
+        c = self._client('admin', 'jr_ev')
+        n = len(self.j['steps'])
+        r = c.post('/api/help/tour-event/', {'screen_key': f'journey:{self.jid}', 'reached': 99, 'done': True}, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(HelpEvent.objects.get(screen_key=f'journey:{self.jid}').results, n)
+        self.assertEqual(c.post('/api/help/tour-event/', {'screen_key': 'journey:nope.x'}, format='json').status_code, 400)
+        rows = c.get('/api/help/usage/').json()['tours']
+        row = next(x for x in rows if x['screen_key'] == f'journey:{self.jid}')
+        self.assertEqual((row['kind'], row['runs'], row['done']), ('journey', 1, 1))
+
+
+class TourExplanationTests(SimpleTestCase):
+    def setUp(self):
+        self.modules, self.screens = registry.load()
+
+    def test_tour_explanations_and_module_tours(self):
+        """A longer explanation (`more`, shown under the step) is optional — the rich
+        steps already carry label / when / warn — but when present it is real text in
+        both languages; and every module has a desktop module tour."""
+        short, no_flow = [], []
+        for key, s in self.screens.items():
+            for i, st in enumerate(s.get('tour') or []):
+                m = st.get('more')
+                if m is not None and (len((m.get('ar') or '').strip()) < 60 or not (m.get('en') or '').strip()):
+                    short.append(f'{key}.tour[{i}]')
+        for mk, m in self.modules.items():
+            flows = m.get('flows') or []
+            if not any(not f.get('mobile') for f in flows):
+                no_flow.append(mk)
+            for f in flows:
+                for i, st in enumerate(f['steps']):
+                    mo = st.get('more')
+                    if mo is not None and (len((mo.get('ar') or '').strip()) < 60 or not (mo.get('en') or '').strip()):
+                        short.append(f'{mk}.flows.{f["key"]}[{i}]')
+        self.assertEqual(short, [], 'Tour steps whose longer explanation (`more`) is too short or one-language')
+        self.assertEqual(no_flow, [], 'Modules without a desktop module / workflow tour')

@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi, branchesApi } from '../api/client'
 import DeliveryBackfillModal from '../components/DeliveryBackfillModal'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -192,7 +193,7 @@ function StatusHistory({ logs }) {
           <div className="mt-1 w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
           <div className="flex-1">
             <span className="text-gray-500">{log.from_status || '—'}</span>
-            <span className="text-gray-400 mx-1.5">→</span>
+            <span className="text-gray-400 mx-1.5">{fa()}</span>
             <span className="font-medium text-gray-700">{log.to_status}</span>
             {log.notes && <span className="text-gray-400 mr-2">· {log.notes}</span>}
           </div>
@@ -244,7 +245,7 @@ function OrderDetailPanel({ orderId, onClose, onAction }) {
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={order.status} />
-            <button onClick={() => setShowBackfill(true)}
+            <button onClick={() => setShowBackfill(true)} data-tour="delivery-dashboard-backfill"
               className="text-xs px-2.5 py-1 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
               title="إدخال يدوي عند عدم تسجيل السائق">✍️ إدخال يدوي</button>
             {hasWA && <WhatsAppButton orderId={order.id} phone={order.customer_phone} size="sm" />}
@@ -318,7 +319,7 @@ function OrderDetailPanel({ orderId, onClose, onAction }) {
               )}
             </div>
             {/* SOFTECH Reference Block */}
-            <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+            <div className="mt-3 pt-3 border-t border-gray-200 space-y-1" data-tour="delivery-dashboard-softech">
               <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">مراجع SOFTECH</p>
               {order.softech_doc_number5 && (
                 <div className="flex items-center justify-between">
@@ -385,7 +386,7 @@ function OrderDetailPanel({ orderId, onClose, onAction }) {
         )}
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 px-5">
+        <div className="flex border-b border-gray-200 px-5" data-tour="delivery-dashboard-tabs">
           {[
             { id: 'details', label: 'الأصناف 📦' },
             { id: 'timeline', label: 'سجل الحالات 📋' },
@@ -415,7 +416,7 @@ function OrderDetailPanel({ orderId, onClose, onAction }) {
 
         {/* WhatsApp action bar */}
         {hasWA && (
-          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-3">
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-3" data-tour="delivery-dashboard-whatsapp">
             <p className="text-xs text-gray-400 mb-2">إبلاغ العميل عبر واتساب</p>
             <WhatsAppButton orderId={order.id} phone={order.customer_phone || order.customer_phone_alt} size="lg" />
           </div>
@@ -490,7 +491,7 @@ function AssignModal({ order, onClose, onDone }) {
         {mut.isError && <p className="text-xs text-red-500 mt-2">{mut.error?.response?.data?.detail || 'حدث خطأ'}</p>}
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">إلغاء</button>
-          <button disabled={(!driverName.trim() && !driverId) || mut.isPending} onClick={() => mut.mutate()}
+          <button disabled={(!driverName.trim() && !driverId) || mut.isPending} onClick={() => mut.mutate()} data-tour="delivery-dashboard-assign-submit"
             className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {mut.isPending ? 'جارٍ…' : 'تكليف السائق'}
           </button>
@@ -545,7 +546,7 @@ function CashModal({ order, onClose, onDone }) {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">المبلغ المحصَّل *</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} data-tour="delivery-dashboard-cash-amount"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-400 focus:outline-none" />
         </div>
         {amount && !isNaN(Number(amount)) && (
@@ -555,7 +556,7 @@ function CashModal({ order, onClose, onDone }) {
         )}
         <div className="flex gap-3 mt-4">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">إلغاء</button>
-          <button disabled={!amount || mut.isPending} onClick={() => mut.mutate()}
+          <button disabled={!amount || mut.isPending} onClick={() => mut.mutate()} data-tour="delivery-dashboard-cash-confirm"
             className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
             {mut.isPending ? 'جارٍ…' : 'تأكيد التحصيل'}
           </button>
@@ -581,7 +582,7 @@ function NewOrderModal({ branches, onClose, onDone }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-800 mb-5">طلب توصيل جديد</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4" data-tour="delivery-dashboard-new-form">
           <div>
             <label className="block text-xs text-gray-500 mb-1">مصدر الطلب *</label>
             <select value={form.source_type} onChange={e => set('source_type', e.target.value)}
@@ -654,7 +655,7 @@ function NewOrderModal({ branches, onClose, onDone }) {
         {mut.isError && <p className="text-xs text-red-500 mt-3">{JSON.stringify(mut.error?.response?.data)}</p>}
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">إلغاء</button>
-          <button disabled={!form.customer_name.trim() || !form.branch || mut.isPending} onClick={() => mut.mutate()}
+          <button disabled={!form.customer_name.trim() || !form.branch || mut.isPending} onClick={() => mut.mutate()} data-tour="delivery-dashboard-new-submit"
             className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
             {mut.isPending ? 'جارٍ الحفظ…' : 'إنشاء الطلب'}
           </button>
@@ -687,42 +688,42 @@ function OrderActions({ order, onAssign, onFail, onCancel, onCash, refetch }) {
 
   switch (order.status) {
     case 'created': case 'pending_review': case 'preparing': case 'ready':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-assign">
         {btn('تكليف سائق', 'bg-blue-600 text-white hover:bg-blue-700', () => onAssign(order))}
         {btn('إلغاء', 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200', () => onCancel(order))}
       </div>)
     case 'assigned':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-accept">
         {btn('السائق قبل ✓', 'bg-indigo-600 text-white hover:bg-indigo-700', () => acceptMut.mutate(), acceptMut.isPending)}
         {btn('إلغاء', 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200', () => onCancel(order))}
       </div>)
     case 'driver_accepted':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-out">
         {btn('خرج للتوصيل 🚚', 'bg-amber-500 text-white hover:bg-amber-600', () => dispatchMut.mutate(), dispatchMut.isPending)}
         {btn('إلغاء', 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200', () => onCancel(order))}
       </div>)
     case 'out_for_delivery':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-deliver">
         {btn('تسليم ✓', 'bg-green-600 text-white hover:bg-green-700', () => completeMut.mutate(), completeMut.isPending)}
         {btn('جزئي', 'bg-lime-500 text-white hover:bg-lime-600', () => partialMut.mutate(), partialMut.isPending)}
         {btn('غير متاح', 'bg-pink-500 text-white hover:bg-pink-600', () => unavailableMut.mutate(), unavailableMut.isPending)}
         {btn('فشل ✗', 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200', () => onFail(order))}
       </div>)
     case 'customer_unavailable':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-retry">
         {btn('إعادة المحاولة', 'bg-amber-500 text-white hover:bg-amber-600', () => dispatchMut.mutate(), dispatchMut.isPending)}
         {btn('فشل ✗', 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200', () => onFail(order))}
         {btn('إلغاء', 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200', () => onCancel(order))}
       </div>)
     case 'delivered': case 'partial_delivery':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-cash-close">
         {order.payment_method === 'cash' && (
           btn('تحصيل نقدي 💵', 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300', () => onCash(order))
         )}
         {btn('إغلاق', 'bg-gray-600 text-white hover:bg-gray-700', () => closeMut.mutate(), closeMut.isPending)}
       </div>)
     case 'failed':
-      return (<div className="flex gap-1.5 flex-wrap">
+      return (<div className="flex gap-1.5 flex-wrap" data-tour="delivery-dashboard-return">
         {btn('إعادة', 'bg-purple-600 text-white hover:bg-purple-700', () => returnMut.mutate(), returnMut.isPending)}
       </div>)
     case 'returned':
@@ -849,13 +850,13 @@ export default function DeliveryDashboard() {
             <option value="">كل الفروع</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
           </select>
-          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
+          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} data-tour="delivery-dashboard-source"
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none">
             <option value="">كل المصادر</option>
             <option value="call_center">📞 كول سنتر</option>
             <option value="branch_pos">🏪 POS الفرع</option>
           </select>
-          <button type="button" onClick={() => setShowTime(v => !v)}
+          <button type="button" onClick={() => setShowTime(v => !v)} data-tour="delivery-dashboard-dates"
             className={`flex items-center gap-1 px-3 py-2 text-xs rounded-lg border transition-colors
               ${showTime ? 'bg-brand-50 border-brand-400 text-brand-700' : 'bg-white border-gray-300 text-gray-600 hover:border-brand-400'}`}>
             🗓️ التاريخ {showTime ? '▲' : '▼'}

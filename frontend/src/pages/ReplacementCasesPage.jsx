@@ -10,11 +10,38 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { replacementApi } from '../api/client'
+import useBranchLabels from '../hooks/useBranchLabels'
 import { Chip, money } from './supply/supplyUi'
 
 export const STATUS_TONE = {
   entitlement_active: 'amber', settled: 'blue', reconciled: 'emerald', closed: 'gray',
-  reversed: 'rose', cancelled: 'gray',
+  reversed: 'rose', cancelled: 'gray', unclaimed: 'rose',
+}
+
+/** Entry-first adoption per cut-over branch (owner 2026-10-26): purchases from a case entered
+ *  first vs «شراء بدون حالة», and who posted the case-less ones. */
+function Adoption({ rows, onUnclaimed }) {
+  const bl = useBranchLabels()
+  if (!rows?.length) return null
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2" data-tour="replacement-cases-adoption">
+      <div className="text-xs text-gray-500">التسجيل أولاً (كل فاتورة شراء على مورد البدل يجب أن تبدأ بحالة هنا)</div>
+      {rows.map((a) => (
+        <div key={a.branchcode} className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">{bl(a.branchcode)}</span>
+          <span className="text-[11px] text-gray-500">منذ {a.from}</span>
+          <Chip tone="emerald">سُجلت أولاً {a.entered_first}</Chip>
+          <button onClick={() => onUnclaimed(a.branchcode)}>
+            <Chip tone={a.unclaimed ? 'rose' : 'gray'}>بدون حالة {a.unclaimed} · {money(a.unclaimed_value)}</Chip>
+          </button>
+          <Chip tone="gray">نسبة الالتزام {a.rate == null ? '—' : `${a.rate}%`}</Chip>
+          {a.unclaimed_by_user.map((u) => (
+            <span key={u.usercode} className="text-[11px] text-gray-600">{u.label}: {u.n}</span>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 export const SEV_TONE = { info: 'blue', warning: 'amber', high: 'rose', critical: 'rose' }
 export const SEV_LABEL = { info: 'معلومة', warning: 'تحذير', high: 'مرتفع', critical: 'حرج' }
@@ -55,7 +82,7 @@ export default function ReplacementCasesPage() {
           <h1 className="text-xl font-bold text-gray-900">🔁 بدل الروشتة وشراء أدوية العملاء</h1>
           <p className="text-xs text-gray-500">
             كل حالة = فاتورة شراء من مورد شركات/مورد عام (الرصيد) + فاتورة التعاقد + سندات الصرف + فواتير المنتجات.
-            إعادة بناء من بيانات SOFTECH — للقراءة فقط.
+            الحالة تُسجَّل هنا أولاً ثم تُنفَّذ المستندات؛ المطابقة مع SOFTECH تتحقق منها يومياً.
           </p>
         </div>
         <button onClick={() => nav('/replacement/new')} data-tour="replacement-cases-new" className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm">➕ حالة جديدة</button>
@@ -79,6 +106,8 @@ export default function ReplacementCasesPage() {
              sub="انظر «سداد الموردين»" />
       </div>
 
+      <Adoption rows={s?.adoption} onUnclaimed={(b) => setF((x) => ({ ...x, branch: b, status: 'unclaimed', page: 1 }))} />
+
       {!!s?.exceptions?.length && (
         <div className="flex gap-2 flex-wrap items-center" data-tour="replacement-cases-exceptions">
           <span className="text-xs text-gray-500">الاستثناءات المفتوحة:</span>
@@ -98,23 +127,24 @@ export default function ReplacementCasesPage() {
                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[260px]" />
         <input value={f.branch} onChange={(e) => set('branch', e.target.value)} placeholder="فرع"
                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20" />
-        <select value={f.supplier} onChange={(e) => set('supplier', e.target.value)}
+        <select data-tour="replacement-cases-supplier" value={f.supplier} onChange={(e) => set('supplier', e.target.value)}
                 className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           <option value="">كل الموردين</option>
           {SUPPLIERS.map(([c, l]) => <option key={c} value={c}>{c} — {l}</option>)}
         </select>
-        <select value={f.status} onChange={(e) => set('status', e.target.value)}
+        <select data-tour="replacement-cases-status" value={f.status} onChange={(e) => set('status', e.target.value)}
                 className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
           <option value="">كل الحالات</option>
+          <option value="unclaimed">شراء بدون حالة</option>
           <option value="entitlement_active">رصيد قائم</option>
           <option value="settled">مستهلكة (تحتاج مراجعة)</option>
           <option value="reconciled">مطابقة</option>
         </select>
-        <label className="text-xs flex items-center gap-1">
+        <label data-tour="replacement-cases-open-balance" className="text-xs flex items-center gap-1">
           <input type="checkbox" checked={f.open_balance === '1'} onChange={(e) => set('open_balance', e.target.checked ? '1' : '')} />
           برصيد فقط
         </label>
-        <label className="text-xs flex items-center gap-1">
+        <label data-tour="replacement-cases-with-exceptions" className="text-xs flex items-center gap-1">
           <input type="checkbox" checked={f.has_exceptions === '1'} onChange={(e) => set('has_exceptions', e.target.checked ? '1' : '')} />
           باستثناءات فقط
         </label>

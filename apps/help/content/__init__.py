@@ -16,7 +16,7 @@ MODULE_FILES = [
     'general', 'gamification',
     'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
     'customers', 'vouchers', 'loyalty',
-    'catalog', 'chronic', 'batches', 'shortage', 'replacement',
+    'catalog', 'chronic', 'batches', 'stock_audit', 'shortage', 'replacement',
     'callcenter', 'omni',
     'purchasing', 'invoices', 'pricing',
     'analytics', 'incentives',

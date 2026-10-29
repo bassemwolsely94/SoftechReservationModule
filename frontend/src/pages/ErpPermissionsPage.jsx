@@ -49,19 +49,19 @@ export default function ErpPermissionsPage() {
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
+          <div data-tour="admin-erp-permissions-header">
             <h1 className="text-2xl font-bold text-gray-900">صلاحيات Softech الموروثة</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               تُشتق صلاحيات الوحدات تلقائياً من مجموعة المستخدم في Softech — Softech هو المصدر، يُعاد البناء يومياً.
             </p>
           </div>
-          <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}
+          <button data-tour="admin-erp-permissions-rebuild" onClick={() => rebuild.mutate()} disabled={rebuild.isPending}
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-60">
             {rebuild.isPending ? 'جاري…' : 'إعادة الاشتقاق الآن'}
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-gray-200">
+        <div data-tour="admin-erp-permissions-tabs" className="flex gap-1 border-b border-gray-200">
           {[['map', 'ربط الأنظمة بالوحدات'], ['groups', 'صلاحيات المجموعات'], ['systems', 'أنظمة Softech']].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
@@ -76,7 +76,7 @@ export default function ErpPermissionsPage() {
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
               أكّد الربط الغامض: <b>transfers</b> يأتي من نظام المبيعات للفروع (MB). عدّل أدناه إن لزم.
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-end gap-2 flex-wrap">
+            <div data-tour="admin-erp-permissions-add-map" className="bg-white rounded-xl border border-gray-200 p-4 flex items-end gap-2 flex-wrap">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">نظام Softech</label>
                 <input value={newMap.system} onChange={e => setNewMap(s => ({ ...s, system: e.target.value.toUpperCase() }))}
@@ -95,7 +95,7 @@ export default function ErpPermissionsPage() {
                 className="bg-emerald-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-emerald-700">إضافة ربط</button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div data-tour="admin-erp-permissions-map" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {Object.entries(byModule).map(([module, rows]) => (
                 <div key={module} className="bg-white rounded-xl border border-gray-200 p-3">
                   <div className="font-bold text-gray-800 text-sm mb-2">{module}</div>
@@ -115,7 +115,7 @@ export default function ErpPermissionsPage() {
 
         {/* ── Per-group derived permissions ───────────────────────────────── */}
         {tab === 'groups' && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <div data-tour="admin-erp-permissions-groups" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-xs">
               <thead><tr className="bg-gray-50 border-b text-right">
                 <th className="px-3 py-2 sticky right-0 bg-gray-50">المجموعة</th>

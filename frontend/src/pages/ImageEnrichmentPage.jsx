@@ -64,9 +64,10 @@ function FilterPanel({ filters, onChange, meta }) {
           <option value="no_image">منتجات بلا صور</option>
           <option value="all_active">كل المنتجات النشطة</option>
           <option value="low_score">نقاط إثراء منخفضة</option>
-          <option value="top_qty">الأعلى مبيعاً بالكمية</option>
-          <option value="top_value">الأعلى مبيعاً بالقيمة</option>
+          <option value="top_qty">بلا صور — بالكمية فقط</option>
+          <option value="top_value">بلا صور — بالقيمة فقط</option>
         </select>
+        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>الترتيب دائماً: الأعلى مبيعاً (كمية + قيمة) أولاً</div>
       </label>
 
       {/* Category */}
@@ -137,7 +138,7 @@ function CandidateCard({ c, onApprove, onReject, loading }) {
       )}
 
       {/* Image preview */}
-      <div style={{flexShrink:0}}>
+      <div style={{flexShrink:0}} data-tour="catalog-images-watermark">
         <img src={imgUrl} alt={c.item_name}
              style={{width:120,height:120,objectFit:'contain',borderRadius:8,
                      border:'1.5px solid #e2e8f0',background:'#f8fafc'}}
@@ -177,8 +178,8 @@ function CandidateCard({ c, onApprove, onReject, loading }) {
 
         {/* Actions */}
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>
-          <button style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>
+          <button data-tour="catalog-images-approve" style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>
+          <button data-tour="catalog-images-reject" style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>
           {c.source_page_url && (
             <a href={c.source_page_url} target="_blank" rel="noreferrer"
                style={{...btn('#6b7280',true,true),textDecoration:'none'}}>
@@ -206,6 +207,8 @@ function DashboardTab() {
     {label:'إجمالي المنتجات',    value:(r.total_items||0).toLocaleString(),      color:'#64748b'},
     {label:'بصورة معتمدة',       value:(r.items_with_image||0).toLocaleString(), color:'#059669'},
     {label:'نسبة التغطية',       value:(r.coverage_pct||0)+'%',                  color:'#2563eb'},
+    {label:'تغطية قيمة المبيعات', value:(r.sales_coverage_value_pct||0)+'%',      color:'#0d9488'},
+    {label:'تغطية كمية المبيعات', value:(r.sales_coverage_qty_pct||0)+'%',        color:'#0891b2'},
     {label:'تنتظر المراجعة',     value:r.pending_review||0,                      color:'#f59e0b'},
     {label:'موافقة تلقائية',     value:r.auto_approved||0,                       color:'#8b5cf6'},
     {label:'مهام جارية',         value:(r.jobs_running||0)+(r.jobs_pending||0),  color:'#3b82f6'},
@@ -214,7 +217,7 @@ function DashboardTab() {
 
   return (
     <div>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}} data-tour="catalog-images-stats">
         {stats.map(s=>(
           <div key={s.label} style={{...card,flex:1,minWidth:120,textAlign:'center',margin:0}}>
             <div style={{fontSize:26,fontWeight:700,color:s.color}}>{s.value}</div>
@@ -223,11 +226,16 @@ function DashboardTab() {
         ))}
       </div>
 
-      <div style={card}>
+      <div data-tour="catalog-images-coverage" style={card}>
         <div style={{fontWeight:600,marginBottom:8}}>التغطية البصرية</div>
         <CoverageBar pct={r.coverage_pct||0}/>
         <div style={{fontSize:12,color:'#64748b',marginTop:6}}>
           {(r.items_with_image||0).toLocaleString()} من {(r.total_items||0).toLocaleString()} منتج
+        </div>
+        <div style={{fontWeight:600,margin:'14px 0 8px'}}>تغطية المبيعات (باريتو)</div>
+        <CoverageBar pct={r.sales_coverage_value_pct||0}/>
+        <div style={{fontSize:12,color:'#64748b',marginTop:6}}>
+          {(r.sold_items_with_image||0).toLocaleString()} من {(r.sold_items||0).toLocaleString()} صنف عليه مبيعات · نسبة قيمة المبيعات اللي أصنافها لها صورة معتمدة
         </div>
       </div>
 
@@ -280,7 +288,7 @@ function ReviewQueueTab({ onGallery }) {
   return (
     <div>
       {/* Filters row */}
-      <div style={{...card, padding:'14px 20px'}}>
+      <div style={{...card, padding:'14px 20px'}} data-tour="catalog-images-review-filters">
         <div style={{display:'flex',gap:16,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:13,fontWeight:600}}>فلتر العرض</div>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
@@ -363,7 +371,7 @@ function BatchLaunchTab({ meta }) {
           <div style={{fontSize:12,fontWeight:600,marginBottom:4,color:'#374151'}}>
             حد الموافقة التلقائية: {Math.round(threshold*100)}%
           </div>
-          <input type="range" min={0.5} max={1.0} step={0.05} value={threshold}
+          <input data-tour="catalog-images-batch-threshold" type="range" min={0.5} max={1.0} step={0.05} value={threshold}
                  onChange={e=>setThreshold(+e.target.value)} style={{width:'100%'}}/>
           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#94a3b8',marginTop:2}}>
             <span>50% — أقل تحفظاً (موافقة أسرع)</span>
@@ -379,7 +387,7 @@ function BatchLaunchTab({ meta }) {
         </div>
 
         <div style={{marginTop:12}}>
-          <button style={btn('#2563eb')} onClick={launch} disabled={loading}>
+          <button data-tour="catalog-images-batch-launch" style={btn('#2563eb')} onClick={launch} disabled={loading}>
             {loading ? 'جارٍ الإطلاق…' : `🚀 إطلاق لـ ${filters.limit} منتج`}
           </button>
         </div>
@@ -451,7 +459,7 @@ function ReviseTab({ meta }) {
         </div>
 
         <div style={{marginTop:12}}>
-          <button style={btn('#dc2626')} onClick={launch} disabled={loading}>
+          <button data-tour="catalog-images-revise" style={btn('#dc2626')} onClick={launch} disabled={loading}>
             {loading ? 'جارٍ الإطلاق…' : `🔄 مراجعة ${filters.limit} منتج (بما فيها ذات الصور)`}
           </button>
         </div>
@@ -670,7 +678,7 @@ function ItemImageManager({ item, onClose }) {
       </div>
 
       {/* Sub-tabs */}
-      <div style={{display:'flex', gap:0, borderBottom:'1px solid #e2e8f0', padding:'0 8px',
+      <div data-tour="catalog-images-gallery-panels" style={{display:'flex', gap:0, borderBottom:'1px solid #e2e8f0', padding:'0 8px',
                    background:'#fff', flexShrink:0}}>
         {panelTab('approved',   '🖼️ الصور المعتمدة', images.length)}
         {panelTab('candidates', '🔍 المرشحون', pendingCount)}
@@ -1010,7 +1018,7 @@ function GalleryTab({ initialItemId = '' }) {
                      borderBottom:'1px solid #e2e8f0', flexShrink:0}}>
           <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>🖼️ إدارة صور المنتجات</div>
           {/* Search input */}
-          <input placeholder="ابحث باسم المنتج أو الكود…" value={q}
+          <input data-tour="catalog-images-gallery-search" placeholder="ابحث باسم المنتج أو الكود…" value={q}
                  onChange={e => setQ(e.target.value)}
                  style={{...input, marginBottom:8}}/>
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:8}}>
@@ -1279,7 +1287,7 @@ export default function ImageEnrichmentPage() {
 
   return (
     <div dir="rtl" style={{fontFamily:'Segoe UI,Tahoma,Arial,sans-serif',padding:'24px',maxWidth:1200,margin:'0 auto'}}>
-      <div style={{marginBottom:18}}>
+      <div data-tour="catalog-images-header" style={{marginBottom:18}}>
         <h1 style={{fontSize:22,fontWeight:700,margin:0}}>🖼️ محرك اكتساب صور المنتجات</h1>
         <p style={{fontSize:13,color:'#64748b',margin:'4px 0 0'}}>
           بحث آلي متعدد المصادر · كشف العلامات المائية وإزالتها · تقييم الجودة · مراجعة بشرية · تعلم آلي من الموافقات
@@ -1287,7 +1295,7 @@ export default function ImageEnrichmentPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid #e2e8f0',flexWrap:'wrap'}}>
+      <div data-tour="catalog-images-tabs" style={{display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid #e2e8f0',flexWrap:'wrap'}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
                   style={{padding:'9px 16px',border:'none',background:'none',cursor:'pointer',

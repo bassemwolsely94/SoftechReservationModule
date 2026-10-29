@@ -1,12 +1,54 @@
 from rest_framework import serializers
-from .models import SupplierInvoice, InvoiceLine, VendorProfile, VendorItemMapping
+from .models import (SupplierInvoice, InvoiceLine, VendorProfile, VendorItemMapping,
+                     InvoiceBatch, PurchaseOrder, PurchaseOrderLine)
+
+
+class PurchaseOrderLineSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True, default=None)
+
+    class Meta:
+        model  = PurchaseOrderLine
+        fields = ['id', 'item', 'item_name', 'quantity', 'unit_price', 'notes']
+
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    lines        = PurchaseOrderLineSerializer(many=True, required=False)
+    vendor_name  = serializers.CharField(source='vendor.name', read_only=True, default=None)
+    branch_name  = serializers.CharField(source='branch.name_ar', read_only=True, default=None)
+    line_count   = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = PurchaseOrder
+        fields = ['id', 'branch', 'branch_name', 'vendor', 'vendor_name', 'po_number',
+                  'status', 'notes', 'lines', 'line_count', 'created_at', 'updated_at']
+
+    def get_line_count(self, obj):
+        return obj.lines.count()
+
+    def create(self, validated):
+        lines = validated.pop('lines', [])
+        po = PurchaseOrder.objects.create(**validated)
+        for ln in lines:
+            PurchaseOrderLine.objects.create(po=po, **ln)
+        return po
+
+    def update(self, instance, validated):
+        lines = validated.pop('lines', None)
+        for k, v in validated.items():
+            setattr(instance, k, v)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for ln in lines:
+                PurchaseOrderLine.objects.create(po=instance, **ln)
+        return instance
 
 
 class VendorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model  = VendorProfile
         fields = ['id', 'name', 'softech_personcode', 'is_main', 'aliases',
-                  'typical_discount_pct', 'notes', 'created_at']
+                  'typical_discount_pct', 'ocr_profile', 'notes', 'created_at']
 
 
 class InvoiceLineSerializer(serializers.ModelSerializer):
@@ -24,12 +66,14 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
             'manufacturer', 'vendor_item_code', 'batch_number', 'expiry_date',
             'item', 'item_name', 'item_softech_id', 'item_sale_price',
             'quantity', 'public_price',
-            'discount_pct', 'extra_discount_pct',
-            'unit_price', 'discount_amt',
+            'discount_pct', 'extra_discount_pct', 'special_discount_pct', 'tax_from_cost',
+            'unit_price', 'discount_amt', 'bonus_qty',
             'vat_pct', 'distributor_margin_amt', 'pharmacist_margin_amt',
-            'line_total', 'match_score', 'ocr_confidence', 'match_review', 'is_confirmed',
+            'line_total', 'match_score', 'ocr_confidence', 'match_review',
+            'needs_pick', 'price_action', 'is_confirmed',
             'notes', 'order',
         ]
+        # NOTE: SupplierInvoice.ocr_flags is surfaced on the detail serializer below
         read_only_fields = ['line_total']
 
 
@@ -39,20 +83,22 @@ class InvoiceLineWriteSerializer(serializers.ModelSerializer):
         fields = [
             'manual_name', 'manufacturer', 'vendor_item_code', 'batch_number', 'expiry_date',
             'item', 'quantity', 'public_price',
-            'discount_pct', 'extra_discount_pct',
-            'unit_price', 'discount_amt',
+            'discount_pct', 'extra_discount_pct', 'special_discount_pct', 'tax_from_cost',
+            'unit_price', 'discount_amt', 'bonus_qty',
             'vat_pct', 'distributor_margin_amt', 'pharmacist_margin_amt',
-            'notes', 'is_confirmed', 'order',
+            'notes', 'is_confirmed', 'price_action', 'order',
         ]
 
 
 class SupplierInvoiceListSerializer(serializers.ModelSerializer):
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
+    vendor_personcode = serializers.CharField(source='vendor.softech_personcode', read_only=True, default='')
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
     status_label    = serializers.SerializerMethodField()
     line_count      = serializers.SerializerMethodField()
     confirmed_count = serializers.SerializerMethodField()
+    attention_count = serializers.SerializerMethodField()
     source_image_url= serializers.SerializerMethodField()
 
     STATUS_LABELS = {
@@ -76,6 +122,9 @@ class SupplierInvoiceListSerializer(serializers.ModelSerializer):
     def get_confirmed_count(self, obj):
         return getattr(obj, 'confirmed_count', obj.lines.filter(is_confirmed=True).count())
 
+    def get_attention_count(self, obj):
+        return getattr(obj, 'attention_count', None)
+
     def get_source_image_url(self, obj):
         if obj.source_image:
             request = self.context.get('request')
@@ -86,14 +135,15 @@ class SupplierInvoiceListSerializer(serializers.ModelSerializer):
         model  = SupplierInvoice
         fields = [
             'id', 'branch', 'branch_name',
-            'vendor', 'vendor_name',
+            'vendor', 'vendor_name', 'vendor_personcode',
             'status', 'status_label', 'doc_kind',
             'supplier_name', 'invoice_number', 'invoice_date', 'currency',
             'global_discount_pct', 'global_discount_amt', 'declared_total',
             'softech_branchcode', 'softech_docnumber', 'softech_docdate', 'return_of_docnumber',
-            'source_image_url',
+            'source_image_url', 'ocr_flags', 'source_pages',
             'created_by_name', 'notes', 'erp_error',
-            'line_count', 'confirmed_count',
+            'line_count', 'confirmed_count', 'attention_count',
+            'dup_check', 'dup_checked_at',
             'created_at', 'updated_at',
         ]
 
@@ -118,3 +168,51 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
             'currency', 'global_discount_pct', 'global_discount_amt',
             'return_of_docnumber', 'source_image', 'notes',
         ]
+
+
+# ── Multi-invoice bundle ────────────────────────────────────────────────────────
+
+class InvoiceBatchListSerializer(serializers.ModelSerializer):
+    branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
+    vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
+    status_label    = serializers.SerializerMethodField()
+    invoice_count   = serializers.SerializerMethodField()
+
+    STATUS_LABELS = dict(InvoiceBatch.STATUS)
+
+    def get_status_label(self, obj):
+        return self.STATUS_LABELS.get(obj.status, obj.status)
+
+    def get_invoice_count(self, obj):
+        return getattr(obj, 'invoice_count', obj.invoices.count())
+
+    class Meta:
+        model  = InvoiceBatch
+        fields = [
+            'id', 'branch', 'branch_name', 'vendor', 'vendor_name', 'doc_kind', 'ocr_engine',
+            'status', 'status_label', 'page_count', 'detected_count', 'processed_count', 'invoice_count',
+            'flags', 'error', 'created_by_name', 'created_at', 'updated_at',
+        ]
+
+
+class InvoiceBatchDetailSerializer(InvoiceBatchListSerializer):
+    invoices     = SupplierInvoiceListSerializer(many=True, read_only=True)
+    source_file_url = serializers.SerializerMethodField()
+
+    def get_source_file_url(self, obj):
+        if obj.source_file:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.source_file.url) if request else obj.source_file.url
+        return None
+
+    class Meta(InvoiceBatchListSerializer.Meta):
+        fields = InvoiceBatchListSerializer.Meta.fields + [
+            'split_summary', 'source_file_url', 'invoices',
+        ]
+
+
+class InvoiceBatchCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = InvoiceBatch
+        fields = ['branch', 'vendor', 'doc_kind', 'ocr_engine', 'source_file']

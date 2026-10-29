@@ -31,6 +31,7 @@ API endpoints:
 import csv
 import io
 import logging
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -41,6 +42,7 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import MatrixPermission, matrix_allows
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.finance.recon_labels import branch_label as BL      # '170' → '170 · name'
@@ -64,6 +66,9 @@ from .serializers import (
 )
 
 logger = logging.getLogger('elrezeiky.incentives')
+
+# SOFTECH store / item codes: letters, digits and dashes only.
+_SOFTECH_CODE = re.compile(r'^[0-9A-Za-z\-]{1,20}$')
 
 _EXPIRY_BUCKETS = ['0-30', '31-60', '61-90', '91-180', '181+']
 
@@ -98,7 +103,12 @@ def _parse_date(value, field_name='date') -> date:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveProgramViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_actions = {
+        'simulate': ('view',), 'calculate': ('edit',), 'finalize': ('finalize',),
+        'clone': ('create',), 'export_settlements': ('export',),
+    }
 
     def get_queryset(self):
         qs = IncentiveProgram.objects.annotate(rule_count=Count('rules'))
@@ -164,6 +174,9 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         force = bool(request.data.get('force', False))
+        if force and not matrix_allows(self._get_profile(), 'incentives', 'finalize'):
+            return Response({'detail': 'إعادة الاحتساب الإجباري تفتح التسويات المعتمدة — تحتاج صلاحية «إنهاء» الحوافز'},
+                            status=status.HTTP_403_FORBIDDEN)
 
         try:
             from .engine import calculate as run_calculate
@@ -1033,7 +1046,11 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveRuleViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_actions = {'add_item': ('edit',), 'import_items': ('edit',),
+                    'remove_item': ('edit', 'delete'), 'clear_items': ('edit', 'delete')}
+    rbac_delete = ('edit', 'delete')
     serializer_class   = IncentiveRuleSerializer
 
     def get_queryset(self):
@@ -1199,9 +1216,12 @@ class IncentiveRuleViewSet(viewsets.ModelViewSet):
 class AdjustmentEntryViewSet(viewsets.ModelViewSet):
     """
     Manual +/- adjustments to incentive totals.
-    Any authenticated user can view; only admin/manager can create/update/delete.
+    Matrix module 'incentives': view to read, create / edit to add or change,
+    edit or delete to remove.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
+    rbac_delete = ('edit', 'delete')
     serializer_class   = AdjustmentEntrySerializer
 
     def get_queryset(self):
@@ -1223,6 +1243,42 @@ class AdjustmentEntryViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
+
+    # Batch 4, Z-10b: like delete, adding or changing an adjustment is refused once the period's
+    # settlement is finalized (old and new period both), and no one adjusts their own incentive.
+    def _blocked(self, data, instance=None):
+        profile = getattr(self.request.user, 'staff_profile', None)
+        user = data.get('user', getattr(instance, 'user', None))
+        if profile and user and user.pk == profile.pk:
+            return Response({'detail': 'لا يمكنك إضافة أو تعديل تسوية لحوافزك أنت.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        targets = [{k: data.get(k, getattr(instance, k, None))
+                    for k in ('program', 'user', 'period_start', 'period_end')}]
+        if instance is not None:
+            targets.append({k: getattr(instance, k) for k in ('program', 'user', 'period_start', 'period_end')})
+        if any(IncentiveSettlement.objects.filter(is_finalized=True, **t).exists() for t in targets):
+            return Response({'detail': 'لا يمكن تعديل التسويات — التسوية النهائية مُعتمدة بالفعل'},
+                            status=status.HTTP_409_CONFLICT)
+        return None
+
+    def create(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        blocked = self._blocked(ser.validated_data)
+        if blocked:
+            return blocked
+        self.perform_create(ser)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        ser = self.get_serializer(instance, data=request.data, partial=kwargs.pop('partial', False))
+        ser.is_valid(raise_exception=True)
+        blocked = self._blocked(ser.validated_data, instance)
+        if blocked:
+            return blocked
+        self.perform_update(ser)
+        return Response(ser.data)
 
     def destroy(self, request, *args, **kwargs):
         """Block deletion if the related settlement is already finalized."""
@@ -1246,7 +1302,8 @@ class AdjustmentEntryViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveTransactionViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveTransactionSerializer
 
     def get_queryset(self):
@@ -1270,7 +1327,8 @@ class IncentiveTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveSettlementSerializer
 
     def get_queryset(self):
@@ -1345,7 +1403,8 @@ class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IncentiveCalculationLogViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
     serializer_class   = IncentiveCalculationLogSerializer
 
     def get_queryset(self):
@@ -1423,7 +1482,8 @@ class SuggestItemsView(APIView):
       max_results          int   default=30
       include_tags         str   comma-separated: near_expiry,slow_moving,high_margin
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
 
     def get(self, request):
         params = request.query_params
@@ -1577,7 +1637,8 @@ class NearExpiryStockView(viewsets.ViewSet):
       total_items        — total distinct item codes
       total_qty          — total quantity across all batches
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    rbac_module = 'incentives'
 
     def list(self, request):
         params = request.query_params
@@ -1598,6 +1659,16 @@ class NearExpiryStockView(viewsets.ViewSet):
 
         item_codes_raw = params.get('item_codes', '').strip()
         item_codes = [c.strip() for c in item_codes_raw.split(',') if c.strip()] or None
+
+        # Shape checks — SOFTECH store / item codes are letters, digits and dashes only.
+        # (The query binds every value; this refuses junk early.)
+        codes = (store_codes or []) + (item_codes or [])
+        if any(not _SOFTECH_CODE.match(c) for c in codes):
+            return Response({'detail': 'أكواد المخازن والأصناف يجب أن تكون أرقاماً أو حروفاً فقط'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if len(store_codes or []) > 100 or len(item_codes or []) > 2000:
+            return Response({'detail': 'عدد الأكواد كبير جداً (حد أقصى 100 مخزن و 2000 صنف)'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         include_quarantine = params.get('include_quarantine', '').lower() == 'true'
 
@@ -1664,11 +1735,30 @@ from .serializers import SalesTargetSerializer  # noqa: E402
 
 _TARGET_EDIT_ROLES = {'admin', 'supervisor', 'purchasing'}
 
+# Sales targets sit beside the KPI board (Batch 4, Z-9a — reads were open to any logged-in user,
+# and the edit-role check ran only after validation): every call needs analytics view; edits
+# need an editor role (_TARGET_EDIT_ROLES) before the body is read — _guard below stays.
+from core.permissions import matrix_permission as _matrix_permission   # noqa: E402
+from rest_framework.permissions import SAFE_METHODS as _SAFE, BasePermission as _BasePermission  # noqa: E402
+_TARGETS = _matrix_permission('analytics', post=('view',), edit=('view',), delete=('view',))
+
+
+class _TargetEditors(_BasePermission):
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        if request.method in _SAFE:
+            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        p = getattr(request.user, 'staff_profile', None)
+        return bool(p and p.role in _TARGET_EDIT_ROLES)
+
 
 class SalesTargetViewSet(_viewsets.ModelViewSet):
     """CRUD for sales targets with live attainment. Filters: ?active=true, ?scope=branch."""
     serializer_class   = SalesTargetSerializer
-    permission_classes = [_IsAuth]
+    permission_classes = [_IsAuth, _TARGETS, _TargetEditors]
 
     def get_queryset(self):
         qs = SalesTarget.objects.select_related('branch', 'category').all()

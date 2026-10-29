@@ -37,7 +37,6 @@ def get_current_ip():
 
 
 def _get_client_ip(request):
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR')
+    # Not the first X-Forwarded-For entry — the client writes that one (A-6).
+    from core.client_ip import client_ip
+    return client_ip(request)

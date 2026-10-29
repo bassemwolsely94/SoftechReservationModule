@@ -50,7 +50,11 @@ class ReplacementCase(models.Model):
     STATUS_CANCELLED          = 'cancelled'
     STATUS_REVERSING          = 'reversing'
     STATUS_REVERSED           = 'reversed'
+    # entry-first (owner 2026-10-26): a virtual-supplier purchase posted natively after the branch
+    # cut-over with no case entered first. Money still tracked; a live case can CLAIM it.
+    STATUS_UNCLAIMED          = 'unclaimed'
     STATUS_CHOICES = [
+        (STATUS_UNCLAIMED,          'شراء بدون حالة'),
         (STATUS_DRAFT,              'مسودة'),
         (STATUS_CALCULATED,         'محسوبة'),
         (STATUS_AWAITING_APPROVAL,  'بانتظار الموافقة'),
@@ -132,6 +136,10 @@ class ReplacementCase(models.Model):
     approved_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True,
                                      on_delete=models.SET_NULL, related_name='+')
     approved_at  = models.DateTimeField(null=True, blank=True)
+    # A live case opened to claim an unclaimed purchase; on approval the purchase is linked to it
+    # and the unclaimed record is retired (compensating entries, history kept).
+    claim_of     = models.OneToOneField('self', null=True, blank=True, on_delete=models.SET_NULL,
+                                        related_name='claimed_by')
     locked_at    = models.DateTimeField(null=True, blank=True)   # set on submit; edits refused while set
     version      = models.PositiveIntegerField(default=1)        # optimistic concurrency token
 
@@ -357,6 +365,22 @@ class CaseException(models.Model):
         ('stale_approval',          'اعتماد على حساب تغيّر بعد الإرسال'),
         ('posting_failed',          'فشل الترحيل إلى SOFTECH'),
         ('purchase_value_mismatch', 'قيمة فاتورة الشراء في SOFTECH تختلف عن الرصيد المعتمد'),
+        ('caseless_purchase',       'شراء على مورد البدل بدون حالة مُسجلة أولاً'),
+        ('backdated_entry',         'فاتورة الشراء أقدم من تسجيل الحالة'),
+        ('undeclared_redemption',   'سند صرف بدون فواتير منتجات مربوطة بالحالة'),
+        ('cash_without_instruction', 'صرف نقدي بدون تعليمات صرف من الحالة'),
+        ('payout_amount_mismatch',  'قيمة سند الصرف تختلف عن تعليمات الصرف النقدي'),
+        ('voucher_by_creator',      'سند الصرف النقدي من منشئ الحالة نفسه'),
+        ('payout_not_executed',     'تعليمات صرف نقدي لم تُنفّذ'),
+        ('payout_not_confirmed',    'صرف نقدي لم يُؤكَّد تسليمه'),
+        ('contract_cancelled',      'فاتورة التعاقد أُلغيت بمرتجع كامل'),
+        ('contract_partially_returned', 'مرتجع جزئي من فاتورة التعاقد'),
+        ('late_contract_return',    'مرتجع تعاقد بعد مهلة التراجع'),
+        ('product_sale_returned',   'مرتجع من فاتورة منتجات البدل'),
+        ('insurer_rejected',        'شركة التأمين رفضت الروشتة'),
+        ('return_without_approval', 'مرتجع للمورد بدون طلب عكس معتمد'),
+        ('reversal_amount_mismatch', 'قيمة مرتجع المورد تختلف عن طلب العكس'),
+        ('reversal_not_executed',   'طلب عكس معتمد لم يُنفّذ'),
     ]
 
     STATUS_OPEN, STATUS_ACK, STATUS_RESOLVED, STATUS_CLEARED = 'open', 'acknowledged', 'resolved', 'auto_cleared'
@@ -516,6 +540,93 @@ class PostingOperation(models.Model):
         ordering = ['created_at']
         verbose_name = 'عملية ترحيل'
         verbose_name_plural = 'عمليات الترحيل'
+
+
+class CashPayout(models.Model):
+    """B3 (doc 25 §23): one cash handout to the patient from a cash / mixed case. The CASHIER makes the
+    سداد voucher natively (owner Q2 — no voucher writer); this record is the instruction, then the link
+    to that voucher (user, box, time), then the employee's confirmation that the cash was handed over.
+    Covered by the case approval (cash band: supervisor, manager above the threshold, on the whole
+    balance). An open instruction reserves its amount like a product order."""
+    ST_INSTRUCTED, ST_PAID, ST_CONFIRMED, ST_CANCELLED = 'instructed', 'paid', 'confirmed', 'cancelled'
+    STATUS_CHOICES = [(ST_INSTRUCTED, 'تعليمات للكاشير'), (ST_PAID, 'صُرف — بانتظار تأكيد التسليم'),
+                      (ST_CONFIRMED, 'سُلّم وتأكد'), (ST_CANCELLED, 'ملغى')]
+    OPEN = (ST_INSTRUCTED,)
+
+    case    = models.ForeignKey(ReplacementCase, on_delete=models.PROTECT, related_name='payouts')
+    amount  = models.DecimalField(max_digits=12, decimal_places=2)
+    status  = models.CharField(max_length=12, choices=STATUS_CHOICES, default=ST_INSTRUCTED, db_index=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    note    = models.CharField(max_length=300, blank=True)
+    # the native voucher, once the daily check links it
+    voucher = models.ForeignKey('lineage.DocumentRef', null=True, blank=True, on_delete=models.PROTECT,
+                                related_name='cash_payouts')
+    voucher_usercode = models.CharField(max_length=8, blank=True)     # SOFTECH user who made it (the cashier)
+    voucher_box      = models.CharField(max_length=3, blank=True)     # cash box (cheques.bankcode)
+    paid_at          = models.DateTimeField(null=True, blank=True)    # voucher trans_time
+    # the employee who handed the cash over confirms it (owner: "the employee responsible signs it")
+    confirmed_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    reference    = models.CharField(max_length=120, blank=True)       # optional receipt / proof reference
+    cancel_reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'صرف نقدي للبدل'
+        verbose_name_plural = 'صرف نقدي للبدل'
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_payout_positive'),
+            models.UniqueConstraint(fields=['voucher'], condition=models.Q(voucher__isnull=False),
+                                    name='uq_replacement_payout_voucher'),
+        ]
+
+
+class ReversalRequest(models.Model):
+    """B4 (doc 25 §24): undoing a case's entitlement — reversal, never deletion. The supplier return
+    (doccode 120) is posted NATIVELY; this record carries the reason and the approval (band G:
+    supervisor, manager once any of the balance was used) and is closed by the daily check when the
+    native return on the case's purchase appears with the approved amount."""
+    KIND_CHOICES = [('wrong_rate', 'نسبة خاطئة'), ('wrong_rx', 'روشتة خاطئة'), ('duplicate', 'مكررة'),
+                    ('to_cash', 'تحويل من منتجات إلى نقدي'), ('change_of_mind', 'تراجع المريض'), ('other', 'أخرى')]
+    ST_AWAITING, ST_APPROVED, ST_EXECUTED, ST_REJECTED, ST_CANCELLED = (
+        'awaiting_approval', 'approved', 'executed', 'rejected', 'cancelled')
+    STATUS_CHOICES = [(ST_AWAITING, 'بانتظار الموافقة'), (ST_APPROVED, 'معتمد — بانتظار مرتجع المورد'),
+                      (ST_EXECUTED, 'نُفّذ مرتجع المورد'), (ST_REJECTED, 'مرفوض'), (ST_CANCELLED, 'ملغى')]
+    OPEN = (ST_AWAITING, ST_APPROVED)
+
+    case   = models.ForeignKey(ReplacementCase, on_delete=models.PROTECT, related_name='reversals')
+    kind   = models.CharField(max_length=16, choices=KIND_CHOICES)
+    reason = models.TextField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)          # supplier-return value expected
+    balance_used = models.BooleanField(default=False)                      # any redemption before the request
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ST_AWAITING, db_index=True)
+    requested_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    approval_request = models.ForeignKey('approvals.ApprovalRequest', null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name='+')
+    decided_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    supplier_return = models.ForeignKey('lineage.DocumentRef', null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name='reversal_requests')
+    executed_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True)                     # decision / cancel note
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'طلب عكس حالة بدل'
+        verbose_name_plural = 'طلبات عكس حالات البدل'
+        constraints = [
+            models.CheckConstraint(check=models.Q(amount__gt=0), name='ck_replacement_reversal_positive'),
+            models.UniqueConstraint(fields=['case'], condition=models.Q(status__in=['awaiting_approval', 'approved']),
+                                    name='uq_replacement_one_open_reversal'),
+        ]
 
 
 class ReconstructionRun(models.Model):

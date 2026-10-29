@@ -55,6 +55,7 @@ ALLOWED_HOSTS=yourdomain.com,YOUR_VPS_IP   # required — '*' is no longer the d
 SCHEDULER_AUTOSTART=False          # MUST be False — scheduler runs separately
 SECRET_KEY=<generate a long random key>     # REQUIRED — the app refuses to start without it
 BEHIND_HTTPS_PROXY=True            # Nginx terminates TLS (sets X-Forwarded-Proto)
+NUM_PROXIES=1                      # nginx appends the client to X-Forwarded-For (throttles + audit IP)
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 RBAC_ENFORCEMENT=log               # then 'enforce' once the rbac log is clean
 MEDIA_ACCEL_REDIRECT=True          # uploads: Django checks the signed link, Nginx sends the file

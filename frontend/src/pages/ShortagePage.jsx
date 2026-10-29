@@ -22,6 +22,7 @@ import ItemSearchInput from '../components/ItemSearchInput'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import { createWorker } from 'tesseract.js'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ const INPUT_TAB_LABELS = {
   bulk:   '📋 نص',
 }
 
-// Top-10 main distributors (SofTech personcode → label) for single-supplier POs
+// Top-10 main distributors (SofTech personcode ${fa()} label) for single-supplier POs
 const MAIN_SUPPLIERS = [
   ['565', 'PharmaOverseas'], ['260', 'Ibn Sina'], ['4327', 'Egy Drug Zaytoun'],
   ['786', 'Egy Drug Sherif'], ['30', 'Ramco'], ['746', 'Sofico'],
@@ -843,7 +844,7 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, op
 
             {si.item_name && !editing && (
               <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-gray-400">→</span>
+                <span className="text-xs text-gray-400">${fa()}</span>
                 <span className="text-xs font-medium text-gray-700">{si.item_name}</span>
                 {si.item_softech_id && (
                   <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1 py-0.5 rounded">{si.item_softech_id}</span>
@@ -863,6 +864,7 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, op
             <div className="flex items-center gap-1 shrink-0">
               {needsReview && (
                 <button
+                  data-tour="shortage-list-match"
                   onClick={() => setShowMatch(true)}
                   className="text-xs text-brand-600 hover:text-brand-800 px-2 py-1 rounded hover:bg-brand-50 font-medium"
                 >
@@ -873,7 +875,7 @@ function ShortageItemRow({ item: si, listId, onUpdated, onDelete, isOpen, kb, op
                 className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100">
                 ✏️
               </button>
-              <button onClick={() => onDelete(si.id)}
+              <button data-tour="shortage-list-item-delete" onClick={() => onDelete(si.id)}
                 className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">
                 🗑
               </button>
@@ -939,7 +941,7 @@ function ShortageDetail({ listId, onBack }) {
 
   useEffect(() => { load() }, [load])
 
-  // keyboard flow (shared review-grid keys), rows in screen order: pending → confirmed →
+  // keyboard flow (shared review-grid keys), rows in screen order: pending ${fa()} confirmed ${fa()}
   // unmatched. Enter confirms the suggested item and moves on; M opens the match picker.
   const kbRows = [...(sl?.items || []).filter(i => !i.is_confirmed && !i.is_unmatched),
                   ...(sl?.items || []).filter(i => i.is_confirmed),
@@ -979,7 +981,7 @@ function ShortageDetail({ listId, onBack }) {
       await shortageApi.addItem(listId, {
         raw_name:        catalogItem.name,
         quantity_needed: singleInput.quantity_needed,
-        item:            catalogItem.id,   // pre-links catalog item → skips fuzzy matching
+        item:            catalogItem.id,   // pre-links catalog item ${fa()} skips fuzzy matching
         source:          'manual',
       })
       setCatalogItem(null)
@@ -1186,18 +1188,18 @@ function ShortageDetail({ listId, onBack }) {
           </span>
           <div className="mr-auto flex items-center gap-2 flex-wrap">
             {confirmed > 0 && (
-              <button onClick={() => setShowStock(true)}
+              <button data-tour="shortage-list-stock-check" onClick={() => setShowStock(true)}
                 className="px-3 py-1.5 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 flex items-center gap-1">
                 🔄 فحص المخزون
               </button>
             )}
             {isOpen && (
-              <button onClick={handleSubmit}
+              <button data-tour="shortage-list-submit" onClick={handleSubmit}
                 className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600">
                 📤 إرسال
               </button>
             )}
-            <div className="flex border border-gray-300 rounded-lg overflow-hidden text-sm">
+            <div data-tour="shortage-list-export" className="flex border border-gray-300 rounded-lg overflow-hidden text-sm">
               <button onClick={handleExportCsv}
                 className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 border-l border-gray-300">
                 CSV
@@ -1213,6 +1215,7 @@ function ShortageDetail({ listId, onBack }) {
             </div>
             {/* Single-supplier purchase order (that supplier's own item codes) */}
             <select
+              data-tour="shortage-list-supplier-po"
               defaultValue=""
               onChange={e => { const s = mainSuppliers.find(x => x.personcode === e.target.value); if (s) handleExportPo(s.personcode, s.name); e.target.value = '' }}
               className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-600 bg-white"
@@ -1247,7 +1250,7 @@ function ShortageDetail({ listId, onBack }) {
         {/* Input tabs */}
         {isOpen && (
           <div>
-            <div className="flex gap-1.5 mb-3">
+            <div data-tour="shortage-list-input-tabs" className="flex gap-1.5 mb-3">
               {INPUT_TABS.map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
@@ -1275,6 +1278,7 @@ function ShortageDetail({ listId, onBack }) {
                     ✏️ كتابة يدوية
                   </button>
                   <button
+                    data-tour="shortage-list-catalog-mode"
                     onClick={() => setManualInputMode('catalog')}
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
                       manualInputMode === 'catalog'

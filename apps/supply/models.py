@@ -273,6 +273,11 @@ class AvailabilityLine(models.Model):
     # sourcing, order lists, KPIs) still sees exactly one item per line.
     split_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
                                    related_name='siblings', verbose_name='مقسوم من سطر')
+    # Locking a list collapses rows matched to the SAME item into one (owner 2026-10-12), so an
+    # item is never sent to the supplier twice: the others point to the kept row, drop out of
+    # the review / order / comparison, and come back when the list is unlocked.
+    duplicate_of = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='duplicates', verbose_name='مكرر لسطر')
 
     confirmed_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                      null=True, blank=True, related_name='confirmed_availability_lines')

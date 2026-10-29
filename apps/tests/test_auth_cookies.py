@@ -8,6 +8,7 @@ Staff session in httpOnly cookies (core/auth_cookies.py):
   authenticates from the cookie; legacy body-refresh migrates old browsers.
 """
 from asgiref.sync import async_to_sync
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -22,6 +23,7 @@ XHR = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
 class CookieSessionTests(TestCase):
 
     def setUp(self):
+        cache.clear()       # login throttle: earlier tests in the same minute must not starve these
         self.branch = make_branch()
         self.user, self.profile, _ = make_user('cookie_user', role='admin', branch=self.branch,
                                                password='Secret123', access_all=True)
@@ -52,7 +54,7 @@ class CookieSessionTests(TestCase):
 
     def test_cookie_write_requires_xhr_header(self):
         self._login()
-        body = {'old_password': 'Secret123', 'new_password': 'Secret456', 'confirm_password': 'Secret456'}
+        body = {'old_password': 'Secret123', 'new_password': 'Cookie-pw-2026', 'confirm_password': 'Cookie-pw-2026'}
         r = self.client.post('/api/auth/change-password/', body, format='json')
         self.assertIn(r.status_code, (401, 403))           # forged cross-site POST → anonymous
         r = self.client.post('/api/auth/change-password/', body, format='json', **XHR)

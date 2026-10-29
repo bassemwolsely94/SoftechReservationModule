@@ -22,6 +22,7 @@ import useAuthStore from '../store/authStore'
 import { format, formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -333,7 +334,7 @@ function PurchasesTab({ customerId }) {
           </strong>
           {' '} في {purchases.length} فاتورة
         </div>
-        <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs">
+        <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs" data-tour="customers-detail-purchases-filter">
           {[
             { key: 'all',  label: 'الكل' },
             { key: '115',  label: 'مبيعات' },
@@ -682,6 +683,7 @@ function ChurnScoreCard({ customer, customerId }) {
 
   return (
     <div
+      data-tour="customers-detail-churn"
       className="rounded-2xl border p-4"
       style={{ background: cfg.bg, borderColor: cfg.border }}
     >
@@ -791,6 +793,7 @@ function HealthProfileTab({ customerId }) {
         onClick={handleRebuild}
         disabled={rebuilding}
         className="btn-primary text-sm"
+        data-tour="customers-detail-health-rebuild"
       >
         {rebuilding ? 'جارٍ البناء…' : '🔄 بناء الملف الصحي الآن'}
       </button>
@@ -817,6 +820,7 @@ function HealthProfileTab({ customerId }) {
           onClick={handleRebuild}
           disabled={rebuilding}
           className="text-xs text-blue-600 hover:underline"
+          data-tour="customers-detail-health-rebuild"
         >
           {rebuilding ? 'جارٍ…' : '↻ تحديث'}
         </button>
@@ -861,7 +865,7 @@ function HealthProfileTab({ customerId }) {
       )}
 
       {/* Special flags */}
-      <div>
+      <div data-tour="customers-detail-health-alerts">
         <div className="text-xs font-semibold text-gray-500 mb-2">تنبيهات خاصة</div>
         <div className="flex flex-wrap gap-2">
           {hp.pregnancy_flag    && <span className="badge bg-pink-100 text-pink-700 text-xs">🤰 حامل</span>}
@@ -1101,6 +1105,7 @@ function LoyaltyTab({ customerId }) {
           </button>
           {hasPic && (
             <button
+              data-tour="customers-detail-points-adjust"
               onClick={() => setShowAdjust(true)}
               className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors"
             >
@@ -1135,6 +1140,7 @@ function LoyaltyTab({ customerId }) {
           )}
           <div className="flex gap-2">
             <button
+              data-tour="customers-detail-points-softech"
               onClick={() => adjustMut.mutate()}
               disabled={!points || delta === 0 || !reason.trim() || adjustMut.isPending}
               className="flex-1 bg-green-600 text-white rounded-lg px-3 py-2 text-sm disabled:opacity-50"
@@ -1172,7 +1178,7 @@ function LoyaltyTab({ customerId }) {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs text-gray-500">→ {log.balance_after?.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">{fa()} {log.balance_after?.toLocaleString()}</p>
                   {!log.success && <p className="text-xs text-red-500">✗</p>}
                 </div>
               </div>
@@ -1207,6 +1213,7 @@ function ChronicConditionsWidget({ customerId, value, onSaved }) {
 
   return (
     <div
+      data-tour="customers-detail-conditions"
       className="rounded-xl p-3 border"
       style={{ background: '#fff7ed', borderColor: '#fed7aa' }}
     >
@@ -1287,7 +1294,7 @@ function UnmetDemandStrip({ customerId, navigate }) {
   const egp = v => Math.round(Number(v) || 0).toLocaleString('en-US')
 
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4" data-tour="customers-detail-unmet">
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-bold text-amber-800 text-sm flex items-center gap-2">
           <span>🧩</span> طلبات لم تُلبَّ
@@ -1526,7 +1533,7 @@ export default function CustomerDetailPage() {
 
           {/* SOFTECH account state (HQ mirror) — decided server-side, shown here */}
           {customer.account_state && (customer.account_state.code !== 'active' || !customer.account_state.points) && (
-            <div className={`rounded-xl px-3 py-2 text-sm border ${customer.account_state.blocked
+            <div data-tour="customers-detail-account-state" className={`rounded-xl px-3 py-2 text-sm border ${customer.account_state.blocked
               ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
               <span className="font-bold">حالة الحساب في SOFTECH: {customer.account_state.label}</span>
               {!customer.account_state.points && <span> · خارج نظام النقاط والكوبونات</span>}

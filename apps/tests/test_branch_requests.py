@@ -352,10 +352,11 @@ class TransferProposalTests(TestCase):
                 'fallback': {}, 'run_id': None, 'taken_at': '2026-10-04T10:00:00', 'names': {}, 'eng': {},
                 'stock': {'150': {a: 3.0, b: 9.0}, '160': {a: 1.0}, '100': {}}, 'isrs': [pi]}
 
-    def post(self):
+    def post(self, basis='requested'):
         from apps.purchasing import isr_fulfillment as F
         with mock.patch.object(F, 'collect_requests', side_effect=lambda isrs: self.snap(isrs[0])) as col:
-            r = self.c.post(f'{self.URL}{self.req.pk}/transfers/', {'coverage': 1.5}, format='json')
+            r = self.c.post(f'{self.URL}{self.req.pk}/transfers/', {'coverage': 1.5, 'basis': basis},
+                            format='json')
         return r, col
 
     def test_two_linked_legs_per_donor_from_confirmed_lines(self):
@@ -373,6 +374,12 @@ class TransferProposalTests(TestCase):
                 self.assertEqual((p.status, p.origin_request_id, p.origin_donor), ('proposed', self.req.pk, c['donor']))
                 self.assertIn(f'WA-{self.req.pk}', p.notes)
         self.assertEqual(len(r.data['plan']['transfers']), 2)
+
+    def test_no_sales_anywhere_moves_only_the_seed(self):
+        """Owner 2026-10-24: nobody sells it → a seed (2 packs, price < 300), not the 5 asked."""
+        r, _ = self.post(basis='min')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual([(c['donor'], c['qty']) for c in r.data['created']], [('150', 2.0)])
 
     def test_never_twice_and_cancel_frees(self):
         from apps.purchasing.models import IsrPush

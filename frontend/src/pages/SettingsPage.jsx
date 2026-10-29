@@ -24,6 +24,7 @@ import {
 } from '../theme/theme'
 import { useThemeMode } from '../theme/useThemeMode'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 // Most labels come from the DB (Arabic), English shown as sub-labels where provided.
@@ -219,6 +220,70 @@ function LanguageSelector({ isAdmin }) {
   )
 }
 
+// ── Branch working hours (used by the stock audit's after-hours check) ─────────
+function BranchHours({ branch, settings, isAdmin, onRefresh, showToast }) {
+  const [editing, setEditing] = useState(false)
+  const [is24, setIs24] = useState(!!settings.is_24h)
+  const [windows, setWindows] = useState(settings.working_hours || [])
+  const [saving, setSaving] = useState(false)
+  const set = (i, k, v) => setWindows(ws => ws.map((w, j) => (j === i ? { ...w, [k]: v } : w)))
+  const save = async () => {
+    setSaving(true)
+    try {
+      const clean = windows.map(w => {
+        const codes = String(w.doccodes ?? '').split(',').map(x => x.trim()).filter(Boolean)
+        return { from: w.from, to: w.to, ...(w.label ? { label: w.label } : {}), ...(codes.length ? { doccodes: codes } : {}) }
+      })
+      await branchesApi.updateSettings(branch.id, { is_24h: is24, working_hours: is24 ? [] : clean })
+      setEditing(false); onRefresh(); showToast('تم حفظ المواعيد ✓')
+    } catch (e) {
+      const d = e.response?.data
+      showToast((d && (d.working_hours?.[0] || d.detail)) || 'خطأ في الحفظ', 'error')
+    } finally { setSaving(false) }
+  }
+  const summary = settings.is_24h ? '24 ساعة'
+    : (settings.working_hours || []).length
+      ? settings.working_hours.map(w => `${w.from}–${w.to}${w.label ? ` (${w.label})` : ''}`).join(' · ')
+      : 'غير محددة'
+  return (
+    <div className="px-4 pb-3 border-t border-gray-100 pt-3" data-tour="settings-branch-hours">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-gray-400 font-medium">🕘 مواعيد العمل</span>
+        {!editing && <span className="text-[11px] text-gray-700" dir="ltr">{summary}</span>}
+        {isAdmin && !editing && (
+          <button onClick={() => { setIs24(!!settings.is_24h); setWindows((settings.working_hours || []).map(w => ({ ...w, doccodes: (w.doccodes || []).join(', ') }))); setEditing(true) }}
+            className="ms-auto text-[11px] text-brand-600 hover:underline">تعديل</button>
+        )}
+      </div>
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-700">
+            <input type="checkbox" checked={is24} onChange={e => setIs24(e.target.checked)} /> يعمل 24 ساعة
+          </label>
+          {!is24 && windows.map((w, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5 text-xs">
+              <input type="time" value={w.from || ''} onChange={e => set(i, 'from', e.target.value)} className="border border-gray-300 rounded px-1.5 py-1" />
+              <span>إلى</span>
+              <input type="time" value={w.to === '24:00' ? '00:00' : (w.to || '')} onChange={e => set(i, 'to', e.target.value === '00:00' ? '24:00' : e.target.value)} className="border border-gray-300 rounded px-1.5 py-1" />
+              <input value={w.label || ''} onChange={e => set(i, 'label', e.target.value)} placeholder="وصف (اختياري)" className="border border-gray-300 rounded px-1.5 py-1 w-28" />
+              <input value={w.doccodes || ''} onChange={e => set(i, 'doccodes', e.target.value)} placeholder="لمستندات معينة: 115, 125" className="border border-gray-300 rounded px-1.5 py-1 w-40" dir="ltr" />
+              <button onClick={() => setWindows(ws => ws.filter((_, j) => j !== i))} className="text-red-500 px-1">✕</button>
+            </div>
+          ))}
+          {!is24 && (
+            <button onClick={() => setWindows(ws => [...ws, { from: '08:00', to: '01:00' }])} className="text-[11px] text-brand-600 hover:underline">+ فترة</button>
+          )}
+          <div className="text-[10px] text-gray-400">«إلى» قبل «من» = بعد منتصف الليل. فترة بأكواد مستندات تنطبق عليها فقط (مثل الكول سنتر).</div>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving} className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50">{saving ? '…' : 'حفظ'}</button>
+            <button onClick={() => setEditing(false)} className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── BranchCard ────────────────────────────────────────────────────────────────
 function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
   const [editMode, setEditMode]   = useState(false)
@@ -380,6 +445,9 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
           ))}
         </div>
       )}
+
+      <BranchHours key={settings.updated_at} branch={branch} settings={settings} isAdmin={isAdmin}
+        onRefresh={onRefresh} showToast={showToast} />
 
       {/* Feature flags */}
       <div className="px-4 pb-4 border-t border-gray-100 pt-3">
@@ -849,7 +917,7 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
 
         {/* Generated scale strip */}
         <div className="mt-5">
-          <div className="text-[11px] text-gray-400 mb-1.5">{t ? 'Generated palette (brand-50 → brand-900)' : 'التدرج المُولّد (brand-50 ← brand-900)'}</div>
+          <div className="text-[11px] text-gray-400 mb-1.5">{t ? `Generated palette (brand-50 ${fa()} brand-900)` : 'التدرج المُولّد (brand-50 ← brand-900)'}</div>
           <div className="flex rounded-lg overflow-hidden border border-gray-100 h-8">
             {Object.entries(scale).map(([step, rgb]) => (
               <div key={step} title={`brand-${step}`} className="flex-1" style={{ background: `rgb(${rgb})` }} />
@@ -972,7 +1040,7 @@ export default function SettingsPage() {
       <Toast msg={toast?.msg} type={toast?.type} />
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
+      <div data-tour="admin-settings-header" className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚙️</span>
           <div>
@@ -996,7 +1064,7 @@ export default function SettingsPage() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Sidebar ── */}
-        <nav className="w-52 bg-white border-e border-gray-200 shrink-0 py-3 px-2 space-y-0.5 overflow-y-auto">
+        <nav data-tour="admin-settings-tabs" className="w-52 bg-white border-e border-gray-200 shrink-0 py-3 px-2 space-y-0.5 overflow-y-auto">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
@@ -1010,7 +1078,7 @@ export default function SettingsPage() {
         </nav>
 
         {/* ── Content Panel ── */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main data-tour="admin-settings-content" className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-48">
               <div className="text-gray-400 animate-pulse text-sm">
@@ -1021,7 +1089,7 @@ export default function SettingsPage() {
 
             /* ─── GENERAL ───────────────────────────────────────────────── */
             activeTab === 'general' ? (
-              <div className="max-w-3xl space-y-5">
+              <div data-tour="admin-settings-general" className="max-w-3xl space-y-5">
                 <h2 className="text-lg font-bold text-gray-900">{lang === 'en' ? 'General Settings' : 'الإعدادات العامة'}</h2>
 
                 {/* Language & Direction */}
@@ -1096,7 +1164,7 @@ export default function SettingsPage() {
                     {lang === 'en' ? 'No branches found.' : 'لا توجد فروع.'}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div data-tour="admin-settings-branches" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {branches.map(b => (
                       <BranchCard key={b.id} branch={b} isAdmin={isAdmin}
                         onRefresh={loadAll} showToast={showToast} />
@@ -1107,7 +1175,7 @@ export default function SettingsPage() {
 
             /* ─── SETTINGS TABS (reservations / transfers / …) ─────────── */
             ) : activeTab === 'dropdowns' ? (
-              <div className="space-y-6 max-w-3xl">
+              <div data-tour="admin-settings-dropdowns" className="space-y-6 max-w-3xl">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-900">{lang === 'en' ? 'Dropdown Options' : 'القوائم المنسدلة'}</h2>
                   <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{ddKeys.length} {lang === 'en' ? 'lists' : 'قائمة'}</span>

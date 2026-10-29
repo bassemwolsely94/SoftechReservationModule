@@ -11,6 +11,7 @@ import { deliveryApi } from '../../api/client'
 import { deliveryBadgeClass, deliveryStatusLabel } from './deliveryStatus'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
+import { ba } from '../../utils/flowArrow'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -62,7 +63,7 @@ export default function MobileDeliveryDetailPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <button onClick={() => navigate('/m/delivery')} className="text-sm text-gray-500">→ الرجوع للوحة</button>
+      <button onClick={() => navigate('/m/delivery')} className="text-sm text-gray-500">{ba()} الرجوع للوحة</button>
 
       {/* Header */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4">

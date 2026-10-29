@@ -69,6 +69,15 @@ class Customer(models.Model):
         default=False,
         help_text='زبون مؤقت — سيتم دمجه تلقائياً عند مزامنة رقم هاتفه من SOFTECH',
     )
+    # One record per SOFTECH sales ACCOUNT (personsdata.personcode — 1510 Walk-In, 1500 Home
+    # Delivery, a contract …) that holds the invoices carrying no PIC. softech_pic = 'ACCT-<code>'.
+    # Not a person: kept out of segmentation, chronic/health, recommendations, campaigns and
+    # customer search (apps/customers/account_link.py).
+    is_account_placeholder = models.BooleanField(
+        default=False, db_index=True,
+        verbose_name='حساب بيع (ليس شخصاً)',
+        help_text='سجل حساب SOFTECH يجمع فواتير بدون PIC — لا يدخل في تقسيم العملاء أو الحملات',
+    )
     # ── SOFTECH account state (HQ localcustomers, refreshed by sync_customers; B7 2026-10-08) ──
     # Read by apps/customers/account_state.py — the ONE place that turns these into decisions.
     softech_status = models.CharField(
@@ -458,6 +467,13 @@ class PurchaseHistory(models.Model):
         max_length=20, blank=True, db_index=True,
         verbose_name='كود المخزن',
         help_text='stktrans.storecode — warehouse / store code within the branch',
+    )
+    # stktrans.personcode — the SOFTECH sales ACCOUNT the invoice was made on (1510 Walk-In,
+    # 1500 Home Delivery, a contract code …). NOT a Customer.softech_id (that is the PIC serial).
+    softech_personcode = models.CharField(
+        max_length=8, blank=True, db_index=True,
+        verbose_name='حساب البيع (personcode)',
+        help_text='stktrans.personcode — personsdata account the invoice was made on',
     )
     # stktransm.cust_branch_code — the customer ordering/delivery branch code.
     # Distinct from the transaction branch: this is the branch "responsible" for

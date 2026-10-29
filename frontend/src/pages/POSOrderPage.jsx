@@ -8,6 +8,9 @@ import PicSuggestions from '../components/PicSuggestions'
 import PicHistoryModal from '../components/PicHistoryModal'
 import PrescriptionOcrModal from '../components/PrescriptionOcrModal'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import PosImageSearch from '../pos/search/PosImageSearch'
+import PosAlternatives from '../pos/search/PosAlternatives'
+import ContractAssist, { ClaimField } from '../pos/contract/ContractAssist'
 import QuickSellGrid from '../components/QuickSellGrid'
 import StockLookupDrawer from '../components/StockLookupDrawer'
 import BasketIntelPanel from '../components/BasketIntelPanel'
@@ -18,6 +21,7 @@ import UnitsQtyModal from '../components/UnitsQtyModal'
 import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../hooks/useGuidedFlow'
 import { Badge, BatchBadge, Icon, WorkflowStep, ErrorState } from '../pos/design'
+import FefoGroupChip from '../pos/batch/FefoGroupChip'
 
 /*
  * POSOrderPage — Indirect-POS (desktop). Mirrors the SOFTECH "In-Direct Point of Sale"
@@ -32,11 +36,18 @@ export default function POSOrderPage() {
   const P = usePosOrder()
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
+  const [picPhone, setPicPhone] = useState('')     // call screen-pop → new PIC with the caller's phone
   const [showParked, setShowParked] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [guided, setGuided] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showImg, setShowImg] = useState(false)      // F6 full-screen image search
+  const [imgSeed, setImgSeed] = useState('')
+  const [altItem, setAltItem] = useState(null)      // F7 verified-alternatives side panel
+  const closeAlt = () => { setAltItem(null); setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0) }
+  const openImages = () => { setImgSeed(document.querySelector('#pos-item-search input')?.value || ''); setShowImg(true) }
+  const closeImages = () => { setShowImg(false); setTimeout(() => document.querySelector('#pos-item-search input')?.focus(), 0) }
   const [showUnits, setShowUnits] = useState(false)   // Q shortcut → enter qty in strips/units
   const [stockItem, setStockItem] = useState(null)    // §37 network-stock lookup drawer (Find-Stock)
   // side panels collapse so the item grid gets full width (remembered per-device)
@@ -45,18 +56,18 @@ export default function POSOrderPage() {
   const toggleMode = () => setModeOpen(o => { const n = !o; try { localStorage.setItem('pos_mode_open', n ? '1' : '0') } catch { /* private */ } return n })
   const togglePad = () => setPadOpen(o => { const n = !o; try { localStorage.setItem('pos_pad_open', n ? '1' : '0') } catch { /* private */ } return n })
   // keyboard shortcuts are muted while any modal/overlay owns the screen
-  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || !!P.batchModal || !!P.couponModal || !!P.plan
+  const modalOpen = showCust || showPic || showParked || showReceipt || guided || showOcr || showHistory || showUnits || showImg || !!altItem || !!P.batchModal || !!P.couponModal || !!P.plan
   const histCustomerId = P.picCustomer?.id || P.customer?.id
   // Q → open the units (strips) entry for the selected line
   const openUnits = () => { if (P.selected >= 0 && P.selected < P.lines.length) setShowUnits(true) }
-  usePosHotkeys(P, { enabled: !modalOpen, onOpenUnits: openUnits })
+  usePosHotkeys(P, { enabled: !modalOpen, onOpenUnits: openUnits, onOpenImages: openImages })
   return (
     <div dir="rtl" className="flex flex-col h-[calc(100vh-3.5rem)] bg-gray-100 text-[13px]">
       <style>{`.inp{width:100%;border:1px solid #d1d5db;border-radius:.3rem;padding:.2rem .4rem;font-size:12px}
         .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         .pos-num{-moz-appearance:textfield}`}</style>
       <WorkflowBar P={P} guided={guided} onToggleGuided={() => setGuided(g => !g)} />
-      <CallPopBanner onLoadCustomer={P.setCustomer} />
+      <CallPopBanner onLoadCustomer={P.setPicCustomer} onNewCustomer={(phone) => { setPicPhone(phone); setShowPic(true) }} />
       <HeaderBand P={P} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* channels + flags (collapsible → item lines get the width) */}
@@ -67,7 +78,7 @@ export default function POSOrderPage() {
         <div className="flex-1 flex flex-col bg-white overflow-hidden">
           <Tabs P={P} />
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} />}
+            {P.activeTab === 'items' && <ItemsTab P={P} onOpenOcr={() => setShowOcr(true)} onOpenImages={openImages} onOpenHistory={histCustomerId ? () => setShowHistory(true) : null} onOpenUnits={(idx) => { P.setSelected(idx); setShowUnits(true) }} onAlternatives={setAltItem} onFindStock={setStockItem} />}
             {P.activeTab === 'payment' && <div className="flex-1 min-h-0 overflow-auto"><PaymentTab P={P} /></div>}
             {P.activeTab === 'contract' && <div className="flex-1 min-h-0 overflow-auto"><ContractTab P={P} /></div>}
           </div>
@@ -82,8 +93,13 @@ export default function POSOrderPage() {
       {P.batchModal && <BatchModal P={P} />}
       {P.couponModal && <CouponModal P={P} />}
       {showCust && <POSCustomerModal onSelect={P.setCustomer} onClose={() => setShowCust(false)} />}
-      {showPic && <POSCustomerModal onSelect={P.setPicCustomer} onClose={() => setShowPic(false)} />}
+      {showPic && <POSCustomerModal onSelect={P.setPicCustomer} initialPhone={picPhone}
+                                    onClose={() => { setShowPic(false); setPicPhone('') }} />}
       {showParked && <ParkedModal P={P} onClose={() => setShowParked(false)} />}
+      <PosImageSearch open={showImg} onClose={closeImages} branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id}
+                      initialQuery={imgSeed} onPick={P.addItem} />
+      {altItem && <PosAlternatives item={altItem} branchId={P.branch} onClose={closeAlt}
+                                   onPick={(it) => { P.addItem(it); closeAlt() }} />}
       {showOcr && <PrescriptionOcrModal onAdd={P.addByBarcode} onClose={() => setShowOcr(false)} />}
       {showHistory && histCustomerId && (
         <PicHistoryModal customerId={histCustomerId} name={P.picCustomer?.name || P.customer?.name}
@@ -103,7 +119,7 @@ export default function POSOrderPage() {
             : kind === 'transfer' ? '✓ تم إنشاء طلب تحويل بين الفروع' : 'تم')} />
       )}
       {showReceipt && <ReceiptModal P={P} onClose={() => setShowReceipt(false)} />}
-      {guided && <GuidedMode P={P} onClose={() => setGuided(false)} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />}
+      {guided && <GuidedMode P={P} onAlternatives={setAltItem} onClose={() => setGuided(false)} onOpenCust={() => setShowCust(true)} onOpenPic={() => setShowPic(true)} />}
       {P.plan && <PlanModal P={P} />}
     </div>
   )
@@ -356,7 +372,7 @@ function WorkflowBar({ P, guided, onToggleGuided }) {
 /* ─────────────────── guided focus mode (wizard) ─────────────────── */
 // One panel at a time over a dimmed power-screen. Stages reuse the same tab panels and the
 // same reactive engine (via useGuidedFlow), so switching in/out never loses or forks state.
-function GuidedMode({ P, onClose, onOpenCust, onOpenPic }) {
+function GuidedMode({ P, onAlternatives, onClose, onOpenCust, onOpenPic }) {
   const wf = P.workflow
   const { stages, safeIdx, stage, isLast, stStatus, setIdx, goNext, goPrev } = useGuidedFlow(P)
   const stageAdvisories = wf.advisories.filter(a => a.tab === STAGE_TAB[stage.key])
@@ -403,7 +419,7 @@ function GuidedMode({ P, onClose, onOpenCust, onOpenPic }) {
         {/* the one active panel */}
         <div className="flex-1 overflow-auto p-4 bg-white">
           {stage.key === 'customer' && <GuidedCustomer P={P} onOpenCust={onOpenCust} onOpenPic={onOpenPic} />}
-          {stage.key === 'items' && <ItemsTab P={P} />}
+          {stage.key === 'items' && <ItemsTab P={P} onAlternatives={onAlternatives} />}
           {stage.key === 'claim' && <ContractTab P={P} />}
           {stage.key === 'payment' && <GuidedPayment P={P} />}
           {stageAdvisories.length > 0 && (
@@ -701,7 +717,7 @@ export function orderedIndices(lines, key = 'entry', dir = 'asc') {
 }
 
 /* ───────────────────────── Items tab ───────────────────────── */
-function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
+function ItemsTab({ P, onOpenOcr, onOpenImages, onOpenHistory, onOpenUnits, onAlternatives, onFindStock }) {
   // display-only sort of the line grid (canonical P.lines is untouched → prescription order kept)
   const [sortKey, setSortKey] = useState('entry')
   const [sortDir, setSortDir] = useState('asc')
@@ -727,18 +743,23 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
     ['total', 'الإجمالي'], [null, ''],
   ]
   // After ANY add appends a line, jump focus to its qty cell (SOFTECH Enter→qty flow).
-  const prevLen = useRef(P.lines.length)
+  // A FEFO re-split grows a group IN PLACE (or appends its tail) — that is not an add, so it never
+  // steals the cashier's focus; a new auto-split group focuses its single visible (head) row.
+  const prevLines = useRef(P.lines)
   useEffect(() => {
-    if (P.lines.length > prevLen.current) {
-      const last = P.lines.length - 1
-      P.setSelected(last)   // select the new line so F4/arrows act on it immediately
-      setTimeout(() => {
-        const el = document.querySelector(`[data-pos-cell="qty-${last}"]`)
-        if (el) { el.focus(); el.select?.() }
-      }, 0)
-    }
-    prevLen.current = P.lines.length
-  }, [P.lines.length])
+    const prev = prevLines.current
+    prevLines.current = P.lines
+    if (P.lines.length <= prev.length) return
+    const lastL = P.lines[P.lines.length - 1]
+    if (prev.includes(lastL) || (lastL?.fefo_group && prev.some(p => p.fefo_group === lastL.fefo_group))) return
+    let last = P.lines.length - 1
+    if (lastL?.fefo_auto) last = P.lines.findIndex(l => l.fefo_auto && !l.is_reservation && l.fefo_group === lastL.fefo_group)
+    P.setSelected(last)   // select the new line so F4/arrows act on it immediately
+    setTimeout(() => {
+      const el = document.querySelector(`[data-pos-cell="qty-${last}"]`)
+      if (el) { el.focus(); el.select?.() }
+    }, 0)
+  }, [P.lines])
   const custId = P.picCustomer?.id || P.customer?.id
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -746,7 +767,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
       <div className="shrink-0 px-2 pt-2">
         {custId && (
           <div className="mb-2 flex items-start gap-2">
-            <div className="flex-1"><CustomerMomentBar customerId={custId} /></div>
+            <div className="flex-1"><CustomerMomentBar customerId={custId} branchId={P.branch} /></div>
             {onOpenHistory && (
               <button onClick={onOpenHistory} title="سجل معاملات العميل السابقة (كل الفواتير)"
                       className="shrink-0 self-center text-[11px] px-2 py-1 rounded border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 whitespace-nowrap">📜 السجل</button>
@@ -754,7 +775,9 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
           </div>
         )}
         <div className="flex gap-2 mb-2">
-          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget onSelect={P.addItem} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم)" /></div>
+          <div className="flex-1" id="pos-item-search" data-tour="pos-order-search"><ItemSearchWidget variant="pos" branchId={P.branch} customerId={P.picCustomer?.id || P.customer?.id} onSelect={P.addItem} onAction={P.searchAction} onAlternatives={onAlternatives} placeholder="ابحث بالاسم / الكود / الباركود… (F2 إضافة · Ctrl+F1 بحث متقدم · F6 صور · F7 بدائل)" /></div>
+          <button onClick={onOpenImages} title="بحث بالصور (F6)" data-tour="pos-order-image-search"
+                  className="px-2 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 self-start mt-1 h-[34px] flex items-center"><Icon name="image" size={16} /></button>
           <button onClick={onOpenOcr} title="إدخال ذكي — قراءة روشتة أو تسجيل صوتي"
                   className="px-2 rounded text-white text-xs whitespace-nowrap self-start mt-1" style={{ background: '#022871' }}>📷🎤 ذكي</button>
           {Object.values(P.suggest.map || {}).some(v => v != null) &&
@@ -775,7 +798,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
                   ))}
                 </div>
               )}
-              <QuickSellGrid branchId={P.branch} onSelect={P.addItem} onFindStock={setStockItem} />
+              <QuickSellGrid branchId={P.branch} onSelect={P.addItem} onFindStock={onFindStock} />
             </div>
           )}
         </div>
@@ -814,7 +837,10 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
           </thead>
           <tbody>
             {order.map(i => {
-              const l = P.lines[i]
+              // an automatic FEFO split is ONE row (its head); the other batch lines are folded in
+              if (P.fefoHidden(i)) return null
+              const g = P.fefoGroupAt(i)
+              const l = g ? { ...P.lines[i], qty: g.qty, available_expiry_qty: g.available } : P.lines[i]
               const net = +(l.item_sale_price * (1 - l.cust_discp / 100)) * l.qty
               const taxAmt = l.sale_tax_pct ? net - net / (1 + l.sale_tax_pct / 100) : 0
               const sel = P.selected === i
@@ -834,11 +860,12 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
                       {l.not_stockable && <Badge tone="info" icon="pill" size="xs" label="خدمي" title="صنف غير مخزون (خدمي) — بلا رصيد أو تشغيلة أو حجز" />}
                       {discOn && !P.discountLocked && <Badge tone="warn" icon="tag" size="xs" label={`−${l.cust_discp}%`} title="خصم مطبَّق" />}
                     </div>
+                    {g && <FefoGroupChip g={g} P={P} className="mt-0.5" />}
                   </td>
                   <Td className="tabular-nums text-gray-500">{l.available_expiry_qty ?? '—'}</Td>
                   <Td className="tabular-nums text-gray-500">{l.available_qty ?? '—'}</Td>
-                  <Td className="tabular-nums text-gray-500">{l.item_expiry || '—'}</Td>
-                  <Td className="text-gray-500">{l.batchno || '—'}</Td>
+                  <Td className="tabular-nums text-gray-500">{g ? (g.count === 1 ? (g.expiries[0] || '—') : `${g.count} تشغيلات`) : (l.item_expiry || '—')}</Td>
+                  <Td className="text-gray-500">{g ? (g.batchnos.filter(Boolean).join(' · ') || '—') : (l.batchno || '—')}</Td>
                   {/* ── العبوة = the item's UNIT (علبة/شريط), display-only (NOT a bonus) ── */}
                   <Td className="text-gray-600">{l.unit_name || 'علبة'}</Td>
 
@@ -846,11 +873,12 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
                   <td className="px-1 py-1.5 text-center">
                     <div className="flex items-center justify-center gap-0.5">
                       {/* Enter on qty → discount (or back to search when the discount is locked) */}
-                      <input type="number" step="any" value={l.qty} data-pos-cell={`qty-${i}`} title={STEP_HINT}
+                      <input type="number" step="any" value={g ? (g.need ?? g.qty) : l.qty} data-pos-cell={`qty-${i}`} title={STEP_HINT}
                              onClick={e => e.stopPropagation()}
                              {...numFieldHandlers({ P, i, k: 'qty', step: 1, onEnter: () => focusPosCell(P.discountLocked ? 'search' : `cust_discp-${i}`) })}
                              onChange={e => P.setLine(i, 'qty', e.target.value)}
                              className="pos-num w-16 border rounded px-1 py-0.5 text-center font-semibold tabular-nums" />
+                      {g?.shortfall > 0 && <span className="text-[10px] text-amber-700 whitespace-nowrap" title="الكمية التي ستُرسل فعلاً">(متاح {g.qty})</span>}
                       {onOpenUnits && l.pack_qty > 1 && (
                         <button onClick={e => { e.stopPropagation(); onOpenUnits(i) }}
                                 title={`إدخال بالوحدات/الشرائط — العبوة ${l.pack_qty} (Q)`}
@@ -867,7 +895,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
                   <TdInp l={l} i={i} k="sale_tax_pct" P={P} />
 
                   {/* ── خصم %: retrieved + manager-locked for contract/permanent (server-enforced too) ── */}
-                  <td className="px-1 py-1.5 text-center">
+                  <td className="px-1 py-1.5 text-center" data-tour="pos-order-line-discount">
                     <div className="relative inline-block">
                       <input type="number" step="any" value={l.cust_discp} onClick={e => e.stopPropagation()}
                              data-pos-cell={`cust_discp-${i}`}
@@ -922,7 +950,7 @@ function ItemsTab({ P, onOpenOcr, onOpenHistory, onOpenUnits }) {
 
       {/* ── collapsible intelligence footer — bounded height so it never steals grid space ── */}
       {(P.lines.length > 0 || custId) && (
-        <div className="shrink-0 border-t bg-gray-50/60 px-2">
+        <div className="shrink-0 border-t bg-gray-50/60 px-2" data-tour="pos-order-intel">
           <button onClick={toggleIntel} className="w-full text-right text-[11px] text-gray-500 hover:text-gray-700 py-1 flex items-center justify-between">
             <span>💡 اقتراحات وعروض (تاريخ العميل · FBT · عروض)</span><span>{intelOpen ? '▾' : '▸'}</span>
           </button>
@@ -957,7 +985,7 @@ function PaymentTab({ P }) {
   const change = Number(P.totals.change || 0)
   return (
     <div className="p-2">
-      <div className="flex items-center gap-3 flex-wrap text-xs mb-2">
+      <div className="flex items-center gap-3 flex-wrap text-xs mb-2" data-tour="pos-order-payment">
         <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }}>الصافي <b className="text-base tabular-nums">{money(P.totals.net)}</b></span>
         <span className="text-gray-500">المدفوع <b className="text-gray-800 tabular-nums">{money(P.totals.paid)}</b></span>
         {change < -0.005
@@ -1009,10 +1037,11 @@ function ContractTab({ P }) {
           </span>
         )}
       </div>
+      <ContractAssist P={P} />
       <div className="grid grid-cols-3 gap-3 max-w-3xl">
         {fields.map(({ key, label, type }) => (
           <F key={key} label={label}>
-            <input type={type || 'text'} value={P.claim[key] || ''} onChange={e => C(key, e.target.value)} className="inp" />
+            <ClaimField P={P} k={key} type={type} className="inp" />
           </F>
         ))}
         <F label="تاريخ المطالبة"><input type="date" value={P.claim.claimdate || ''} onChange={e => C('claimdate', e.target.value)} className="inp" /></F>
@@ -1033,7 +1062,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <span className="text-gray-500">الإجمالي <b className="text-gray-800 tabular-nums">{money(P.totals.gross)}</b></span>
       <span className="text-orange-600">− الخصم <b className="tabular-nums">{money(P.totals.discount)}</b></span>
       <span className="text-gray-500">ض.ق.م <b className="text-gray-800 tabular-nums">{money(P.totals.tax)}</b></span>
-      <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }}>
+      <span className="flex items-center gap-1.5 text-white rounded-lg px-3 py-1" style={{ background: '#022871' }} data-tour="pos-order-net">
         الصافي <b className="text-base tabular-nums">{money(P.totals.net)}</b>
       </span>
       {paid > 0 && <span className="text-gray-500">المدفوع <b className="text-gray-800 tabular-nums">{money(paid)}</b></span>}
@@ -1044,7 +1073,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <span className="text-gray-400 tabular-nums">🧾 {P.lines.length}</span>
       <div className="flex-1 min-w-2" />
       {/* finalize actions — always visible so the side panels can collapse away */}
-      <button onClick={P.parkOrder} title="تعليق السلة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
+      <button onClick={P.parkOrder} title="تعليق السلة" data-tour="pos-order-park" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
       <button onClick={onParked} title="السلال المعلّقة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">📥{P.parked.length ? ` ${P.parked.length}` : ''}</button>
       <button onClick={onReceipt} disabled={!P.lines.length} title="معاينة الإيصال" className="h-8 px-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-40">🧾</button>
       <button onClick={() => P.submit(false)} disabled={P.busy || !P.lines.length} title="معاينة الإرسال (تجريبى)" data-tour="pos-order-preview"
@@ -1052,10 +1081,10 @@ function FooterBar({ P, onParked, onReceipt }) {
         {P.busy ? '...' : <>🧾 معاينة <kbd className="text-[10px] bg-white/20 rounded px-1">F9</kbd></>}
       </button>
       {P.ref?.writer_enabled
-        ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير"
+        ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير" data-tour="pos-order-send"
                   className="h-8 px-3 rounded bg-red-600 text-white font-semibold disabled:opacity-40 flex items-center gap-1.5">⚠ إرسال <kbd className="text-[10px] bg-white/20 rounded px-1">F10</kbd></button>
-        : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك">🔒 مُعطّل</span>}
-      <button onClick={P.reset} title="أمر جديد" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
+        : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك" data-tour="pos-order-send">🔒 مُعطّل</span>}
+      <button onClick={P.reset} title="أمر جديد" data-tour="pos-order-reset" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
     </div>
   )
 }
@@ -1109,6 +1138,8 @@ const POS_SHORTCUTS = [
   ['Ctrl+F2/3', 'نقدى / توصيل'],
   ['Ctrl+F1', 'بحث متقدم'],
   ['Ctrl+K', 'بحث شامل'],
+  ['F6', 'بحث بالصور'],
+  ['F7', 'بدائل مؤكدة للصنف المحدد في البحث'],
   ['F9', 'معاينة الإرسال'],
   ['F10', 'إرسال فعلي (عند التفعيل)'],
 ]
@@ -1117,7 +1148,7 @@ function KeyboardLegend() {
   const toggle = () => setOpen(o => { const n = !o; try { localStorage.setItem('pos_shortcuts_open', n ? '1' : '0') } catch { /* private mode */ } return n })
   return (
     <div className="border-t mt-2 pt-2 text-right">
-      <button onClick={toggle} className="w-full flex items-center justify-between text-[11px] text-gray-500 hover:text-gray-700">
+      <button onClick={toggle} data-tour="pos-order-shortcuts" className="w-full flex items-center justify-between text-[11px] text-gray-500 hover:text-gray-700">
         <span>⌨ اختصارات لوحة المفاتيح</span><span>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
@@ -1164,7 +1195,7 @@ export function QueueIndicator({ P }) {
   const total = (q.queued || 0) + (q.push_failed || 0) + (q.pushing || 0)
   if (!total) return null
   return (
-    <div className="rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800">
+    <div className="rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800" data-tour="pos-order-queue">
       <div className="flex items-center justify-between">
         <span>⏳ في الطابور: <b>{q.queued || 0}</b>{q.push_failed ? ` · فشل ${q.push_failed}` : ''}{q.pushing ? ` · جارٍ ${q.pushing}` : ''}</span>
         <button onClick={P.refreshQueue} title="تحديث" className="text-amber-600">↻</button>

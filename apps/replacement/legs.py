@@ -32,11 +32,79 @@ from .models import (CaseDocument as CD, CaseException as X, EntitlementLedgerEn
 from .workflow import _audit, _bump, _lock
 
 ACTIVE_OPS = (Op.ST_PLANNED, Op.ST_DRY_RUN, Op.ST_POSTING, Op.ST_POSTED, Op.ST_VERIFIED)
+def purchase_line_extra(c) -> dict:
+    """Native purchase-screen values beyond the generic writer template (doc 25 §21), per line:
+    • custdiscp = 1.0 — the screen sends it (862 of 871 lines on 130 in 60 days); the rollback probe
+      2026-10-26 proved no trigger sets it.
+    • VAT items (owner 2026-10-26, option A): a buy-back from a patient carries no input VAT, so the line
+      posts like SOFTECH's own buy-backs (2,058 of 2,060 taxable lines in 90 days): tax 0, sale price with
+      tax = the public price, discount = the rule %. The cost and total are the approved ones either way."""
+    extra = {'custdiscp': 1.0}
+    if Decimal(str(c.get('itemsalestax') or 0)) != 0:
+        ln = c['_line']
+        extra.update({'itemsalestax': 0.0, 'itemsaleprice_tax': float(ln.public_price),
+                      'pharmacydiscp': float(ln.discount_pct)})
+    return extra
+
+
+PURCHASE_LINE_EXTRA = purchase_line_extra       # writer line_extra hook (callable per line)
 CENT = Decimal('0.01')
 
 
-def posting_enabled() -> bool:
-    return bool(C.get('POSTING_ENABLED'))
+def posting_enabled(case=None) -> bool:
+    """Live SOFTECH posting: the master switch AND (for a case) its branch in the pilot list."""
+    if not C.get('POSTING_ENABLED'):
+        return False
+    return case is None or str(case.branchcode).strip() in {str(b).strip() for b in C.get('POSTING_BRANCHES')}
+
+
+def precheck_purchase(op, *, live=False) -> list[str]:
+    """Pre-write guard (B1): what the invoices writer WOULD post must equal the approved
+    calculation — supplier, items, quantities, unit cost and total — before anything is sent.
+    VAT lines (owner option A) must post in SOFTECH's buy-back form after purchase_line_extra: tax 0,
+    sale price with tax = public, discount = the approved %. A live post also needs every expiry."""
+    from apps.invoices import writer as IW
+    calc = op.case.current_calc
+    inv = op.supplier_invoice
+    problems = []
+    if calc is None:
+        return ['لا يوجد حساب معتمد للحالة']
+    if (inv.vendor.softech_personcode or '') != calc.rule.supplier_personcode:
+        problems.append(f'المورد {inv.vendor.softech_personcode} ≠ مورد القاعدة {calc.rule.supplier_personcode}')
+    computed, header = IW.compute(inv)
+    total = Decimal(str(header.get('doc_value', 0))).quantize(CENT)
+    if abs(total - calc.entitlement) > C.get('PURCHASE_PRECHECK_TOLERANCE'):
+        problems.append(f'إجمالي فاتورة الشراء كما سيُرحّل {total} ≠ الرصيد المعتمد {calc.entitlement}')
+    want = {l['itemcode']: (Decimal(l['qty']), Decimal(l['unit_net'])) for l in calc.lines}
+    got = {}
+    for c in computed:
+        if c.get('is_bonus'):
+            problems.append('سطر بونص في فاتورة البدل')
+            continue
+        code = str(c['_line'].item.softech_id)
+        posted = {**c, **purchase_line_extra(c)}
+        calc_line = next((l for l in calc.lines if l['itemcode'] == code), None)
+        if Decimal(str(posted.get('itemsalestax') or 0)) != 0:
+            problems.append(f'الصنف {code}: الضريبة على سطر البدل يجب أن تكون صفراً')
+        if calc_line and Decimal(str(c.get('itemsalestax') or 0)) != 0:     # a VAT line in buy-back form
+            if abs(Decimal(str(posted['itemsaleprice_tax'])) - Decimal(str(calc_line['public_price']))) > Decimal('0.01'):
+                problems.append(f'الصنف {code}: سعر الجمهور {posted["itemsaleprice_tax"]} ≠ {calc_line["public_price"]}')
+            if abs(Decimal(str(posted['pharmacydiscp'])) - Decimal(str(calc_line['deduction_pct']))) > Decimal('0.01'):
+                problems.append(f'الصنف {code}: نسبة الخصم {posted["pharmacydiscp"]} ≠ {calc_line["deduction_pct"]}')
+        if live and not IW._parse_expiry(c['_line'].expiry_date):
+            problems.append(f'الصنف {code}: تاريخ الصلاحية مطلوب')
+        q, _ = got.get(code, (Decimal('0'), None))
+        got[code] = (q + Decimal(str(c.get('qty') or 0)), Decimal(str(c['transprice'])))
+    if set(got) != set(want):
+        problems.append(f'أصناف الفاتورة {sorted(got)} ≠ أصناف الحساب {sorted(want)}')
+    for code, (q, price) in got.items():
+        if code in want:
+            wq, wp = want[code]
+            if q != wq:
+                problems.append(f'الصنف {code}: كمية {q} ≠ {wq}')
+            if abs(price - wp) > Decimal('0.01'):
+                problems.append(f'الصنف {code}: تكلفة الوحدة {price} ≠ {wp}')
+    return problems
 
 
 def purchase_token(case) -> str:
@@ -77,6 +145,8 @@ def available(case) -> dict:
     reserved = sum((o.expected_value for o in case.operations.filter(
         kind=Op.KIND_PRODUCT_SALE, status__in=ACTIVE_OPS).exclude(result__has_key='voucher_linked')),
         Decimal('0'))
+    from .cash import reserved as cash_reserved
+    reserved += cash_reserved(case)                  # B3: open cash instructions reserve their amount
     return {'entitlement': case.entitlement, 'balance': native_bal, 'reserved': reserved,
             'available': max(Decimal('0'), native_bal - reserved)}
 
@@ -85,10 +155,47 @@ def available(case) -> dict:
 # Purchase leg
 # ─────────────────────────────────────────────────────────────────────────────
 
-@transaction.atomic
-def prepare_purchase(case_id, *, user, version, request=None) -> Op:
-    """Build the virtual-supplier purchase invoice from the APPROVED calculation (once per case)."""
+def build_purchase_invoice(branch, supplier_personcode, lines, *, user=None, invoice_number='', notes=''):
+    """The virtual-supplier SupplierInvoice the invoices writer posts. lines = calculation lines
+    ({item, qty, public_price, deduction_pct, unit_net, entitlement}). Shared by the purchase leg
+    and the read-only golden comparison so both exercise the exact same path."""
     from apps.invoices.models import InvoiceLine, SupplierInvoice
+    vendor = _vendor(supplier_personcode)
+    inv = SupplierInvoice.objects.create(
+        branch=branch, doc_kind='purchase', vendor=vendor, created_by=user, status='confirmed',
+        supplier_name=vendor.name, invoice_number=invoice_number, invoice_date=timezone.localdate(), notes=notes)
+    for n, l in enumerate(lines):
+        InvoiceLine.objects.create(
+            invoice=inv, item=l['item'], manual_name=l['item'].name[:255], quantity=Decimal(str(l['qty'])),
+            public_price=Decimal(str(l['public_price'])), discount_pct=Decimal(str(l['deduction_pct'])),
+            unit_price=Decimal(str(l['unit_net'])), line_total=Decimal(str(l['entitlement'])),
+            expiry_date=str(l.get('expiry') or ''), is_confirmed=True, order=n)
+    return inv
+
+
+def _clean_expiries(expiries, itemcodes) -> dict:
+    """{itemcode: 'YYYY-MM-DD'} from the operator (the physical box stays in our stock, so SOFTECH
+    gets its expiry like a native purchase — golden diff B1). Optional at prepare; required to post live."""
+    from datetime import date as _date
+    out = {}
+    for code, raw in (expiries or {}).items():
+        code = str(code).strip()
+        if code not in itemcodes or not raw:
+            continue
+        try:
+            d = _date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            raise ValidationError(f'تاريخ صلاحية غير صالح للصنف {code}.')
+        if d <= timezone.localdate():
+            raise ValidationError(f'تاريخ صلاحية الصنف {code} منتهٍ.')
+        out[code] = d.isoformat()
+    return out
+
+
+@transaction.atomic
+def prepare_purchase(case_id, *, user, version, expiries=None, request=None) -> Op:
+    """Build the virtual-supplier purchase invoice from the APPROVED calculation (once per case).
+    expiries: {itemcode: 'YYYY-MM-DD'} of the boxes that stay in stock."""
     case = _lock(case_id, version)
     authz.require(user, 'post', case=case)
     _require_executable(case)
@@ -99,19 +206,12 @@ def prepare_purchase(case_id, *, user, version, request=None) -> Op:
     calc = case.current_calc
     if calc is None:
         raise ValidationError('لا يوجد حساب معتمد.')
-    inv = SupplierInvoice.objects.create(
-        branch=case.branch, doc_kind='purchase', vendor=_vendor(calc.rule.supplier_personcode),
-        created_by=user, status='confirmed', supplier_name=_vendor(calc.rule.supplier_personcode).name,
-        invoice_number=purchase_token(case), invoice_date=timezone.localdate(),
-        notes=f'بدل الروشتة {case.number}')
-    items = {i.itemcode: i for i in case.items.all()}
-    for n, l in enumerate(calc.lines):
-        it = items[l['itemcode']]
-        InvoiceLine.objects.create(
-            invoice=inv, item=it.item, manual_name=it.item_name, quantity=Decimal(l['qty']),
-            public_price=Decimal(l['public_price']), discount_pct=Decimal(l['deduction_pct']),
-            unit_price=Decimal(l['unit_net']), line_total=Decimal(l['entitlement']),
-            is_confirmed=True, order=n)
+    items = {i.itemcode: i.item for i in case.items.all()}
+    exp = _clean_expiries(expiries, {l['itemcode'] for l in calc.lines})
+    inv = build_purchase_invoice(case.branch, calc.rule.supplier_personcode,
+                                 [{**l, 'item': items[l['itemcode']], 'expiry': exp.get(l['itemcode'])}
+                                  for l in calc.lines],
+                                 user=user, invoice_number=purchase_token(case), notes=f'بدل الروشتة {case.number}')
     if op:                                   # a cancelled op is replaced by a fresh one
         op.idempotency_key = f'{key}:void:{op.pk}'
         op.save(update_fields=['idempotency_key'])
@@ -259,6 +359,8 @@ def prepare_product_sale(case_id, *, user, version, channel, items, request=None
         raise ValidationError('هذه حالة صرف نقدي — لا يوجد صرف منتجات.')
     if not items:
         raise ValidationError('أضف منتجات.')
+    if not case.softech_pic:          # owner Q5: never an anonymous redemption sale
+        raise ValidationError('سجّل كود المريض (أو حساب «عميل تبديل») في الحالة قبل تجهيز فاتورة المنتجات.')
     lines = _order_lines(items)
     total = estimate_order(lines)
     av = available(case)
@@ -305,14 +407,26 @@ def post(case_id, op_id, *, user, version, force=False, request=None) -> Op:
     op = Op.objects.select_for_update().get(op_id=op_id, case=case)
     if (op.result or {}).get('native'):
         raise ValidationError('هذا المستند مُدخل يدوياً في SOFTECH — لا يُرحّل من المنصة (أعد ربطه إن كان الرقم خطأ).')
+    if (op.result or {}).get('from_pos'):
+        raise ValidationError('طلب نقطة البيع يُرسَل للكاشير من شاشة البيع نفسها — الحالة تموّله فقط.')
     if op.status in (Op.ST_POSTED, Op.ST_VERIFIED):
         return op
     if op.status in (Op.ST_CANCELLED, Op.ST_POSTING):
         raise ValidationError('لا يمكن ترحيل هذه العملية الآن.')
-    live = posting_enabled()
+    live = posting_enabled(case)
+    # the document carries the poster's SOFTECH user (audit) — never the generic default
+    usercode = (getattr(user, 'softech_user_id', '') or '').strip()
+    if live and not usercode:
+        raise ValidationError('حسابك غير مربوط بمستخدم SOFTECH — لا يمكن الترحيل باسم مجهول.')
+    if op.kind == Op.KIND_PURCHASE:
+        problems = precheck_purchase(op, live=live)
+        if problems:
+            _fail(op, case, user, 'فحص ما قبل الترحيل: ' + '؛ '.join(problems), request)
+            return op
     try:
         if op.kind == Op.KIND_PURCHASE:
-            res = IW.push_final(op.supplier_invoice, dry_run=not live, force=force)
+            res = IW.push_final(op.supplier_invoice, dry_run=not live, force=force, usercode=usercode or None,
+                                line_extra=PURCHASE_LINE_EXTRA)
         else:
             res = PW.push_order(op.sales_order, dry_run=not live, live=live)
     except Exception as exc:                       # writer raised after rolling back
@@ -446,7 +560,10 @@ def resolve_native_purchase(op, *, user=None) -> bool:
     other = RC.objects.select_for_update().filter(purchase_ref=p_ref).exclude(pk=case.pk).first() \
         or RC.objects.select_for_update().filter(purchase_invoice=inv).exclude(pk=case.pk).first()
     if other is not None:
-        if _case_touched_by_people(other):
+        # the unclaimed record this case was opened to claim is retired even if people reviewed it:
+        # its human link decisions live on the lineage edges and are honoured by the rebuild below
+        claimed = other.status == RC.STATUS_UNCLAIMED and case.claim_of_id == other.pk
+        if not claimed and _case_touched_by_people(other):
             _fail(op, case, user, f'فاتورة الشراء مرتبطة بالحالة {other.number} — راجعها قبل الربط.')
             return False
         _retire_duplicate(other, case, user)
@@ -500,6 +617,32 @@ def link_native_purchase(case_id, *, user, version, branchcode, docnumber, docda
     return RC.objects.get(pk=case.pk)
 
 
+@transaction.atomic
+def attach_claimed_purchase(case, *, user=None) -> RC:
+    """Approved case opened from an unclaimed record → link that native purchase (same path as a
+    typed native link: one op, idempotent, verified, the unclaimed record retired)."""
+    case = RC.objects.select_for_update().get(pk=case.pk)
+    src = case.claim_of
+    if src is None or src.purchase_ref_id is None:
+        return case
+    key = f'{case.pk}:purchase'
+    if Op.objects.filter(idempotency_key=key).exclude(status=Op.ST_CANCELLED).exists():
+        return case                                             # already linked / prepared
+    p = src.purchase_ref
+    nk = {'branchcode': p.branchcode, 'docnumber': p.docnumber, 'docdate': p.docdate.isoformat()}
+    calc = case.current_calc
+    op = Op.objects.create(case=case, kind=Op.KIND_PURCHASE, idempotency_key=key, status=Op.ST_POSTED,
+                           result_docnumber=p.docnumber, expected_value=calc.entitlement if calc else 0,
+                           requested_by=user, result={'native': nk, 'claimed_from': src.number,
+                                                      'linked_by': user.full_name if user else 'system'})
+    case.status = RC.STATUS_EXECUTING
+    _bump(case, 'status')
+    _audit('replacement_leg_posted', case, user, new={'op': str(op.op_id), 'kind': op.kind,
+                                                       'mode': 'claim', 'claimed_from': src.number, **nk})
+    resolve_native_purchase(op, user=user)
+    return RC.objects.get(pk=case.pk)
+
+
 def resolve_pending_native_links(user=None) -> dict:
     """Scheduled: attach every pending natively-posted purchase the mirror now has."""
     out = {'pending': 0, 'attached': 0}
@@ -533,8 +676,11 @@ def link_native_product_sale(case_id, *, user, version, branchcode, docnumber, d
     if ph.sales_channel in C.CONTRACT_CHANNELS:
         raise ValidationError('هذه فاتورة تعاقد — اربطها كفاتورة التعاقد.')
     pic = (ph.softech_phcode or '').strip()
-    if case.softech_pic and pic and pic != case.softech_pic and pic not in tabdeel_pics():
-        raise ValidationError('فاتورة المنتجات على عميل آخر (المسموح: كود المريض أو حساب «عميل تبديل»).')
+    # owner 2026-10-26 (Q5): a redemption sale is on the patient's PIC or «عميل تبديل» — never
+    # anonymous, never another customer
+    if not pic or (pic != case.softech_pic and pic not in tabdeel_pics()):
+        raise ValidationError('فاتورة المنتجات يجب أن تكون على كود المريض أو حساب «عميل تبديل» '
+                              + ('(الفاتورة بدون كود عميل).' if not pic else '(الفاتورة على عميل آخر).'))
     ref = ref_for_sale(ph)
     elsewhere = (CD.objects.filter(document=ref, role=CD.ROLE_PRODUCT_SALE, status=CD.STATUS_CONFIRMED)
                  .exclude(case=case).select_related('case').first()) or \

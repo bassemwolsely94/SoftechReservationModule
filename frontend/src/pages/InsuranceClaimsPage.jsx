@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import { wildcardMatch } from '../utils/wildcard'
+import { fa } from '../utils/flowArrow'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
@@ -238,7 +239,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                   {importLog.map((r, i) => (
                     <div key={i} className={r.status === 'error' ? 'text-red-600' : 'text-green-700'}>
                       {r.status === 'imported'
-                        ? `✓ مطالبة ${r.motalbano} → ${r.claim_number} (${r.rx_count} روشتة)`
+                        ? `✓ مطالبة ${r.motalbano} ${fa()} ${r.claim_number} (${r.rx_count} روشتة)`
                         : r.status === 'already_imported'
                         ? `— مطالبة ${r.motalbano} مستوردة مسبقاً`
                         : `✗ مطالبة ${r.motalbano}: ${r.error}`}
@@ -309,7 +310,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                           {r.subclient_name || <span className="text-amber-600">غير مُعدّ</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
-                          {r.motfromdate} → {r.mottodate}
+                          {r.motfromdate} {fa()} {r.mottodate}
                         </td>
                         <td className="px-3 py-2 text-center">{r.rxcount}</td>
                         <td className="px-3 py-2 text-left font-mono text-gray-700 text-xs">
@@ -416,7 +417,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">{error}</div>}
 
         <div className="space-y-4">
-          <div>
+          <div data-tour="insurance-import-client">
             <label className={lbl}>الفئة / العميل *</label>
             <select className={inp} value={form.subclient_id}
               onChange={e => { set('subclient_id', e.target.value); setMotalbas([]) }}>
@@ -428,7 +429,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
           </div>
 
           {form.subclient_id && (
-            <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
+            <div data-tour="insurance-import-softech" className="border border-blue-200 rounded-lg p-3 bg-blue-50">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-blue-800">المطالبات المتاحة في سوفتك</span>
                 <Btn onClick={loadMotalbas} disabled={loadingMot} size="sm" variant="secondary">
@@ -444,7 +445,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
                       }`}>
                       <div>
                         <span className="font-mono font-bold text-blue-700 ml-2">#{m.motalbano}</span>
-                        <span className="text-gray-500">{m.motfromdate} → {m.mottodate}</span>
+                        <span className="text-gray-500">{m.motfromdate} {fa()} {m.mottodate}</span>
                       </div>
                       <div>
                         <span className="text-gray-500 ml-2">{m.rxcount} روشتة</span>
@@ -463,7 +464,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div data-tour="insurance-import-period" className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>من تاريخ</label>
               <input type="date" className={inp} value={form.period_from}
@@ -498,7 +499,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div data-tour="insurance-import-submit" className="flex gap-3 mt-6">
           <Btn onClick={submit} disabled={loading || !form.subclient_id} className="flex-1">
             {loading ? 'جارٍ الاستيراد...' : 'استيراد وإنشاء المطالبة'}
           </Btn>

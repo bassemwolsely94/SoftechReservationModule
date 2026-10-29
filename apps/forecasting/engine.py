@@ -32,7 +32,7 @@ Q2 = Decimal('0.01')
 # Owner-tunable per metric via SystemSetting 'kpi_round_step_<metric>'.
 ROUND_STEP_DEFAULTS = {
     'cash_delivery': 5000, 'credit': 5000, 'gross_profit': 5000,
-    'customer_count': 50, 'beauty': 2500,
+    'customer_count': 50, 'beauty': 2500, 'pic_count': 50,
 }
 
 
@@ -79,7 +79,12 @@ def _shift_month(year, month, delta):
 class ForecastEngine:
     # Metrics generated (mirror the KPI board set). call_count = Call-Center only;
     # branches have no call history so those rows are skipped (see generate()).
-    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty', 'call_count']
+    METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty',
+               'call_count', 'pic_count']
+    # Generated for the Call-Center member only: branches have no rollup for these
+    # (the board shows them in the CC block only), so a branch would hit the slow
+    # live resolver and get a target nobody sees.
+    CC_ONLY_METRICS = {'pic_count'}
 
     # Validated v2 defaults: growth_goal + blend weights (w_lm, w_pm, w_yoy).
     DEFAULT_FACTORS = {
@@ -89,6 +94,7 @@ class ForecastEngine:
         'gross_profit':   (Decimal('0.15'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
         'customer_count': (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
         'call_count':     (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
+        'pic_count':      (Decimal('0.10'), Decimal('0.50'), Decimal('0.30'), Decimal('0.20')),
     }
 
     def __init__(self):
@@ -181,6 +187,13 @@ class ForecastEngine:
 
     # ── actuals lookup (rollup fast-path for a single branch, resolver otherwise) ─
     def _member_actual(self, member, year, month, metric) -> Decimal:
+        """Actual for a signal month, projected to a FULL month when that month is the
+        current in-progress month (so a forecast run mid-month isn't understated by the
+        partial MTD value)."""
+        return self._project_full_month(self._member_actual_raw(member, year, month, metric),
+                                         year, month)
+
+    def _member_actual_raw(self, member, year, month, metric) -> Decimal:
         kw = member['kwargs']
         bids = kw.get('branch_ids')
         # branch fast-path via KpiActualRollup
@@ -196,6 +209,41 @@ class ForecastEngine:
                 return self._cache[key]
         start, end = self.resolver.month_bounds(year, month)
         return self.resolver.resolve(metric, start=start, end=end, **kw)
+
+    @staticmethod
+    def _latest_complete_date(year, month):
+        """Last day of the month with COMPLETE sales data (today excluded as partial)."""
+        from datetime import date
+        from calendar import monthrange
+        from django.db.models import Max
+        from apps.customers.models import PurchaseHistory
+        today = date.today()
+        mstart = date(year, month, 1)
+        mend = date(year, month, monthrange(year, month)[1])
+        if mend < today:
+            return mend
+        if mstart > today:
+            return None
+        return (PurchaseHistory.objects.filter(
+            invoice_date__date__gte=mstart, invoice_date__date__lt=today)
+            .aggregate(m=Max('invoice_date__date'))['m'])
+
+    def _project_full_month(self, value, year, month) -> Decimal:
+        """Scale a current-month MTD actual to a full-month run-rate estimate
+        (value × total_days ÷ elapsed_complete_days). Complete months pass through."""
+        from datetime import date
+        from calendar import monthrange
+        today = date.today()
+        if (year, month) != (today.year, today.month) or not value:
+            return value
+        last = self._latest_complete_date(year, month)
+        if not last:
+            return value
+        total = monthrange(year, month)[1]
+        elapsed = (last - date(year, month, 1)).days + 1
+        if elapsed <= 0 or elapsed >= total:
+            return value
+        return value * Decimal(total) / Decimal(elapsed)
 
     # ── generate ─────────────────────────────────────────────────────────────
     @transaction.atomic
@@ -229,6 +277,8 @@ class ForecastEngine:
             f = factors[metric]
             fbench = f.benchmark if f.benchmark is not None else bench   # per-metric YoY, else global
             for mem in members:
+                if metric in self.CC_ONLY_METRICS and mem['key'] != 'CC':
+                    continue
                 base = self._member_actual(mem, by, bm, metric)
                 lmv  = self._member_actual(mem, ly, lm, metric)
                 pmv  = self._member_actual(mem, py, pm, metric)

@@ -11,3 +11,5 @@ class ReplacementConfig(AppConfig):
         from apps.approvals.signals import register_outcome_handler
         from .workflow import on_approval_outcome
         register_outcome_handler('replacement.replacementcase', on_approval_outcome)
+        from .reversal import on_reversal_outcome           # B4: reversal requests ride the same inbox
+        register_outcome_handler('replacement.reversalrequest', on_reversal_outcome)

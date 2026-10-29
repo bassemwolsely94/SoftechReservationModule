@@ -27,12 +27,14 @@ ALL_MODULES = [
     'reservations', 'demand', 'transfers', 'followups', 'delivery',
     'customers', 'chronic', 'campaigns', 'vouchers',
     'catalog', 'stockcount', 'shortage',
+    'offers',        # العروض والتخفيضات — under المخزون, not POS (Z-5); checkout evaluation = pos
     'purchasing', 'invoices', 'incentives', 'cheques', 'finance',
     'insurance', 'commerce', 'replacement',
     'callcenter', 'hr', 'approvals', 'analytics', 'dashboard',
     'audit', 'sync', 'settings', 'users', 'admin',
     'help',          # in-app help: 'edit' = trainer may rewrite a screen's explanation
     'gamification',  # points/levels: 'view' = reports, 'export' = Excel, 'edit' = rules + manual awards
+    'stock_audit',   # doc 32: 'view' = all branches, 'approve' = review findings, 'export', 'edit' = thresholds
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -70,7 +72,7 @@ PERMISSIONS = {
         'transfers':    RO,
         'followups':    {'view', 'create', 'edit', 'export', 'assign'},
         'customers':    {'view', 'edit'},           # update notes/contact, no delete
-        'chronic':      RO,
+        'chronic':      {'view', 'edit'},    # classify chronic items (owner 2026-10-29, Z-11i)
         'catalog':      RO,
         'vouchers':     {'view', 'approve'},        # initiate + confirm OTP redemption
         'shortage':     {'view', 'create', 'edit'},
@@ -144,6 +146,7 @@ PERMISSIONS = {
         'catalog':      {'view', 'edit', 'export', 'approve'},
         'transfers':    {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'shortage':     {'view', 'create', 'edit', 'approve', 'export'},
+        'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'stockcount':   RE,
         'purchasing':   {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
         'invoices':     {'view', 'create', 'edit', 'approve', 'export', 'finalize'},
@@ -216,10 +219,12 @@ PERMISSIONS = {
         'transfers':    {'view', 'approve', 'export'},
         'followups':    {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'customers':    {'view', 'edit', 'export'},
-        'chronic':      RO,
+        'chronic':      {'view', 'edit'},    # classify chronic items (owner 2026-10-29, Z-11i)
+        'stockcount':   RW,                  # run counts (owner 2026-10-29, Z-11i)
         'catalog':      RO,
         'vouchers':     {'view', 'create', 'edit', 'approve', 'export', 'assign'},
         'shortage':     {'view', 'create', 'edit', 'approve', 'export'},
+        'offers':       {'view', 'create', 'edit', 'delete'},   # manage offers (Z-5)
         'callcenter':   {'view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize'},
         'campaigns':    {'view', 'create', 'edit', 'approve', 'export'},
         'analytics':    RE,
@@ -231,6 +236,7 @@ PERMISSIONS = {
         'approvals':    {'view', 'approve'},
         'replacement':  {'view', 'create', 'edit', 'approve', 'finalize', 'export'},   # بدل: approve + post legs (doc 25)
         'gamification': RE,   # executive gamification reports
+        'stock_audit':  {'view', 'approve', 'export'},   # review findings, all branches (doc 32)
     },
 
     # ─────────────────────────────────────────────────────────────────────
@@ -263,6 +269,7 @@ PERMISSIONS = {
         'hr':           RE,                  # view + export; own requests
         'approvals':    {'view', 'approve'}, # batch_quarantine authorization
         'replacement':  RE,                  # بدل الروشتة — audit/read (doc 25)
+        'stock_audit':  {'view', 'approve', 'export', 'edit'},   # review + thresholds (doc 32)
     },
 }
 

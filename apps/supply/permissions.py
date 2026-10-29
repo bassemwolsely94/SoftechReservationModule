@@ -18,7 +18,7 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 MODULE = 'purchasing'
 
-# Fallbacks mirror the purchasing writers' WRITE_ROLES (isr_views / rate_writer_views).
+# Fallbacks while the matrix has no `purchasing` rows at all (a fresh install).
 VIEW_FALLBACK_ROLES  = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
 WRITE_FALLBACK_ROLES = {'admin', 'supervisor', 'purchasing'}
 

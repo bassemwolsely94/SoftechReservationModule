@@ -57,7 +57,8 @@ def recognize(query, *, limit=6):
     if d and len(d) >= 3:
         # Phone path — exact first (best), then prefix, then contained.
         base = Customer.objects.filter(
-            Q(phone__icontains=d) | Q(phone_alt__icontains=d) | Q(whatsapp_phone__icontains=d)
+            Q(phone__icontains=d) | Q(phone_alt__icontains=d) | Q(whatsapp_phone__icontains=d),
+            is_account_placeholder=False,
         ).only(*fields)
         rows = list(base[: limit * 4])
         rows.sort(key=lambda c: _phone_rank(c, d))
@@ -65,7 +66,8 @@ def recognize(query, *, limit=6):
     else:
         # Name path.
         rows = list(
-            Customer.objects.filter(wq(raw, 'name') | Q(softech_pic__iexact=raw))
+            Customer.objects.filter(wq(raw, 'name') | Q(softech_pic__iexact=raw),
+                                    is_account_placeholder=False)
             .only(*fields)[:limit]
         )
 

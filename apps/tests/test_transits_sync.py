@@ -238,3 +238,118 @@ class SyncReceiptFixTests(TestCase):
         }
         self.assertEqual(by_supplier['100'].erp_receiving_branch_code, '140')
         self.assertEqual(by_supplier['140'].erp_receiving_branch_code, '100')
+
+
+class ManualReceiptSurvivesSyncTests(TestCase):
+    """A local «تسجيل الاستلام» stands until SOFTECH's own receipt (doc 25) appears;
+    then SOFTECH's result wins and the lines are reconciled. (Bug: the next sync used
+    to flip it back to in_transit, and the button then refused a second attempt.)"""
+
+    def setUp(self):
+        from django.utils import timezone
+        self.hq   = make_branch('HQ', '100')
+        self.giza = make_branch2('Giza', '140')
+        self.cmd = Command()
+        self.now = timezone.now()
+
+    def _local(self, doc, days_ago=3):
+        return InTransitTransfer.objects.create(
+            erp_doc_number=str(doc), erp_supplying_branch_code='100',
+            erp_receiving_branch_code='140', receiving_branch=self.giza,
+            issue_date=TODAY - datetime.timedelta(days=days_ago),
+            transit_status='received', manually_received_at=self.now,
+            item_count=1,
+            items_snapshot=[{'itemcode': 'IT001', 'itemname': 'X', 'qty': 5,
+                             'unit_cost': 70, 'extended_cost': 350,
+                             'batch': None, 'expiry': None, 'near_expiry': False}],
+        )
+
+    def test_no_doc25_keeps_local_receipt(self):
+        self._local(901000)
+        conn = FakeConn()
+        conn.headers = [_hdr(901000, '100', '140', date=TODAY - datetime.timedelta(days=3))]
+        conn.lines[(901000, '100', '125')] = [_line('IT001', 5, 350)]
+        self.cmd._sync(conn, 30, '')
+        t = InTransitTransfer.objects.get(erp_doc_number='901000')
+        self.assertEqual(t.transit_status, 'received')
+        self.assertIsNotNone(t.manually_received_at)
+        self.assertEqual(t.erp_receipt_doc_number, '')
+
+    def test_later_doc25_mismatch_wins(self):
+        self._local(901100)
+        conn = FakeConn()
+        conn.headers = [_hdr(901100, '100', '140', date=TODAY - datetime.timedelta(days=3))]
+        conn.lines[(901100, '100', '125')] = [_line('IT001', 5, 350)]
+        conn.receipts[('140', '100', 901100)] = [(777, TODAY)]
+        conn.lines[(777, '140', '25')] = [_line('IT001', 3, 210)]      # 2 short
+        self.cmd._sync(conn, 30, '')
+        t = InTransitTransfer.objects.get(erp_doc_number='901100')
+        self.assertEqual(t.transit_status, 'erp_mismatch')
+        self.assertEqual(t.erp_receipt_doc_number, '777')
+        self.assertTrue(t.has_discrepancy)
+
+    def test_wide_recheck_reconciles_locally_received(self):
+        """An old doc outside the header window, received locally, is still picked up
+        by the wide re-check when its 25 appears."""
+        self._local(901200, days_ago=90)
+        conn = FakeConn()
+        conn.headers = []                                   # outside the window
+        conn.receipts[('140', '100', 901200)] = [(888, TODAY)]
+        conn.lines[(888, '140', '25')] = [_line('IT001', 5, 350)]
+        self.cmd._sync(conn, 30, '')
+        t = InTransitTransfer.objects.get(erp_doc_number='901200')
+        self.assertEqual(t.transit_status, 'received')
+        self.assertEqual(t.erp_receipt_doc_number, '888')
+        self.assertFalse(t.has_discrepancy)
+
+
+class LocalReceiptAlertTests(TestCase):
+    """A local receipt not confirmed in SOFTECH (no doc 25) after N days alerts the
+    receiving branch once a day; confirmed / recent / in-transit ones don't."""
+
+    def setUp(self):
+        from django.utils import timezone
+        self.hq = make_branch('HQ', '100')
+        self.giza = make_branch2('Giza', '140')
+        self.cmd = Command()
+        self.now = timezone.now()
+
+    def _t(self, doc, days_ago, received_date=None, status='received'):
+        return InTransitTransfer.objects.create(
+            erp_doc_number=str(doc), erp_supplying_branch_code='100', supplying_branch=self.hq,
+            erp_receiving_branch_code='140', receiving_branch=self.giza,
+            issue_date=TODAY - datetime.timedelta(days=days_ago + 2), transit_status=status,
+            manually_received_at=self.now - datetime.timedelta(days=days_ago),
+            erp_received_date=received_date, item_count=1)
+
+    def test_alert_once_a_day_only_for_unconfirmed_old(self):
+        from apps.transits.models import InTransitNote
+        old = self._t(902000, days_ago=4)
+        self._t(902001, days_ago=1)                                  # too recent
+        self._t(902002, days_ago=5, received_date=TODAY)             # SOFTECH confirmed
+        self.assertEqual(self.cmd._fire_local_receipt_alerts(), 1)
+        self.assertEqual(self.cmd._fire_local_receipt_alerts(), 0)   # same day → no repeat
+        old.refresh_from_db()
+        self.assertEqual(old.last_alert_level, 'local')
+        self.assertEqual(InTransitNote.objects.filter(transfer=old, note_type='alert').count(), 1)
+
+    def test_setting_controls_threshold_and_off(self):
+        from apps.config.models import SystemSetting
+        self._t(902100, days_ago=4)
+        SystemSetting.objects.update_or_create(key='transit_local_receipt_alert_days',
+                                               defaults={'value': '0', 'value_type': 'integer'})
+        self.assertEqual(self.cmd._fire_local_receipt_alerts(), 0)
+        SystemSetting.objects.filter(key='transit_local_receipt_alert_days').update(value='7')
+        self.assertEqual(self.cmd._fire_local_receipt_alerts(), 0)
+        SystemSetting.objects.filter(key='transit_local_receipt_alert_days').update(value='2')
+        self.assertEqual(self.cmd._fire_local_receipt_alerts(), 1)
+
+    def test_grid_filter_awaiting_erp(self):
+        from .factories import make_admin
+        self._t(902200, days_ago=4)
+        self._t(902201, days_ago=4, received_date=TODAY)
+        _, _, client = make_admin('tr_admin_f')
+        r = client.get('/api/transits/?awaiting_erp=1')
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()['results'] if isinstance(r.json(), dict) else r.json()
+        self.assertEqual([x['erp_doc_number'] for x in rows], ['902200'])

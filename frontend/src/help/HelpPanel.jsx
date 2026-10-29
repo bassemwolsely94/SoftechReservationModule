@@ -18,7 +18,7 @@ import HelpArticle from './HelpArticle'
 import HelpEditor from './HelpEditor'
 import HelpFeedback from './HelpFeedback'
 import { LearnedButton } from './Onboarding'
-import TourRunner from './Tour'
+import TourRunner, { startScreenTour } from './Tour'
 import AskBox from './AskBox'
 import { pick, label } from './text'
 
@@ -28,6 +28,7 @@ export function useHelpShortcuts() {
   const open = useHelpStore((s) => s.open)
   useEffect(() => {
     const onKey = (e) => {
+      if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); window.dispatchEvent(new Event('help:show-me')); return }
       if (e.key === 'F1') { e.preventDefault(); toggle() }
     }
     const onOpen = (e) => open(e?.detail?.key || null, e?.detail?.tab || null)
@@ -37,14 +38,28 @@ export function useHelpShortcuts() {
   }, [toggle, open])
 }
 
+/** Shift+F1 → the current screen's «اعرض لي» tour (or its help when it has none). */
+function useShowMeShortcut() {
+  const { screen } = useCurrentHelp()
+  useEffect(() => {
+    const onShow = () => {
+      if (screen?.has_tour) startScreenTour(screen.key).catch(() => {})
+      else useHelpStore.getState().open()
+    }
+    window.addEventListener('help:show-me', onShow)
+    return () => window.removeEventListener('help:show-me', onShow)
+  }, [screen])
+}
+
 export default function HelpPanel() {
   useHelpShortcuts()
+  useShowMeShortcut()
   const isOpen = useHelpStore((s) => s.isOpen)
   return <>{isOpen && <PanelBody />}<TourRunner /></>
 }
 
 function PanelBody() {
-  const { close, open, forcedKey, forcedTab, markSeen, startTour } = useHelpStore()
+  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney } = useHelpStore()
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -148,10 +163,25 @@ function PanelBody() {
                 {label('baseChanged', lang)}
               </div>
             )}
+            {data.tour?.length > 0 && data.key === screen?.key && (
+              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
+                      className="w-full mb-4 flex items-center gap-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 text-start">
+                <span className="text-2xl">👆</span>
+                <span className="flex-1">
+                  <span className="block text-sm font-bold">{lang === 'en' ? 'Show me on this screen' : 'اعرض لي على الشاشة'}</span>
+                  <span className="block text-[11px] text-white/80">
+                    {lang === 'en' ? 'A guided tour of the real buttons, step by step (Shift+F1)' : 'جولة على الأزرار الحقيقية خطوة بخطوة (Shift+F1)'}
+                  </span>
+                </span>
+              </button>
+            )}
             <HelpArticle data={data} lang={lang} tab={tab} role={role} showAllRoles={data.can_edit}
                          onOpenScreen={openScreen} />
+            <FlowList flows={data.module?.flows} role={role} lang={lang} onStart={startTour}
+                      mobile={window.location.pathname.startsWith('/m/') || window.location.pathname === '/m'} />
             <div className="mt-6 pt-4 border-t border-line text-[11px] text-faint flex flex-wrap gap-x-3 gap-y-1">
               {data.updated && <span>{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
+              {data.change_note && <span className="text-amber-800">— {pick(data.change_note, lang)}</span>}
               {data.override?.updated_by && <span>{label('editedBy', lang)}: {data.override.updated_by}</span>}
             </div>
           </>
@@ -163,12 +193,12 @@ function PanelBody() {
         <div className="shrink-0 border-t border-line px-4 py-2.5 space-y-2">
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
           <div className="flex flex-wrap items-center gap-3 text-xs">
-            {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour)}
-                      className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
-                👆 {lang === 'en' ? 'Show me' : 'اعرض لي'}
+            {data && !term && (data.module?.journeys || []).map((j) => (
+              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)}
+                      className="text-xs border border-brand-300 text-brand-700 dark:text-brand-300 rounded-lg px-3 py-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/30">
+                🧭 {pick(j.title, lang)}
               </button>
-            )}
+            ))}
             {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>
@@ -181,5 +211,30 @@ function PanelBody() {
         </div>
       )}
     </aside>
+  )
+}
+
+/** «جولات دورة العمل» of the current module — cross-page tours, started on request. */
+export function FlowList({ flows, role, lang, onStart, mobile = null }) {
+  // in the panel: only the tours made for this shell (mobile / desktop); /help shows all
+  const mine = (flows || []).filter((f) => (!f.roles || f.roles.includes(role))
+    && (mobile === null || !!f.mobile === mobile))
+  if (!mine.length) return null
+  return (
+    <section className="mt-5 space-y-2">
+      <h3 className="text-xs font-bold text-brand-600 tracking-wide">
+        🧭 {lang === 'en' ? 'Workflow tours (across screens)' : 'جولات دورة العمل (بين الشاشات)'}
+      </h3>
+      {mine.map((f) => (
+        <button key={f.id} type="button" onClick={() => onStart(f.id, f.steps, [], f.title)}
+                className="w-full text-start rounded-lg border border-line px-3 py-2 hover:border-brand-300 hover:bg-brand-50">
+          <div className="text-sm font-semibold text-content">{f.mobile ? '📱' : '👆'} {pick(f.title, lang)}</div>
+          {f.summary && <div className="text-xs text-muted leading-5">{pick(f.summary, lang)}</div>}
+          {f.change_note && (
+            <div className="text-[11px] text-brand-700 leading-5">✨ {lang === 'en' ? 'Updated' : 'اتحدّث'}: {pick(f.change_note, lang)}</div>
+          )}
+        </button>
+      ))}
+    </section>
   )
 }

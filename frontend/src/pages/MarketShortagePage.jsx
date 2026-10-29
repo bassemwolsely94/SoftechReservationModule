@@ -347,11 +347,11 @@ function CandidateTable({ rows, onConfirm, onDismiss, onNotShortage, confirming 
               <td className="px-3 py-2">
                 {c.already_flagged ? <span className="text-xs text-emerald-600 font-semibold">✓ مؤكَّد</span> : (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onConfirm(c.item_id)} disabled={confirming}
+                    <button data-tour="shortage-market-confirm" onClick={() => onConfirm(c.item_id)} disabled={confirming}
                       className="px-3 py-1 text-xs bg-brand-600 text-white rounded hover:opacity-90 disabled:opacity-50 whitespace-nowrap">تأكيد</button>
-                    <button onClick={() => onNotShortage(c.item_id)}
+                    <button data-tour="shortage-market-not-shortage" onClick={() => onNotShortage(c.item_id)}
                       className="px-3 py-1 text-xs text-amber-700 border border-amber-300 rounded hover:bg-amber-50 whitespace-nowrap" title="ليس نقص سوق — ينتقل لقائمة المُراجعة">ليس نقصًا</button>
-                    <button onClick={() => onDismiss(c)}
+                    <button data-tour="shortage-market-dismiss" onClick={() => onDismiss(c)}
                       className="px-3 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100 whitespace-nowrap">استبعاد</button>
                   </div>
                 )}
@@ -440,7 +440,7 @@ function ChangesTab({ med, q }) {
             <div key={c.item_id} className="flex items-center justify-between px-4 py-2 text-sm">
               <span><span className="font-mono text-xs text-gray-400">{c.code}</span> — {c.name}
                 <span className="text-xs text-emerald-600 mr-2">تغطية {c.coverage.toFixed(1)} شهر</span></span>
-              <button onClick={() => clear.mutate(c.item_id)} disabled={clear.isPending}
+              <button data-tour="shortage-market-recover" onClick={() => clear.mutate(c.item_id)} disabled={clear.isPending}
                 className="px-3 py-1 text-xs text-emerald-700 border border-emerald-300 rounded hover:bg-emerald-50 disabled:opacity-50">
                 {clear.isPending && clear.variables === c.item_id ? '…' : 'أزل النقص (توفّر)'}</button>
             </div>
@@ -475,7 +475,7 @@ function ManualAdd() {
   const add = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, note, source: 'manual' }),
     onSuccess: () => { setQ(''); setNote(''); invalidate(qc) } })
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4" data-tour="shortage-market-manual-add">
       <p className="text-sm font-semibold text-gray-700 mb-2">➕ إضافة صنف ناقص يدويًا (كوتة / لا يوجد بالموردين)</p>
       <div className="flex flex-wrap gap-2">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="ابحث بالكود أو الاسم…" className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" />
@@ -537,13 +537,13 @@ function ConfirmedTab({ med, q }) {
                 <td className="px-3 py-2">
                   {it.possibly_resolved && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">🔄 قد يكون توفّر</span>}
                   {it.autodetectable > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 whitespace-nowrap block mt-0.5">أصبح قابلاً للاكتشاف</span>}
-                  {data?.softech_write_enabled && !it.softech_synced && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap block mt-0.5" title="لم يصل بعد إلى سوفتك — سيُعاد المحاولة">⏳ بانتظار سوفتك</span>}
+                  {data?.softech_write_enabled && !it.softech_synced && <span data-tour="shortage-market-softech-pending" className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap block mt-0.5" title="لم يصل بعد إلى سوفتك — سيُعاد المحاولة">⏳ بانتظار سوفتك</span>}
                   {it.waiting_customers > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap block mt-0.5" title="حجوزات قيد الانتظار لهذا الصنف">👥 {it.waiting_customers} عميل منتظر</span>}
                 </td>
                 <td className="px-3 py-2 text-gray-500 text-xs">{it.note || '—'}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
-                    <button onClick={() => clear.mutate(it.item_id)} className="px-3 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 whitespace-nowrap">تراجع</button>
+                    <button data-tour="shortage-market-revert" onClick={() => clear.mutate(it.item_id)} className="px-3 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 whitespace-nowrap">تراجع</button>
                     <button onClick={() => setDismissItem({ item_id: it.item_id, code: it.code, name: it.name })} className="px-3 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100 whitespace-nowrap">استبعاد</button>
                   </div>
                 </td>
@@ -609,7 +609,7 @@ function DismissedTab({ med, q }) {
                 )}
               </td>
               <td className="px-3 py-2 text-xs text-gray-500">{it.note || '—'}</td>
-              <td className="px-3 py-2"><button onClick={() => retrieve.mutate(it.item_id)} className="px-3 py-1 text-xs text-brand-600 border border-brand-200 rounded hover:bg-brand-50 whitespace-nowrap">استرجاع</button></td>
+              <td className="px-3 py-2"><button data-tour="shortage-market-retrieve" onClick={() => retrieve.mutate(it.item_id)} className="px-3 py-1 text-xs text-brand-600 border border-brand-200 rounded hover:bg-brand-50 whitespace-nowrap">استرجاع</button></td>
             </tr>
           ))}
         </tbody>

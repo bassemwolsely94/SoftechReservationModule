@@ -26,7 +26,7 @@ export default function ProcurementHubPage() {
 
         {/* ── Tab bar ───────────────────────────────────────────────────────── */}
         <div className="shrink-0 bg-white border-b border-gray-200 px-6 pt-0">
-          <nav className="flex gap-0" aria-label="procurement tabs">
+          <nav data-tour="purchasing-procurement-tabs" className="flex gap-0" aria-label="procurement tabs">
             {TABS.map(tab => (
               <NavLink
                 key={tab.to}
@@ -47,7 +47,7 @@ export default function ProcurementHubPage() {
         </div>
 
         {/* ── Shared filter bar (drives every analytics tab) ────────────────── */}
-        {showFilterBar && <div className="shrink-0"><ProcurementFilterBar /></div>}
+        {showFilterBar && <div data-tour="purchasing-procurement-filters" className="shrink-0"><ProcurementFilterBar /></div>}
 
         {/* ── Active tab content ────────────────────────────────────────────── */}
         <div className="flex-1 overflow-auto">

@@ -40,6 +40,7 @@ from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from .permissions import DeliveryModulePermission, guard
 from rest_framework.response import Response
 
 from .models import (
@@ -155,7 +156,7 @@ def _geofence_violation(actual_lat, actual_lng, target_lat, target_lng, radius_m
 
 class DriverListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/drivers/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
     serializer_class   = DeliveryDriverSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['full_name', 'mobile', 'national_id']
@@ -175,7 +176,7 @@ class DriverListView(generics.ListCreateAPIView):
 
 class DriverDetailView(generics.RetrieveUpdateAPIView):
     """GET/PATCH /api/delivery/drivers/{id}/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
     serializer_class   = DeliveryDriverSerializer
     queryset = DeliveryDriver.objects.select_related('branch', 'staff_profile')
 
@@ -184,9 +185,16 @@ class DriverDetailView(generics.RetrieveUpdateAPIView):
 # Customer location views
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Customer delivery locations = the `delivery` module (Batch 4, Z-9c — viewer could add them):
+# reads need view, adding / editing create or edit, removing edit or delete.
+LOCATIONS = matrix_permission('delivery', post=('create', 'edit'), delete=('edit', 'delete'))
+
+
 class CustomerLocationListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/customers/{customer_id}/locations/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, LOCATIONS]
     serializer_class   = CustomerLocationSerializer
 
     def get_queryset(self):
@@ -202,7 +210,7 @@ class CustomerLocationListView(generics.ListCreateAPIView):
 
 class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET/PATCH/DELETE /api/delivery/locations/{id}/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, LOCATIONS]
     serializer_class   = CustomerLocationSerializer
     queryset = CustomerLocation.objects.all()
 
@@ -216,7 +224,7 @@ class CustomerLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class DeliveryOrderListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['order_number', 'customer_name', 'customer_phone',
                           'softech_doc_ref', 'softech_crm_order_no', 'softech_doc_number5']
@@ -276,7 +284,7 @@ class DeliveryOrderListView(generics.ListCreateAPIView):
 
 class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
     """GET/PATCH /api/delivery/{id}/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
 
     def get_queryset(self):
         return DeliveryOrder.objects.select_related(
@@ -287,6 +295,23 @@ class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
         if self.request.method in ('PUT', 'PATCH'):
             return DeliveryOrderCreateSerializer
         return DeliveryOrderSerializer
+
+    # Batch 4, Z-10a: once an order is out for delivery the driver carries its value — amount,
+    # fees, payment method, items, branch and SOFTECH references are closed (they were editable
+    # even after delivery, under the cash collection); a delivered / cancelled / closed order is final.
+    PRE_DISPATCH = {DeliveryOrder.STATUS_CREATED, DeliveryOrder.STATUS_PENDING_REVIEW,
+                    DeliveryOrder.STATUS_PREPARING, DeliveryOrder.STATUS_READY,
+                    DeliveryOrder.STATUS_ASSIGNED, DeliveryOrder.STATUS_DRIVER_ACCEPTED}
+    VALUE_FIELDS = ('branch', 'source_type', 'softech_doc_ref', 'softech_branch_code', 'items_count',
+                    'total_value', 'delivery_fees', 'payment_method', 'items')
+
+    def update(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.is_terminal or (order.status not in self.PRE_DISPATCH
+                                 and any(f in request.data for f in self.VALUE_FIELDS)):
+            return Response({'detail': 'خرج الطلب للتوصيل — لا يمكن تعديل قيمته أو أصنافه.'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().update(request, *args, **kwargs)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -302,6 +327,9 @@ def delivery_assign(request, pk):
     Assigns a driver and moves order to STATUS_ASSIGNED.
     Supersedes previous assignment (is_current=False on old one).
     """
+    denied = guard(request, 'assign')
+    if denied:
+        return denied
     order = get_object_or_404(DeliveryOrder, pk=pk)
     try:
         _assert_transition(order, DeliveryOrder.STATUS_ASSIGNED)
@@ -355,6 +383,9 @@ def delivery_assign(request, pk):
 def delivery_accept(request, pk):
     """POST /api/delivery/{id}/accept/ — driver accepts the assignment."""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_DRIVER_ACCEPTED)
     except ValueError as e:
@@ -376,6 +407,9 @@ def delivery_accept(request, pk):
 def delivery_dispatch(request, pk):
     """POST /api/delivery/{id}/dispatch/ — driver is out for delivery."""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_OUT)
     except ValueError as e:
@@ -411,6 +445,9 @@ def delivery_dispatch(request, pk):
 def delivery_complete(request, pk):
     """POST /api/delivery/{id}/complete/ — fully delivered."""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_DELIVERED)
     except ValueError as e:
@@ -503,6 +540,9 @@ def delivery_complete(request, pk):
 def delivery_partial(request, pk):
     """POST /api/delivery/{id}/partial/ — partially delivered."""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_PARTIAL)
     except ValueError as e:
@@ -524,6 +564,9 @@ def delivery_partial(request, pk):
 def delivery_unavailable(request, pk):
     """POST /api/delivery/{id}/unavailable/ — customer not available."""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_CUSTOMER_UNAVAILABLE)
     except ValueError as e:
@@ -544,6 +587,9 @@ def delivery_unavailable(request, pk):
 def delivery_fail(request, pk):
     """POST /api/delivery/{id}/fail/ — Body: { reason (required), notes (opt) }"""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_FAILED)
     except ValueError as e:
@@ -570,6 +616,9 @@ def delivery_fail(request, pk):
 def delivery_cancel(request, pk):
     """POST /api/delivery/{id}/cancel/ — Body: { reason (required) }"""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'approve', order=order)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_CANCELLED)
     except ValueError as e:
@@ -595,6 +644,9 @@ def delivery_cancel(request, pk):
 def delivery_return(request, pk):
     """POST /api/delivery/{id}/return/"""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'edit', order=order, rider_ok=True)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_RETURNED)
     except ValueError as e:
@@ -615,6 +667,9 @@ def delivery_return(request, pk):
 def delivery_close(request, pk):
     """POST /api/delivery/{id}/close/"""
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'finalize', 'approve', order=order)
+    if denied:
+        return denied
     try:
         _assert_transition(order, DeliveryOrder.STATUS_CLOSED)
     except ValueError as e:
@@ -639,6 +694,9 @@ def delivery_collect_cash(request, pk):
     Body: { collected_amount, notes (opt) }
     """
     order = get_object_or_404(DeliveryOrder, pk=pk)
+    denied = guard(request, 'finalize', 'approve', order=order, rider_ok=True)
+    if denied:
+        return denied
     collected_amount = request.data.get('collected_amount')
     if collected_amount is None:
         return Response({'detail': 'المبلغ المحصَّل مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -688,6 +746,9 @@ def delivery_order_items(request, pk):
     Checks DeliveryOrderItem table first (manually created orders).
     Falls back to SOFTECH piccrmitems via live query (SOFTECH-synced orders).
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     order = get_object_or_404(DeliveryOrder, pk=pk)
 
     # 1. Try local DeliveryOrderItem records first
@@ -794,6 +855,9 @@ def delivery_whatsapp_message(request, pk):
     GET /api/delivery/{id}/whatsapp/
     Returns the pre-formatted WhatsApp URL + message text for the order's current status.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     order = get_object_or_404(DeliveryOrder, pk=pk)
 
     phone = order.customer_phone or order.customer_phone_alt
@@ -892,6 +956,9 @@ def delivery_whatsapp_message(request, pk):
 @permission_classes([IsAuthenticated])
 def delivery_summary(request):
     """GET /api/delivery/summary/ — quick KPI card data."""
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     today  = timezone.localdate()
     all_qs = DeliveryOrder.objects.all()
     today_qs = all_qs.filter(ordered_at__date=today)
@@ -947,6 +1014,9 @@ def delivery_dashboard(request):
     Query params: date_from, date_to, branch
     Full analytics payload.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     p = request.query_params
     date_from = p.get('date_from')
     date_to   = p.get('date_to')
@@ -1040,6 +1110,9 @@ def delivery_threshold_check(request):
     GET /api/delivery/threshold/?value=450&branch=1&area=Nasr+City&governorate=Cairo
     Returns fee, free_above, amount_needed, is_free_eligible.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     from apps.config.models import SystemSetting
     try:
         value = float(request.query_params.get('value', 0))
@@ -1110,6 +1183,9 @@ def delivery_route_plan(request):
     Returns orders grouped by area with suggested delivery sequence.
     Prioritises: SLA urgency → area clustering → order value (high value first).
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     branch_id = request.query_params.get('branch')
     driver_id = request.query_params.get('driver')
     date_str  = request.query_params.get('date', timezone.localdate().isoformat())
@@ -1253,6 +1329,9 @@ _TRACK_MAX_AGE = 14 * 24 * 3600   # link valid 14 days
 @permission_classes([IsAuthenticated])
 def delivery_tracking_link(request, pk):
     """Staff: get a shareable tracking link (+ WhatsApp share URL) for an order."""
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     from django.core import signing
     from django.conf import settings as dj_settings
     import urllib.parse
@@ -1316,7 +1395,7 @@ def delivery_public_track(request, token):
 
 class DeliveryAreaFeeListView(generics.ListCreateAPIView):
     """GET/POST /api/delivery/area-fees/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
 
     def get_queryset(self):
         qs = DeliveryAreaFee.objects.select_related('branch')
@@ -1338,7 +1417,7 @@ class DeliveryAreaFeeListView(generics.ListCreateAPIView):
 
 class DeliveryAreaFeeDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET/PATCH/DELETE /api/delivery/area-fees/{id}/"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, DeliveryModulePermission]
     queryset = DeliveryAreaFee.objects.all()
 
     def get_serializer_class(self):
@@ -1362,6 +1441,9 @@ def driver_performance(request):
     GET /api/delivery/driver-performance/?date_from=&date_to=&branch=
     Returns per-driver KPIs: orders, delivered, failed, avg_time, cash_collected.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     p = request.query_params
     date_from = p.get('date_from', timezone.localdate().isoformat())
     date_to   = p.get('date_to',   timezone.localdate().isoformat())
@@ -1444,6 +1526,9 @@ def delivery_area_heatmap(request):
     GET /api/delivery/area-heatmap/?date_from=&date_to=&branch=
     Returns order density per governorate and area for map visualisation.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     p = request.query_params
     date_from = p.get('date_from', _thirty_days_ago())
     date_to   = p.get('date_to',   timezone.localdate().isoformat())
@@ -1529,6 +1614,9 @@ def delivery_shift_report(request):
     GET /api/delivery/shift-report/?date_from=&date_to=&branch=
     Breaks down orders by time-of-day shift.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     p = request.query_params
     date_from = p.get('date_from', timezone.localdate().isoformat())
     date_to   = p.get('date_to',   timezone.localdate().isoformat())
@@ -1590,6 +1678,9 @@ def customer_delivery_profile(request):
     Returns customer's saved locations + order history summary for fast order entry.
     Falls back to SOFTECH dm_picsloc for GPS if no local records exist.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     phone = request.query_params.get('phone', '').strip()
     if not phone:
         return Response({'detail': 'رقم الهاتف مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1676,6 +1767,9 @@ def delivery_submit_csat(request, pk):
     Body: { score: 1-5, feedback: '' }
     Staff enters customer rating; also creates/updates CSAT record.
     """
+    denied = guard(request, 'edit', 'create')
+    if denied:
+        return denied
     order = get_object_or_404(DeliveryOrder, pk=pk)
     score    = request.data.get('score')
     feedback = request.data.get('feedback', '').strip()
@@ -1725,6 +1819,9 @@ def delivery_csat_report(request):
     GET /api/delivery/csat-report/?date_from=&date_to=&branch=
     Returns CSAT summary: avg score, distribution, low-score orders.
     """
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     p = request.query_params
     date_from = p.get('date_from', _thirty_days_ago())
     date_to   = p.get('date_to',   timezone.localdate().isoformat())
@@ -1776,6 +1873,9 @@ from .serializers import DeliveryRouteSerializer  # noqa: E402
 @permission_classes([IsAuthenticated])
 def delivery_routes(request):
     """GET list (?date=&driver=&status=) · POST create {driver_id, route_date?, order_ids:[ordered], notes?}."""
+    denied = guard(request, 'view' if request.method == 'GET' else 'assign')
+    if denied:
+        return denied
     if request.method == 'GET':
         qs = DeliveryRoute.objects.select_related('driver', 'branch').all()
         if request.query_params.get('date'):
@@ -1828,6 +1928,9 @@ def delivery_routes(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def delivery_route_detail(request, pk):
+    denied = guard(request, 'view')
+    if denied:
+        return denied
     route = get_object_or_404(DeliveryRoute, pk=pk)
     return Response(DeliveryRouteSerializer(route).data)
 
@@ -1836,6 +1939,9 @@ def delivery_route_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def delivery_route_dispatch(request, pk):
     """Dispatch the whole route: move its orders to out-for-delivery in one action."""
+    denied = guard(request, 'assign')
+    if denied:
+        return denied
     route = get_object_or_404(DeliveryRoute, pk=pk)
     now = timezone.now()
     moved = 0

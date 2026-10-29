@@ -145,7 +145,7 @@ function AuditLogsTab() {
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div data-tour="admin-audit-log-filters" className="flex gap-3 mb-4 flex-wrap">
         <input
           className="input-field w-64 text-sm"
           placeholder="🔍 بحث باسم المستخدم، الكيان..."
@@ -350,7 +350,7 @@ function AbuseFlagsTab() {
       )}
 
       {/* Filters + scan */}
-      <div className="flex gap-3 mb-4 flex-wrap items-end">
+      <div data-tour="admin-audit-flag-filters" className="flex gap-3 mb-4 flex-wrap items-end">
         <div className="flex gap-1">
           {[
             { v: 'open',     label: 'مفتوح' },
@@ -376,7 +376,7 @@ function AbuseFlagsTab() {
           <option value="info">معلومة</option>
         </select>
         <div className="flex-1" />
-        <button onClick={runScan} disabled={scanning}
+        <button data-tour="admin-audit-scan" onClick={runScan} disabled={scanning}
           className="btn-secondary text-sm disabled:opacity-50">
           {scanning ? '🔍 جارٍ الفحص...' : '🔍 فحص الآن'}
         </button>
@@ -395,7 +395,7 @@ function AbuseFlagsTab() {
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div data-tour="admin-audit-flags" className="space-y-3">
           {flags.map(flag => {
             const s  = SEVERITY_CFG[flag.severity]  || SEVERITY_CFG.warning
             const st = FLAG_STATUS_CFG[flag.status] || FLAG_STATUS_CFG.open
@@ -445,6 +445,7 @@ function AbuseFlagsTab() {
 
                   {flag.status === 'open' && (
                     <button
+                      data-tour="admin-audit-review"
                       onClick={() => setReviewing(flag)}
                       className="btn-secondary text-xs px-3 py-1.5 shrink-0">
                       مراجعة
@@ -489,7 +490,7 @@ export default function AuditPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0 mt-3 border-b border-gray-200 -mb-px overflow-x-auto">
+          <div data-tour="admin-audit-tabs" className="flex gap-0 mt-3 border-b border-gray-200 -mb-px overflow-x-auto">
             <button
               onClick={() => setTab('flags')}
               className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${

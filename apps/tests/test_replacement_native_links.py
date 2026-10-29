@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone as dt_tz
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.test import override_settings
 from django.utils import timezone
 
 from apps.finance.recon_models import Allocation, APInvoice, Payment, ReconParty
@@ -172,7 +173,7 @@ class NativeLinkTests(TW._Base):
     def test_product_sale_link_is_owned_and_verified_by_the_cashier_voucher(self):
         inv = self.ap_invoice()
         c = self.link(self.approved())
-        ph = self.sale(470001, '300.00', phcode='')                       # cashier left the PIC empty
+        ph = self.sale(470001, '300.00')               # on the patient's PIC (owner Q5: never anonymous)
         self.link_sale(c, 470001)
         op = Op.objects.get(case=c, kind=Op.KIND_PRODUCT_SALE)
         self.assertEqual((op.status, op.expected_value, op.result['native_receipt']), (Op.ST_POSTED, D('300.00'), ph.pk))
@@ -209,6 +210,7 @@ class NativeLinkTests(TW._Base):
         with self.assertRaises(ValidationError):
             self.link_sale(c, 470004)
 
+    @override_settings(REPLACEMENT_APPROVAL_CASH_MANAGER_ABOVE=D('99999'))   # supervisor-only approval here
     def test_cash_case_has_no_product_sales(self):
         c = self.link(self.approved(mode='cash'))
         self.sale(470005, '100')

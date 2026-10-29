@@ -23,6 +23,49 @@ from django.utils import timezone
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PBXBridgeStatus — single row written by the run_ami_bridge process
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class PBXBridgeStatus(models.Model):
+    STATE_CHOICES = [
+        ('connected',      'متصل'),
+        ('connecting',     'جارٍ الاتصال'),
+        ('disconnected',   'منقطع — يعيد المحاولة'),
+        ('auth_failed',    'فشل تسجيل الدخول'),
+        ('not_configured', 'غير مهيأ'),
+    ]
+    state            = models.CharField(max_length=15, choices=STATE_CHOICES, default='connecting')
+    host             = models.CharField(max_length=100, blank=True)
+    port             = models.PositiveIntegerField(default=5038)
+    banner           = models.CharField(max_length=100, blank=True)
+    connected_since  = models.DateTimeField(null=True, blank=True)
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    last_event_at    = models.DateTimeField(null=True, blank=True)
+    last_error       = models.TextField(blank=True)
+    last_error_at    = models.DateTimeField(null=True, blank=True)
+    reconnect_count  = models.PositiveIntegerField(default=0)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    HEARTBEAT_STALE_SECONDS = 90
+
+    class Meta:
+        verbose_name = 'حالة جسر السنترال'
+
+    @classmethod
+    def record(cls, **fields):
+        cls.objects.update_or_create(pk=1, defaults=fields)
+
+    @classmethod
+    def current(cls):
+        return cls.objects.filter(pk=1).first()
+
+    @property
+    def is_alive(self) -> bool:
+        return bool(self.last_heartbeat_at and
+                    (timezone.now() - self.last_heartbeat_at).total_seconds() < self.HEARTBEAT_STALE_SECONDS)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # AgentExtension — Asterisk extension ↔ StaffProfile mapping
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -458,20 +501,43 @@ class CallSession(models.Model):
             staff = self.agent.staff if self.agent else None
             branch = staff.branch if staff and hasattr(staff, 'branch') else None
 
-            log = CallLog.objects.create(
-                phone_number=self.caller_number,
-                customer=self.customer,
-                caller_name=self.caller_name,
-                direction=direction_map.get(self.direction, 'inbound'),
-                status=status_map.get(self.state, 'answered'),
-                duration_seconds=self.talk_seconds,
-                handled_by=staff,
-                branch=branch,
-                recording_url=self.recording_url,
-                called_at=self.started_at,
-            )
-            self.call_log = log
-            self.save(update_fields=['call_log', 'updated_at'])
+            if self.call_log_id:
+                # Agent saved during the call — add PBX facts, keep agent's content
+                log = self.call_log
+                log.duration_seconds = self.talk_seconds or log.duration_seconds
+                log.recording_url = self.recording_url or log.recording_url
+                log.customer = log.customer or self.customer
+                log.source = 'merged'
+                log.save(update_fields=['duration_seconds', 'recording_url',
+                                        'customer', 'source', 'updated_at'])
+            else:
+                log = CallLog.objects.create(
+                    phone_number=self.caller_number,
+                    customer=self.customer,
+                    caller_name=self.caller_name,
+                    direction=direction_map.get(self.direction, 'inbound'),
+                    status=status_map.get(self.state, 'answered'),
+                    duration_seconds=self.talk_seconds,
+                    handled_by=staff,
+                    branch=branch,
+                    recording_url=self.recording_url,
+                    called_at=self.started_at,
+                    source='pbx',
+                )
+                self.call_log = log
+                self.save(update_fields=['call_log', 'updated_at'])
+
+            from apps.callcenter import whisper
+            whisper.enqueue(log)
+
+            from django.conf import settings
+            # The recording may only appear in the CDR after hangup; the
+            # auto-transcriber waits, then looks it up.
+            if getattr(settings, 'CALLCENTER_AUTO_TRANSCRIBE', False):
+                from threading import Thread
+                from apps.omni.transcription import auto_transcribe_after_hangup
+                Thread(target=auto_transcribe_after_hangup,
+                       args=(log.pk,), daemon=True).start()
         except Exception as exc:
             import logging
             logging.getLogger('elrezeiky.pbx').warning(

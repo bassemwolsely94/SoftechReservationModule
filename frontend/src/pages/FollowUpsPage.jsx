@@ -33,6 +33,7 @@ import RefreshButton from '../components/RefreshButton'
 import ModuleNotificationBell from '../components/ModuleNotificationBell'
 import CanDo from '../components/CanDo'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -579,7 +580,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
       </div>
 
       {/* Right actions */}
-      <div className="flex flex-col items-end gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+      <div className="flex flex-col items-end gap-2 flex-shrink-0" onClick={e => e.stopPropagation()} data-tour="followups-tasks-card-actions">
         {/* Pin toggle — always visible */}
         <PinButton task={task} onPinToggle={onPinToggle} />
 
@@ -597,6 +598,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
         {['pending', 'called'].includes(task.status) && (
           <button
             onClick={() => onQuickAction(task)}
+            data-tour="followups-tasks-card-log"
             className="btn-primary text-xs px-3 py-1.5 whitespace-nowrap">
             تسجيل النتيجة
           </button>
@@ -684,6 +686,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
     }`}>
       {/* ── Customer header ── */}
       <div className="px-4 py-3.5 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+        data-tour="followups-tasks-group-header"
         onClick={() => setExpanded(p => !p)}>
         {/* Channel strip */}
         <div className="w-1.5 self-stretch rounded-full flex-shrink-0"
@@ -733,7 +736,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
           {/* WA button: if collapsed → expand so user can select items first;
               if already expanded → build message with selection (or all) */}
           {activeTaskIds.length > 0 && c.phone_available && canSeePhone && (
-            <button
+            <button data-tour="followups-tasks-group-whatsapp"
               disabled={building}
               onClick={() => {
                 if (!expanded) {
@@ -805,7 +808,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
       {expanded && (
         <div className="border-t border-gray-100">
           {/* Batch toolbar for this group */}
-          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 flex-wrap" data-tour="followups-tasks-group-batch">
             {/* Item selection for WA message */}
             <div className="flex items-center gap-1.5">
               <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer"
@@ -919,7 +922,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
                     )}
                     {p.indication && (r.last_sale_date || r.due_date) && <span className="text-gray-300">·</span>}
                     {r.last_sale_date && <span>صُرف: <strong className="text-gray-600">{r.last_sale_date}</strong></span>}
-                    {r.last_sale_date && r.due_date && <span className="text-gray-300">→</span>}
+                    {r.last_sale_date && r.due_date && <span className="text-gray-300">{fa()}</span>}
                     {r.due_date && (
                       <span>استحقاق: <strong className={isOverdue2 ? 'text-red-600' : 'text-gray-700'}>{r.due_date}</strong></span>
                     )}
@@ -947,7 +950,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
                 </div>
 
                 {/* Per-task quick action */}
-                <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <div className="flex-shrink-0" onClick={e => e.stopPropagation()} data-tour="followups-tasks-group-log">
                   {isActive && (
                     <button
                       onClick={() => onQuickAction(task)}
@@ -1046,7 +1049,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
   const currentAssignees = task.assignments_list || []
 
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-3 space-y-3" data-tour="followups-tasks-assign">
       {/* Current assignees */}
       {currentAssignees.length > 0 && (
         <div className="space-y-1">
@@ -1930,7 +1933,7 @@ function QuickActionModal({ task, onClose, onDone }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl mt-0.5">✕</button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4" data-tour="followups-tasks-outcome">
           {/* Product summary */}
           <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-100 rounded-xl">
             <div className="text-2xl flex-shrink-0">💊</div>
@@ -1958,7 +1961,7 @@ function QuickActionModal({ task, onClose, onDone }) {
               {/* Step 1 — Status bucket */}
               <div>
                 <div className="text-xs font-bold text-gray-400 mb-2">١. ما الذي حدث؟</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2" data-tour="followups-tasks-outcome">
                   {OUTCOME_BUCKETS.map(b => {
                     const colors = BUCKET_COLORS[b.color]
                     const active = bucket === b.id
@@ -2014,6 +2017,7 @@ function QuickActionModal({ task, onClose, onDone }) {
               {/* Submit */}
               <div className="flex gap-2">
                 <button onClick={submit} disabled={saving || !preset}
+                  data-tour="followups-tasks-outcome-save"
                   className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                     preset
                       ? `${BUCKET_COLORS[bucketData?.color]?.bg || 'bg-brand-600'} text-white`
@@ -2305,6 +2309,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2 text-orange-600">
                     🔀 إزالة التكرار
                   </button>
+                  <div data-tour="followups-tasks-generate">
                   <RefreshButton
                     loading={regenerating}
                     size="sm"
@@ -2318,7 +2323,7 @@ export default function FollowUpsPage() {
                         qc.invalidateQueries(['followup-dashboard'])
                         const parts = []
                         if (result.tasks_created)    parts.push(`${result.tasks_created} مهمة جديدة`)
-                        if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} → فائت`)
+                        if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} ${fa()} فائت`)
                         if (result.tasks_auto_closed) parts.push(`${result.tasks_auto_closed} مُغلق آلياً`)
                         if (parts.length) alert('تم: ' + parts.join(' · '))
                       } catch (e) {
@@ -2327,6 +2332,7 @@ export default function FollowUpsPage() {
                     }}>
                     🔄 توليد المهام
                   </RefreshButton>
+                  </div>
                 </>
               )}
             </div>
@@ -2514,7 +2520,7 @@ export default function FollowUpsPage() {
             <div className="font-bold text-gray-600">لا توجد مهام</div>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3" data-tour="followups-tasks-groups">
             {groupedTasks.map((group, idx) => (
               <CustomerGroupCard
                 key={group.phcode || group.customer?.id || `group-${idx}`}
@@ -2543,7 +2549,7 @@ export default function FollowUpsPage() {
       {viewMode === 'list' && selectedIds.length > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none" dir="rtl">
           <div className="max-w-7xl mx-auto px-4 pb-4 pointer-events-auto">
-            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" data-tour="followups-tasks-bulk">
 
               {/* Inline preset picker — shown when apply_preset is active */}
               {showBatchPreset && (

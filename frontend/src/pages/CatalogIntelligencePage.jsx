@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { catalogIntelApi, recommendationsApi, enrichmentApi } from '../api/client'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
@@ -66,13 +67,14 @@ function VariantGroupsTab() {
     <div className="flex gap-4 h-full" dir="rtl">
       {/* Left: list */}
       <div className="w-72 flex-shrink-0">
-        <div className="flex items-center gap-2 mb-3">
+        <div data-tour="catalog-intelligence-variant-search" className="flex items-center gap-2 mb-3">
           <input
             value={q} onChange={e => setQ(e.target.value)}
             placeholder="بحث في المجموعات..."
             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
           <button
+            data-tour="catalog-intelligence-variant-new"
             onClick={() => setShowCreate(true)}
             className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
           >+</button>
@@ -97,7 +99,7 @@ function VariantGroupsTab() {
           </div>
         )}
 
-        <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+        <div data-tour="catalog-intelligence-variant-list" className="space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
           {isLoading && <div className="text-center text-gray-400 py-4 text-sm">جارٍ التحميل...</div>}
           {!isLoading && groups.length === 0 && (
             <div className="text-center text-gray-400 py-6 text-sm">لا توجد مجموعات</div>
@@ -119,7 +121,7 @@ function VariantGroupsTab() {
       </div>
 
       {/* Right: detail */}
-      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto">
+      <div data-tour="catalog-intelligence-variant-detail" className="flex-1 bg-white border border-gray-200 rounded-xl p-5 overflow-y-auto">
         {!selectedGroup && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <div className="text-5xl mb-3">🔗</div>
@@ -136,6 +138,7 @@ function VariantGroupsTab() {
                 )}
               </div>
               <button
+                data-tour="catalog-intelligence-variant-delete"
                 onClick={() => { if (window.confirm('حذف هذه المجموعة؟')) deleteMutation.mutate(selectedGroup.id) }}
                 className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded hover:bg-red-50"
               >
@@ -144,7 +147,7 @@ function VariantGroupsTab() {
             </div>
 
             {/* Add item */}
-            <div className="mb-4">
+            <div data-tour="catalog-intelligence-variant-add" className="mb-4">
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للمجموعة</label>
               <ItemSearchWidget
                 selected={null}
@@ -245,7 +248,7 @@ function BundlesTab() {
             placeholder="بحث في الباقات..."
             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
           />
-          <button onClick={() => setShowCreate(true)}
+          <button data-tour="catalog-intelligence-bundle-new" onClick={() => setShowCreate(true)}
             className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">+</button>
         </div>
 
@@ -257,7 +260,7 @@ function BundlesTab() {
             <input value={newBundle.name_ar} onChange={e => setNewBundle(b => ({ ...b, name_ar: e.target.value }))}
               placeholder="الاسم (عربي)"
               className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm" />
-            <select value={newBundle.discount_type}
+            <select data-tour="catalog-intelligence-bundle-discount" value={newBundle.discount_type}
               onChange={e => setNewBundle(b => ({ ...b, discount_type: e.target.value }))}
               className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm">
               <option value="none">بدون خصم</option>
@@ -333,6 +336,7 @@ function BundlesTab() {
                 )}
               </div>
               <button
+                data-tour="catalog-intelligence-bundle-visibility"
                 onClick={() => updateMutation.mutate({
                   id: selectedBundle.id,
                   data: { is_active: !selectedBundle.is_active },
@@ -446,7 +450,7 @@ function FBTPairsTab() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4" data-tour="catalog-intelligence-fbt-filter">
         <ItemSearchWidget
           selected={filterItem}
           onSelect={setFilterItem}
@@ -765,6 +769,7 @@ function EnrichmentManagementTab() {
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-gray-800 text-sm">⚙️ دفعات الإثراء</h3>
             <button
+              data-tour="catalog-intelligence-batch-new"
               onClick={() => setShowCreateForm(v => !v)}
               className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition-colors"
             >
@@ -816,6 +821,7 @@ function EnrichmentManagementTab() {
                   حد النشر التلقائي — {Math.round(threshold * 100)}%
                 </label>
                 <input
+                  data-tour="catalog-intelligence-batch-threshold"
                   type="range" min={0.5} max={1.0} step={0.05}
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
@@ -827,6 +833,7 @@ function EnrichmentManagementTab() {
               </div>
 
               <button
+                data-tour="catalog-intelligence-batch-run"
                 onClick={handleCreateBatch}
                 disabled={createBatch.isPending}
                 className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
@@ -854,6 +861,7 @@ function EnrichmentManagementTab() {
                     <BatchStatusBadge status={b.status} />
                     {(b.status === 'running' || b.status === 'pending') && (
                       <button
+                        data-tour="catalog-intelligence-batch-cancel"
                         onClick={() => cancelBatch.mutate(b.id)}
                         disabled={cancelBatch.isPending}
                         className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40"
@@ -976,6 +984,7 @@ function EnrichmentManagementTab() {
                         <div className="flex items-center justify-center gap-1.5">
                           {/* Generate suggestions */}
                           <button
+                            data-tour="catalog-intelligence-generate"
                             onClick={() => generate.mutate({ itemPk: item.item_id })}
                             disabled={generate.isPending}
                             className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 disabled:opacity-40 transition-colors border border-blue-200"
@@ -986,6 +995,7 @@ function EnrichmentManagementTab() {
                           {/* Bulk approve ≥80% */}
                           {item.pending_count > 0 && (
                             <button
+                              data-tour="catalog-intelligence-approve-80"
                               onClick={() => bulkApprove.mutate({ itemId: item.item_id, conf: 0.80 })}
                               disabled={bulkApprove.isPending}
                               className="px-2.5 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium hover:bg-green-100 disabled:opacity-40 transition-colors border border-green-200"
@@ -1021,7 +1031,7 @@ function EnrichmentManagementTab() {
                 disabled={qPage === totalPages}
                 className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-40 transition-colors"
               >
-                التالي →
+                التالي {fa()}
               </button>
             </div>
           )}
@@ -1046,7 +1056,7 @@ export default function CatalogIntelligencePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50" dir="rtl">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div data-tour="catalog-intelligence-header" className="bg-white border-b border-gray-200 px-6 py-4">
         <h1 className="text-xl font-bold text-gray-800">🧠 ذكاء الكتالوج</h1>
         <p className="text-xs text-gray-400 mt-0.5">
           إدارة مجموعات المتغيرات والباقات وبيانات الشراء المتزامن · إثراء بيانات الكتالوج بالذكاء الاصطناعي
@@ -1054,7 +1064,7 @@ export default function CatalogIntelligencePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-6">
+      <div className="flex border-b border-gray-200 bg-white px-6" data-tour="catalog-intelligence-tabs">
         {TABS.map(t => (
           <button
             key={t.key}

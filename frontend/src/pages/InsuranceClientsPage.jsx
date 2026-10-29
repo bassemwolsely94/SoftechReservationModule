@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { fa } from '../utils/flowArrow'
 
 function Btn({ children, onClick, variant = 'primary', size = 'sm', disabled, className = '' }) {
   const v = {
@@ -91,7 +92,7 @@ function ClientPanel({ selected, onSelect }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-3">
+      <div data-tour="insurance-clients-add" className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-gray-700 text-sm">جهات التأمين</h2>
         <Btn onClick={openAdd}>+ جديد</Btn>
       </div>
@@ -386,7 +387,7 @@ function ContractPanel({ subclient }) {
             <div className="flex justify-between items-start mb-2">
               <span className="font-medium text-gray-800 text-sm">{c.name || `عقد ${c.effective_from}`}</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">{c.effective_from} → {c.effective_to || 'مفتوح'}</span>
+                <span className="text-xs text-gray-400">{c.effective_from} {fa()} {c.effective_to || 'مفتوح'}</span>
                 <EditIcon active={false} onClick={() => openEdit(c)} />
               </div>
             </div>
@@ -413,7 +414,7 @@ export default function InsuranceClientsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div data-tour="insurance-clients-header" className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3 mb-1">
           <button onClick={() => navigate('/insurance')} className="text-blue-600 text-sm hover:underline">
             ← مطالبات التأمين
@@ -424,20 +425,20 @@ export default function InsuranceClientsPage() {
       </div>
 
       <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+        <div data-tour="insurance-clients-payers" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ClientPanel
             selected={selectedClient}
             onSelect={(c) => { setSelectedClient(c); setSelectedSubclient(null) }}
           />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+        <div data-tour="insurance-clients-categories" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <SubClientPanel
             client={selectedClient}
             selected={selectedSubclient}
             onSelect={setSelectedSubclient}
           />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+        <div data-tour="insurance-clients-contracts" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ContractPanel subclient={selectedSubclient} />
         </div>
       </div>

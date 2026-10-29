@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../../api/client'
+import { fa } from '../../utils/flowArrow'
 
 function fmtDate(s) {
   if (!s) return '—'
@@ -168,7 +169,7 @@ export default function InsightsPanel() {
               {(impact?.changes || []).slice(0, 12).map(c => {
                 const lift = c.qty_lift_pct
                 const disc = Object.entries(c.changed).filter(([, v]) => v.is_discount)
-                  .map(([k, v]) => `${k.replace('_discp','')}: ${v.old ?? '—'}→${v.new}`).join('، ')
+                  .map(([k, v]) => `${k.replace('_discp','')}: ${v.old ?? '—'}${fa()}${v.new}`).join('، ')
                 return (
                   <tr key={c.request_id} className="border-b border-gray-50">
                     <td className="py-1.5">

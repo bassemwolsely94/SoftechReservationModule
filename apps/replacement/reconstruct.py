@@ -522,6 +522,9 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
         _edge(r_ref, p_ref, Edge.REL_RETURNS, origin=Edge.ORIGIN_NATIVE, status=Edge.STATUS_CONFIRMED,
               amount=amt, confidence=100)
         L.ensure(case, E.TYPE_SUPPLIER_RET, -amt, document=r_ref, note='مرتجع للمورد')
+        if live:                                                         # B4: approved reversal ↔ native return
+            from . import reversal as REV
+            REV.match_supplier_return(case, r_ref, amt, issue)
         settled = D0
         r_cd = case.documents.get(document=r_ref, role=CD.ROLE_SUPPLIER_RETURN)
         for ra in Allocation.objects.filter(invoice=ret, origin__in=[Allocation.ORIGIN_SOFTECH,
@@ -570,20 +573,53 @@ def reconstruct_invoice(inv, *, tabdeel=frozenset(), user=None) -> dict:
                                             'confidence': str(c.confidence_score),
                                             'status': c.status} for c in cands]})
 
+    # ── 7. entry-first (owner 2026-10-26) ────────────────────────────────────
+    # After the branch cut-over a virtual-supplier purchase must come from a case entered first.
+    # One posted natively without a case stays a tracked, claimable «شراء بدون حالة» record.
+    unclaimed = not live and C.is_entry_first(inv.branchcode, inv.docdate)
+    if unclaimed:
+        issue('caseless_purchase', X.SEV_HIGH, amount=case.entitlement,
+              detail=f'فاتورة شراء {inv.branchcode}/{_docno(inv.docnumber)} على {case.supplier_name} '
+                     f'بدون حالة مُسجلة أولاً — افتح حالة من «شراء بدون حالة» لاستلامها',
+              evidence={'usercode': (inv.usercode or '').strip(), 'docdate': inv.docdate.isoformat()})
+    if live:
+        from . import cash as CASH
+        CASH.ageing_issues(case, issue)                                  # B3: instructions not executed / confirmed
+        from . import reversal as REV
+        REV.detect_returns(case, issue)                                  # B4: contract / product returns
+        REV.ageing_issues(case, issue)
+        entered = timezone.localtime(case.created_at).date()
+        if inv.docdate < entered:
+            days = (entered - inv.docdate).days
+            crossed = (inv.docdate.year, inv.docdate.month) != (entered.year, entered.month)
+            sev = (X.SEV_INFO if case.claim_of_id                     # approved through the backdate band
+                   else X.SEV_HIGH if days > C.get('APPROVAL_BACKDATE_SUPERVISOR_DAYS') or crossed
+                   else X.SEV_WARNING)
+            issue('backdated_entry', sev,
+                  detail=f'فاتورة الشراء بتاريخ {inv.docdate} والحالة سُجلت {entered} ({days} يوم)'
+                         + (' — عبر نهاية الشهر' if crossed else ''),
+                  evidence={'docdate': inv.docdate.isoformat(), 'entered': entered.isoformat(), 'days': days})
+
     prod, cash = case.redeemed_products, case.redeemed_cash
-    case.settlement_mode = (RC.MODE_MIXED if prod > 0 and cash > 0 else RC.MODE_PRODUCTS if prod > 0
-                            else RC.MODE_CASH if cash > 0 else RC.MODE_PENDING)
+    if not live:            # a live case keeps the mode the operator chose and the approval covered
+        case.settlement_mode = (RC.MODE_MIXED if prod > 0 and cash > 0 else RC.MODE_PRODUCTS if prod > 0
+                                else RC.MODE_CASH if cash > 0 else RC.MODE_PENDING)
     _sync_exceptions(case, issues)
     confs = list(case.documents.exclude(role=CD.ROLE_PURCHASE).values_list('confidence', flat=True))
     case.link_confidence = C.conf_class(min(confs)) if confs else ''
     open_proposed = case.documents.filter(status=CD.STATUS_PROPOSED).exists()
-    if case.outstanding > CENT:
+    if unclaimed:
+        case.status = RC.STATUS_UNCLAIMED
+    elif case.outstanding > CENT:
         case.status = RC.STATUS_ENTITLEMENT_ACTIVE
     elif (case.redeemed_unclassified == 0 and not open_proposed and
           not case.exceptions.filter(status=X.STATUS_OPEN, severity__in=X.BLOCKING).exists()):
         case.status = RC.STATUS_RECONCILED
     else:
         case.status = RC.STATUS_SETTLED
+    if live:
+        from . import reversal as REV
+        REV.apply_status(case)                                           # B4: reversing / reversed
     case.reconstructed_at = timezone.now()
     case.save()
     case.assign_number()
@@ -628,6 +664,10 @@ def _fund_voucher(case, v_ref, v_cd, pay, amt, tabdeel, sale_matched, code, issu
         pool = [r for r in _same_day_receipts(pay.branchcode, pay.voucher_date, pay.trans_time, case)
                 if r['key'] not in rejected_src]
         own = _own_receipts(case)
+        if case.origin == RC.ORIGIN_LIVE:
+            # entry-first: a live case declares its product sales — the matcher only verifies them,
+            # it never guesses other receipts into the case
+            pool = [r for r in pool if r['key'] in own]
         fund = M.select_funding({'amount': amt, 'trans_time': pay.trans_time}, pool, case.softech_pic,
                                 tabdeel, known_keys=frozenset(own))
         for r in fund['receipts']:                       # live: mark the product op as voucher-funded
@@ -663,6 +703,16 @@ def _fund_voucher(case, v_ref, v_cd, pay, amt, tabdeel, sale_matched, code, issu
         if fund['excess_kind'] == 'customer_topup':
             issue('receipts_exceed_voucher', X.SEV_INFO, key=key, amount=fund['excess'],
                   detail=f'فواتير المنتجات أكبر من السند بـ {fund["excess"]} (دفعها المريض)')
+    elif case.origin == RC.ORIGIN_LIVE and fund['status'] != 'proposed':
+        # no declared receipt behind this voucher: the operator's settlement mode decides
+        if case.settlement_mode in (RC.MODE_CASH, RC.MODE_MIXED):
+            from . import cash as CASH
+            product, cash, uncl = D0, amt, D0
+            CASH.match_voucher(case, v_ref, pay, amt, issue)        # B3: instruction ↔ voucher
+        else:
+            product, cash, uncl = D0, D0, amt
+            issue('undeclared_redemption', X.SEV_WARNING, key=key, amount=amt,
+                  detail='سند صرف بدون فواتير منتجات مربوطة بالحالة — اربط فاتورة المنتجات من «سير العمل»')
     elif fund['status'] == 'proposed':
         product, cash, uncl = D0, D0, amt
         if fund.get('anonymous'):
@@ -730,11 +780,11 @@ def reset_reconstructed() -> dict:
     if blockers:
         raise RuntimeError('لا يمكن إعادة الضبط: ' + '، '.join(blockers))
     counts = {'cases': RC.objects.count(), 'ledger': E.objects.count(), 'documents': Ref.objects.count()}
-    from .models import PostingOperation, ReplacementCalculation
-    # explicit list (no CASCADE): only this module's derived tables. Live data (calculations,
-    # operations) can't exist here — reset_blockers refuses whenever a live case exists.
+    from .models import CashPayout, PostingOperation, ReplacementCalculation, ReversalRequest
+    # explicit list (no CASCADE): only this module's derived tables. Live data (calculations, operations,
+    # cash payouts, reversals) can't exist here — reset_blockers refuses whenever a live case exists.
     tables = [m._meta.db_table for m in (E, CD, X, ReplacementItem, ReplacementCalculation, PostingOperation,
-                                         RC, Edge, Ref)]
+                                         CashPayout, ReversalRequest, RC, Edge, Ref)]
     with transaction.atomic(), connection.cursor() as cur:
         cur.execute('SET CONSTRAINTS ALL IMMEDIATE')     # flush deferred FK checks first
         # NO 'RESTART IDENTITY': ids must never be reused, or a new case would inherit the

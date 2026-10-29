@@ -13,6 +13,9 @@ apps/purchasing/shortage_views.py — REST API for the Market-Shortage screen.
   POST retrieve/       — bring a dismissed item back
   GET  export/         — Excel of a view (candidates|confirmed|dismissed)
   GET  whatsapp/       — plain-text list formatted for WhatsApp
+
+Permissions (`shortage` module, Batch 4 Z-7b): reads → view, export → export, the four SOFTECH-writing
+POSTs (flag / unflag / dismiss / retrieve) → approve.
 """
 import io
 import logging
@@ -26,6 +29,12 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from apps.catalog.models import Item
+from core.permissions import deny_unless, matrix_permission
+
+# Market Shortage = the `shortage` module (Batch 4, Z-7b): reads need view; flag / unflag /
+# dismiss / retrieve need approve (their deny_unless checks stay).
+SHORTAGE = matrix_permission('shortage', post=('approve',))
+SHORTAGE_EXPORT = matrix_permission('shortage', get=('export',))   # Excel download needs the export grant
 from . import shortage as S
 from apps.catalog.wildcard import wq
 
@@ -64,7 +73,7 @@ def _apply_filters(rows, request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_candidates(request):
     cands = S.compute_shortage_candidates()
     counts = {k: 0 for k in S.TIER_COUNT_KEYS}
@@ -87,7 +96,7 @@ def shortage_candidates(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_deltas(request):
     d = S.compute_deltas()
     return Response({
@@ -99,7 +108,7 @@ def shortage_deltas(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_confirmed(request):
     S.ensure_snapshot()
     recovery = S.recovery_map()
@@ -142,7 +151,7 @@ def shortage_confirmed(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_dismissed(request):
     qs = (Item.objects.filter(shortage_dismissed=True)
           .select_related('shortage_dismissed_by')
@@ -174,7 +183,7 @@ def shortage_dismissed(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_med_types(request):
     """Distinct general-classification options among current candidates + confirmed."""
     cands = S.compute_shortage_candidates()
@@ -190,7 +199,7 @@ def shortage_med_types(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_search(request):
     q = (request.GET.get('q') or '').strip()
     if len(q) < 2:
@@ -206,8 +215,13 @@ def shortage_search(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_flag(request):
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -223,16 +237,21 @@ def shortage_flag(request):
                              'shortage_flagged_at', 'shortage_confirmed_by',
                              'shortage_dismissed', 'shortage_softech_synced'])
     from . import shortage_writer
-    synced = shortage_writer.push_item(item)    # best-effort; queued if SOFTECH offline
+    synced = shortage_writer.push_item(item, actor=request.user)    # best-effort; queued if SOFTECH offline
     logger.info('[SHORTAGE] flag %s (%s) src=%s softech_synced=%s',
                 item.softech_id, item.name, item.shortage_source, synced)
     return Response({'ok': True, 'item_id': item.id, 'softech_synced': synced})
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_unflag(request):
     """Revert a mistaken confirmation → in_shortage = False."""
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -244,18 +263,23 @@ def shortage_unflag(request):
     item.save(update_fields=['in_shortage', 'shortage_source', 'shortage_flagged_at',
                              'shortage_confirmed_by', 'shortage_softech_synced'])
     from . import shortage_writer
-    synced = shortage_writer.push_item(item)    # clears صنف نواقص + تحذير in SOFTECH
+    synced = shortage_writer.push_item(item, actor=request.user)    # clears صنف نواقص + تحذير in SOFTECH
     logger.info('[SHORTAGE] unflag %s (%s) softech_synced=%s', item.softech_id, item.name, synced)
     return Response({'ok': True, 'item_id': item.id, 'softech_synced': synced})
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_dismiss(request):
     """
     Move an item out of the candidate list with a reason (retrievable).
     Body: { item_id, reason, note?, matching_item_id? }
     """
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -281,7 +305,7 @@ def shortage_dismiss(request):
                              'shortage_dismissed_by', 'in_shortage', 'shortage_softech_synced'])
     if needs_push:
         from . import shortage_writer
-        shortage_writer.push_item(item)     # → موقوف for on_request/obsolete; clears shortage flag
+        shortage_writer.push_item(item, actor=request.user)     # → موقوف for on_request/obsolete; clears shortage flag
     # one OR two matching products (M2M) — accept list or single, cap at 2
     ids = request.data.get('matching_item_ids') or request.data.get('matching_item_id')
     ids = ids if isinstance(ids, list) else ([ids] if ids else [])
@@ -291,9 +315,14 @@ def shortage_dismiss(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_retrieve(request):
     """Bring a dismissed item back into the candidate pool."""
+    # Changes the SOFTECH item master chain-wide (shortage flag / suspended ordering):
+    # the «نواقص السوق» roles only (matrix shortage/approve).
+    denied = deny_unless(request, 'shortage', 'approve')
+    if denied:
+        return denied
     item = Item.objects.filter(id=request.data.get('item_id')).first()
     if item is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -311,7 +340,7 @@ def shortage_retrieve(request):
     item.shortage_matching_items.clear()
     if restore_supply:
         from . import shortage_writer
-        shortage_writer.push_item(item)     # → أوامر التوريد back to normal (itemnomoreuse='0')
+        shortage_writer.push_item(item, actor=request.user)     # → أوامر التوريد back to normal (itemnomoreuse='0')
     logger.info('[SHORTAGE] retrieve %s (%s) restore_supply=%s', item.softech_id, item.name, restore_supply)
     return Response({'ok': True, 'item_id': item.id})
 
@@ -356,7 +385,7 @@ class _FakeReq:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE_EXPORT])
 def shortage_export(request):
     import openpyxl
     from openpyxl.styles import Font, PatternFill
@@ -383,7 +412,7 @@ def shortage_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_whatsapp(request):
     """Plain-text list formatted for WhatsApp (confirmed by default; ?view=candidates)."""
     view = request.GET.get('view', 'confirmed')
@@ -412,7 +441,7 @@ _DIRTY_MOLECULES = {'', 'undefined item', 'undefined', 'n/a', 'na', '.', '-'}
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_suggest_matches(request):
     """
     Suggest available substitutes for a shortage item: other stockable/active items
@@ -452,7 +481,7 @@ def shortage_suggest_matches(request):
 
 # ── Tier 3 (#9): shortage trends from snapshot history ────────────────────────
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_trends(request):
     from apps.purchasing.models import ShortageSnapshot
     snaps = list(ShortageSnapshot.objects.order_by('created_at')

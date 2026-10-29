@@ -93,7 +93,43 @@ _CURATED: list[tuple[str, str]] = sorted(
 )
 
 
-def resolve_supplier(name: str, *, conn=None, min_fuzzy: float = 0.86) -> dict | None:
+def _similarity(a: str, b: str) -> float:
+    """Best of the spaced and space-less ratios — OCR often merges or splits
+    words ("PharmaOverseas" vs "pharma over seas")."""
+    r1 = difflib.SequenceMatcher(None, a, b).ratio()
+    r2 = difflib.SequenceMatcher(None, a.replace(' ', ''), b.replace(' ', '')).ratio()
+    return max(r1, r2)
+
+
+def _fuzzy_offline(n: str, *, min_ratio: float) -> dict | None:
+    """Closest learned VendorProfile name/alias or curated alias to ``n``.
+    Returns a resolution dict when the best ratio clears ``min_ratio``."""
+    from .models import VendorProfile
+
+    if len(n.replace(' ', '')) < 6:
+        return None
+    cands: list[tuple[str, str, str, str]] = []   # (alias, personcode, name, source)
+    for vp in VendorProfile.objects.exclude(softech_personcode='').exclude(softech_personcode__isnull=True):
+        for al in [vp.name] + (vp.aliases or '').split(','):
+            cands.append((_norm(al), vp.softech_personcode, vp.name, 'vendor_fuzzy'))
+    for alias, code in _CURATED:
+        cands.append((alias, code, TOP_SUPPLIERS[code][0], 'curated_fuzzy'))
+
+    best = None
+    for alias, code, cname, src in cands:
+        if len(alias.replace(' ', '')) < 6 or alias in _GENERIC:
+            continue
+        r = _similarity(n, alias)
+        if best is None or r > best[0]:
+            best = (r, code, cname, src)
+    if best and best[0] >= min_ratio:
+        return {'personcode': best[1], 'name': best[2],
+                'score': round(min(best[0], 0.94), 4), 'source': best[3]}
+    return None
+
+
+def resolve_supplier(name: str, *, conn=None, min_fuzzy: float = 0.86,
+                     min_offline_fuzzy: float = 0.88) -> dict | None:
     """Resolve a raw supplier name to {personcode, name, score, source} or None.
 
     ``conn`` (an open SOFTECH connection) enables the live personsdata fuzzy
@@ -124,6 +160,14 @@ def resolve_supplier(name: str, *, conn=None, min_fuzzy: float = 0.86) -> dict |
         if _alias_hits(alias, n) or (len(n) >= 4 and n in alias):
             return {'personcode': code, 'name': TOP_SUPPLIERS[code][0],
                     'score': 0.95, 'source': 'curated'}
+
+    # 2b. Offline fuzzy against learned names/aliases + curated aliases ────────
+    # Absorbs OCR spelling noise ("Pharma Over swas" → PHARMA OVER SEAS) that the
+    # exact alias pass above misses. Whole-name similarity only, on aliases long
+    # enough to be distinctive, so a short/generic token can never win alone.
+    hit = _fuzzy_offline(n, min_ratio=min_offline_fuzzy)
+    if hit:
+        return hit
 
     # 3. Live fuzzy against SOFTECH suppliers (opt-in) ─────────────────────────
     if conn is not None:
@@ -181,11 +225,21 @@ def get_or_create_vendor(personcode: str, name: str, *, alias: str = ''):
             vname = f'{base} ({i})'
         vp = VendorProfile.objects.create(name=vname, softech_personcode=personcode)
     # Learn the raw OCR alias so next time it resolves via the 'vendor' path.
-    a = (alias or '').strip()
-    if a and _norm(a) not in {_norm(x) for x in (vp.aliases or '').split(',')} and _norm(a) not in _GENERIC:
-        vp.aliases = (vp.aliases + ',' + a).strip(',') if vp.aliases else a
-        vp.save(update_fields=['aliases'])
+    learn_alias(vp, alias)
     return vp
+
+
+def learn_alias(vp, alias: str) -> None:
+    """Append ``alias`` to the vendor's aliases unless it is generic, already
+    known, or just the vendor's own name."""
+    a = (alias or '').strip().replace(',', ' ')
+    na = _norm(a)
+    if not na or na in _GENERIC or na == _norm(vp.name):
+        return
+    if na in {_norm(x) for x in (vp.aliases or '').split(',')}:
+        return
+    vp.aliases = (vp.aliases + ',' + a).strip(',') if vp.aliases else a
+    vp.save(update_fields=['aliases'])
 
 
 def link_invoice_vendor(invoice, *, conn=None) -> dict | None:
@@ -194,10 +248,63 @@ def link_invoice_vendor(invoice, *, conn=None) -> dict | None:
     if invoice.vendor_id and invoice.vendor and invoice.vendor.softech_personcode:
         return {'personcode': invoice.vendor.softech_personcode,
                 'name': invoice.vendor.name, 'score': 1.0, 'source': 'already_linked'}
-    res = resolve_supplier(invoice.supplier_name or '', conn=conn)
+    res, used = None, ''
+    for cand in _supplier_name_candidates(invoice):
+        res = resolve_supplier(cand, conn=conn)
+        if res:
+            used = cand
+            break
     if not res:
         return None
-    vp = get_or_create_vendor(res['personcode'], res['name'], alias=invoice.supplier_name or '')
+    vp = get_or_create_vendor(res['personcode'], res['name'], alias=used)
     invoice.vendor = vp
     invoice.save(update_fields=['vendor'])
     return res
+
+
+def _supplier_name_candidates(invoice) -> list:
+    """Names to try, in order: the (possibly user-edited) header name, then the
+    raw OCR'd supplier name kept in raw_ocr_text — the header can drift from it
+    (manual edits, merged/split words) while the raw read still resolves."""
+    import json
+    out = []
+    if invoice.supplier_name:
+        out.append(invoice.supplier_name)
+    raw = (invoice.raw_ocr_text or '').strip()
+    if raw.startswith('{'):
+        try:
+            ocr_name = str(json.loads(raw).get('supplier_name') or '').strip()
+        except (ValueError, AttributeError):
+            ocr_name = ''
+        if ocr_name and _norm(ocr_name) not in {_norm(x) for x in out}:
+            out.append(ocr_name)
+    return out
+
+
+def ensure_invoice_vendor(invoice) -> dict | None:
+    """Best-effort, never-raising re-resolution used before validate / preview /
+    push, so an invoice OCR'd before a resolver improvement (or whose supplier
+    name was corrected afterwards) links itself without re-running OCR."""
+    try:
+        return link_invoice_vendor(invoice)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning('supplier re-resolution failed for invoice %s: %s', invoice.pk, e)
+        return None
+
+
+def linkable_suppliers() -> list:
+    """Suppliers a user can link an invoice to by hand: every VendorProfile that
+    already carries a SOFTECH personcode, plus curated top distributors that have
+    no profile yet. [{vendor_id|None, personcode, name, is_main}] sorted by name."""
+    from .models import VendorProfile
+    rows, seen = [], set()
+    for vp in (VendorProfile.objects.exclude(softech_personcode='')
+               .exclude(softech_personcode__isnull=True).order_by('name')):
+        rows.append({'vendor_id': vp.id, 'personcode': vp.softech_personcode,
+                     'name': vp.name, 'is_main': vp.is_main})
+        seen.add(vp.softech_personcode)
+    for code, (cname, _) in TOP_SUPPLIERS.items():
+        if code not in seen:
+            rows.append({'vendor_id': None, 'personcode': code, 'name': cname, 'is_main': False})
+    rows.sort(key=lambda r: r['name'].lower())
+    return rows

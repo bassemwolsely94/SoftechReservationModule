@@ -14,6 +14,7 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import MultiSelectFilter from './MultiSelectFilter'
+import { fa } from '../utils/flowArrow'
 
 const PERIODS = [
   { key: 'today',   label: 'اليوم' },
@@ -92,7 +93,7 @@ export function ProcurementFilterBar() {
           <div className="flex items-center gap-1">
             <input type="date" value={filters.date_from} onChange={e => set('date_from', e.target.value)}
               className="input-field !py-1 text-xs !w-auto" />
-            <span className="text-gray-400 text-xs">→</span>
+            <span className="text-gray-400 text-xs">{fa()}</span>
             <input type="date" value={filters.date_to} onChange={e => set('date_to', e.target.value)}
               className="input-field !py-1 text-xs !w-auto" />
           </div>

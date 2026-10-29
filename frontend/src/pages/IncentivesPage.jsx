@@ -19,6 +19,7 @@ import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
+import { fa } from '../utils/flowArrow'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -215,15 +216,15 @@ function ProgramsTab({ selectedProgram, onSelect }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-gray-700">برامج الحوافز</h2>
-        <button className="btn-primary text-sm" onClick={() => setShowCreate(true)}>+ برنامج جديد</button>
+        <button data-tour="incentives-programs-new" className="btn-primary text-sm" onClick={() => setShowCreate(true)}>+ برنامج جديد</button>
       </div>
 
       {loading ? <Spinner /> : programs.length === 0 ? (
         <EmptyState icon="🏆" title="لا توجد برامج حوافز" sub="أنشئ برنامجاً جديداً للبدء" />
       ) : (
-        <div className="space-y-3">
+        <div data-tour="incentives-programs-list" className="space-y-3">
           {programs.map(p => (
-            <div key={p.id} onClick={() => onSelect(p)}
+            <div key={p.id} data-tour="incentives-programs-card" onClick={() => onSelect(p)}
               className={`rounded-xl border p-4 cursor-pointer transition-all ${
                 selectedProgram?.id === p.id
                   ? 'border-brand-500 bg-brand-50 shadow-sm'
@@ -234,7 +235,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
                   <div className="font-semibold text-gray-800">{p.name}</div>
                   {p.description && <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>}
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-gray-500">
-                    <span>📅 {p.start_date} → {p.end_date}</span>
+                    <span>📅 {p.start_date} {fa()} {p.end_date}</span>
                     <span>·</span>
                     <span>📐 {p.rule_count} قاعدة</span>
                     {p.is_sponsored && (
@@ -243,7 +244,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <button data-tour="incentives-programs-clone"
                     className="text-xs text-brand-600 hover:text-brand-700 border border-brand-200 rounded-lg px-2 py-1 hover:bg-brand-50"
                     onClick={e => { e.stopPropagation(); setShowCloneModal(p) }}
                   >
@@ -1040,7 +1041,7 @@ function RulesTab({ selectedProgram }) {
           <h2 className="font-bold text-gray-700">قواعد الحوافز</h2>
           <div className="text-xs text-gray-500">{selectedProgram.name}</div>
         </div>
-        <button className="btn-primary text-sm" onClick={() => { setAddingNew(true); setEditingId(null) }}>
+        <button data-tour="incentives-programs-rule-new" className="btn-primary text-sm" onClick={() => { setAddingNew(true); setEditingId(null) }}>
           + قاعدة جديدة
         </button>
       </div>
@@ -1092,7 +1093,7 @@ function RulesTab({ selectedProgram }) {
                         {r.min_total_qty_in_period && <Badge color="teal">حد أدنى/فترة: {r.min_total_qty_in_period}</Badge>}
                         {r.person_code_filter && <Badge color="gray">مندوب: {r.person_code_filter}</Badge>}
                         {r.branch_filter && <Badge color="gray">فرع: {r.branch_filter}</Badge>}
-                        {r.time_window_start && <Badge color="gray">🕐 {r.time_window_start}→{r.time_window_end}</Badge>}
+                        {r.time_window_start && <Badge color="gray">🕐 {r.time_window_start}{fa()}{r.time_window_end}</Badge>}
                         {r.expiry_within_days && <Badge color="red">صلاحية &lt; {r.expiry_within_days} يوم</Badge>}
                         {r.is_imported_filter === 'local'    && <Badge color="teal">محلي فقط</Badge>}
                         {r.is_imported_filter === 'imported' && <Badge color="blue">مستورد فقط</Badge>}
@@ -1106,7 +1107,7 @@ function RulesTab({ selectedProgram }) {
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0 mr-2">
-                      <button
+                      <button data-tour="incentives-programs-rule-items"
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${
                           expandedId === r.id
                             ? 'text-purple-700 border-purple-300 bg-purple-50'
@@ -1236,7 +1237,7 @@ function CalculateTab({ selectedProgram }) {
           </div>
 
           <div className="flex gap-3 pt-1">
-            <button
+            <button data-tour="incentives-programs-simulate"
               className="flex-1 border border-brand-400 text-brand-700 hover:bg-brand-50 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
               onClick={() => _exec(true)} disabled={running || simming || !selectedProgram}>
               {simming ? (
@@ -1246,7 +1247,7 @@ function CalculateTab({ selectedProgram }) {
                 </span>
               ) : '🔍 معاينة (محاكاة)'}
             </button>
-            <button
+            <button data-tour="incentives-programs-calculate"
               className="flex-[2] btn-primary py-2.5 disabled:opacity-50"
               onClick={() => _exec(false)}
               disabled={running || simming || !selectedProgram || (locked && !force)}>
@@ -1469,7 +1470,7 @@ function ReportTab({ selectedProgram }) {
           <input type="date" className="input" value={form.period_end}
             onChange={e => setForm(f => ({ ...f, period_end: e.target.value }))} />
         </div>
-        <button className="btn-primary" onClick={loadReport} disabled={loading || !selectedProgram}>
+        <button data-tour="incentives-programs-report-load" className="btn-primary" onClick={loadReport} disabled={loading || !selectedProgram}>
           {loading ? 'جارٍ التحميل...' : '📊 عرض التقرير'}
         </button>
       </div>
@@ -1481,7 +1482,7 @@ function ReportTab({ selectedProgram }) {
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center flex-wrap gap-2">
               <span className="text-sm font-semibold text-gray-700">
-                {rows.length} مندوب — {form.period_start} → {form.period_end}
+                {rows.length} مندوب — {form.period_start} {fa()} {form.period_end}
               </span>
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-gray-500">حوافز: <strong className="text-brand-700">{fmt(meta.grand_total)} ج.م</strong></span>
@@ -1538,7 +1539,7 @@ function ReportTab({ selectedProgram }) {
             <div className="px-4 py-3 border-t bg-gray-50 flex items-center justify-between flex-wrap gap-2">
               {finalMsg && <div className="text-sm text-green-700">{finalMsg}</div>}
               <div className="mr-auto">
-                <button className="btn-primary text-sm" onClick={finalize}
+                <button data-tour="incentives-programs-settle" className="btn-primary text-sm" onClick={finalize}
                   disabled={finalizing || rows.every(r => r.is_finalized)}>
                   {finalizing ? 'جارٍ الاعتماد...' : '✅ اعتماد التسويات نهائياً'}
                 </button>
@@ -1705,7 +1706,7 @@ function AdjustmentsTab({ selectedProgram }) {
           <h2 className="font-bold text-gray-700">التسويات اليدوية</h2>
           <div className="text-xs text-gray-500">{selectedProgram.name}</div>
         </div>
-        <button className="btn-primary text-sm" onClick={() => { setAddingNew(true); setEditingId(null) }}>
+        <button data-tour="incentives-programs-adjust-new" className="btn-primary text-sm" onClick={() => { setAddingNew(true); setEditingId(null) }}>
           + تسوية جديدة
         </button>
       </div>
@@ -1769,7 +1770,7 @@ function AdjustmentsTab({ selectedProgram }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-gray-800">{a.user_name}</span>
-                        <span className="text-xs text-gray-400 font-mono">{a.period_start} → {a.period_end}</span>
+                        <span className="text-xs text-gray-400 font-mono">{a.period_start} {fa()} {a.period_end}</span>
                         {a.created_by_name && (
                           <span className="text-xs text-gray-400">بواسطة: {a.created_by_name}</span>
                         )}
@@ -1868,7 +1869,7 @@ function ReceiptModal({ settlementId, onClose }) {
                 </div>
                 <div>
                   <div className="text-gray-500 text-xs">الفترة</div>
-                  <div className="font-semibold">{s.period_start} → {s.period_end}</div>
+                  <div className="font-semibold">{s.period_start} {fa()} {s.period_end}</div>
                 </div>
                 <div>
                   <div className="text-gray-500 text-xs">تاريخ الاعتماد</div>
@@ -1910,7 +1911,7 @@ function ReceiptModal({ settlementId, onClose }) {
                       {data.adjustments.map(a => (
                         <tr key={a.id} className="adj-row">
                           <td>{a.reason}</td>
-                          <td className="text-xs text-gray-400">{a.period_start}→{a.period_end}</td>
+                          <td className="text-xs text-gray-400">{a.period_start}{fa()}{a.period_end}</td>
                           <td className={`text-right font-bold ${Number(a.amount) < 0 ? 'text-red-600' : 'text-green-700'}`}>
                             {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)}
                           </td>
@@ -2025,7 +2026,7 @@ function SettlementsTab({ selectedProgram }) {
                   <div className="font-semibold text-gray-800">{s.user_name}</div>
                   <div className="text-xs text-gray-500 mt-0.5">{s.program_name}</div>
                   <div className="text-xs text-gray-400 mt-1">
-                    {s.period_start} → {s.period_end}
+                    {s.period_start} {fa()} {s.period_end}
                     &nbsp;·&nbsp; {s.transaction_count} حركة
                     &nbsp;·&nbsp; اعتمد: {s.finalized_by_name || '—'} في {s.finalized_at?.slice(0, 10)}
                   </div>
@@ -2039,7 +2040,7 @@ function SettlementsTab({ selectedProgram }) {
                       <span className="font-bold text-green-700 text-lg">{fmt(s.final_payout)} ج.م</span>
                     </>
                   )}
-                  <button className="btn-secondary text-xs mt-1" onClick={() => setReceiptId(s.id)}>🖨 إيصال</button>
+                  <button data-tour="incentives-programs-receipt" className="btn-secondary text-xs mt-1" onClick={() => setReceiptId(s.id)}>🖨 إيصال</button>
                 </div>
               </div>
             </div>
@@ -2116,7 +2117,7 @@ function HistoryTab({ selectedProgram }) {
                       {log.status_label || log.status}
                     </Badge>
                     <span className="text-sm font-medium text-gray-700">
-                      {log.period_start} → {log.period_end}
+                      {log.period_start} {fa()} {log.period_end}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400 flex-wrap">
@@ -2599,7 +2600,7 @@ function ExportSettlementsButton({ program, settlements }) {
   }
 
   return (
-    <button
+    <button data-tour="incentives-programs-export"
       className="text-sm btn-secondary flex items-center gap-1"
       onClick={doExport}
       disabled={exporting}
@@ -3021,7 +3022,7 @@ export default function IncentivesPage() {
             </p>
           </div>
           {selectedProgram && (
-            <div className="flex items-center gap-2 text-sm bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-lg">
+            <div data-tour="incentives-programs-selected" className="flex items-center gap-2 text-sm bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-lg">
               <span className="text-gray-500">البرنامج:</span>
               <span className="font-semibold text-brand-700">{selectedProgram.name}</span>
               <button className="text-gray-400 hover:text-gray-600 mr-1"
@@ -3031,7 +3032,7 @@ export default function IncentivesPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex gap-1 mt-4 border-b -mb-4 overflow-x-auto">
+        <div data-tour="incentives-programs-tabs" className="flex gap-1 mt-4 border-b -mb-4 overflow-x-auto">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -3046,7 +3047,7 @@ export default function IncentivesPage() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div data-tour="incentives-programs-content" className="flex-1 overflow-auto p-6">
         {/* Incentives are computed from actual SOFTECH sales */}
         <DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
         {activeTab === 'programs'    && <ProgramsTab    selectedProgram={selectedProgram} onSelect={handleSelectProgram} />}

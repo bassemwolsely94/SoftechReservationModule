@@ -1,5 +1,5 @@
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import (
     IncentiveProgramViewSet,
     IncentiveRuleViewSet,
@@ -13,7 +13,7 @@ from .views import (
     SalesTargetViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-9a)
 router.register('programs',          IncentiveProgramViewSet,        basename='incentive-program')
 router.register('rules',             IncentiveRuleViewSet,           basename='incentive-rule')
 router.register('transactions',      IncentiveTransactionViewSet,    basename='incentive-transaction')
