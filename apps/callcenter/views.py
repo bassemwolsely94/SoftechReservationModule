@@ -48,6 +48,16 @@ def _is_supervisor_or_admin(profile):
 # CallLogViewSet
 # ─────────────────────────────────────────────────────────────────────────────
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# Call center = the `callcenter` matrix module (Batch 4, Z-8b — was any logged-in user, branch
+# staff saw their branch's calls and cases): reads need view; writes need create / edit /
+# approve; removing an item or attachment needs edit. Call quality scoring keeps its own role
+# check (admin / supervisor / quality manager / call center): the matrix asks only view there.
+CALLCENTER = matrix_permission('callcenter', post=('create', 'edit', 'approve'), delete=('edit', 'delete'),
+                               actions={'quality': ('view',)})
+
+
 class CallLogViewSet(viewsets.ModelViewSet):
     """
     Full CRUD for call logs.
@@ -55,7 +65,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
       - call_center / supervisor / admin: full access to all logs
       - branch staff: own logs only
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['direction', 'status', 'purpose', 'handled_by', 'branch', 'ai_sentiment']
     search_fields      = [
@@ -958,7 +968,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
     """
     CRUD for CustomerCase with state-machine actions.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['status', 'category', 'priority', 'branch', 'assigned_to']
     search_fields      = ['case_number', 'title', 'description', 'customer__name', 'customer__phone']
@@ -1229,7 +1239,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
 
 class AddressUpdateViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only global list of address updates — admin / call_center only."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CALLCENTER]
     serializer_class   = AddressUpdateSerializer
     filter_backends    = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields   = ['status', 'customer']

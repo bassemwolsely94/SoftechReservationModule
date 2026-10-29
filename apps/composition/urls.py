@@ -1,4 +1,4 @@
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from django.urls import path, include
 
 from .views import (
@@ -6,7 +6,7 @@ from .views import (
     IngredientClassViewSet, IngredientSearchViewSet, PosAlternativesView,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-8a)
 router.register(r'raw',        SoftechIngredientRawViewSet,      basename='ai-raw')
 router.register(r'candidates', IngredientParseCandidateViewSet,  basename='ai-candidate')
 router.register(r'classes',    IngredientClassViewSet,           basename='ai-class')

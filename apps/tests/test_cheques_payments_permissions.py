@@ -66,6 +66,8 @@ class ChequePermissionTests(_Base):
         self.assertEqual(c.post(f'/api/cheques/plans/{self.plan.pk}/cancel/').status_code, 200)
 
     def test_marking_cleared_needs_finalize(self):
+        self.plan.status = 'active'      # only an active plan's cheques change (Batch 4, Z-10a)
+        self.plan.save()
         url = f'/api/cheques/plans/{self.plan.pk}/instalments/{self.inst.pk}/'
         RoleModuleAccess.objects.create(role='supervisor', module='cheques', action='edit')
         module_access.clear_cache()

@@ -9,16 +9,10 @@ call_center POST /api/pos-orders/987654321/cancel/
 call_center POST /api/pos-orders/987654321/push/
 call_center POST /api/pos-orders/987654321/ready/
 call_center POST /api/vouchers/documents/x/mark-used/
-delivery POST /api/pos-orders/987654321/ready/
-delivery POST /api/vouchers/documents/x/mark-used/
 pharmacist POST /api/pos-orders/987654321/cancel/
 pharmacist POST /api/pos-orders/987654321/push/
 pharmacist POST /api/pos-orders/987654321/ready/
 pharmacist POST /api/vouchers/documents/x/mark-used/
-purchasing POST /api/pos-orders/987654321/ready/
-purchasing POST /api/vouchers/documents/x/mark-used/
-quality_manager POST /api/pos-orders/987654321/ready/
-quality_manager POST /api/vouchers/documents/x/mark-used/
 salesperson POST /api/pos-orders/987654321/cancel/
 salesperson POST /api/pos-orders/987654321/push/
 salesperson POST /api/pos-orders/987654321/ready/
@@ -27,5 +21,3 @@ supervisor POST /api/pos-orders/987654321/cancel/
 supervisor POST /api/pos-orders/987654321/push/
 supervisor POST /api/pos-orders/987654321/ready/
 supervisor POST /api/vouchers/documents/x/mark-used/
-viewer POST /api/pos-orders/987654321/ready/
-viewer POST /api/vouchers/documents/x/mark-used/

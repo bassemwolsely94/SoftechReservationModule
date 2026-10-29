@@ -14,6 +14,8 @@ import logging
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+
+from apps.purchasing.access import PURCHASING
 from rest_framework.response import Response
 from rest_framework import status as http
 from django.shortcuts import get_object_or_404
@@ -24,7 +26,6 @@ from apps.branches.models import Branch
 from . import isr_writer
 
 logger = logging.getLogger(__name__)
-WRITE_ROLES = {'admin', 'supervisor', 'purchasing'}
 
 
 def _staff(request):
@@ -72,7 +73,7 @@ def _detail(p):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_list(request):
     from apps.purchasing.isr_fulfillment import user_names
     qs = list(IsrPush.objects.select_related('branch', 'created_by', 'approved_by').all()[:100])
@@ -83,13 +84,13 @@ def isr_list(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_detail(request, pk):
     return Response(_detail(get_object_or_404(IsrPush, pk=pk)))
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_propose(request):
     """Build an ISR proposal for a branch (READ-ONLY vs SOFTECH — engine gaps + item
     master). Persists an IsrPush(proposed) with the reviewed line snapshot."""
@@ -133,7 +134,7 @@ def _stat_labels():
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_filter_options(request):
     """Choices for the SOFTECH-style filters on «طلب توريد جديد» (catalog, PG only)."""
     from django.core.cache import cache
@@ -147,7 +148,7 @@ def isr_filter_options(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_transfer_preview(request):
     """Available (surplus A → deficit B) pairs from the latest transfer-recommendation
     run — for the /supply inter-branch picker. READ-ONLY."""
@@ -178,7 +179,7 @@ def isr_transfer_preview(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_transfer_export(request):
     """Excel of the inter-branch recommendations — one pair (?from=&to=) or all. READ-ONLY."""
     from django.http import HttpResponse
@@ -192,7 +193,7 @@ def isr_transfer_export(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_transfer(request):
     """Create the two linked ISR proposals (A→HQ, HQ→B) for one or all deficit↔surplus
     pairs from the latest transfer-recommendation run."""
@@ -219,7 +220,7 @@ def _categories(params):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def distribution_preview(request):
     """L3 توزيعة suggestions from the latest run: summary + sample. READ-ONLY."""
     from apps.purchasing import distribution
@@ -258,7 +259,7 @@ def distribution_preview(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def distribution_generate(request):
     """Turn توزيعة suggestions into ISR proposals (HQ→branch, or A→HQ→branch)."""
     if not _can_write(request):
@@ -276,7 +277,7 @@ def distribution_generate(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_approve(request, pk):
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك باعتماد طلبات التوريد.'}, status=http.HTTP_403_FORBIDDEN)
@@ -299,7 +300,7 @@ def isr_approve(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_push(request, pk):
     if not _can_write(request):
         return Response({'detail': 'غير مصرح لك بالترحيل إلى SOFTECH.'}, status=http.HTTP_403_FORBIDDEN)
@@ -319,7 +320,7 @@ def isr_push(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_cancel(request, pk):
     """Cancel an unpushed draft — reason required, audited (isr_guards.cancel)."""
     from apps.purchasing.isr_guards import GuardError, cancel
@@ -375,7 +376,7 @@ def _fulfil_error(exc):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_fulfilment(request):
     """Body {isrs: '261609, 2615043' | [..], coverage: 1.5, token?, refresh?} → the plan."""
     from apps.purchasing import isr_fulfillment as F
@@ -394,7 +395,7 @@ def isr_fulfilment(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_fulfilment_recent(request):
     """Picker: ISRs raised by branches in the last ?days= (default 14, max 90)."""
     from apps.purchasing import isr_fulfillment as F
@@ -414,7 +415,7 @@ def isr_fulfilment_recent(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_fulfilment_proposals(request):
     """Body {isrs, coverage, isr?} → donor→HQ return proposals (PROPOSED, PG only) for the
     plan's «from branches» quantities. Always re-reads live stock first, so a proposal is
@@ -448,7 +449,7 @@ def isr_fulfilment_proposals(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def isr_fulfilment_export(request):
     """Same body → the formula-driven Excel workbook (same snapshot as the screen)."""
     import io

@@ -372,7 +372,8 @@ SCREENS = [
         'title': T('جرد المخزون', 'Stock count'),
         'summary': T('إنشاء جلسات الجرد ومتابعتها خطوة بخطوة عبر أربعة تبويبات: الجلسات ← اللقطة ← العد ← الفروق.',
                      'Create count sessions and run them step by step through four tabs: sessions → snapshot → count → variance.'),
-        'audience': T('الصيادلة ومديرو الفروع والجودة والمشرفون.', 'Pharmacists, branch managers, quality and supervisors.'),
+        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون.',
+                      'Pharmacists and supervisors open and count; quality and purchasing follow and export.'),
         'tabs': [
             {'key': 'sessions', 'title': T('📋 الجلسات', '📋 Sessions'),
              'body': T('كل جلسات الجرد بحالتها وعدد الأصناف والزيادة والنقص والمطابق. «جلسة جديدة»: اسم، كود الفرع، النوع، الفترة، أكواد المستندات، وفلاتر المستخدم والتصنيف. '
@@ -476,7 +477,7 @@ SCREENS = [
                  'اعرض الجلسات اللي في مرحلة معيّنة: مسودة، تم اللقطة، تم التصدير، تم الرفع، الفروق جاهزة، مغلق.\n• مثلاً «تم اللقطة» عشان تشوف الجلسات اللي مستنية عد.',
                  'Show the sessions at one stage: draft, snapshot taken, exported, uploaded, variance ready, closed.\n• For example "Snapshot taken" to see sessions waiting to be counted.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -169,7 +169,7 @@ SCREENS = [
              'text': T('يسحب أرصدة الصلاحية من SOFTECH لكل الفروع دلوقتي بدل انتظار المزامنة اليومية. قراءة بس.',
                        'Pulls expiry balances from SOFTECH for every branch now instead of waiting for the daily sync. Read only.'),
              'warn': T('بتاخد وقت وبتحمّل على سيرفرات الفروع. استخدمها لما البيانات تكون قديمة بس.', 'It takes time and loads the branch servers. Use it only when the data is stale.'),
-             'open_hint': T('للمدير والمشرف فقط.', 'Admin and supervisor only.')},
+             'open_hint': T('للمدير والصيادلة والمشتريات (صلاحية «تعديل» على الأصناف). لا تبدأ لو فيه مزامنة جارية.', 'Admins, pharmacists and purchasing (Catalog «edit»). It does not start while a sync is already running.')},
             {'target': 'batches-main-filters', 'label': T('بحث بالاسم / الكود…', 'Search by name / code…'),
              'text': T('ابحث بالاسم أو الكود، وصفّي بالتصنيف العام، والمستورد، وأصناف الثلاجة. الترتيب من رأس أي عمود.',
                        'Search by name or code, and filter by general class, imported and fridge items. Sort from any column header.')},
@@ -235,7 +235,7 @@ SCREENS = [
                  'اضغط عنوان أي عمود للترتيب (مثلاً «قيمة معرّضة» أو «أقرب صلاحية»)، والصف الأحمر صنف منتهي.\n• «🗑️ إتلاف/مرتجع» بيفتح نافذة: القرار (إتلاف، مرتجع للمورد، عزل، مراجعة) والكمية والسبب، ثم «تسجيل القرار».\n• القرار بيتسجّل مسودة في تبويب «إتلاف/مرتجع» ومش بيخصم من SOFTECH.',
                  'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

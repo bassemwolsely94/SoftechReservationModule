@@ -212,6 +212,31 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
             return TaskWriteSerializer
         return TaskDetailSerializer
 
+    # Batch 4, Z-10b: a task is changed or cancelled only by its creator, its assignees or a
+    # manager — any logged-in user could reassign or cancel anyone's task. (Who may *see* tasks
+    # is the Batch 5 scoping item.)
+    TASK_MANAGERS = {'admin', 'supervisor'}
+
+    def _may_change(self, task):
+        staff = _get_staff(self.request)
+        if not staff:
+            return False
+        return (staff.role in self.TASK_MANAGERS
+                or staff.pk in (task.created_by_id, task.assigned_to_id)
+                or task.assignments.filter(staff=staff).exists())
+
+    def update(self, request, *args, **kwargs):
+        if not self._may_change(self.get_object()):
+            return Response({'detail': 'يعدّل المهمة منشئها أو المكلَّفون بها أو المشرف فقط.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._may_change(self.get_object()):
+            return Response({'detail': 'يلغي المهمة منشئها أو المكلَّفون بها أو المشرف فقط.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
     def perform_update(self, serializer):
         task = self.get_object()
         staff = _get_staff(self.request)

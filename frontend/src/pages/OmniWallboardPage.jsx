@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { omniApi, pbxApi } from '../api/client'
+import useAuthStore from '../store/authStore'
 
 const STATE_META = {
   ringing:     { label: 'يرن',        cls: 'bg-yellow-100 text-yellow-700' },
@@ -33,6 +34,9 @@ function Kpi({ label, value, accent = 'text-gray-800' }) {
 
 export default function OmniWallboardPage() {
   const [spyMsg, setSpyMsg] = useState(null)
+  const { user } = useAuthStore()
+  // listen / whisper = the PBX spy endpoint, admin / supervisor only (agents see the board — Z-11f)
+  const canSpy = ['admin', 'supervisor'].includes(user?.role)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['omni-wallboard'],
@@ -132,7 +136,7 @@ export default function OmniWallboardPage() {
                     </td>
                     <td className="px-2 py-2 text-gray-600 tabular-nums">{mmss(c.seconds)}</td>
                     <td className="px-4 py-2 text-left whitespace-nowrap">
-                      {c.state === 'answered' && c.agent_ext ? (
+                      {canSpy && c.state === 'answered' && c.agent_ext ? (
                         <>
                           <button data-tour="omni-wallboard-listen" onClick={() => spy(c.agent_ext, 'listen')}
                                   className="text-xs text-gray-500 hover:text-indigo-600 ml-2"

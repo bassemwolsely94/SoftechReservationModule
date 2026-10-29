@@ -196,7 +196,9 @@ SCREENS = [
             {'key': 'advances', 'title': T('💵 السلف', '💵 Advances'), 'body': T('طلب سلفة على الراتب: المبلغ وتاريخ السداد والسبب.', 'A salary advance: amount, repayment date and reason.')},
             {'key': 'expenses', 'title': T('🧾 المصروفات', '🧾 Expenses'), 'body': T('مطالبة مصروفات (مواصلات، وجبات، إقامة، قرطاسية، معدات، مأمورية…) ولو مأمورية: الوجهة والغرض والمغادرة والعودة والمسافة والبدل.', 'An expense claim (transport, meals, lodging, stationery, equipment, errand…) and for an errand: destination, purpose, departure, return, distance and allowance.')},
         ],
-        'tips': [T('الطلب «المسودة» لا يصل لأحد — قدّمه.', 'A "draft" request reaches nobody — submit it.')],
+        'tips': [T('الطلب «المسودة» لا يصل لأحد — قدّمه.', 'A "draft" request reaches nobody — submit it.'),
+                 T('لا يمكنك اختيار نفسك (ولا صاحب الطلب) ضمن الموافقين على الطلب.',
+                   'You cannot pick yourself (or the employee the request is about) as one of its approvers.')],
         'related': ['hr.approvals', 'hr.attendance'],
         'tour': [
             {'target': 'hr-requests-tabs', 'text': T('نوع الطلب: إجازات، أذونات، إضافي، سلف، مصروفات.',
@@ -244,8 +246,8 @@ SCREENS = [
                        '• 🖨️ prints the request on paper.\n'
                        '• "Cancel" only shows while the request is a draft or awaiting approval — not after a decision.')},
         ],
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
-        'updated': '2026-10-25',
     },
     {
         'key': 'hr.approvals',

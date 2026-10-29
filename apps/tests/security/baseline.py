@@ -76,7 +76,7 @@ def assert_matches_baseline(testcase, name: str, found) -> None:
     testcase.fail('\n\n'.join(parts))
 
 
-_PENDING_LINE = re.compile(r'^\s*-\s*([A-Z]-\d+)\s*:')    # P-<n> Batch 2, A-<n> Batch 3, …
+_PENDING_LINE = re.compile(r'^\s*-\s*([A-Z]-\d+[a-z]?)\s*:')    # P-<n> Batch 2, A-<n> Batch 3, Z-5a …
 
 
 def pending_ids() -> set:

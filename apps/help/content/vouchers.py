@@ -233,6 +233,8 @@ SCREENS = [
         'tips': [
             T('لا تطلب من العميل إرسال الرمز في رسالة؛ يقرأه لك فقط.', 'Do not ask the customer to forward the code in a message; they only read it to you.'),
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
+            T('بعد استخدام القسيمة أو تخصيصها لا تتغير قيمتها ولا حدودها، والعميل يُحدَّد من «تخصيص» فقط.',
+              'Once a voucher has been used or assigned its value and limits cannot change, and the customer is set only through "Assign".'),
         ],
         'related': ['vouchers.mobile', 'pos.order'],
         'tour': [
@@ -311,7 +313,7 @@ SCREENS = [
                  'عمود «الاستخدام» بيوضح اتصرفت كام مرة من الحد الكلي.\n• «استرداد» بيبدأ خطوات الصرف (الهاتف ← الرمز ← التحقق ← المستند).\n• «📱 تخصيص» يضيف رقم عميل مسموح له بالقسيمة.\n• «إلغاء» بيوقف القسيمة نهائياً بعد تأكيد، والسيستم بيسمح بيه للمدير بس.',
                  'The "Usage" column shows how many times it was used out of the total limit.\n• "Redeem" starts the redemption steps (phone → code → verify → document).\n• "📱 Assign" adds a customer phone allowed to use the voucher.\n• "Cancel" stops the voucher for good after a confirmation, and the system allows it for managers only.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -1,5 +1,5 @@
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import (
     login_view, refresh_view, me_view, change_password_view,
     StaffProfileViewSet, ERPUserViewSet, PermissionsMatrixView,
@@ -15,7 +15,7 @@ auth_urlpatterns = [
 ]
 
 # ── User management endpoints (mounted at /api/users/) ────────────────────────
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page under /api/users/ (Z-4)
 router.register(r'staff',       StaffProfileViewSet,   basename='staff')
 router.register(r'erp-users',   ERPUserViewSet,        basename='erp-user')
 router.register(r'permissions', PermissionsMatrixView, basename='permissions')

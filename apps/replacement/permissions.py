@@ -41,9 +41,13 @@ def scoped_cases(request, qs):
 
 
 class CanUseReplacement(BasePermission):
-    """Entry gate = may VIEW the module. Every mutating action then checks its OWN permission
-    (create / edit / approve / post + per-employee grant) via authz.require in the view/service."""
+    """Entry gate = may VIEW the module; a write also needs one write grant (create / edit /
+    approve / post) — checked here, before the body is validated (Batch 4, Z-11a: a view + export
+    role reached the body validation of every write). Every mutating action then checks its OWN
+    permission (+ per-employee grant) via authz.require in the view/service."""
     message = 'ليس لديك صلاحية على وحدة بدل الروشتة.'
 
     def has_permission(self, request, view):
-        return replacement_allowed(request, 'view')
+        if request.method in SAFE_METHODS:
+            return replacement_allowed(request, 'view')
+        return any(replacement_allowed(request, a) for a in ('create', 'edit', 'approve', 'post'))

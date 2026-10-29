@@ -118,7 +118,7 @@ class DetectionApiTests(TestCase):
         detect_manual_offers()
 
     def test_list_matches(self):
-        _, _, client = make_user('det_user', role='pharmacist')
+        _, _, client = make_user('det_user', role='purchasing')     # offers module (Z-5a)
         r = client.get('/api/offers/manual-matches/')
         self.assertEqual(r.status_code, 200)
         self.assertIn('summary', r.data)

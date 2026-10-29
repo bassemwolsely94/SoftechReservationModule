@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { stockAuditApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import DataTable, { SortIcon } from '../components/DataTable'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
 
@@ -109,7 +110,7 @@ function RefreshButton() {
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 
-function Filters({ f, setF, branches, showStatus = true }) {
+function Filters({ f, setF, branches, channels = [], showStatus = true }) {
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   return (
     <div className="flex flex-wrap items-end gap-2 mb-3 text-sm" data-tour="stock-audit-main-filters">
@@ -145,6 +146,15 @@ function Filters({ f, setF, branches, showStatus = true }) {
               {Object.entries(SEVERITY).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
             </select>
           </label>
+          {channels.length > 0 && (
+            <label className="flex flex-col text-xs text-gray-500" data-tour="stock-audit-main-channel">قناة البيع
+              <select value={f.channel} onChange={e => set('channel', e.target.value)}
+                className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
+                <option value="">كل القنوات</option>
+                {channels.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+              </select>
+            </label>
+          )}
           <label className="flex flex-col text-xs text-gray-500 grow min-w-[180px]">بحث
             <input value={f.q} onChange={e => set('q', e.target.value)} placeholder="كود صنف، اسم، رقم مستند…"
               className="mt-0.5 border border-gray-200 rounded-md px-2 py-1 text-sm bg-white" />
@@ -186,63 +196,56 @@ function SummaryTab({ f, onOpenRule }) {
           )
         })}
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="stock-audit-main-matrix">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <th className="px-3 py-2 text-right font-semibold">الفرع</th>
-              {rules.map(r => <th key={r.code} className="px-3 py-2 text-center font-semibold">{r.name_ar}</th>)}
-              <th className="px-3 py-2 text-center font-semibold">المفتوحة</th>
-              <th className="px-3 py-2 text-center font-semibold">القيمة (ج.م)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.branches.length === 0 && (
-              <tr><td colSpan={rules.length + 3} className="py-10 text-center text-gray-400">✅ لا توجد ملاحظات مفتوحة في هذه الفترة</td></tr>
-            )}
-            {data.branches.map(b => (
-              <tr key={b.branchcode} className="border-b border-gray-100">
-                <td className="px-3 py-2 font-medium text-gray-900">{b.branch_name?.ar || b.branchcode}</td>
-                {rules.map(r => (
-                  <td key={r.code} className="px-3 py-2 text-center">
-                    {b.per_rule[r.code]
-                      ? <button className="text-primary font-bold hover:underline" onClick={() => onOpenRule(r.code, b.branchcode)}>{fmtInt(b.per_rule[r.code])}</button>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                ))}
-                <td className="px-3 py-2 text-center font-bold">{fmtInt(b.open)}</td>
-                <td className="px-3 py-2 text-center">{fmt(b.value_open)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-xl border border-gray-200" data-tour="stock-audit-main-matrix">
+        <MatrixGrid rules={rules} branches={data.branches} onOpenRule={onOpenRule} />
       </div>
     </div>
   )
 }
 
+function MatrixGrid({ rules, branches, onOpenRule }) {
+  const rows = useMemo(() => branches.map(b => ({
+    ...b, name: b.branch_name?.ar || b.branchcode,
+    ...Object.fromEntries(rules.map(r => [`r_${r.code}`, b.per_rule[r.code] || 0])),
+  })), [branches, rules])
+  const columns = useMemo(() => [
+    { key: 'name', label: 'الفرع', width: 150, cellClass: 'font-medium text-gray-900' },
+    ...rules.map(r => ({
+      key: `r_${r.code}`, label: r.name_ar, type: 'integer', width: 120, align: 'center',
+      render: (v, b) => (v
+        ? <button className="text-primary font-bold hover:underline" onClick={() => onOpenRule(r.code, b.branchcode)}>{fmtInt(v)}</button>
+        : <span className="text-gray-300">—</span>),
+    })),
+    { key: 'open', label: 'المفتوحة', type: 'integer', width: 100, align: 'center', cellClass: 'font-bold', render: v => fmtInt(v) },
+    { key: 'value_open', label: 'القيمة (ج.م)', type: 'currency', width: 130, align: 'center', render: v => fmt(v) },
+  ], [rules, onOpenRule])
+  return (
+    <DataTable columns={columns} rows={rows} rowKey={b => b.branchcode} stickyHeader={false}
+      defaultSort={{ key: 'value_open', dir: 'desc' }}
+      emptyLabel="✅ لا توجد ملاحظات مفتوحة في هذه الفترة" />
+  )
+}
+
 // ── Findings grid (sales + adjustments tabs) ──────────────────────────────────
+
+const EVIDENCE_COLUMNS = [
+  { key: 'docnumber', label: 'المستند', type: 'integer', width: 150, render: (v, l) => `${DOC[l.doccode] || l.doccode} ${v}` },
+  { key: 'trans_time', label: 'الوقت', width: 130, render: v => fmtTime(v) },
+  { key: 'itemcode', label: 'الصنف', width: 90 },
+  { key: 'qty', label: 'الكمية', type: 'number', width: 80, render: v => fmt(v, 2) },
+  { key: 'price', label: 'السعر', type: 'number', width: 90, render: v => fmt(v) },
+  { key: 'cost', label: 'التكلفة', type: 'number', width: 90, render: v => fmt(v) },
+  { key: 'newqty', label: 'الرصيد بعده', type: 'number', width: 100, render: v => fmt(v, 2) },
+  { key: 'usercode', label: 'المستخدم', width: 90 },
+]
 
 function EvidenceLines({ ev }) {
   const lines = ev?.lines || (ev?.line ? [ev.line] : [])
   if (!lines.length) return null
   return (
-    <table className="w-full text-xs mt-2">
-      <thead><tr className="text-gray-500">
-        <th className="text-right py-1">المستند</th><th className="text-right">الوقت</th><th className="text-right">الصنف</th>
-        <th className="text-right">الكمية</th><th className="text-right">السعر</th><th className="text-right">التكلفة</th>
-        <th className="text-right">الرصيد بعده</th><th className="text-right">المستخدم</th>
-      </tr></thead>
-      <tbody>
-        {lines.map((l, i) => (
-          <tr key={i} className="border-t border-gray-100">
-            <td className="py-1">{DOC[l.doccode] || l.doccode} {l.docnumber}</td>
-            <td>{fmtTime(l.trans_time)}</td><td>{l.itemcode}</td><td>{fmt(l.qty, 2)}</td>
-            <td>{fmt(l.price)}</td><td>{fmt(l.cost)}</td><td>{fmt(l.newqty, 2)}</td><td>{l.usercode}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="mt-2 bg-white rounded-lg border border-gray-100">
+      <DataTable columns={EVIDENCE_COLUMNS} rows={lines} stickyHeader={false} />
+    </div>
   )
 }
 
@@ -266,6 +269,33 @@ function ReviewBar({ statuses, onMove, pending, compact }) {
   )
 }
 
+// Server-side sort keys (stock_audit/views.py SORTS). Numbers/dates open descending, text ascending.
+const FINDING_COLUMNS = [
+  { key: 'rule', label: 'الفحص' },
+  { key: 'branch', label: 'الفرع' },
+  { key: 'item', label: 'الصنف' },
+  { key: 'account', label: 'القناة / الحساب' },
+  { key: 'pic', label: 'العميل (PIC)', sortable: false },
+  { key: 'value', label: 'القيمة (ج.م)', align: 'text-left', firstDesc: true },
+  { key: 'status', label: 'الحالة' },
+  { key: 'doc', label: 'المستند' },
+  { key: 'date', label: 'الوقت', firstDesc: true },
+  { key: 'user', label: 'المستخدم' },
+]
+
+function SortTh({ col, label, align = 'text-right', firstDesc, sortable = true, sort, onSort }) {
+  if (!sortable) return <th className={`px-2 py-2 font-semibold whitespace-nowrap ${align}`}>{label}</th>
+  const active = sort === col || sort === `-${col}`
+  const dir = sort === `-${col}` ? 'desc' : 'asc'
+  const next = active ? (dir === 'desc' ? col : `-${col}`) : (firstDesc ? `-${col}` : col)
+  return (
+    <th onClick={() => onSort(next)}
+      className={`px-2 py-2 font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 ${align}`}>
+      {label}<SortIcon active={active} dir={dir} />
+    </th>
+  )
+}
+
 function FindingsGrid({ f, rules, access }) {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
@@ -273,9 +303,10 @@ function FindingsGrid({ f, rules, access }) {
   const [open, setOpen] = useState(null)
   const [msg, setMsg] = useState('')
   const params = { from: f.from, to: f.to, branch: f.branch || undefined, status: f.status || undefined,
-                   severity: f.severity || undefined, q: f.q || undefined, rule: rules.join(','),
+                   severity: f.severity || undefined, channel: f.channel || undefined,
+                   q: f.q || undefined, rule: rules.join(','),
                    sort: f.sort, page }
-  const filterKey = [f.from, f.to, f.branch, f.status, f.severity, f.q, f.sort, rules.join(',')].join('|')
+  const filterKey = [f.from, f.to, f.branch, f.status, f.severity, f.channel, f.q, f.sort, rules.join(',')].join('|')
   useEffect(() => { setPage(1); setPicked(new Set()) }, [filterKey])
   const { data, isLoading, error } = useQuery({
     queryKey: ['stock-audit', 'findings', params], queryFn: () => stockAuditApi.findings(params).then(r => r.data),
@@ -321,10 +352,7 @@ function FindingsGrid({ f, rules, access }) {
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-2 text-xs text-gray-500">
         <span>{fmtInt(data?.count)} ملاحظة · {fmt(data?.totals?.value)} ج.م</span>
-        <select value={f.sort} onChange={e => f.setSort(e.target.value)}
-          className="border border-gray-200 rounded-md px-2 py-0.5 bg-white">
-          <option value="-date">الأحدث أولاً</option><option value="-value">الأعلى قيمة</option>
-        </select>
+        <span className="text-gray-400">· اضغط عنوان أي عمود للترتيب</span>
         {access.can_export && (
           <button data-tour="stock-audit-main-export" onClick={download}
             className="ms-auto px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-700 font-bold">⬇️ تصدير Excel</button>
@@ -344,21 +372,15 @@ function FindingsGrid({ f, rules, access }) {
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs">
               <th className="px-2 py-2 w-8"></th>
-              <th className="px-2 py-2 text-right font-semibold">الفحص</th>
-              <th className="px-2 py-2 text-right font-semibold">الفرع</th>
-              <th className="px-2 py-2 text-right font-semibold">الصنف</th>
-              <th className="px-2 py-2 text-left font-semibold">القيمة (ج.م)</th>
-              <th className="px-2 py-2 text-right font-semibold">الحالة</th>
-              <th className="px-2 py-2 text-right font-semibold">المستند</th>
-              <th className="px-2 py-2 text-right font-semibold">الوقت</th>
-              <th className="px-2 py-2 text-right font-semibold">المستخدم</th>
+              {FINDING_COLUMNS.map(c => <SortTh key={c.key} col={c.key} label={c.label} align={c.align}
+                firstDesc={c.firstDesc} sortable={c.sortable} sort={f.sort} onSort={f.setSort} />)}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={9} className="py-10 text-center text-gray-400">جاري التحميل…</td></tr>}
-            {error && <tr><td colSpan={9} className="py-10 text-center text-red-600">{errText(error)}</td></tr>}
+            {isLoading && <tr><td colSpan={11} className="py-10 text-center text-gray-400">جاري التحميل…</td></tr>}
+            {error && <tr><td colSpan={11} className="py-10 text-center text-red-600">{errText(error)}</td></tr>}
             {!isLoading && !error && rows.length === 0 && (
-              <tr><td colSpan={9} className="py-10 text-center text-gray-400">✅ لا توجد ملاحظات بهذه الفلاتر</td></tr>
+              <tr><td colSpan={11} className="py-10 text-center text-gray-400">✅ لا توجد ملاحظات بهذه الفلاتر</td></tr>
             )}
             {rows.map(r => {
               const rp = kb.rowProps(r)
@@ -377,6 +399,15 @@ function FindingsGrid({ f, rules, access }) {
                   <td className="px-2 py-2 whitespace-nowrap">{r.branch_name?.ar}</td>
                   <td className="px-2 py-2"><div dir="auto" className="font-medium text-gray-900 truncate max-w-[260px] text-right">{r.item_name || r.itemcode}</div>
                     <div className="text-[11px] text-gray-400">{r.itemcode}</div></td>
+                  <td className="px-2 py-2">{r.sales
+                    ? <><div className="font-medium text-gray-900 whitespace-nowrap">{r.sales.channel_label || '—'}</div>
+                        <div dir="auto" className="text-[11px] text-gray-500 truncate max-w-[220px] text-right" title={r.sales.account_name}>
+                          {r.sales.account_name || r.sales.account_code}</div></>
+                    : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-2 py-2">{r.sales?.pic
+                    ? <><div dir="auto" className="text-gray-900 truncate max-w-[200px] text-right">{r.sales.pic_name || '—'}</div>
+                        <div className="text-[11px] text-gray-400">{r.sales.pic}</div></>
+                    : <span className="text-gray-300">{r.sales ? 'بدون PIC' : '—'}</span>}</td>
                   <td className="px-2 py-2 text-left font-bold whitespace-nowrap">{fmt(r.value_egp)}</td>
                   <td className="px-2 py-2 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full border text-[11px] ${STATUS[r.status]?.cls}`}>{STATUS[r.status]?.label}</span></td>
                   <td className="px-2 py-2 whitespace-nowrap">{DOC[r.doccode] || r.doccode} {r.docnumber}</td>
@@ -386,7 +417,7 @@ function FindingsGrid({ f, rules, access }) {
                 open === r.id && (
                   <tr key={`${r.id}-d`} className="bg-gray-50/60 border-b border-gray-100">
                     <td></td>
-                    <td colSpan={8} className="px-2 py-3">
+                    <td colSpan={10} className="px-2 py-3">
                       <div className="text-sm text-gray-800">{r.message_ar}</div>
                       <EvidenceLines ev={r.evidence} />
                       {r.review_note && <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap font-sans">{r.review_note}</pre>}
@@ -430,35 +461,32 @@ function RuleChips({ codes, value, onChange, meta }) {
 function UserRanking({ f }) {
   const params = { from: f.from, to: f.to, branch: f.branch || undefined }
   const { data } = useQuery({ queryKey: ['stock-audit', 'by-user', params], queryFn: () => stockAuditApi.byUser(params).then(r => r.data) })
-  const rows = data?.rows || []
+  const rows = useMemo(() => (data?.rows || []).map(r => ({
+    ...r, user: r.user_name || r.usercode || '', branch: r.branch_name?.ar || r.branchcode,
+    surplus: r.by_doccode['50'] || 0, shortage: r.by_doccode['150'] || 0, damaged: r.by_doccode['160'] || 0,
+  })), [data])
   return (
     <div className="mt-6" data-tour="stock-audit-main-ranking">
       <h3 className="font-bold text-gray-900 mb-2">التسويات حسب المستخدم <span className="text-xs font-normal text-gray-500">(كل التسويات في الفترة، بدون حد)</span></h3>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead><tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs">
-            <th className="px-3 py-2 text-right">المستخدم</th><th className="px-3 py-2 text-right">الفرع</th>
-            <th className="px-3 py-2 text-center">عدد التسويات</th><th className="px-3 py-2 text-center">فائض / عجز / هالك</th>
-            <th className="px-3 py-2 text-left">القيمة بالتكلفة (ج.م)</th><th className="px-3 py-2 text-center">ملاحظات مفتوحة</th>
-          </tr></thead>
-          <tbody>
-            {rows.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-gray-400">لا توجد تسويات في الفترة</td></tr>}
-            {rows.map(r => (
-              <tr key={`${r.branchcode}-${r.usercode}`} className="border-b border-gray-100">
-                <td className="px-3 py-2">{r.user_name || r.usercode || '—'} <span className="text-[11px] text-gray-400">{r.usercode}</span></td>
-                <td className="px-3 py-2">{r.branch_name?.ar}</td>
-                <td className="px-3 py-2 text-center">{fmtInt(r.count)}</td>
-                <td className="px-3 py-2 text-center text-xs">{fmtInt(r.by_doccode['50'])} / {fmtInt(r.by_doccode['150'])} / {fmtInt(r.by_doccode['160'])}</td>
-                <td className="px-3 py-2 text-left font-bold">{fmt(r.value_egp)}</td>
-                <td className="px-3 py-2 text-center">{r.open_findings ? fmtInt(r.open_findings) : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-xl border border-gray-200">
+        <DataTable columns={RANKING_COLUMNS} rows={rows} rowKey={r => `${r.branchcode}-${r.usercode}`}
+          stickyHeader={false} defaultSort={{ key: 'value_egp', dir: 'desc' }} emptyLabel="لا توجد تسويات في الفترة" />
       </div>
     </div>
   )
 }
+
+const RANKING_COLUMNS = [
+  { key: 'user', label: 'المستخدم', width: 200,
+    render: (v, r) => <>{v || '—'} <span className="text-[11px] text-gray-400">{r.usercode}</span></> },
+  { key: 'branch', label: 'الفرع', width: 150 },
+  { key: 'count', label: 'عدد التسويات', type: 'integer', width: 110, align: 'center', render: v => fmtInt(v) },
+  { key: 'surplus', label: 'فائض', type: 'integer', width: 80, align: 'center', render: v => fmtInt(v) },
+  { key: 'shortage', label: 'عجز', type: 'integer', width: 80, align: 'center', render: v => fmtInt(v) },
+  { key: 'damaged', label: 'هالك', type: 'integer', width: 80, align: 'center', render: v => fmtInt(v) },
+  { key: 'value_egp', label: 'القيمة بالتكلفة (ج.م)', type: 'currency', width: 160, align: 'left', cellClass: 'font-bold', render: v => fmt(v) },
+  { key: 'open_findings', label: 'ملاحظات مفتوحة', type: 'integer', width: 120, align: 'center', render: v => (v ? fmtInt(v) : '—') },
+]
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
 
@@ -598,16 +626,18 @@ function AccessPanel() {
     <div className="bg-white border border-gray-200 rounded-xl p-4" data-tour="stock-audit-main-access">
       <div className="font-bold text-gray-900">مديرو الفروع المسموح لهم</div>
       <p className="text-xs text-gray-500 mb-3">يرى مدير الفرع ملاحظات فرعه فقط ويراجعها ويصدّرها، ولا يغيّر الحدود. الإدارة والمشرفون والجودة يرون كل الفروع بصلاحية دورهم.</p>
-      <div className="space-y-1 mb-3">
-        {active.length === 0 && <div className="text-xs text-gray-400">لا يوجد مديرو فروع بعد.</div>}
-        {active.map(g => (
-          <div key={g.id} className="flex items-center gap-2 text-sm">
-            <span className="font-medium">{g.staff_name}</span><span className="text-xs text-gray-500">{g.branch}</span>
-            <span className="text-[11px] text-gray-400">منذ {fmtTime(g.granted_at)} — {g.granted_by}</span>
-            <button data-tour="stock-audit-main-access-revoke" onClick={() => revoke.mutate(g.id)}
-              className="ms-auto px-2 py-0.5 rounded-md border border-gray-300 text-xs text-gray-600">سحب الصلاحية</button>
-          </div>
-        ))}
+      <div className="mb-3 rounded-lg border border-gray-100">
+        <DataTable rows={active} rowKey={g => g.id} stickyHeader={false}
+          defaultSort={{ key: 'staff_name', dir: 'asc' }} emptyLabel="لا يوجد مديرو فروع بعد."
+          columns={[
+            { key: 'staff_name', label: 'الموظف', width: 200, cellClass: 'font-medium' },
+            { key: 'branch', label: 'الفرع', width: 150 },
+            { key: 'granted_at', label: 'منذ', width: 140, render: v => fmtTime(v) },
+            { key: 'granted_by', label: 'بواسطة', width: 150 },
+            { key: 'id', label: '', width: 120, sortable: false, render: (id) => (
+              <button data-tour="stock-audit-main-access-revoke" onClick={() => revoke.mutate(id)}
+                className="px-2 py-0.5 rounded-md border border-gray-300 text-xs text-gray-600">سحب الصلاحية</button>) },
+          ]} />
       </div>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="ابحث عن موظف بالاسم أو الكود…"
         className="border border-gray-200 rounded-md px-2 py-1 text-sm bg-white w-full max-w-sm" />
@@ -645,7 +675,7 @@ export default function StockAuditPage() {
   useHelpTab(tab)
   const [rule, setRule] = useState({})
   const [filters, setFilters] = useState({ from: daysAgo(29), to: isoDay(new Date()), branch: '',
-                                           status: 'open,escalated', severity: '', q: '', sort: '-date' })
+                                           status: 'open,escalated', severity: '', channel: '', q: '', sort: '-date' })
   const me = useQuery({ queryKey: ['stock-audit', 'me'], queryFn: () => stockAuditApi.me().then(r => r.data) })
   const rulesMeta = useMemo(() => Object.fromEntries((me.data?.rules || []).map(r => [r.code, r])), [me.data])
   const summaryBranches = useQuery({
@@ -691,7 +721,8 @@ export default function StockAuditPage() {
           </button>
         ))}
       </div>
-      {tab !== 'settings' && <Filters f={filters} setF={setFilters} branches={branches} showStatus={tab !== 'summary'} />}
+      {tab !== 'settings' && <Filters f={filters} setF={setFilters} branches={branches} channels={me.data?.channels}
+                                                showStatus={tab !== 'summary'} />}
       {tab === 'summary' && <SummaryTab f={filters} onOpenRule={openRule} />}
       {access.groups[tab] && (
         <>

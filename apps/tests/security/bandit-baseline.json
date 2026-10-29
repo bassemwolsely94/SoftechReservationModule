@@ -3,6 +3,27 @@
  "metrics": {},
  "results": [
   {
+   "code": "36         marks = ', '.join('?' for _ in chunk)\n37         cur.execute(f'SELECT personcode, personname, ptcode, ptclassifcode FROM {_DB}.personsdata '\n38                     f'WHERE personcode IN ({marks})', chunk, timeout=60)\n39         for pc, name, ptc, cls in cur.fetchall():\n",
+   "col_offset": 22,
+   "end_col_offset": 80,
+   "filename": "apps/customers/account_link.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 37,
+   "line_range": [
+    37,
+    38
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "53             cur.execute('SET ROWCOUNT 1')\n54             cur.execute(f'SELECT * FROM {DB}.{table}')\n55             cur.fetchall()\n",
    "col_offset": 26,
    "end_col_offset": 40,

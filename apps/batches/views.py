@@ -5,7 +5,44 @@ import threading
 
 from rest_framework import viewsets, mixins, status, generics
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import BasePermission, IsAuthenticated
+
+from core.permissions import matrix_allows, matrix_permission
+
+# Expiry batches = the catalog module (Batch 4, Z-9b — was any logged-in user): reads and the
+# worklist / export POSTs (they only compute) need catalog view; disposal decisions need catalog
+# edit / approve; a markdown request is a price-change request (approvals, as Z-6).
+BATCH_READ     = matrix_permission('catalog', post=('view',))
+BATCH_DISPOSAL = matrix_permission('catalog', post=('edit', 'approve'))
+BATCH_MARKDOWN = matrix_permission('approvals', post=('create', 'approve'))
+
+
+class CanSpawnExpiryCount(BasePermission):
+    """Spawning an expiry count is the expiry screen's action: catalog edit (pharmacist,
+    purchasing), as the middleware maps it. The old "or stockcount create" only ever matched
+    pharmacists, who hold catalog edit too; with supervisors now running counts (Z-11i) it would
+    have let them past the view but not the middleware — counts start on the stock-count screen."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        return matrix_allows(getattr(request.user, 'staff_profile', None), 'catalog', 'edit')
+
+
+class StockBatchPermission(BasePermission):
+    """Batch reads need catalog view; quarantine is the matrix's batch-quarantine grant
+    (approvals approve — quality manager, pharmacist, supervisor, purchasing)."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        p = getattr(request.user, 'staff_profile', None)
+        if getattr(view, 'action', None) == 'quarantine':
+            return matrix_allows(p, 'approvals', 'approve')
+        if request.method in SAFE_METHODS:
+            return matrix_allows(p, 'catalog', 'view')
+        return matrix_allows(p, 'catalog', 'edit', 'approve')
 from rest_framework.response import Response
 
 from .models import StockBatch, NearExpiryAlert, PurchaseExpiryAuditRun
@@ -46,7 +83,7 @@ def _branch_list(data):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def purchase_expiry_candidates(request):
     """
     Physical near-expiry audit report.
@@ -117,7 +154,7 @@ def purchase_expiry_candidates(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_MARKDOWN])
 def purchase_expiry_request_markdown(request):
     """
     A5.2 — create a PENDING near-expiry markdown request in the EXISTING
@@ -194,7 +231,7 @@ def purchase_expiry_request_markdown(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def export_purchase_expiry(request):
     """
     Export the (already filtered/sorted) audit rows the client is showing to xlsx.
@@ -291,7 +328,7 @@ def export_purchase_expiry(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def purchase_expiry_rebalance_suggest(request):
     """
     A4 — inter-branch rebalancing suggestion for one near-expiry item.
@@ -321,7 +358,7 @@ def purchase_expiry_rebalance_suggest(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def purchase_expiry_prone_items(request):
     """
     C2 — procurement feedback: items chronically bought short-dated (high share of
@@ -347,7 +384,7 @@ def purchase_expiry_prone_items(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def purchase_expiry_supplier_scorecard(request):
     """
     B2 — supplier dating scorecard: how well-dated is each main supplier's stock?
@@ -375,16 +412,38 @@ def purchase_expiry_supplier_scorecard(request):
 
 class PurchaseExpiryRunListView(generics.ListAPIView):
     """GET — recent purchase-expiry backfill runs (status/counters)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BATCH_READ]
     serializer_class   = PurchaseExpiryAuditRunSerializer
     queryset           = PurchaseExpiryAuditRun.objects.all()[:30]
 
 
+class CanRefreshExpiry(BasePermission):
+    """The expiry screens' sync buttons: catalog edit (admin, pharmacist, purchasing) or Django
+    staff (Batch 4, Z-11g — overblock review decision 6; was Django staff only, which no role is)."""
+    message = 'تحديث بيانات الصلاحية يحتاج صلاحية «تعديل» على الأصناف.'
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        return user.is_staff or matrix_allows(getattr(user, 'staff_profile', None), 'catalog', 'edit')
+
+
+_SYNC_STALE_AFTER = _dt.timedelta(hours=6)
+
+
+def _sync_running(model):
+    """A sync of this kind started in the last 6 hours and still running — refuse a second one
+    (more people can press the button now). An older 'running' row is a dead thread, not a run."""
+    from django.utils import timezone
+    return model.objects.filter(status='running', started_at__gte=timezone.now() - _SYNC_STALE_AFTER).exists()
+
+
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, CanRefreshExpiry])
 def trigger_purchase_expiry_sync(request):
     """
-    Kick off a purchase-expiry backfill in a background thread (admin only).
+    Kick off a purchase-expiry backfill in a background thread (catalog edit — Z-11g).
 
     Body: years|from|to, categories (all optional). Always mirrors ALL branches
     (any 'branch' is ignored — the mirror must stay chain-wide).
@@ -393,6 +452,8 @@ def trigger_purchase_expiry_sync(request):
     """
     from .expiry_audit import run_backfill, MAIN_SUPPLIER_CATEGORIES
 
+    if _sync_running(PurchaseExpiryAuditRun):
+        return Response({'detail': 'مزامنة بيانات الشراء جارية بالفعل.'}, status=status.HTTP_409_CONFLICT)
     today = _dt.date.today()
     date_to = _parse_date(request.data.get('to')) or today
     date_from = _parse_date(request.data.get('from'))
@@ -434,7 +495,7 @@ def trigger_purchase_expiry_sync(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanSpawnExpiryCount])
 def spawn_expiry_count_session(request):
     """
     Create a physical stock-count session (mode=expiry_audit) from the audit
@@ -543,7 +604,7 @@ def _store_list(params):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def stock_expiry_summary_view(request):
     """KPI cards for the FEFO tabs from the StockExpiryBalance mirror (all nodes)."""
     from .stock_expiry import stock_expiry_summary
@@ -555,7 +616,7 @@ def stock_expiry_summary_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def stock_expiry_stores_view(request):
     """Distinct stores (HQ/branch warehouses) in the mirror — powers the store filter."""
     from .stock_expiry import stock_expiry_stores
@@ -564,7 +625,7 @@ def stock_expiry_stores_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def stock_expiry_report_view(request):
     """
     Near-expiry / expired report over the mirror.
@@ -597,7 +658,7 @@ def stock_expiry_report_view(request):
 
 class StockExpirySyncRunListView(generics.ListAPIView):
     """GET — recent stock-expiry sync runs (per-node status)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BATCH_READ]
 
     def get(self, request, *args, **kwargs):
         from .models import StockExpirySyncRun
@@ -611,11 +672,13 @@ class StockExpirySyncRunListView(generics.ListAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, CanRefreshExpiry])
 def stock_expiry_sync_trigger(request):
-    """Kick off a multi-node stkbalexpiry sync in the background (admin)."""
+    """Kick off a multi-node stkbalexpiry sync in the background (catalog edit — Z-11g)."""
     from .models import StockExpirySyncRun
     from .stock_expiry import sync_stock_expiry_all
+    if _sync_running(StockExpirySyncRun):
+        return Response({'detail': 'مزامنة صلاحية المخزون جارية بالفعل.'}, status=status.HTTP_409_CONFLICT)
     branch = str(request.data.get('branch') or '').strip() or None
     run = StockExpirySyncRun.objects.create(triggered_by=str(request.user))
 
@@ -632,7 +695,7 @@ def stock_expiry_sync_trigger(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def export_stock_expiry(request):
     """Export the displayed live stock-expiry rows to xlsx (Latin digits, RTL)."""
     from django.http import HttpResponse
@@ -699,7 +762,7 @@ def export_stock_expiry(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanSpawnExpiryCount])
 def spawn_stock_expiry_count(request):
     """
     Create a physical stock-count session (mode=expiry_audit) from the LIVE
@@ -773,7 +836,7 @@ def _disposal_dict(r):
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
 def expiry_disposal(request):
     """
     GET  — list disposal/return decisions (filter: status, branch, decision).
@@ -830,7 +893,7 @@ def expiry_disposal(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def expiry_disposal_status(request, pk):
     """Transition a disposal record: approve / done / cancel. approve+done are
     gated to admin / quality_manager / supervisor. No SOFTECH write."""
@@ -864,7 +927,7 @@ def expiry_disposal_status(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def export_disposal(request):
     """Export the disposal/return ledger (or a filtered subset) to xlsx — the
     printable إتلاف/مرتجع document. Body: items (list of dicts as shown)."""
@@ -913,7 +976,7 @@ class StockBatchViewSet(
     GET /api/batches/alerts/             — NearExpiryAlert list
     POST /api/batches/{id}/quarantine/   — quarantine a batch
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, StockBatchPermission]
 
     def get_queryset(self):
         qs = StockBatch.objects.select_related('item', 'branch', 'vendor', 'received_by')
@@ -1015,7 +1078,7 @@ class StockBatchViewSet(
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, BATCH_READ])
 def stock_expiry_rebalance(request):
     """B3 — network-wide near-expiry rebalancing worklist (advisory, read-only).
     Query: ?branch=<softech code>&item=<item code>. A line becomes a DRAFT transfer through

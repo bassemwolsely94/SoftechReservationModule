@@ -1,11 +1,11 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from .views import (
     DocumentTypeViewSet, RecipientViewSet, CommerceDocumentViewSet, commerce_status,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page under /api/commerce/ (Z-5b)
 router.register('types',      DocumentTypeViewSet,     basename='commerce-types')
 router.register('recipients', RecipientViewSet,        basename='commerce-recipients')
 router.register('documents',  CommerceDocumentViewSet, basename='commerce-documents')

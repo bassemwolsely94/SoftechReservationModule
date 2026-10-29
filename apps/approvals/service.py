@@ -125,6 +125,11 @@ class ApprovalService:
             raise ApprovalError(f"Request {request.pk} has no step at order {request.current_step_order}.")
 
         cls._assert_eligible(request, step, decided_by)
+        # Separation of duties (Batch 4, Z-11j — owner sign-off): nobody approves their own request,
+        # whatever the step — HR, quarantine, markdowns, POS offer approvals, rewards, replacement.
+        # Rejecting / returning / delegating one's own request stays possible (that is withdrawing it).
+        if decision == ApprovalDecision.DECISION_APPROVED and decided_by.pk == request.requested_by_id:
+            raise ApprovalError('لا يمكن اعتماد طلب قدّمته بنفسك (فصل المهام).')
 
         dec = ApprovalDecision.objects.create(
             request=request,

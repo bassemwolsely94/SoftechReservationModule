@@ -133,6 +133,16 @@ class ReviewTests(StockAuditApiBase):
         self.assertEqual(r.json()['results'][0]['id'], self.f2.pk)
         self.assertEqual(Decimal(str(r.json()['totals']['value'])), Decimal('400'))
 
+    def test_every_grid_column_sorts_both_ways(self):
+        from apps.stock_audit.views import SORTS
+        for key in ('date', 'value', 'rule', 'branch', 'item', 'status', 'doc', 'user'):
+            self.assertIn(key, SORTS)
+            asc = [x['id'] for x in self.sup.get(f'/api/stock-audit/findings/?sort={key}').json()['results']]
+            desc = [x['id'] for x in self.sup.get(f'/api/stock-audit/findings/?sort=-{key}').json()['results']]
+            self.assertEqual(sorted(asc), sorted(desc), key)
+        r = self.sup.get('/api/stock-audit/findings/?sort=value')
+        self.assertEqual(r.json()['results'][-1]['id'], self.f2.pk)
+
 
 class ThresholdTests(StockAuditApiBase):
 
@@ -226,3 +236,57 @@ class RefreshTests(StockAuditApiBase):
         sync.assert_called_once()
         engine.assert_called_once()
         self.assertFalse(self.sup.get('/api/stock-audit/runs/').json()['refreshing'])
+
+
+class SalesContextTests(StockAuditApiBase):
+    """Sale findings carry the sales channel, the sales account (e.g. a union / contract) and the
+    customer PIC + name — read from the corrected PurchaseHistory and the account placeholders."""
+
+    def setUp(self):
+        super().setUp()
+        from apps.customers.models import Customer, PurchaseHistory
+        from apps.sync.models import SoftechPersonClassif
+        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='30', ptclassifdescr='عميل دائم')
+        SoftechPersonClassif.objects.create(ptcode='10', ptclassifcode='91', ptclassifdescr='عميل نقدى')
+        self.union = Customer.objects.create(name='نقابة الزراعين', softech_pic='ACCT-4801', is_account_placeholder=True,
+                                             softech_ptclassifcode='30')
+        Customer.objects.create(name='Walk-In Customer', softech_pic='ACCT-1510', is_account_placeholder=True,
+                                softech_ptclassifcode='91')
+        person = Customer.objects.create(name='شركة مكة خصم', softech_pic='B01HD8329')
+        StockAuditFinding.objects.filter(pk=self.f1.pk).update(personcode='4801')
+        StockAuditFinding.objects.filter(pk=self.f2.pk).update(personcode='1510')
+        PurchaseHistory.objects.create(
+            customer=person, branch=self.b1, doc_code='115', docnumber='1', sales_channel='30',
+            invoice_date=timezone.now(), softech_phcode='B01HD8329', softech_personcode='4801',
+            softech_invoice_id=f'B01-115-1-{TODAY:%Y%m%d}')
+
+    def _row(self, rows, pk):
+        return next(x for x in rows if x['id'] == pk)
+
+    def test_findings_show_channel_account_and_pic(self):
+        rows = self.sup.get('/api/stock-audit/findings/').json()['results']
+        s = self._row(rows, self.f1.pk)['sales']
+        self.assertEqual((s['channel'], s['channel_label'], s['account_code'], s['account_name']),
+                         ('30', 'عميل دائم', '4801', 'نقابة الزراعين'))
+        self.assertEqual((s['pic'], s['pic_name']), ('B01HD8329', 'شركة مكة خصم'))
+        # no synced invoice: channel falls back to the account's own channel, no PIC
+        s2 = self._row(rows, self.f2.pk)['sales']
+        self.assertEqual((s2['channel_label'], s2['account_name'], s2['pic']), ('عميل نقدى', 'Walk-In Customer', ''))
+
+    def test_channel_filter_account_sort_and_options(self):
+        r = self.sup.get('/api/stock-audit/findings/?channel=30').json()
+        self.assertEqual([x['id'] for x in r['results']], [self.f1.pk])
+        r = self.sup.get('/api/stock-audit/findings/?sort=account').json()
+        self.assertEqual([x['id'] for x in r['results']], [self.f2.pk, self.f1.pk])   # 1510 < 4801
+        codes = {c['code'] for c in self.sup.get('/api/stock-audit/me/').json()['channels']}
+        self.assertEqual(codes, {'30', '91'})
+
+    def test_export_has_the_sales_columns(self):
+        import openpyxl
+        from io import BytesIO
+        r = self.sup.get('/api/stock-audit/findings/export/')
+        ws = openpyxl.load_workbook(BytesIO(r.content)).active
+        head = [c.value for c in ws[1]]
+        self.assertEqual(head[-5:], ['قناة البيع', 'كود الحساب', 'الحساب', 'PIC العميل', 'اسم العميل'])
+        rows = {tuple(c.value for c in row)[-5:] for row in ws.iter_rows(min_row=2)}
+        self.assertIn(('عميل دائم', '4801', 'نقابة الزراعين', 'B01HD8329', 'شركة مكة خصم'), rows)

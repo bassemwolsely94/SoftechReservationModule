@@ -220,6 +220,8 @@ SCREENS = [
             {'key': 'history', 'title': T('🕒 سجل الاحتساب', '🕒 Calculation log'), 'body': T('كل عمليات الاحتساب والمحاكاة: من، متى، الملخص، وأكواد مندوبين غير مرتبطة بموظفين (اربطها).', 'Every calculation and simulation: who, when, summary, and salesperson codes not linked to employees (link them).')},
         ],
         'tips': [T('اربط كود SOFTECH لكل مندوب بحسابه وإلا لن تظهر حوافزه.', 'Link each salesperson\'s SOFTECH code to their account, otherwise their incentives will not show.'),
+                 T('لا تُضاف تسوية ولا تُعدَّل على فترة اعتُمدت، ولا يُسوّي أحد حوافزه هو.',
+                   'No adjustment is added or changed on a finalized period, and no one adjusts their own incentive.'),
                  T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الحوافز): «احتساب» يحتاج «تعديل»، و«اعتماد التسويات» وإعادة الاحتساب الإجباري يحتاجوا «إنهاء»، والتصدير يحتاج «تصدير».',
                    'Every action is checked on the server (Permissions Matrix, incentives module): "Calculate" needs "edit", finalizing and a forced recalculation need "finalize", and export needs "export".')],
         'related': ['incentives.mine', 'analytics.performance'],
@@ -313,7 +315,7 @@ SCREENS = [
                  'المساحة دي بتتغير حسب التبويب: قائمة البرامج، أو محرر القواعد (أصناف يدوي أو CSV، والسلاب)، أو شاشة الاحتساب، أو التقرير…\n• في «الاحتساب» ابدأ دايماً بـ«🔍 معاينة (محاكاة)» — مبتتحفظش — وبعدين «⚡ تشغيل الاحتساب».\n• «✅ اعتماد التسويات نهائياً» في «التقرير» بيقفل الفترة ومينفعش يترجع فيه.',
                  'This area changes with the tab: the program list, the rule editor (items manually or by CSV, and slabs), the calculation screen, the report…\n• In "Calculate" always start with "🔍 Preview (simulation)" — it is not saved — then "⚡ Run calculation".\n• "✅ Finalize settlements" in "Report" locks the period and cannot be undone.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-28',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

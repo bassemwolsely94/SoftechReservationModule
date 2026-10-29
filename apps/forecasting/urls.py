@@ -1,12 +1,12 @@
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 from .views import (
     SeasonalityIndexViewSet, ForecastRunViewSet, ForecastAccuracyViewSet, KpiBoardView,
     KpiSheetExportView, KpiRefreshView, ForecastScenarioViewSet, BacktestViewSet, GrowthView,
     ProfitExclusionViewSet, ForecastReferenceView,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()     # no API-root index page (Z-7b)
 router.register(r'seasonality',  SeasonalityIndexViewSet, basename='seasonality')
 router.register(r'runs',         ForecastRunViewSet,       basename='forecast-run')
 router.register(r'accuracy',     ForecastAccuracyViewSet,  basename='forecast-accuracy')

@@ -8,6 +8,14 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
+
+from core.permissions import matrix_permission
+
+# External payments sit in the finance module (Batch 4, Z-3): read = view, record = create,
+# change = edit, delete = delete; confirm / reconcile = approve; dispute / screenshot = edit.
+FINANCE         = matrix_permission('finance')
+FINANCE_APPROVE = matrix_permission('finance', post=('approve',))
+FINANCE_EDIT    = matrix_permission('finance', post=('edit',))
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -37,7 +45,7 @@ class ExternalPaymentListView(generics.ListCreateAPIView):
     GET  /api/payments/  — list with filters
     POST /api/payments/  — create new payment record
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
     search_fields      = ['customer_name', 'reference_number', 'softech_invoice_code', 'customer_phone']
     ordering_fields    = ['created_at', 'payment_date', 'amount', 'status']
@@ -75,7 +83,7 @@ class ExternalPaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
     PATCH  /api/payments/{id}/
     DELETE /api/payments/{id}/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     queryset = ExternalPayment.objects.select_related(
         'branch', 'customer', 'created_by', 'confirmed_by'
     ).prefetch_related('reconciliation_logs')
@@ -85,24 +93,46 @@ class ExternalPaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
             return ExternalPaymentCreateSerializer
         return ExternalPaymentSerializer
 
+    # Batch 4, Z-10a: a payment is corrected only while pending or disputed — once confirmed,
+    # reconciled or cancelled its amount, branch and SOFTECH references are closed — and only a
+    # pending payment can be deleted. Status itself moves only through confirm / reconcile / dispute.
+    EDITABLE = (ExternalPayment.STATUS_PENDING, ExternalPayment.STATUS_DISPUTED)
+
+    def update(self, request, *args, **kwargs):
+        payment = self.get_object()
+        if payment.status not in self.EDITABLE:
+            return Response({'detail': f'لا يمكن تعديل دفعة بحالة "{payment.get_status_display()}".'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        # each correction lands in the payment's log, before → after (Batch 4, Z-10c)
+        before = {f: getattr(serializer.instance, f) for f in serializer.validated_data}
+        payment = serializer.save()
+        changes = '، '.join(f'{f}: {before[f]} → {getattr(payment, f)}'
+                           for f in before if before[f] != getattr(payment, f))
+        if changes:
+            _log_action(payment, 'edited', self.request.user, notes=changes)
+
+    def destroy(self, request, *args, **kwargs):
+        payment = self.get_object()
+        if payment.status != ExternalPayment.STATUS_PENDING:
+            return Response({'detail': f'لا يمكن حذف دفعة بحالة "{payment.get_status_display()}".'},
+                            status=status.HTTP_409_CONFLICT)
+        return super().destroy(request, *args, **kwargs)
+
 
 # ── Action views ──────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def payment_confirm(request, pk):
     """
     POST /api/payments/{id}/confirm/
-    Restricted to admin or pharmacist role.
+    Needs finance approve (FINANCE_APPROVE: admin, purchasing). A hard-coded admin / pharmacist list
+    used to sit here too — pharmacists hold finance view only, so in practice only admin could
+    confirm, against the matrix and the help (Batch 4, Z-11d — overblock review decision 2).
     """
-    # Role check
-    profile = getattr(request.user, 'staff_profile', None)
-    if profile and profile.role not in ('admin', 'pharmacist'):
-        return Response(
-            {'detail': 'هذا الإجراء مسموح للمدير والصيدلاني فقط.'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     payment = get_object_or_404(ExternalPayment, pk=pk)
     if payment.status not in (ExternalPayment.STATUS_PENDING, ExternalPayment.STATUS_DISPUTED):
         return Response(
@@ -122,7 +152,7 @@ def payment_confirm(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def payment_reconcile(request, pk):
     """
     POST /api/payments/{id}/reconcile/
@@ -152,7 +182,7 @@ def payment_reconcile(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EDIT])
 def payment_dispute(request, pk):
     """
     POST /api/payments/{id}/dispute/
@@ -178,7 +208,7 @@ def payment_dispute(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def payment_summary(request):
     """
     GET /api/payments/summary/
@@ -231,7 +261,7 @@ def payment_summary(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EDIT])
 @parser_classes([MultiPartParser, FormParser])
 def payment_upload_screenshot(request, pk):
     """

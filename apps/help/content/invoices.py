@@ -269,6 +269,10 @@ SCREENS = [
         'tips': [
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الفواتير): التعديل وتشغيل القراءة الآلية يحتاجوا «تعديل»، «تأكيد» و«رفض» وعمل مرتجع يحتاجوا «اعتماد»، والإرسال لـ SOFTECH يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, invoices module): editing and running OCR need "edit", "Confirm", "Reject" and creating a return need "approve", and sending to SOFTECH needs "finalize".'),
+            T('بعد دخول الفاتورة طابور الترحيل أو ترحيلها إلى SOFTECH لا يُعدَّل رأسها ولا سطورها — التصحيح بمرتجع.',
+              'Once an invoice is queued for or posted to SOFTECH its header and lines cannot be edited — correct it with a return.'),
+            T('تعديل فاتورة «مُأكَّدة» (أو فشل ترحيلها) يرجعها «قيد المراجعة» — أكّدها من جديد قبل الترحيل.',
+              'Editing a "confirmed" (or push-failed) invoice puts it back to "review" — confirm it again before sending.'),
             T('لو ظهر «سيتغيّر كود المورد لهذا الصنف» فهذا تعارض في ربط كود المورد بالأصناف — اعتمده فقط لو متأكد.', 'If "this item\'s supplier code will change" appears, it is a supplier-code mapping conflict — approve only if you are sure.'),
             T('لو الترحيل غير مُفعّل تعمل الشاشة في «وضع المعاينة» فقط.', 'If posting is not enabled, the screen works in "preview mode" only.'),
             T('محرك القراءة: «تلقائي» يقرأ أولاً بمحرّك مجاني محلي (Tesseract بالعربية — سريع ودقيق على الفواتير المطبوعة) وبه قوالب أعمدة جاهزة للموزّعين الكبار (رامكو، فارما أوفرسيز) تستخرج الاسم والسعر والخصم والصلاحية؛ ولا يلجأ إلى Gemini (المدفوع) إلا إذا كانت النتيجة المجانية ضعيفة — لتحقيق أقصى استخراج مجاني مع ضمان الجودة. يمكن فرض محرّك معيّن عند رفع الحزمة أو إعادة القراءة. راجع الأسعار دائماً.',
@@ -379,7 +383,7 @@ SCREENS = [
                  'كل سطر: الصنف اللي النظام طابقه، الكمية، سعر الوحدة والخصم، ودرجة ثقة القراءة.\n• السطور منخفضة الثقة أو اللي الاسم العربي والعلمي فيها أشاروا لصنفين مختلفين محتاجة انتباهك.\n• بالكيبورد: ↑↓ للتنقل، Enter يأكّد الصنف المقترح وينقلك للسطر اللي بعده، M يعرض اقتراحات المطابقة.',
                  'Each line: the item the system matched, quantity, unit price and discount, and the reading confidence.\n• Lines with low confidence, or where the Arabic and scientific names point to different items, need your attention.\n• Keyboard: ↑↓ to move, Enter confirms the suggested item and moves to the next line, M shows match suggestions.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-29',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

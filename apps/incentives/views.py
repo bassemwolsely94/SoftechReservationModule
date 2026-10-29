@@ -1244,6 +1244,42 @@ class AdjustmentEntryViewSet(viewsets.ModelViewSet):
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
 
+    # Batch 4, Z-10b: like delete, adding or changing an adjustment is refused once the period's
+    # settlement is finalized (old and new period both), and no one adjusts their own incentive.
+    def _blocked(self, data, instance=None):
+        profile = getattr(self.request.user, 'staff_profile', None)
+        user = data.get('user', getattr(instance, 'user', None))
+        if profile and user and user.pk == profile.pk:
+            return Response({'detail': 'لا يمكنك إضافة أو تعديل تسوية لحوافزك أنت.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        targets = [{k: data.get(k, getattr(instance, k, None))
+                    for k in ('program', 'user', 'period_start', 'period_end')}]
+        if instance is not None:
+            targets.append({k: getattr(instance, k) for k in ('program', 'user', 'period_start', 'period_end')})
+        if any(IncentiveSettlement.objects.filter(is_finalized=True, **t).exists() for t in targets):
+            return Response({'detail': 'لا يمكن تعديل التسويات — التسوية النهائية مُعتمدة بالفعل'},
+                            status=status.HTTP_409_CONFLICT)
+        return None
+
+    def create(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        blocked = self._blocked(ser.validated_data)
+        if blocked:
+            return blocked
+        self.perform_create(ser)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        ser = self.get_serializer(instance, data=request.data, partial=kwargs.pop('partial', False))
+        ser.is_valid(raise_exception=True)
+        blocked = self._blocked(ser.validated_data, instance)
+        if blocked:
+            return blocked
+        self.perform_update(ser)
+        return Response(ser.data)
+
     def destroy(self, request, *args, **kwargs):
         """Block deletion if the related settlement is already finalized."""
         instance = self.get_object()
@@ -1699,11 +1735,30 @@ from .serializers import SalesTargetSerializer  # noqa: E402
 
 _TARGET_EDIT_ROLES = {'admin', 'supervisor', 'purchasing'}
 
+# Sales targets sit beside the KPI board (Batch 4, Z-9a — reads were open to any logged-in user,
+# and the edit-role check ran only after validation): every call needs analytics view; edits
+# need an editor role (_TARGET_EDIT_ROLES) before the body is read — _guard below stays.
+from core.permissions import matrix_permission as _matrix_permission   # noqa: E402
+from rest_framework.permissions import SAFE_METHODS as _SAFE, BasePermission as _BasePermission  # noqa: E402
+_TARGETS = _matrix_permission('analytics', post=('view',), edit=('view',), delete=('view',))
+
+
+class _TargetEditors(_BasePermission):
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        if request.method in _SAFE:
+            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        p = getattr(request.user, 'staff_profile', None)
+        return bool(p and p.role in _TARGET_EDIT_ROLES)
+
 
 class SalesTargetViewSet(_viewsets.ModelViewSet):
     """CRUD for sales targets with live attainment. Filters: ?active=true, ?scope=branch."""
     serializer_class   = SalesTargetSerializer
-    permission_classes = [_IsAuth]
+    permission_classes = [_IsAuth, _TARGETS, _TargetEditors]
 
     def get_queryset(self):
         qs = SalesTarget.objects.select_related('branch', 'category').all()

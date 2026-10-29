@@ -136,10 +136,9 @@ def run_full_sync(full_history=False):
 # run_full_sync, so there is no behavioural divergence — only scheduling.
 #
 # Eventual consistency note: sync_sales(RECENT) re-pulls today+yesterday every
-# run and skips lines whose customer/item isn't in the local map yet. A brand-new
-# customer's or item's first sale is therefore skipped once and re-caught on the
-# next fast tick after the slow lane imports them — no data is lost, worst-case
-# delay is one slow interval.
+# run. A sale whose PIC customer isn't imported yet lands on the account's
+# placeholder customer and is re-linked to the person on a later tick (or by the
+# 03:45 7-day sales_history_catchup) once the slow lane imports them.
 
 def _maybe_sync_permissions(conn, sync_run):
     """
@@ -1280,10 +1279,12 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
         return 0
 
     # ── Pre-load lookup dicts once ────────────────────────────────────────────
-    customer_map = {
-        c.softech_id: c.id
-        for c in Customer.objects.filter(softech_id__isnull=False).only('id', 'softech_id')
-    }
+    # Buyer = the invoice PIC (sm.phcode → Customer.softech_pic); no PIC → the account's
+    # placeholder (st.personcode). Never personcode → Customer.softech_id (a per-branch PIC
+    # serial — that linked invoices to random people until 2026-10-28).
+    from apps.customers.account_link import CustomerLinker
+    linker = CustomerLinker(conn)
+    linker.prepare({str(r[0]).strip() for r in rows})
 
     # sm.ptcode [13] and sm.ptclassifcode [14] are read directly from each invoice row —
     # these are the AUTHORITATIVE source for sales channel (قناة البيع / نوع العميل).
@@ -1328,7 +1329,8 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
         for (personcode, branchcode, doccode, docnumber, docdate), lines in batch:
             # docnumber is already normalised (integer string) from the grouping step.
             try:
-                customer_id = customer_map.get(personcode)
+                inv_pic     = str(lines[0][11] or '').strip() if len(lines[0]) > 11 else ''
+                customer_id = linker.resolve(inv_pic, personcode)
                 branch_id   = branch_map.get(branchcode)
                 if not customer_id or not branch_id:
                     continue
@@ -1417,6 +1419,7 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
                         store_code=store_code,
                         cust_branch_code=cust_branch_code,
                         softech_phcode=phcode,         # sm.phcode — customer PIC per invoice
+                        softech_personcode=personcode, # st.personcode — sales account
                     )
                     lines_by_inv_id[inv_id] = line_tuples
 
@@ -1437,7 +1440,7 @@ def sync_sales(conn, sync_run, full_history=False, query=None):
                 'total_amount', 'doc_code', 'docnumber', 'softech_user',
                 'sales_channel', 'sales_person_type',
                 'store_code', 'cust_branch_code',
-                'softech_phcode',
+                'softech_phcode', 'softech_personcode',
             ],
             batch_size=500,
         )
@@ -2176,6 +2179,35 @@ def _run_stock_ledger_sync(days=3):
         run_stock_audit(triggered_by='scheduler')
     except Exception as exc:
         logger.error('[APScheduler] stock-ledger sync failed: %s', exc)
+
+
+def _run_sales_history_catchup(days=7):
+    """Re-sync the last `days` docdate days of PurchaseHistory with the bounded window query.
+    The fast lane only re-reads today + yesterday, so a day missed while the sync or a branch
+    link was down never came back (15 & 22 Oct 2026 lost 1,063 documents). Idempotent upsert;
+    also re-links invoices whose PIC customer was imported after the sale. READ-ONLY vs SOFTECH."""
+    from .sybase_queries import QUERY_CUSTOMER_SALES_LINES_WINDOW
+    today = timezone.localdate()
+    start, end = today - _dt.timedelta(days=days), today + _dt.timedelta(days=1)
+    sync_run = SyncRun.objects.create(status='running')
+    conn = None
+    try:
+        conn = get_sybase_connection()
+        n = sync_sales(conn, sync_run, query=QUERY_CUSTOMER_SALES_LINES_WINDOW.format(
+            start=start.strftime('%Y%m%d'), end=end.strftime('%Y%m%d')))
+        sync_run.status, sync_run.records_synced = 'success', n
+        logger.info('[APScheduler] sales-history catch-up done: %s invoices (%s → %s)', n, start, end)
+    except Exception as exc:
+        sync_run.status, sync_run.error_message = 'failed', str(exc)[:500]
+        logger.error('[APScheduler] sales-history catch-up failed: %s', exc)
+    finally:
+        sync_run.completed_at = timezone.now()
+        sync_run.save()
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _run_refill_reminders():
@@ -3292,6 +3324,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_stock_ledger_sync, 'cron', hour=3, minute=15, id='stock_ledger_catchup',
         kwargs={'days': 7}, replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Sales history catch-up — 03:45 re-syncs the last 7 days (the fast lane only re-reads 2).
+    _scheduler.add_job(
+        _run_sales_history_catchup, 'cron', hour=3, minute=45, id='sales_history_catchup',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Nightly itemssuppliers mirror (supplier ↔ item links + supplier item codes) — 04:30.
     _scheduler.add_job(

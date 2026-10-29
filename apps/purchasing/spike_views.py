@@ -26,7 +26,12 @@ from apps.catalog.models import Item
 from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
 from . import spike as S
 from apps.catalog.wildcard import wq
-from core.permissions import deny_unless
+from core.permissions import deny_unless, matrix_permission
+
+# Batch 4, Z-7b: the list is a report (`analytics` view); confirm / unconfirm keep their
+# `purchasing` edit / approve check.
+SPIKE_READ   = matrix_permission('analytics')
+SPIKE_REVIEW = matrix_permission('purchasing', post=('edit', 'approve'))
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +80,7 @@ _FIELDS = ('id', 'softech_id', 'name', 'medicine_type', 'medicine_type_name_ar',
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SPIKE_READ])
 def spike_candidates(request):
     qs = Item.objects.filter(is_spike=True)
     tier = request.GET.get('tier')
@@ -96,7 +101,7 @@ def spike_candidates(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SPIKE_READ])
 def spike_summary(request):
     flagged = Item.objects.filter(is_spike=True)
     strong = flagged.filter(spike_tier='strong').count()
@@ -110,7 +115,7 @@ def spike_summary(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SPIKE_READ])
 def spike_med_types(request):
     seen, opts = set(), []
     for it in Item.objects.filter(is_spike=True).only('medicine_type', 'medicine_type_name_ar', 'medicine_type_name'):
@@ -126,7 +131,7 @@ def _get_item(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SPIKE_REVIEW])
 def spike_confirm(request):
     """Confirm a STRONG spike as an unsustained burst → eligible for the order cap."""
     denied = deny_unless(request, 'purchasing', 'edit', 'approve')
@@ -147,7 +152,7 @@ def spike_confirm(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, SPIKE_REVIEW])
 def spike_unconfirm(request):
     """Revert to monitor-only (no cap) — e.g. it's a genuine new-product ramp."""
     denied = deny_unless(request, 'purchasing', 'edit', 'approve')

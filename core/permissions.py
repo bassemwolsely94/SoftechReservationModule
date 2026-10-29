@@ -111,20 +111,24 @@ def require_module(module: str, action: str = 'view'):
 def matrix_allows(profile, module: str, *actions) -> bool:
     """True when the RoleModuleAccess matrix grants any of `actions` on `module`.
 
-    Admins always pass (as StaffProfile.can_do). If the matrix was never seeded
-    (RoleModuleAccess empty) nothing is denied — the same safety net as
-    core.middleware.module_access — so a fresh install does not lock everyone but
-    admins out; the gap is logged instead."""
+    Admins always pass (as StaffProfile.can_do). If `module` was never seeded (no row for it at
+    all) nothing is denied, so a fresh install — or a database holding only some data
+    migrations' rows — does not lock everyone but admins out; the gap is logged instead.
+    Per module since Batch 4, Z-5c (was: any row anywhere = whole matrix seeded)."""
     if profile is None or not profile.is_active:
         return False
     if profile.role == 'admin':
         return True
     from core.middleware import module_access
-    if not module_access._grants()[1]:
+    if module not in module_access.seeded_modules():
         import logging
-        logging.getLogger('elrezeiky.rbac').error('RBAC matrix empty — %s.%s not enforced', module, actions)
+        logging.getLogger('elrezeiky.rbac').error('RBAC module %s not seeded — %s not enforced', module, actions)
         return True
-    return any(profile.can_do(module, a) for a in actions)
+    if any(profile.can_do(module, a) for a in actions):
+        return True
+    # SOFTECH supply groups work purchasing with the purchasing role's grants (Z-2).
+    return module == 'purchasing' and module_access.supply_member(profile) and any(
+        (module, a) in module_access._grants()[0].get('purchasing', set()) for a in actions)
 
 
 class MatrixPermission(BasePermission):
@@ -155,6 +159,35 @@ class MatrixPermission(BasePermission):
         if not needed:
             return True
         return matrix_allows(_get_profile(request), view.rbac_module, *needed)
+
+
+def matrix_permission(module: str, *, get=('view',), post=('create',), edit=('edit',), delete=('delete',),
+                      actions=None):
+    """MatrixPermission for views that don't carry `rbac_module` (function views mostly):
+
+        FINANCE = matrix_permission('finance')                     # GET view · POST create
+        @permission_classes([IsAuthenticated, matrix_permission('finance', post=('approve',))])
+
+    PUT/PATCH need `edit`, DELETE `delete` (both overridable, e.g. delete=('edit',) where the
+    editors remove lines). `actions` maps a viewset action to its own tuple, whatever the method
+    (e.g. {'quality': ('view',)} where the view's role check decides). Same checks as matrix_allows
+    (Batch 4)."""
+    class _ModuleMatrix(BasePermission):
+        message = MatrixPermission.message
+
+        def has_permission(self, request, view):
+            from rest_framework.permissions import SAFE_METHODS
+            m = request.method
+            if view is not None and not hasattr(view, m.lower()):
+                return True                  # no handler for the method: DRF answers 405 (Z-5b)
+            needed = (actions or {}).get(getattr(view, 'action', None))
+            if needed is None:
+                needed = (get if m in SAFE_METHODS else post if m == 'POST'
+                          else edit if m in ('PUT', 'PATCH') else delete)
+            return matrix_allows(_get_profile(request), module, *needed)
+
+    _ModuleMatrix.__name__ = _ModuleMatrix.__qualname__ = f'Matrix_{module}'
+    return _ModuleMatrix
 
 
 def deny_unless(request, module: str, *actions):

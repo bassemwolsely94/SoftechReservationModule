@@ -49,7 +49,7 @@ class FieldValuesApiTests(TestCase):
     def test_field_values(self):
         _item('A', producer_code='P1', producer_name='شركة أولى')
         _item('B', producer_code='P2', producer_name='شركة ثانية')
-        _, _, client = make_user('fv_user', role='pharmacist')
+        _, _, client = make_user('fv_user', role='purchasing')      # offers module (Z-5a)
         r = client.get('/api/offers/field-values/?field=producer_code')
         self.assertEqual(r.status_code, 200)
         vals = {x['value']: x['label'] for x in r.data}
@@ -60,7 +60,7 @@ class FieldValuesApiTests(TestCase):
         self.assertEqual({x['value'] for x in rq.data}, {'P2'})
 
     def test_unsupported_field_rejected(self):
-        _, _, client = make_user('fv_user2', role='pharmacist')
+        _, _, client = make_user('fv_user2', role='purchasing')     # offers module (Z-5a)
         r = client.get('/api/offers/field-values/?field=pack_price')
         self.assertEqual(r.status_code, 400)
 

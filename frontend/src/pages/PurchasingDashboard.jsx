@@ -1484,9 +1484,9 @@ const VIEW_TABS = [
 export default function PurchasingDashboard() {
   const { user }   = useAuthStore()
   const qc         = useQueryClient()
-  const isAdmin    = ['admin', 'pharmacist'].includes(user?.role)
+  const isAdmin    = user?.role === 'admin'
   // quick engine run («▶ تشغيل») also for the Purchasing role + SOFTECH supply groups;
-  // full re-sync / catch-up / items sync / ⚙ settings stay admin-pharmacist (server-enforced)
+  // full re-sync / catch-up / items sync / ⚙ settings stay admin only (server-enforced, Z-2)
   const canRunEngine = isAdmin || user?.role === 'purchasing' || !!user?.can_run_engine
 
   const [viewTab,   setViewTab]   = useState('agg')
@@ -2435,7 +2435,7 @@ export default function PurchasingDashboard() {
 
             {canRunEngine && (
               <div className="flex items-center gap-2 flex-wrap">
-                {isAdmin && (<>
+                <>
                 {/* ── Catch-up ── robust chunked backfill for when the scheduled
                     sync missed SOFTECH and sales went stale. Emphasised when stale. */}
                 <button data-tour="purchasing-engine-catchup"
@@ -2461,7 +2461,9 @@ export default function PurchasingDashboard() {
                   {salesStale && !catchupMutation.isLoading && ` (${saleStaleDays}ي)`}
                 </button>
 
-                {/* ── Full Sync 365d ── re-syncs the complete rolling year from SOFTECH */}
+                {/* ── Full Sync 365d ── re-syncs the complete rolling year from SOFTECH (admin only;
+                    catch-up and the items sync follow the engine-run rule — Z-11g) */}
+                {isAdmin && (
                 <button data-tour="purchasing-engine-full-sync"
                   onClick={() => {
                     if (isRunning) return
@@ -2478,6 +2480,7 @@ export default function PurchasingDashboard() {
                 >
                   🔄 مزامنة كاملة
                 </button>
+                )}
 
                 {/* ── Items catalog sync ── new items + price/itemtrans/امر التوريد updates */}
                 <button
@@ -2496,7 +2499,7 @@ export default function PurchasingDashboard() {
                 >
                   {(itemsSyncMutation.isLoading || itemsSyncRunId != null) ? '⏳ جارٍ...' : '📦 مزامنة الأصناف'}
                 </button>
-                </>)}
+                </>
 
                 {/* ── Settings + Quick Run ── */}
                 <div className="flex items-center rounded-lg overflow-hidden border border-brand-600 shadow-sm">

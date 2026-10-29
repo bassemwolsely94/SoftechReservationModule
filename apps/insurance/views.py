@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models import Q, Count
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.permissions import IsAuthenticated
 from .permissions import InsuranceModuleAccess
 from rest_framework.response import Response
@@ -130,6 +131,12 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         if self.action in ('retrieve',):
             return InsuranceClaimDetailSerializer
         return InsuranceClaimListSerializer
+
+    # No generic PUT / PATCH (Batch 4, Z-10a): status moves through change-status and the totals
+    # are recalculated from the receipts — a PATCH set status and the billed totals past the claim
+    # lock. (create below already takes only the safe fields.)
+    def update(self, request, *args, **kwargs):
+        raise MethodNotAllowed(request.method)
 
     @staticmethod
     def _locked_response(claim):

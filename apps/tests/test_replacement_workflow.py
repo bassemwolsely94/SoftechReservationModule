@@ -177,11 +177,12 @@ class ApprovalAndLockingTests(_Base):
         c = W.create_case(user=self.sup, branch=self.branch, source_type='insurance_rx', settlement_mode='products',
                           softech_pic=PIC, contract_personcode='4479', items=[{'item_id': self.lokelma.pk, 'qty': 1}])
         c = self.submit(self.calc(c, user=self.sup), user=self.sup)
-        ApprovalService.decide(request=c.approval_request, decision=ApprovalDecision.DECISION_APPROVED,
-                               decided_by=self.sup)                 # the approvals app itself allows this…
+        from apps.approvals.service import ApprovalError
+        with self.assertRaises(ApprovalError):                      # the approvals engine refuses it now
+            ApprovalService.decide(request=c.approval_request, decision=ApprovalDecision.DECISION_APPROVED,
+                                   decided_by=self.sup)             # (Batch 4, Z-11j)…
         c.refresh_from_db()
-        self.assertNotEqual(c.status, RC.STATUS_APPROVED)           # …the case does not
-        self.assertTrue(c.exceptions.filter(exception_type='self_approval', severity='high').exists())
+        self.assertNotEqual(c.status, RC.STATUS_APPROVED)           # …and the case is untouched
 
     def test_reject_returns_to_maker_unlocked(self):
         c = self.submit(self.calc(self.new_case()))

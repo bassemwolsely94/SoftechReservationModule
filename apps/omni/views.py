@@ -31,9 +31,32 @@ logger = logging.getLogger('elrezeiky.omni')
 # Conversations
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# The omni-channel inbox = the `callcenter` matrix module (Batch 4, Z-8b — was any logged-in
+# user): reads need view, replies / assignment need create / edit / approve. Wallboard and
+# analytics keep their admin / supervisor / quality role check, automations and channel-account
+# edits admin / supervisor.
+OMNI = matrix_permission('callcenter', post=('create', 'edit', 'approve'))
+
+
+class _AccountWrite(BasePermission):
+    """A channel account carries the number / token messages go out on: edits are admin /
+    supervisor (the Accounts screen's audience), reads follow OMNI."""
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+        if request.method in SAFE_METHODS:
+            return True
+        if view is not None and not hasattr(view, request.method.lower()):
+            return True                                  # no handler for the method: DRF answers 405
+        p = getattr(request.user, 'staff_profile', None)
+        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
+
+
 class ConversationListView(generics.ListAPIView):
     serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def get_queryset(self):
         qs = (
@@ -76,7 +99,7 @@ class ConversationListView(generics.ListAPIView):
 class ConversationDetailView(generics.RetrieveUpdateAPIView):
     """PATCH: status / priority / assigned_to / subject / branch."""
     serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
     queryset = (
         Conversation.objects
         .select_related('customer', 'assigned_to', 'branch')
@@ -104,7 +127,7 @@ class ConversationDetailView(generics.RetrieveUpdateAPIView):
 
 class TimelineListView(generics.ListAPIView):
     serializer_class = TimelineEventSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def get_queryset(self):
         return (
@@ -120,7 +143,7 @@ class TimelineListView(generics.ListAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class ReplyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def post(self, request, conversation_id):
         try:
@@ -186,7 +209,7 @@ class ReplyView(APIView):
 
 class AccountListView(generics.ListCreateAPIView):
     serializer_class = ChannelAccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI, _AccountWrite]
 
     def get_queryset(self):
         qs = ChannelAccount.objects.select_related('branch', 'supervisor')
@@ -198,7 +221,7 @@ class AccountListView(generics.ListCreateAPIView):
 
 class AccountDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = ChannelAccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI, _AccountWrite]
     queryset = ChannelAccount.objects.select_related('branch', 'supervisor')
 
 
@@ -208,7 +231,7 @@ class TranscribeEventView(APIView):
     call recording or WhatsApp voice note. Result lands in the timeline as an
     'ai_insight' event (picked up by inbox polling).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def post(self, request, pk):
         try:
@@ -241,13 +264,15 @@ class WallboardView(APIView):
     live calls, per-queue stats today, agent states, WhatsApp account load,
     unified-conversation backlog. Polled by /omni/wallboard.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def get(self, request):
         profile = getattr(request.user, 'staff_profile', None)
+        # call-center agents see the board too (owner 2026-10-29, Batch 4 Z-11f); listen / whisper
+        # stay admin / supervisor at the PBX spy endpoint
         if not (profile and profile.is_active and
-                profile.role in ('admin', 'supervisor', 'quality_manager')):
-            return Response({'detail': 'صلاحية المشرفين فقط'}, status=403)
+                profile.role in ('admin', 'supervisor', 'quality_manager', 'call_center')):
+            return Response({'detail': 'صلاحية المشرفين والكول سنتر فقط'}, status=403)
 
         from django.db.models import Avg, Count, Q
         from django.utils import timezone as tz
@@ -348,7 +373,7 @@ class AIAssistView(APIView):
     timeline and returns a summary, suggested replies, intent, and urgency.
     Assists the pharmacist; never sends anything itself (doc 15 AI principle).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def post(self, request, pk):
         try:
@@ -415,7 +440,7 @@ class AutomationRunsView(generics.ListAPIView):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class AnalyticsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def get(self, request):
         profile = getattr(request.user, 'staff_profile', None)
@@ -515,7 +540,7 @@ class AccountHealthView(APIView):
     Meta Cloud: pings the Graph API phone-number object (quality rating etc.)
     and updates the stored status/heartbeat accordingly. Never raises.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, OMNI]
 
     def get(self, request, pk):
         try:

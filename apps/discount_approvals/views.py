@@ -12,6 +12,14 @@ import logging
 
 from django.conf import settings
 from core.errors import public_error
+from core.permissions import matrix_permission
+
+# Pricing approvals sit in the `approvals` matrix module (Batch 4, Z-6): reads need view; filing a
+# price-change request (single, spreadsheet import, rollback) needs create or approve — the
+# roles that file them today (purchasing, pharmacist) hold approve. Executing a change and the
+# alignment / policy writes keep their admin checks.
+APPROVALS        = matrix_permission('approvals')
+APPROVALS_REQUEST = matrix_permission('approvals', post=('create', 'approve'))
 
 logger = logging.getLogger("elrezeiky.discount_approvals")
 
@@ -42,7 +50,7 @@ class IsAdminRole(permissions.BasePermission):
 
 class RequestListCreateView(generics.ListCreateAPIView):
     serializer_class   = ItemPriceChangeRequestSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APPROVALS_REQUEST]
 
     def get_queryset(self):
         qs = ItemPriceChangeRequest.objects.select_related(
@@ -81,7 +89,7 @@ class RequestListCreateView(generics.ListCreateAPIView):
 
 class RequestDetailView(generics.RetrieveAPIView):
     serializer_class   = ItemPriceChangeRequestSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, APPROVALS]
 
     def get_queryset(self):
         qs = ItemPriceChangeRequest.objects.select_related(
@@ -183,7 +191,7 @@ def reject_request(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def item_current_prices(request, softech_id):
     """
     Returns all priceable field values + pack_qty + sale_tax_pct for one item.
@@ -212,7 +220,7 @@ def item_current_prices(request, softech_id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def price_preview(request):
     """
     Compute auto-derived values (unit_price, pack_price_tax) for a given
@@ -228,7 +236,7 @@ def price_preview(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def approver_softech_info(request):
     """
     Returns the current user's Softech account info so the frontend
@@ -243,7 +251,7 @@ def approver_softech_info(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def pending_count(request):
     count = ItemPriceChangeRequest.objects.filter(
         status=ItemPriceChangeRequest.STATUS_PENDING
@@ -256,7 +264,7 @@ def pending_count(request):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def request_replication(request, pk):
     """Live HQ↔branch replication status for the item in this request."""
     try:
@@ -292,7 +300,7 @@ def request_force_replication(request, pk):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def sla_dashboard(request):
     """Pending requests aging report — count, oldest-first, age buckets."""
     from datetime import timedelta
@@ -330,7 +338,7 @@ def sla_dashboard(request):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS_REQUEST])
 def rollback_request(request, pk):
     """Create a NEW pending request that reverts an executed request to its old_values."""
     try:
@@ -375,7 +383,7 @@ def rollback_request(request, pk):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS_REQUEST])
 def import_requests(request):
     """
     Bulk-create pending requests from an uploaded CSV/XLSX.
@@ -588,9 +596,13 @@ def repair_gaps(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def item_replication_status(request, softech_id):
     """Ad-hoc replication check for ANY item (not tied to a request)."""
+    from core.permissions import deny_unless
+    denied = deny_unless(request, 'approvals', 'view')   # a SOFTECH read per call (Z-2)
+    if denied:
+        return denied
     from .replication import check_item
     try:
         return Response(check_item(softech_id))
@@ -656,7 +668,7 @@ def branch_health(request):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def price_history(request, softech_id):
     """Every recorded change for an item — old to new, who, when, reason, source."""
     try:
@@ -889,7 +901,7 @@ def discount_impact(request):
 # ════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_scan(request):
     """
     Scan catalog items and flag those whose actual basic discount
@@ -948,7 +960,7 @@ def alignment_scan(request):
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_policies(request):
     """GET → list master discount policies. POST (admin) → upsert one."""
     from .models import SupplierDiscountPolicy
@@ -997,7 +1009,7 @@ def alignment_policies(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_tiers(request):
     """Distinct origin / contract-discount tiers (code, name, pct) for fix pickers."""
     from .alignment import list_tiers
@@ -1005,7 +1017,7 @@ def alignment_tiers(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_apply(request):
     """
     Master-policy direction: fix stale classification LABELS to match the real
@@ -1055,7 +1067,7 @@ def alignment_apply(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_tier_preview(request):
     """READ-ONLY preview of a new lookup tier before creating it (Phase 3)."""
     from .alignment import preview_new_tier
@@ -1068,7 +1080,7 @@ def alignment_tier_preview(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, APPROVALS])
 def alignment_tier_create(request):
     """Create a new classification tier in a SOFTECH lookup table (admin only)."""
     if not _is_admin(request.user):

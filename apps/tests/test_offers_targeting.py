@@ -136,7 +136,7 @@ class EngineIntegrationTests(TestCase):
 class TargetApiTests(TestCase):
     def test_fields_and_preview(self):
         _item('A', producer_code='PARK'); _item('B', producer_code='OTHER')
-        _, _, client = make_user('tgt_user', role='pharmacist')
+        _, _, client = make_user('tgt_user', role='purchasing')     # offers module (Z-5a)
         r = client.get('/api/offers/target-fields/')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(any(f['field'] == 'producer_code' for f in r.data))

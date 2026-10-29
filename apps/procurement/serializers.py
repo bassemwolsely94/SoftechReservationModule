@@ -247,7 +247,7 @@ class ProcurementAlertSerializer(serializers.ModelSerializer):
 
 
 class ProcurementAlertResolveSerializer(serializers.Serializer):
-    resolved_by     = serializers.CharField(max_length=100, required=True)
+    resolved_by     = serializers.CharField(max_length=100, required=False)   # ignored — the caller (Z-10c)
     resolution_notes = serializers.CharField(required=False, allow_blank=True, default='')
 
 

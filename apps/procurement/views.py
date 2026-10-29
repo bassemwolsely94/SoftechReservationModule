@@ -18,6 +18,8 @@ from django.db.models import (
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+from apps.purchasing.access import PURCHASING   # procurement = the purchasing module (Z-7a)
 from rest_framework.response import Response
 from apps.catalog.wildcard import wq
 
@@ -66,7 +68,7 @@ def _parse_int(request, param, default):
 # ── Module 1: Purchasing Overview ─────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def procurement_overview(request):
     """
     KPI overview cards: latest snapshot + trend data.
@@ -118,7 +120,7 @@ class SupplierPerformanceListView(generics.ListAPIView):
     List all supplier profiles with computed performance metrics.
     Supports: search, ordering, filter by classif_code / score range.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = SupplierProfileListSerializer
 
     def get_queryset(self):
@@ -149,14 +151,14 @@ class SupplierPerformanceListView(generics.ListAPIView):
 
 class SupplierPerformanceDetailView(generics.RetrieveAPIView):
     """Full supplier profile including all scoring details."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = SupplierProfileSerializer
     queryset           = SupplierProfile.objects.all()
     lookup_field       = 'supplier_code'
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def supplier_purchase_history(request, supplier_code):
     """
     Monthly purchase history for a specific supplier (last 12 months).
@@ -203,7 +205,7 @@ def supplier_purchase_history(request, supplier_code):
 # ── Module 3 + 4: Item Procurement + Supplier-Item Matrix ─────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def item_procurement_analysis(request, item_code):
     """
     Per-item procurement analysis: all suppliers, price history, best supplier.
@@ -241,7 +243,7 @@ class SupplierItemMappingListView(generics.ListAPIView):
     """
     Full supplier-item mapping table (Module 4 — OCR learning table).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = SupplierItemMappingSerializer
 
     def get_queryset(self):
@@ -279,7 +281,7 @@ class SupplierItemMappingListView(generics.ListAPIView):
 # ── Module 5: Purchase Margin Engine ──────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def margin_analysis(request):
     """
     Margin breakdown: by supplier, by item, distribution histogram.
@@ -351,7 +353,7 @@ def margin_analysis(request):
 # ── Module 6: Supplier Return Engine ──────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def return_analysis(request):
     """
     Supplier return analysis: return rate, top returners, return trend.
@@ -393,7 +395,7 @@ def return_analysis(request):
 # ── Module 8: Price Control Engine ───────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def price_control(request):
     """
     Price drift alerts and price variance analysis.
@@ -415,7 +417,7 @@ def price_control(request):
 # ── Module 9: Procurement Optimization ───────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def procurement_optimization(request):
     """
     Buy/avoid recommendations: best suppliers per item, underperformers.
@@ -471,7 +473,7 @@ def procurement_optimization(request):
 # ── Module 10: Buyer Performance ──────────────────────────────────────────────
 
 class BuyerPerformanceListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = BuyerPerformanceSerializer
 
     def get_queryset(self):
@@ -495,7 +497,7 @@ class BuyerPerformanceListView(generics.ListAPIView):
 # ── Module 11: Branch Procurement ────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def branch_procurement(request):
     """
     Branch-level procurement KPIs.
@@ -551,7 +553,7 @@ class PurchaseLineListView(generics.ListAPIView):
     """
     Raw purchase lines with filtering. Used for drill-down.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = PurchaseLineSerializer
     # This view does its own filtering + ordering and caps the queryset with a
     # slice. The global DRF filter backends (OrderingFilter) would call
@@ -596,7 +598,7 @@ class PurchaseLineListView(generics.ListAPIView):
 # ── Engine Runs ───────────────────────────────────────────────────────────────
 
 class EngineRunListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = ProcurementEngineRunSerializer
     queryset           = ProcurementEngineRun.objects.all()[:30]
 
@@ -629,7 +631,7 @@ def trigger_engine(request):
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
 class AlertListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = ProcurementAlertSerializer
 
     def get_queryset(self):
@@ -652,7 +654,7 @@ class AlertListView(generics.ListAPIView):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def resolve_alert(request, pk):
     """Mark an alert as resolved."""
     try:
@@ -668,7 +670,10 @@ def resolve_alert(request, pk):
 
     alert.is_resolved     = True
     alert.resolved_at     = timezone.now()
-    alert.resolved_by     = serializer.validated_data['resolved_by']
+    # the resolver is the caller, not a client-sent name (Batch 4, Z-10c — the screens sent
+    # "dashboard_user" / "user")
+    sp = getattr(request.user, 'staff_profile', None)
+    alert.resolved_by     = ((sp.full_name if sp else '') or request.user.get_username())[:100]
     alert.resolution_notes = serializer.validated_data.get('resolution_notes', '')
     alert.save(update_fields=['is_resolved', 'resolved_at', 'resolved_by', 'resolution_notes'])
 
@@ -678,7 +683,7 @@ def resolve_alert(request, pk):
 # ── Snapshot history ──────────────────────────────────────────────────────────
 
 class SnapshotListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = ProcurementSnapshotSerializer
     queryset           = ProcurementSnapshot.objects.all()[:90]
 
@@ -922,7 +927,7 @@ class PurchaseHistoryView(generics.ListAPIView):
       margin_min/max, eff_cost_min/max, value_min/max.
     Max 1000 lines per request; use /history/summary/ for totals over all matches.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = PurchaseLineEnhancedSerializer
     # Self-filters + self-orders and caps with a slice; disable global DRF
     # backends (OrderingFilter would reorder the sliced queryset and 500) and
@@ -942,7 +947,7 @@ class PurchaseHistoryView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def purchase_history_summary(request):
     """
     Totals over the FULL filtered set (not just the 1000 shown rows), so the
@@ -976,7 +981,7 @@ def purchase_history_summary(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def procurement_filter_options(request):
     """
     Dropdown options for the history filter panel, scoped to items that actually
@@ -1048,7 +1053,7 @@ class SupplierSegmentationListView(generics.ListAPIView):
     List all supplier segmentations with optional filters:
       category, q (search name/code), min_value
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = SupplierSegmentationSerializer
 
     def get_queryset(self):
@@ -1080,7 +1085,7 @@ class SupplierSegmentationListView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def supplier_segmentation_summary(request):
     """
     Aggregate KPIs per supplier category:
@@ -1188,7 +1193,7 @@ def update_supplier_segmentation(request, pk):
 # ── v2: FOC Analysis ──────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def foc_analysis(request):
     """
     Free-of-charge (FOC) analysis:
@@ -1298,7 +1303,7 @@ def foc_analysis(request):
 # ── v2: Expiry Return Analysis ────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def expiry_return_analysis(request):
     """
     Expiry return analysis:
@@ -1393,7 +1398,7 @@ def expiry_return_analysis(request):
 # ── v2: Tax Burden Analysis ───────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def tax_burden_analysis(request):
     """
     Tax burden (VAT) analysis:
@@ -1479,7 +1484,7 @@ class SupplierPerformanceEnhancedListView(generics.ListAPIView):
     """
     Enhanced supplier list with v2 scoring (FOC, tax, effective cost dimensions).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, PURCHASING]
     serializer_class   = SupplierProfileEnhancedSerializer
 
     def get_queryset(self):
@@ -1513,7 +1518,7 @@ class SupplierPerformanceEnhancedListView(generics.ListAPIView):
 # ── Dashboard summary endpoint ────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def procurement_dashboard(request):
     """
     All-in-one dashboard data: snapshot + alerts + top suppliers + engine status.
@@ -1561,7 +1566,7 @@ class ReadOnlyOrAdmin(IsAuthenticated):
 
 class SupplierCategoryListCreateView(generics.ListCreateAPIView):
     """List all supplier categories (read: any auth user; write: staff)."""
-    permission_classes = [ReadOnlyOrAdmin]
+    permission_classes = [ReadOnlyOrAdmin, PURCHASING]
     serializer_class   = SupplierCategorySerializer
     filter_backends    = []
     pagination_class   = None
@@ -1574,13 +1579,13 @@ class SupplierCategoryListCreateView(generics.ListCreateAPIView):
 
 
 class SupplierCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [ReadOnlyOrAdmin]
+    permission_classes = [ReadOnlyOrAdmin, PURCHASING]
     serializer_class   = SupplierCategorySerializer
     queryset           = SupplierCategory.objects.all()
 
 
 class SupplierClassificationRuleListCreateView(generics.ListCreateAPIView):
-    permission_classes = [ReadOnlyOrAdmin]
+    permission_classes = [ReadOnlyOrAdmin, PURCHASING]
     serializer_class   = SupplierClassificationRuleSerializer
     filter_backends    = []
     pagination_class   = None
@@ -1594,13 +1599,13 @@ class SupplierClassificationRuleListCreateView(generics.ListCreateAPIView):
 
 
 class SupplierClassificationRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [ReadOnlyOrAdmin]
+    permission_classes = [ReadOnlyOrAdmin, PURCHASING]
     serializer_class   = SupplierClassificationRuleSerializer
     queryset           = SupplierClassificationRule.objects.all()
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, PURCHASING])
 def softech_person_codes(request):
     """
     Reference data for the rule editor: SOFTECH person types + classifications

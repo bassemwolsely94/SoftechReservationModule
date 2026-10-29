@@ -14,6 +14,14 @@ from .serializers import (
 # Roles that see all branches' inspections; others are scoped to their branch.
 _ALL_BRANCH_ROLES = {'admin', 'quality_manager', 'supervisor'}
 
+from core.permissions import matrix_permission                     # noqa: E402
+
+# QA inspections sit in the `hr` module (as the middleware maps /api/qa/) — Batch 4, Z-9c: reads
+# need view; writes need a grant beyond view, export included, because the quality manager —
+# whose screen this is — holds hr view + export (viewer, view only, could create inspections).
+_QA_WRITE = ('create', 'edit', 'approve', 'finalize', 'export')
+QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'))
+
 
 def _profile(request):
     return getattr(request.user, 'staff_profile', None)
@@ -21,14 +29,14 @@ def _profile(request):
 
 class QATemplateListView(generics.ListAPIView):
     """GET /api/qa/templates/ — active checklist templates."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, QA]
     serializer_class   = QAChecklistTemplateSerializer
     queryset           = QAChecklistTemplate.objects.filter(is_active=True)
 
 
 class QAInspectionViewSet(viewsets.ModelViewSet):
     """CRUD + submit for branch QA inspections."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, QA]
 
     def get_queryset(self):
         qs = QAInspection.objects.select_related('template', 'branch', 'inspector__user')

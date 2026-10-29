@@ -121,8 +121,12 @@ class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PaymentExceptionViewSet(viewsets.ModelViewSet):
-    """Triage, assign, and resolve payment exceptions."""
+class PaymentExceptionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Triage, assign, and resolve payment exceptions.
+
+    Read-only apart from resolve / dismiss / assign (Batch 4, Z-10a): exceptions are raised by the
+    matching engine, and a generic PATCH set status / resolved_by without the approve grant (a
+    generic DELETE erased them)."""
     serializer_class   = PaymentExceptionSerializer
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module        = 'finance'

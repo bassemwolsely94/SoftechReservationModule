@@ -238,6 +238,7 @@ def generate_tasks_for_period(
     lines_qs = PurchaseHistoryLine.objects.filter(
         purchase__doc_code='115',
         purchase__invoice_date__date__range=(period_start, period_end),
+        purchase__customer__is_account_placeholder=False,   # a sales account is not a patient
         item__ingredient_maps__active_ingredient__is_chronic=True,
         item__ingredient_maps__active_ingredient__followup_protocols__is_active=True,
     ).select_related(

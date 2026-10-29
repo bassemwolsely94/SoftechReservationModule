@@ -31,6 +31,15 @@ from .recon_serializers import (
 from . import recon_actions
 from .views import _is_admin_or_pharmacist
 from core.errors import public_error
+from core.permissions import matrix_permission
+
+# Every reconciliation view checks the finance matrix too (Batch 4, Z-3); the admin / pharmacist
+# checks inside stay until the owner's overblock review.
+FINANCE          = matrix_permission('finance')
+FINANCE_APPROVE  = matrix_permission('finance', post=('approve',))
+FINANCE_EDIT     = matrix_permission('finance', post=('edit',))
+FINANCE_FINALIZE = matrix_permission('finance', post=('finalize',))     # SOFTECH write-back
+FINANCE_EXPORT   = matrix_permission('finance', get=('export',))
 
 
 def _scope(request, qs, party_path='party'):
@@ -70,7 +79,7 @@ def _sum(qs, field):
 # ── 1. dashboard KPIs ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def reconciliation_dashboard(request):
     inv = _scope(request, APInvoice.objects.all())
     pay = _scope(request, Payment.objects.all())
@@ -120,7 +129,7 @@ def reconciliation_dashboard(request):
 # ── 2. lists ──────────────────────────────────────────────────────────────────
 
 class ReconPartyListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ReconPartySerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_personcode', 'name']
@@ -131,7 +140,7 @@ class ReconPartyListView(generics.ListAPIView):
 
 
 class InvoiceListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = APInvoiceSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['docnumber', 'docnumber2']
@@ -146,7 +155,7 @@ class InvoiceListView(generics.ListAPIView):
 
 
 class PaymentListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = PaymentSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['cheqsno', 'cheqno', 'ourcheqsno', 'note']
@@ -212,7 +221,7 @@ def _candidate_qs(request):
 
 
 class CandidateListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = MatchCandidateSerializer
     pagination_class   = ReconPagination
     filter_backends    = [StableOrdering]
@@ -235,7 +244,7 @@ class CandidateListView(generics.ListAPIView):
 
 
 class ExceptionListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ReconExceptionSerializer
     pagination_class   = ReconPagination
     filter_backends    = [StableOrdering]
@@ -257,7 +266,7 @@ class ExceptionListView(generics.ListAPIView):
 
 
 class ReconRunListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FINANCE]
     serializer_class   = ReconciliationRunSerializer
     ordering           = ['-started_at']
 
@@ -268,7 +277,7 @@ class ReconRunListView(generics.ListAPIView):
 # ── 3. workbench (3-pane payload) ─────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def reconciliation_workbench(request):
     """
     ?invoice=<id>  → the invoice + its candidate payments (with evidence)
@@ -308,7 +317,7 @@ def reconciliation_workbench(request):
 # ── 4. per-party حصر ledger (lightweight; full reconstruction = Phase F) ──────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def party_ledger(request, personcode):
     try:
         party = ReconParty.objects.get(softech_personcode=personcode)
@@ -337,7 +346,7 @@ def party_ledger(request, personcode):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def party_timeline(request, personcode):
     """حصر chronological ledger: signed events + running owed balance + equation."""
     from . import recon_balances
@@ -359,7 +368,7 @@ def _guard_write(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def approve_candidate_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -379,7 +388,7 @@ def approve_candidate_view(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def reject_candidate_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -397,7 +406,7 @@ def reject_candidate_view(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def bulk_approve_view(request):
     """
     Approve every PROPOSED candidate in a confidence class at once (default: all
@@ -430,7 +439,7 @@ def bulk_approve_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def bulk_reject_view(request):
     """Reject a whole review group (or a strategy/confidence slice) at once."""
     denied = _guard_write(request)
@@ -451,7 +460,7 @@ def bulk_reject_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def candidate_groups_view(request):
     """Grouped review: every candidate under its invoice (?by=invoice) or voucher
     (?by=payment), with capacity/excess, existing links and duplicate flags.
@@ -478,7 +487,7 @@ def candidate_groups_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def selection_action_view(request):
     """Apply one action to the rows ticked in the grid / a group.
     approve | reject | review → mirror only (admin/pharmacist);
@@ -544,7 +553,7 @@ def _reverse_selection(request, ids, note):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EDIT])
 def manual_allocate_view(request):
     denied = _guard_write(request)
     if denied:
@@ -563,7 +572,7 @@ def manual_allocate_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EDIT])
 def undo_allocation_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -592,7 +601,7 @@ def _is_admin(user) -> bool:
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
 def write_allocation_softech(request, pk):
     """
     GATED write-back of one approved Allocation to SOFTECH (records the missing
@@ -625,7 +634,7 @@ def write_allocation_softech(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
 def reverse_allocation_softech(request, pk):
     """Undo an allocation WE wrote to SOFTECH, then reject its candidate (admin, gated)."""
     from . import recon_writer
@@ -644,7 +653,7 @@ def reverse_allocation_softech(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EXPORT])
 def unpaid_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -659,7 +668,7 @@ def unpaid_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EXPORT])
 def review_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -674,7 +683,7 @@ def review_export(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
 def bulk_write_softech(request):
     """Write APPROVED allocations to SOFTECH in bounded batches over one connection
     (admin only; the page loops on `remaining`). Validation failures are skipped
@@ -764,7 +773,7 @@ def _sort_rows(rows, ordering, allowed) -> bool:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def unpaid_report(request):
     """Totals + supplier summary + unpaid invoice rows for the finance department."""
     from . import recon_reports as R
@@ -798,7 +807,7 @@ def unpaid_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def partial_report(request):
     """Invoices paid part-way (with the vouchers that paid them) + part-used vouchers."""
     from . import recon_reports as R
@@ -823,7 +832,7 @@ def partial_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EXPORT])
 def partial_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -838,7 +847,7 @@ def partial_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE_EXPORT])
 def returns_chains_export(request):
     """Open returns owed by suppliers, purchases paid although returned, and the
     مدفوعات → مقبوضات → مدفوعات correction chains (doc 23 §17)."""
@@ -869,7 +878,7 @@ def _apply_body_filters(qs, request, kind):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def supplier_options(request):
     """Every party of a type (code + name + SOFTECH balance) for the multi-select."""
     pt = request.query_params.get('party_type', 'supplier')
@@ -880,7 +889,7 @@ def supplier_options(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, FINANCE])
 def invoice_lines_view(request, pk):
     """Item lines of one invoice/return — live from SOFTECH, only on demand."""
     from . import recon_lines
