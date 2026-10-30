@@ -58,7 +58,7 @@ export default function CommerceDocumentEditorPage() {
     <div className="p-6" dir="rtl">
       <button onClick={() => navigate('/commerce')} className="text-sm text-gray-500 hover:text-gray-700 mb-3">← المستندات التجارية</button>
       <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
-        <div>
+        <div data-tour="commerce-editor-header">
           <h1 className="text-xl font-bold text-gray-800">{doc.type_name} — <span className="font-mono text-blue-700">{doc.number}</span></h1>
           <p className="text-sm text-gray-500">{doc.recipient_name || 'بدون جهة'} · {doc.doc_date} · ض.ق.م {fmt(doc.vat_rate)}%</p>
         </div>
@@ -120,7 +120,7 @@ export default function CommerceDocumentEditorPage() {
               </tr>
             ))}
             {/* Add-line row */}
-            <tr data-tour="commerce-editor-add-row" className="bg-blue-50/40">
+            <tr data-tour="commerce-editor-add-line" className="bg-blue-50/40">
               <td className="px-3 py-2 text-gray-300">+</td>
               <td className="px-3 py-2"><input className={`${inp} w-44`} placeholder="اسم الصنف…" value={draft.item_name}
                 onChange={e => setDraft(d => ({ ...d, item_name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addLine()} /></td>

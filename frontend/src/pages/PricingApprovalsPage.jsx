@@ -553,7 +553,7 @@ export default function PricingApprovalsPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div data-tour="pricing-approvals-table" className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           {isLoading && <div className="text-center py-12 text-gray-400 text-sm">جاري التحميل…</div>}
           {isError   && <div className="text-center py-12 text-red-500 text-sm">حدث خطأ أثناء التحميل</div>}
           {!isLoading && !isError && requests.length === 0 && (
@@ -639,7 +639,7 @@ export default function PricingApprovalsPage() {
                         )}
                       </td>
                       {isAdmin && (
-                        <td className="px-4 py-3">
+                        <td data-tour="pricing-approvals-review" className="px-4 py-3">
                           {(req.status === 'pending' || req.status === 'failed') && (
                             <div className="flex gap-1.5">
                               <button data-tour="pricing-approvals-approve"

@@ -98,6 +98,22 @@ export default function HelpArticle({ data, lang, tab, role, showAllRoles = fals
         </Section>
       )}
 
+      {data.tour?.length > 0 && (
+        <Section title={label('buttons', lang)}>
+          <ol className="space-y-1.5" data-tour="general-help-buttons">
+            {data.tour.map((t, i) => (
+              <li key={i} className="flex gap-2 text-sm text-content leading-7">
+                <span className="shrink-0 w-5 h-5 mt-1 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center tabnum">{i + 1}</span>
+                <div className="flex-1">
+                  <div className="font-semibold whitespace-pre-line">{pick(t.text, lang)}</div>
+                  {t.more && pick(t.more, lang) && <div className="text-muted whitespace-pre-line">{pick(t.more, lang)}</div>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Section>
+      )}
+
       {workflows.length > 0 && (
         <Section title={label('workflow', lang)}>
           <div className="space-y-4">{workflows.map((wf, i) => <Workflow key={i} wf={wf} lang={lang} />)}</div>

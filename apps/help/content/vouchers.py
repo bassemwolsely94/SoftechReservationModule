@@ -129,6 +129,71 @@ MODULE = {
              'open_hint': T('بعد «تحقق وصرف» بنجاح.', 'After a successful "Verify and redeem".')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول القسائم', 'A tour of the Vouchers module'),
+            'summary': T('إزاي القسيمة بتتعمل، بتوصل للعميل، بتتصرف برمز تحقق، ومستند الصرف بيتستخدم في نقطة البيع — ومتابعة الاستخدام.',
+                         'How a voucher is created, reaches the customer, is redeemed with a verification code, and how the redemption document is used at the POS — plus usage follow-up.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'purchasing', 'supervisor', 'quality_manager'],
+            'steps': [
+                {'target': 'nav-vouchers', 'nav': '/vouchers',
+                 'text': T('القسائم من القائمة: «العملاء» ← «القسائم».',
+                           'Vouchers from the menu: "Customers" → "Vouchers".'),
+                 'more': T('الموديول ده للخصومات الإلكترونية اللي بتتصرف برمز تحقق على هاتف العميل.\n'
+                           '• الإدارة بتعمل القسيمة، والصيادلة والكول سنتر بيصرفوها.\n'
+                           '• الصرف بيطلع «مستند صرف» يتستخدم عند الكاشير — القسيمة نفسها مش بتعدّل أي فاتورة لوحدها.',
+                           'This module is for electronic discounts redeemed with a verification code on the customer\'s phone.\n'
+                           '• Management creates the voucher; pharmacists and the call center redeem it.\n'
+                           '• Redeeming produces a "redemption document" used at the cashier — the voucher itself changes no invoice on its own.')},
+                {'target': 'vouchers-main-tabs', 'route': '/vouchers',
+                 'text': T('الشاشة كلها تبويبات بترتيب الشغل: إنشاء ← صرف ← تنفيذ عند الكاشير ← تقارير.',
+                           'The screen is tabs in work order: create → redeem → use at the cashier → reports.'),
+                 'more': T('هنمشي عليهم بالترتيب. «🎟️ كوبونات الهدايا» (الكوبونات الورقية المخزّنة في SOFTECH بسريالاتها) بتظهر للمدير والمشرف والمشتريات والجودة بس.',
+                           'We will go through them in order. "🎟️ Gift coupons" (the paper coupons stocked in SOFTECH by serial) shows only for admins, supervisors, purchasing and quality.')},
+                {'target': 'vouchers-main-new', 'route': '/vouchers',
+                 'text': T('١) الإنشاء: «+ قسيمة جديدة».',
+                           '1) Create: "+ New voucher".'),
+                 'more': T('تحدد مين يقدر يستخدمها («فئة التوزيع»: عام، خاص بعميل، أول مرة، مخصص بالهاتف)، ونوع الخصم وقيمته، والشروط (حد أدنى، أصناف وفروع مؤهلة، حدود الاستخدام والصلاحية).\n'
+                           '• الحساب كله بقواعد ثابتة — النظام هو اللي بيحسب الخصم، مش الموظف.',
+                           'You set who may use it ("Distribution category": public, private to a customer, first-time, phone-limited), the discount type and value, and the conditions (minimum, eligible items and branches, usage limits and validity).\n'
+                           '• The calculation follows fixed rules — the system calculates the discount, not the employee.')},
+                {'target': 'vouchers-main-search', 'route': '/vouchers',
+                 'text': T('دوّر على القسيمة بالكود أو العنوان.',
+                           'Find the voucher by code or title.'),
+                 'more': T('لما عميل يجيلك بكود، اكتبه هنا تلاقي القسيمة وحالتها وقيمتها على طول.',
+                           'When a customer brings a code, type it here to find the voucher, its status and value at once.')},
+                {'target': 'vouchers-main-status', 'route': '/vouchers',
+                 'text': T('اختار «نشط» عشان تشوف اللي ينفع يتصرف.',
+                           'Choose "Active" to see what can be redeemed.'),
+                 'more': T('القسيمة بتبقى «مُستخدَم» لما توصل لحدها، و«منتهي» لما تعدّي فترة صلاحيتها، و«ملغى» لو المدير وقفها.',
+                           'A voucher becomes "used" when it reaches its limit, "expired" when its validity ends, and "cancelled" if a manager stops it.')},
+                {'target': 'vouchers-main-table', 'route': '/vouchers',
+                 'text': T('٢) التوصيل للعميل والصرف: «📱 تخصيص» و«استرداد» من صف القسيمة.',
+                           '2) Reach the customer and redeem: "📱 Assign" and "Redeem" on the voucher\'s row.'),
+                 'more': T('• «📱 تخصيص» يربط القسيمة برقم عميل معيّن (للقسائم المخصصة بالهاتف).\n'
+                           '• «استرداد» يبدأ الأربع خطوات: الهاتف والأهلية ← إرسال الرمز (واتساب أو QR) ← التحقق ← مستند الصرف.\n'
+                           '• الرمز صالح 3 دقايق و3 محاولات.',
+                           '• "📱 Assign" links the voucher to a specific customer phone (for phone-limited vouchers).\n'
+                           '• "Redeem" starts the four steps: phone and eligibility → send the code (WhatsApp or QR) → verify → redemption document.\n'
+                           '• The code is valid for 3 minutes and 3 tries.')},
+                {'target': 'vouchers-main-tabs', 'route': '/vouchers',
+                 'text': T('٣) عند الكاشير: تبويب «🏪 وثائق POS».',
+                           '3) At the cashier: the "🏪 POS documents" tab.'),
+                 'more': T('دوّر برقم مستند الصرف، اتأكد من القسيمة والخصم والدقايق المتبقية، واضغط «✅ تفعيل الوثيقة (POS)» وقت تنفيذ البيع.\n'
+                           '• المستند صالح 15 دقيقة بس ومينفعش يتستخدم مرتين.\n'
+                           '• وزر «📱» يبعته للعميل واتساب.',
+                           'Search by the redemption document number, check the voucher, the discount and the minutes left, and press "✅ Activate document (POS)" when the sale is made.\n'
+                           '• The document is valid for 15 minutes only and cannot be used twice.\n'
+                           '• The "📱" button sends it to the customer on WhatsApp.')},
+                {'target': 'vouchers-main-tabs', 'route': '/vouchers',
+                 'text': T('٤) المتابعة: تبويب «📊 تقارير».',
+                           '4) Follow-up: the "📊 Reports" tab.'),
+                 'more': T('بيوضح أكتر القسائم استخداماً وقيمتها ونشاط كل موظف في الصرف — منه تعرف القسيمة نجحت ولا لأ، وتلاحظ أي استخدام غريب.',
+                           'It shows the most-used vouchers and their value, and each employee\'s redemption activity — so you can tell whether a voucher worked and spot any unusual use.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -148,7 +213,7 @@ SCREENS = [
              'body': T('صرف قسيمة لعميل بالخطوات الأربع (الهاتف ← الرمز ← التحقق ← المستند). لو القسيمة مقصورة على أصناف، أكّد وجود صنف منها في الطلب.',
                        'Redeem a voucher for a customer in four steps (phone → code → verify → document). If it is limited to items, confirm one of them is in the order.')},
             {'key': 'documents', 'title': T('🏪 وثائق POS', '🏪 POS documents'),
-             'body': T('البحث عن مستند صرف، تعليمه «مُستخدَم» عند تنفيذ البيع، طباعته أو إرساله واتساب.', 'Find a redemption document, mark it "used" when the sale is done, print it or send it on WhatsApp.')},
+             'body': T('البحث عن مستند صرف، تفعيله بـ«✅ تفعيل الوثيقة (POS)» عند تنفيذ البيع، أو إرساله واتساب.', 'Find a redemption document, activate it with "✅ Activate document (POS)" when the sale is done, or send it on WhatsApp.')},
             {'key': 'report', 'title': T('📊 تقارير', '📊 Reports'), 'body': T('تقرير استخدام القسائم: عدد مرات الصرف والقيمة لكل قسيمة.', 'Voucher usage report: redemptions and value per voucher.')},
             {'key': 'coupons', 'title': T('🎟️ كوبونات الهدايا', '🎟️ Gift coupons'),
              'body': T('كوبونات الهدايا الورقية: ابحث بالسريال لترى تاريخه (شراء ← صرف لعميل ← تحويل لفرع ← استخدام)، و«اختبار فحص الكوبون في POS» لمعرفة هل سيُقبل.',
@@ -177,18 +242,27 @@ SCREENS = [
              'text': T('القسائم، الاسترداد، وثائق POS، والتقارير. «كوبونات الهدايا» الورقية تبويب إضافي للإدارة والمشتريات والجودة.',
                        'Vouchers, redeem, POS documents and reports. Paper "Gift coupons" is an extra tab for management, purchasing and quality.'),
              'when': T('ابدأ من «القسائم» للإنشاء والصرف، و«وثائق POS» لما الكاشير معاه كود مرجع.',
-                       'Start on "Vouchers" to create and redeem, and "POS documents" when the cashier has a reference code.')},
+                       'Start on "Vouchers" to create and redeem, and "POS documents" when the cashier has a reference code.'),
+             'more': T(
+                 '• «🎫 القسائم»: القائمة والإنشاء والتخصيص.\n• «💳 استرداد»: صرف قسيمة لعميل بالكود.\n• «🏪 وثائق POS»: تدوّر على مستند الصرف وتفعّله وقت البيع.\n• «📊 تقارير»: أكتر القسائم استخداماً ونشاط الموظفين.\n• «🎟️ كوبونات الهدايا» بتظهر للمدير والمشرف والمشتريات والجودة بس.',
+                 '• "🎫 Vouchers": the list, creating and assigning.\n• "💳 Redeem": redeem a voucher for a customer by code.\n• "🏪 POS documents": find a redemption document and activate it at the sale.\n• "📊 Reports": most-used vouchers and staff activity.\n• "🎟️ Gift coupons" shows only for admins, supervisors, purchasing and quality.')},
             {'target': 'vouchers-main-new', 'label': T('+ قسيمة جديدة', '+ New voucher'),
              'text': T('يفتح نموذج القسيمة: العنوان، الفئة، آلية الخصم، الصلاحية، حدود الاستخدام، والأصناف والفروع المؤهلة.',
                        'Opens the voucher form: title, category, discount mechanism, validity, usage limits, and eligible items and branches.'),
-             'open_hint': T('الزر بيظهر لمن له صلاحية الإنشاء، في تبويب «القسائم».', 'The button shows for users allowed to create, on the "Vouchers" tab.')},
+             'open_hint': T('الزر بيظهر لمن له صلاحية الإنشاء، في تبويب «القسائم».', 'The button shows for users allowed to create, on the "Vouchers" tab.'),
+             'more': T(
+                 'بتكتب العنوان، «فئة التوزيع» (عام، خاص، أول مرة، مخصص بالهاتف)، «آلية الخصم» (خصم %، خصم ثابت، رصيد نقدي، صنف مجاني) وقيمته.\n• وكمان الحد الأدنى للطلب والحد الأقصى للخصم، فترة الصلاحية، حدود الاستخدام (الكلي / لكل عميل / يومياً)، والأصناف المؤهلة.\n• الزر بيظهر بس لو صلاحيتك تسمح بالإنشاء.',
+                 'You enter the title, the "Distribution category" (public, private, first-time, phone-limited), the "Discount mechanism" (percent, fixed, cash credit, free item) and its value.\n• Also the minimum order and maximum discount, the validity period, usage limits (total / per customer / daily), and eligible items.\n• The button shows only if your permission allows creating.')},
             {'target': 'vouchers-main-create-submit', 'label': T('✓ إنشاء القسيمة', '✓ Create voucher'),
              'text': T('يحفظ القسيمة ويولّد لها كود تلقائياً.', 'Saves the voucher and generates its code automatically.'),
              'warn': T('راجع نوع الخصم وحدود الاستخدام والصلاحية قبل الحفظ — دي اللي بتحدد تكلفة القسيمة.',
                        'Check the discount type, usage limits and validity before saving — they decide what the voucher costs.'),
              'open_hint': T('اضغط «+ قسيمة جديدة».', 'Press "+ New voucher".')},
             {'target': 'vouchers-main-search', 'label': T('بحث بالكود أو العنوان...', 'Search by code or title...'),
-             'text': T('ابحث بالكود أو العنوان. جنبه فلاتر الحالة والنوع والفئة.', 'Search by code or title. Next to it are the status, type and category filters.')},
+             'text': T('ابحث بالكود أو العنوان. جنبه فلاتر الحالة والنوع والفئة.', 'Search by code or title. Next to it are the status, type and category filters.'),
+             'more': T(
+                 'مفيد لما العميل يقولك كود قسيمة معاه. جنبه فلتر «كل الأنواع» و«كل الفئات» لو عايز تضيّق أكتر.',
+                 'Handy when a customer gives you a voucher code. Next to it, "All types" and "All categories" filters narrow it further.')},
             {'target': 'vouchers-main-redeem', 'label': T('استرداد', 'Redeem'),
              'text': T('يبدأ صرف القسيمة دي لعميل: الهاتف ← الأهلية ← الرمز ← المستند.', 'Starts redeeming this voucher for a customer: phone → eligibility → code → document.'),
              'open_hint': T('بيظهر جنب القسائم النشطة بس.', 'Shows next to active vouchers only.')},
@@ -226,8 +300,21 @@ SCREENS = [
                        'Writes to SOFTECH. Run "Rehearse without saving" first. The button is locked while writing is off in settings.'),
              'open_hint': T('تبويب «🎟️ كوبونات الهدايا» ← «الدفعات»، دفعة بانتظار الإدخال. للمسؤول والمشتريات والمشرف.',
                             '"🎟️ Gift coupons" tab → "Batches", a batch waiting to be entered. For admin, purchasing and supervisor.')},
+            {'target': 'vouchers-main-status',  # from the GitHub-side tour
+             'text': T('فلتر الحالة.',
+                       'Status filter.'),
+             'more': T(
+                 'القسيمة «النشطة» بس هي اللي ينفع تتصرف أو تتخصص أو تتلغى. المنتهية أو المُستخدمة بالكامل بتفضل في القائمة للمتابعة.',
+                 'Only an "active" voucher can be redeemed, assigned or cancelled. Expired or fully used ones stay in the list for follow-up.')},
+            {'target': 'vouchers-main-table',  # from the GitHub-side tour
+             'text': T('القسائم — افتح أي قسيمة لتفاصيلها.',
+                       'The vouchers — open one for its details.'),
+             'more': T(
+                 'عمود «الاستخدام» بيوضح اتصرفت كام مرة من الحد الكلي.\n• «استرداد» بيبدأ خطوات الصرف (الهاتف ← الرمز ← التحقق ← المستند).\n• «📱 تخصيص» يضيف رقم عميل مسموح له بالقسيمة.\n• «إلغاء» بيوقف القسيمة نهائياً بعد تأكيد، والسيستم بيسمح بيه للمدير بس.',
+                 'The "Usage" column shows how many times it was used out of the total limit.\n• "Redeem" starts the redemption steps (phone → code → verify → document).\n• "📱 Assign" adds a customer phone allowed to use the voucher.\n• "Cancel" stops the voucher for good after a confirmation, and the system allows it for managers only.')},
         ],
         'updated': '2026-10-28',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'vouchers.mobile',
@@ -244,7 +331,10 @@ SCREENS = [
             {'target': 'vouchers-mobile-phone', 'label': T('هاتف العميل *', 'Customer phone *'),
              'text': T('هاتف العميل، وقيمة الطلب لو عايز الخصم يتحسب. لو القسيمة مقصورة على أصناف، علّم الصنف اللي في الطلب.',
                        'The customer phone, and the order value if you want the discount calculated. If limited to items, tick the one in the order.'),
-             'open_hint': T('اختار قسيمة من القائمة.', 'Pick a voucher from the list.')},
+             'open_hint': T('اختار قسيمة من القائمة.', 'Pick a voucher from the list.'),
+             'more': T(
+                 '«هاتف العميل» إجباري — عليه بيوصل رمز التحقق. «قيمة الطلب» اختيارية لكنها بتساعد النظام يتحقق من الحد الأدنى ويحسب الخصم.\n• لو القسيمة مقصورة على أصناف، لازم تعلّم الصنف الموجود فعلاً في طلب العميل.',
+                 '"Customer phone" is required — the verification code goes to it. "Order value" is optional but helps the system check the minimum and calculate the discount.\n• If the voucher is limited to certain items, you must tick the item that is really in the customer\'s order.')},
             {'target': 'vouchers-mobile-otp-send', 'label': T('إرسال رمز التحقق', 'Send verification code'),
              'text': T('يتأكد من أهلية العميل ويبعت له رمز التحقق.', 'Checks the customer is eligible and sends them the verification code.'),
              'warn': T('اتأكد من الرقم مع العميل. الإرسال المتكرر لنفس الرقم ليه حد في كل 10 دقائق.',
@@ -255,15 +345,34 @@ SCREENS = [
              'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
             {'target': 'vouchers-mobile-code',
              'text': T('اكتب الرمز اللي العميل بيقراه لك. صالح 3 دقائق و3 محاولات.', 'Type the code the customer reads to you. Valid 3 minutes and 3 tries.'),
-             'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
+             'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".'),
+             'more': T(
+                 'اكتب الرمز اللي العميل يقراه لك. لو الرسالة ما وصلتش، زر «💬 إرسال عبر واتساب» يفتح الرسالة جاهزة.\n• ما تطلبش من العميل يبعتلك الرمز في رسالة — يقراه لك بس.\n• «← تغيير الرقم» يرجعك لو الهاتف غلط.',
+                 'Type the code the customer reads out to you. If the message did not arrive, "💬 Send via WhatsApp" opens it ready to send.\n• Do not ask the customer to forward the code in a message — they only read it to you.\n• "← Change number" takes you back if the phone was wrong.')},
             {'target': 'vouchers-mobile-verify', 'label': T('تحقق وصرف', 'Verify and redeem'),
              'text': T('يتأكد من الرمز وينشئ مستند الصرف.', 'Checks the code and creates the redemption document.'),
              'warn': T('بيحسب استخدام من القسيمة فوراً. اضغطه والعميل قدامك بيشتري.', 'It counts one use of the voucher at once. Press it while the customer is buying.'),
-             'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".')},
+             'open_hint': T('بعد «إرسال رمز التحقق».', 'After "Send verification code".'),
+             'more': T(
+                 'لو الرمز صح، بيظهر «تم التحقق وإنشاء مستند الصرف» برقم المستند ووقت انتهائه.\n• استخدم رقم المستند في نقطة البيع خلال 15 دقيقة، وبعد كده بيتعلّم «مُستخدَم».\n• «صرف قسيمة أخرى» يرجعك للقائمة.',
+                 'If the code is right, "Verified and redemption document created" shows with the document number and when it expires.\n• Use the document number at the point of sale within 15 minutes; it is then marked "used".\n• "Redeem another voucher" takes you back to the list.')},
             {'target': 'vouchers-mobile-done',
              'text': T('رقم المستند وصلاحيته. استخدمه في نقطة البيع خلال 15 دقيقة.', 'The document number and its validity. Use it at the POS within 15 minutes.'),
              'open_hint': T('بعد «تحقق وصرف» بنجاح.', 'After a successful "Verify and redeem".')},
+            {'target': 'vouchers-mobile-header',  # from the GitHub-side tour
+             'text': T('«صرف قسيمة» من الموبايل: اختر القسيمة، أدخل بيانات العميل، ثم أكّد برمز التحقق.',
+                       '«Redeem voucher» on mobile: pick the voucher, enter the customer\'s details, then confirm with the verification code.'),
+             'more': T(
+                 'الشاشة دي لصرف قسيمة لعميل واقف قدامك أو على التليفون، من غير ما تفتح الكمبيوتر.\n• الخطوات بالترتيب: القسيمة ← هاتف العميل ← رمز التحقق ← مستند الصرف.\n• المستند اللي بيطلع في الآخر هو اللي بيتستخدم في نقطة البيع.',
+                 "This screen redeems a voucher for a customer in front of you or on the phone, without opening the computer.\n• The steps in order: the voucher → the customer's phone → the verification code → the redemption document.\n• The document produced at the end is what gets used at the point of sale.")},
+            {'target': 'vouchers-mobile-list',  # from the GitHub-side tour
+             'text': T('القسائم الفعّالة بكودها وقيمتها — اضغط على القسيمة التي يريد العميل صرفها.',
+                       'Active vouchers with their code and value — tap the one the customer wants to redeem.'),
+             'more': T(
+                 'هنا بتظهر القسائم الفعّالة بس، بالكود والقيمة. اضغط القسيمة اللي العميل عايز يستخدمها عشان تفتح خطوة بيانات العميل.\n• لو القائمة فاضية يبقى مفيش قسائم فعّالة دلوقتي.',
+                 'Only active vouchers show here, with their code and value. Tap the one the customer wants to use to open the customer-details step.\n• If the list is empty, there are no active vouchers right now.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

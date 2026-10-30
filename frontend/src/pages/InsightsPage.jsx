@@ -506,7 +506,7 @@ function ReportView({ id }) {
       {needsKey && !scopeKey ? null : !rep ? (
         <div className="text-gray-400 text-sm py-8 text-center">{isFetching ? 'جارٍ التحميل…' : 'لا توجد بيانات'}</div>
       ) : (<>
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <div data-tour="analytics-insights-report" className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex rounded-lg bg-gray-100 p-0.5 text-sm">
             <button onClick={() => setLang('ar')} className={`px-3 py-1 rounded-md ${lang === 'ar' ? 'bg-white shadow font-bold' : 'text-gray-500'}`}>عربي</button>

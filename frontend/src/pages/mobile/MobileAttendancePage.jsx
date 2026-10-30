@@ -69,7 +69,7 @@ export default function MobileAttendancePage() {
           {open ? 'أنت مسجّل حضور الآن' : rec ? 'أنهيت يومك' : 'لم تسجّل الحضور بعد'}
         </div>
         {rec && (
-          <div className="mt-3 text-sm text-gray-700 space-y-1.5">
+          <div data-tour="hr-attendance-times" className="mt-3 text-sm text-gray-700 space-y-1.5">
             <div className="flex items-center justify-center gap-2">
               <span className="text-gray-400">حضور:</span>
               <span className="font-medium">{fmtTime(rec.check_in_at)}</span>
@@ -104,7 +104,7 @@ export default function MobileAttendancePage() {
         <div className="text-center text-xs text-gray-400">تم تسجيل حضورك وانصرافك اليوم</div>
       )}
 
-      <p data-tour="hr-attendance-range" className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
+      <p data-tour="hr-attendance-geofence-note" className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
     </div>
   )
 }

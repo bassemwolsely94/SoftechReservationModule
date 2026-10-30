@@ -3,6 +3,27 @@
  "metrics": {},
  "results": [
   {
+   "code": "36         marks = ', '.join('?' for _ in chunk)\n37         cur.execute(f'SELECT personcode, personname, ptcode, ptclassifcode FROM {_DB}.personsdata '\n38                     f'WHERE personcode IN ({marks})', chunk, timeout=60)\n39         for pc, name, ptc, cls in cur.fetchall():\n",
+   "col_offset": 22,
+   "end_col_offset": 80,
+   "filename": "apps/customers/account_link.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 37,
+   "line_range": [
+    37,
+    38
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "53             cur.execute('SET ROWCOUNT 1')\n54             cur.execute(f'SELECT * FROM {DB}.{table}')\n55             cur.fetchall()\n",
    "col_offset": 26,
    "end_col_offset": 40,
@@ -515,7 +536,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "480         self._emit('[mirror] copying itemsai \u2192 SoftechItemAI ...')\n481         cur.execute(f'SELECT itemcode, aicode, aiblock FROM {DB}.itemsai')\n482         rows = cur.fetchall()\n",
+   "code": "480         self._emit('[mirror] copying itemsai → SoftechItemAI ...')\n481         cur.execute(f'SELECT itemcode, aicode, aiblock FROM {DB}.itemsai')\n482         rows = cur.fetchall()\n",
    "col_offset": 22,
    "end_col_offset": 60,
    "filename": "apps/composition/management/commands/probe_softech_ingredients.py",
@@ -637,6 +658,28 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
+   "code": "82         _, rows = self._q(self.hq, (\n83             'SELECT o.name AS table_name, c.name AS col, c.status, c.cdefault, c.length '\n84             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n85             f\"WHERE c.id = o.id AND o.type = 'U' AND o.name IN ({in_list}) ORDER BY o.name, c.colid\"))\n86         out = defaultdict(list)\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 83,
+   "line_range": [
+    83,
+    84,
+    85
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "86         _, rows = self._q(self.hq, (\n87             'SELECT o.name AS table_name, c.name AS col, c.status, c.cdefault, c.length '\n88             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n89             f\"WHERE c.id = o.id AND o.type = 'U' AND o.name IN ({_marks(tables)}) ORDER BY o.name, c.colid\"),\n90             params=list(tables))\n",
    "col_offset": 12,
    "end_col_offset": 19,
@@ -659,6 +702,28 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
+   "code": "103         _, rows = self._q(self.hq, (\n104             'SELECT DISTINCT o.name '\n105             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n106             f\"WHERE c.id = o.id AND o.type = 'U' AND c.name IN ({in_list}) ORDER BY o.name\"))\n107         self.pic_tables = [_s(r[0]) for r in rows]\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 104,
+   "line_range": [
+    104,
+    105,
+    106
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "107         _, rows = self._q(self.hq, (\n108             'SELECT DISTINCT o.name '\n109             f'FROM {DB}.syscolumns c, {DB}.sysobjects o '\n110             f\"WHERE c.id = o.id AND o.type = 'U' AND c.name IN ({_marks(PIC_COLS)}) ORDER BY o.name\"),\n111             params=list(PIC_COLS))\n",
    "col_offset": 12,
    "end_col_offset": 19,
@@ -675,6 +740,29 @@
     108,
     109,
     110
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "118         _, rows = self._q(self.hq, (\n119             'SELECT t.name AS trigger_name, o.name AS table_name '\n120             f'FROM {DB}.sysobjects t, {DB}.sysobjects o '\n121             f\"WHERE t.type = 'TR' AND o.type = 'U' AND o.name IN ({in_list}) \"\n122             'AND (t.id = o.instrig OR t.id = o.updtrig OR t.id = o.deltrig) ORDER BY o.name, t.name'))\n123         if not rows:\n",
+   "col_offset": 12,
+   "end_col_offset": 19,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 119,
+   "line_range": [
+    119,
+    120,
+    121,
+    122
    ],
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
@@ -704,6 +792,26 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
+   "code": "128     def s_allocation(self):\n129         _, rows = self._q(self.hq, f'SELECT phcode FROM {DB}.{MAIN} ORDER BY trans_time DESC', limit=NEWEST)\n130         self.newest = [_s(r[0]) for r in rows]\n",
+   "col_offset": 37,
+   "end_col_offset": 56,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 129,
+   "line_range": [
+    129
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
    "code": "133     def s_allocation(self):\n134         _, rows = self._q(self.hq, f'SELECT phcode FROM {DB}.{MAIN} ORDER BY trans_time DESC', limit=NEWEST)\n135         self.newest = [_s(r[0]) for r in rows]\n",
    "col_offset": 37,
    "end_col_offset": 56,
@@ -718,6 +826,26 @@
    "line_number": 134,
    "line_range": [
     134
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  },
+  {
+   "code": "157             try:\n158                 _, rows = self._q(conn, f'SELECT phcode FROM {DB}.{MAIN} WHERE phcode IN ({in_list})')\n159                 have = {_s(r[0]) for r in rows}\n",
+   "col_offset": 42,
+   "end_col_offset": 61,
+   "filename": "apps/customers/management/commands/investigate_pic_create.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 158,
+   "line_range": [
+    158
    ],
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
    "test_id": "B608",
@@ -785,7 +913,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "137         self._emit(f'  localcustomers: {rows} rows \u00b7 {pics} distinct PIC \u00b7 {branches} branch codes')\n138         _, r = self._q(f'SELECT n, count(*) FROM (SELECT phcode, count(*) n FROM {DB}.localcustomers '\n139                        'GROUP BY phcode) x GROUP BY n ORDER BY n')\n140         self._emit('  rows per PIC (rows \u2192 how many PICs): ' + ', '.join(f'{a}\u2192{b}' for a, b in r[:12]))\n",
+   "code": "137         self._emit(f'  localcustomers: {rows} rows · {pics} distinct PIC · {branches} branch codes')\n138         _, r = self._q(f'SELECT n, count(*) FROM (SELECT phcode, count(*) n FROM {DB}.localcustomers '\n139                        'GROUP BY phcode) x GROUP BY n ORDER BY n')\n140         self._emit('  rows per PIC (rows → how many PICs): ' + ', '.join(f'{a}→{b}' for a, b in r[:12]))\n",
    "col_offset": 25,
    "end_col_offset": 81,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -806,7 +934,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "140         self._emit('  rows per PIC (rows \u2192 how many PICs): ' + ', '.join(f'{a}\u2192{b}' for a, b in r[:12]))\n141         _, r = self._q(f'SELECT count(*) FROM {DB}.personsdata p WHERE EXISTS '\n142                        f'(SELECT 1 FROM {DB}.localcustomers l WHERE l.phcode = p.personcode)')\n143         self._emit(f'  personsdata rows whose personcode is a PIC: {r[0][0]}')\n",
+   "code": "140         self._emit('  rows per PIC (rows → how many PICs): ' + ', '.join(f'{a}→{b}' for a, b in r[:12]))\n141         _, r = self._q(f'SELECT count(*) FROM {DB}.personsdata p WHERE EXISTS '\n142                        f'(SELECT 1 FROM {DB}.localcustomers l WHERE l.phcode = p.personcode)')\n143         self._emit(f'  personsdata rows whose personcode is a PIC: {r[0][0]}')\n",
    "col_offset": 25,
    "end_col_offset": 46,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -911,7 +1039,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "181         names = \"','\".join(TABLES)\n182         _, rows = self._q(f\"SELECT object_name(tableid), object_name(reftabid) FROM {DB}.sysreferences \"\n183                           f\"WHERE object_name(reftabid) IN ('{names}') OR object_name(tableid) IN ('{names}')\")\n184         self._emit('  ' + (', '.join(f'{a} \u2192 {b}' for a, b in rows) if rows else '(no declared FK references)'))\n",
+   "code": "181         names = \"','\".join(TABLES)\n182         _, rows = self._q(f\"SELECT object_name(tableid), object_name(reftabid) FROM {DB}.sysreferences \"\n183                           f\"WHERE object_name(reftabid) IN ('{names}') OR object_name(tableid) IN ('{names}')\")\n184         self._emit('  ' + (', '.join(f'{a} → {b}' for a, b in rows) if rows else '(no declared FK references)'))\n",
    "col_offset": 28,
    "end_col_offset": 84,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -994,7 +1122,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "235         \"\"\"Light by default (the picpoints log is huge \u2014 a full GROUP BY timed out).\"\"\"\n236         _, rows = self._q(f'SELECT count(*), count(distinct phcode), sum(totpoints), sum(conpoints) '\n237                           f'FROM {DB}.localcustomerspoints')\n238         n, pics, tot, con = rows[0]\n",
+   "code": "235         \"\"\"Light by default (the picpoints log is huge — a full GROUP BY timed out).\"\"\"\n236         _, rows = self._q(f'SELECT count(*), count(distinct phcode), sum(totpoints), sum(conpoints) '\n237                           f'FROM {DB}.localcustomerspoints')\n238         n, pics, tot, con = rows[0]\n",
    "col_offset": 28,
    "end_col_offset": 33,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1015,7 +1143,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "239         self._emit(f'  localcustomerspoints (balance table): {n} rows \u00b7 {pics} PICs \u00b7 earned {tot} \u00b7 consumed {con}')\n240         _, rows = self._q(f'SELECT n, count(*) FROM (SELECT phcode, count(*) n FROM {DB}.localcustomerspoints '\n241                           'GROUP BY phcode) x GROUP BY n ORDER BY n')\n242         self._emit('  balance rows per PIC: ' + ', '.join(f'{a}\u2192{b}' for a, b in rows[:8]))\n",
+   "code": "239         self._emit(f'  localcustomerspoints (balance table): {n} rows · {pics} PICs · earned {tot} · consumed {con}')\n240         _, rows = self._q(f'SELECT n, count(*) FROM (SELECT phcode, count(*) n FROM {DB}.localcustomerspoints '\n241                           'GROUP BY phcode) x GROUP BY n ORDER BY n')\n242         self._emit('  balance rows per PIC: ' + ', '.join(f'{a}→{b}' for a, b in rows[:8]))\n",
    "col_offset": 28,
    "end_col_offset": 84,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1036,7 +1164,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "245             return\n246         _, rows = self._q(f'SELECT doccode, count(*), sum(points) FROM {DB}.picpoints '\n247                           'WHERE transdate >= dateadd(day, -60, getdate()) GROUP BY doccode ORDER BY 2 DESC', limit=20)\n248         self._emit('  picpoints last 60 days by doccode (rows, \u03a3points): '\n",
+   "code": "245             return\n246         _, rows = self._q(f'SELECT doccode, count(*), sum(points) FROM {DB}.picpoints '\n247                           'WHERE transdate >= dateadd(day, -60, getdate()) GROUP BY doccode ORDER BY 2 DESC', limit=20)\n248         self._emit('  picpoints last 60 days by doccode (rows, Σpoints): '\n",
    "col_offset": 28,
    "end_col_offset": 71,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1097,7 +1225,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "263             self._emit('    personphones: ' + (', '.join(f'{_mask(p)} block={b} order={o}' for p, b, o in rows) or '(none)'))\n264             _, rows = self._q(f'SELECT totpoints, conpoints, branchcode FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n265             self._emit('    points balance: ' + (', '.join(f'earned {t} \u2212 consumed {c} = {(t or 0) - (c or 0)} (branch {b})'\n",
+   "code": "263             self._emit('    personphones: ' + (', '.join(f'{_mask(p)} block={b} order={o}' for p, b, o in rows) or '(none)'))\n264             _, rows = self._q(f'SELECT totpoints, conpoints, branchcode FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n265             self._emit('    points balance: ' + (', '.join(f'earned {t} − consumed {c} = {(t or 0) - (c or 0)} (branch {b})'\n",
    "col_offset": 32,
    "end_col_offset": 77,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1137,7 +1265,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "267             for label, sql in (('picpoints log', f'SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints WHERE phcode = ?'),\n268                                ('stktransm docs', f'SELECT count(*), max(docdate), 0 FROM {DB}.stktransm WHERE phcode = ?')):\n269                 try:                                  # big tables \u2014 a timeout must not lose the rest\n",
+   "code": "267             for label, sql in (('picpoints log', f'SELECT count(*), sum(points), max(transdate) FROM {DB}.picpoints WHERE phcode = ?'),\n268                                ('stktransm docs', f'SELECT count(*), max(docdate), 0 FROM {DB}.stktransm WHERE phcode = ?')):\n269                 try:                                  # big tables — a timeout must not lose the rest\n",
    "col_offset": 52,
    "end_col_offset": 90,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1198,7 +1326,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "326         # pphcode \u2014 possible parent / main-PIC link\n327         _, r = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> ''\")\n328         _, r2 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode\")\n",
+   "code": "326         # pphcode — possible parent / main-PIC link\n327         _, r = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> ''\")\n328         _, r2 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode\")\n",
    "col_offset": 25,
    "end_col_offset": 46,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1238,7 +1366,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "328         _, r2 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode\")\n329         _, r3 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers l WHERE isnull(l.pphcode, '') <> '' \"\n330                         f\"AND l.pphcode <> l.phcode AND EXISTS (SELECT 1 FROM {DB}.localcustomers p WHERE p.phcode = l.pphcode)\")\n331         self._emit(f'  pphcode filled on {r[0][0]} codes \u00b7 pointing to ANOTHER code on {r2[0][0]} \u00b7 '\n",
+   "code": "328         _, r2 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers WHERE isnull(pphcode, '') <> '' AND pphcode <> phcode\")\n329         _, r3 = self._q(f\"SELECT count(*) FROM {DB}.localcustomers l WHERE isnull(l.pphcode, '') <> '' \"\n330                         f\"AND l.pphcode <> l.phcode AND EXISTS (SELECT 1 FROM {DB}.localcustomers p WHERE p.phcode = l.pphcode)\")\n331         self._emit(f'  pphcode filled on {r[0][0]} codes · pointing to ANOTHER code on {r2[0][0]} · '\n",
    "col_offset": 26,
    "end_col_offset": 47,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1280,7 +1408,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "336             self._emit(f'    {a} \u2192 pphcode {b} (relativecode {c})')\n337         _, rc = self._q(f'SELECT relativecode, count(*) FROM {DB}.localcustomers GROUP BY relativecode ORDER BY 2 DESC',\n338                         limit=10)\n",
+   "code": "336             self._emit(f'    {a} → pphcode {b} (relativecode {c})')\n337         _, rc = self._q(f'SELECT relativecode, count(*) FROM {DB}.localcustomers GROUP BY relativecode ORDER BY 2 DESC',\n338                         limit=10)\n",
    "col_offset": 26,
    "end_col_offset": 61,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1340,7 +1468,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "402                 continue\n403             _, n = self._q(f'SELECT count(*) FROM {DB}.{t}')\n404             self._emit(f'  {t}: {n[0][0]} rows \u00b7 ' + ', '.join(f'{c}:{ty}' for c, ty, _ in cols))\n",
+   "code": "402                 continue\n403             _, n = self._q(f'SELECT count(*) FROM {DB}.{t}')\n404             self._emit(f'  {t}: {n[0][0]} rows · ' + ', '.join(f'{c}:{ty}' for c, ty, _ in cols))\n",
    "col_offset": 29,
    "end_col_offset": 50,
    "filename": "apps/customers/management/commands/investigate_pic_merge.py",
@@ -1421,7 +1549,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "202             self._emit(f'    {p}: status={c[\"status\"]!r} changed={c[\"st_time\"]} last_shipped={c[\"dumped\"]}')\n203         _, r = self._q(self.hq, f'SELECT count(*), sum(case when table_dumped is null then 1 else 0 end) '\n204                                 f'FROM {DB}.localcustomerspoints')\n205         self._emit(f'  HQ localcustomerspoints: {r[0][0]} rows \u00b7 never shipped (NULL) {r[0][1]}')\n",
+   "code": "202             self._emit(f'    {p}: status={c[\"status\"]!r} changed={c[\"st_time\"]} last_shipped={c[\"dumped\"]}')\n203         _, r = self._q(self.hq, f'SELECT count(*), sum(case when table_dumped is null then 1 else 0 end) '\n204                                 f'FROM {DB}.localcustomerspoints')\n205         self._emit(f'  HQ localcustomerspoints: {r[0][0]} rows · never shipped (NULL) {r[0][1]}')\n",
    "col_offset": 34,
    "end_col_offset": 39,
    "filename": "apps/customers/management/commands/investigate_pic_replication.py",
@@ -1463,7 +1591,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "214                 continue\n215             _, n = self._q(self.hq, f'SELECT count(*) FROM {DB}.{t}')\n216             self._emit(f'  {t}: {n[0][0]} rows \u00b7 {\", \".join(cols)}')\n",
+   "code": "214                 continue\n215             _, n = self._q(self.hq, f'SELECT count(*) FROM {DB}.{t}')\n216             self._emit(f'  {t}: {n[0][0]} rows · {\", \".join(cols)}')\n",
    "col_offset": 38,
    "end_col_offset": 59,
    "filename": "apps/customers/management/commands/investigate_pic_replication.py",
@@ -1590,7 +1718,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "241                              f'FROM {DB}.lcpointstrans WHERE phcode = ? ORDER BY trans_time DESC', [pic], limit=2)\n242         _, b = self._q(conn, f'SELECT totpoints, conpoints FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n243         bal = f'{b[0][0]}\u2212{b[0][1]}' if b else 'none'\n",
+   "code": "241                              f'FROM {DB}.lcpointstrans WHERE phcode = ? ORDER BY trans_time DESC', [pic], limit=2)\n242         _, b = self._q(conn, f'SELECT totpoints, conpoints FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n243         bal = f'{b[0][0]}−{b[0][1]}' if b else 'none'\n",
    "col_offset": 31,
    "end_col_offset": 64,
    "filename": "apps/customers/management/commands/investigate_pic_replication.py",
@@ -1817,7 +1945,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "424         out = ['customer ' + ' \u00b7 '.join(f'{c}={v}' for c, v in zip(cn, r[0]))]\n425         _, b = self._q(conn, f'SELECT totpoints, conpoints, table_dumped FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n426         out.append('balance ' + (f'{b[0][0]}\u2212{b[0][1]}={(b[0][0] or 0) - (b[0][1] or 0)} shipped={b[0][2]}' if b else 'none'))\n",
+   "code": "424         out = ['customer ' + ' · '.join(f'{c}={v}' for c, v in zip(cn, r[0]))]\n425         _, b = self._q(conn, f'SELECT totpoints, conpoints, table_dumped FROM {DB}.localcustomerspoints WHERE phcode = ?', [pic])\n426         out.append('balance ' + (f'{b[0][0]}−{b[0][1]}={(b[0][0] or 0) - (b[0][1] or 0)} shipped={b[0][2]}' if b else 'none'))\n",
    "col_offset": 31,
    "end_col_offset": 78,
    "filename": "apps/customers/management/commands/investigate_pic_replication.py",
@@ -2163,7 +2291,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "59         # No TOP \u2014 fetchone() takes the first match (single-customer lookup).\n60         sql = f\"\"\"\n61             SELECT lc.phcode,\n62                    lc.branchcustname,\n63                    lc.branchcode,\n64                    ISNULL(lc.mobileno, lc.branchcustphone)\n65             FROM SOFTECHDB9.dbo.localcustomers lc\n66             WHERE {where}\n67         \"\"\"\n68         cursor.execute(sql, params)\n",
+   "code": "59         # No TOP — fetchone() takes the first match (single-customer lookup).\n60         sql = f\"\"\"\n61             SELECT lc.phcode,\n62                    lc.branchcustname,\n63                    lc.branchcode,\n64                    ISNULL(lc.mobileno, lc.branchcustphone)\n65             FROM SOFTECHDB9.dbo.localcustomers lc\n66             WHERE {where}\n67         \"\"\"\n68         cursor.execute(sql, params)\n",
    "col_offset": 18,
    "end_col_offset": 18,
    "filename": "apps/demand/service.py",
@@ -3568,7 +3696,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "275         # \u2500\u2500 Exact COUNT (slower but reliable) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n276         cur.execute(f\"SELECT COUNT(*) FROM {DB_PREFIX}.{table_name}\")\n277         row = cur.fetchone()\n",
+   "code": "275         # ── Exact COUNT (slower but reliable) ─────────────────────────────\n276         cur.execute(f\"SELECT COUNT(*) FROM {DB_PREFIX}.{table_name}\")\n277         row = cur.fetchone()\n",
    "col_offset": 22,
    "end_col_offset": 43,
    "filename": "apps/finance/queries/sybase_discovery.py",
@@ -3745,7 +3873,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "639     period = _period_clause(\"docdate\", year, month)\n640     sql = f\"\"\"\n641         SELECT\n642             branchcode,\n643             -- \u2500\u2500 Gross unsigned columns (individual legs) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n644             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n645                      THEN transprice_total ELSE 0 END)                   AS total_purchases_gross,\n646             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n647                      THEN transprice_total - ISNULL(itemsalestax, 0)\n648                      ELSE 0 END)                                          AS total_purchases_net,\n649             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n650                      THEN transprice_total ELSE 0 END)                   AS total_purchase_returns,\n651             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n652                      THEN transprice_total ELSE 0 END)                   AS total_sales_gross,\n653             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n654                      THEN transprice_total - ISNULL(itemsalestax, 0)\n655                      ELSE 0 END)                                          AS total_sales_net,\n656             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n657                      THEN transprice_total ELSE 0 END)                   AS total_sales_returns,\n658             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n659                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)            AS total_tax,\n660             -- \u2500\u2500 Signed net columns (pair netted in one SUM, returns negated) \u2500\u2500\n661             {_signed_sum_sql('transprice_total',\n662                              pos=f\"'{DOCCODE_SALES}'\",\n663                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n664                              alias='net_revenue')},\n665             {_signed_sum_sql('transprice_total - ISNULL(itemsalestax, 0)',\n666                              pos=f\"'{DOCCODE_SALES}'\",\n667                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n668                              alias='net_revenue_excl_tax')},\n669             {_signed_sum_sql('transprice_total',\n670                              pos=f\"'{DOCCODE_PURCHASE}'\",\n671                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n672                              alias='net_purchases')}\n673         FROM   {DB}.stktrans\n674         WHERE  {period}\n675         AND    doccode IN (\n676                    '{DOCCODE_PURCHASE}',\n677                    '{DOCCODE_SUPPLIER_RETURN}',\n678                    '{DOCCODE_SALES}',\n679                    '{DOCCODE_CUSTOMER_RETURN}'\n680                )\n681         GROUP  BY branchcode\n682         ORDER  BY branchcode\n683     \"\"\"\n684     _own = conn is None\n",
+   "code": "639     period = _period_clause(\"docdate\", year, month)\n640     sql = f\"\"\"\n641         SELECT\n642             branchcode,\n643             -- ── Gross unsigned columns (individual legs) ──────────────────────\n644             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n645                      THEN transprice_total ELSE 0 END)                   AS total_purchases_gross,\n646             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n647                      THEN transprice_total - ISNULL(itemsalestax, 0)\n648                      ELSE 0 END)                                          AS total_purchases_net,\n649             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n650                      THEN transprice_total ELSE 0 END)                   AS total_purchase_returns,\n651             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n652                      THEN transprice_total ELSE 0 END)                   AS total_sales_gross,\n653             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n654                      THEN transprice_total - ISNULL(itemsalestax, 0)\n655                      ELSE 0 END)                                          AS total_sales_net,\n656             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n657                      THEN transprice_total ELSE 0 END)                   AS total_sales_returns,\n658             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n659                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)            AS total_tax,\n660             -- ── Signed net columns (pair netted in one SUM, returns negated) ──\n661             {_signed_sum_sql('transprice_total',\n662                              pos=f\"'{DOCCODE_SALES}'\",\n663                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n664                              alias='net_revenue')},\n665             {_signed_sum_sql('transprice_total - ISNULL(itemsalestax, 0)',\n666                              pos=f\"'{DOCCODE_SALES}'\",\n667                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n668                              alias='net_revenue_excl_tax')},\n669             {_signed_sum_sql('transprice_total',\n670                              pos=f\"'{DOCCODE_PURCHASE}'\",\n671                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n672                              alias='net_purchases')}\n673         FROM   {DB}.stktrans\n674         WHERE  {period}\n675         AND    doccode IN (\n676                    '{DOCCODE_PURCHASE}',\n677                    '{DOCCODE_SUPPLIER_RETURN}',\n678                    '{DOCCODE_SALES}',\n679                    '{DOCCODE_CUSTOMER_RETURN}'\n680                )\n681         GROUP  BY branchcode\n682         ORDER  BY branchcode\n683     \"\"\"\n684     _own = conn is None\n",
    "col_offset": 14,
    "end_col_offset": 37,
    "filename": "apps/finance/queries/sybase_finance.py",
@@ -3842,7 +3970,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "812 \n813     sql = f\"\"\"\n814         SELECT\n815             COUNT(DISTINCT branchcode)                                    AS branches,\n816             -- \u2500\u2500 Gross unsigned \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n817             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n818                      THEN transprice_total ELSE 0 END)                   AS sales_gross,\n819             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n820                      THEN transprice_total ELSE 0 END)                   AS sales_returns,\n821             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n822                      THEN transprice_total ELSE 0 END)                   AS purchases_gross,\n823             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n824                      THEN transprice_total ELSE 0 END)                   AS purchase_returns,\n825             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n826                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)            AS total_tax,\n827             -- \u2500\u2500 Signed net (pair+reversal in one SUM) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n828             {_signed_sum_sql('transprice_total',\n829                              pos=f\"'{DOCCODE_SALES}'\",\n830                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n831                              alias='net_revenue')},\n832             {_signed_sum_sql('transprice_total - ISNULL(itemsalestax, 0)',\n833                              pos=f\"'{DOCCODE_SALES}'\",\n834                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n835                              alias='net_revenue_excl_tax')},\n836             {_signed_sum_sql('transprice_total',\n837                              pos=f\"'{DOCCODE_PURCHASE}'\",\n838                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n839                              alias='net_purchases')}\n840         FROM   {DB}.stktrans\n841         WHERE  {period}\n842         AND    doccode IN ({PNL_ALL_CODES})\n843         {branch_filter}\n844     \"\"\"\n845 \n",
+   "code": "812 \n813     sql = f\"\"\"\n814         SELECT\n815             COUNT(DISTINCT branchcode)                                    AS branches,\n816             -- ── Gross unsigned ─────────────────────────────────────────────\n817             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n818                      THEN transprice_total ELSE 0 END)                   AS sales_gross,\n819             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n820                      THEN transprice_total ELSE 0 END)                   AS sales_returns,\n821             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n822                      THEN transprice_total ELSE 0 END)                   AS purchases_gross,\n823             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n824                      THEN transprice_total ELSE 0 END)                   AS purchase_returns,\n825             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n826                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)            AS total_tax,\n827             -- ── Signed net (pair+reversal in one SUM) ─────────────────────\n828             {_signed_sum_sql('transprice_total',\n829                              pos=f\"'{DOCCODE_SALES}'\",\n830                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n831                              alias='net_revenue')},\n832             {_signed_sum_sql('transprice_total - ISNULL(itemsalestax, 0)',\n833                              pos=f\"'{DOCCODE_SALES}'\",\n834                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n835                              alias='net_revenue_excl_tax')},\n836             {_signed_sum_sql('transprice_total',\n837                              pos=f\"'{DOCCODE_PURCHASE}'\",\n838                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n839                              alias='net_purchases')}\n840         FROM   {DB}.stktrans\n841         WHERE  {period}\n842         AND    doccode IN ({PNL_ALL_CODES})\n843         {branch_filter}\n844     \"\"\"\n845 \n",
    "col_offset": 14,
    "end_col_offset": 37,
    "filename": "apps/finance/queries/sybase_finance.py",
@@ -4049,7 +4177,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "1085     \"\"\"\n1086     sql = f\"\"\"\n1087         SELECT\n1088             MONTH(docdate)                                                AS month_num,\n1089             -- \u2500\u2500 Gross unsigned \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n1090             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n1091                      THEN transprice_total ELSE 0 END)                  AS purchases_gross,\n1092             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n1093                      THEN transprice_total ELSE 0 END)                  AS purchase_returns,\n1094             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n1095                      THEN transprice_total ELSE 0 END)                  AS sales_gross,\n1096             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n1097                      THEN transprice_total ELSE 0 END)                  AS sales_returns,\n1098             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n1099                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)           AS total_tax,\n1100             -- \u2500\u2500 Signed net (pair netted, reversals negated) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n1101             {_signed_sum_sql('transprice_total',\n1102                              pos=f\"'{DOCCODE_SALES}'\",\n1103                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n1104                              alias='net_revenue')},\n1105             {_signed_sum_sql('transprice_total',\n1106                              pos=f\"'{DOCCODE_PURCHASE}'\",\n1107                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n1108                              alias='net_purchases')}\n1109         FROM   {DB}.stktrans\n1110         WHERE  YEAR(docdate) = {year}\n1111         AND    doccode IN (\n1112                    '{DOCCODE_PURCHASE}',\n1113                    '{DOCCODE_SUPPLIER_RETURN}',\n1114                    '{DOCCODE_SALES}',\n1115                    '{DOCCODE_CUSTOMER_RETURN}'\n1116                )\n1117         GROUP  BY MONTH(docdate)\n1118         ORDER  BY month_num\n1119     \"\"\"\n1120     _own = conn is None\n",
+   "code": "1085     \"\"\"\n1086     sql = f\"\"\"\n1087         SELECT\n1088             MONTH(docdate)                                                AS month_num,\n1089             -- ── Gross unsigned ─────────────────────────────────────────────\n1090             SUM(CASE WHEN doccode = '{DOCCODE_PURCHASE}'\n1091                      THEN transprice_total ELSE 0 END)                  AS purchases_gross,\n1092             SUM(CASE WHEN doccode = '{DOCCODE_SUPPLIER_RETURN}'\n1093                      THEN transprice_total ELSE 0 END)                  AS purchase_returns,\n1094             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n1095                      THEN transprice_total ELSE 0 END)                  AS sales_gross,\n1096             SUM(CASE WHEN doccode = '{DOCCODE_CUSTOMER_RETURN}'\n1097                      THEN transprice_total ELSE 0 END)                  AS sales_returns,\n1098             SUM(CASE WHEN doccode = '{DOCCODE_SALES}'\n1099                      THEN ISNULL(itemsalestax, 0) ELSE 0 END)           AS total_tax,\n1100             -- ── Signed net (pair netted, reversals negated) ────────────────\n1101             {_signed_sum_sql('transprice_total',\n1102                              pos=f\"'{DOCCODE_SALES}'\",\n1103                              neg=f\"'{DOCCODE_CUSTOMER_RETURN}'\",\n1104                              alias='net_revenue')},\n1105             {_signed_sum_sql('transprice_total',\n1106                              pos=f\"'{DOCCODE_PURCHASE}'\",\n1107                              neg=f\"'{DOCCODE_SUPPLIER_RETURN}'\",\n1108                              alias='net_purchases')}\n1109         FROM   {DB}.stktrans\n1110         WHERE  YEAR(docdate) = {year}\n1111         AND    doccode IN (\n1112                    '{DOCCODE_PURCHASE}',\n1113                    '{DOCCODE_SUPPLIER_RETURN}',\n1114                    '{DOCCODE_SALES}',\n1115                    '{DOCCODE_CUSTOMER_RETURN}'\n1116                )\n1117         GROUP  BY MONTH(docdate)\n1118         ORDER  BY month_num\n1119     \"\"\"\n1120     _own = conn is None\n",
    "col_offset": 14,
    "end_col_offset": 37,
    "filename": "apps/finance/queries/sybase_finance.py",
@@ -4216,7 +4344,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "37         return {'lines': [], 'error': '\u0645\u0641\u062a\u0627\u062d \u0627\u0644\u0645\u0633\u062a\u0646\u062f \u063a\u064a\u0631 \u0635\u0627\u0644\u062d'}\n38     sql = (f\"SELECT itemcode, transqty, transprice, pharmacydiscp, transprice_total, \"\n39            f\"itemexpirydate, itemsaleprice, storecode, r_docnumber \"\n40            f\"FROM SOFTECHDB9.dbo.stktrans WHERE branchcode='{br}' AND doccode='{dc}' \"\n41            f\"AND docnumber={dn} AND docdate='{d.month}-{d.day}-{d.year} 0:0:0.000' AT ISOLATION 0\")\n42     conn = get_sybase_connection()\n",
+   "code": "37         return {'lines': [], 'error': 'مفتاح المستند غير صالح'}\n38     sql = (f\"SELECT itemcode, transqty, transprice, pharmacydiscp, transprice_total, \"\n39            f\"itemexpirydate, itemsaleprice, storecode, r_docnumber \"\n40            f\"FROM SOFTECHDB9.dbo.stktrans WHERE branchcode='{br}' AND doccode='{dc}' \"\n41            f\"AND docnumber={dn} AND docdate='{d.month}-{d.day}-{d.year} 0:0:0.000' AT ISOLATION 0\")\n42     conn = get_sybase_connection()\n",
    "col_offset": 13,
    "end_col_offset": 60,
    "filename": "apps/finance/recon_lines.py",
@@ -4392,7 +4520,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "341     result['steps'].append('chequestrans_delete')\n342     if _scalar(f\"SELECT COUNT(*) FROM {DB}.chequestrans WHERE {row_key}\"):\n343         raise ReconWriteIntegrityError('chequestrans row still present after DELETE \u2014 STOP')\n",
+   "code": "341     result['steps'].append('chequestrans_delete')\n342     if _scalar(f\"SELECT COUNT(*) FROM {DB}.chequestrans WHERE {row_key}\"):\n343         raise ReconWriteIntegrityError('chequestrans row still present after DELETE — STOP')\n",
    "col_offset": 17,
    "end_col_offset": 38,
    "filename": "apps/finance/recon_writer.py",
@@ -4412,7 +4540,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "343         raise ReconWriteIntegrityError('chequestrans row still present after DELETE \u2014 STOP')\n344     cur.execute(f\"UPDATE {DB}.stktransm SET fatcurrentstatus='{fat}', \"\n345                 f\"docvaluepay={new_paid}, docvaluepaybc={new_paid} WHERE {inv_key}\")\n346     result['steps'].append('stktransm_update')\n",
+   "code": "343         raise ReconWriteIntegrityError('chequestrans row still present after DELETE — STOP')\n344     cur.execute(f\"UPDATE {DB}.stktransm SET fatcurrentstatus='{fat}', \"\n345                 f\"docvaluepay={new_paid}, docvaluepaybc={new_paid} WHERE {inv_key}\")\n346     result['steps'].append('stktransm_update')\n",
    "col_offset": 18,
    "end_col_offset": 25,
    "filename": "apps/finance/recon_writer.py",
@@ -4534,7 +4662,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "406         result['steps'].append('chequestrans_topup')\n407         if abs(_dec(_scalar(f\"SELECT docvaluepaynow FROM {DB}.chequestrans WHERE {row_key}\")) - target) > Decimal('0.01'):\n408             raise ReconWriteIntegrityError('chequestrans top-up did not land \u2014 STOP')\n",
+   "code": "406         result['steps'].append('chequestrans_topup')\n407         if abs(_dec(_scalar(f\"SELECT docvaluepaynow FROM {DB}.chequestrans WHERE {row_key}\")) - target) > Decimal('0.01'):\n408             raise ReconWriteIntegrityError('chequestrans top-up did not land — STOP')\n",
    "col_offset": 30,
    "end_col_offset": 57,
    "filename": "apps/finance/recon_writer.py",
@@ -4554,7 +4682,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "408             raise ReconWriteIntegrityError('chequestrans top-up did not land \u2014 STOP')\n409         cur.execute(f\"UPDATE {DB}.stktransm SET fatcurrentstatus='{fat}', \"\n410                     f\"docvaluepay={new_paid}, docvaluepaybc={new_paid} WHERE {inv_key}\")\n411         result['steps'].append('stktransm_update')\n",
+   "code": "408             raise ReconWriteIntegrityError('chequestrans top-up did not land — STOP')\n409         cur.execute(f\"UPDATE {DB}.stktransm SET fatcurrentstatus='{fat}', \"\n410                     f\"docvaluepay={new_paid}, docvaluepaybc={new_paid} WHERE {inv_key}\")\n411         result['steps'].append('stktransm_update')\n",
    "col_offset": 22,
    "end_col_offset": 29,
    "filename": "apps/finance/recon_writer.py",
@@ -4575,7 +4703,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "411         result['steps'].append('stktransm_update')\n412         if abs(_dec(_scalar(f\"SELECT docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")) - new_paid) > Decimal('0.01'):\n413             raise ReconWriteIntegrityError('stktransm header did not update \u2014 STOP')\n",
+   "code": "411         result['steps'].append('stktransm_update')\n412         if abs(_dec(_scalar(f\"SELECT docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")) - new_paid) > Decimal('0.01'):\n413             raise ReconWriteIntegrityError('stktransm header did not update — STOP')\n",
    "col_offset": 30,
    "end_col_offset": 54,
    "filename": "apps/finance/recon_writer.py",
@@ -4838,7 +4966,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "578             raise ReconWriteError(f'chequestrans amount {now} \u2260 allocation {amount} \u2014 refusing')\n579         cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n580         inv = cur.fetchone()\n",
+   "code": "578             raise ReconWriteError(f'chequestrans amount {now} ≠ allocation {amount} — refusing')\n579         cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n580         inv = cur.fetchone()\n",
    "col_offset": 22,
    "end_col_offset": 56,
    "filename": "apps/finance/recon_writer.py",
@@ -4918,7 +5046,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "680         # hold table locks on it for minutes; only the stktransm UPDATE needs a lock\n681         if _scalar(f\"SELECT COUNT(*) FROM {DB}.chequestrans WHERE {row_key} AT ISOLATION 0\"):\n682             raise ReconWriteError('our chequestrans row is still present \u2014 use reverse_allocation')\n",
+   "code": "680         # hold table locks on it for minutes; only the stktransm UPDATE needs a lock\n681         if _scalar(f\"SELECT COUNT(*) FROM {DB}.chequestrans WHERE {row_key} AT ISOLATION 0\"):\n682             raise ReconWriteError('our chequestrans row is still present — use reverse_allocation')\n",
    "col_offset": 21,
    "end_col_offset": 42,
    "filename": "apps/finance/recon_writer.py",
@@ -4938,7 +5066,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "682             raise ReconWriteError('our chequestrans row is still present \u2014 use reverse_allocation')\n683         links = _dec(_scalar(f\"SELECT SUM(docvaluepaynow) FROM {DB}.chequestrans WHERE {inv_key} AT ISOLATION 0\"))\n684         cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n",
+   "code": "682             raise ReconWriteError('our chequestrans row is still present — use reverse_allocation')\n683         links = _dec(_scalar(f\"SELECT SUM(docvaluepaynow) FROM {DB}.chequestrans WHERE {inv_key} AT ISOLATION 0\"))\n684         cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n",
    "col_offset": 31,
    "end_col_offset": 63,
    "filename": "apps/finance/recon_writer.py",
@@ -5019,7 +5147,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "763     # (2026-09-28, invoice 81122). A held lock now waits/fails \u2192 retried or reported.\n764     cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n765     hdr = cur.fetchone()\n",
+   "code": "763     # (2026-09-28, invoice 81122). A held lock now waits/fails → retried or reported.\n764     cur.execute(f\"SELECT docvalue, docvaluepay FROM {DB}.stktransm WHERE {inv_key}\")\n765     hdr = cur.fetchone()\n",
    "col_offset": 18,
    "end_col_offset": 52,
    "filename": "apps/finance/recon_writer.py",
@@ -5295,6 +5423,46 @@
    "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen",
    "test_id": "B310",
    "test_name": "blacklist"
+  },
+  {
+   "code": "674 \n675     sql = f\"\"\"\n676         SET ROWCOUNT {safe_limit}\n677         SELECT\n678             sbe.itemcode,\n679             sbe.itemexpirydate,\n680             sbe.itemqty,\n681             sbe.branchcode,\n682             sbe.storecode,\n683             sbe.batchno,\n684             i.itemname\n685         FROM SOFTECHDB9.dbo.stkbalexpiry sbe\n686         JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode\n687         WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'\n688           AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'\n689           {qty_filter}\n690           {store_filter}\n691           {quarantine_filter}\n692           {item_filter}\n693         ORDER BY sbe.itemexpirydate ASC, sbe.itemcode\n694         SET ROWCOUNT 0\n695     \"\"\"\n696 \n",
+   "col_offset": 14,
+   "end_col_offset": 21,
+   "filename": "apps/incentives/engine.py",
+   "issue_confidence": "LOW",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 675,
+   "line_range": [
+    675,
+    676,
+    677,
+    678,
+    679,
+    680,
+    681,
+    682,
+    683,
+    684,
+    685,
+    686,
+    687,
+    688,
+    689,
+    690,
+    691,
+    692,
+    693,
+    694,
+    695
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
   },
   {
    "code": "697                 item_sql = f'AND sbe.itemcode IN ({_marks(chunk)})' if chunk else ''\n698                 cur.execute(f\"\"\"\n699                     SELECT\n700                         sbe.itemcode,\n701                         sbe.itemexpirydate,\n702                         sbe.itemqty,\n703                         sbe.branchcode,\n704                         sbe.storecode,\n705                         sbe.batchno,\n706                         i.itemname\n707                     FROM SOFTECHDB9.dbo.stkbalexpiry sbe\n708                     JOIN SOFTECHDB9.dbo.items i ON i.itemcode = sbe.itemcode\n709                     WHERE sbe.itemexpirydate >= '{today.strftime('%Y-%m-%d')} 00:00:00'\n710                       AND sbe.itemexpirydate <= '{cutoff_date.strftime('%Y-%m-%d')} 23:59:59'\n711                       {qty_sql} {store_sql} {quarantine_sql}\n712                       {item_sql}\n713                     ORDER BY sbe.itemexpirydate ASC, sbe.itemcode\n714                 \"\"\", fixed_params + (chunk or []))\n715                 rows.extend(cur.fetchall())\n",
@@ -5876,7 +6044,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "129     if others:\n130         stmts.append(f\"update itemssuppliers set suppitemcode='', modif_lastupdate=getdate() \"\n131                      f\"where suppcode={ls} and suppitemcode={lc} and itemcode<>{li}\")\n132     # 2. Set the code on the target row (approved \u2192 overwrite; clean \u2192 empty-guarded).\n",
+   "code": "129     if others:\n130         stmts.append(f\"update itemssuppliers set suppitemcode='', modif_lastupdate=getdate() \"\n131                      f\"where suppcode={ls} and suppitemcode={lc} and itemcode<>{li}\")\n132     # 2. Set the code on the target row (approved → overwrite; clean → empty-guarded).\n",
    "col_offset": 23,
    "end_col_offset": 38,
    "filename": "apps/invoices/supplier_items.py",
@@ -6617,7 +6785,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "86     \"\"\"Allocate the \u062d\u062c\u0632 serial (native read+1) and insert header + lines. Returns readback.\"\"\"\n87     cur_no = _q1(conn, f\"SELECT {RESERVATION_COUNTER} FROM lastdocnumbers HOLDLOCK \"\n88                        \"WHERE branchcode=? AND ver_branch=1\", [order.softech_branchcode])\n89     docnumber = int(cur_no[0]) + 1\n",
+   "code": "86     \"\"\"Allocate the حجز serial (native read+1) and insert header + lines. Returns readback.\"\"\"\n87     cur_no = _q1(conn, f\"SELECT {RESERVATION_COUNTER} FROM lastdocnumbers HOLDLOCK \"\n88                        \"WHERE branchcode=? AND ver_branch=1\", [order.softech_branchcode])\n89     docnumber = int(cur_no[0]) + 1\n",
    "col_offset": 25,
    "end_col_offset": 32,
    "filename": "apps/pos_orders/reservation.py",
@@ -7043,7 +7211,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "153             try:\n154                 r = self._q(conn, f\"\"\"\n155                     SELECT COUNT(*)\n156                     FROM SOFTECHDB9.dbo.stktransm sm\n157                     JOIN SOFTECHDB9.dbo.stktrans  st\n158                       ON st.branchcode=sm.branchcode AND st.doccode=sm.doccode\n159                      AND st.docnumber=sm.docnumber   AND st.docdate=sm.docdate\n160                     WHERE sm.doccode='10'\n161                       AND sm.docdate >= DATEADD(day, -{int(days)}, GETDATE())\n162                       AND {cond}\n163                 \"\"\")[0]\n164                 self.stdout.write(f'    {label:<52} \u2192 {r[0]:>10,} lines')\n",
+   "code": "153             try:\n154                 r = self._q(conn, f\"\"\"\n155                     SELECT COUNT(*)\n156                     FROM SOFTECHDB9.dbo.stktransm sm\n157                     JOIN SOFTECHDB9.dbo.stktrans  st\n158                       ON st.branchcode=sm.branchcode AND st.doccode=sm.doccode\n159                      AND st.docnumber=sm.docnumber   AND st.docdate=sm.docdate\n160                     WHERE sm.doccode='10'\n161                       AND sm.docdate >= DATEADD(day, -{int(days)}, GETDATE())\n162                       AND {cond}\n163                 \"\"\")[0]\n164                 self.stdout.write(f'    {label:<52} → {r[0]:>10,} lines')\n",
    "col_offset": 38,
    "end_col_offset": 54,
    "filename": "apps/procurement/management/commands/inspect_procurement_sources.py",
@@ -7175,7 +7343,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "175                         # Text column \u2014 show distinct non-empty samples\n176                         cur.execute(f\"\"\"\n177                             SELECT TOP {sample_n} DISTINCT {col_name}\n178                             FROM   SOFTECHDB9.dbo.{tbl}\n179                             WHERE  {col_name} IS NOT NULL\n180                               AND  {col_name} != ''\n181                         \"\"\")\n182                         samples = [str(r[0]) for r in cur.fetchall()]\n",
+   "code": "175                         # Text column — show distinct non-empty samples\n176                         cur.execute(f\"\"\"\n177                             SELECT TOP {sample_n} DISTINCT {col_name}\n178                             FROM   SOFTECHDB9.dbo.{tbl}\n179                             WHERE  {col_name} IS NOT NULL\n180                               AND  {col_name} != ''\n181                         \"\"\")\n182                         samples = [str(r[0]) for r in cur.fetchall()]\n",
    "col_offset": 40,
    "end_col_offset": 39,
    "filename": "apps/procurement/management/commands/inspect_tax_columns.py",
@@ -8163,7 +8331,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "88             raise ValueError(f'\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0641\u0627\u062a\u0648\u0631\u0629 \u0627\u0644\u0634\u0631\u0627\u0621 {branchcode}/{docnumber} \u0628\u062a\u0627\u0631\u064a\u062e {docdate}')\n89         lines = IW._all_dicts(conn, f'SELECT * FROM stktrans WHERE {where} ORDER BY dblitemflag', args)\n90     finally:\n",
+   "code": "88             raise ValueError(f'لم يتم العثور على فاتورة الشراء {branchcode}/{docnumber} بتاريخ {docdate}')\n89         lines = IW._all_dicts(conn, f'SELECT * FROM stktrans WHERE {where} ORDER BY dblitemflag', args)\n90     finally:\n",
    "col_offset": 38,
    "end_col_offset": 67,
    "filename": "apps/replacement/golden.py",
@@ -8270,7 +8438,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "51 _NUMBERING_RE = re.compile(r'^\\(?\\d{1,3}\\s*[\\)\\-\\.]\\s*(?=[^\\d\\s])')\n52 _EMOJI_RE = re.compile('[\\U0001F000-\\U0001FAFF\u2600-\u27bf\ufe0f\u200d\u200e\u200f]')\n53 \n",
+   "code": "51 _NUMBERING_RE = re.compile(r'^\\(?\\d{1,3}\\s*[\\)\\-\\.]\\s*(?=[^\\d\\s])')\n52 _EMOJI_RE = re.compile('[\\U0001F000-\\U0001FAFF☀-➿️‍‎‏]')\n53 \n",
    "col_offset": 53,
    "end_col_offset": 0,
    "filename": "apps/supply/availability.py",
@@ -8290,7 +8458,7 @@
    "test_name": "trojansource"
   },
   {
-   "code": "37 _AR_DIGITS = str.maketrans('\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9', '01234567890123456789')\n38 _INVISIBLE = dict.fromkeys(map(ord, '\u200e\u200f\u202a\u202b\u202c\u202d\u202e\ufeff'), None)\n39 \n",
+   "code": "37 _AR_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')\n38 _INVISIBLE = dict.fromkeys(map(ord, '‎‏‪‫‬‭‮﻿'), None)\n39 \n",
    "col_offset": 40,
    "end_col_offset": 0,
    "filename": "apps/supply/line_matching.py",
@@ -8666,7 +8834,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "29             # Sybase ASE \u2014 syscolumns + sysobjects (database-qualified)\n30             cursor.execute(f\"\"\"\n31                 SELECT c.name, t.name AS type, c.length\n32                 FROM   SOFTECHDB9.dbo.syscolumns c\n33                 JOIN   SOFTECHDB9.dbo.sysobjects o ON c.id = o.id\n34                 JOIN   SOFTECHDB9.dbo.systypes   t ON c.usertype = t.usertype\n35                 WHERE  o.name = '{table}'\n36                 ORDER  BY c.colid\n37             \"\"\")\n38             rows = cursor.fetchall()\n",
+   "code": "29             # Sybase ASE — syscolumns + sysobjects (database-qualified)\n30             cursor.execute(f\"\"\"\n31                 SELECT c.name, t.name AS type, c.length\n32                 FROM   SOFTECHDB9.dbo.syscolumns c\n33                 JOIN   SOFTECHDB9.dbo.sysobjects o ON c.id = o.id\n34                 JOIN   SOFTECHDB9.dbo.systypes   t ON c.usertype = t.usertype\n35                 WHERE  o.name = '{table}'\n36                 ORDER  BY c.colid\n37             \"\"\")\n38             rows = cursor.fetchall()\n",
    "col_offset": 31,
    "end_col_offset": 33,
    "filename": "apps/sync/management/commands/inspect_softech_schema.py",
@@ -8860,7 +9028,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "154         for tbl in CRM_TABLES:\n155             run(f'{tbl} \u2014 columns with a bound default', f\"\"\"\n156                 SELECT c.name, m.text\n157                 FROM   SOFTECHDB9.dbo.syscolumns c\n158                 JOIN   SOFTECHDB9.dbo.sysobjects  o ON c.id = o.id\n159                 JOIN   SOFTECHDB9.dbo.syscomments m ON c.cdefault = m.id\n160                 WHERE  o.name = '{tbl}' AND c.cdefault > 0\n161                 ORDER BY c.colid\n162             \"\"\")\n163 \n",
+   "code": "154         for tbl in CRM_TABLES:\n155             run(f'{tbl} — columns with a bound default', f\"\"\"\n156                 SELECT c.name, m.text\n157                 FROM   SOFTECHDB9.dbo.syscolumns c\n158                 JOIN   SOFTECHDB9.dbo.sysobjects  o ON c.id = o.id\n159                 JOIN   SOFTECHDB9.dbo.syscomments m ON c.cdefault = m.id\n160                 WHERE  o.name = '{tbl}' AND c.cdefault > 0\n161                 ORDER BY c.colid\n162             \"\"\")\n163 \n",
    "col_offset": 63,
    "end_col_offset": 33,
    "filename": "apps/sync/management/commands/investigate_crm_orders.py",
@@ -8887,7 +9055,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "167         for tbl in CRM_TABLES:\n168             rows = run(f'{tbl} \u2014 bound triggers', f\"\"\"\n169                 SELECT o.name AS tbl,\n170                        t1.name AS insert_trigger,\n171                        t2.name AS update_trigger,\n172                        t3.name AS delete_trigger\n173                 FROM   SOFTECHDB9.dbo.sysobjects o\n174                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t1 ON t1.id = o.instrig\n175                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t2 ON t2.id = o.updtrig\n176                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t3 ON t3.id = o.deltrig\n177                 WHERE  o.name = '{tbl}'\n178             \"\"\")\n179             for r in rows:\n",
+   "code": "167         for tbl in CRM_TABLES:\n168             rows = run(f'{tbl} — bound triggers', f\"\"\"\n169                 SELECT o.name AS tbl,\n170                        t1.name AS insert_trigger,\n171                        t2.name AS update_trigger,\n172                        t3.name AS delete_trigger\n173                 FROM   SOFTECHDB9.dbo.sysobjects o\n174                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t1 ON t1.id = o.instrig\n175                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t2 ON t2.id = o.updtrig\n176                 LEFT JOIN SOFTECHDB9.dbo.sysobjects t3 ON t3.id = o.deltrig\n177                 WHERE  o.name = '{tbl}'\n178             \"\"\")\n179             for r in rows:\n",
    "col_offset": 56,
    "end_col_offset": 33,
    "filename": "apps/sync/management/commands/investigate_crm_orders.py",
@@ -8917,7 +9085,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "249         section(f'F: Golden Example \u2014 newest real order (crmbranchcode={crm_branch})')\n250         newest = run('Newest header row', f\"\"\"\n251             SELECT TOP 1 crmbranchcode, crmorderno, branchcode, doccode,\n252                    docnumber5, docdate5, docnumber, docdate,\n253                    orderdatetime, orderusercode, ordervalue, phcode, orderstatus\n254             FROM SOFTECHDB9.dbo.piccrmorders\n255             WHERE crmbranchcode = '{crm_branch}'\n256             ORDER BY orderdatetime DESC\n257         \"\"\")\n258         if newest:\n",
+   "code": "249         section(f'F: Golden Example — newest real order (crmbranchcode={crm_branch})')\n250         newest = run('Newest header row', f\"\"\"\n251             SELECT TOP 1 crmbranchcode, crmorderno, branchcode, doccode,\n252                    docnumber5, docdate5, docnumber, docdate,\n253                    orderdatetime, orderusercode, ordervalue, phcode, orderstatus\n254             FROM SOFTECHDB9.dbo.piccrmorders\n255             WHERE crmbranchcode = '{crm_branch}'\n256             ORDER BY orderdatetime DESC\n257         \"\"\")\n258         if newest:\n",
    "col_offset": 46,
    "end_col_offset": 35,
    "filename": "apps/sync/management/commands/investigate_crm_orders.py",
@@ -9124,7 +9292,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "164                 run(f'{tname} \u2014 rows for doccode in {codes}',\n165                     f\"SELECT * FROM {DB}.{tname} WHERE doccode IN ({ph})\", codes)\n166 \n",
+   "code": "164                 run(f'{tname} — rows for doccode in {codes}',\n165                     f\"SELECT * FROM {DB}.{tname} WHERE doccode IN ({ph})\", codes)\n166 \n",
    "col_offset": 22,
    "end_col_offset": 36,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9302,7 +9470,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "227         section(f'1: SUPPLIER MASTER \u2014 personsdata personcode={supp}')\n228         vrow('personsdata', f\"SELECT * FROM {DB}.personsdata WHERE personcode=?\", [supp])\n229 \n",
+   "code": "227         section(f'1: SUPPLIER MASTER — personsdata personcode={supp}')\n228         vrow('personsdata', f\"SELECT * FROM {DB}.personsdata WHERE personcode=?\", [supp])\n229 \n",
    "col_offset": 30,
    "end_col_offset": 44,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9322,7 +9490,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "231         section(f'2: PURCHASE HEADERS \u2014 stktransm doccode=10 cust_branch_code={supp}')\n232         hcols, hdrs = run('per-branch summary', f\"\"\"\n233             SELECT branchcode, COUNT(*) AS docs, MIN(docdate) AS first_doc, MAX(docdate) AS last_doc,\n234                    SUM(docvalue) AS total_value\n235             FROM {DB}.stktransm\n236             WHERE doccode='10' AND cust_branch_code=? AND docdate >= ?\n237             GROUP BY branchcode ORDER BY branchcode\n238         \"\"\", [supp, since])\n239         _, headers = run('all headers', f\"\"\"\n",
+   "code": "231         section(f'2: PURCHASE HEADERS — stktransm doccode=10 cust_branch_code={supp}')\n232         hcols, hdrs = run('per-branch summary', f\"\"\"\n233             SELECT branchcode, COUNT(*) AS docs, MIN(docdate) AS first_doc, MAX(docdate) AS last_doc,\n234                    SUM(docvalue) AS total_value\n235             FROM {DB}.stktransm\n236             WHERE doccode='10' AND cust_branch_code=? AND docdate >= ?\n237             GROUP BY branchcode ORDER BY branchcode\n238         \"\"\", [supp, since])\n239         _, headers = run('all headers', f\"\"\"\n",
    "col_offset": 52,
    "end_col_offset": 17,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9417,7 +9585,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "303             if headers:\n304                 run('most recent doc \u2014 lines (all columns)', f\"\"\"\n305                     SELECT * FROM {DB}.stktrans WHERE branchcode=? AND doccode='10' AND docnumber=?\n306                 \"\"\", [str(last[0]).strip(), last[1]], limit=sample)\n307 \n",
+   "code": "303             if headers:\n304                 run('most recent doc — lines (all columns)', f\"\"\"\n305                     SELECT * FROM {DB}.stktrans WHERE branchcode=? AND doccode='10' AND docnumber=?\n306                 \"\"\", [str(last[0]).strip(), last[1]], limit=sample)\n307 \n",
    "col_offset": 67,
    "end_col_offset": 34,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9506,7 +9674,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "329         section(f'5: RETURNS \u2014 stktransm doccode=120 cust_branch_code={supp}')\n330         run('return headers', f\"\"\"\n331             SELECT branchcode, docnumber, docdate, docnumber2, patientpayment, docvalue\n332             FROM {DB}.stktransm WHERE doccode='120' AND cust_branch_code=? AND docdate >= ?\n333         \"\"\", [supp, since], limit=sample)\n334 \n",
+   "code": "329         section(f'5: RETURNS — stktransm doccode=120 cust_branch_code={supp}')\n330         run('return headers', f\"\"\"\n331             SELECT branchcode, docnumber, docdate, docnumber2, patientpayment, docvalue\n332             FROM {DB}.stktransm WHERE doccode='120' AND cust_branch_code=? AND docdate >= ?\n333         \"\"\", [supp, since], limit=sample)\n334 \n",
    "col_offset": 34,
    "end_col_offset": 17,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9601,7 +9769,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "356             \"\"\", [code])\n357             run(f'stkbalexpiry itemcode={code} (qty<>0)', f\"\"\"\n358                 SELECT storecode, itemexpirydate, batchno, itemqty FROM {DB}.stkbalexpiry\n359                 WHERE itemcode=? AND itemqty <> 0\n360             \"\"\", [code], limit=sample)\n361             run(f'stkbalexpiry itemcode={code} \u2014 row/qty totals', f\"\"\"\n",
+   "code": "356             \"\"\", [code])\n357             run(f'stkbalexpiry itemcode={code} (qty<>0)', f\"\"\"\n358                 SELECT storecode, itemexpirydate, batchno, itemqty FROM {DB}.stkbalexpiry\n359                 WHERE itemcode=? AND itemqty <> 0\n360             \"\"\", [code], limit=sample)\n361             run(f'stkbalexpiry itemcode={code} — row/qty totals', f\"\"\"\n",
    "col_offset": 62,
    "end_col_offset": 72,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9624,7 +9792,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "360             \"\"\", [code], limit=sample)\n361             run(f'stkbalexpiry itemcode={code} \u2014 row/qty totals', f\"\"\"\n362                 SELECT storecode, COUNT(*) AS rows_cnt, SUM(itemqty) AS qty,\n363                        SUM(CASE WHEN itemqty = 0 THEN 1 ELSE 0 END) AS zero_rows\n364                 FROM {DB}.stkbalexpiry WHERE itemcode=? GROUP BY storecode\n365             \"\"\", [code])\n366 \n",
+   "code": "360             \"\"\", [code], limit=sample)\n361             run(f'stkbalexpiry itemcode={code} — row/qty totals', f\"\"\"\n362                 SELECT storecode, COUNT(*) AS rows_cnt, SUM(itemqty) AS qty,\n363                        SUM(CASE WHEN itemqty = 0 THEN 1 ELSE 0 END) AS zero_rows\n364                 FROM {DB}.stkbalexpiry WHERE itemcode=? GROUP BY storecode\n365             \"\"\", [code])\n366 \n",
    "col_offset": 72,
    "end_col_offset": 21,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9692,7 +9860,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "378         section('9: NAME SEARCH \u2014 other coupon/voucher/gift items')\n379         run('items matching coupon/voucher/gift keywords', f\"\"\"\n380             SELECT itemcode, itemname, itemmedicine, itemexpiry, itemsaleprice, itemcostprice,\n381                    itemtrans1, itemtrans2, itemtrans3, itemnomoreuse, itemarchive\n382             FROM {DB}.items\n383             WHERE itemname LIKE '%COUPON%' OR itemname LIKE '%VOUCHER%' OR itemname LIKE '%GIFT%'\n384                OR itemname LIKE '%\u0643\u0648\u0628\u0648\u0646%' OR itemname LIKE '%\u0642\u0633\u064a\u0645%' OR itemname LIKE '%\u0647\u062f\u064a%'\n385                OR itemname LIKE '%\u0641\u0627\u0648\u062a\u0634\u0631%' OR itemmedicine = '60'\n386         \"\"\", limit=200)\n387 \n",
+   "code": "378         section('9: NAME SEARCH — other coupon/voucher/gift items')\n379         run('items matching coupon/voucher/gift keywords', f\"\"\"\n380             SELECT itemcode, itemname, itemmedicine, itemexpiry, itemsaleprice, itemcostprice,\n381                    itemtrans1, itemtrans2, itemtrans3, itemnomoreuse, itemarchive\n382             FROM {DB}.items\n383             WHERE itemname LIKE '%COUPON%' OR itemname LIKE '%VOUCHER%' OR itemname LIKE '%GIFT%'\n384                OR itemname LIKE '%كوبون%' OR itemname LIKE '%قسيم%' OR itemname LIKE '%هدي%'\n385                OR itemname LIKE '%فاوتشر%' OR itemmedicine = '60'\n386         \"\"\", limit=200)\n387 \n",
    "col_offset": 63,
    "end_col_offset": 17,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -9719,7 +9887,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "389         section('10: COUNTERS \u2014 lastdocnumbers (*_supp)')\n390         run('lastdocnumbers', f\"\"\"\n391             SELECT branchcode, ver_branch, lastdocnumberin_supp, lastdocnumberout_supp\n392             FROM {DB}.lastdocnumbers ORDER BY branchcode\n393         \"\"\")\n394 \n",
+   "code": "389         section('10: COUNTERS — lastdocnumbers (*_supp)')\n390         run('lastdocnumbers', f\"\"\"\n391             SELECT branchcode, ver_branch, lastdocnumberin_supp, lastdocnumberout_supp\n392             FROM {DB}.lastdocnumbers ORDER BY branchcode\n393         \"\"\")\n394 \n",
    "col_offset": 34,
    "end_col_offset": 17,
    "filename": "apps/sync/management/commands/investigate_gift_vouchers.py",
@@ -10107,7 +10275,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "189             if dump_samples:\n190                 run(f'{tbl} \u2014 TOP 5 sample', f\"SELECT TOP 5 * FROM SOFTECHDB9.dbo.{tbl}\")\n191 \n",
+   "code": "189             if dump_samples:\n190                 run(f'{tbl} — TOP 5 sample', f\"SELECT TOP 5 * FROM SOFTECHDB9.dbo.{tbl}\")\n191 \n",
    "col_offset": 49,
    "end_col_offset": 84,
    "filename": "apps/sync/management/commands/investigate_pos_cashier.py",
@@ -10819,7 +10987,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "70         # pending header \u2192 derive branch, phcode, storecode, itemcodes\n71         hdr = rows(f\"SELECT * FROM stktransm5 WHERE docnumber={docnumber}\")\n72         branch = phcode = store = None\n",
+   "code": "70         # pending header → derive branch, phcode, storecode, itemcodes\n71         hdr = rows(f\"SELECT * FROM stktransm5 WHERE docnumber={docnumber}\")\n72         branch = phcode = store = None\n",
    "col_offset": 21,
    "end_col_offset": 62,
    "filename": "apps/sync/management/commands/observe_finalization.py",
@@ -11165,7 +11333,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "269         log('\\n  [C1] cheques \u2014 cash/box voucher hypothesis (cheqtype=10)')\n270         run('cheques WHERE cheqvalue = amount (recent)', f\"\"\"\n271             SELECT cheqsno, cheqno, ourcheqsno, financialdoccode, cheqtype, cheqdate,\n272                    cheqvalue, bankcode, personcode, branchcode, chequenote,\n273                    personnewbal, banknewbal, open_trans, blockinv, handedto\n274             FROM   {DB}.cheques\n275             WHERE  cheqvalue = {amt}\n276               AND  cheqdate >= DATEADD(day, -90, GETDATE())\n277             ORDER  BY cheqdate DESC\n278         \"\"\", cap=40)\n279         for col, val in (('cheqsno', vser), ('cheqno', rcpt), ('ourcheqsno', rcpt),\n",
+   "code": "269         log('\\n  [C1] cheques — cash/box voucher hypothesis (cheqtype=10)')\n270         run('cheques WHERE cheqvalue = amount (recent)', f\"\"\"\n271             SELECT cheqsno, cheqno, ourcheqsno, financialdoccode, cheqtype, cheqdate,\n272                    cheqvalue, bankcode, personcode, branchcode, chequenote,\n273                    personnewbal, banknewbal, open_trans, blockinv, handedto\n274             FROM   {DB}.cheques\n275             WHERE  cheqvalue = {amt}\n276               AND  cheqdate >= DATEADD(day, -90, GETDATE())\n277             ORDER  BY cheqdate DESC\n278         \"\"\", cap=40)\n279         for col, val in (('cheqsno', vser), ('cheqno', rcpt), ('ourcheqsno', rcpt),\n",
    "col_offset": 61,
    "end_col_offset": 19,
    "filename": "apps/sync/management/commands/probe_ap_reconciliation.py",
@@ -11360,7 +11528,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "359         section('E: procedures/triggers referencing the settlement / voucher save path')\n360         run('procs/triggers mentioning cheques / settlement / open_trans / financialdoc', f\"\"\"\n361             SELECT DISTINCT o.name, o.type\n362             FROM   {DB}.syscomments sc\n363             JOIN   {DB}.sysobjects  o ON sc.id = o.id\n364             WHERE  o.type IN ('P','TR')\n365               AND (LOWER(sc.text) LIKE '%open_trans%'\n366                 OR LOWER(sc.text) LIKE '%blockinv%'\n367                 OR LOWER(sc.text) LIKE '%financialdoc%'\n368                 OR LOWER(sc.text) LIKE '%docpaydue%'\n369                 OR LOWER(sc.text) LIKE '%paidinv%'\n370                 OR LOWER(sc.text) LIKE '%sadad%')\n371             ORDER BY o.name\n372         \"\"\", cap=80)\n373         run('tr_cheques trigger body (if readable \u2014 personnewbal/bank balance math)', f\"\"\"\n",
+   "code": "359         section('E: procedures/triggers referencing the settlement / voucher save path')\n360         run('procs/triggers mentioning cheques / settlement / open_trans / financialdoc', f\"\"\"\n361             SELECT DISTINCT o.name, o.type\n362             FROM   {DB}.syscomments sc\n363             JOIN   {DB}.sysobjects  o ON sc.id = o.id\n364             WHERE  o.type IN ('P','TR')\n365               AND (LOWER(sc.text) LIKE '%open_trans%'\n366                 OR LOWER(sc.text) LIKE '%blockinv%'\n367                 OR LOWER(sc.text) LIKE '%financialdoc%'\n368                 OR LOWER(sc.text) LIKE '%docpaydue%'\n369                 OR LOWER(sc.text) LIKE '%paidinv%'\n370                 OR LOWER(sc.text) LIKE '%sadad%')\n371             ORDER BY o.name\n372         \"\"\", cap=80)\n373         run('tr_cheques trigger body (if readable — personnewbal/bank balance math)', f\"\"\"\n",
    "col_offset": 94,
    "end_col_offset": 19,
    "filename": "apps/sync/management/commands/probe_ap_reconciliation.py",
@@ -11392,7 +11560,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "372         \"\"\", cap=80)\n373         run('tr_cheques trigger body (if readable \u2014 personnewbal/bank balance math)', f\"\"\"\n374             SELECT sc.text FROM {DB}.syscomments sc\n375             JOIN {DB}.sysobjects o ON sc.id = o.id\n376             WHERE o.name = 'tr_cheques' ORDER BY sc.colid2\n377         \"\"\")\n378         checkpoint()\n",
+   "code": "372         \"\"\", cap=80)\n373         run('tr_cheques trigger body (if readable — personnewbal/bank balance math)', f\"\"\"\n374             SELECT sc.text FROM {DB}.syscomments sc\n375             JOIN {DB}.sysobjects o ON sc.id = o.id\n376             WHERE o.name = 'tr_cheques' ORDER BY sc.colid2\n377         \"\"\")\n378         checkpoint()\n",
    "col_offset": 92,
    "end_col_offset": 32,
    "filename": "apps/sync/management/commands/probe_ap_reconciliation.py",
@@ -11523,7 +11691,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "136         section('A: lastdocnumbers \u2014 is there a cheque serial counter?')\n137         run('all lastdocnumbers column names', f\"\"\"\n138             SELECT c.name FROM {DB}.syscolumns c JOIN {DB}.sysobjects o ON c.id=o.id\n139             WHERE o.name='lastdocnumbers' ORDER BY c.colid\n140         \"\"\")\n141 \n",
+   "code": "136         section('A: lastdocnumbers — is there a cheque serial counter?')\n137         run('all lastdocnumbers column names', f\"\"\"\n138             SELECT c.name FROM {DB}.syscolumns c JOIN {DB}.sysobjects o ON c.id=o.id\n139             WHERE o.name='lastdocnumbers' ORDER BY c.colid\n140         \"\"\")\n141 \n",
    "col_offset": 51,
    "end_col_offset": 31,
    "filename": "apps/sync/management/commands/probe_ap_writeback.py",
@@ -12211,7 +12379,7 @@
    "test_name": "hardcoded_sql_expressions"
   },
   {
-   "code": "147         self.log('  B1. sales (115) lines: taxed vs untaxed \u2014 avg price / cost ratio')\n148         cols, rows = self.q(conn, f\"\"\"\n149             SELECT CASE WHEN st.itemsalestax > 0 THEN 'taxed' ELSE 'untaxed' END AS kind,\n150                    COUNT(*) AS n,\n151                    AVG(st.transprice / st.newcostprice) AS avg_price_over_cost,\n152                    AVG(st.itemsaleprice_tax / st.newcostprice) AS avg_list_tax_over_cost,\n153                    AVG(st.itemsaleprice / st.newcostprice) AS avg_list_over_cost,\n154                    SUM(CASE WHEN st.transprice < st.newcostprice THEN 1 ELSE 0 END) AS below_cost\n155             FROM {DB}.stktrans st\n156             WHERE st.docdate >= {_since(30)} AND st.doccode = '115'\n157               AND st.newcostprice > 0 AND st.transprice > 0\n158             GROUP BY CASE WHEN st.itemsalestax > 0 THEN 'taxed' ELSE 'untaxed' END\"\"\", 'B1')\n159         self.table(cols, rows)\n",
+   "code": "147         self.log('  B1. sales (115) lines: taxed vs untaxed — avg price / cost ratio')\n148         cols, rows = self.q(conn, f\"\"\"\n149             SELECT CASE WHEN st.itemsalestax > 0 THEN 'taxed' ELSE 'untaxed' END AS kind,\n150                    COUNT(*) AS n,\n151                    AVG(st.transprice / st.newcostprice) AS avg_price_over_cost,\n152                    AVG(st.itemsaleprice_tax / st.newcostprice) AS avg_list_tax_over_cost,\n153                    AVG(st.itemsaleprice / st.newcostprice) AS avg_list_over_cost,\n154                    SUM(CASE WHEN st.transprice < st.newcostprice THEN 1 ELSE 0 END) AS below_cost\n155             FROM {DB}.stktrans st\n156             WHERE st.docdate >= {_since(30)} AND st.doccode = '115'\n157               AND st.newcostprice > 0 AND st.transprice > 0\n158             GROUP BY CASE WHEN st.itemsalestax > 0 THEN 'taxed' ELSE 'untaxed' END\"\"\", 'B1')\n159         self.table(cols, rows)\n",
    "col_offset": 38,
    "end_col_offset": 17,
    "filename": "apps/sync/management/commands/probe_stock_audit.py",

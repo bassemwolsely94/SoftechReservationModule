@@ -395,7 +395,7 @@ function AbuseFlagsTab() {
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div data-tour="admin-audit-flags" className="space-y-3">
           {flags.map(flag => {
             const s  = SEVERITY_CFG[flag.severity]  || SEVERITY_CFG.warning
             const st = FLAG_STATUS_CFG[flag.status] || FLAG_STATUS_CFG.open
@@ -444,7 +444,8 @@ function AbuseFlagsTab() {
                   </div>
 
                   {flag.status === 'open' && (
-                    <button data-tour="admin-audit-review"
+                    <button
+                      data-tour="admin-audit-review"
                       onClick={() => setReviewing(flag)}
                       className="btn-secondary text-xs px-3 py-1.5 shrink-0">
                       مراجعة

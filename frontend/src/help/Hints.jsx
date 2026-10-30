@@ -2,7 +2,7 @@
  * Button emphasis outside a tour — both read the same «اعرض لي» text the tours use
  * (the screen's `tour` + its module's journey steps on this screen); no text of their own.
  *
- *   HintsLayer — «💡 تلميحات الأزرار» (Shift+F1 or the help panel): every explained
+ *   HintsLayer — «💡 تلميحات الأزرار» (Ctrl+F1 or the help panel): every explained
  *                element gets a dashed outline (amber when the step has a ⚠), and hovering
  *                or focusing it shows a small card: «label», what it does, «متى؟», ⚠.
  *                The card never takes clicks; the button works as usual.
@@ -149,7 +149,7 @@ function HintsBody({ steps }) {
         <span>💡 {steps.size
           ? tr(`تلميحات الأزرار شغالة — ${steps.size} عنصر مشروح هنا`, `Button hints on — ${steps.size} explained here`)
           : tr('تلميحات الأزرار شغالة — مفيش شرح أزرار للشاشة دي', 'Button hints on — none for this screen')}</span>
-        <span className="hidden sm:inline opacity-75">Shift+F1</span>
+        <span className="hidden sm:inline opacity-75">Ctrl+F1</span>
         <button type="button" onClick={toggleHints} data-tour="general-help-center-hints-off"
                 className="rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5">
           {tr('إيقاف ✕', 'Off ✕')}

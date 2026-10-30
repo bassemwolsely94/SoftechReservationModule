@@ -580,7 +580,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
       </div>
 
       {/* Right actions */}
-      <div className="flex flex-col items-end gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+      <div className="flex flex-col items-end gap-2 flex-shrink-0" onClick={e => e.stopPropagation()} data-tour="followups-tasks-card-actions">
         {/* Pin toggle — always visible */}
         <PinButton task={task} onPinToggle={onPinToggle} />
 
@@ -598,6 +598,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
         {['pending', 'called'].includes(task.status) && (
           <button
             onClick={() => onQuickAction(task)}
+            data-tour="followups-tasks-card-log"
             className="btn-primary text-xs px-3 py-1.5 whitespace-nowrap">
             تسجيل النتيجة
           </button>
@@ -685,6 +686,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
     }`}>
       {/* ── Customer header ── */}
       <div className="px-4 py-3.5 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+        data-tour="followups-tasks-group-header"
         onClick={() => setExpanded(p => !p)}>
         {/* Channel strip */}
         <div className="w-1.5 self-stretch rounded-full flex-shrink-0"
@@ -806,7 +808,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
       {expanded && (
         <div className="border-t border-gray-100">
           {/* Batch toolbar for this group */}
-          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 flex-wrap" data-tour="followups-tasks-group-batch">
             {/* Item selection for WA message */}
             <div className="flex items-center gap-1.5">
               <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer"
@@ -948,7 +950,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
                 </div>
 
                 {/* Per-task quick action */}
-                <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <div className="flex-shrink-0" onClick={e => e.stopPropagation()} data-tour="followups-tasks-group-log">
                   {isActive && (
                     <button
                       onClick={() => onQuickAction(task)}
@@ -1959,7 +1961,7 @@ function QuickActionModal({ task, onClose, onDone }) {
               {/* Step 1 — Status bucket */}
               <div>
                 <div className="text-xs font-bold text-gray-400 mb-2">١. ما الذي حدث؟</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2" data-tour="followups-tasks-outcome">
                   {OUTCOME_BUCKETS.map(b => {
                     const colors = BUCKET_COLORS[b.color]
                     const active = bucket === b.id
@@ -2015,6 +2017,7 @@ function QuickActionModal({ task, onClose, onDone }) {
               {/* Submit */}
               <div className="flex gap-2">
                 <button onClick={submit} disabled={saving || !preset}
+                  data-tour="followups-tasks-outcome-save"
                   className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                     preset
                       ? `${BUCKET_COLORS[bucketData?.color]?.bg || 'bg-brand-600'} text-white`

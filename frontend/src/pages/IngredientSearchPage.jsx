@@ -50,7 +50,7 @@ export default function IngredientSearchPage() {
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
-      <div>
+      <div data-tour="chronic-ingredient-search-header">
         <h1 className="text-xl font-bold text-content">بحث المواد الفعّالة</h1>
         <p className="text-sm text-muted">ابحث عن كل الأدوية التي تحتوي على مادة فعّالة أو تركيز أو شكل صيدلي أو تصنيف معيّن.</p>
       </div>

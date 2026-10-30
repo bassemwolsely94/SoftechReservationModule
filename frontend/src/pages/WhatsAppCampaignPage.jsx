@@ -79,7 +79,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
             + حملة جديدة
           </button>
         </div>
-        <input
+        <input data-tour="omni-campaigns-search"
           type="text"
           placeholder="بحث باسم الحملة..."
           value={q}
@@ -107,7 +107,7 @@ function CampaignList({ selectedId, onSelect, onNew }) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div data-tour="omni-campaigns-list" className="flex-1 overflow-y-auto">
         {isLoading && (
           <div className="p-6 text-center text-gray-400 text-sm">جارٍ التحميل...</div>
         )}
@@ -566,7 +566,7 @@ function WorkflowBar({ campaign, onAction }) {
   const { status } = campaign
 
   return (
-    <div className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
+    <div data-tour="omni-campaigns-workflow" className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
       {status === 'draft' && campaign.can_request_approval && (
         <button
           data-tour="omni-campaigns-request-approval"

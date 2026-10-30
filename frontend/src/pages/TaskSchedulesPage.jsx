@@ -215,7 +215,7 @@ export default function TaskSchedulesPage() {
     <div className="min-h-full bg-gray-50" dir="rtl">
       <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">الجداول التلقائية</h1>
+          <h1 className="text-xl font-bold text-gray-800" data-tour="tasks-schedules-header">الجداول التلقائية</h1>
           <p className="text-sm text-gray-500 mt-0.5">إنشاء وإدارة المهام المتكررة</p>
         </div>
         <div className="flex gap-2">
@@ -294,7 +294,7 @@ export default function TaskSchedulesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" data-tour="tasks-schedules-actions">
                         {s.is_active && (
                           <button data-tour="tasks-schedules-run" onClick={() => runNow(s.id, s.name)} className="text-xs text-brand-600 hover:underline">تشغيل</button>
                         )}

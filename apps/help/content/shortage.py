@@ -1,5 +1,7 @@
 from . import T
 
+CHANGE_NOTE = T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour')
+
 MODULE = {
     'key': 'shortage', 'group': 'inventory', 'icon': '🚨',
     'title': T('النواقص', 'Shortages'),
@@ -114,6 +116,126 @@ MODULE = {
              'open_hint': T('في قائمة مفتوحة فيها أصناف.', 'In an open list with items.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول النواقص', 'A tour of the Shortages module'),
+            'summary': T('من تسجيل نواقص الفرع ومتابعتها، للعرض المجمّع للمشتريات، لكشف «نواقص السوق» ومراجعتها، لـ«المبيعات الوهمية» اللي بتقلل الكميات المطلوبة — '
+                         'وإزاي كل جزء بيأثر على اللي بيتطلب من الموردين.',
+                         'From recording and following a branch\'s shortages, to the aggregated view for purchasing, to detecting and reviewing "market shortages", to "phantom sales" '
+                         'that reduce ordered quantities — and how each part affects what is ordered from suppliers.'),
+            'roles': ['admin', 'pharmacist', 'purchasing', 'supervisor', 'quality_manager'],
+            'steps': [
+                {'target': 'nav-shortage', 'nav': '/shortage',
+                 'text': T('نبدأ من «النواقص»: قوائم نواقص الفروع.',
+                           'Start at "Shortages": the branches\' shortage lists.'),
+                 'more': T('كل فرع بيسجّل هنا الأصناف اللي خلصت عنده أو العملاء طلبوها ومش موجودة.\n'
+                           '• القائمة بتمشي: مفتوحة ← مُرسَلة للمشتريات ← محلولة.\n'
+                           '• المشتريات بتشوف القوائم دي وتقرر: تحويل من فرع تاني، شراء، أو غير متوفر.',
+                           'Each branch records here the items it ran out of or that customers asked for and we do not have.\n'
+                           '• A list goes: open → submitted to purchasing → resolved.\n'
+                           '• Purchasing reviews these lists and decides: transfer from another branch, buy, or unavailable.')},
+                {'target': 'shortage-list-new', 'route': '/shortage',
+                 'text': T('«+ قائمة جديدة» تبدأ تسجيل نواقص فرعك.',
+                           '"+ New list" starts recording your branch\'s shortages.'),
+                 'more': T('بتختار الفرع (إجباري) وعنوان وملاحظات (اختياري)، و«إنشاء» يفتح القائمة على طول.\n'
+                           '• جوه القائمة تضيف الأصناف: يدوي، صوت، صورة لقائمة مكتوبة، أو لصق.\n'
+                           '• النظام بيطابق كل سطر مع صنف من الكتالوج، وانت لازم تأكد المطابقة.',
+                           'Choose the branch (required) and a title and notes (optional); "Create" opens the list straight away.\n'
+                           '• Inside the list you add items: manual, voice, a photo of a written list, or paste.\n'
+                           '• The system matches each line to a catalog item, and you must confirm the match.')},
+                {'target': 'shortage-list-grid', 'route': '/shortage',
+                 'text': T('القوائم الموجودة بحالتها ونسبة التأكيد.',
+                           'The existing lists with their status and confirmation rate.'),
+                 'more': T('كل كارت فيه: الفرع والتاريخ والحالة، وعدد الأصناف، و✓ المؤكد، و✕ اللي لسه مش متطابق.\n'
+                           '• شريط «تأكيد» الأخضر بيوضح نسبة الأصناف اللي اتأكدت مطابقتها.',
+                           'Each card shows: branch, date and status, the item count, ✓ confirmed, and ✕ still unmatched.\n'
+                           '• The green "Confirmed" bar shows the share of items whose match is confirmed.')},
+                {'target': 'shortage-list-card', 'route': '/shortage',
+                 'text': T('افتح قائمة عشان تضيف أصناف أو تأكد المطابقات أو ترسلها.',
+                           'Open a list to add items, confirm matches or submit it.'),
+                 'more': T('جوه القائمة: راجع المطابقة لكل سطر (النظام بيعرض أفضل احتمالات)، وبعدين «فحص المخزون» يقولك لو ينفع تحويل من فرع تاني بدل الشراء، وبعدين «إرسال».\n'
+                           '• متأكدش مطابقة مش متأكد منها — صنف غلط يعني طلب صنف غلط.',
+                           'Inside the list: review the match for each line (the system shows the best candidates), then "Check stock" tells you whether a transfer from another branch can replace buying, then "Submit".\n'
+                           '• Never confirm a match you are unsure of — a wrong item means ordering the wrong item.')},
+                {'target': 'shortage-list-aggregate', 'route': '/shortage',
+                 'text': T('«📊 عرض مجمع» يجمع نواقص كل الفروع للمشتريات.',
+                           '"📊 Aggregate view" combines all branches\' shortages for purchasing.'),
+                 'more': T('بتختار الحالة والفترة وتضغط «🔍 تجميع»: كل صنف بيظهر بالكمية الكلية وتوزيعها على الفروع.\n'
+                           '• «📊 تصدير Excel» يطلعها ملف للمشتريات.\n'
+                           '• ده الجسر بين نواقص الفروع وطلبات الشراء.',
+                           'Choose the status and date range and press "🔍 Aggregate": each item shows its total quantity and split across branches.\n'
+                           '• "📊 Export Excel" downloads it as a file for purchasing.\n'
+                           '• This is the bridge between branch shortages and purchase orders.')},
+                {'target': 'nav-market-shortage', 'nav': '/market-shortage',
+                 'text': T('بعدها «نواقص السوق»: أصناف ناقصة من السوق كله.',
+                           'Next, "Market shortages": items short across the whole market.'),
+                 'more': T('دي غير نواقص الفرع: صنف عليه طلب عالي بس صعب توريده أو بييجي بكوتة.\n'
+                           '• المحرك بيكتشفها من المخزون والمبيعات، والإنسان هو اللي بيأكد أو يستبعد.',
+                           'These differ from branch shortages: an item in high demand that is hard to source or comes in quotas.\n'
+                           '• The engine detects them from stock and sales; a person confirms or dismisses.')},
+                {'target': 'shortage-market-run', 'route': '/market-shortage',
+                 'text': T('«🔄 تشغيل المحرك ومزامنة البيانات» يحدّث التحليل.',
+                           '"🔄 Run engine and sync data" refreshes the analysis.'),
+                 'more': T('قبل التشغيل بص على «المبيعات حتى»: لو متأخرة بيظهر زر «⏬ مزامنة المبيعات».\n'
+                           '• التشغيل بياخد وقت والتقدم بيظهر جنبه؛ لما يخلص القوائم بتتحدث لوحدها.\n'
+                           '• التشغيل مسموح لأدوار معيّنة بس.',
+                           'Before running, check "Sales up to": if it is behind, a "⏬ Sync sales" button appears.\n'
+                           '• A run takes a while and its progress shows next to it; when done the lists refresh by themselves.\n'
+                           '• Only certain roles may run it.')},
+                {'target': 'shortage-market-kpis', 'route': '/market-shortage',
+                 'text': T('المؤكدة، الجديدة، اللي ممكن توفّرت، والخسارة الشهرية.',
+                           'Confirmed, new, possibly available again, and the monthly loss.'),
+                 'more': T('«💸 خسارة شهرية» = قيمة الطلب اللي مش بنقدر نلبّيه بسبب النواقص المؤكدة.\n'
+                           '• «🔄 قد توفّرت» أصناف مؤكدة رجع مخزونها ومبيعاتها — راجعها وشيل النقص لو اتوفرت.',
+                           '"💸 Monthly loss" = the value of demand we cannot meet because of confirmed shortages.\n'
+                           '• "🔄 May be available" are confirmed items whose stock and sales recovered — review them and remove the shortage if available.')},
+                {'target': 'shortage-market-tabs', 'route': '/market-shortage',
+                 'text': T('التغييرات، المرشحون، المؤكدة، المستبعدة، والاتجاهات.',
+                           'Changes, candidates, confirmed, dismissed and trends.'),
+                 'more': T('• ابدأ بـ «التغييرات»: الجديد من آخر تشغيل.\n'
+                           '• «المرشحون»: كل المشتبه فيهم للمراجعة.\n'
+                           '• «المؤكدة»: تتصدّر Excel أو واتساب للمورد.\n'
+                           '• «المستبعدة»: بسببها وتقدر ترجّعها.',
+                           '• Start with "Changes": what is new since the last run.\n'
+                           '• "Candidates": all suspects to review.\n'
+                           '• "Confirmed": export to Excel or WhatsApp for the supplier.\n'
+                           '• "Dismissed": with their reason, and can be restored.')},
+                {'target': 'shortage-market-table', 'route': '/market-shortage',
+                 'text': T('لكل صنف: «تأكيد» أو «ليس نقصًا» أو «استبعاد».',
+                           'For each item: "Confirm", "Not a shortage" or "Dismiss".'),
+                 'more': T('القرار هنا إنساني: المحرك بيرشّح بس.\n'
+                           '• «تأكيد» بيضيفه للنواقص المؤكدة، ولو الربط مع SOFTECH مفعّل بيتعلّم على كارت الصنف هناك كـ «صنف نواقص».\n'
+                           '• «استبعاد» بيطلب سبب، ويقدر يحدد صنف بديل متاح.',
+                           'The decision here is human: the engine only suggests.\n'
+                           '• "Confirm" adds it to the confirmed shortages, and when the SOFTECH link is on it is flagged on the item card there as a shortage item.\n'
+                           '• "Dismiss" asks for a reason and can name an available matching product.')},
+                {'target': 'nav-phantom-sales', 'nav': '/phantom-sales',
+                 'text': T('وفي الآخر «مبيعات وهمية».',
+                           'Finally, "Phantom sales".'),
+                 'more': T('أصناف تعاقد معظم مبيعاتها بيرجع يتشترى من المرضى نفسهم، مش من الموردين.\n'
+                           '• لو اتحسبت مبيعات عادية هنطلب كميات مش محتاجينها — عشان كده كميتها بتقل في شيت النواقص.',
+                           'Contract items whose sales are mostly bought back from the patients themselves, not from suppliers.\n'
+                           '• Counted as normal sales, they would make us order quantities we do not need — so their quantity is reduced on the shortage sheet.')},
+                {'target': 'shortage-phantom-stats', 'route': '/phantom-sales',
+                 'text': T('المُكتشفة، بانتظار المراجعة، المؤكَّدة، المستبعدة، وتخفيض الطلب التقديري.',
+                           'Detected, pending review, confirmed, excluded, and the estimated order reduction.'),
+                 'more': T('الكشف تلقائي لما نسبة إعادة الشراء توصل للحد المكتوب في رأس الصفحة.\n'
+                           '• «بانتظار المراجعة» هي اللي محتاجة قرارك.\n'
+                           '• «تخفيض الطلب» = قيمة الشراء اللي هنوفّرها تقديرياً.',
+                           'Detection is automatic once the buy-back ratio reaches the threshold shown in the page header.\n'
+                           '• "Pending review" are the ones that need your decision.\n'
+                           '• "Order reduction" = the estimated purchase value we will save.')},
+                {'target': 'shortage-phantom-tabs', 'route': '/phantom-sales',
+                 'text': T('«المُكتشفة» للمراجعة، و«المستبعدة» لما حُكم إنه مش وهمي.',
+                           '"Detected" for review, and "Excluded" for items judged not phantom.'),
+                 'more': T('في «المُكتشفة»: «تأكيد» أو «ليست وهمية». في «المستبعدة»: «إرجاع للتلقائي» يرجّع الحكم للمحرك.\n'
+                           '• قراراتك هنا بتأثر على الكميات اللي المشتريات هتطلبها.',
+                           'In "Detected": "Confirm" or "Not phantom". In "Excluded": "Back to automatic" returns the decision to the engine.\n'
+                           '• Your decisions here affect the quantities purchasing will order.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -144,18 +266,30 @@ SCREENS = [
             {'target': 'shortage-list-new', 'label': T('+ قائمة جديدة', '+ New list'),
              'text': T('يفتح نموذج قائمة نواقص: الفرع وعنوان اختياري وملاحظات. بعد «إنشاء» القائمة تفتح على طول.',
                        'Opens the shortage-list form: branch, optional title and notes. After "Create" the list opens straight away.'),
-             'when': T('قائمة لكل جولة جرد أو زيارة مندوب — مش قائمة لكل صنف.', 'One list per stock walk or rep visit — not one list per item.')},
+             'when': T('قائمة لكل جولة جرد أو زيارة مندوب — مش قائمة لكل صنف.', 'One list per stock walk or rep visit — not one list per item.'),
+             'more': T(
+                 'بيفتح نافذة «قائمة نواقص جديدة»: الفرع (إجباري)، والعنوان والملاحظات (اختياري).\n• «إنشاء» يفتح القائمة الجديدة على طول عشان تبدأ تضيف أصناف.\n• مثال للعنوان: «زيارة المندوب — مايو».',
+                 'Opens the "New shortage list" window: branch (required), title and notes (optional).\n• "Create" opens the new list straight away so you can start adding items.\n• Title example: "Rep visit — May".')},
             {'target': 'shortage-list-filters', 'label': T('كل الفروع · كل الحالات', 'All branches · All statuses'),
              'text': T('فلتر القوائم بالفرع والحالة: مفتوحة، مُرسَلة، محلولة.', 'Filter the lists by branch and status: open, submitted, resolved.'),
-             'when': T('المشتريات تبدأ بـ«مُرسَلة» — دي القوائم المستنية توفير.', 'Purchasing starts with "Submitted" — those lists are waiting to be sourced.')},
+             'when': T('المشتريات تبدأ بـ«مُرسَلة» — دي القوائم المستنية توفير.', 'Purchasing starts with "Submitted" — those lists are waiting to be sourced.'),
+             'more': T(
+                 'اختار فرع أو «كل الفروع»، والحالة: مفتوحة، مُرسَلة، أو محلولة.\n• «مفتوحة» = لسه الفرع بيضيف ويأكد.\n• «مُرسَلة» = مستنية المشتريات تتصرف.',
+                 'Pick a branch or "All branches", and the status: open, submitted or resolved.\n• "Open" = the branch is still adding and confirming.\n• "Submitted" = waiting for purchasing to act.')},
             {'target': 'shortage-list-aggregate', 'label': T('📊 عرض مجمع', '📊 Aggregate view'),
              'text': T('يجمع أصناف كل القوائم حسب الحالة والفترة في جدول واحد، مع «📊 تصدير Excel».',
                        'Combines the items of all lists, by status and period, into one table, with "📊 Export Excel".'),
-             'when': T('قبل طلبية المورد، عشان تشوف إجمالي الناقص في كل الفروع مرة واحدة.', 'Before a supplier order, to see the total shortage across branches at once.')},
+             'when': T('قبل طلبية المورد، عشان تشوف إجمالي الناقص في كل الفروع مرة واحدة.', 'Before a supplier order, to see the total shortage across branches at once.'),
+             'more': T(
+                 'بتختار الحالة والفترة (من تاريخ / إلى تاريخ) وتضغط «🔍 تجميع».\n• كل صنف بيظهر بالكمية الكلية وتوزيعها على الفروع ومصادرها.\n• «📊 تصدير Excel» يطلع النتيجة ملف، و«← رجوع» يرجعك للقوائم.',
+                 'Choose the status and period (from / to date) and press "🔍 Aggregate".\n• Each item shows its total quantity, its split across branches and its sources.\n• "📊 Export Excel" downloads the result, and "← Back" returns to the lists.')},
             {'target': 'shortage-list-card',
              'text': T('كل كارت قائمة: الفرع والتاريخ والحالة وعدد الأصناف ونسبة التأكيد. اضغطه يفتح القائمة.',
                        'Each card is a list: branch, date, status, item count and confirmed %. Click it to open the list.'),
-             'open_hint': T('محتاج قائمة واحدة على الأقل في الفلتر الحالي.', 'Needs at least one list under the current filter.')},
+             'open_hint': T('محتاج قائمة واحدة على الأقل في الفلتر الحالي.', 'Needs at least one list under the current filter.'),
+             'more': T(
+                 'جوه القائمة: الإضافة (يدوي، صوت، صورة، لصق)، ومراجعة المطابقة، و«فحص المخزون» للتحويل بدل الشراء، و«إرسال» للمشتريات.\n• متأكدش مطابقة مش متأكد منها — صنف غلط يعني طلب صنف غلط.',
+                 'Inside the list: adding (manual, voice, photo, paste), match review, "Check stock" for a transfer instead of buying, and "Submit" to purchasing.\n• Never confirm a match you are unsure of — a wrong item means ordering the wrong item.')},
             {'target': 'shortage-list-input-tabs', 'label': T('يدوي · صوتي · صورة · نصي', 'Manual · Voice · Photo · Paste'),
              'text': T('أربع طرق لإضافة الأصناف: كتابة، صوت (Chrome أو Edge)، صورة لقائمة مكتوبة، أو لصق سطر لكل صنف.',
                        'Four ways to add items: typing, voice (Chrome or Edge), a photo of a written list, or pasting one line per item.'),
@@ -198,8 +332,15 @@ SCREENS = [
                        'Choose a main supplier to download an Excel file of the list items with that supplier codes.'),
              'when': T('ده ملف بس — مش بيتبعت للمورد ولا بيتسجل في SOFTECH.', 'It is only a file — nothing is sent to the supplier or written to SOFTECH.'),
              'open_hint': T('في أعلى أي قائمة مفتوحة.', 'At the top of any opened list.')},
+            {'target': 'shortage-list-grid',  # from the GitHub-side tour
+             'text': T('القوائم الموجودة.',
+                       'The existing lists.'),
+             'more': T(
+                 'كل كارت: العنوان أو اسم الفرع، والتاريخ، والحالة، وعدد الأصناف، و✓ المؤكد، و✕ غير المطابق.\n• شريط «تأكيد» بيوضح كام في المية من الأصناف اتأكدت مطابقتها.\n• لو مفيش قوائم بيظهر زر «+ قائمة جديدة» في النص.',
+                 'Each card: title or branch name, date, status, item count, ✓ confirmed and ✕ unmatched.\n• The "Confirmed" bar shows what percentage of items have a confirmed match.\n• If there are no lists, a "+ New list" button shows in the middle.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'shortage.market',
@@ -223,16 +364,25 @@ SCREENS = [
              'text': T('يشغّل محرك الطلب في الخلفية ويحدّث المرشحين. السطر جنبه بيقول آخر تشغيل والمبيعات لحد إمتى.',
                        'Runs the demand engine in the background and refreshes the candidates. The line beside it shows the last run and sales date.'),
              'when': T('لو المبيعات متأخرة اضغط «⏬ مزامنة المبيعات» الأول. التشغيل للمدير والمشتريات وفريق التوريد (مجموعات SOFTECH).',
-                       'If sales are behind, press "⏬ Sync sales" first. Running is for admin, purchasing and the supply team (SOFTECH groups).')},
+                       'If sales are behind, press "⏬ Sync sales" first. Running is for admin, purchasing and the supply team (SOFTECH groups).'),
+             'more': T(
+                 'جنبه «آخر تشغيل» و«المبيعات حتى» — لو المبيعات متأخرة بيظهر بالأصفر ومعاه زر «⏬ مزامنة المبيعات».\n• وقت التشغيل بيظهر «جارٍ تشغيل المحرك…» بالنسبة، والقوائم بتتحدث لما يخلص.\n• التشغيل مسموح لأدوار معيّنة بس.',
+                 'Next to it are "Last run" and "Sales up to" — if sales are behind it turns amber with a "⏬ Sync sales" button.\n• While running it shows "Running the engine…" with a percentage, and the lists refresh when done.\n• Only certain roles may run it.')},
             {'target': 'shortage-market-tabs', 'label': T('التغييرات · المرشحون · المؤكدة …', 'Changes · Candidates · Confirmed …'),
              'text': T('«التغييرات» الجديد منذ آخر تشغيل، و«المرشحون» كل المشتبه بنقصه، و«📈 الاتجاهات» التطور مع الوقت.',
                        '"Changes" is what is new since the last run, "Candidates" every suspected item, and "📈 Trends" the change over time.'),
-             'when': T('ابدأ يومك من «التغييرات».', 'Start your day from "Changes".')},
+             'when': T('ابدأ يومك من «التغييرات».', 'Start your day from "Changes".'),
+             'more': T(
+                 'الرقم جنب كل تبويب = عدد أصنافه.\n• ابدأ يومك بـ «التغييرات» (الجديد من آخر تشغيل).\n• «المرشحون» فيه فلتر بالشدة (نفاد مؤكد، نقص حاد، مراقبة) وترتيب «الأشد» أو «الأعلى خسارة».',
+                 'The number next to each tab = its item count.\n• Start your day with "Changes" (what is new since the last run).\n• "Candidates" has a severity filter (confirmed out, severe, watch) and "Most severe" or "Highest loss" sorting.')},
             {'target': 'shortage-market-toolbar', 'label': T('بحث · 📥 Excel · 📱 واتساب', 'Search · 📥 Excel · 📱 WhatsApp'),
              'text': T('فلتر بالتصنيف وابحث بالكود أو الاسم. «📥 Excel» ينزّل التبويب، و«📱 واتساب» يجهّز نص للمورد.',
                        'Filter by class and search by code or name. "📥 Excel" downloads the tab; "📱 WhatsApp" prepares a text for the supplier.'),
              'when': T('الواتساب بيفتح المحادثة بس — إنت اللي بتضغط إرسال هناك.', 'WhatsApp only opens the chat — you press send there yourself.'),
-             'open_hint': T('موجود في كل التبويبات ما عدا «📈 الاتجاهات».', 'Present on every tab except "📈 Trends".')},
+             'open_hint': T('موجود في كل التبويبات ما عدا «📈 الاتجاهات».', 'Present on every tab except "📈 Trends".'),
+             'more': T(
+                 'الفلتر والبحث بيطبقوا على التبويب المفتوح.\n• «📥 Excel» يطلع ملف بالأصناف المعروضة.\n• «📱 واتساب» يجهّز رسالة: تنسخها أو تكتب رقم المورد وتفتح واتساب بيها.',
+                 'The filter and search apply to the open tab.\n• "📥 Excel" downloads a file with the shown items.\n• "📱 WhatsApp" prepares a message: copy it, or enter the supplier\'s number and open WhatsApp with it.')},
             {'target': 'shortage-market-confirm', 'label': T('تأكيد', 'Confirm'),
              'text': T('يأكد إن الصنف ناقص في السوق وينقله لـ«المؤكدة».', 'Confirms the item is short in the market and moves it to "Confirmed".'),
              'warn': T('لو الكتابة في SOFTECH مفعّلة: بيعلّم «صنف نواقص» ويكتب تحذير على كارت الصنف لكل الفروع فوراً.',
@@ -271,8 +421,21 @@ SCREENS = [
              'text': T('يرجّع صنف مستبعد لقائمة المرشحين عشان يتراجع تاني.', 'Returns a dismissed item to the candidates for another review.'),
              'warn': T('لو كنا وقّفنا أوامر التوريد له، الاسترجاع بيرجّعها شغالة في SOFTECH.', 'If we had suspended its supply orders, restoring turns them back on in SOFTECH.'),
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
+            {'target': 'shortage-market-kpis',  # from the GitHub-side tour
+             'text': T('النواقص المؤكدة والجديدة واللي ممكن توفّرت والخسارة الشهرية.',
+                       'Confirmed and new shortages, ones that may be available again, and the monthly loss.'),
+             'more': T(
+                 '• «مؤكدة (في نقص)»: اللي اتأكد نقصها.\n• «🆕 نواقص جديدة»: ظهرت في آخر تشغيل ومحتاجة مراجعة.\n• «🔄 قد توفّرت»: مؤكدة رجع مخزونها ومبيعاتها — راجعها.\n• «💸 خسارة شهرية»: قيمة الطلب اللي مش بنلبّيه بالجنيه في الشهر.',
+                 '• "Confirmed (short)": items confirmed as short.\n• "🆕 New shortages": appeared in the last run and need review.\n• "🔄 May be available": confirmed items whose stock and sales recovered — review them.\n• "💸 Monthly loss": unmet demand value in pounds per month.')},
+            {'target': 'shortage-market-table',  # from the GitHub-side tour
+             'text': T('الأصناف — راجع وأكّد أو استبعد.',
+                       'The items — review and confirm or exclude.'),
+             'more': T(
+                 'الأعمدة: الخسارة الشهرية، التغطية (المخزون ÷ متوسط الطلب الشهري)، القمع (نزول مبيعات آخر 30 يوم عن المعدل)، وأيام النفاد.\n• «تأكيد» يضيفه للمؤكدة، ولو الربط مع SOFTECH مفعّل بيتعلّم «صنف نواقص» على كارت الصنف هناك.\n• «استبعاد» بيطلب سبب ويقدر يحدد صنف بديل متاح.',
+                 'Columns: monthly loss, coverage (stock ÷ average monthly demand), suppression (last-30-day sales drop versus the yearly rate) and stock-out days.\n• "Confirm" adds it to confirmed; when the SOFTECH link is on, the item card there is flagged as a shortage item.\n• "Dismiss" asks for a reason and can name an available matching product.')},
         ],
         'updated': '2026-10-27',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'shortage.phantom',
@@ -290,17 +453,29 @@ SCREENS = [
         'tour': [
             {'target': 'shortage-phantom-stats', 'label': T('🩹 مُكتشفة · ⏳ بانتظار المراجعة …', '🩹 Detected · ⏳ Waiting review …'),
              'text': T('أعداد الأصناف حسب الحالة. «تخفيض الطلب (تقديري)» تقدير بس لقيمة الكميات اللي ممكن مانطلبهاش.',
-                       'Item counts by state. "Order reduction (estimate)" is only an estimate of the quantities we might not order.')},
+                       'Item counts by state. "Order reduction (estimate)" is only an estimate of the quantities we might not order.'),
+             'more': T(
+                 '• «⏳ بانتظار المراجعة»: محتاجة قرارك.\n• «تخفيض الطلب (تقديري)»: قيمة الشراء اللي هنوفّرها بالجنيه.',
+                 '• "⏳ Pending review": needs your decision.\n• "Order reduction (estimate)": the purchase value saved, in pounds.')},
             {'target': 'shortage-phantom-tabs', 'label': T('المُكتشفة · المستبعدة', 'Detected · Excluded'),
-             'text': T('«المُكتشفة» للمراجعة، و«المستبعدة» اللي اتقال عنها «ليست وهمية».', '"Detected" is for review; "Excluded" holds what was marked "Not phantom".')},
+             'text': T('«المُكتشفة» للمراجعة، و«المستبعدة» اللي اتقال عنها «ليست وهمية».', '"Detected" is for review; "Excluded" holds what was marked "Not phantom".'),
+             'more': T(
+                 'الرقم جنب كل تبويب = عدد أصنافه.\n• الصنف اللي تقول عليه «ليست وهمية» بينتقل لـ «المستبعدة» وبيرجع يتطلب بكميته العادية.',
+                 'The number next to each tab = its item count.\n• An item you mark "Not phantom" moves to "Excluded" and is ordered at its normal quantity again.')},
             {'target': 'shortage-phantom-toolbar', 'label': T('كل التصنيفات · بحث بالكود/الاسم', 'All classes · Search by code/name'),
-             'text': T('فلتر بالتصنيف العام وابحث بالكود أو الاسم.', 'Filter by general class and search by code or name.')},
+             'text': T('فلتر بالتصنيف العام وابحث بالكود أو الاسم.', 'Filter by general class and search by code or name.'),
+             'more': T(
+                 'الفلتر والبحث بيطبقوا على التبويب المفتوح.\n• مفيد لو عايز تراجع تصنيف معيّن مرة واحدة.',
+                 'The filter and search apply to the open tab.\n• Useful to review one class at a time.')},
             {'target': 'shortage-phantom-table',
              'text': T('لكل صنف: نسبة إعادة الشراء من المرضى، والنسبة الموصى بطلبها، والطلب الحقيقي. «شديد» أو «مراقبة».',
                        'For each item: the share bought back from patients, the recommended order %, and the genuine need. "Severe" or "Watch".'),
              'when': T('الأرقام دي إرشاد للمشتريات. التخفيض التلقائي في شيت الطلب مقفول إلا لو المالك فعّله.',
                        'These figures guide purchasing. The automatic cut on the order sheet is off unless the owner turns it on.'),
-             'open_hint': T('محتاج صنف واحد على الأقل في التبويب.', 'Needs at least one item in the tab.')},
+             'open_hint': T('محتاج صنف واحد على الأقل في التبويب.', 'Needs at least one item in the tab.'),
+             'more': T(
+                 '• «نسبة الوهمية» = إعادة الشراء ÷ المبيعات.\n• «النسبة الموصى بطلبها» و«الطلب الحقيقي»: اللي فعلاً محتاجين نشتريه.\n• شارة «شديد» أو «مراقبة» جنب الاسم، و«📉 نقص سوق» لو الصنف كمان ناقص من السوق.',
+                 '• "Phantom ratio" = buy-back ÷ sales.\n• "Recommended order %" and "Genuine need": what we really need to buy.\n• A "Severe" or "Watch" badge next to the name, and "📉 Market shortage" if the item is also short in the market.')},
             {'target': 'shortage-phantom-confirm', 'label': T('تأكيد', 'Confirm'),
              'text': T('يثبّت إن الصنف وهمي حتى لو النسبة نزلت شوية بعدين. بيتسجل باسمك عندنا بس — مفيش كتابة في SOFTECH.',
                        'Locks the item as phantom even if its ratio dips later. Logged under your name here only — nothing is written to SOFTECH.'),
@@ -313,8 +488,21 @@ SCREENS = [
             {'target': 'shortage-phantom-reset', 'label': T('إرجاع للتلقائي', 'Back to automatic'),
              'text': T('يلغي قرارك ويرجّع الحكم للمحرك حسب النسبة.', 'Cancels your decision and returns the call to the engine by ratio.'),
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Excluded" tab.')},
+            {'target': 'shortage-phantom-header',  # from the GitHub-side tour
+             'text': T('«مبيعات وهمية»: أصناف يُعاد شراء معظم مبيعاتها من المرضى لا من الموردين.',
+                       '«Phantom sales»: items mostly bought back from patients rather than from suppliers.'),
+             'more': T(
+                 'تحت العنوان مكتوب الحد (نسبة إعادة الشراء من المبيعات) والفترة اللي بيتحسب عليها.\n• الأصناف دي كميتها بتقل في شيت النواقص عشان منطلبش اللي مش محتاجينه.',
+                 'Under the title is the threshold (buy-back as a share of sales) and the period it is measured over.\n• These items get a reduced quantity on the shortage sheet so we do not order what we do not need.')},
+            {'target': 'shortage-phantom-row-actions',  # from the GitHub-side tour
+             'text': T('في «المُكتشفة»: «تأكيد» أو «ليست وهمية»؛ وفي «المستبعدة» يظهر «إرجاع للتلقائي».',
+                       'In «Detected»: «Confirm» or «Not phantom»; in «Excluded» you get «Back to automatic».'),
+             'more': T(
+                 '• «تأكيد»: الحالة تبقى «مؤكَّد» والتخفيض يفضل مطبّق.\n• «ليست وهمية»: بيسألك عن سبب (اختياري) وينقله للمستبعدة.\n• «إرجاع للتلقائي»: يلغي قرارك ويرجّع الحكم للمحرك.',
+                 '• "Confirm": the status becomes "Confirmed" and the reduction stays applied.\n• "Not phantom": asks for an (optional) reason and moves it to Excluded.\n• "Back to automatic": cancels your decision and hands it back to the engine.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'shortage.mobile',
@@ -332,25 +520,37 @@ SCREENS = [
         'tour': [
             {'target': 'shortage-mobile-filters', 'label': T('مفتوحة · الكل · مُرسَلة · محلولة', 'Open · All · Submitted · Resolved'),
              'text': T('شرائح تختار بيها حالة القوائم اللي تشوفها.', 'Chips that choose which list status you see.'),
-             'when': T('«مفتوحة» هي الشغل الجاري؛ ابدأ منها.', '"Open" is the work in progress; start there.')},
+             'when': T('«مفتوحة» هي الشغل الجاري؛ ابدأ منها.', '"Open" is the work in progress; start there.'),
+             'more': T(
+                 'اسحب الأزرار يمين وشمال لو مش ظاهرة كلها.\n• «مفتوحة» = لسه بتضيف فيها؛ «مُرسَلة» = راحت للمتابعة؛ «محلولة» = اتعاملت.',
+                 'Swipe the buttons sideways if they do not all fit.\n• "Open" = still adding; "Submitted" = sent for follow-up; "Resolved" = handled.')},
             {'target': 'shortage-mobile-card',
              'text': T('اضغط القائمة تفتحها وتضيف أصناف. الكارت بيبين عدد الأصناف والمؤكد منها.', 'Tap a list to open it and add items. The card shows the item and confirmed counts.'),
              'open_hint': T('محتاج قائمة واحدة على الأقل في الشريحة دي.', 'Needs at least one list in this chip.')},
             {'target': 'shortage-mobile-new', 'label': T('+', '+'),
              'text': T('قائمة نواقص جديدة.', 'A new shortage list.'),
-             'when': T('قائمة واحدة لكل جولة بين الأرفف.', 'One list per walk through the aisles.')},
+             'when': T('قائمة واحدة لكل جولة بين الأرفف.', 'One list per walk through the aisles.'),
+             'more': T(
+                 'الزر العائم ده بيفتح شاشة «قائمة نواقص جديدة».\n• قبل ما تعمل قائمة جديدة شوف لو فيه قائمة مفتوحة لنفس الفرع تكمّل فيها.',
+                 'This floating button opens the "New shortage list" screen.\n• Before creating a new list, check whether there is an open list for the same branch to continue.')},
             {'target': 'shortage-mobile-form', 'label': T('الفرع · العنوان (اختياري)', 'Branch · Title (optional)'),
              'text': T('الفرع بيبقى فرعك. المدير والمشتريات والكول سنتر بس يقدروا يختاروا فرع تاني.',
                        'The branch is yours. Only admin, purchasing and call center can pick another branch.'),
              'open_hint': T('اضغط «+» في قائمة النواقص.', 'Tap "+" on the shortage list.')},
             {'target': 'shortage-mobile-create', 'label': T('إنشاء وبدء التسجيل', 'Create and start'),
              'text': T('ينشئ القائمة ويفتحها على طول عشان تبدأ تضيف.', 'Creates the list and opens it straight away so you can start adding.'),
-             'open_hint': T('في شاشة القائمة الجديدة.', 'On the new-list screen.')},
+             'open_hint': T('في شاشة القائمة الجديدة.', 'On the new-list screen.'),
+             'more': T(
+                 'لو صلاحيتك تسمح بتختار الفرع؛ غير كده بيتحط فرعك تلقائي.\n• بعد الإنشاء بتتفتح القائمة على طول عشان تبدأ تضيف.\n• «إلغاء» يرجعك من غير ما يعمل قائمة.',
+                 'If your permissions allow, you choose the branch; otherwise your own branch is set automatically.\n• After creating, the list opens straight away so you can start adding.\n• "Cancel" goes back without creating a list.')},
             {'target': 'shortage-mobile-quick-add', 'label': T('اسم الصنف الناقص... · + إضافة', 'Missing item name... · + Add'),
              'text': T('اكتب الاسم والكمية واضغط «+ إضافة» أو Enter. المؤشر بيفضل في الخانة للصنف اللي بعده.',
                        'Type the name and quantity and tap "+ Add" or Enter. The cursor stays for the next item.'),
              'when': T('من غير نت بيتحفظ ويتضاف أول ما الاتصال يرجع (📴).', 'Offline, it is kept and added once the connection is back (📴).'),
-             'open_hint': T('افتح أي قائمة مفتوحة.', 'Open any open list.')},
+             'open_hint': T('افتح أي قائمة مفتوحة.', 'Open any open list.'),
+             'more': T(
+                 'بعد «+ إضافة» المؤشر بيفضل في الخانة عشان تضيف اللي بعده بسرعة. لو النت فاصل بيتضاف لما يرجع.\n• «📋 لصق قائمة»: سطر لكل صنف مع الكمية، و«🎤 صوت» و«📷 صورة» بيحطوا السطور للمراجعة.\n• كل سطر بيتطابق مع الكتالوج؛ «غير مطابق» محتاج مراجعة.',
+                 'After "+ Add" the cursor stays in the box so you can add the next one quickly. If offline, it is added when the connection returns.\n• "📋 Paste list": one line per item with quantity; "🎤 Voice" and "📷 Photo" put the lines up for review.\n• Each line is matched to the catalog; "no match" needs review.')},
             {'target': 'shortage-mobile-paste', 'label': T('📋 لصق قائمة', '📋 Paste a list'),
              'text': T('يفتح خانة تلصق فيها سطر لكل صنف مع الكمية اختيارياً، ثم «استيراد القائمة».',
                        'Opens a box to paste one line per item with an optional quantity, then "Import list".'),
@@ -369,8 +569,18 @@ SCREENS = [
              'text': T('يبعت القائمة للمشتريات وحالتها تبقى «مُرسَلة».', 'Sends the list to purchasing; its status becomes "Submitted".'),
              'warn': T('بيتبعت من أول ضغطة من غير تأكيد، وبعدها مفيش إضافة. راجع الأصناف الأول.',
                        'It is sent on the first tap with no prompt, and nothing can be added after. Review the items first.'),
-             'open_hint': T('يظهر في قائمة مفتوحة فيها صنف واحد على الأقل.', 'Shows on an open list with at least one item.')},
+             'open_hint': T('يظهر في قائمة مفتوحة فيها صنف واحد على الأقل.', 'Shows on an open list with at least one item.'),
+             'more': T(
+                 'الزر بيوضح عدد الأصناف اللي هتتبعت.\n• بعد الإرسال القائمة بتبقى «مُرسَلة» ومش هتقدر تضيف فيها تاني.\n• راجع الأصناف «غير مطابق» قبل ما ترسل.',
+                 'The button shows how many items will be sent.\n• After submitting, the list becomes "Submitted" and you can no longer add to it.\n• Review the "no match" items before submitting.')},
+            {'target': 'shortage-mobile-lists',  # from the GitHub-side tour
+             'text': T('قوائم النواقص بعدد أصنافها والمؤكد منها — اضغط قائمة لفتحها.',
+                       'Shortage lists with item and confirmed counts — tap a list to open it.'),
+             'more': T(
+                 'لو القوايم كتير، «تحميل المزيد» تحت بيجيب الباقي.\n• اضغط القائمة المفتوحة عشان تكمّل إضافة فيها.',
+                 'If there are many lists, "Load more" at the bottom brings the rest.\n• Tap an open list to keep adding to it.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

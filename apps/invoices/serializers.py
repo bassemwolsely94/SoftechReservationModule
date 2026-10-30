@@ -93,6 +93,7 @@ class InvoiceLineWriteSerializer(serializers.ModelSerializer):
 class SupplierInvoiceListSerializer(serializers.ModelSerializer):
     branch_name     = serializers.CharField(source='branch.name_ar', read_only=True)
     vendor_name     = serializers.CharField(source='vendor.name', read_only=True, default=None)
+    vendor_personcode = serializers.CharField(source='vendor.softech_personcode', read_only=True, default='')
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
     status_label    = serializers.SerializerMethodField()
     line_count      = serializers.SerializerMethodField()
@@ -134,7 +135,7 @@ class SupplierInvoiceListSerializer(serializers.ModelSerializer):
         model  = SupplierInvoice
         fields = [
             'id', 'branch', 'branch_name',
-            'vendor', 'vendor_name',
+            'vendor', 'vendor_name', 'vendor_personcode',
             'status', 'status_label', 'doc_kind',
             'supplier_name', 'invoice_number', 'invoice_date', 'currency',
             'global_discount_pct', 'global_discount_amt', 'declared_total',

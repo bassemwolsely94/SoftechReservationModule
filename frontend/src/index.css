@@ -494,3 +494,22 @@ thead th {
   .overflow-auto:has(> table),
   .overflow-y-auto:has(> table) { max-height: none; }
 }
+
+/* ─── «اعرض لي» tour: zoom into each highlighted area, then a soft pulse ───── */
+@keyframes tour-zoom {
+  from { transform: scale(1.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes tour-pulse {
+  0%, 100% { outline: 0 solid rgba(59, 130, 246, 0.0); outline-offset: 2px; }
+  50%      { outline: 6px solid rgba(59, 130, 246, 0.25); outline-offset: 4px; }
+}
+@keyframes tour-card-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.tour-spot { animation: tour-zoom 420ms cubic-bezier(.2,.8,.2,1), tour-pulse 1.8s ease-in-out 420ms 3; }
+.tour-card { animation: tour-card-in 260ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot, .tour-card { animation: none; }
+}

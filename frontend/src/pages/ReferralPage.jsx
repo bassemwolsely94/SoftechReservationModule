@@ -67,7 +67,7 @@ function LeadRow({ lead, onInvite, onValidate, onShowEvents }) {
       </td>
       <td className="px-3 py-2 text-gray-400 text-xs">{fmtDt(lead.created_at)}</td>
       <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
+        <div data-tour="loyalty-referral-row-actions" className="flex items-center gap-1.5">
           {lead.status === 'pending' && (
             <button data-tour="loyalty-referral-invite"
               onClick={() => onInvite(lead)}
@@ -338,7 +338,7 @@ export default function ReferralPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-800">نظام الإحالات</h1>
+        <h1 data-tour="loyalty-referral-header" className="text-xl font-bold text-gray-800">نظام الإحالات</h1>
         <div className="flex gap-2" data-tour="loyalty-referral-tabs">
           {[
             { key: 'leads', label: 'قائمة الإحالات' },

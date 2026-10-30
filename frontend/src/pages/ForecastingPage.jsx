@@ -223,7 +223,7 @@ export default function ForecastingPage() {
       {/* Seasonality tab */}
       {tab === 'seasonality' && (
         <div>
-          <div className="flex justify-end mb-4">
+          <div data-tour="analytics-forecasting-seasonality-recalc" className="flex justify-end mb-4">
             <button data-tour="analytics-forecasting-recompute"
               onClick={() => computeSeasonality.mutate()}
               disabled={computeSeasonality.isPending}

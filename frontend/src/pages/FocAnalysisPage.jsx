@@ -270,7 +270,7 @@ export default function FocAnalysisPage() {
         <div className="grid md:grid-cols-2 gap-4">
 
           {/* Summary */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-expiry" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">⚠️ ملخص مرتجعات التالف</h3>
             {expiryQ.isLoading ? (
               <div className="animate-pulse space-y-2">
@@ -370,7 +370,7 @@ export default function FocAnalysisPage() {
         <div className="grid md:grid-cols-2 gap-4">
 
           {/* Summary */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div data-tour="purchasing-foc-tax" className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <h3 className="font-semibold text-gray-800 mb-3">🧾 ملخص العبء الضريبي</h3>
             {taxQ.isLoading ? (
               <div className="animate-pulse space-y-2">

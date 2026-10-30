@@ -213,7 +213,7 @@ export default function MobileNewReservationPage() {
       </div>
 
       {/* Details */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div data-tour="reservations-mnew-details" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 text-sm">📋 التفاصيل</h2>
 
         {/* Branch */}
@@ -302,6 +302,7 @@ export default function MobileNewReservationPage() {
       <div className="flex gap-2.5">
         <button onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
         <button
+          data-tour="reservations-mnew-submit"
           onClick={() => submit(false)}
           data-tour="reservations-new-submit"
           disabled={submitting}

@@ -91,7 +91,7 @@ export default function MobileStockCountDetailPage() {
         </div>
         <div className="text-xs text-gray-400 mt-1">{s.branch_name || s.branch_name_ar || ''}</div>
         {total > 0 && (
-          <div className="mt-2.5">
+          <div className="mt-2.5" data-tour="stockcount-mcount-progress">
             <div className="flex justify-between text-[11px] text-gray-500 mb-1">
               <span>تم جرد {toLatin(counted)} من {toLatin(total)}</span><span>{toLatin(pct)}%</span>
             </div>
@@ -106,7 +106,7 @@ export default function MobileStockCountDetailPage() {
           <h2 className="font-semibold text-gray-700 text-sm">📷 جرد صنف (مسح/بحث)</h2>
           <ItemSearchWidget selected={item} onSelect={(it) => { setItem(it); setError(''); setTimeout(() => qtyRef.current?.focus(), 50) }} onClear={() => setItem(null)} />
           {item && (
-            <div className="flex gap-2 items-end">
+            <div className="flex gap-2 items-end" data-tour="stockcount-mcount-qty">
               <div className="flex-1">
                 <label className="label">الكمية المعدودة</label>
                 <input ref={qtyRef} type="number" min="0" inputMode="decimal" className="input-field w-full"
@@ -119,7 +119,7 @@ export default function MobileStockCountDetailPage() {
           )}
           {error && <div className="text-sm text-red-600">{error}</div>}
           {last && (
-            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm">
+            <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm" data-tour="stockcount-mcount-result">
               <div className="font-medium text-gray-800 break-words">{last.item_name}</div>
               {last.queued ? (
                 <div className="text-xs mt-1 text-blue-600">📴 سيُسجَّل عند عودة الاتصال</div>

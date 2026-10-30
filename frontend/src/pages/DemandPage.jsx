@@ -283,7 +283,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
           </div>
 
           {/* Branch + source + priority */}
-          <div className="grid grid-cols-3 gap-3">
+          <div data-tour="demand-new-details" className="grid grid-cols-3 gap-3">
             <div>
               <label className="label text-xs">الفرع *</label>
               <BranchSelect

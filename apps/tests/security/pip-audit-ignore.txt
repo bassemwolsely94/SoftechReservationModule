@@ -12,6 +12,7 @@ CVE-2026-115775  # twisted 26.4.0
 CVE-2026-115776  # twisted 26.4.0
 CVE-2026-115778  # twisted 26.4.0
 CVE-2026-115877  # twisted 26.4.0
+CVE-2026-83813  # twisted 26.4.0 — published 2026-10-27; only fix is 26.10.0rc1 (pre-release), take the stable 26.10 in Batch 6
 PYSEC-2024-102  # django 4.2.13
 PYSEC-2024-156  # django 4.2.13
 PYSEC-2024-157  # django 4.2.13

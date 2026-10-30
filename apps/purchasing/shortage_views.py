@@ -13,6 +13,9 @@ apps/purchasing/shortage_views.py — REST API for the Market-Shortage screen.
   POST retrieve/       — bring a dismissed item back
   GET  export/         — Excel of a view (candidates|confirmed|dismissed)
   GET  whatsapp/       — plain-text list formatted for WhatsApp
+
+Permissions (`shortage` module, Batch 4 Z-7b): reads → view, export → export, the four SOFTECH-writing
+POSTs (flag / unflag / dismiss / retrieve) → approve.
 """
 import io
 import logging
@@ -31,6 +34,7 @@ from core.permissions import deny_unless, matrix_permission
 # Market Shortage = the `shortage` module (Batch 4, Z-7b): reads need view; flag / unflag /
 # dismiss / retrieve need approve (their deny_unless checks stay).
 SHORTAGE = matrix_permission('shortage', post=('approve',))
+SHORTAGE_EXPORT = matrix_permission('shortage', get=('export',))   # Excel download needs the export grant
 from . import shortage as S
 from apps.catalog.wildcard import wq
 
@@ -381,7 +385,7 @@ class _FakeReq:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, SHORTAGE])
+@permission_classes([IsAuthenticated, SHORTAGE_EXPORT])
 def shortage_export(request):
     import openpyxl
     from openpyxl.styles import Font, PatternFill

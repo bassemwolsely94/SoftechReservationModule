@@ -193,7 +193,7 @@ export default function MobileShortageDetailPage() {
 
       {/* Quick add (open lists only) */}
       {isOpen && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
+        <div data-tour="shortage-mobile-quick-add" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2.5">
           <div data-tour="shortage-mobile-quick-add" className="flex gap-2">
             <input
               ref={nameRef}

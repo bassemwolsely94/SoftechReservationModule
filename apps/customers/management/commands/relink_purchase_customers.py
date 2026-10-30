@@ -25,7 +25,7 @@ from django.utils import timezone
 Q_DOC_ACCOUNTS = """
     SELECT DISTINCT branchcode, doccode, docnumber, docdate, personcode
     FROM SOFTECHDB9.dbo.stktrans
-    WHERE docdate >= '{start}' AND docdate < '{end}'
+    WHERE docdate >= ? AND docdate < ?
       AND doccode IN ('115', '30')
       AND personcode IS NOT NULL AND personcode != ''
 """
@@ -79,7 +79,7 @@ class Command(BaseCommand):
             while day < end:
                 nxt = min(day + dt.timedelta(days=o['chunk_days']), end)
                 cur = conn.cursor()
-                cur.execute(Q_DOC_ACCOUNTS.format(start=f'{day:%Y%m%d}', end=f'{nxt:%Y%m%d}'), timeout=300)
+                cur.execute(Q_DOC_ACCOUNTS, [f'{day:%Y%m%d}', f'{nxt:%Y%m%d}'], timeout=300)
                 account_of = {}
                 for bc, dc, dn, dd, pc in cur.fetchall():
                     try:

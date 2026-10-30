@@ -152,7 +152,7 @@ export default function PerformanceDashboard() {
   return (
     <div className="p-6 space-y-4 max-w-screen-xl mx-auto" dir="rtl">
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-tour="analytics-performance-header" className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">لوحة الأداء</h1>
           <p className="text-sm text-gray-500 mt-0.5">أداء الموظفين — إيراد · ربح · خصم · كود المستخدم واسمه</p>

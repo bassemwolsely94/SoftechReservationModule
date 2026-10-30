@@ -78,7 +78,7 @@ function MarginTab({ days, setDays }) {
   return (
     <div className="space-y-5">
       {/* Overall KPIs */}
-      <div className="grid grid-cols-3 gap-3">
+      <div data-tour="purchasing-margins-kpis" className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-500">متوسط الهامش</p>
           <p className={`text-xl font-bold mt-1 ${Number(data.overall?.avg_margin) < 15 ? 'text-red-600' : 'text-emerald-600'}`}>

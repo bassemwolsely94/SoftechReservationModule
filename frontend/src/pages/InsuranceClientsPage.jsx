@@ -92,7 +92,7 @@ function ClientPanel({ selected, onSelect }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center mb-3">
+      <div data-tour="insurance-clients-add" className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-gray-700 text-sm">جهات التأمين</h2>
         <Btn onClick={openAdd} data-tour="insurance-clients-add-client">+ جديد</Btn>
       </div>
@@ -414,7 +414,7 @@ export default function InsuranceClientsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div data-tour="insurance-clients-header" className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3 mb-1">
           <button onClick={() => navigate('/insurance')} className="text-blue-600 text-sm hover:underline">
             ← مطالبات التأمين
@@ -424,21 +424,21 @@ export default function InsuranceClientsPage() {
         <p className="text-sm text-gray-500 mt-0.5">جهات التأمين — الفئات — العقود ونسب الخصم</p>
       </div>
 
-      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]" data-tour="insurance-clients-columns">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]">
+        <div data-tour="insurance-clients-payers" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ClientPanel
             selected={selectedClient}
             onSelect={(c) => { setSelectedClient(c); setSelectedSubclient(null) }}
           />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+        <div data-tour="insurance-clients-categories" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <SubClientPanel
             client={selectedClient}
             selected={selectedSubclient}
             onSelect={setSelectedSubclient}
           />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
+        <div data-tour="insurance-clients-contracts" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ContractPanel subclient={selectedSubclient} />
         </div>
       </div>

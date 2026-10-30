@@ -2,6 +2,8 @@ from . import T
 
 _SYNC = T('لو ظهرت «لا توجد بيانات» فالمزامنة المالية لم تُشغَّل لهذه الفترة — اطلب من المدير تشغيلها.', 'If "no data" shows, the finance sync has not run for this period — ask the admin to run it.')
 
+_NOTE = T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour')
+
 MODULE = {
     'key': 'finance', 'group': 'finance', 'icon': '💹',
     'title': T('المالية', 'Finance'),
@@ -105,7 +107,7 @@ MODULE = {
             {'screen': 'finance.payment_audit', 'target': 'finance-payment-audit-upload', 'perm': 'finance',
              'label': T('+ رفع كشف حساب', '+ Upload statement'),
              'text': T('ارفع كشف البنك (CSV أو Excel) للفترة.', 'Upload the bank statement (CSV or Excel) for the period.')},
-            {'screen': 'finance.payment_audit', 'target': 'finance-payment-audit-run-matching', 'perm': 'finance',
+            {'screen': 'finance.payment_audit', 'target': 'finance-payment-audit-match', 'perm': 'finance',
              'label': T('تشغيل المطابقة', 'Run matching'),
              'text': T('يطابق سطور الكشف بالدفعات المسجّلة ويحسب نسبة المطابقة.', 'Matches statement lines to recorded payments and computes the match rate.'),
              'open_hint': T('تبويب «🏦 الكشوف البنكية»، على كشف حالته pending.', 'The "🏦 Bank statements" tab, on a pending statement.')},
@@ -147,6 +149,131 @@ MODULE = {
              'open_hint': T('تبويب «غير المسددة (للمالية)».', 'The "Unpaid (for finance)" tab.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول المالية', 'A tour of the Finance module'),
+            'summary': T('جزئين: «الذكاء المالي» للقراءة (لوحة القيادة، الأرباح والخسائر، التدفق النقدي، المصروفات، دليل الحسابات) — وأدوات التشغيل اليومي: الشيكات، المدفوعات الخارجية، مراجعة كشوف البنك، وسداد الموردين.',
+                         'Two parts: "Financial intelligence" for reading (dashboard, profit & loss, cash flow, expenses, chart of accounts) — and the daily tools: cheques, external payments, bank statement review and supplier payments.'),
+            'roles': ['admin', 'purchasing', 'pharmacist'],
+            'steps': [
+                {'target': 'nav-finance', 'nav': '/finance',
+                 'text': T('نبدأ من «المالية» ← «الذكاء المالي».',
+                           'Start at "Finance" → "Financial intelligence".'),
+                 'more': T('كل أرقام الذكاء المالي بتتحسب في السيرفر من بيانات SOFTECH المحاسبية بعد المزامنة المالية — محدش بيكتب إجمالي بإيده، والشاشات دي مبتكتبش في SOFTECH.\n'
+                           '• فوق الصفحة تبويبات: لوحة القيادة، الأرباح والخسائر، التدفق النقدي، المصروفات، دليل الحسابات.',
+                           'Every financial intelligence figure is computed on the server from SOFTECH accounting data after the finance sync — nobody types a total, and these screens do not write to SOFTECH.\n'
+                           '• At the top are tabs: Dashboard, Profit & loss, Cash flow, Expenses, Chart of accounts.')},
+                {'target': 'finance-dashboard-period', 'route': '/finance/dashboard',
+                 'text': T('لوحة القيادة: اختار السنة والشهر.',
+                           'The dashboard: choose the year and month.'),
+                 'more': T('الأرقام بتتحمّل لوحدها مع تغيير الشهر. لو الشهر ما اتزامنش هتظهر رسالة إن البيانات مش موجودة.\n'
+                           '• لو ظهر «⚠ بيانات غير مكتملة» يبقى فيه مصادر لسه ما اتزامنتش للشهر ده.',
+                           'Figures load by themselves when you change the month. If the month was not synced, a message says there is no data.\n'
+                           '• "⚠ Incomplete data" means some sources are not synced yet for that month.')},
+                {'target': 'finance-dashboard-kpis', 'route': '/finance/dashboard',
+                 'text': T('المؤشرات: الإيرادات والأرباح والمشتريات والمصروفات والتدفق والمخزون.',
+                           'The KPIs: revenue, profit, purchases, expenses, cash flow and stock.'),
+                 'more': T('صورة سريعة للشهر لكل الفروع مع بعض. تحت كل رقم سطر صغير بيوضح الإجمالي أو الهامش.\n'
+                           '• تحت الكروت: الاتجاه الشهري للسنة وتفصيل كل فرع.',
+                           'A quick picture of the month for all branches together. Under each figure a small line shows the gross amount or the margin.\n'
+                           '• Below the cards: the monthly trend for the year and a breakdown per branch.')},
+                {'target': 'finance-pnl-statement', 'route': '/finance/pnl',
+                 'text': T('«الأرباح والخسائر»: من الإيرادات لحد صافي الربح.',
+                           '"Profit & loss": from revenue down to net profit.'),
+                 'more': T('القائمة مرتبة زي أي قائمة دخل: الإيرادات ← تكلفة البضاعة ← إجمالي الربح ← المصروفات ← الربح التشغيلي وصافي الربح.\n'
+                           '• الأرقام بين قوسين خصم (مرتجعات أو مصروفات).',
+                           'The statement is ordered like any income statement: revenue → cost of goods → gross profit → expenses → operating and net profit.\n'
+                           '• Figures in brackets are deductions (returns or expenses).')},
+                {'target': 'finance-cashflow-kpis', 'route': '/finance/cashflow',
+                 'text': T('«التدفق النقدي»: الداخل والخارج والصافي للشهر.',
+                           '"Cash flow": inflow, outflow and net for the month.'),
+                 'more': T('تحت الأرقام دي توزيع الداخل والخارج بطريقة الدفع (نقدي، شيك، تحويل، بطاقة، آجل).\n'
+                           '• الصافي بالأزرق لو موجب وبالبرتقالي لو سالب.',
+                           'Below these figures is the inflow and outflow split by payment method (cash, cheque, transfer, card, credit).\n'
+                           '• Net is blue when positive and orange when negative.')},
+                {'target': 'finance-expenses-mode', 'route': '/finance/expenses',
+                 'text': T('«المصروفات»: بالشهر أو بنطاق تاريخ، وتقدر تدوس على أي فئة.',
+                           '"Expenses": by month or by date range, and you can click any category.'),
+                 'more': T('بتوري المصروفات حسب الفئة (رواتب، إيجارات، مرافق، صيانة، توصيل…) والتصنيف الفرعي والفرع، وتحت جدول بكل مصروف.\n'
+                           '• اضغط على فئة في التوزيع عشان التفاصيل تتفلتر عليها.',
+                           'It shows expenses by category (salaries, rent, utilities, maintenance, delivery…), sub-category and branch, with a table of every expense below.\n'
+                           '• Click a category in the breakdown to filter the details to it.')},
+                {'target': 'finance-coa-view', 'route': '/finance/coa',
+                 'text': T('«دليل الحسابات»: حسابات SOFTECH كقائمة أو شجرة.',
+                           '"Chart of accounts": SOFTECH accounts as a list or a tree.'),
+                 'more': T('مرجع للقراءة بس: كود الحساب واسمه ونوعه وطبيعته (مدين/دائن) ومستواه.\n'
+                           '• مفيد لما تحب تعرف رقم معيّن في القوائم جاي من أنهي حساب.',
+                           'A read-only reference: account code, name, type, nature (debit/credit) and level.\n'
+                           '• Handy when you want to know which account a figure in the statements comes from.')},
+                {'target': 'finance-cheques-treasury', 'route': '/cheques',
+                 'text': T('«تخطيط الشيكات»: الخطط النشطة والمتبقي والمستحق قريب والمتأخر.',
+                           '"Cheque planning": active plans, outstanding, due soon and overdue.'),
+                 'more': T('ننتقل لأدوات الشغل اليومي. هنا بتخطط سداد مورد أو التزام بشيكات مؤجلة.\n'
+                           '• الكروت بتتحسب من الخطط: «شيكات متأخرة» بتحمرّ لو فيه شيك عدّى ميعاده ولسه ما اتصرفش.',
+                           'Now to the daily tools. Here you plan paying a supplier or an obligation with post-dated cheques.\n'
+                           '• The cards are computed from the plans: "Overdue cheques" turns red when a cheque is past due and not cleared.')},
+                {'target': 'finance-cheques-new', 'route': '/cheques',
+                 'text': T('«+ خطة جديدة»: الإجمالي وعدد الشيكات وتاريخ أول شيك والفترة.',
+                           '"+ New plan": total, number of cheques, first date and interval.'),
+                 'more': T('«📅 معاينة جدول الشيكات» بيوريك التواريخ والمبالغ قبل الحفظ؛ النظام بيقسم الإجمالي بالتساوي وبيرحّل أي تاريخ واقع في إجازة.\n'
+                           '• «إنشاء الخطة» بيحفظها مسودة، و«✅ تفعيل الخطة» بيبدأ متابعتها.',
+                           '"📅 Preview cheque schedule" shows dates and amounts before saving; the system splits the total evenly and moves any date that falls on a holiday.\n'
+                           '• "Create plan" saves it as a draft, and "✅ Activate plan" starts tracking it.')},
+                {'target': 'finance-payments-new', 'route': '/payments',
+                 'text': T('«تتبع المدفوعات»: «+ تسجيل دفعة» لأي دفعة خارجية.',
+                           '"Payment tracking": "+ Record payment" for any external payment.'),
+                 'more': T('لما عميل يدفع انستاباي أو فودافون كاش أو تحويل بنكي، سجّلها هنا بالمبلغ وكود فاتورة SOFTECH ورقم العملية وصورة الإيصال.\n'
+                           '• الدفعة بتبدأ «في الانتظار» لحد ما المدير أو الصيدلي يأكدها.',
+                           'When a customer pays by Instapay, Vodafone Cash or bank transfer, record it here with the amount, SOFTECH invoice code, transaction number and receipt photo.\n'
+                           '• The payment starts as "Pending" until the admin or pharmacist confirms it.')},
+                {'target': 'finance-payments-summary', 'route': '/payments',
+                 'text': T('ملخص اليوم: الإجمالي وكل طريقة دفع والمنتظر والمؤكد.',
+                           'Today summary: total, each payment method, pending and confirmed.'),
+                 'more': T('أرقام محسوبة في السيرفر من الدفعات المسجلة.\n'
+                           '• «في الانتظار» العالي معناه دفعات محتاجة حد يراجعها ويأكدها.',
+                           'Figures computed on the server from the recorded payments.\n'
+                           '• A high "Pending" means payments that need someone to review and confirm them.')},
+                {'target': 'finance-payment-audit-upload', 'route': '/payment-audit',
+                 'text': T('«مراجعة الكشوف»: ارفع كشف البنك وقارنه بالمدفوعات المسجلة.',
+                           '"Statement review": upload the bank statement and compare it with recorded payments.'),
+                 'more': T('دي الخطوة اللي بتتأكد إن كل دفعة اتسجلت فعلاً دخلت البنك، وإن كل حركة في البنك ليها دفعة مسجلة.\n'
+                           '• ارفع ملف CSV أو Excel، وبعدين «تشغيل المطابقة» من تبويب الكشوف.',
+                           'This is the step that checks that every recorded payment really reached the bank, and that every bank line has a recorded payment.\n'
+                           '• Upload a CSV or Excel file, then "Run matching" from the statements tab.')},
+                {'target': 'finance-payment-audit-tabs', 'route': '/payment-audit',
+                 'text': T('«⚠️ الاستثناءات» اللي محتاجة قرار، و«🏦 الكشوف البنكية».',
+                           '"⚠️ Exceptions" that need a decision, and "🏦 Bank statements".'),
+                 'more': T('أي حركة ما اتطابقتش أو فيها شبهة بتتحول استثناء: غير مسجّلة، مكررة، فرع غلط، فرق في المبلغ…\n'
+                           '• افتح الاستثناء واكتب ملاحظة وحلّه أو تجاهله — القرار بيتسجّل باسمك.',
+                           'Any line that did not match or looks suspicious becomes an exception: unrecorded, duplicate, wrong branch, amount mismatch…\n'
+                           '• Open the exception, write a note, and resolve or ignore it — the decision is recorded under your name.')},
+                {'target': 'finance-reconciliation-party', 'route': '/reconciliation',
+                 'text': T('«سداد الموردين»: ربط سندات الصرف بالفواتير اللي بتسددها.',
+                           '"Supplier payments": link payment vouchers to the invoices they pay.'),
+                 'more': T('النظام بيقترح ربط كل سند صرف بفاتورة أو أكتر بدرجة ثقة، وإنت بتعتمد أو ترفض.\n'
+                           '• اختار «موردون» أو «عملاء» حسب الطرف.',
+                           'The system proposes linking each payment voucher to one or more invoices with a confidence level, and you approve or reject.\n'
+                           '• Choose "Suppliers" or "Customers" depending on the party.')},
+                {'target': 'finance-reconciliation-kpis', 'route': '/reconciliation',
+                 'text': T('الفواتير والسندات والسندات بلا ربط والمقترحات والاستثناءات.',
+                           'Invoices, vouchers, unlinked vouchers, proposals and exceptions.'),
+                 'more': T('الكروت دي محسوبة في السيرفر حسب الفلاتر.\n'
+                           '• «سندات بلا ربط» فلوس اتدفعت ولسه مش معروف سددت أنهي فاتورة — دي أهم حاجة تتراجع.',
+                           'These cards are computed on the server according to the filters.\n'
+                           '• "Unlinked vouchers" is money paid that is not yet known to settle which invoice — the most important thing to review.')},
+                {'target': 'finance-reconciliation-tabs', 'route': '/reconciliation',
+                 'text': T('المقترحات ← الاستثناءات ← غير المسددة ← الحصر.',
+                           'Proposals → Exceptions → Unpaid → Parties.'),
+                 'more': T('الاعتماد بيعمل ربط داخلي عندنا بس؛ الكتابة في SOFTECH خطوة منفصلة للمدير وقابلة للعكس.\n'
+                           '• «غير المسددة (للمالية)» قائمة شغل المالية بالفواتير اللي لسه عليها رصيد.\n'
+                           '• مطالبات التأمين ليها موديول لوحده في نفس القائمة.',
+                           'Approving creates an internal link in our system only; writing to SOFTECH is a separate, reversible step for the admin.\n'
+                           '• "Unpaid (for finance)" is the finance worklist of invoices that still carry a balance.\n'
+                           '• Insurance claims have their own module in the same menu.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -167,32 +294,56 @@ SCREENS = [
              'text': T('تنقّل بين لوحة القيادة والأرباح والخسائر والتدفق النقدي والمصروفات ودليل الحسابات.',
                        'Move between the dashboard, P&L, cash flow, expenses and the chart of accounts.'),
              'when': T('«اكتشاف المخطط» يظهر للمدير فقط.', '"Schema discovery" shows to admins only.')},
-            {'target': 'finance-dashboard-period',
+            {'target': 'finance-dashboard-period', 'text': T('اختار السنة والشهر.',
+                                              'Choose the year and month.'),
+             'more': T('اللوحة بتتحمّل لوحدها مع أي تغيير. الأرقام جاية من ملخص الشهر اللي المزامنة المالية بتحسبه من بيانات SOFTECH المحاسبية.\n'
+                       '• لو الشهر ما اتزامنش هتظهر رسالة «تعذّر تحميل البيانات» — اطلب من المدير يشغّل المزامنة.\n'
+                       '• جنبها بيظهر اسم الفترة.',
+                       'The board loads by itself on any change. The figures come from the month summary the finance sync computes from SOFTECH accounting data.\n'
+                       '• If the month was not synced, a "Could not load data" message shows — ask the admin to run the sync.\n'
+                       '• The period name appears next to it.'),
              'label': T('السنة والشهر', 'Year and month'),
-             'text': T('اختر الفترة. كل المؤشرات والفروع تتبعها.', 'Pick the period. All KPIs and branches follow it.'),
              'when': T('آخر 5 سنوات متاحة.', 'The last 5 years are available.')},
-            {'target': 'finance-dashboard-refresh',
+            {'target': 'finance-dashboard-refresh', 'text': T('«تحديث» يعيد تحميل الأرقام.',
+                                              '"Refresh" reloads the figures.'),
+             'more': T('مفيد بعد ما مزامنة مالية جديدة تخلص والصفحة مفتوحة.\n'
+                       '• لو ظهر جنبه «⚠ بيانات غير مكتملة» يبقى فيه مصادر لسه ما اتزامنتش للشهر ده، والأرقام ممكن تتغير.\n'
+                       '• التحديث بيقرا بس، مش بيعيد الحساب.',
+                       'Useful after a new finance sync finishes while the page is open.\n'
+                       '• If "⚠ Incomplete data" shows next to it, some sources are not synced yet for that month and the figures may change.\n'
+                       '• Refreshing only reads; it does not recompute.'),
              'label': T('تحديث', 'Refresh'),
-             'text': T('يعيد قراءة الأرقام من بياناتنا. لا يشغّل مزامنة SOFTECH.', 'Re-reads the figures from our data. It does not run a SOFTECH sync.'),
              'when': T('بعد ما المدير يشغّل المزامنة المالية.', 'After the admin runs the finance sync.')},
             {'target': 'finance-dashboard-incomplete',
              'label': T('⚠ بيانات غير مكتملة', '⚠ Incomplete data'),
              'text': T('بعض المصادر لم تُزامن بعد لهذه الفترة.', 'Some sources are not synced yet for this period.'),
              'warn': T('لا تبني قراراً على أرقام فترة غير مكتملة.', 'Do not base a decision on an incomplete period.'),
              'open_hint': T('يظهر فقط لما تكون الفترة ناقصة.', 'Shown only when the period is incomplete.')},
-            {'target': 'finance-dashboard-kpis',
+            {'target': 'finance-dashboard-kpis', 'text': T('المؤشرات المالية للفترة لكل الفروع مع بعض.',
+                                              'The period financial figures for all branches together.'),
+             'more': T('• صافي الإيرادات (وتحته الإجمالي)، إجمالي الربح وهامشه، صافي الربح وهامشه.\n'
+                       '• صافي المشتريات، إجمالي المصروفات، صافي التدفق النقدي، قيمة المخزون («تقدير تراكمي»)، والمرتجعات.\n'
+                       'كلها محسوبة في المزامنة — مفيش رقم هنا بيتكتب باليد.',
+                       '• Net revenue (with gross under it), gross profit and margin, net profit and margin.\n'
+                       '• Net purchases, total expenses, net cash flow, stock value ("cumulative estimate") and returns.\n'
+                       'All are computed by the sync — no figure here is typed by hand.'),
              'label': T('المؤشرات المالية', 'Financial KPIs'),
-             'text': T('صافي الإيرادات، إجمالي وصافي الربح وهامشهما، المشتريات، المصروفات، التدفق النقدي، المخزون، المرتجعات.',
-                       'Net revenue, gross and net profit with margins, purchases, expenses, cash flow, stock, returns.'),
              'when': T('التدفق النقدي يتلوّن أحمر لو سالب. قيمة المخزون تقدير تراكمي.', 'Cash flow turns red when negative. Stock value is a running estimate.')},
-            {'target': 'finance-dashboard-trend',
+            {'target': 'finance-dashboard-trend', 'text': T('الاتجاه الشهري لصافي الإيرادات في السنة المختارة.',
+                                              'The monthly net revenue trend for the chosen year.'),
+             'more': T('عمود لكل شهر اتزامن من نفس السنة، لكل الفروع مع بعض.\n'
+                       '• بيبيّن الموسمية والشهور اللي فيها نزول عشان تسأل عن السبب.',
+                       'One bar per synced month of the same year, for all branches together.\n'
+                       '• It shows seasonality and the months with a drop so you can ask why.'),
              'label': T('الاتجاه الشهري', 'Monthly trend'),
-             'text': T('صافي الإيرادات لكل شهر في السنة المختارة.', 'Net revenue for each month of the chosen year.'),
              'open_hint': T('يظهر لما يكون للسنة بيانات.', 'Shown when the year has data.')},
-            {'target': 'finance-dashboard-branches',
+            {'target': 'finance-dashboard-branches', 'text': T('التفصيل حسب الفرع.',
+                                              'The breakdown by branch.'),
+             'more': T('لكل فرع: صافي الإيرادات، إجمالي الربح، هامش الربح، صافي الربح، وهل بياناته «مكتمل».\n'
+                       '• فرع مش مكتمل ممكن أرقامه أقل من الحقيقة لحد ما المزامنة تخلص.',
+                       'Per branch: net revenue, gross profit, profit margin, net profit, and whether its data is "Complete".\n'
+                       '• An incomplete branch may show lower figures until the sync finishes.'),
              'label': T('تفصيل الفروع', 'Branch breakdown'),
-             'text': T('إيرادات وربح وهامش كل فرع. الهامش: أخضر ≥ 20%، أصفر ≥ 10%، أحمر أقل.',
-                       'Each branch\'s revenue, profit and margin. Margin: green ≥ 20%, yellow ≥ 10%, red below.'),
              'when': T('النقطة الصفراء في «مكتمل» = بيانات الفرع ناقصة.', 'A yellow dot under "Complete" = the branch data is partial.'),
              'open_hint': T('يظهر لما يكون للشهر بيانات فروع.', 'Shown when the month has branch data.')},
             {'target': 'finance-dashboard-last-sync',
@@ -200,6 +351,7 @@ SCREENS = [
              'text': T('حالة ووقت آخر مزامنة مالية.', 'The status and time of the last finance sync.'),
              'when': T('قديمة؟ اطلب من المدير تشغيل المزامنة.', 'Old? Ask the admin to run the sync.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -211,24 +363,46 @@ SCREENS = [
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
         'tips': [_SYNC],
         'tour': [
-            {'target': 'finance-pnl-period',
+            {'target': 'finance-pnl-period', 'text': T('اختر السنة والشهر لعرض القائمة.',
+                                              'Choose the year and month to show the statement.'),
+             'more': T('القائمة بتتحمّل لوحدها مع تغيير الشهر.\n'
+                       '• لو ظهر «تعذّر التحميل» يبقى الشهر ده ما اتزامنش ماليّاً لسه.\n'
+                       '• قارن شهرين ورا بعض عشان تشوف اتجاه الربح.',
+                       'The statement loads by itself when you change the month.\n'
+                       '• If "Could not load" shows, that month has not been finance-synced yet.\n'
+                       '• Compare two months in a row to see the profit trend.'),
              'label': T('السنة والشهر', 'Year and month'),
-             'text': T('اختر الشهر الذي تريد قائمته.', 'Pick the month you want the statement for.'),
              'when': T('القائمة تتحدّث فوراً.', 'The statement updates at once.')},
-            {'target': 'finance-pnl-header',
-             'label': T('قائمة الأرباح والخسائر', 'Profit & loss'),
-             'text': T('الفترة والنطاق: «موحد (جميع الفروع)» أو فرع واحد.', 'The period and scope: "Consolidated (all branches)" or one branch.')},
-            {'target': 'finance-pnl-statement',
+            {'target': 'finance-pnl-header', 'text': T('الفترة والفرع، أو «موحد (جميع الفروع)».',
+                                              'The period and branch, or «موحد (جميع الفروع)» (Consolidated, all branches).'),
+             'more': T('القائمة هنا موحّدة لكل الفروع.\n'
+                       '• لو عايز أرقام فرع فرع شوف جدول الفروع في «لوحة القيادة».',
+                       'The statement here is consolidated for all branches.\n'
+                       '• For branch-by-branch figures see the branch table on the "Dashboard".'),
+             'label': T('قائمة الأرباح والخسائر', 'Profit & loss')},
+            {'target': 'finance-pnl-statement', 'text': T('الإيرادات ← تكلفة البضاعة ← إجمالي الربح ← المصروفات التشغيلية ← الربح التشغيلي وصافي الربح.',
+                                              'Revenue → cost of goods → gross profit → operating expenses → operating and net profit.'),
+             'more': T('• الإيرادات: إجمالي المبيعات − المرتجعات = صافي الإيرادات.\n'
+                       '• التكلفة: المشتريات − مرتجعات المشتريات.\n'
+                       '• المصروفات: رواتب، إيجارات، مرافق، أخرى.\n'
+                       'الأرقام بين قوسين بتتخصم، وكلها محسوبة في المزامنة.',
+                       '• Revenue: gross sales − returns = net revenue.\n'
+                       '• Cost: purchases − purchase returns.\n'
+                       '• Expenses: salaries, rent, utilities, other.\n'
+                       'Figures in brackets are deducted, and all are computed by the sync.'),
              'label': T('بنود القائمة', 'Statement lines'),
-             'text': T('الإيرادات ← تكلفة البضاعة ← إجمالي الربح ← المصروفات ← الربح التشغيلي وEBITDA ← صافي الربح.',
-                       'Revenue → cost of goods → gross profit → expenses → operating profit and EBITDA → net profit.'),
              'when': T('الأرقام بين أقواس تُطرح. الأحمر = خسارة.', 'Figures in brackets are deducted. Red = a loss.')},
-            {'target': 'finance-pnl-incomplete',
+            {'target': 'finance-pnl-partial', 'text': T('تنبيه «بيانات جزئية» يظهر عندما لم تُزامن بعض مصادر البيانات بعد.',
+                                              'A «بيانات جزئية» (Partial data) note appears when some data sources are not yet synced.'),
+             'more': T('معناه إن القائمة ممكن تتغير بعد المزامنة الجاية.\n'
+                       '• متعتمدش على الأرقام دي في قرار نهائي غير لما التنبيه يختفي.',
+                       'It means the statement may change after the next sync.\n'
+                       '• Do not rely on these figures for a final decision until the note disappears.'),
              'label': T('⚠ بيانات جزئية', '⚠ Partial data'),
-             'text': T('بعض المصادر لم تُزامن بعد.', 'Some sources are not synced yet.'),
              'warn': T('صافي الربح هنا غير نهائي — لا تعتمد عليه.', 'Net profit here is not final — do not rely on it.'),
              'open_hint': T('يظهر أسفل القائمة لما تكون الفترة ناقصة.', 'Shown under the statement when the period is partial.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -239,22 +413,41 @@ SCREENS = [
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
         'tips': [_SYNC],
         'tour': [
-            {'target': 'finance-cashflow-period',
-             'label': T('السنة والشهر', 'Year and month'),
-             'text': T('اختر شهر حركات الخزينة.', 'Pick the month of treasury movements.')},
-            {'target': 'finance-cashflow-kpis',
+            {'target': 'finance-cashflow-period', 'text': T('اختر السنة والشهر.',
+                                              'Choose the year and month.'),
+             'more': T('الأرقام بتتحمّل لوحدها مع تغيير الشهر.\n'
+                       '• لو ظهر «لا توجد بيانات حركات الخزينة» يبقى الشهر ما اتزامنش.',
+                       'Figures load by themselves when you change the month.\n'
+                       '• If "No treasury movement data" shows, the month was not synced.'),
+             'label': T('السنة والشهر', 'Year and month')},
+            {'target': 'finance-cashflow-kpis', 'text': T('إجمالي التدفق الداخل والخارج وصافي التدفق للفترة.',
+                                              'Total inflow, outflow and net cash flow for the period.'),
+             'more': T('محسوبة في المزامنة من حركات الخزينة في SOFTECH.\n'
+                       '• الصافي = الداخل − الخارج؛ بالأزرق لو موجب وبالبرتقالي لو سالب.\n'
+                       '• صافي سالب معناه إن الخارج أكتر من الداخل في الشهر ده.',
+                       'Computed by the sync from SOFTECH treasury movements.\n'
+                       '• Net = inflow − outflow; blue when positive and orange when negative.\n'
+                       '• A negative net means more went out than came in that month.'),
              'label': T('الداخل والخارج والصافي', 'In, out and net'),
-             'text': T('إجمالي التدفق الداخل والخارج وصافي التدفق.', 'Total inflow, total outflow and the net flow.'),
              'when': T('الصافي البرتقالي = خرج أكثر مما دخل.', 'An orange net = more went out than came in.')},
-            {'target': 'finance-cashflow-inflow',
+            {'target': 'finance-cashflow-inflow', 'text': T('التدفق الداخل موزعاً بطريقة الدفع — يظهر بعد اكتشاف جداول الخزينة.',
+                                              'Inflow by payment method — shown once treasury tables are discovered.'),
+             'more': T('شريط لكل طريقة دفع بالمبلغ.\n'
+                       '• لو ظهرت رسالة إن جداول الخزينة ما اتكتشفتش، المدير لازم يشغّل «اكتشاف المخطط» ويفعّل جداول الدفع الأول.',
+                       'One bar per payment method with its amount.\n'
+                       '• If a message says the treasury tables were not discovered, the admin must run "Schema discovery" and enable the payment tables first.'),
              'label': T('التدفق الداخل — بطريقة الدفع', 'Inflow — by payment method'),
-             'text': T('نصيب كل طريقة (نقدي، شيك، تحويل، بطاقة، آجل) من الداخل.', 'Each method\'s share (cash, cheque, transfer, card, credit) of the inflow.'),
              'open_hint': T('يظهر لما تكون جداول الخزينة مكتشفة.', 'Shown once the treasury tables are discovered.')},
-            {'target': 'finance-cashflow-outflow',
+            {'target': 'finance-cashflow-outflow', 'text': T('التدفق الخارج موزعاً بطريقة الدفع.',
+                                              'Outflow by payment method.'),
+             'more': T('بيوضح الفلوس خرجت إزاي: نقدي، شيكات، تحويلات…\n'
+                       '• قارنه بتخطيط الشيكات عشان تتوقع ضغط السيولة في الشهور الجاية.',
+                       'Shows how money went out: cash, cheques, transfers…\n'
+                       '• Compare it with cheque planning to anticipate cash pressure in the coming months.'),
              'label': T('التدفق الخارج — بطريقة الدفع', 'Outflow — by payment method'),
-             'text': T('نفس التوزيع للمدفوعات الخارجة.', 'The same breakdown for money going out.'),
              'open_hint': T('يظهر لما تكون جداول الخزينة مكتشفة.', 'Shown once the treasury tables are discovered.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -266,21 +459,35 @@ SCREENS = [
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
         'tips': [_SYNC],
         'tour': [
-            {'target': 'finance-expenses-mode',
+            {'target': 'finance-expenses-mode', 'text': T('اختار «شهر / سنة» أو «نطاق تاريخ».',
+                                              'Choose "Month / year" or "Date range".'),
+             'more': T('• «شهر / سنة»: شهر كامل.\n'
+                       '• «نطاق تاريخ»: من يوم ليوم، مفيد لربع سنة أو موسم.\n'
+                       'التبديل بيرجعك لأول صفحة في الجدول.',
+                       '• "Month / year": a whole month.\n'
+                       '• "Date range": from one day to another, useful for a quarter or a season.\n'
+                       'Switching takes you back to the first page of the table.'),
              'label': T('شهر / سنة · نطاق تاريخ', 'Month / year · Date range'),
-             'text': T('اختر طريقة تحديد الفترة: شهر بعينه أو من تاريخ إلى تاريخ.', 'Choose how to set the period: one month, or from a date to a date.'),
              'when': T('النطاق مفيد لربع سنة أو موسم.', 'A range suits a quarter or a season.')},
-            {'target': 'finance-expenses-filters',
+            {'target': 'finance-expenses-filters', 'text': T('فلتر الفترة والفئة والتصنيف الفرعي والفرع.',
+                                              'Filter by period, category, sub-category and branch.'),
+             'more': T('الفلاتر المختارة بتظهر كشرائح تقدر تشيل أي واحدة منها، و«مسح الكل» بيلغيهم مرة واحدة.\n'
+                       '• كل الأرقام والتوزيع والجدول بيتبعوا الفلاتر.',
+                       'The chosen filters show as chips you can remove one by one, and "Clear all" removes them at once.\n'
+                       '• All the figures, the breakdown and the table follow the filters.'),
              'label': T('الفلاتر', 'Filters'),
-             'text': T('الفترة والفئة والتصنيف الفرعي والفرع.', 'Period, category, sub-category and branch.'),
              'when': T('التصنيفات الفرعية تتقيد بالفئة المختارة.', 'Sub-categories narrow to the chosen category.')},
             {'target': 'finance-expenses-chips',
              'label': T('مرشحات نشطة', 'Active filters'),
              'text': T('كل فلتر مفعّل كشريحة؛ «×» يلغيه و«مسح الكل» يلغيها كلها.', 'Each active filter as a chip; "×" removes it and "Clear all" removes them all.'),
              'open_hint': T('تظهر بعد اختيار أي فلتر.', 'Shown after you pick any filter.')},
-            {'target': 'finance-expenses-kpis',
-             'label': T('إجمالي المصروفات', 'Total expenses'),
-             'text': T('الإجمالي للفترة وعدد الفئات وعدد السجلات.', 'The period total, the number of categories and of records.')},
+            {'target': 'finance-expenses-kpis', 'text': T('إجمالي المصروفات وعدد الفئات والسجلات.',
+                                              'Total expenses and the number of categories and records.'),
+             'more': T('الإجمالي محسوب في السيرفر من سجلات المصروفات المتزامنة من SOFTECH، وتحته الفترة.\n'
+                       '• «عدد السجلات» هو عدد قيود المصروف في الجدول تحت.',
+                       'The total is computed on the server from the expense records synced from SOFTECH, with the period under it.\n'
+                       '• "Records" is the number of expense entries in the table below.'),
+             'label': T('إجمالي المصروفات', 'Total expenses')},
             {'target': 'finance-expenses-categories',
              'label': T('التوزيع بالفئة الرئيسية', 'Breakdown by main category'),
              'text': T('اضغط فئة لتصفية التصنيفات الفرعية والسجلات عليها.', 'Click a category to filter the sub-categories and records to it.'),
@@ -289,14 +496,29 @@ SCREENS = [
              'label': T('التصنيفات الفرعية', 'Sub-categories'),
              'text': T('المبلغ والعدد والنسبة لكل تصنيف فرعي. اضغط واحداً لتصفية الجدول.', 'Amount, count and share per sub-category. Click one to filter the table.'),
              'open_hint': T('يظهر لما تكون للفترة تصنيفات فرعية.', 'Shown when the period has sub-categories.')},
-            {'target': 'finance-expenses-table',
+            {'target': 'finance-expenses-breakdown', 'text': T('التوزيع حسب الفئة الرئيسية — اضغط فئة لتصفية التفاصيل.',
+                                              'The breakdown by main category — click a category to filter the details.'),
+             'more': T('الضغط على فئة بيفلتر الصفحة عليها ويظهر جنبها توزيع التصنيفات الفرعية، والضغط تاني بيلغي الفلتر.\n'
+                       '• كمان تقدر تضغط تصنيف فرعي عشان تضيّق أكتر.',
+                       'Clicking a category filters the page to it and shows the sub-category breakdown next to it; clicking again removes the filter.\n'
+                       '• You can also click a sub-category to narrow further.')},
+            {'target': 'finance-expenses-table', 'text': T('تفاصيل كل مصروف.',
+                                              'The detail of each expense.'),
+             'more': T('الأعمدة: التاريخ، الفئة، التصنيف الفرعي، البيان، مركز التكلفة، الفرع، المبلغ.\n'
+                       '• استخدمه لما رقم في التوزيع يبان غريب وعايز تعرف القيود اللي وراه.',
+                       'Columns: date, category, sub-category, description, cost center, branch, amount.\n'
+                       '• Use it when a figure in the breakdown looks odd and you want the entries behind it.'),
              'label': T('تفاصيل المصروفات', 'Expense details'),
-             'text': T('التاريخ والفئة والتصنيف والبيان ومركز التكلفة والفرع والمبلغ.', 'Date, category, sub-category, description, cost center, branch and amount.'),
              'when': T('شارات الفئة والتصنيف في الجدول قابلة للضغط كفلتر.', 'The category and sub-category badges in the table click to filter.')},
-            {'target': 'finance-expenses-pagination',
-             'label': T('السابق · التالي', 'Previous · Next'),
-             'text': T('40 سجلاً في الصفحة.', '40 records per page.')},
+            {'target': 'finance-expenses-pagination', 'text': T('التنقل بين الصفحات.',
+                                              'Move between pages.'),
+             'more': T('كل صفحة فيها 40 سجل؛ «→ التالي» و«← السابق» للتنقل ورقم الصفحة في النص.\n'
+                       '• لتقليل الصفحات ضيّق الفلاتر.',
+                       'Each page holds 40 records; "Next →" and "← Previous" to move, with the page number in the middle.\n'
+                       '• To get fewer pages, narrow the filters.'),
+             'label': T('السابق · التالي', 'Previous · Next')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -307,26 +529,49 @@ SCREENS = [
                      'The SOFTECH accounts as a list or tree: code, name, type (assets, liabilities, equity, revenue, expenses, cost of sales), nature (debit/credit) and level.'),
         'audience': T('المالية.', 'Finance.'),
         'tour': [
-            {'target': 'finance-coa-view',
-             'label': T('قائمة · شجرة', 'List · Tree'),
-             'text': T('«قائمة» جدول مسطح قابل للبحث، و«شجرة» الهيكل الأب والأبناء.', '"List" is a flat searchable table; "Tree" is the parent/child structure.')},
-            {'target': 'finance-coa-search',
+            {'target': 'finance-coa-view', 'text': T('اعرض الحسابات «قائمة» أو «شجرة».',
+                                              'Show the accounts as «قائمة» (List) or «شجرة» (Tree).'),
+             'more': T('• «قائمة»: جدول مسطح فيه بحث وفلتر.\n'
+                       '• «شجرة»: الحسابات تحت بعض حسب المستوى.\n'
+                       'الدليل للقراءة بس — التعديل بيتم في SOFTECH نفسه.',
+                       '• "List": a flat table with search and filter.\n'
+                       '• "Tree": accounts nested by level.\n'
+                       'The chart is read-only — changes are made in SOFTECH itself.'),
+             'label': T('قائمة · شجرة', 'List · Tree')},
+            {'target': 'finance-coa-search', 'text': T('بحث بالاسم أو الكود — في عرض «قائمة» فقط.',
+                                              'Search by name or code — in «قائمة» (List) view only.'),
+             'more': T('اكتب جزء من اسم الحساب أو كوده والقائمة بتتفلتر.\n'
+                       '• مفيد لما تشوف كود حساب في قيد وعايز تعرف اسمه.',
+                       'Type part of the account name or code and the list filters.\n'
+                       '• Handy when you see an account code in an entry and want its name.'),
              'label': T('بحث بالاسم أو الكود', 'Search by name or code'),
-             'text': T('اكتب جزءاً من اسم الحساب أو كوده.', 'Type part of the account name or code.'),
              'open_hint': T('في عرض «قائمة».', 'In the "List" view.')},
-            {'target': 'finance-coa-type',
+            {'target': 'finance-coa-type', 'text': T('فلتر نوع الحساب: أصول، التزامات، إيرادات، مصروفات…',
+                                              'Filter by account type: assets, liabilities, revenue, expenses…'),
+             'more': T('بيقصر القائمة على نوع واحد، مثلاً «مصروفات» عشان تشوف كل حسابات المصروف.\n'
+                       '• اختار «الكل» عشان ترجع القائمة كاملة.',
+                       'It narrows the list to one type, for example "Expenses" to see every expense account.\n'
+                       '• Choose "All" to get the full list back.'),
              'label': T('جميع الأنواع', 'All types'),
-             'text': T('أصول، التزامات، حقوق ملكية، إيرادات، مصروفات، تكلفة مبيعات.', 'Assets, liabilities, equity, revenue, expenses, cost of sales.'),
              'open_hint': T('في عرض «قائمة».', 'In the "List" view.')},
-            {'target': 'finance-coa-table',
+            {'target': 'finance-coa-list', 'text': T('الكود، الاسم، النوع، الطبيعة (مدين/دائن)، المستوى، وهل الحساب ورقة.',
+                                              'Code, name, type, nature (debit/credit), level, and whether the account is a leaf.'),
+             'more': T('«ورقة» يعني حساب نهائي بتتسجل عليه القيود، وغير كده حساب تجميعي.\n'
+                       '• «الطبيعة» بتقولك الرصيد الطبيعي للحساب مدين ولا دائن.',
+                       '"Leaf" means a final account that entries are posted to; otherwise it is a grouping account.\n'
+                       '• "Nature" tells you whether the account normal balance is debit or credit.'),
              'label': T('جدول الحسابات', 'Accounts table'),
-             'text': T('الكود والاسم والنوع والطبيعة (مدين/دائن) والمستوى. «ورقة ✓» = حساب بلا أبناء.', 'Code, name, type, nature (debit/credit) and level. "Leaf ✓" = an account with no children.'),
              'when': T('للعرض فقط — التعديل يتم في SOFTECH.', 'View only — changes are made in SOFTECH.')},
-            {'target': 'finance-coa-tree',
+            {'target': 'finance-coa-tree', 'text': T('الهيكل الشجري للحسابات — يظهر في عرض «شجرة».',
+                                              'The account hierarchy — shown in «شجرة» (Tree) view.'),
+             'more': T('أول مستويين مفتوحين؛ اضغط أي حساب ليه فروع عشان تفتحه أو تقفله.\n'
+                       '• بيوضح كل حساب تابع لأنهي مجموعة.',
+                       'The first two levels are open; click any account with children to open or close it.\n'
+                       '• It shows which group each account belongs to.'),
              'label': T('الشجرة', 'Tree'),
-             'text': T('اضغط حساباً أباً لفتح أو طي حساباته الفرعية.', 'Click a parent account to open or fold its sub-accounts.'),
              'open_hint': T('اضغط «شجرة».', 'Press "Tree".')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -337,9 +582,21 @@ SCREENS = [
                      'For admins: scan SOFTECH tables with a financial purpose, confirm each table\'s purpose and enable it for syncing. A setup step before the other finance screens work.'),
         'audience': T('المدير فقط.', 'Admins only.'),
         'tour': [
-            {'target': 'finance-schema-discover',
+            {'target': 'finance-schema-filters', 'text': T('بحث باسم الجدول، وفلتر الفئة وحالة التأكيد.',
+                                              'Search by table name, and filter by category and confirmation status.'),
+             'more': T('استخدم «غير مؤكد» عشان تلاقي الجداول اللي لسه محتاجة مراجعة.\n'
+                       '• الفئة هي التصنيف اللي الاكتشاف استنتجه (خزينة، مصروفات…).',
+                       'Use "Unconfirmed" to find the tables that still need review.\n'
+                       '• The category is the classification the discovery inferred (treasury, expenses…).')},
+            {'target': 'finance-schema-discover', 'text': T('«🔍 تشغيل الاكتشاف» يفحص جداول SOFTECH ذات الصلة المالية في الخلفية.',
+                                              '«🔍 تشغيل الاكتشاف» (Run discovery) scans SOFTECH tables with a financial purpose in the background.'),
+             'more': T('الفحص بيقرا هيكل جداول SOFTECH بس ومبيكتبش فيها، وبيشتغل في الخلفية فممكن ياخد وقت.\n'
+                       '• بعد ما يخلص الجداول بتظهر في القائمة.\n'
+                       '• الشاشة دي للمدير بس.',
+                       'The scan only reads the structure of SOFTECH tables and does not write to them; it runs in the background so it may take a while.\n'
+                       '• When it finishes, the tables show in the list.\n'
+                       '• This screen is for the admin only.'),
              'label': T('🔍 تشغيل الاكتشاف', '🔍 Run discovery'),
-             'text': T('يفحص جداول SOFTECH في الخلفية (قراءة فقط) ويحدّث القائمة هنا.', 'Scans SOFTECH tables in the background (read only) and updates the list here.'),
              'when': T('خذ 2–3 دقائق ثم أعد تحميل الصفحة.', 'Allow 2–3 minutes, then reload the page.'),
              'warn': T('يقرأ كل جداول SOFTECH — شغّله مرة وانتظر النتيجة.', 'It reads every SOFTECH table — run it once and wait for the result.')},
             {'target': 'finance-schema-search',
@@ -351,20 +608,39 @@ SCREENS = [
             {'target': 'finance-schema-confirmed-filter',
              'label': T('الكل · مؤكد · غير مؤكد', 'All · Confirmed · Unconfirmed'),
              'text': T('اعرض الجداول التي راجعتها أو التي لم تراجعها بعد.', 'Show the tables you have reviewed, or not yet.')},
-            {'target': 'finance-schema-stats',
-             'label': T('إجمالي · مؤكد · مفعّل للمزامنة', 'Total · Confirmed · Sync enabled'),
-             'text': T('عدد الجداول المكتشفة وما تم تأكيده وما يُزامن.', 'How many tables were found, confirmed and synced.')},
-            {'target': 'finance-schema-row',
-             'label': T('صف الجدول', 'Table row'),
-             'text': T('اضغطه لترى الغرض المستنتج وأعمدة الجدول.', 'Click it to see the inferred purpose and the table columns.')},
-            {'target': 'finance-schema-confirm',
-             'label': T('تأكيد · ✓ مؤكد', 'Confirm · ✓ Confirmed'),
-             'text': T('يسجّل أنك راجعت غرض الجدول. اضغط تاني للإلغاء.', 'Records that you checked the table\'s purpose. Click again to undo.')},
-            {'target': 'finance-schema-sync-toggle',
+            {'target': 'finance-schema-stats', 'text': T('إجمالي الجداول المكتشفة، والمؤكد منها، والمفعّل للمزامنة.',
+                                              'Total discovered tables, how many are confirmed, and how many are enabled for sync.'),
+             'more': T('هدفك إن كل جدول مالي مهم يبقى مؤكد ومفعّل.\n'
+                       '• لو المفعّل صفر، شاشات المالية التانية هتفضل فاضية.',
+                       'Your goal is that every important financial table is confirmed and enabled.\n'
+                       '• If enabled is zero, the other finance screens stay empty.'),
+             'label': T('إجمالي · مؤكد · مفعّل للمزامنة', 'Total · Confirmed · Sync enabled')},
+            {'target': 'finance-schema-row', 'text': T('صف لكل جدول بفئته وعدد أعمدته وصفوفه؛ اضغطه لرؤية الغرض المستنتج والأعمدة.',
+                                              'A row per table with category, columns and rows; click it to see the inferred purpose and columns.'),
+             'more': T('اقرا الغرض المستنتج والأعمدة قبل ما تأكد — الاستنتاج آلي وممكن يغلط.\n'
+                       '• الصف بيتلوّن أخضر بعد التأكيد.',
+                       'Read the inferred purpose and columns before confirming — the inference is automatic and can be wrong.\n'
+                       '• The row turns green after confirmation.'),
+             'label': T('صف الجدول', 'Table row')},
+            {'target': 'finance-schema-confirm', 'text': T('«تأكيد» / «✓ مؤكد» يسجّل تأكيد غرض الجدول أو يلغيه.',
+                                              '«تأكيد» / «✓ مؤكد» (Confirm / Confirmed) records or clears confirmation of the table\'s purpose.'),
+             'more': T('الضغط بيبدّل الحالة: «تأكيد» يعني إنك راجعت وموافق على الغرض، والضغط على «✓ مؤكد» بيلغيه.\n'
+                       '• التأكيد بيتسجل في نظامنا بس، مش في SOFTECH.',
+                       'Pressing toggles the state: "Confirm" means you reviewed and agree with the purpose, and pressing "✓ Confirmed" clears it.\n'
+                       '• Confirmation is stored in our system only, not in SOFTECH.'),
+             'label': T('تأكيد · ✓ مؤكد', 'Confirm · ✓ Confirmed')},
+            {'target': 'finance-schema-sync', 'text': T('«تفعيل» / «⟲ مزامنة» يشغّل أو يوقف مزامنة هذا الجدول.',
+                                              '«تفعيل» / «⟲ مزامنة» (Enable / Syncing) turns syncing of this table on or off.'),
+             'more': T('المفعّل بس هو اللي المزامنة المالية بتقرا بياناته وتحسب منها لوحة القيادة والقوائم.\n'
+                       '• المزامنة قراءة من SOFTECH بس.\n'
+                       '• فعّل الجدول بعد ما تأكد غرضه.',
+                       'Only enabled tables are read by the finance sync to compute the dashboard and statements.\n'
+                       '• Syncing only reads from SOFTECH.\n'
+                       '• Enable a table after confirming its purpose.'),
              'label': T('تفعيل · ⟲ مزامنة', 'Enable · ⟲ Sync'),
-             'text': T('يضيف الجدول للمزامنة المالية أو يوقفه.', 'Adds the table to the finance sync, or stops it.'),
              'warn': T('إيقاف جدول مستخدم يوقف تحديث أرقامه في الشاشات المالية.', 'Disabling a table in use stops its figures updating in the finance screens.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -378,6 +654,54 @@ SCREENS = [
             T('«خطة جديدة»: العنوان، المستفيد، المستند المرجعي، البنك والحساب والفرع، الإجمالي وعدد الشيكات وتاريخ الأول والفترة بينها ← «معاينة جدول الشيكات».', '"New plan": title, beneficiary, reference document, bank, account and branch, total, number of cheques, first date and interval → "Preview cheque schedule".'),
             T('التواريخ التي تقع في إجازة أو عطلة تُرحَّل تلقائياً ويظهر التاريخ الأصلي. ثم «إنشاء الخطة» و«تفعيل الخطة».', 'Dates falling on a holiday or weekend shift automatically and show the original date. Then "Create plan" and "Activate plan".'),
             T('حدّث حالة كل شيك: لم يُصدر ← صادر ← مُقدَّم للبنك ← تمّ الصرف (أو ارتدّ/رُفض).', 'Update each cheque: not issued → issued → presented → cleared (or bounced/rejected).'),
+        ],
+        'tour': [
+            {'target': 'finance-cheques-treasury', 'text': T('الخطط النشطة، إجمالي المتبقي، شيكات الـ 30 يوماً القادمة، والمتأخرة.',
+                                              'Active plans, total outstanding, cheques due in the next 30 days, and overdue ones.'),
+             'more': T('الكروت محسوبة في السيرفر من الخطط والشيكات.\n'
+                       '• «شيكات خلال 30 يوم» عددها ومبلغها عشان تجهّز الرصيد في البنك.\n'
+                       '• «شيكات متأخرة» بتحمرّ لو فيه شيك عدّى ميعاده ولسه ما اتصرفش — تابعه فوراً.',
+                       'The cards are computed on the server from the plans and cheques.\n'
+                       '• "Cheques within 30 days" gives their count and amount so you can prepare the bank balance.\n'
+                       '• "Overdue cheques" turns red when a cheque is past due and not cleared — follow it up straight away.')},
+            {'target': 'finance-cheques-new', 'text': T('«+ خطة جديدة» يفتح نموذج جدول سداد بالشيكات.',
+                                              '«+ خطة جديدة» (New plan) opens the cheque payment schedule form.'),
+             'more': T('بتكتب العنوان والمستفيد والمستند المرجعي والبنك والإجمالي وعدد الشيكات وتاريخ أول شيك والفترة بينهم.\n'
+                       '• «📅 معاينة جدول الشيكات»: النظام بيقسم الإجمالي بالتساوي (آخر شيك ياخد فرق التقريب) وبيرحّل التواريخ اللي في إجازة.\n'
+                       '• «إنشاء الخطة» بيحفظها «مسودة».',
+                       'You enter the title, beneficiary, reference document, bank, total, number of cheques, first cheque date and the interval.\n'
+                       '• "📅 Preview cheque schedule": the system splits the total evenly (the last cheque takes the rounding difference) and moves dates that fall on holidays.\n'
+                       '• "Create plan" saves it as a "Draft".')},
+            {'target': 'finance-cheques-search', 'text': T('بحث في الخطط بالاسم أو المستفيد.',
+                                              'Search plans by name or beneficiary.'),
+             'more': T('اكتب اسم المورد أو جزء من عنوان الخطة والقائمة بتتفلتر.\n'
+                       '• مفيد لما مورد يسأل عن شيكاته الجاية.',
+                       'Type the supplier name or part of the plan title and the list filters.\n'
+                       '• Handy when a supplier asks about their upcoming cheques.')},
+            {'target': 'finance-cheques-status', 'text': T('فلتر الحالة: الكل، مسودة، نشطة، مكتملة.',
+                                              'Status filter: all, draft, active, completed.'),
+             'more': T('• «مسودة»: اتعملت ولسه ما اتفعلتش.\n'
+                       '• «نشطة»: شيكاتها شغالة ومتابعة.\n'
+                       '• «مكتملة»: كل شيكاتها خلصت.',
+                       '• "Draft": created but not activated yet.\n'
+                       '• "Active": its cheques are running and tracked.\n'
+                       '• "Completed": all its cheques are done.')},
+            {'target': 'finance-cheques-detail', 'text': T('تفاصيل الخطة المختارة أو نموذج الخطة الجديدة يظهر هنا.',
+                                              'The selected plan\'s details, or the new plan form, appear here.'),
+             'more': T('اضغط أي خطة في القائمة عشان تفتح هنا.\n'
+                       '• الخطة المسودة فيها «✅ تفعيل الخطة».\n'
+                       '• المسودة والنشطة فيها «إلغاء» بعد رسالة تأكيد.',
+                       'Click any plan in the list to open it here.\n'
+                       '• A draft plan has "✅ Activate plan".\n'
+                       '• Draft and active plans have "Cancel" after a confirmation message.')},
+            {'target': 'finance-cheques-schedule', 'text': T('بعد اختيار خطة: جدول الشيكات بالاستحقاق والمبلغ والحالة، و«تعديل» لكل شيك في الخطط النشطة.',
+                                              'After picking a plan: the cheque schedule with due date, amount and status, and «تعديل» (Edit) for each cheque of an active plan.'),
+             'more': T('⚠️ جنب التاريخ يعني إنه اترحّل عن التاريخ الأصلي بسبب إجازة، والتاريخ الأحمر يعني متأخر.\n'
+                       '• «تعديل» بيفتح رقم الشيك والحالة والملاحظات: لم يُصدر ← صادر ← مُقدَّم للبنك ← تمّ الصرف أو ارتدّ.\n'
+                       '• المبلغ نفسه محسوب من الخطة ومبيتعدلش هنا.',
+                       '⚠️ next to the date means it moved from the original date because of a holiday, and a red date means overdue.\n'
+                       '• "Edit" opens the cheque number, status and notes: not issued → issued → presented → cleared or bounced.\n'
+                       '• The amount itself is computed from the plan and is not edited here.')},
         ],
         'tips': [
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
@@ -396,7 +720,7 @@ SCREENS = [
             {'target': 'finance-cheques-search',
              'label': T('بحث بالاسم أو المستفيد', 'Search by name or payee'),
              'text': T('اكتب جزءاً من عنوان الخطة أو اسم المستفيد.', 'Type part of the plan title or payee name.')},
-            {'target': 'finance-cheques-status-tabs',
+            {'target': 'finance-cheques-status',
              'label': T('الكل · مسودة · نشطة · مكتملة', 'All · Draft · Active · Completed'),
              'text': T('صفِّ الخطط بحالتها.', 'Filter plans by status.')},
             {'target': 'finance-cheques-plan',
@@ -442,6 +766,7 @@ SCREENS = [
              'open_hint': T('اضغط «تعديل» على شيك.', 'Press "Edit" on a cheque.')},
         ],
         'updated': '2026-10-30',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'finance.payments',
@@ -460,9 +785,15 @@ SCREENS = [
         ],
         'related': ['finance.payment_audit'],
         'tour': [
-            {'target': 'finance-payments-new',
-             'label': T('+ تسجيل دفعة', '+ Record payment'),
-             'text': T('يفتح نموذج دفعة خارجية جديدة.', 'Opens a new external-payment form.')},
+            {'target': 'finance-payments-new', 'text': T('«+ تسجيل دفعة» يفتح نموذج تسجيل دفعة خارجية.',
+                                              '«+ تسجيل دفعة» (Record payment) opens the external payment form.'),
+             'more': T('استخدمه لما عميل يدفع انستاباي أو فودافون كاش أو تحويل بنكي أو كاش خارج الكاشير.\n'
+                       '• النموذج فيه طريقة الدفع والمبلغ وإجمالي الفاتورة وكود فاتورة SOFTECH ورقم المرجع والفرع وصورة الإيصال؛ لو «دفعة جزئية» بتسجّل المتبقي زي ما هو.\n'
+                       '• الدفعة بتتسجل «في الانتظار» ومبتكتبش حاجة في SOFTECH.',
+                       'Use it when a customer pays by Instapay, Vodafone Cash, bank transfer or cash outside the till.\n'
+                       '• The form has the method, amount, invoice total, SOFTECH invoice code, reference number, branch and receipt photo; for a "Partial payment" you record the remaining as stated.\n'
+                       '• The payment is saved as "Pending" and writes nothing to SOFTECH.'),
+             'label': T('+ تسجيل دفعة', '+ Record payment')},
             {'target': 'finance-payments-new-method',
              'label': T('طريقة الدفع', 'Payment method'),
              'text': T('كاش، انستاباي، فودافون كاش، تحويل بنكي…', 'Cash, Instapay, Vodafone Cash, bank transfer…'),
@@ -481,27 +812,47 @@ SCREENS = [
              'text': T('يحفظ الدفعة «في الانتظار». يلزم المبلغ والفرع.', 'Saves the payment as "pending". Amount and branch are required.'),
              'when': T('لا يُكتب شيء في SOFTECH.', 'Nothing is written to SOFTECH.'),
              'open_hint': T('داخل نموذج الدفعة.', 'Inside the payment form.')},
-            {'target': 'finance-payments-summary',
+            {'target': 'finance-payments-summary', 'text': T('إجمالي اليوم وحسب طريقة الدفع، وما في الانتظار، والمؤكد اليوم.',
+                                              'Today\'s total and by payment method, pending, and confirmed today.'),
+             'more': T('كلها محسوبة في السيرفر من الدفعات المسجلة.\n'
+                       '• «في الانتظار» = دفعات لسه محتاجة تأكيد.\n'
+                       '• «مؤكد اليوم» = اللي اتأكد انهارده.',
+                       'All computed on the server from the recorded payments.\n'
+                       '• "Pending" = payments still awaiting confirmation.\n'
+                       '• "Confirmed today" = those confirmed today.'),
              'label': T('ملخص اليوم', "Today's summary"),
-             'text': T('إجمالي اليوم وتوزيعه بطريقة الدفع، وأعداد المنتظر والمؤكد.', "Today's total and its split by method, with pending and confirmed counts."),
              'when': T('يتحدّث كل 30 ثانية.', 'Updates every 30 seconds.')},
-            {'target': 'finance-payments-filters',
+            {'target': 'finance-payments-filters', 'text': T('فلتر التاريخ وطريقة الدفع والحالة والفرع، وبحث بالاسم أو الهاتف أو المرجع.',
+                                              'Filter by date, method, status and branch, and search by name, phone or reference.'),
+             'more': T('الفترة الافتراضية آخر 7 أيام.\n'
+                       '• الحالات: في الانتظار، مؤكد، تمت المطابقة، متنازع، ملغي.\n'
+                       '• البحث برقم المرجع أسرع طريقة تلاقي بيها تحويل معيّن.',
+                       'The default period is the last 7 days.\n'
+                       '• Statuses: pending, confirmed, reconciled, disputed, cancelled.\n'
+                       '• Searching by reference number is the fastest way to find a specific transfer.'),
              'label': T('الفلاتر', 'Filters'),
-             'text': T('من/إلى، طريقة الدفع، الحالة، والفرع.', 'From/to, method, status and branch.'),
              'when': T('الافتراضي آخر 7 أيام.', 'The default is the last 7 days.')},
             {'target': 'finance-payments-search',
              'label': T('بحث', 'Search'),
              'text': T('بالاسم أو الهاتف أو رقم المرجع.', 'By name, phone or reference number.')},
-            {'target': 'finance-payments-time-filters',
+            {'target': 'finance-payments-time', 'text': T('«🕐 وقت» يفتح فلاتر إضافية: فترات سريعة، يوم بعينه، الساعة، وأيام الأسبوع.',
+                                              '«🕐 وقت» (Time) opens extra filters: quick ranges, a specific day, hour and weekdays.'),
+             'more': T('مفيد لما تراجع وردية معيّنة أو تدوّر على دفعة اتعملت في ساعة معروفة.\n'
+                       '• اضغطه تاني عشان تقفل الفلاتر الإضافية.',
+                       'Useful when reviewing a specific shift or looking for a payment made at a known hour.\n'
+                       '• Press it again to close the extra filters.'),
              'label': T('🕐 وقت', '🕐 Time'),
-             'text': T('اختصارات (اليوم، أمس، 7 و30 يوماً)، يوم بعينه، الساعة، وأيام الأسبوع.', 'Shortcuts (today, yesterday, 7 and 30 days), one day, hour, and weekdays.'),
              'when': T('مفيد لكشف دفعات في ساعات أو أيام غريبة.', 'Useful to spot payments at odd hours or days.')},
             {'target': 'finance-payments-refresh',
              'label': T('تحديث', 'Refresh'),
              'text': T('يعيد تحميل القائمة والملخص.', 'Reloads the list and the summary.')},
-            {'target': 'finance-payments-list',
-             'label': T('قائمة الدفعات', 'Payments list'),
-             'text': T('المبلغ والطريقة والحالة والعميل والفاتورة والمرجع والفرع، و«📷 إيصال» لو مرفق.', 'Amount, method, status, customer, invoice, reference, branch, and "📷 Receipt" if attached.')},
+            {'target': 'finance-payments-list', 'text': T('المدفوعات المطابقة بالمبلغ والطريقة والحالة والفاتورة والمرجع؛ «تحديث» لإعادة التحميل.',
+                                              'Matching payments with amount, method, status, invoice and reference; «تحديث» (Refresh) reloads.'),
+             'more': T('كل كارت فيه العميل وتليفونه وكود الفاتورة والمرجع والفرع والتاريخ، والمتبقي لو الدفعة جزئية.\n'
+                       '• «📷 إيصال» بيفتح صورة الإيصال لو موجودة.',
+                       'Each card shows the customer and phone, invoice code, reference, branch and date, and the remaining if the payment is partial.\n'
+                       '• "📷 Receipt" opens the receipt photo when there is one.'),
+             'label': T('قائمة الدفعات', 'Payments list')},
             {'target': 'finance-payments-confirm',
              'label': T('تأكيد ✓', 'Confirm ✓'),
              'text': T('يؤكد أن الدفعة وصلت فعلاً ويسجّل اسمك.', 'Confirms the payment really arrived and records your name.'),
@@ -516,7 +867,16 @@ SCREENS = [
              'text': T('يحوّل الدفعة إلى «متنازع عليه» ويسجّل السبب.', 'Moves the payment to "disputed" and records the reason.'),
              'when': T('الدفعة المتنازع عليها تبقى قابلة للتعديل حتى تُحل.', 'A disputed payment stays editable until it is sorted out.'),
              'open_hint': T('اضغط «اعتراض» على دفعة.', 'Press "Dispute" on a payment.')},
+            {'target': 'finance-payments-actions', 'text': T('للدفعات المنتظرة: «تأكيد ✓» أو «اعتراض» — التأكيد للمدير والمشتريات فقط.',
+                                              'For pending payments: «تأكيد ✓» (Confirm) or «اعتراض» (Dispute) — confirming is for admin and purchasing only.'),
+             'more': T('• «تأكيد ✓» بعد ما تتأكد إن الفلوس وصلت فعلاً؛ بيتسجل اسمك والوقت.\n'
+                       '• «اعتراض» بيطلب سبب وبيحوّل الدفعة «متنازع».\n'
+                       'السيرفر بيرفض التأكيد من أي حد غير المدير والمشتريات؛ الصيدلي بيشوف بس.',
+                       '• "Confirm ✓" once you are sure the money really arrived; your name and the time are recorded.\n'
+                       '• "Dispute" asks for a reason and turns the payment "Disputed".\n'
+                       'The server refuses confirmation from anyone but admin and purchasing; pharmacists can only view.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
     },
     {
@@ -530,6 +890,48 @@ SCREENS = [
             {'key': 'statements', 'title': T('🏦 الكشوف البنكية', '🏦 Bank statements'), 'body': T('الكشوف المرفوعة بعدد السطور والمطابق ونسبة المطابقة؛ «رفع كشف حساب» و«تشغيل المطابقة».', 'Uploaded statements with line count, matched and match rate; "Upload statement" and "Run matching".')},
         ],
         'related': ['finance.payments'],
+        'tour': [
+            {'target': 'finance-payment-audit-upload', 'text': T('«+ رفع كشف حساب» لرفع كشف بنكي (CSV/Excel) مع مرجع اختياري.',
+                                              '«+ رفع كشف حساب» (Upload statement) uploads a bank statement (CSV/Excel) with an optional reference.'),
+             'more': T('بتختار الملف من البنك وتكتب المرجع البنكي لو حابب، وتضغط رفع.\n'
+                       '• الكشف بيظهر في «🏦 الكشوف البنكية» بحالة معلّقة.\n'
+                       '• المطابقة مش بتشتغل لوحدها — شغّلها من زر «تشغيل المطابقة».',
+                       'You choose the file from the bank, add the bank reference if you like, and upload.\n'
+                       '• The statement appears in "🏦 Bank statements" as pending.\n'
+                       '• Matching does not start by itself — run it with "Run matching".')},
+            {'target': 'finance-payment-audit-tabs', 'text': T('«⚠️ الاستثناءات» المفتوحة بعددها، و«🏦 الكشوف البنكية».',
+                                              '«⚠️ الاستثناءات» (Exceptions) with their open count, and «🏦 الكشوف البنكية» (Bank statements).'),
+             'more': T('• «⚠️ الاستثناءات»: الحاجات اللي محتاجة قرار منك.\n'
+                       '• «🏦 الكشوف البنكية»: كل كشف اترفع ونسبة مطابقته.\n'
+                       'ابدأ يومك بالاستثناءات.',
+                       '• "⚠️ Exceptions": things that need your decision.\n'
+                       '• "🏦 Bank statements": every uploaded statement and its match rate.\n'
+                       'Start your day with the exceptions.')},
+            {'target': 'finance-payment-audit-exceptions', 'text': T('الاستثناءات المفتوحة: النوع والمبلغ والمرجع والحالة والتاريخ — تظهر عند وجودها.',
+                                              'Open exceptions: type, amount, reference, status and date — shown when there are any.'),
+             'more': T('الأنواع: غير مسجّلة (في البنك ومش متسجلة عندنا)، مكررة، تسوية متأخرة، فرع خاطئ، تباين في المبلغ، ومؤشر إساءة.\n'
+                       '• مؤشر الإساءة بيطلع لما دفعة تبعد كتير عن المعتاد للكاشير أو طريقة الدفع — راجعه بعناية.',
+                       'Types: unrecorded (in the bank but not recorded here), duplicate, late settlement, wrong branch, amount mismatch and abuse signal.\n'
+                       '• An abuse signal appears when a payment is far from the usual for that cashier or payment method — review it carefully.')},
+            {'target': 'finance-payment-audit-handle', 'text': T('«معالجة» تفتح نافذة لكتابة ملاحظة ثم «حل الاستثناء» أو «تجاهل».',
+                                              '«معالجة» (Handle) opens a window to add a note, then «حل الاستثناء» (Resolve) or «تجاهل» (Ignore).'),
+             'more': T('اكتب في الملاحظة عملت إيه (اتسجلت الدفعة، اتصلحت، اتكلمنا مع الفرع…).\n'
+                       '• «حل الاستثناء» و«تجاهل» الاتنين بيقفلوا الاستثناء وبيسجلوا اسمك والوقت.',
+                       'Write in the note what you did (payment recorded, fixed, talked to the branch…).\n'
+                       '• "Resolve" and "Ignore" both close the exception and record your name and the time.')},
+            {'target': 'finance-payment-audit-statements', 'text': T('في تبويب الكشوف: المرجع والسطور والمطابق ونسبة المطابقة والحالة.',
+                                              'On the statements tab: reference, lines, matched, match rate and status.'),
+             'more': T('نسبة مطابقة واطية معناها إن فيه حركات كتير في البنك مش لاقية دفعة مسجلة — هتلاقيها استثناءات.\n'
+                       '• الحالات: في الانتظار، قيد المعالجة، مكتمل، فشل.',
+                       'A low match rate means many bank lines have no recorded payment — you will find them as exceptions.\n'
+                       '• Statuses: pending, processing, completed, failed.')},
+            {'target': 'finance-payment-audit-match', 'text': T('«تشغيل المطابقة» يظهر للكشوف المعلقة ليطابق سطورها بالمدفوعات المسجلة.',
+                                              '«تشغيل المطابقة» (Run matching) appears for pending statements to match their lines to recorded payments.'),
+             'more': T('القواعد ثابتة: نفس المرجع ونفس المبلغ = مطابقة أكيدة، أو فرق مبلغ لحد 1% وفرق تاريخ لحد يومين = مطابقة تقريبية، وغير كده استثناء «غير مسجّلة».\n'
+                       '• السيرفر بيسمح بيها للمدير والمشرف والمشتريات.',
+                       'The rules are fixed: same reference and same amount = certain match, or an amount difference up to 1% and a date difference up to 2 days = approximate match; anything else becomes an "Unrecorded" exception.\n'
+                       '• The server allows it for admin, supervisor and purchasing.')},
+        ],
         'tips': [
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول المالية): العرض يحتاج «عرض»، «حل الاستثناء» و«تجاهل» يحتاجوا «اعتماد»، الإسناد يحتاج «إسناد» أو «اعتماد»، ورفع كشف يحتاج «إضافة».',
               'Every action is checked on the server (Permissions Matrix, finance module): viewing needs "view", "Resolve" and "Ignore" need "approve", assigning needs "assign" or "approve", and uploading a statement needs "create".'),
@@ -554,7 +956,7 @@ SCREENS = [
              'label': T('الكشوف البنكية', 'Bank statements'),
              'text': T('كل كشف بعدد السطور والمطابق ونسبة المطابقة وحالته.', 'Each statement with line count, matched lines, match rate and status.'),
              'open_hint': T('تبويب «🏦 الكشوف البنكية».', 'The "🏦 Bank statements" tab.')},
-            {'target': 'finance-payment-audit-run-matching',
+            {'target': 'finance-payment-audit-match',
              'label': T('تشغيل المطابقة', 'Run matching'),
              'text': T('يطابق سطور الكشف بالدفعات المسجّلة ويحسب النسبة.', 'Matches statement lines to recorded payments and computes the rate.'),
              'when': T('بعد الرفع مباشرة. لا يكتب في SOFTECH.', 'Right after uploading. It does not write to SOFTECH.'),
@@ -584,6 +986,7 @@ SCREENS = [
              'open_hint': T('داخل نافذة «معالجة». يحتاج صلاحية «اعتماد».', 'Inside the "Handle" box. Needs "approve" permission.')},
         ],
         'updated': '2026-10-30',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'finance.reconciliation',
@@ -599,28 +1002,56 @@ SCREENS = [
             {'key': 'parties', 'title': T('الحصر', 'Parties & ledger'), 'body': T('الموردون وحساباتهم: الفواتير، السندات، السندات بلا ربط، وكشف الحساب.', 'Suppliers and their accounts: invoices, vouchers, unlinked vouchers and the ledger.')},
         ],
         'related': ['invoices.main', 'replacement.cases'],
-        'tips': [
-            T('«🖊 كتابة في SOFTECH» خطوة منفصلة بعد الاعتماد، للمدير فقط. وهي معطّلة بإعداد في السيرفر: تعرض «تشغيل تجريبي» ولا تكتب شيئاً.',
-              '"🖊 Write to SOFTECH" is a separate step after approval, admins only. While a server setting keeps it off it shows a "dry run" and writes nothing.'),
-        ],
         'tour': [
-            {'target': 'finance-reconciliation-party-type',
-             'label': T('موردون · عملاء', 'Suppliers · Customers'),
-             'text': T('اختر نوع الطرف: سداد فواتير الموردين أو مقبوضات العملاء.', 'Pick the party type: supplier invoice payments or customer receipts.'),
-             'when': T('تغييره يمسح فلتر الأطراف.', 'Changing it clears the party filter.')},
-            {'target': 'finance-reconciliation-filters',
+            {'target': 'finance-reconciliation-party', 'text': T('اختر الطرف: «موردون» أو «عملاء».',
+                                              'Choose the party: «موردون» (Suppliers) or «عملاء» (Customers).'),
+             'more': T('كل الصفحة (الفلاتر والكروت والتبويبات) بتتبع الطرف المختار.\n'
+                       '• جنبها ملاحظة مهمة: الاعتماد بيعمل ربط داخلي عندنا بس، والكتابة في SOFTECH خطوة منفصلة قابلة للعكس.',
+                       'The whole page (filters, cards and tabs) follows the chosen party.\n'
+                       '• Next to it is an important note: approving creates an internal link in our system only, and writing to SOFTECH is a separate, reversible step.'),
+             'label': T('حصر ›', 'Ledger ›'),
+             'open_hint': T('تبويب «الحصر».', 'The "Parties & ledger" tab.')},
+            {'target': 'finance-reconciliation-filters', 'text': T('فلتر المورد وتاريخ الفاتورة وتاريخ السند والقيمة — ينطبق على كل التبويبات والإجماليات.',
+                                              'Filter by supplier, invoice date, voucher date and amount — applies to all tabs and totals.'),
+             'more': T('تقدر تختار أكتر من مورد، وتحدد مدى تاريخ الفاتورة ومدى تاريخ السند (السداد) والقيمة من/إلى.\n'
+                       '• زر المسح بيرجّع كل الفلاتر.\n'
+                       '• اشتغل مورد مورد عشان المراجعة تبقى أوضح.',
+                       'You can pick several suppliers, and set an invoice date range, a voucher (payment) date range and an amount from/to.\n'
+                       '• The clear button resets all filters.\n'
+                       '• Work supplier by supplier for a clearer review.'),
              'label': T('الفلاتر', 'Filters'),
-             'text': T('المورد، تاريخ الفاتورة، تاريخ السند، ونطاق القيمة.', 'Supplier, invoice date, voucher date and value range.'),
              'when': T('تنطبق على كل التبويبات والإجماليات والتصدير والإجراءات الجماعية.', 'They apply to every tab, total, export and bulk action.')},
-            {'target': 'finance-reconciliation-kpis',
-             'label': T('الإجماليات', 'Totals'),
-             'text': T('الفواتير، السندات، سندات بلا ربط، المقترحات وقيمتها، والاستثناءات.', 'Invoices, vouchers, unlinked vouchers, proposals and their value, and exceptions.')},
-            {'target': 'finance-reconciliation-tabs',
-             'label': T('المقترحات · الاستثناءات · …', 'Proposals · Exceptions · …'),
-             'text': T('أربع مساحات عمل لنفس النطاق المفلتر.', 'Four workspaces over the same filtered scope.')},
-            {'target': 'finance-reconciliation-status',
+            {'target': 'finance-reconciliation-kpis', 'text': T('الفواتير، السندات، السندات بلا ربط، المقترحات، القيمة المقترحة، والاستثناءات.',
+                                              'Invoices, vouchers, unlinked vouchers, proposals, proposed value and exceptions.'),
+             'more': T('كلها محسوبة في السيرفر حسب الفلاتر.\n'
+                       '• «سندات بلا ربط» بتتلوّن تحذير: فلوس اتدفعت ومش معروف سددت أنهي فاتورة.\n'
+                       '• «قيمة مقترحة» = مجموع المقترحات القابلة للاعتماد.',
+                       'All computed on the server according to the filters.\n'
+                       '• "Unlinked vouchers" is highlighted as a warning: money paid with no known invoice.\n'
+                       '• "Proposed value" = the total of proposals that can be approved.'),
+             'label': T('الإجماليات', 'Totals')},
+            {'target': 'finance-reconciliation-tabs', 'text': T('التبويبات: «المقترحات»، «الاستثناءات»، «غير المسددة (للمالية)»، و«الحصر».',
+                                              'Tabs: «المقترحات» (Proposals), «الاستثناءات» (Exceptions), «غير المسددة (للمالية)» (Unpaid) and «الحصر» (Parties).'),
+             'more': T('• «المقترحات»: هنا بتعتمد أو ترفض.\n'
+                       '• «الاستثناءات»: سند مكرر محتمل أو بيسمي فاتورة تانية وغيرها.\n'
+                       '• «غير المسددة»: فواتير لسه عليها رصيد.\n'
+                       '• «الحصر»: حساب كل مورد وكشفه.',
+                       '• "Proposals": where you approve or reject.\n'
+                       '• "Exceptions": a possible duplicate voucher, one naming another invoice, and more.\n'
+                       '• "Unpaid": invoices still carrying a balance.\n'
+                       '• "Parties": each supplier account and ledger.'),
+             'label': T('المقترحات · الاستثناءات · …', 'Proposals · Exceptions · …')},
+            {'target': 'finance-reconciliation-status', 'text': T('في «المقترحات»: فلتر الحالة (يحتاج مراجعة، مقترحة، معتمدة، مكتوبة، مرفوضة…).',
+                                              'In «المقترحات» (Proposals): the status filter (needs review, proposed, approved, written, rejected…).'),
+             'more': T('• «⚠ يحتاج مراجعة»: مقترحات محجوزة لازم تتراجع واحدة واحدة.\n'
+                       '• «معتمدة»: اتربطت عندنا ولسه ما اتكتبتش في SOFTECH.\n'
+                       '• «مكتوبة»: اتكتبت في SOFTECH.\n'
+                       'زر «✓ اعتماد كل الثقة العالية» بيعتمد العالية بس ويسيب المحجوزة.',
+                       '• "⚠ Needs review": held proposals that must be reviewed one by one.\n'
+                       '• "Approved": linked in our system and not yet written to SOFTECH.\n'
+                       '• "Written": written to SOFTECH.\n'
+                       'The "✓ Approve all high confidence" button approves only the high ones and leaves the held ones.'),
              'label': T('الحالة', 'Status'),
-             'text': T('يحتاج مراجعة، مقترحة، معتمدة، مكتوبة، مرفوضة.', 'Needs review, proposed, approved, written, rejected.'),
              'when': T('«⚠ يحتاج مراجعة» = محجوزة لا يشملها الاعتماد الجماعي.', '"⚠ Needs review" = held back; bulk approval skips them.'),
              'open_hint': T('تبويب «المقترحات».', 'The "Proposals" tab.')},
             {'target': 'finance-reconciliation-confidence',
@@ -705,11 +1136,20 @@ SCREENS = [
              'label': T('بحث بالكود أو الاسم', 'Search by code or name'),
              'text': T('ابحث عن مورد لعرض حصره.', 'Find a supplier to show its ledger.'),
              'open_hint': T('تبويب «الحصر».', 'The "Parties & ledger" tab.')},
-            {'target': 'finance-reconciliation-party',
-             'label': T('حصر ›', 'Ledger ›'),
-             'text': T('اضغط المورد لفتح كشف حسابه بالرصيد بعد كل حركة.', 'Click the supplier to open its ledger with the balance after each movement.'),
-             'open_hint': T('تبويب «الحصر».', 'The "Parties & ledger" tab.')},
+            {'target': 'finance-reconciliation-list', 'text': T('المقترحات بدرجة الثقة والفاتورة والسند والمتبقي؛ افتح الصف للتفاصيل، والاعتماد أو الرفض حسب الصلاحية.',
+                                              'Proposals with confidence, invoice, voucher and remaining; open a row for details — approving or rejecting depends on permission.'),
+             'more': T('افتح الصف عشان تشوف أصناف الفاتورة والمرتجعات المرتبطة، وبعدين «✓ اعتماد» أو «✕ رفض» (أو للمجموعة كاملة).\n'
+                       '• «المتبقي» محسوب: قيمة الفاتورة − المسدد في SOFTECH − المعتمد بانتظار الكتابة.\n'
+                       '• الاعتماد للمدير والصيدلي، والكتابة في SOFTECH للمدير بس.',
+                       'Open the row to see the invoice items and linked returns, then "✓ Approve" or "✕ Reject" (or the whole group).\n'
+                       '• "Remaining" is computed: invoice value − paid in SOFTECH − approved awaiting write.\n'
+                       '• Approving is for the admin and pharmacist; writing to SOFTECH is for the admin only.')},
         ],
+        'change_note': _NOTE,
         'updated': '2026-10-30',
+        'tips': [
+            T('«🖊 كتابة في SOFTECH» خطوة منفصلة بعد الاعتماد، للمدير فقط. وهي معطّلة بإعداد في السيرفر: تعرض «تشغيل تجريبي» ولا تكتب شيئاً.',
+              '"🖊 Write to SOFTECH" is a separate step after approval, admins only. While a server setting keeps it off it shows a "dry run" and writes nothing.'),
+        ],
     },
 ]

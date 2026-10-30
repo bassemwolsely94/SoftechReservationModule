@@ -1132,7 +1132,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
           قيمة معرّضة للخطر: <b className="text-red-600">{fmtNum(totalVar)} ج</b>
           {isFetching && <span className="mr-2 text-xs text-gray-400">جاري التحميل…</span>}
         </p>
-        <div className="flex items-center gap-2">
+        <div data-tour="batches-main-actions" className="flex items-center gap-2">
           <button data-tour="batches-main-export" onClick={() => exportXlsx.mutate()} disabled={exportXlsx.isPending || view.length === 0}
                   className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             {exportXlsx.isPending ? 'جاري التصدير…' : '⬇️ تصدير Excel'}
@@ -1149,7 +1149,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       {view.length === 0 ? (
         <div className="text-center py-14 text-gray-400">لا توجد أصناف — تأكد من تشغيل مزامنة صلاحية المخزون.</div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div data-tour="batches-main-table" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 select-none">
@@ -1400,14 +1400,14 @@ export default function BatchesPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <div className="mb-6">
+      <div data-tour="batches-main-header" className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">إدارة الدفعات (FEFO)</h1>
         <p className="text-sm text-gray-500 mt-1">مراقبة انتهاء الصلاحية · نظام الصرف الأول انتهاء أولاً</p>
       </div>
 
       {/* KPI cards — live from the stkbalexpiry mirror (all nodes) */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div data-tour="batches-main-kpis" className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <KpiCard label="أصناف تنتهي خلال 30 يوم"  value={fmtInt(summary.lt_30?.items)}  sub={`${fmtNum(summary.lt_30?.value)} ج`}  color="text-red-600" />
           <KpiCard label="خلال 90 يوم"              value={fmtInt(summary.lt_90?.items)}  sub={`${fmtNum(summary.lt_90?.value)} ج`}  color="text-amber-600" />
           <KpiCard label="خلال 180 يوم"             value={fmtInt(summary.lt_180?.items)} sub={`${fmtNum(summary.lt_180?.value)} ج`} color="text-yellow-600" />

@@ -389,7 +389,7 @@ function CallsTab() {
       <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100" data-tour="callcenter-analytics-call-filters">
         <div className="relative flex-1 min-w-40">
           <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 pointer-events-none text-sm">🔍</span>
-          <input value={search} onChange={handleSearch}
+          <input data-tour="callcenter-analytics-calls-search" value={search} onChange={handleSearch}
             placeholder="بحث باسم / هاتف / ملاحظات…"
             className="w-full border border-gray-200 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
         </div>
@@ -400,7 +400,7 @@ function CallsTab() {
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
-        <select value={purposeF} onChange={e => setPurposeF(e.target.value)}
+        <select data-tour="callcenter-analytics-calls-filters" value={purposeF} onChange={e => setPurposeF(e.target.value)}
           className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
           <option value="">كل الأغراض</option>
           {Object.entries(PURPOSE_META).map(([k, v]) => (
@@ -696,7 +696,7 @@ export default function CallCenterAnalyticsPage() {
   return (
     <div dir="rtl" className="flex flex-col h-full bg-gray-50 min-h-screen">
       {/* Page header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      <div data-tour="callcenter-analytics-header" className="bg-white border-b border-gray-100 px-6 py-5">
         <h1 className="text-xl font-black text-gray-900">لوحة مركز الاتصال</h1>
         <p className="text-xs text-gray-500 mt-0.5">
           مراقبة جودة المكالمات · إدارة الحالات · أداء المندوبين
@@ -704,7 +704,7 @@ export default function CallCenterAnalyticsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="bg-white border-b border-gray-100 px-6">
+      <div data-tour="callcenter-analytics-tabs" className="bg-white border-b border-gray-100 px-6">
         <div className="flex gap-1 -mb-px" data-tour="callcenter-analytics-tabs">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}

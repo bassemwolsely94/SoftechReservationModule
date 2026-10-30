@@ -108,7 +108,7 @@ export default function InventoryDashboard() {
     <div className="p-6 space-y-5 max-w-screen-xl mx-auto" dir="rtl">
 
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div data-tour="catalog-inventory-header" className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">لوحة المخزون</h1>
           <p className="text-sm text-gray-500 mt-0.5">نواقص · فائض · راكد · نوع الدواء · توزيع الفروع</p>

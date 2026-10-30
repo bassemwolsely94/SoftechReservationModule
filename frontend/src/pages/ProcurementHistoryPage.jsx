@@ -135,7 +135,7 @@ export default function ProcurementHistoryPage() {
         <div data-tour="purchasing-history-lookups" className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">بحث عام</label>
-            <input name="q" value={filters.q} onChange={onInput} placeholder="اسم/كود صنف، فاتورة..."
+            <input data-tour="purchasing-history-search" name="q" value={filters.q} onChange={onInput} placeholder="اسم/كود صنف، فاتورة..."
               className="input-field w-full text-sm" onKeyDown={e => e.key === 'Enter' && handleSearch()} />
           </div>
           <div><label className="text-xs text-gray-500 block mb-1">كود المورد</label>
@@ -167,7 +167,7 @@ export default function ProcurementHistoryPage() {
         </div>
 
         {/* Row 5 — toggle filters + actions */}
-        <div className="flex flex-wrap gap-2 items-center pt-1">
+        <div data-tour="purchasing-history-toggles" className="flex flex-wrap gap-2 items-center pt-1">
           {[
             { label: 'كل الحركات', value: '' },
             { label: 'مشتريات فقط', value: 'false' },

@@ -167,7 +167,7 @@ function ProgramProgressCard({ prog }) {
       {/* Projection & top items */}
       <div className="p-5 space-y-4">
         {/* Projection */}
-        <div className="grid grid-cols-2 gap-4">
+        <div data-tour="incentives-mine-projection" className="grid grid-cols-2 gap-4">
           <div className="bg-brand-50 rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-brand-700">{fmt(prog.projected_total)}</div>
             <div className="text-xs text-brand-500 mt-0.5">المتوقع نهاية الشهر ج.م</div>
@@ -325,7 +325,7 @@ export default function MyIncentivesPage() {
           <ProgramProgressCard key={prog.program_id} prog={prog} />
         ))}
 
-        <p className="text-center text-xs text-gray-400 pb-4">
+        <p data-tour="incentives-mine-note" className="text-center text-xs text-gray-400 pb-4">
           * التوقعات تعتمد على متوسط يومي خطي — قد تختلف عن النتائج الفعلية
         </p>
       </div>

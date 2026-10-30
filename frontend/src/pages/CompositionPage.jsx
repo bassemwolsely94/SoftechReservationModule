@@ -145,7 +145,7 @@ function CandidateRow({ cand, classes, onApprove, onReject, onNonDrug, onSetClas
           {showItems && <LinkedItems candId={cand.id} />}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div data-tour="chronic-composition-row-actions" className="flex flex-wrap items-center gap-1.5">
           <select data-tour="chronic-composition-class" value={selectedClass || ''} onChange={e => onSetClass(cand.id, e.target.value ? Number(e.target.value) : '')}
             className="rounded border border-line bg-surface px-2 py-1 text-xs text-content max-w-[210px]" title="Class / التصنيف">
             <option value="">— no class / بدون —</option>
@@ -214,7 +214,7 @@ export default function CompositionPage() {
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
-      <div>
+      <div data-tour="chronic-composition-header">
         <h1 className="text-xl font-bold text-content">تنقية المواد الفعّالة</h1>
         <p className="text-sm text-muted">مراجعة واعتماد تحليل المواد الفعّالة من سوفتك — لا يتم أي تعديل على سوفتك.</p>
       </div>
@@ -286,7 +286,7 @@ export default function CompositionPage() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div data-tour="chronic-composition-list" className="space-y-2">
         {isLoading && <div className="text-center text-muted py-8">جارٍ التحميل…</div>}
         {!isLoading && rows.length === 0 && <div className="text-center text-muted py-8">لا توجد نتائج</div>}
         {rows.map(cand => (

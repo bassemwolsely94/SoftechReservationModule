@@ -183,7 +183,6 @@ apps/customers/management/commands/investigate_pic_merge.py::Command.s_relatives
 apps/customers/management/commands/investigate_pic_merge.py::Command.s_triggers
 apps/customers/management/commands/investigate_pic_replication.py::Command._trace_one
 apps/customers/management/commands/investigate_pic_replication.py::Command.s_side
-apps/customers/management/commands/relink_purchase_customers.py::Command.handle
 apps/delivery/management/commands/sync_crm_orders.py::Command.handle
 apps/delivery/management/commands/sync_crm_orders.py::_apply_branch_status_updates
 apps/finance/management/commands/backfill_ap_invoice_comments.py::Command.handle
@@ -291,3 +290,7 @@ apps/sync/management/commands/probe_stock_audit.py::Command.section_d
 apps/sync/management/commands/probe_stock_audit.py::Command.section_e
 apps/sync/management/commands/verify_branch_replication.py::Command.handle
 apps/vouchers/management/commands/push_coupon_batch.py::Command._probe
+
+# Owner: doc 30 SOFTECH load telemetry (merged from amazing-fermi 2026-10-27) — POSTGRES write, not SOFTECH
+#   only the VALUES placeholder list is .format()-ed (a fixed "(%s,…)" per bucket); every value is a bound param
+apps/sync/softech_load.py::flush

@@ -15,6 +15,8 @@
  *  9.  Sync status
  */
 
+import FirstDay from '../help/FirstDay'
+import WhatsNewCard from '../help/WhatsNewCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -188,7 +190,7 @@ function FollowUpPanel({ navigate }) {
   const results = data?.results ?? []
 
   return (
-    <div data-tour="general-dashboard-followups" className="border border-orange-200 rounded-2xl overflow-hidden bg-orange-50">
+    <div className="border border-orange-200 rounded-2xl overflow-hidden bg-orange-50" data-tour="general-dashboard-followups">
       {/* Header — always visible, acts as toggle */}
       <button
         onClick={() => setExpanded(v => !v)}
@@ -706,7 +708,7 @@ export default function DashboardPage() {
               {user?.branch_name && <span className="mr-2">· {user.branch_name}</span>}
             </p>
           </div>
-          <div data-tour="general-dashboard-quick-actions" className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" data-tour="general-dashboard-actions">
             <button
               onClick={() => navigate('/reservations')}
               className="btn-secondary text-sm flex items-center gap-1.5"
@@ -733,6 +735,10 @@ export default function DashboardPage() {
       {/* ── Body ────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
+        {/* ── «أول يوم»: system tour + training path, until complete or hidden ── */}
+        <FirstDay />
+        <WhatsNewCard />
+
         {/* Data freshness — dashboard mixes live sales + stock */}
         <DataFreshnessBar domains={['sales', 'stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
 
@@ -743,7 +749,7 @@ export default function DashboardPage() {
         {isLoading ? (
           <SkeletonStrip cols={6} />
         ) : (
-          <div data-tour="general-dashboard-kpis" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-tour="general-dashboard-kpis">
             <HeroKpi
               icon="📋" label="نشط الآن"
               value={r.active_total}
@@ -823,7 +829,7 @@ export default function DashboardPage() {
 
         {/* ── 6. Transfer alerts ──────────────────────────────────── */}
         {!isLoading && (tr.pending > 0 || tr.flagged > 0 || tr.incoming_to_my_branch > 0) && (
-          <div>
+          <div data-tour="general-dashboard-transfers">
             <SectionTitle icon="🔀">
               تنبيهات التحويل
             </SectionTitle>
@@ -837,7 +843,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Main two-column layout ──────────────────────────────── */}
-        <div className="grid lg:grid-cols-3 gap-5">
+        <div className="grid lg:grid-cols-3 gap-5" data-tour="general-dashboard-pipeline">
 
           {/* Left 2/3 */}
           <div className="lg:col-span-2 space-y-5">

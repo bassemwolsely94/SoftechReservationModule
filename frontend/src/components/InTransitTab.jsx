@@ -254,6 +254,7 @@ function DetailPanel({ transit, onClose, onAction }) {
       <div
         className="w-full max-w-2xl bg-white shadow-2xl overflow-y-auto flex flex-col"
         dir="rtl"
+        data-tour="transfers-transit-drawer"
       >
         {/* Header */}
         <div
@@ -299,8 +300,14 @@ function DetailPanel({ transit, onClose, onAction }) {
         </div>
 
         {/* Status row */}
-        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm">
+        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 flex-wrap text-sm" data-tour="transfers-transit-status">
           <StatusBadge status={transit.transit_status} />
+          {transit.manually_received_at && !transit.erp_received_date && (
+            <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-semibold"
+                  title="تم تسجيل الاستلام هنا — في انتظار مستند الاستلام (25) من SOFTECH للمطابقة">
+              ⏳ مستلم محلياً — في انتظار تأكيد SOFTECH
+            </span>
+          )}
           {transit.cancellation_available && (
             <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-semibold">
               ↩️ الإلغاء متاح حتى {fmtDate(transit.cancellation_expires_at)}
@@ -376,7 +383,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Items tab */}
           {tab === 'items' && (
-            <div className="px-6 py-4">
+            <div className="px-6 py-4" data-tour="transfers-transit-items">
               {transit.fefo_warning?.length > 0 && (
                 <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <div className="font-bold text-amber-800 text-sm mb-1">
@@ -490,7 +497,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
           {/* Reconciliation tab (125 issued ↔ 25 received) */}
           {tab === 'recon' && (
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-6 py-4 space-y-4" data-tour="transfers-transit-recon">
               {/* Summary banner */}
               <div className={`rounded-xl px-4 py-3 border ${
                 transit.has_discrepancy
@@ -603,7 +610,7 @@ function DetailPanel({ transit, onClose, onAction }) {
           {tab === 'notes' && (
             <div className="px-6 py-4 space-y-3">
               {/* Add note form */}
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-tour="transfers-transit-notes">
                 <textarea
                   className="flex-1 border border-gray-200 rounded-xl p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-200"
                   rows={2}
@@ -674,7 +681,7 @@ function DetailPanel({ transit, onClose, onAction }) {
 
         {/* Actions footer */}
         {transit.transit_status === 'in_transit' && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 space-y-3" data-tour="transfers-transit-actions">
 
             {/* Mark Received (receiving branch or admin) */}
             {(isAdmin || isReceivingBranch) && (
@@ -743,6 +750,20 @@ function FiltersBar({ filters, setFilters, branches }) {
           <option key={k} value={k}>{v.icon} {v.label}</option>
         ))}
       </select>
+
+      {/* Received here but SOFTECH's receipt (doc 25) not seen yet — alerts point here */}
+      <button
+        type="button"
+        data-tour="transfers-transits-awaiting-erp"
+        onClick={() => setFilters(f => (f.awaiting_erp
+          ? { ...f, awaiting_erp: undefined, transit_status: 'in_transit' }
+          : { ...f, awaiting_erp: '1', transit_status: '' }))}
+        className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filters.awaiting_erp
+          ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50'}`}
+        title="تحويلات اتسجّل استلامها هنا ولسه مستند الاستلام (25) مش متسجّل في SOFTECH"
+      >
+        ⏳ بانتظار تأكيد SOFTECH
+      </button>
 
       {/* Supplying branch */}
       <select
@@ -867,11 +888,12 @@ function TransitGrid({ items, onRowClick, checkedIds, onToggleCheck, onToggleAll
               return (
                 <tr
                   key={tr.id}
+                  data-tour="transfers-transits-row"
                   onClick={() => onRowClick(tr)}
                   className="cursor-pointer hover:bg-brand-50 transition-colors"
                   style={{ borderRight: `3px solid ${p.dot}` }}
                 >
-                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                  <td className="px-3 py-3" onClick={e => e.stopPropagation()} data-tour="transfers-transits-row-check">
                     <input
                       type="checkbox"
                       className="accent-brand-600 cursor-pointer"

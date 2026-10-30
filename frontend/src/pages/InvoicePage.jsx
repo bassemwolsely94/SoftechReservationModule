@@ -309,6 +309,90 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
 
 // ── Invoice Detail ────────────────────────────────────────────────────────────
 
+// Raw OCR is JSON for structured reads — pretty-print it; plain text stays as is.
+function prettyOcr(raw) {
+  const t = (raw || '').trim()
+  if (!t.startsWith('{')) return raw
+  try { return JSON.stringify(JSON.parse(t), null, 2) } catch { return raw }
+}
+
+// SOFTECH supplier link: shows the linked personcode, or a picker when the
+// auto-resolver missed it (validation E7 supplier_unlinked blocks the push).
+function VendorLink({ inv, editable, onLinked, onNotify }) {
+  const [open,    setOpen]    = useState(false)
+  const [options, setOptions] = useState(null)
+  const [choice,  setChoice]  = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const linked = !!inv.vendor_personcode
+  const locked = ['pushing', 'finalized'].includes(inv.status)
+
+  const start = async () => {
+    setOpen(true)
+    if (options) return
+    try {
+      const { data } = await invoicesApi.linkableVendors()
+      setOptions(data || [])
+    } catch {
+      setOptions([])
+      onNotify('تعذّر تحميل قائمة الموردين', 'error')
+    }
+  }
+
+  const save = async () => {
+    const opt = (options || []).find(o => `${o.vendor_id ?? ''}|${o.personcode}` === choice)
+    if (!opt) return
+    setSaving(true)
+    try {
+      await invoicesApi.linkVendor(inv.id, opt.vendor_id
+        ? { vendor: opt.vendor_id }
+        : { personcode: opt.personcode, name: opt.name })
+      onNotify(`تم ربط المورد ${opt.name} (${opt.personcode})`)
+      setOpen(false)
+      onLinked()
+    } catch (e) {
+      onNotify(e?.response?.data?.detail || 'تعذّر ربط المورد', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (open) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <select value={choice} onChange={e => setChoice(e.target.value)}
+          className="border border-gray-300 rounded-lg px-2 py-1 text-xs max-w-[16rem] focus:outline-none focus:ring-2 focus:ring-brand-400">
+          <option value="">{options ? '— اختر مورد SOFTECH —' : 'جاري التحميل…'}</option>
+          {(options || []).map(o => (
+            <option key={`${o.vendor_id ?? ''}|${o.personcode}`} value={`${o.vendor_id ?? ''}|${o.personcode}`}>
+              {o.name} ({o.personcode}){o.is_main ? ' ★' : ''}
+            </option>
+          ))}
+        </select>
+        <button onClick={save} disabled={!choice || saving}
+          className="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs disabled:opacity-50">ربط</button>
+        <button onClick={() => setOpen(false)}
+          className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
+      </div>
+    )
+  }
+
+  return linked ? (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 flex items-center gap-1">
+      SOFTECH: {inv.vendor_name} ({inv.vendor_personcode})
+      {editable && !locked && (
+        <button onClick={start} className="text-green-800 hover:underline mr-1">تغيير</button>
+      )}
+    </span>
+  ) : (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
+      غير مربوط بمورد SOFTECH
+      {!locked && (
+        <button onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
+      )}
+    </span>
+  )
+}
+
 function InvoiceDetail({ invoiceId, onBack, onOpen }) {
   const [inv,          setInv]          = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -774,7 +858,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             {stCfg.dot} {stCfg.label}
           </span>
 
-          <div className="mr-auto flex items-center gap-2 flex-wrap">
+          <div data-tour="invoices-main-actions" className="mr-auto flex items-center gap-2 flex-wrap">
             {/* Processing spinner */}
             {inv.status === 'processing' && (
               <span className="text-xs text-blue-600 animate-pulse flex items-center gap-1">
@@ -898,7 +982,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         </div>
 
         {/* Header card */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-3">
+        <div data-tour="invoices-main-header-card" className="bg-gray-50 rounded-xl p-4 mb-3">
           {headerEdit ? (
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -924,7 +1008,10 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             </div>
           ) : (
             <div className="flex items-center gap-6 flex-wrap text-sm">
-              <div><span className="text-gray-400 text-xs">المورد: </span><span className="font-medium">{inv.supplier_name || '—'}</span></div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span><span className="text-gray-400 text-xs">المورد: </span><span className="font-medium">{inv.supplier_name || '—'}</span></span>
+                <VendorLink inv={inv} editable={editable} onLinked={load} onNotify={showToast} />
+              </div>
               <div><span className="text-gray-400 text-xs">الفاتورة: </span><span className="font-mono">{inv.invoice_number || '—'}</span></div>
               <div><span className="text-gray-400 text-xs">التاريخ: </span><span>{inv.invoice_date || '—'}</span></div>
               <div><span className="text-gray-400 text-xs">الخصم: </span><span>{inv.global_discount_pct}%</span></div>
@@ -991,7 +1078,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
       </div>
 
       {/* Lines */}
-      <div className="flex-1 overflow-auto p-6">
+      <div data-tour="invoices-main-lines" className="flex-1 overflow-auto p-6">
 
         {/* Anomaly panel */}
         {showAnomalies && anomalies !== null && (
@@ -1087,8 +1174,8 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
               className="w-48 h-auto rounded-xl border border-gray-200 shadow-sm object-contain cursor-pointer"
               onClick={() => window.open(inv.source_image_url, '_blank')} />
             {inv.raw_ocr_text && (
-              <div className="flex-1 bg-gray-50 rounded-xl p-3 max-h-48 overflow-auto text-[11px] font-mono text-gray-500 whitespace-pre-wrap border border-gray-200">
-                {inv.raw_ocr_text}
+              <div dir="ltr" className="flex-1 bg-gray-50 rounded-xl p-3 max-h-48 overflow-auto text-[11px] font-mono text-gray-500 whitespace-pre-wrap text-left border border-gray-200">
+                {prettyOcr(inv.raw_ocr_text)}
               </div>
             )}
           </div>
@@ -1435,7 +1522,7 @@ export default function InvoicePage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div data-tour="invoices-main-list" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {invoices.map(inv => {
               const cfg = STATUS_CONFIG[inv.status] || {}
               const matchPct = inv.line_count > 0

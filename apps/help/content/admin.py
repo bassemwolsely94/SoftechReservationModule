@@ -93,6 +93,131 @@ MODULE = {
              'text': T('تابع العملية: الحالة، عدد السجلات والمدة لكل جدول.', 'Follow the run: status, records and duration per table.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول الإدارة والنظام', 'A tour of the Administration & system module'),
+            'summary': T('من إضافة مستخدم وتحديد دوره، لصلاحيات كل دور، للإعدادات والفروع، ومتابعة المزامنة مع SOFTECH، لحد سجل المراجعة والإشارات المشبوهة.',
+                         'From adding a user and setting their role, to each role\'s permissions, settings and branches, the SOFTECH sync, and finally the audit log and suspicious flags.'),
+            'roles': ['admin'],
+            'steps': [
+                {'target': 'nav-users', 'nav': '/users',
+                 'text': T('نبدأ من «المستخدمون» في مجموعة «الإدارة».',
+                           'Start at "Users" in the "Administration" group.'),
+                 'more': T('كل حاجة في النظام بتبدأ من المستخدم: دوره بيحدد صلاحياته، وفرعه بيحدد بياناته اللي بيشوفها.\n'
+                           'المدير بيضيف ويعدّل هنا، والمشرف بيشوف القائمة بس.',
+                           'Everything starts from the user: their role sets their permissions and their branch sets the data they see.\n'
+                           'Admins add and edit here; supervisors can only view the list.')},
+                {'target': 'admin-users-add', 'route': '/users',
+                 'text': T('«إضافة مستخدم» لموظف جديد مربوط بحسابه في SOFTECH.',
+                           '"Add user" for a new employee linked to their SOFTECH account.'),
+                 'more': T('بيفتح نموذج: ابحث عن المستخدم في SOFTECH واختاره، وبعدين كلمة المرور والاسم والدور والفرع الأساسي.\n'
+                           'الربط بـ SOFTECH مهم للاعتمادات اللي بتتنفذ في SOFTECH باسمه، والحساب مش بيتعمل غير بـ«إنشاء المستخدم».',
+                           'It opens a form: search the user in SOFTECH and pick them, then password, name, role and main branch.\n'
+                           'The SOFTECH link matters for approvals executed in SOFTECH under their name; nothing is created until "Create user".')},
+                {'target': 'admin-users-actions', 'route': '/users',
+                 'text': T('لكل مستخدم: تعديل، كلمة مرور، تعطيل/تفعيل، وسجل النشاط.',
+                           'Per user: edit, password, deactivate/activate, and the activity log.'),
+                 'more': T('لما موظف يسيب الشغل عطّل حسابه بدل ما تمسحه — تاريخه بيفضل محفوظ.\n'
+                           'تغيير الدور أو الفرع أو التعطيل كله بيتسجّل في «سجل النشاط» بتاع المستخدم.',
+                           'When an employee leaves, deactivate their account instead of deleting it — their history stays.\n'
+                           'Role, branch and activation changes are all recorded in the user\'s "Activity log".')},
+                {'target': 'nav-permissions', 'nav': '/permissions',
+                 'text': T('بعدها «الصلاحيات»: إيه اللي كل دور يشوفه ويعمله.',
+                           'Next, "Permissions": what each role sees and does.'),
+                 'more': T('الدور اللي اخترته للمستخدم بياخد صلاحياته من هنا.\n'
+                           'السيرفر بيطبّق نفس المصفوفة على كل طلب، والقائمة والأزرار بتستخبى حسبها — يعني الصلاحية هنا هي الحماية الحقيقية.',
+                           'The role you gave the user takes its permissions from here.\n'
+                           'The server applies the same matrix to every request, and menus and buttons hide accordingly — so permissions here are the real protection.')},
+                {'target': 'admin-permissions-roles', 'route': '/permissions',
+                 'text': T('اختار الدور، وعلّم الإجراءات المسموحة لكل وحدة.',
+                           'Pick the role, then tick the allowed actions per module.'),
+                 'more': T('بعد ما تختار الدور، الجدول بيعرض كل وحدة × إجراء (عرض، إنشاء، تعديل، حذف، اعتماد…).\n'
+                           'النقطة الصفرا جنب الدور معناها إن عنده تغييرات لسه ما اتحفظتش. المدير له وصول كامل مش بيتعدّل.',
+                           'Once you pick a role, the table shows each module × action (view, create, edit, delete, approve…).\n'
+                           'A yellow dot next to a role means it has unsaved changes. Admins have full access that cannot be edited.')},
+                {'target': 'admin-permissions-save-bar', 'route': '/permissions',
+                 'text': T('مفيش حاجة بتتطبّق غير بـ«حفظ التغييرات».',
+                           'Nothing applies until "Save changes".'),
+                 'more': T('هنا بيظهر عدد التغييرات غير المحفوظة، و«تراجع» يرجّع كل حاجة زي ما كانت، و«حفظ التغييرات» يطبّقها.\n'
+                           'الحفظ بيتسجّل باسمك في سجل نشاط المستخدمين.',
+                           'Here you see the number of unsaved changes; "Undo" puts everything back and "Save changes" applies them.\n'
+                           'Saving is recorded under your name in the user activity log.')},
+                {'target': 'nav-erp-permissions', 'nav': '/erp-permissions',
+                 'text': T('«صلاحيات Softech»: صلاحيات مشتقة من مجموعة المستخدم في SOFTECH.',
+                           '"Softech permissions": permissions derived from the user\'s SOFTECH group.'),
+                 'more': T('جنب المصفوفة، النظام بيشتق صلاحيات الوحدات من مجموعة المستخدم في SOFTECH، ويُعاد البناء يومياً.\n'
+                           'هنا بتراجع وتعدّل طريقة الاشتقاق — من غير أي كتابة في SOFTECH نفسه.',
+                           'Alongside the matrix, module permissions are derived from the user\'s SOFTECH group and rebuilt daily.\n'
+                           'Here you review and adjust how they are derived — without writing anything to SOFTECH itself.')},
+                {'target': 'admin-erp-permissions-rebuild', 'route': '/erp-permissions',
+                 'text': T('«إعادة الاشتقاق الآن» يطبّق الاشتقاق فوراً.',
+                           '"Re-derive now" applies the derivation immediately.'),
+                 'more': T('استخدمه بعد ما تغيّر الربط لو مش عايز تستنى البناء اليومي.\n'
+                           'بيعيد حساب صلاحيات كل مجموعة، والنتيجة بتظهر في تبويب «صلاحيات المجموعات».',
+                           'Use it after changing the mapping if you do not want to wait for the daily rebuild.\n'
+                           'It recalculates every group\'s permissions; the result shows in the "Group permissions" tab.')},
+                {'target': 'nav-settings', 'nav': '/settings',
+                 'text': T('«الإعدادات»: بيانات الصيدلية والفروع وقواعد كل موديول.',
+                           '"Settings": pharmacy details, branches and each module\'s rules.'),
+                 'more': T('هنا بتتظبط القواعد اللي باقي الشاشات بتشتغل بيها.\n'
+                           'المدير بيعدّل، والصيدلي بيشوف «عرض فقط».',
+                           'This is where the rules the other screens run on are set.\n'
+                           'Admins edit; pharmacists see "View only".')},
+                {'target': 'admin-settings-tabs', 'route': '/settings',
+                 'text': T('أقسام الإعدادات: عام، المظهر، الفروع، الحجوزات، التحويل، الإشعارات، المزامنة، القسائم، القوائم المنسدلة.',
+                           'Settings sections: General, Appearance, Branches, Reservations, Transfers, Notifications, Sync, Vouchers, Dropdowns.'),
+                 'more': T('• «الفروع»: حالة كل فرع وميزاته وإحداثياته (لازمة لتحقق الحضور والاستلام).\n'
+                           '• «القوائم المنسدلة»: خيارات زي قنوات الحجز.\n'
+                           '• باقي الأقسام: إعدادات كل موديول، وكل إعداد بيتحفظ لوحده بزرار «حفظ» جنبه.',
+                           '• "Branches": each branch\'s status, features and coordinates (needed for attendance and pickup checks).\n'
+                           '• "Dropdowns": options such as reservation channels.\n'
+                           '• The other sections: each module\'s settings; each setting is saved on its own with the "Save" next to it.')},
+                {'target': 'nav-sync', 'nav': '/sync',
+                 'text': T('«المزامنة»: البيانات اللي جاية من SOFTECH.',
+                           '"Sync": the data coming from SOFTECH.'),
+                 'more': T('الأصناف والمخزون والعملاء والمبيعات والمستخدمين بيتسحبوا من SOFTECH تلقائياً كل 5 دقايق.\n'
+                           'لو حد اشتكى إن بيانات مش ظاهرة أو قديمة، هنا أول مكان تبص فيه.',
+                           'Items, stock, customers, sales and users are pulled from SOFTECH automatically every 5 minutes.\n'
+                           'If someone says data is missing or stale, this is the first place to look.')},
+                {'target': 'admin-sync-status', 'route': '/sync',
+                 'text': T('حالة آخر مزامنة — لو فشلت، السبب مكتوب هنا.',
+                           'The last sync status — if it failed, the reason is shown here.'),
+                 'more': T('أخضر «المزامنة تعمل بشكل طبيعي»، أصفر «جارٍ»، أحمر «فشلت آخر مزامنة» ومعاها رسالة الخطأ.\n'
+                           'وفوق الكارت ممكن يظهر تحذير «المجدول متوقف» — وقتها المهام التلقائية كلها واقفة.',
+                           'Green "Sync running normally", amber "Running", red "Last sync failed" with the error message.\n'
+                           'Above the card a "Scheduler stopped" warning may show — then all automatic jobs are stopped.')},
+                {'target': 'admin-sync-branch-health', 'route': '/sync',
+                 'text': T('حالة اتصال المركز وكل فرع.',
+                           'The connection status of head office and each branch.'),
+                 'more': T('لكل نقطة: متصل، غير متصل، أو «منقطع باستمرار» بعد محاولات فاشلة متتالية.\n'
+                           '«فحص الآن» يختبر الاتصال فوراً. الفرع المنقطع بياناته مش هتتحدث لحد ما يرجع.',
+                           'For each node: connected, disconnected, or "persistently down" after consecutive failures.\n'
+                           '"Check now" tests the connection immediately. A disconnected branch\'s data will not update until it is back.')},
+                {'target': 'nav-audit', 'nav': '/audit',
+                 'text': T('وأخيراً «المراجعة والأمان»: مين عمل إيه وإمتى.',
+                           'Finally "Audit & security": who did what, and when.'),
+                 'more': T('كل الإجراءات المهمة في الموديولات التانية بتتسجّل هنا، والنظام بيدوّر فيها على أنماط مشبوهة.\n'
+                           'متاحة للمدير والمشرف ومدير الجودة.',
+                           'Every important action in the other modules is recorded here, and the system scans it for suspicious patterns.\n'
+                           'Available to admins, supervisors and the quality manager.')},
+                {'target': 'admin-audit-tabs', 'route': '/audit',
+                 'text': T('«الإشارات المشبوهة» أو «سجل الإجراءات».',
+                           '"Suspicious flags" or "Action log".'),
+                 'more': T('• «الإشارات المشبوهة»: إلغاءات أو تعديلات متكررة، عدم تطابق ERP، نشاط خارج الدوام — بدرجة خطورة.\n'
+                           '• «سجل الإجراءات»: كل حدث بالمستخدم والكيان والوقت، واضغط على السطر تشوف التغييرات.',
+                           '• "Suspicious flags": repeated cancellations or edits, ERP mismatch, after-hours activity — by severity.\n'
+                           '• "Action log": every event with user, entity and time; click a row to see the changes.')},
+                {'target': 'admin-audit-scan', 'route': '/audit',
+                 'text': T('«🔍 فحص الآن» يدوّر على أنماط مشبوهة في آخر 24 ساعة.',
+                           '"🔍 Scan now" looks for suspicious patterns in the last 24 hours.'),
+                 'more': T('بعد الفحص بتظهر رسالة بعدد الإشارات الجديدة، وتظهر في القائمة تحت «مفتوح».\n'
+                           'كل إشارة مفتوحة عليها «مراجعة» — راجعت، تجاهل، أو تصعيد مع ملاحظة.',
+                           'After the scan a message shows the number of new flags, and they appear in the list under "Open".\n'
+                           'Each open flag has "Review" — reviewed, ignore, or escalate with a note.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -112,24 +237,62 @@ SCREENS = [
                    'Passwords need at least 10 characters and are refused if common (like password123), digits only, or close to the username — on create, reset and password change.')],
         'related': ['admin.permissions', 'admin.erp_permissions'],
         'tour': [
-            {'target': 'admin-users-add', 'label': T('إضافة مستخدم', 'Add user'),
-             'text': T('يفتح نموذج «إضافة مستخدم جديد» على الجنب.', 'Opens the "Add new user" form on the side.'),
+            {'target': 'admin-users-add', 'text': T('«إضافة مستخدم» يفتح نموذج حساب جديد.',
+                                              '"Add user" opens a new account form.'),
+             'more': T('النموذج بيطلب:\n'
+                       '• «بحث في مستخدمي SOFTECH» واختار الموظف عشان يتربط بيه.\n'
+                       '• كلمة المرور والاسم والهاتف وكود الموارد البشرية.\n'
+                       '• الدور والفرع الأساسي وصلاحيات الوصول (كل الفروع، قنوات البيع، رؤية العملاء وأرقامهم).\n'
+                       'الحساب مش بيتعمل غير بـ«إنشاء المستخدم». الزرار للمدير بس.',
+                       'The form asks for:\n'
+                       '• "Search SOFTECH users" and pick the employee to link.\n'
+                       '• Password, name, phone and HR code.\n'
+                       '• Role, main branch and access (all branches, sales channels, seeing customers and their phones).\n'
+                       'Nothing is created until "Create user". The button is admin only.'),
+             'label': T('إضافة مستخدم', 'Add user'),
              'when': T('لموظف جديد. للمدير فقط.', 'For a new employee. Admins only.')},
-            {'target': 'admin-users-search', 'label': T('بحث بالاسم أو اسم المستخدم…', 'Search by name or username…'),
-             'text': T('يدوّر في المستخدمين بالاسم أو اسم الدخول.', 'Searches users by name or login name.'),
+            {'target': 'admin-users-search', 'text': T('ابحث بالاسم أو اسم المستخدم.',
+                                              'Search by name or username.'),
+             'more': T('اكتب جزء من الاسم أو اسم الدخول والقائمة بتتفلتر وإنت بتكتب.\n'
+                       'مفيد لما تدوّر على موظف معيّن عشان تعدّل دوره أو تعيد كلمة مروره.',
+                       'Type part of the name or login and the list filters as you type.\n'
+                       'Handy when looking for a specific employee to change their role or reset their password.'),
+             'label': T('بحث بالاسم أو اسم المستخدم…', 'Search by name or username…'),
              'when': T('دوّر الأول قبل ما تضيف عشان ماتعملش حساب مكرر.', 'Search first before adding so you do not create a duplicate account.')},
-            {'target': 'admin-users-role-filter', 'label': T('كل الأدوار', 'All roles'),
-             'text': T('يعرض مستخدمي دور واحد بس.', 'Shows the users of one role only.')},
-            {'target': 'admin-users-status-filter', 'label': T('كل الحالات', 'All statuses'),
-             'text': T('«نشط» أو «موقوف».', '"Active" or "Disabled".'),
+            {'target': 'admin-users-role-filter', 'text': T('فلتر الدور.',
+                                              'Role filter.'),
+             'more': T('بيعرض مستخدمي دور واحد بس، زي كل الصيادلة أو كل الكول سنتر.\n'
+                       'مفيد قبل ما تغيّر صلاحيات دور، عشان تعرف مين هيتأثر.',
+                       'Shows users of one role only, such as all pharmacists or all call center staff.\n'
+                       'Useful before changing a role\'s permissions, to see who will be affected.'),
+             'label': T('كل الأدوار', 'All roles')},
+            {'target': 'admin-users-status-filter', 'text': T('فلتر الحالة (نشط / موقوف).',
+                                              'Status filter (active / disabled).'),
+             'more': T('«نشط» للي يقدر يدخل، و«موقوف» للحسابات المعطّلة.\n'
+                       'استخدم «موقوف» لو عايز ترجّع حساب موظف رجع الشغل.',
+                       '"Active" for those who can log in, "Disabled" for deactivated accounts.\n'
+                       'Use "Disabled" to find an account to reactivate for a returning employee.'),
+             'label': T('كل الحالات', 'All statuses'),
              'when': T('راجع الموقوفين دورياً.', 'Review the disabled ones regularly.')},
-            {'target': 'admin-users-table', 'label': T('جدول المستخدمين', 'Users table'),
-             'text': T('المستخدم، الدور، الفرع («• شامل» = كل الفروع)، اسم SOFTECH المربوط والحالة.',
-                       'User, role, branch ("• all" = every branch), the linked SOFTECH name and status.'),
+            {'target': 'admin-users-table', 'text': T('المستخدمين: الدور والفرع وربط SOFTECH والحالة.',
+                                              'The users: role, branch, SOFTECH link and status.'),
+             'more': T('لكل مستخدم: اسمه واسم الدخول، الدور، الفرع («• شامل» لو له وصول لكل الفروع)، اسم مستخدم SOFTECH المربوط، ونشط أو موقوف.\n'
+                       'لو خانة SOFTECH فاضية، المستخدم مش مربوط.',
+                       'For each user: name and login, role, branch ("• all" if they can access every branch), the linked SOFTECH username, and active or disabled.\n'
+                       'An empty SOFTECH cell means the user is not linked.'),
+             'label': T('جدول المستخدمين', 'Users table'),
              'when': T('عمود SOFTECH فاضي «—» يعني الحساب مش مربوط.', 'An empty "—" SOFTECH column means the account is not linked.')},
-            {'target': 'admin-users-actions', 'label': T('إجراءات', 'Actions'),
-             'text': T('أربع أزرار لكل مستخدم: تعديل، إعادة تعيين كلمة المرور، تعطيل/تفعيل، سجل النشاط.',
-                       'Four buttons per user: edit, reset password, disable/enable, activity log.'),
+            {'target': 'admin-users-actions', 'text': T('الإجراءات: تعديل، كلمة المرور، تعطيل/تفعيل، سجل النشاط.',
+                                              'Actions: edit, password, deactivate/activate, activity log.'),
+             'more': T('• ✎ «تعديل»: الدور والفرع وصلاحيات الوصول.\n'
+                       '• 🔑 «إعادة تعيين كلمة المرور».\n'
+                       '• 🚫 «تعطيل الحساب» بيتنفذ فوراً من غير تأكيد ويوقف الدخول من غير ما يمسح حاجة.\n'
+                       '• 📋 «سجل النشاط»: الدخول وكل تغيير في الدور أو الفرع أو الصلاحيات. للمدير بس.',
+                       '• ✎ "Edit": role, branch and access.\n'
+                       '• 🔑 "Reset password".\n'
+                       '• 🚫 "Deactivate account" applies at once without confirmation and stops login without deleting anything.\n'
+                       '• 📋 "Activity log": logins and every role, branch or permission change. Admin only.'),
+             'label': T('إجراءات', 'Actions'),
              'open_hint': T('يظهر للمدير بس.', 'Shown to admins only.')},
             {'target': 'admin-users-edit', 'label': T('✎ تعديل', '✎ Edit'),
              'text': T('يفتح نفس النموذج لتغيير الاسم أو الدور أو الفرع أو الوصول.', 'Opens the same form to change name, role, branch or access.'),
@@ -170,6 +333,7 @@ SCREENS = [
              'open_hint': _DRAWER},
         ],
         'updated': '2026-10-30',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'admin.permissions',
@@ -184,14 +348,32 @@ SCREENS = [
         ],
         'related': ['admin.users', 'admin.erp_permissions'],
         'tour': [
-            {'target': 'admin-permissions-view-tabs', 'label': T('صلاحيات الوحدات · 🔔 ظهور الإشعارات', 'Module permissions · 🔔 Notifications'),
-             'text': T('عرضين: مين يعمل إيه في كل وحدة، ومين يوصله أي نوع إشعار.', 'Two views: who does what in each module, and who gets which notification type.')},
-            {'target': 'admin-permissions-roles', 'label': T('الأدوار', 'Roles'),
-             'text': T('اختار الدور اللي هتعدّله. النقطة الصفرا = تغيير مش محفوظ في الدور ده.', 'Pick the role to edit. A yellow dot = an unsaved change in that role.'),
+            {'target': 'admin-permissions-view-tabs', 'text': T('صلاحيات الوحدات، أو ظهور الإشعارات لكل دور.',
+                                              'Module permissions, or notification visibility per role.'),
+             'more': T('• «صلاحيات الوحدات»: إيه اللي الدور يقدر يشوفه ويعمله في كل موديول.\n'
+                       '• «🔔 ظهور الإشعارات»: لكل نوع إشعار — إظهار، كتم (بيتعمل بس مش بيظهر)، أو إيقاف (مش بيتعمل خالص).',
+                       '• "Module permissions": what the role can see and do in each module.\n'
+                       '• "🔔 Notification visibility": per notification type — show, mute (created but hidden), or off (not created at all).'),
+             'label': T('صلاحيات الوحدات · 🔔 ظهور الإشعارات', 'Module permissions · 🔔 Notifications')},
+            {'target': 'admin-permissions-roles', 'text': T('اختار الدور.',
+                                              'Choose the role.'),
+             'more': T('الجدول جنبه بيتغيّر حسب الدور المختار.\n'
+                       'النقطة الصفرا جنب الدور معناها تغييرات لسه ما اتحفظتش. المدير مش في القائمة لأن له وصول كامل مش بيتعدّل.',
+                       'The table beside it changes with the chosen role.\n'
+                       'A yellow dot next to a role means unsaved changes. Admin is not listed because it has full, non-editable access.'),
+             'label': T('الأدوار', 'Roles'),
              'when': T('المدير مش في القائمة: له وصول كامل ثابت.', 'Admin is not listed: it has fixed full access.')},
-            {'target': 'admin-permissions-matrix', 'label': T('الوحدة × عرض · إنشاء · تعديل…', 'Module × view · create · edit…'),
-             'text': T('علّم الإجراءات المسموحة لكل وحدة. السيرفر بيطبّقها على كل طلب، والقوائم والأزرار بتختفي حسبها.',
-                       'Tick the allowed actions per module. The server enforces them on every request; menus and buttons hide accordingly.'),
+            {'target': 'admin-permissions-matrix', 'text': T('علّم الإجراءات المسموحة لكل وحدة — السيرفر بيطبّقها على كل طلب.',
+                                              'Tick the allowed actions per module — the server enforces them on every request.'),
+             'more': T('كل سطر وحدة وكل عمود إجراء (عرض، إنشاء، تعديل، حذف، اعتماد…). اضغط الخانة تفتحها أو تقفلها.\n'
+                       '• «منح الكل / سحب الكل» في آخر السطر للوحدة كلها.\n'
+                       '• تحت: «منح / سحب جميع الصلاحيات» للدور كله — بحذر.\n'
+                       'وحدة «دليل الاستخدام» بإجراء «تعديل» = مين يقدر يعدّل الشرح.',
+                       'Each row is a module, each column an action (view, create, edit, delete, approve…). Click a cell to turn it on or off.\n'
+                       '• "Grant all / Revoke all" at the row end covers the whole module.\n'
+                       '• Below: "Grant / Revoke all permissions" for the whole role — use with care.\n'
+                       'The "Help guide" module with "edit" = who may edit the help.'),
+             'label': T('الوحدة × عرض · إنشاء · تعديل…', 'Module × view · create · edit…'),
              'when': T('من غير «عرض» الوحدة كلها بتختفي من القائمة.', 'Without "view" the whole module disappears from the menu.'),
              'open_hint': _ROLE},
             {'target': 'admin-permissions-row-all', 'label': T('منح الكل / سحب الكل', 'Grant all / Revoke all'),
@@ -205,18 +387,34 @@ SCREENS = [
              'text': T('لكل إشعار: إظهار، كتم (يتسجل ومايظهرش)، أو إيقاف (مايتعملش خالص).', 'Per notification: show, mute (created, not shown) or off (not created at all).'),
              'warn': T('«إيقاف» مالوش أثر رجعي — الإشعارات اللي فاتت مش هترجع.', '"Off" is not retroactive — missed notifications will not come back.'),
              'open_hint': T('افتح «🔔 ظهور الإشعارات» واختار دور.', 'Open "🔔 Notification visibility" and pick a role.')},
-            {'target': 'admin-permissions-legend', 'label': T('مسموح · ممنوع · تغيير غير محفوظ', 'Allowed · denied · unsaved change'),
-             'text': T('معنى الألوان والنقط في المصفوفة.', 'What the colours and dots in the matrix mean.')},
-            {'target': 'admin-permissions-save-bar', 'label': T('… تغيير غير محفوظ', '… unsaved changes'),
-             'text': T('عدد التغييرات اللي لسه ماتحفظتش في كل الأدوار.', 'How many changes are still unsaved across all roles.')},
+            {'target': 'admin-permissions-legend', 'text': T('معنى الألوان: مسموح، ممنوع، تغيير غير محفوظ.',
+                                              'The colours: allowed, denied, unsaved change.'),
+             'more': T('✓ أخضر مسموح، × رمادي ممنوع، والنقطة الصفرا تحت الخانة تغيير لسه ما اتحفظش.\n'
+                       'لو مش مدير هتلاقي «عرض فقط» — تشوف المصفوفة من غير ما تعدّل.',
+                       'Green ✓ allowed, grey × denied, and a yellow dot under a cell is an unsaved change.\n'
+                       'If you are not an admin you see "View only" — you can see the matrix but not edit it.'),
+             'label': T('مسموح · ممنوع · تغيير غير محفوظ', 'Allowed · denied · unsaved change')},
+            {'target': 'admin-permissions-save-bar', 'text': T('عدد التغييرات غير المحفوظة و«تراجع».',
+                                              'The number of unsaved changes and "Undo".'),
+             'more': T('بيعدّ كل خانة غيّرتها في كل الأدوار. «تراجع» بيرجّع كل التغييرات اللي ما اتحفظتش مرة واحدة.\n'
+                       'الأزرار دي بتظهر بس لما يكون فيه تغيير.',
+                       'It counts every cell you changed across all roles. "Undo" reverts all unsaved changes at once.\n'
+                       'These buttons only appear when there is a change.'),
+             'label': T('… تغيير غير محفوظ', '… unsaved changes')},
             {'target': 'admin-permissions-undo', 'label': T('تراجع', 'Undo'),
              'text': T('يرجّع كل التغييرات غير المحفوظة.', 'Reverts every unsaved change.'),
              'open_hint': T('يظهر لما يكون فيه تغيير غير محفوظ.', 'Shown when there is an unsaved change.')},
-            {'target': 'admin-permissions-save', 'label': T('حفظ التغييرات (…)', 'Save changes (…)'),
-             'text': T('يحفظ كل التغييرات مرة واحدة. مفيش حاجة بتتطبّق قبل الحفظ.', 'Saves every change at once. Nothing applies before saving.'),
+            {'target': 'admin-permissions-save', 'text': T('«حفظ التغييرات» — لا شيء يتطبّق قبل الحفظ.',
+                                              '"Save changes" — nothing applies before saving.'),
+             'more': T('بيحفظ كل التغييرات (وحدات وإشعارات) مرة واحدة، والرقم بين القوسين عددها. بعدها تظهر «✓ تم الحفظ».\n'
+                       'الحفظ بيتسجّل باسمك في سجل نشاط المستخدمين. راجع قبل ما تحفظ — سحب «عرض» بيخفي الشاشة عن الدور كله.',
+                       'It saves all changes (modules and notifications) at once; the number in brackets is how many. Then "✓ Saved" shows.\n'
+                       'Saving is recorded under your name in the user activity log. Check first — removing "view" hides the screen from the whole role.'),
+             'label': T('حفظ التغييرات (…)', 'Save changes (…)'),
              'warn': T('بيسري فوراً على كل مستخدمي الدور في كل الفروع.', 'Takes effect at once for every user of the role in every branch.'),
              'open_hint': T('يظهر لما يكون فيه تغيير غير محفوظ.', 'Shown when there is an unsaved change.')},
         ],
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
         'updated': '2026-10-30',
     },
     {
@@ -232,13 +430,36 @@ SCREENS = [
         ],
         'steps': [T('«إعادة الاشتقاق الآن» بعد أي تعديل لتطبيقه فوراً.', '"Re-derive now" after a change to apply it immediately.')],
         'tour': [
-            {'target': 'admin-erp-permissions-rebuild', 'label': T('إعادة الاشتقاق الآن', 'Re-derive now'),
-             'text': T('يعيد حساب صلاحيات كل مجموعة من الربط الحالي بدل ما تستنى البناء اليومي.', 'Recomputes every group\'s permissions from the current map instead of waiting for the daily rebuild.'),
+            {'target': 'admin-erp-permissions-header', 'text': T('صلاحيات الوحدات هنا مشتقة من مجموعة المستخدم في Softech، ويُعاد بناؤها يومياً.',
+                                              'Module permissions here are derived from the user\'s Softech group and rebuilt daily.'),
+             'more': T('كل مستخدم في SOFTECH تابع لمجموعة ليها صلاحيات على شاشات أنظمة SOFTECH. الصفحة دي بتترجم ده لصلاحيات على وحداتنا.\n'
+                       'SOFTECH هو المصدر — مفيش هنا أي كتابة فيه، بس قراءة واشتقاق.',
+                       'Every SOFTECH user belongs to a group with rights on SOFTECH system screens. This page translates that into rights on our modules.\n'
+                       'SOFTECH is the source — nothing here writes to it; it only reads and derives.')},
+            {'target': 'admin-erp-permissions-rebuild', 'text': T('«إعادة الاشتقاق الآن» يطبّق طريقة الاشتقاق فوراً؛ للمدير فقط.',
+                                              '"Re-derive now" applies the derivation immediately; admin only.'),
+             'more': T('بيعيد حساب صلاحيات كل المجموعات بالربط الحالي من غير ما تستنى البناء اليومي.\n'
+                       'إضافة أو حذف ربط بيعيد الاشتقاق لوحده، فالزرار ده مفيد لو عايز تتأكد إن كل حاجة محدّثة.',
+                       'It recalculates all groups\' permissions with the current mapping without waiting for the daily rebuild.\n'
+                       'Adding or removing a mapping re-derives by itself, so this button is for making sure everything is up to date.'),
+             'label': T('إعادة الاشتقاق الآن', 'Re-derive now'),
              'when': T('بعد ما تراجع الربط. مش بيكتب حاجة في SOFTECH.', 'After reviewing the map. Nothing is written to SOFTECH.')},
-            {'target': 'admin-erp-permissions-tabs', 'label': T('الربط · المجموعات · الأنظمة', 'Map · groups · systems'),
-             'text': T('ربط الأنظمة بالوحدات، صلاحيات المجموعات الناتجة، ومرجع أنظمة SOFTECH.', 'The system → module map, the resulting group permissions, and the SOFTECH systems reference.')},
-            {'target': 'admin-erp-permissions-map-form', 'label': T('نظام Softech · الوحدة · ملاحظة', 'SOFTECH system · module · note'),
-             'text': T('اكتب رمز النظام (مثل IM) واختار الوحدة اللي يديها هنا.', 'Type the system code (like IM) and pick the module it grants here.'),
+            {'target': 'admin-erp-permissions-tabs', 'text': T('التبويبات: ربط الأنظمة بالوحدات، صلاحيات المجموعات، وأنظمة Softech.',
+                                              'Tabs: system → module map, group permissions, and Softech systems.'),
+             'more': T('• «ربط الأنظمة بالوحدات»: أنهي نظام SOFTECH بيدّي أنهي وحدة.\n'
+                       '• «صلاحيات المجموعات»: النتيجة لكل مجموعة.\n'
+                       '• «أنظمة Softech»: مرجع بعدد شاشات كل نظام وهل هو مربوط ولا «— غير مربوط».',
+                       '• "System → module map": which SOFTECH system grants which module.\n'
+                       '• "Group permissions": the result for each group.\n'
+                       '• "Softech systems": a reference with each system\'s screen count and whether it is mapped or "— not mapped".'),
+             'label': T('الربط · المجموعات · الأنظمة', 'Map · groups · systems')},
+            {'target': 'admin-erp-permissions-add-map', 'text': T('في «ربط الأنظمة بالوحدات»: نظام Softech والوحدة وملاحظة ثم «إضافة ربط».',
+                                              'In "System → module map": Softech system, module and a note, then "Add mapping".'),
+             'more': T('اكتب كود النظام (زي IM)، واختار الوحدة، وملاحظة توضّح السبب، واضغط «إضافة ربط».\n'
+                       'الربط بيتحفظ والصلاحيات بتتشتق تاني فوراً — كل مستخدمي المجموعات اللي عندها النظام ده هياخدوا الوحدة.',
+                       'Type the system code (like IM), choose the module, add a note explaining why, and press "Add mapping".\n'
+                       'The mapping is saved and permissions are re-derived at once — users in groups with that system get the module.'),
+             'label': T('نظام Softech · الوحدة · ملاحظة', 'SOFTECH system · module · note'),
              'open_hint': T('في تبويب «ربط الأنظمة بالوحدات».', 'On the "System → module map" tab.')},
             {'target': 'admin-erp-permissions-map-add', 'label': T('إضافة ربط', 'Add mapping'),
              'text': T('يضيف الربط ويعيد الاشتقاق على طول.', 'Adds the mapping and re-derives at once.'),
@@ -252,14 +473,26 @@ SCREENS = [
              'text': T('يشيل ربط نظام من الوحدة ويعيد الاشتقاق.', 'Removes a system from the module and re-derives.'),
              'warn': T('بيتنفّذ فوراً من غير تأكيد — المجموعات ممكن تفقد الوحدة.', 'Happens at once with no confirmation — groups may lose the module.'),
              'open_hint': T('جنب كل رمز نظام في كروت الوحدات.', 'Next to every system code in the module cards.')},
-            {'target': 'admin-erp-permissions-groups', 'label': T('صلاحيات المجموعات', 'Group permissions'),
-             'text': T('لكل مجموعة SOFTECH: ✓ عرض، ✎ تعديل، $ رؤية التكلفة والمال.', 'Per SOFTECH group: ✓ view, ✎ edit, $ see cost and money.'),
+            {'target': 'admin-erp-permissions-map', 'text': T('كل وحدة والأنظمة المربوطة بها، و✕ لإزالة ربط.',
+                                              'Each module and the systems mapped to it; ✕ removes a mapping.'),
+             'more': T('كارت لكل وحدة فيه أكواد أنظمة SOFTECH المربوطة بيها.\n'
+                       '✕ بيشيل الربط فوراً من غير تأكيد ويعيد الاشتقاق — ممكن مستخدمين يفقدوا الوحدة، فاتأكد قبل ما تضغط.',
+                       'A card per module with the SOFTECH system codes mapped to it.\n'
+                       '✕ removes the mapping at once without confirmation and re-derives — users may lose the module, so be sure before pressing.')},
+            {'target': 'admin-erp-permissions-groups', 'text': T('في «صلاحيات المجموعات»: لكل مجموعة ✓ عرض، ✎ تعديل، $ رؤية التكلفة.',
+                                              'In "Group permissions": per group ✓ view, ✎ edit, $ see cost.'),
+             'more': T('سطر لكل مجموعة SOFTECH وعمود لكل وحدة: ✓ عرض، ✎ تعديل، $ رؤية التكلفة والمال، و· لا شيء.\n'
+                       'راجعه بعد أي تغيير في الربط عشان تتأكد إن مفيش مجموعة أخدت أكتر من اللازم.',
+                       'A row per SOFTECH group and a column per module: ✓ view, ✎ edit, $ see cost and money, · nothing.\n'
+                       'Review it after any mapping change to make sure no group got more than it should.'),
+             'label': T('صلاحيات المجموعات', 'Group permissions'),
              'when': T('راجع «$» كويس — دي بتكشف التكلفة.', 'Check "$" carefully — it reveals costs.'),
              'open_hint': T('افتح تبويب «صلاحيات المجموعات».', 'Open the "Group permissions" tab.')},
             {'target': 'admin-erp-permissions-systems', 'label': T('أنظمة Softech', 'SOFTECH systems'),
              'text': T('كل نظام: عدد شاشاته، مثال، ومربوط بأي وحدة أو «— غير مربوط».', 'Each system: screen count, a sample, and which module it maps to or "— unmapped".'),
              'open_hint': T('افتح تبويب «أنظمة Softech».', 'Open the "SOFTECH systems" tab.')},
         ],
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
         'updated': '2026-10-30',
     },
     {
@@ -278,6 +511,53 @@ SCREENS = [
             {'key': 'sync', 'title': T('⟳ المزامنة', '⟳ Sync'), 'body': T('جدول المزامنة مع SOFTECH وحجم الدفعات.', 'The SOFTECH sync schedule and batch sizes.')},
             {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'), 'body': T('إعدادات رموز التحقق وحدود القيم.', 'OTP settings and value limits.')},
             {'key': 'dropdowns', 'title': T('📝 القوائم المنسدلة', '📝 Dropdowns'), 'body': T('خيارات القوائم المنسدلة في الشاشات (قنوات الحجز، أولويات الحجز، حالات التحويل…): أضف خياراً (تسمية عربية، قيمة، أيقونة) أو عطّله.', 'The dropdown options used in screens (reservation channels, priorities, transfer statuses…): add an option (Arabic label, value, icon) or disable it.')},
+        ],
+        'tips': [T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.')],
+        'tour': [
+            {'target': 'admin-settings-header', 'text': T('إعدادات النظام؛ غير المدير يرى «عرض فقط».',
+                                              'System settings; non-admins see "View only".'),
+             'more': T('هنا بتتظبط بيانات الصيدلية والفروع وقواعد كل موديول.\n'
+                       'المدير بس اللي يعدّل؛ الصيدلي بيشوف الإعدادات مع شارة «عرض فقط — يحتاج صلاحية مدير للتعديل».',
+                       'Pharmacy details, branches and each module\'s rules are set here.\n'
+                       'Only admins edit; pharmacists see the settings with a "View only — admin required to edit" badge.')},
+            {'target': 'admin-settings-tabs', 'text': T('أقسام الإعدادات: عام، المظهر، الفروع، الحجوزات، التحويل، الإشعارات، المزامنة، القسائم، القوائم المنسدلة.',
+                                              'Settings sections: General, Appearance, Branches, Reservations, Transfers, Notifications, Sync, Vouchers, Dropdowns.'),
+             'more': T('اضغط القسم من العمود الجانبي والمحتوى بيتغيّر جنبه.\n'
+                       '• «الحجوزات» و«التحويل» و«الإشعارات» و«المزامنة» و«القسائم»: قواعد كل موديول.\n'
+                       '• «المظهر»: ألوان الهوية.',
+                       'Click a section in the side column and the content beside it changes.\n'
+                       '• "Reservations", "Transfers", "Notifications", "Sync" and "Vouchers": each module\'s rules.\n'
+                       '• "Appearance": brand colours.')},
+            {'target': 'admin-settings-content', 'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
+                                              'The selected section\'s settings appear here; editing is admin only.'),
+             'more': T('كل إعداد في سطر بقيمته الحالية. اضغط «تعديل» جنبه، غيّر القيمة، وبعدين «حفظ» — كل إعداد بيتحفظ لوحده وتظهر «تم الحفظ ✓».\n'
+                       'التغيير بيأثر على شغل الموديول على طول، فغيّر بس اللي فاهم تأثيره.',
+                       'Each setting is a row with its current value. Click "Edit" next to it, change the value, then "Save" — each setting saves on its own and "Saved ✓" shows.\n'
+                       'The change affects how the module works right away, so only change what you understand.')},
+            {'target': 'admin-settings-general', 'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
+                                              'In "General": interface language and pharmacy details shown on receipts and WhatsApp.'),
+             'more': T('• لغة الواجهة (العربية / English): التغيير فوري ومتسجّل في المتصفح.\n'
+                       '• «معلومات سلسلة الصيدليات»: بتظهر في إيصالات العملاء ورسائل واتساب ورمز QR — راجعها كويس.',
+                       '• Interface language (Arabic / English): the change is instant and saved in the browser.\n'
+                       '• "Pharmacy chain profile": shown on customer receipts, WhatsApp messages and the QR code — check it carefully.')},
+            {'target': 'admin-settings-branches', 'text': T('في «الفروع»: بطاقة لكل فرع بحالته وميزاته وبياناته وموقعه.',
+                                              'In "Branches": a card per branch with status, features, details and location.'),
+             'more': T('• «✎ تعديل»: الاسم والهاتف والعنوان والإحداثيات («استخدم موقعي الحالي» وإنت جوه الفرع).\n'
+                       '• «نشط» و«قيد التشغيل» بيتغيّروا بضغطة واحدة فوراً.\n'
+                       '• «الميزات المتاحة»: اضغط على الميزة تفعّلها أو توقفها للفرع.\n'
+                       'من غير إحداثيات، تحقق الحضور والاستلام الجغرافي مش هيشتغل.',
+                       '• "✎ Edit": name, phone, address and coordinates ("use my current location" while inside the branch).\n'
+                       '• "Active" and "Operational" switch with one click, immediately.\n'
+                       '• "Available features": click a feature to enable or disable it for the branch.\n'
+                       'Without coordinates, attendance and pickup geo-checks will not work.')},
+            {'target': 'admin-settings-dropdowns', 'text': T('في «القوائم المنسدلة»: خيارات القوائم المستخدمة في الشاشات مثل قنوات الحجز.',
+                                              'In "Dropdowns": the options used in screens, such as reservation channels.'),
+             'more': T('• «+ إضافة خيار جديد»: التسمية العربية والقيمة إجباريين، والإنجليزي والأيقونة اختياريين.\n'
+                       '• «مفعّل / معطّل» بيخفي الخيار من الشاشات من غير ما يمسحه.\n'
+                       '• ✕ بيمسح بعد تأكيد، والخيارات «ثابت» مش بتتمسح.',
+                       '• "+ Add new option": Arabic label and value are required; English label and icon are optional.\n'
+                       '• "Enabled / Disabled" hides the option from screens without deleting it.\n'
+                       '• ✕ deletes after a confirmation; "System" options cannot be deleted.')},
         ],
         'tips': [
             T('تغيير لغة الواجهة فوري ويُحفظ في المتصفح.', 'Changing the interface language is instant and saved in the browser.'),
@@ -332,6 +612,7 @@ SCREENS = [
              'open_hint': T('افتح تبويب «🎨 المظهر» وغيّر حاجة.', 'Open the "🎨 Appearance" tab and change something.')},
         ],
         'updated': '2026-10-30',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'admin.sync',
@@ -345,38 +626,65 @@ SCREENS = [
             T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة السيرفر.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
         ],
         'tips': [T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.'),
-                 T('المزامنة قراءة فقط من SOFTECH إلى النظام؛ لا تكتب أي شيء في SOFTECH.', 'Sync only reads from SOFTECH into the system; it writes nothing to SOFTECH.')],
+                 T('المزامنة قراءة فقط من SOFTECH إلى النظام؛ لا تكتب أي شيء في SOFTECH.', 'Sync only reads from SOFTECH into the system; it writes nothing to SOFTECH.'),
+                 T('«حمل SOFTECH» يعرض كم مرة اتصلنا بالسيرفر وكم استعلاماً وصفاً سحبنا وكم استغرق — حسب المهمة أو الكود أو السيرفر. الأثقل في أول الجدول؛ الأرقام تُحفظ كل دقيقة تقريباً.',
+                   '"SOFTECH load" shows how many times we logged in to the server, how many queries and rows we pulled and how long it took — by job, code or server. The heaviest come first; figures are saved about once a minute.')],
         'tour': [
-            {'target': 'admin-sync-status', 'label': T('حالة المزامنة', 'Sync status'),
-             'text': T('آخر مزامنة: وقتها، عدد السجلات والمدة. أخضر نجحت، أصفر جارية، أحمر فشلت والسبب مكتوب تحت.',
-                       'Last sync: time, records and duration. Green succeeded, yellow running, red failed with the reason below.'),
+            {'target': 'admin-sync-status', 'text': T('حالة المزامنة مع SOFTECH — لو فشلت، السبب مكتوب هنا.',
+                                              'The SOFTECH sync status — if it failed, the reason is shown here.'),
+             'more': T('النقطة الملونة: أخضر «المزامنة تعمل بشكل طبيعي»، أصفر «جارٍ المزامنة الآن»، أحمر «فشلت آخر مزامنة» ومعاها رسالة الخطأ.\n'
+                       'كمان هتلاقي وقت آخر مزامنة وعدد السجلات والمدة. الحالة بتتحدّث لوحدها.',
+                       'The coloured dot: green "Sync running normally", amber "Syncing now", red "Last sync failed" with the error message.\n'
+                       'You also see the last sync time, record count and duration. The status refreshes by itself.'),
+             'label': T('حالة المزامنة', 'Sync status'),
              'when': T('أول حاجة تبص عليها لو حد قال «البيانات قديمة».', 'The first thing to check when someone says "the data is old".')},
             {'target': 'admin-sync-scheduler', 'label': T('المجدول متوقف — المهام لا تعمل', 'Scheduler stopped — jobs not running'),
              'text': T('المهام التلقائية (المزامنة الدورية، المتابعات، التنبيهات) واقفة، مع آخر نبضة.', 'Automatic jobs (periodic sync, follow-ups, alerts) are stopped, with the last heartbeat.'),
              'when': T('بلّغ مسؤول السيرفر يشغّل المجدول فوراً.', 'Ask the server admin to start the scheduler at once.'),
              'open_hint': T('بيظهر بس لما المجدول يقف — غيابه علامة كويسة.', 'Shown only when the scheduler stops — its absence is good.')},
-            {'target': 'admin-sync-now', 'label': T('↻ مزامنة الآن', '↻ Sync now'),
-             'text': T('يسحب الأصناف والعملاء والمبيعات من SOFTECH في الخلفية، والصفحة بتتابع لوحدها.',
-                       'Pulls items, customers and sales from SOFTECH in the background; the page follows it by itself.'),
+            {'target': 'admin-sync-now', 'text': T('«مزامنة الآن» تجيب آخر التغييرات من SOFTECH.',
+                                              '"Sync now" pulls the latest changes from SOFTECH.'),
+             'more': T('بتسحب الفروع والأصناف والمخزون والعملاء والمبيعات والمستخدمين من SOFTECH — قراءة بس، مفيش كتابة فيه.\n'
+                       'بتشتغل في الخلفية والنتيجة تظهر في الحالة والسجل. الزرار بيتقفل طول ما فيه مزامنة شغالة، ومش بتتكرر فوق بعض.',
+                       'It pulls branches, items, stock, customers, sales and users from SOFTECH — read only, nothing is written to it.\n'
+                       'It runs in the background and the result shows in the status and log. The button is disabled while a sync runs, and runs never stack.'),
+             'label': T('↻ مزامنة الآن', '↻ Sync now'),
              'when': T('بعد تغيير مهم في SOFTECH ومش عايز تستنى الدورة. لو فيه مزامنة شغالة مش هيبدأ تانية.',
                        'After an important SOFTECH change when you do not want to wait. It will not start a second run.')},
-            {'target': 'admin-sync-full', 'label': T('مزامنة كاملة (90 يوم)', 'Full sync (90 days)'),
-             'text': T('إعادة بناء أوسع لتاريخ 90 يوم.', 'A wider rebuild over 90 days of history.'),
+            {'target': 'admin-sync-full', 'text': T('«مزامنة كاملة» تقيلة (90 يوم) — استخدمها بس لو فيه بيانات ناقصة.',
+                                              '"Full sync" is heavy (90 days) — use it only when data is missing.'),
+             'more': T('زي «مزامنة الآن» بس بتعيد سحب مبيعات آخر 90 يوم كاملة، فبتاخد وقت أطول بكتير.\n'
+                       'استخدمها لو فيه مبيعات قديمة ناقصة أو بعد انقطاع طويل، ويُفضّل في وقت هادي.',
+                       'Like "Sync now" but re-pulls the full last 90 days of sales, so it takes much longer.\n'
+                       'Use it when older sales are missing or after a long outage, preferably at a quiet time.'),
+             'label': T('مزامنة كاملة (90 يوم)', 'Full sync (90 days)'),
              'warn': T('تقيلة وبتاخد وقت وبتحمّل على SOFTECH — استخدمها بس لو فيه بيانات ناقصة، ويفضّل برّه وقت الذروة.',
                        'Heavy, slow and loads SOFTECH — use only when data is missing, ideally outside peak hours.')},
-            {'target': 'admin-sync-branch-health', 'label': T('حالة اتصال الشبكة', 'Network connection status'),
-             'text': T('المركز وكل فرع: متصل (مع زمن الاستجابة)، غير متصل، أو منقطع باستمرار، وآخر اتصال.',
-                       'HQ and every branch: connected (with response time), disconnected or persistently down, and last contact.'),
+            {'target': 'admin-sync-branch-health', 'text': T('حالة اتصال المركز والفروع.',
+                                              'The connection status of head office and branches.'),
+             'more': T(
+                 'لكل نقطة: «متصل» (بزمن الاستجابة)، «غير متصل»، أو «منقطع باستمرار» بعد محاولات فاشلة متتالية، مع آخر محاولة وآخر اتصال.\n«🔄 فحص الآن» يختبر الاتصال فوراً. لو فرع منقطع، بياناته مش هتتحدث لحد ما يرجع — كلّم الفرع.',
+                 'For each node: "Connected" (with response time), "Disconnected", or "Persistently down" after consecutive failures, with last attempt and last connection.\n"🔄 Check now" tests immediately. If a branch is down its data will not update until it is back — contact the branch.'),
+             'label': T('حالة اتصال الشبكة', 'Network connection status'),
              'when': T('فرع «منقطع باستمرار» = بياناته مش بتتحدث — كلّم الفرع يراجع الشبكة.', 'A "persistently down" branch = its data is not updating — ask the branch to check the network.')},
             {'target': 'admin-sync-probe', 'label': T('🔄 فحص الآن', '🔄 Check now'),
              'text': T('يختبر الاتصال بكل نقطة دلوقتي.', 'Tests every node\'s connection right now.'),
              'when': T('بعد ما الفرع يقول إنه صلّح الشبكة.', 'After the branch says it fixed the network.')},
-            {'target': 'admin-sync-logs', 'label': T('سجل المزامنة', 'Sync log'),
-             'text': T('كل عملية: الحالة، البداية والنهاية، السجلات، المدة، الخطأ، وعدد السجلات لكل جدول.',
-                       'Every run: status, start and end, records, duration, error, and records per table.'),
+            {'target': 'admin-sync-softech-load', 'text': T('«حمل SOFTECH»: ما نطلبه من السيرفر — اختر الفترة، ثم اعرض حسب المهمة أو الكود أو السيرفر.',
+                                              '"SOFTECH load": what we ask of the server — pick a period, then group by job, code or server.'),
+             'label': T('حمل SOFTECH', 'SOFTECH load'),
+             'when': T('لما SOFTECH يبقى بطيء في الفروع — شوف أنهي مهمة بتسحب أكتر.', 'When SOFTECH is slow at the branches — see which job pulls the most.'),
+             'warn': T('أرقام للقراءة بس — متوقفش مهمة تقيلة من غير ما ترجع لمسؤول السيرفر.', 'Read-only figures — do not stop a heavy job without checking with the server admin.')},
+            {'target': 'admin-sync-logs', 'text': T('سجل المزامنة.',
+                                              'The sync log.'),
+             'more': T(
+                 'كل عملية: نجح أو فشل، وقت البداية والنهاية، عدد السجلات والمدة، ورسالة الخطأ لو فشلت.\nوتحتها عدد السجلات لكل جدول — مفيد تعرف أنهي جزء (أصناف، عملاء، مبيعات) اتحدّث.',
+                 'Each run: success or failure, start and end time, record count and duration, and the error if it failed.\nBelow it the record count per table — useful to see which part (items, customers, sales) was updated.'),
+             'label': T('سجل المزامنة', 'Sync log'),
              'when': T('جدول عدده صفر وهو المفروض يتحدث = مشكلة في الجدول ده.', 'A table at zero that should update = a problem with that table.')},
         ],
         'updated': '2026-10-30',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'admin.audit',
@@ -389,30 +697,66 @@ SCREENS = [
             {'key': 'logs', 'title': T('سجل الإجراءات', 'Action log'), 'body': T('من فعل ماذا ومتى ومن أي عنوان IP، مع التغييرات قبل وبعد — صفِّ بنوع الإجراء (إنشاء حجوزات، تغيير حالة، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة…).', 'Who did what, when and from which IP, with before/after changes — filter by action (reservations created, status changes, transfer approvals, logins, failed attempts, sync…).')},
         ],
         'tour': [
-            {'target': 'admin-audit-tabs', 'label': T('⚠️ الإشارات المشبوهة · 📋 سجل الإجراءات', '⚠️ Suspicious flags · 📋 Action log'),
-             'text': T('الإشارات = أنماط النظام كشفها. السجل = كل إجراء مهم بالتفصيل.', 'Flags = patterns the system detected. The log = every important action in detail.')},
+            {'target': 'admin-audit-tabs', 'text': T('«الإشارات المشبوهة» أو «سجل الإجراءات».',
+                                              '"Suspicious flags" or "Action log".'),
+             'more': T('• «⚠️ الإشارات المشبوهة»: أنماط النظام كشفها وتحتاج حد يراجعها.\n'
+                       '• «📋 سجل الإجراءات»: كل حدث مهم بالمستخدم والكيان والوقت.\n'
+                       'ابدأ بالإشارات المفتوحة، وارجع للسجل لما تحتاج تفاصيل.',
+                       '• "⚠️ Suspicious flags": patterns the system detected that need someone to review.\n'
+                       '• "📋 Action log": every important event with user, entity and time.\n'
+                       'Start with open flags, and go to the log when you need details.'),
+             'label': T('⚠️ الإشارات المشبوهة · 📋 سجل الإجراءات', '⚠️ Suspicious flags · 📋 Action log')},
             {'target': 'admin-audit-summary', 'label': T('ملخص الإشارات المفتوحة', 'Open flags summary'),
              'text': T('عدد الإشارات المفتوحة لكل نمط: إلغاءات متكررة، تعديلات متكررة، عدم تطابق ERP، نشاط خارج الدوام.',
                        'Open flags per pattern: repeated cancellations, repeated edits, ERP mismatch, out-of-hours activity.'),
              'open_hint': T('يظهر لو فيه إشارات مفتوحة.', 'Shown when there are open flags.')},
-            {'target': 'admin-audit-flag-filters', 'label': T('مفتوح · مراجع · الكل · الخطورة', 'Open · reviewed · all · severity'),
-             'text': T('فلتر بالحالة وبالخطورة (حرج، تحذير، معلومة).', 'Filter by status and severity (critical, warning, info).'),
+            {'target': 'admin-audit-flag-filters', 'text': T('فلترة الإشارات: مفتوح، مراجع، الكل، وحسب الخطورة.',
+                                              'Filter flags: open, reviewed, all, and by severity.'),
+             'more': T('• «مفتوح» (الافتراضي): اللي لسه محدش راجعه.\n'
+                       '• «مراجع» أو «الكل» عشان تشوف القرارات اللي اتاخدت.\n'
+                       '• الخطورة: حرج، تحذير، معلومة — ابدأ بـ«حرج».',
+                       '• "Open" (default): not yet reviewed.\n'
+                       '• "Reviewed" or "All" to see decisions already taken.\n'
+                       '• Severity: critical, warning, info — start with "critical".'),
+             'label': T('مفتوح · مراجع · الكل · الخطورة', 'Open · reviewed · all · severity'),
              'when': T('ابدأ بـ«مفتوح» + «حرج».', 'Start with "Open" + "Critical".'),
              'open_hint': _FLAGS},
-            {'target': 'admin-audit-scan', 'label': T('🔍 فحص الآن', '🔍 Scan now'),
-             'text': T('يشغّل الكشف على آخر 24 ساعة ويقولك كام إشارة جديدة.', 'Runs detection over the last 24 hours and tells you how many new flags.'),
+            {'target': 'admin-audit-scan', 'text': T('«🔍 فحص الآن» يشغّل كشف الأنماط على آخر 24 ساعة.',
+                                              '"🔍 Scan now" runs pattern detection over the last 24 hours.'),
+             'more': T('الكشف بيدوّر في نشاط آخر 24 ساعة على إلغاءات وتعديلات متكررة، عدم تطابق مع ERP، ونشاط خارج الدوام.\n'
+                       'في الآخر بتظهر رسالة بعدد الإشارات الجديدة، وبتنضاف للقائمة تحت «مفتوح».',
+                       'Detection scans the last 24 hours for repeated cancellations and edits, ERP mismatches and after-hours activity.\n'
+                       'At the end a message shows the number of new flags, which join the list under "Open".'),
+             'label': T('🔍 فحص الآن', '🔍 Scan now'),
              'when': T('قبل المراجعة اليومية أو بعد حادثة.', 'Before the daily review or after an incident.'),
              'open_hint': _FLAGS},
-            {'target': 'admin-audit-review', 'label': T('مراجعة', 'Review'),
-             'text': T('يفتح الإشارة بتفاصيلها: الموظف، الفرع، عدد الأحداث ومن إمتى.', 'Opens the flag in detail: employee, branch, number of events and when.'),
+            {'target': 'admin-audit-flags', 'text': T('الإشارات بنوعها وخطورتها والموظف والفرع وعدد الأحداث؛ تظهر عند وجود إشارات.',
+                                              'Flags with type, severity, staff, branch and event count; shown when flags exist.'),
+             'more': T('كل إشارة: النوع والوصف، الخطورة والحالة، الموظف وفرعه، عدد الأحداث وإمتى اتكشفت، وملاحظة المراجعة لو اتراجعت.\n'
+                       'الإشارة مش اتهام — هي سبب إنك تبص وتتأكد.',
+                       'Each flag: type and description, severity and status, the staff member and branch, event count and when detected, and the review note if reviewed.\n'
+                       'A flag is not an accusation — it is a reason to look and verify.')},
+            {'target': 'admin-audit-review', 'text': T('«مراجعة» على الإشارة المفتوحة لتسجيل القرار مع ملاحظة.',
+                                              '"Review" on an open flag records a decision with a note.'),
+             'more': T('بيفتح نافذة فيها تفاصيل الإشارة وتختار: «✓ راجعت»، «— تجاهل»، أو «🚨 تصعيد»، مع ملاحظة اختيارية، وبعدين «تأكيد القرار».\n'
+                       'الإشارة بتطلع من «مفتوح» والملاحظة بتفضل ظاهرة عليها للي بعدك.',
+                       'It opens a window with the flag details; choose "✓ Reviewed", "— Ignore" or "🚨 Escalate", add an optional note, then "Confirm decision".\n'
+                       'The flag leaves "Open" and the note stays visible on it for whoever comes next.'),
+             'label': T('مراجعة', 'Review'),
              'open_hint': T('على كل إشارة «مفتوح».', 'On every "Open" flag.')},
             {'target': 'admin-audit-decision', 'label': T('✓ راجعت · — تجاهل · 🚨 تصعيد', '✓ Reviewed · — Ignore · 🚨 Escalate'),
              'text': T('قرارك على الإشارة، مع ملاحظة المراجعة ثم «تأكيد القرار».', 'Your decision on the flag, with a review note, then "Confirm decision".'),
              'warn': T('ماتتجاهلش من غير ما تفتح السجل وتتأكد — والملاحظة بتفضل متسجلة.', 'Do not ignore before checking the log — the note stays on record.'),
              'open_hint': T('اضغط «مراجعة» على إشارة.', 'Press "Review" on a flag.')},
-            {'target': 'admin-audit-log-filters', 'label': T('🔍 بحث · نوع الإجراء · مسح', '🔍 Search · action type · Clear'),
-             'text': T('ابحث باسم المستخدم أو الكيان، وفلتر بنوع الإجراء (دخول، محاولات فاشلة، اعتماد تحويلات…).',
-                       'Search by user or entity, and filter by action type (logins, failed attempts, transfer approvals…).'),
+            {'target': 'admin-audit-log-filters', 'text': T('في «سجل الإجراءات»: ابحث بالمستخدم أو الكيان وفلتر بنوع الإجراء، و«مسح».',
+                                              'In "Action log": search by user or entity, filter by action type, and "Clear".'),
+             'more': T('• البحث باسم المستخدم أو الكيان (زي رقم حجز).\n'
+                       '• نوع الإجراء: إنشاء حجوزات، تغيير حالة، إلغاء، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة.\n'
+                       'اضغط على أي سطر يفتح التغييرات قبل/بعد وعنوان IP. «مسح» بيرجّع الفلاتر.',
+                       '• Search by user name or entity (such as a reservation number).\n'
+                       '• Action type: reservations created, status changes, cancellations, transfer approvals, logins, failed attempts, sync.\n'
+                       'Click any row to open the before/after changes and IP address. "Clear" resets the filters.'),
+             'label': T('🔍 بحث · نوع الإجراء · مسح', '🔍 Search · action type · Clear'),
              'open_hint': _LOGS},
             {'target': 'admin-audit-log-table', 'label': T('سجل الإجراءات', 'Action log'),
              'text': T('الإجراء، المستخدم، الكيان والتوقيت. اضغط الصف يظهر التغييرات قبل وبعد وعنوان IP.',
@@ -420,6 +764,7 @@ SCREENS = [
              'when': T('لما تحقق في «مين غيّر إيه».', 'When investigating "who changed what".'),
              'open_hint': _LOGS},
         ],
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
         'updated': '2026-10-30',
     },
 ]

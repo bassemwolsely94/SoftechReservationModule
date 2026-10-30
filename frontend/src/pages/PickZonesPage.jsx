@@ -304,7 +304,7 @@ function ZonesTab({ zones, branchParam, purpose, canEdit, showToast }) {
   return (
     <div>
       <SettingsCard zones={zones} canEdit={canEdit} showToast={showToast} />
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden" data-tour="transfers-pick-zones-zones">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>

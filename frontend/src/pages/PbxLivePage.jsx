@@ -289,7 +289,7 @@ export default function PbxLivePage() {
   return (
     <div className="flex flex-col h-full" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div data-tour="callcenter-pbx-header" className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold text-gray-800">لوحة المكالمات الحية</h1>
           {canConfigure && (

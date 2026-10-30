@@ -129,19 +129,21 @@ export default function InsurancePrintPage() {
           <span className="text-gray-600 text-sm">طباعة وتصدير</span>
         </div>
         <div className="flex justify-between items-start">
-          <div>
+          <div data-tour="insurance-print-header">
             <h1 className="text-xl font-bold text-gray-900">طباعة وتصدير الفواتير</h1>
             <p className="text-sm text-gray-500">{claim?.client_name} — {claim?.subclient_name}</p>
           </div>
           <div className="flex gap-2">
-            <button data-tour="insurance-print-statistical"
+            <button
+              data-tour="insurance-print-statistical"
               onClick={exportStatistical}
               disabled={!!exporting}
               title="مسلسل · اسم المريض رباعى · التاريخ · اجمالى الروشتة · اسم الصيدلية · ملاحظات (الجهة + الفئة)"
               className="px-5 py-2.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-50">
               {exporting === 'statistical' ? 'جارٍ التصدير...' : '📊 الاحصائية الشهرية'}
             </button>
-            <button data-tour="insurance-print-export-all"
+            <button
+              data-tour="insurance-print-export-all"
               onClick={() => exportExcel('all')}
               disabled={!!exporting}
               className="px-5 py-2.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
@@ -154,7 +156,7 @@ export default function InsurancePrintPage() {
       <div className="px-6 py-6 grid grid-cols-3 gap-6">
         {/* Left: Cover summary */}
         <div className="col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="insurance-print-cover-summary">
+          <div data-tour="insurance-print-cover" className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-bold text-gray-800 mb-4 text-base">ملخص الغلاف</h2>
 
             <div className="space-y-2 text-sm mb-5">
@@ -215,7 +217,7 @@ export default function InsurancePrintPage() {
         </div>
 
         {/* Right: Template cards */}
-        <div className="col-span-2 space-y-4">
+        <div data-tour="insurance-print-templates" className="col-span-2 space-y-4">
           <h2 className="font-bold text-gray-800 text-base">اختر نموذج الطباعة</h2>
           {TEMPLATES.map(t => (
             <div key={t.id} className={`border-2 rounded-xl p-5 ${t.color}`}>
@@ -237,8 +239,8 @@ export default function InsurancePrintPage() {
 
               {/* Layout + sort controls for the يوميات sheet */}
               {t.id === 'daily_detail' && (
-                <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap text-sm" data-tour="insurance-print-layout">
+                <div data-tour="insurance-print-layout" className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap text-sm">
                     <span className="text-gray-500">الترتيب:</span>
                     <button onClick={() => setLayout('daily')}
                       className={`px-2.5 py-1 rounded text-xs border ${layout === 'daily' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 text-gray-600'}`}>

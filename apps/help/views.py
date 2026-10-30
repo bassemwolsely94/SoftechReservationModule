@@ -32,6 +32,28 @@ def _staff_name(staff):
     return (user.get_full_name() or user.username) if user else ''
 
 
+def change_notes(screens, overrides):
+    """screen key → {'ar', 'en'} «what changed» for the CURRENT help version: the
+    trainer's one-line note on their latest save when that save is the newest change,
+    else the repo's `change_note` (written by developers with the `updated` date)."""
+    latest = {}
+    for r in (HelpRevision.objects.filter(action=HelpRevision.ACTION_SAVE)
+              .exclude(public_note='').order_by('screen_key', '-created_at')
+              .values('screen_key', 'public_note', 'created_at')):
+        latest.setdefault(r['screen_key'], r)
+    out = {}
+    for k, s in screens.items():
+        o = overrides.get(k)
+        repo_date = s.get('updated') or ''
+        r = latest.get(k)
+        if o is not None and r and o.updated_at.date().isoformat() >= repo_date \
+                and r['created_at'] >= o.updated_at - timezone.timedelta(minutes=1):
+            out[k] = {'ar': r['public_note'], 'en': r['public_note']}
+        elif s.get('change_note') and (o is None or repo_date >= o.updated_at.date().isoformat()):
+            out[k] = s['change_note']
+    return out
+
+
 def _updated(screen, override):
     """Date the text last changed (repo date, or the trainer's save if newer)."""
     d = screen.get('updated') or ''
@@ -85,6 +107,7 @@ def index(request):
     center: modules (grouped), screens (key, routes, title, updated, tab keys)."""
     modules, screens = registry.load()
     ov = _overrides()
+    notes = change_notes(screens, ov)
     return Response({
         'groups': [{'key': k, 'title': {'ar': ar, 'en': en}} for k, ar, en in registry.GROUPS],
         'modules': [{
@@ -98,7 +121,10 @@ def index(request):
             'tabs': [t['key'] for t in s.get('tabs') or []],
             'has_tour': bool(s.get('tour')),
             'updated': _updated(s, ov.get(s['key'])),
+            'change_note': notes.get(s['key']),
         } for s in screens.values()],
+        'flows': [{'id': fid, 'module': f['module'], 'title': f['title'], 'mobile': bool(f.get('mobile'))}
+                  for fid, f in _flows_effective(modules).items()],
         'can_edit': _can_edit(_profile(request)),
     })
 
@@ -112,10 +138,23 @@ def module_detail(request, key):
         return Response({'detail': 'not found'}, status=404)
     ov = _overrides()
     return Response({
-        **{k: v for k, v in m.items() if k != 'screens'},
+        **{k: v for k, v in m.items() if k not in ('screens', 'flows')},
+        'flows': _module_flows(m['key']),
         'screens': [_brief(registry.effective(screens[k], ov.get(k)), modules) for k in m['screens']],
         'journeys': _journeys_for(request, key, screens, ov),
     })
+
+
+def _flows_effective(modules):
+    from . import training
+    return training.flows_effective(modules)
+
+
+def _module_flows(module_key):
+    """A module's workflow tours as users run them (trainers' text applied)."""
+    from . import training
+    return [training.flow_brief(fid, f) for fid, f in training.flows_effective().items()
+            if f['module'] == module_key]
 
 
 def _screen_payload(request, key, s, modules, screens, override):
@@ -125,15 +164,20 @@ def _screen_payload(request, key, s, modules, screens, override):
     workflows = m.get('workflows') or []
     if s.get('workflows') is not None:      # a screen may show only some of its module's workflows
         workflows = [w for w in workflows if w.get('key') in s['workflows']]
+    all_ov = {o.screen_key: o for o in HelpOverride.objects.filter(
+        screen_key__in=[key, s.get('tour_continue') or ''])}
     payload = {
         **{k: v for k, v in eff.items() if k != 'workflows'},
+        'tour_flow': registry.tour_flow(key, screens, all_ov) if eff.get('tour') else [],
         'module': {'key': m.get('key'), 'title': m.get('title'), 'icon': m.get('icon', ''),
                    'summary': m.get('summary'), 'workflows': workflows,
+                   'flows': _module_flows(m['key']) if m else [],
                    'journeys': _journeys_for(request, m.get('key'), screens)},
         'siblings': [_brief(registry.effective(screens[k], None), modules)
                      for k in m.get('screens', []) if k != key],
         'related': [_brief(screens[k], modules) for k in s.get('related', []) if k in screens],
         'updated': _updated(s, override),
+        'change_note': change_notes({key: s}, {key: override} if override else {}).get(key),
         'can_edit': can_edit,
         'override': None,
     }
@@ -192,7 +236,9 @@ def screen_detail(request, key):
     HelpRevision.objects.create(
         screen_key=key, action=HelpRevision.ACTION_SAVE, before=before,
         after={f: registry.effective(s, override).get(f) for f in registry.EDITABLE_FIELDS},
-        note=str(request.data.get('note', ''))[:300], staff=profile)
+        note=str(request.data.get('note', ''))[:300],
+        public_note=' '.join(str(request.data.get('public_note', '') or '').split())[:120],
+        staff=profile)
     return Response(_screen_payload(request, key, s, modules, screens, override))
 
 
@@ -416,6 +462,7 @@ def manual(request):
             out_modules.append({'key': mk, 'title': m['title'], 'icon': m.get('icon', ''),
                                 'summary': m['summary'], 'workflows': m.get('workflows') or []})
         item = {f: eff.get(f) for f in ('key', 'title', 'summary', 'audience', 'tabs', 'faq', 'notes')}
+        item['buttons'] = [{'text': t['text'], 'more': t.get('more')} for t in eff.get('tour') or []]
         item.update(module=mk, routes=s['routes'], updated=_updated(s, ov.get(k)),
                     steps=_for_role(eff.get('steps'), role) if role else eff.get('steps') or [],
                     tips=_for_role(eff.get('tips'), role) if role else eff.get('tips') or [])
@@ -473,21 +520,23 @@ def ask(request):
 def tour_event(request):
     """The frontend reports a finished or abandoned «اعرض لي» tour:
     {screen_key, reached (steps seen), done (bool)} — for the trainers' usage report."""
-    _, screens = registry.load()
-    key = str(request.data.get('screen_key', ''))
-    if key.startswith('journey:'):
+    modules, screens = registry.load()
+    key = str(request.data.get('screen_key', ''))[:80]
+    if key.startswith('flow:'):
+        f = registry.flows(modules).get(key)   # step count is fixed by the code
+        total = len(f['steps']) if f else 0
+    elif key.startswith('journey:'):
         j = registry.journeys().get(key[len('journey:'):])
-        steps = j['steps'] if j else None
+        total = len(j['steps']) if j else 0
     else:
-        s = screens.get(key)
-        steps = s.get('tour') if s else None
-    if not steps:
+        total = len(registry.tour_flow(key, screens)) if key in screens and screens[key].get('tour') else 0
+    if not total:
         return Response({'detail': 'unknown tour'}, status=400)
     try:
-        reached = max(1, min(int(request.data.get('reached', 1)), len(steps)))
+        reached = max(1, min(int(request.data.get('reached', 1)), total))
     except (TypeError, ValueError):
         reached = 1
-    done = bool(request.data.get('done')) and reached == len(steps)
+    done = bool(request.data.get('done')) and reached == total
     _log(HelpEvent.KIND_TOUR, request, screen_key=key, query='done' if done else '', results=reached)
     return Response({'ok': True}, status=status.HTTP_201_CREATED)
 
@@ -525,19 +574,29 @@ def usage(request):
             t['done'] += 1
         else:
             t['stops'][e['results'] or 1] = t['stops'].get(e['results'] or 1, 0) + 1
+    ov = _overrides()
     tour_rows = []
-    runnable = [(k, s['title'], s['tour'], 'screen') for k, s in screens.items() if s.get('tour')]
-    runnable += [(registry.journey_override_key(jid), j['title'], j['steps'], 'journey')
-                 for jid, j in registry.journeys().items()]
-    for k, title, steps, kind in runnable:
+    runs = [(k, s['title'], registry.tour_flow(k, screens, ov), 'screen') for k, s in screens.items() if s.get('tour')]
+    runs += [(k, f['title'], [{**st, 'screen': None, 'flow': k[5:], 'i': i} for i, st in enumerate(f['steps'])], 'flow')
+             for k, f in training.flows_effective(modules).items()]
+    runs += [(registry.journey_override_key(jid), j['title'],
+              [{**st, 'journey': jid, 'i': i} for i, st in enumerate(j['steps'])], 'journey')
+             for jid, j in registry.journeys().items()]
+    for k, title, steps, kind in runs:
         t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
         stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None
+        # people stop AFTER step `stop`, so the step they did not get past is the next one
+        weak = steps[stop] if stop is not None and stop < len(steps) else None
         tour_rows.append({
-            'screen_key': k, 'title': title, 'steps': len(steps), 'kind': kind,
+            'screen_key': k, 'title': title, 'steps': len(steps), 'flow': kind == 'flow', 'kind': kind,
             'runs': t['runs'], 'done': t['done'],
             'done_pct': round(100 * t['done'] / t['runs']) if t['runs'] else None,
-            # the step most people stopped after (the next one is probably unclear / not visible)
             'common_stop': stop,
+            # where to fix it: that step's own screen + index (None for workflow tours)
+            'weak_step': (None if not weak else
+                          {'journey': weak['journey'], 'i': weak['i']} if weak.get('journey') else
+                          {'screen': weak['screen'], 'i': weak['i']} if weak.get('screen') else
+                          {'flow': weak['flow'], 'i': weak['i']}),
         })
     tour_rows.sort(key=lambda r: (r['runs'] > 0, r['done_pct'] if r['done_pct'] is not None else 101))
     return Response({

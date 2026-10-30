@@ -1,6 +1,8 @@
 """
 apps/help/notify.py — tell people when their training changes.
 
+Both add the trainer's one-line «what changed» (`note`) to the message when given.
+
   path_changed  — a role's training path gained screens → everyone in that role
   quiz_changed  — a module quiz changed → everyone who had passed it (their pass no
                   longer counts until they retake it)
@@ -22,7 +24,12 @@ def _send(staff_qs, title, body, dedup_key):
     return sent
 
 
-def path_changed(role, before, after, revision_id):
+def _with_note(body, note):
+    """The trainer's one-line «what changed», when they wrote one."""
+    return f'{body} الجديد: {note}' if note else body
+
+
+def path_changed(role, before, after, revision_id, note=''):
     """→ number notified. Only screens ADDED to the path are news; removals are not."""
     try:
         from apps.users.models import StaffProfile
@@ -36,14 +43,14 @@ def path_changed(role, before, after, revision_id):
         return _send(
             StaffProfile.objects.filter(role=role, is_active=True, user__is_active=True),
             '🎓 شاشات جديدة في مسارك التدريبي',
-            f'اتضاف لمسارك: {names}{more}. افتح «دليل الاستخدام» ← «مساري التدريبي».',
+            _with_note(f'اتضاف لمسارك: {names}{more}. افتح «دليل الاستخدام» ← «مساري التدريبي».', note),
             dedup_key=f'help_path_{role}_{revision_id}')
     except Exception as exc:
         logger.warning('help path_changed notify skipped: %s', exc)
         return 0
 
 
-def quiz_changed(module_key, old_version, new_version, revision_id):
+def quiz_changed(module_key, old_version, new_version, revision_id, note=''):
     """→ number notified: people who passed the old version of this quiz."""
     try:
         if old_version == new_version:
@@ -58,7 +65,7 @@ def quiz_changed(module_key, old_version, new_version, revision_id):
         return _send(
             StaffProfile.objects.filter(id__in=list(ids), is_active=True, user__is_active=True),
             '📝 اختبار اتحدّث — أعد الاختبار',
-            f'اختبار «{title}» اتغيّر بعد ما نجحت فيه. ادخل «مساري التدريبي» وأعد الاختبار عشان يتحسب.',
+            _with_note(f'اختبار «{title}» اتغيّر بعد ما نجحت فيه. ادخل «مساري التدريبي» وأعد الاختبار عشان يتحسب.', note),
             dedup_key=f'help_quiz_{module_key}_{revision_id}')
     except Exception as exc:
         logger.warning('help quiz_changed notify skipped: %s', exc)

@@ -108,7 +108,7 @@ function CaseModal({ callId, customerId, onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" data-tour="callcenter-operator-case-modal">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-black text-gray-900">🗂️ فتح حالة جديدة</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
@@ -195,7 +195,7 @@ function FollowupModal({ callId, customerId, onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" data-tour="callcenter-operator-followup-modal">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-black text-gray-900">🔔 جدولة متابعة</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
@@ -1864,7 +1864,7 @@ export default function CallCenterPage() {
 
                 {/* Flash case created */}
                 {flashCase && (
-                  <div className="card border-2 border-green-200 bg-green-50">
+                  <div className="card border-2 border-green-200 bg-green-50" data-tour="callcenter-operator-case-created">
                     <div className="font-bold text-green-800">✅ تم فتح الحالة</div>
                     <div className="text-sm text-green-700 mt-1">
                       {flashCase.case_number} — {flashCase.title}
@@ -1877,7 +1877,7 @@ export default function CallCenterPage() {
 
                 {/* Open follow-ups */}
                 {data.open_followups?.length > 0 && (
-                  <div className="card">
+                  <div className="card" data-tour="callcenter-operator-open-followups">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
                       💊 مهام المتابعة ({data.open_followups.length})
                     </div>
@@ -2018,9 +2018,10 @@ export default function CallCenterPage() {
                       </div>
 
                       {/* Post-save actions */}
-                      <div className="space-y-2">
+                      <div className="space-y-2" data-tour="callcenter-operator-postsave">
                         {customer && (
                           <button
+                            data-tour="callcenter-operator-postsave-case"
                             onClick={() => setShowCaseModal(true)}
                             className="w-full text-sm btn-secondary text-right px-3 py-2">
                             🗂️ فتح حالة
@@ -2028,6 +2029,7 @@ export default function CallCenterPage() {
                         )}
                         {customer && (
                           <button
+                            data-tour="callcenter-operator-postsave-followup"
                             onClick={() => setShowFollowupModal(true)}
                             className="w-full text-sm btn-secondary text-right px-3 py-2">
                             🔔 جدولة متابعة
@@ -2069,7 +2071,7 @@ export default function CallCenterPage() {
                     <div className="space-y-3">
                       <div>
                         <label className="label text-xs">الغرض</label>
-                        <select className="input-field text-sm" value={logForm.purpose}
+                        <select data-tour="callcenter-operator-purpose" className="input-field text-sm" value={logForm.purpose}
                           onChange={e => setLogForm(p => ({ ...p, purpose: e.target.value }))}>
                           {PURPOSE_OPTIONS.map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
@@ -2088,7 +2090,7 @@ export default function CallCenterPage() {
                         </div>
                         <div>
                           <label className="label text-xs">الحالة</label>
-                          <select className="input-field text-sm" value={logForm.status}
+                          <select data-tour="callcenter-operator-outcome" className="input-field text-sm" value={logForm.status}
                             onChange={e => setLogForm(p => ({ ...p, status: e.target.value }))}>
                             <option value="answered">✅ أجاب</option>
                             <option value="no_answer">📵 لا رد</option>
@@ -2132,12 +2134,12 @@ export default function CallCenterPage() {
                       إجراءات سريعة
                     </div>
                     <div className="space-y-1.5">
-                      <button onClick={() => setShowCaseModal(true)}
+                      <button onClick={() => setShowCaseModal(true)} data-tour="callcenter-operator-case"
                         className="w-full text-right text-xs text-purple-700 hover:text-purple-900
                           bg-purple-50 hover:bg-purple-100 rounded-lg px-3 py-2 transition-all">
                         🗂️ فتح حالة جديدة
                       </button>
-                      <button onClick={() => setShowFollowupModal(true)}
+                      <button onClick={() => setShowFollowupModal(true)} data-tour="callcenter-operator-followup"
                         className="w-full text-right text-xs text-orange-700 hover:text-orange-900
                           bg-orange-50 hover:bg-orange-100 rounded-lg px-3 py-2 transition-all">
                         🔔 جدولة متابعة

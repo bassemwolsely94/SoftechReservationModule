@@ -5,6 +5,7 @@
  * existing reservations API — branch-scoped server-side for branch roles.
  * Status filter chips + infinite "load more" following the cursor `next` link.
  */
+import { FirstDayStrip } from '../../help/FirstDay'
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
@@ -102,6 +103,7 @@ function ReservationsList() {
 
   return (
     <div className="p-3 space-y-3">
+      <FirstDayStrip />
 
       <div className="flex justify-end"><DataFreshnessBar compact domains={['stock']} /></div>
 

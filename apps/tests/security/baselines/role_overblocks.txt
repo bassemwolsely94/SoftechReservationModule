@@ -429,6 +429,22 @@ supervisor POST /api/batches/purchase-expiry/request-markdown/
 #   quality manager / call center); viewer holds callcenter view only and the POST now maps to view.
 viewer POST /api/callcenter/transcripts/987654321/correct/
 
+# reason: merge of Batch 4 with the consolidation line — the shortage Excel export keeps its own
+#   `export` grant (SHORTAGE_EXPORT); roles holding shortage view only read the lists on screen.
+call_center GET /api/purchasing/shortage/export/
+salesperson GET /api/purchasing/shortage/export/
+viewer GET /api/purchasing/shortage/export/
+
+# reason: merge of Batch 4 with the consolidation line — vendors/linkable/ feeds only the supplier-invoice
+#   page (link an invoice to a supplier), so it keeps `invoices` view; Z-7a's shortage-view opening
+#   covers the vendor lookups the shortage screen reads (list / retrieve / main).
+call_center GET /api/invoices/vendors/linkable/
+pharmacist GET /api/invoices/vendors/linkable/
+quality_manager GET /api/invoices/vendors/linkable/
+salesperson GET /api/invoices/vendors/linkable/
+supervisor GET /api/invoices/vendors/linkable/
+viewer GET /api/invoices/vendors/linkable/
+
 # reason: Z-12 — edits of admin configuration (customer segmentation, offers margin floor, purchasing engine
 #   settings, finance schema, procurement supplier categories / rules / segmentation) are admin only.
 call_center PATCH /api/customers/segmentation-config/

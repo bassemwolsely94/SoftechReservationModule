@@ -1,5 +1,240 @@
 from . import T
 
+# Longer explanations ("more") shared by the screen tours and the module tours.
+DM_MORE_NEW = T(
+    'استخدمه كل مرة عميل يطلب صنف مش قادرين نصرفه دلوقتي (نفد، قليل، مش متخزّن، أو بيسأل على السعر) — حتى لو العميل ماشي.\n'
+    '• بيفتح نافذة «تسجيل طلب عميل جديد»: بيانات العميل، الفرع والمصدر والأولوية، والأصناف.\n'
+    '• الطلب بيتسجّل «جديد» وبعدها بتتفتح صفحته، ولازم يتعيّن لموظف خلال 10 دقايق.',
+    'Use it every time a customer asks for an item we cannot dispense right now (out, low, not stocked, or a price check) — even if the customer is leaving.\n'
+    '• It opens the "Record a new customer request" window: customer data, branch, source and priority, and the items.\n'
+    '• The request is saved as "New" and its page opens; it must be assigned to an employee within 10 minutes.')
+DM_MORE_TABS = T(
+    'كل تبويب بيعرض الطلبات اللي في المرحلة دي: جديد، مُعيَّن، متابعة، انتظار المخزون، للمشتريات، بيع ضائع، تم التسليم — و«الكل».\n'
+    '• ابدأ بـ «جديد» عشان محدش يتعدى عليه وقت الـ SLA.\n'
+    '• جنب البحث فيه فلتر «⚠ SLA تجاوز فقط» للطلبات المتأخرة.',
+    'Each tab shows the requests at that stage: new, assigned, follow-up, waiting for stock, to purchasing, lost sale, fulfilled — and "All".\n'
+    '• Start with "New" so nothing passes its SLA time.\n'
+    '• Next to search there is an "⚠ SLA breached only" filter for late requests.')
+DM_MORE_SEARCH = T(
+    'اكتب رقم تليفون العميل أو اسمه أو كود PIC أو اسم الصنف.\n'
+    '• مفيد لما العميل يتصل يسأل على طلبه، أو قبل ما تسجّل طلب جديد تتأكد إنه مش متسجّل.\n'
+    '• جنبه فلاتر الأولوية والفرع، و«مسح» يرجّع كل الفلاتر.',
+    'Type the customer\'s phone, name, PIC code or the item name.\n'
+    '• Useful when a customer calls about their request, or to check a request is not already recorded before logging a new one.\n'
+    '• Next to it are priority and branch filters, and "Clear" resets them all.')
+DM_MORE_TABLE = T(
+    'كل صف: رقم الطلب، العميل، الفرع، الأصناف، الحالة، الأولوية، وقت الـ SLA، ومين مسؤول.\n'
+    '• اضغط الصف عشان تفتح الطلب وتتابعه.\n'
+    '• علّم أكتر من طلب بمربع الاختيار فيظهر شريط تعيين جماعي لموظف، أو إرسال للمشتريات، أو إلغاء.',
+    'Each row: request number, customer, branch, items, status, priority, SLA time and owner.\n'
+    '• Click a row to open the request and follow it.\n'
+    '• Tick several requests and a bar appears to assign them to an employee, send them to purchasing, or cancel them.')
+DM_MORE_OPEN = T(
+    'افتح أي طلب عشان تكمّل الجولة على صفحة تفاصيله (العميل، الأصناف، المتابعات، والسجلات).\n'
+    '• لو القائمة فاضية اضغط «إنهاء».',
+    'Open any request to continue the tour on its detail page (customer, items, follow-ups and logs).\n'
+    '• If the list is empty, press "End".')
+DM_MORE_RECOVERY = T(
+    'بيفتح «قائمة الاسترداد»: عملاء طلبوا أصناف نفدت والمزامنة لقت إنها رجعت للمخزون.\n'
+    '• الرقم الأحمر على الزر هو عدد الفرص المفتوحة.\n'
+    '• اتصل بالعميل من هناك وحوّل الطلب لحجز أو سجّل البيعة المستردة.',
+    'Opens the "Recovery queue": customers who asked for items that ran out and the sync found back in stock.\n'
+    '• The red number on the button is how many opportunities are open.\n'
+    '• Contact the customer from there and turn it into a reservation or record the recovered sale.')
+DM_MORE_CUSTOMER = T(
+    'ابحث عن العميل بالاسم أو الهاتف أو كود PIC عشان بياناته تتملي لوحدها، أو اكتبها يدوي.\n'
+    '• رقم الهاتف إجباري: موبايل 11 رقم بيبدأ بـ 01، أو أرضي بكود المحافظة.\n'
+    '• من غير رقم صحيح مش هنعرف نبلّغه لما الصنف يرجع.',
+    'Search the customer by name, phone or PIC code to fill their data automatically, or type it in.\n'
+    '• The phone is required: an 11-digit mobile starting 01, or a landline with its area code.\n'
+    '• Without a valid number we cannot tell them when the item is back.')
+DM_MORE_DETAILS = T(
+    '• «الفرع» (إجباري): الفرع اللي العميل طلب منه.\n'
+    '• «مصدر الطلب»: حضر للفرع، اتصال، واتساب، تطبيق توصيل، موقع، مركز الاتصالات.\n'
+    '• «الأولوية»: منخفض، عادي، عالٍ، عاجل، أو «مزمن 💊».',
+    '• "Branch" (required): the branch the customer asked at.\n'
+    '• "Request source": walk-in, call, WhatsApp, delivery app, website, call center.\n'
+    '• "Priority": low, normal, high, urgent, or "chronic 💊".')
+DM_MORE_ITEMS = T(
+    'ابحث بالاسم أو الكود أو الباركود (القارئ شغال) وضيف كل صنف بكميته.\n'
+    '• لو الصنف مش في الكتالوج: «+ إضافة صنف غير مكوَّد (يدوي)» واكتب اسمه وسعر تقديري (مش من SOFTECH).\n'
+    '• لو ظهر بديل بنفس المادة الفعّالة ممكن تعرضه على العميل — القرار للصيدلي، مفيش استبدال تلقائي.',
+    'Search by name, code or barcode (the scanner works) and add each item with its quantity.\n'
+    '• If the item is not in the catalog: "+ Add an uncoded item (manual)" and type its name and an estimated price (not from SOFTECH).\n'
+    '• If an alternative with the same active ingredient shows, you may offer it — the pharmacist decides; there is no automatic substitution.')
+DM_MORE_SUBMIT = T(
+    'بيحفظ الطلب «جديد» ويفتح صفحة تفاصيله على طول.\n'
+    '• الزر مقفول لحد ما تضيف صنف واحد على الأقل.\n'
+    '• بعد الحفظ النظام بيدوّر على العميل في الـ ERP تلقائياً.',
+    'Saves the request as "New" and opens its detail page straight away.\n'
+    '• The button stays disabled until you add at least one item.\n'
+    '• After saving, the system looks the customer up in the ERP automatically.')
+DM_MORE_DHEADER = T(
+    'رقم الطلب وحالته وأولويته، و«⚠ SLA تجاوز» لو اتأخر.\n'
+    '• تحتهم اسم العميل والفرع من إمتى، وجنبهم عدّاد الـ SLA: أخضر لسه فيه وقت، أصفر قرب يخلص، أحمر اتعدّى.',
+    'The request number, status and priority, and "⚠ SLA breached" if it is late.\n'
+    '• Below them the customer, branch and how long ago, and next to them the SLA timer: green has time, amber is nearly out, red has passed.')
+DM_MORE_DTABS = T(
+    '• «📋 التفاصيل»: بيانات العميل وربطه بـ SOFTECH وتفاصيل الطلب.\n'
+    '• «💊 الأصناف»: الكميات والمخزون في الفرع والبدائل.\n'
+    '• «🔔 المتابعات»: مهام تواصل مجدولة بتاريخ.\n'
+    '• «💬 السجلات»: ملاحظات واتصالات وتغييرات الحالة.',
+    '• "📋 Details": customer data, SOFTECH link and request details.\n'
+    '• "💊 Items": quantities, branch stock and alternatives.\n'
+    '• "🔔 Follow-ups": scheduled contact tasks with a date.\n'
+    '• "💬 Logs": notes, calls and status changes.')
+DM_MORE_DCONTENT = T(
+    'هنا محتوى التبويب اللي فاتحه.\n'
+    '• في «المتابعات» تقدر تجدول تذكير بالتواصل الجاي وتقفله بملاحظة لما تنفّذه.\n'
+    '• في «السجلات» اكتب ملاحظة أو سجل اتصال وابعته بـ Ctrl+Enter.',
+    'This is the content of the open tab.\n'
+    '• In "Follow-ups" you can schedule a reminder for the next contact and close it with a note when done.\n'
+    '• In "Logs" write a note or a call log and send it with Ctrl+Enter.')
+DM_MORE_DACTIONS = T(
+    'الأزرار بتتغيّر حسب المرحلة والصلاحية:\n'
+    '• «👤 تعيين» (للطلب الجديد) تختار الموظف المسؤول.\n'
+    '• «📞 تواصلت مع العميل»، «⏳ ينتظر المخزون»، «تم التوريد»، «بيع ضائع» بسبب إجباري، و«إلغاء الطلب».\n'
+    '• «بحث في ERP» يربط العميل بكوده في SOFTECH. كل تغيير حالة بيتسجّل في السجلات.',
+    'The buttons change with the stage and your permission:\n'
+    '• "👤 Assign" (for a new request) picks the responsible employee.\n'
+    '• "📞 Contacted the customer", "⏳ Waiting for stock", "Supplied", "Lost sale" with a required reason, and "Cancel request".\n'
+    '• "Search ERP" links the customer to their SOFTECH code. Every status change is recorded in the logs.')
+DM_MORE_CONTACT = T(
+    'بعد ما تكلّم العميل، اضغطه واكتب نتيجة المكالمة ثم «تأكيد».\n'
+    '• الطلب بيتنقل لـ «متابعة» والملاحظة بتتسجّل في السجلات.\n'
+    '• بيظهر بعد التعيين — الطلب «الجديد» لازم يتعيّن الأول.',
+    'After calling the customer, press it, write the call outcome, then "Confirm".\n'
+    '• The request moves to "Follow-up" and the note is saved in the logs.\n'
+    '• It shows after assignment — a "New" request must be assigned first.')
+DM_MORE_FULFILL = T(
+    'لما العميل ياخد الصنف فعلاً: اضغطه، اكتب رقم الفاتورة (اختياري) و«تأكيد».\n'
+    '• الطلب بيقفل «تم التسليم» والأصناف اللي لسه مستنية بتتعلّم مُسلَّمة.\n'
+    '• مرحلة نهائية، ومحتاج صلاحية الإنهاء. مش بيكتب في SOFTECH.',
+    'When the customer actually gets the item: press it, enter the invoice number (optional) and "Confirm".\n'
+    '• The request closes as "Fulfilled" and the still-pending items are marked fulfilled.\n'
+    '• A final stage that needs the finalize permission. It does not write to SOFTECH.')
+DB_MORE_DAYS = T(
+    'كل الأرقام والقوائم تحت بتتحسب على الفترة دي.\n'
+    '• 7 أو 14 يوم للمتابعة الأسبوعية، 30 لـ 90 يوم لقرارات الشراء.',
+    'All figures and lists below are calculated over this period.\n'
+    '• 7 or 14 days for weekly follow-up, 30 to 90 days for purchasing decisions.')
+DB_MORE_NEW = T(
+    'بيوديك لشاشة الطلب الضائع عشان تسجّل طلب عميل من هناك بـ «+ تسجيل طلب جديد».\n'
+    '• اللوحة نفسها للتحليل بس.',
+    'Takes you to the lost-demand screen to record a customer request there with "+ Log new request".\n'
+    '• The dashboard itself is for analysis only.')
+DB_MORE_KPIS = T(
+    '• إجمالي الطلبات، ونسبة «تم التوريد»، و«بيع ضائع» ونسبته، و«قيمة مؤكدة ضائعة».\n'
+    '• الصف التاني: النشط دلوقتي، الإيراد المُسترَد، المتابعات المتأخرة، وفرص الاسترداد المفتوحة.\n'
+    'المتابعات المتأخرة والفرص المفتوحة هي شغلك النهارده.',
+    '• Total requests, the "Fulfilled" rate, "Lost sales" and their share, and "Confirmed lost value".\n'
+    '• Second row: active now, recovered revenue, overdue follow-ups and open recovery opportunities.\n'
+    'Overdue follow-ups and open opportunities are today\'s work.')
+DB_MORE_TOP = T(
+    'قائمتين: الأصناف اللي اتسجلت أكتر كبيع ضائع، والأصناف الأكتر طلباً بكل الحالات.\n'
+    '• الصنف اللي متكرر هنا مرشّح يتراجع رصيده الأدنى أو يتضاف للأوردر مع المشتريات.',
+    'Two lists: the items most recorded as lost sales, and the most requested items in all statuses.\n'
+    '• An item that repeats here is a candidate to review its minimum stock or add to the order with purchasing.')
+DB_MORE_CHRONIC = T(
+    '• «نقص مزمن»: صنف بيتطلب كتير ومش بيتوفّر — يتضاف للأوردر الدوري أو طلب تحويل.\n'
+    '• «أصناف متوقفة مع طلب نشط»: اقفل الطلبات دي أو بلّغ العملاء إن الصنف مش متاح.',
+    '• "Chronic shortage": an item asked for often and not supplied — add it to the periodic order or request a transfer.\n'
+    '• "Discontinued items with active requests": close those requests or tell customers the item is unavailable.')
+DB_MORE_SUGG = T(
+    'أصناف طلبها عملاء حقيقيون (مفتوحة + ضائعة) مرتّبة بالقيمة الضائعة المؤكدة.\n'
+    '• «⬇ تصدير CSV» بينزّل القائمة.\n'
+    '• «📦 إرسال للمشتريات» بيبعتها اقتراحات شراء للوحة المشتريات — المشتريات هي اللي بتقرر تطلب ولا لأ.',
+    'Items real customers asked for (open + lost), sorted by confirmed lost value.\n'
+    '• "⬇ Export CSV" downloads the list.\n'
+    '• "📦 Send to purchasing" sends them as purchase suggestions to the purchasing board — purchasing decides whether to order.')
+RC_MORE_HEADER = T(
+    'الشاشة دي شغل يومي للكول سنتر والصيادلة: كل صف عميل صنفه رجع للمخزون.\n'
+    '• بتتحدث لوحدها بعد المزامنة.\n'
+    '• الهدف: تكلّم العميل بسرعة وترجّع البيعة.',
+    'This screen is daily work for the call center and pharmacists: each row is a customer whose item is back in stock.\n'
+    '• It updates by itself after the sync.\n'
+    '• The goal: contact the customer quickly and win the sale back.')
+RC_MORE_KPIS = T(
+    '• «إيراد مُسترَد (30 يوم)» وعدد البيعات المستردة.\n'
+    '• «معدل الاسترداد» من الأصناف اللي رجعت للمخزون.\n'
+    '• «فرص مفتوحة» و«قيمة الفرص المفتوحة»: اللي لسه مستني تواصل.',
+    '• "Recovered revenue (30 days)" and the number of recovered sales.\n'
+    '• "Recovery rate" of items that came back in stock.\n'
+    '• "Open opportunities" and "Open opportunity value": what is still waiting for contact.')
+RC_MORE_QUEUE = T(
+    'كل صف: العميل وتليفونه ورقم الطلب، الصنف والكمية، الفرع، المخزون المتاح، القيمة، وأيام الانتظار.\n'
+    '• ابدأ بأعلى قيمة والأقدم.\n'
+    '• «🔕» لو العميل مش عايز يتابع الصنف، و«🚫» لاستبعاد صنف مش فرصة حقيقية (للي عنده صلاحية الاعتماد).',
+    'Each row: the customer, phone and request number, the item and quantity, branch, available stock, value and days waiting.\n'
+    '• Start with the highest value and the oldest.\n'
+    '• "🔕" if the customer no longer wants the item, and "🚫" to exclude an item that is not a real opportunity (for those with approval permission).')
+RC_MORE_WA = T(
+    'بيفتح محادثة واتساب مع العميل في تبويب جديد، وفي نفس الوقت بيسجّل إنك تواصلت معاه.\n'
+    '• بيظهر بس لو للعميل رقم صالح.',
+    'Opens a WhatsApp chat with the customer in a new tab and records at the same time that you contacted them.\n'
+    '• Shown only when the customer has a valid number.')
+RC_MORE_RESERVE = T(
+    'لو العميل عايز الصنف: بيعمل حجز باسم العميل للصنف ده ويفتح صفحة الحجز على طول.\n'
+    '• بيظهر ويشتغل بس لو عندك صلاحية إنشاء الحجوزات (السيرفر بيتحقق).\n'
+    '• بعدها الحجز بيمشي في موديول الحجوزات العادي.',
+    'If the customer wants the item: creates a reservation for them for this item and opens the reservation page.\n'
+    '• Shown and allowed only with reservation-create permission (the server checks).\n'
+    '• From then on it follows the normal reservations module.')
+RC_MORE_RECOVER = T(
+    'لما العميل يشتري فعلاً: بيفتح «💰 تأكيد استرداد البيعة» بقيمة مقترحة (السعر المجمّد × الكمية).\n'
+    '• عدّل القيمة عشان تطابق الفاتورة الفعلية ثم «تأكيد الاسترداد».\n'
+    '• الصنف بيتعلّم «تم الاسترداد» ويتحسب في الإيراد المسترد ويختفي من القائمة.',
+    'When the customer actually buys: opens "💰 Confirm sale recovery" with a suggested value (frozen price × quantity).\n'
+    '• Adjust the value to match the real invoice, then "Confirm recovery".\n'
+    '• The item is marked "Recovered", counts in recovered revenue and leaves the list.')
+MB_MORE_FILTERS = T(
+    'شرائح الحالة: «جديد» (الافتراضي)، الكل، متابعة، انتظار مخزون، تم التسليم، ضائعة.\n'
+    '• ابدأ بـ «جديد» — دي اللي محتاجة حد يمسكها.',
+    'Status chips: "New" (the default), all, follow-up, waiting for stock, fulfilled, lost.\n'
+    '• Start with "New" — those need someone to take them.')
+MB_MORE_CARD = T(
+    'الكارت فيه رقم الطلب والحالة، و«SLA» بالأحمر لو الطلب اتأخر.\n'
+    '• اضغطه يفتح التفاصيل: الاتصال بالعميل والأصناف والملاحظات.',
+    'The card shows the request number and status, and a red "SLA" if the request is late.\n'
+    '• Tap it to open the details: call the customer, the items and the notes.')
+MB_MORE_NEW = T(
+    'بيفتح نموذج سريع لتسجيل الطلب قدام العميل على الكاونتر.\n'
+    '• الهاتف إجباري، والأصناف من البحث أو مكتوبة يدوي.',
+    'Opens a quick form to record the request in front of the customer at the counter.\n'
+    '• The phone is required; items come from search or are typed in.')
+MB_MORE_CUSTOMER = T(
+    '«رقم الهاتف» إجباري و«الاسم» اختياري.\n'
+    '• الرقم ده اللي هنكلّم عليه العميل لما الصنف يرجع، فاتأكد منه.',
+    '"Phone number" is required and "Name" is optional.\n'
+    '• This is the number we call when the item is back, so double-check it.')
+MB_MORE_ITEMS = T(
+    'ابحث عن الصنف أو امسح الباركود وضيفه، أو اكتب اسم صنف غير مكوَّد واضغط «إضافة».\n'
+    '• لازم صنف واحد على الأقل.',
+    'Search or scan the item and add it, or type an uncoded item name and press "Add".\n'
+    '• At least one item is required.')
+MB_MORE_DETAILS = T(
+    '• الفرع بيتحط فرعك تلقائياً (بعض الأدوار تقدر تختار فرع تاني).\n'
+    '• اختار الأولوية والمصدر بالضغط، وضيف ملاحظات لو فيه تفاصيل.',
+    '• The branch is set to yours automatically (some roles can pick another).\n'
+    '• Tap to choose the priority and the source, and add notes if there are details.')
+MB_MORE_SUBMIT = T(
+    'بيسجّل الطلب ويفتح صفحته.\n'
+    '• لو النت قاطع الطلب بيتحفظ على الجهاز ويتبعت لوحده لما النت يرجع، وبترجع للقائمة.\n'
+    '• «إلغاء» يرجعك من غير حفظ.',
+    'Records the request and opens its page.\n'
+    '• If offline, the request is kept on the device and sent automatically when the connection returns, and you go back to the list.\n'
+    '• "Cancel" goes back without saving.')
+MD_MORE_HEADER = T(
+    'رقم الطلب وحالته، و«SLA» بالأحمر لو اتأخر.\n'
+    '• تغيير المراحل المتقدمة (تعيين، تم التوريد، بيع ضائع) بيتعمل من شاشة الكمبيوتر.',
+    'The request number and status, and a red "SLA" if it is late.\n'
+    '• Advanced stage changes (assign, supplied, lost sale) are done on the desktop screen.')
+MD_MORE_CALL = T(
+    'بيفتح الاتصال برقم العميل من الموبايل على طول.\n'
+    '• بعد المكالمة اكتب النتيجة في «💬 الملاحظات» تحت عشان الكل يشوفها.',
+    'Starts a call to the customer\'s number straight from the phone.\n'
+    '• After the call, write the outcome in "💬 Notes" below so everyone sees it.')
+
 MODULE = {
     'key': 'demand', 'group': 'operations', 'icon': '🔍',
     'title': T('الطلب الضائع (طلبات العملاء غير المُلبّاة)', 'Lost demand (unmet customer requests)'),
@@ -66,6 +301,122 @@ MODULE = {
                 {'key': 'fulfilled', 'label': T('تم التسليم', 'Fulfilled'), 'desc': T('صُرف الصنف.', 'Dispensed.')},
                 {'key': 'lost', 'label': T('ضاعت المبيعة', 'Lost'), 'desc': T('لن يُصرف.', 'Will not be dispensed.')},
                 {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('أُلغي هذا الصنف.', 'This item was cancelled.')},
+            ],
+        },
+    ],
+    'flows': [
+        {
+            'key': 'lifecycle',
+            'title': T('دورة الطلب الضائع', 'A missed request, start to finish'),
+            'summary': T('تسجيل طلب لصنف مش موجود، ومتابعته لحد ما العميل ياخده.',
+                         'Logging a request for an item we do not have, and following it until the customer gets it.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'],
+            'steps': [
+                {'target': 'nav-demand', 'nav': '/demand',
+                 'text': T('«العمليات» ← «الطلب الضائع».',
+                           '"Operations" → "Missed demand".'),
+             'more': T('هنا بنسجّل كل طلب عميل ما قدرناش نلبّيه بدل ما يمشي ساكت.\n'
+                           '• الرحلة: تسجيل ← تعيين لموظف خلال 10 دقايق ← تواصل مع العميل خلال 20 دقيقة ← توفير الصنف أو بديل ← «تم التسليم» أو «بيع ضائع».\n'
+                           '• لما الصنف يرجع للمخزون العميل بيظهر في «قائمة الاسترداد»، والطلبات المتكررة بتوصل للمشتريات كإشارة.',
+                           'Here we record every customer request we could not meet, instead of letting the customer leave silently.\n'
+                           '• The journey: record → assign to an employee within 10 minutes → contact the customer within 20 minutes → get the item or an alternative → "Fulfilled" or "Lost sale".\n'
+                           '• When the item is back in stock the customer appears in the "Recovery queue", and repeated requests reach purchasing as a signal.')},
+                {'target': 'demand-list-tabs', 'route': '/demand',
+                 'text': T('كل طلب بيمشي في المراحل دي لحد ما يتقفل.',
+                           'Every request moves through these stages until closed.'),
+             'more': DM_MORE_TABS},
+                {'target': 'demand-list-new', 'route': '/demand',
+                 'text': T('اضغط «+ تسجيل طلب جديد» وبعدين «التالي».',
+                           'Click "+ Log new request", then "Next".'),
+                 'more': T(
+                     'استخدمه كل مرة عميل يطلب صنف مش قادرين نصرفه دلوقتي (نفد، قليل، مش متخزّن، أو بيسأل على السعر) — حتى لو العميل ماشي.\n• بيفتح نافذة «تسجيل طلب عميل جديد»: بيانات العميل، الفرع والمصدر والأولوية، والأصناف.\n• الطلب بيتسجّل «جديد» وبعدها بتتفتح صفحته، ولازم يتعيّن لموظف خلال 10 دقايق.',
+                     'Use it every time a customer asks for an item we cannot dispense right now (out, low, not stocked, or a price check) — even if the customer is leaving.\n• It opens the "Record a new customer request" window: customer data, branch, source and priority, and the items.\n• The request is saved as "New" and its page opens; it must be assigned to an employee within 10 minutes.')},
+                {'target': 'demand-list-create-customer', 'route': '/demand',
+                 'text': T('رقم واسم العميل — عشان نبلّغه لما الصنف يوصل.',
+                           'The customer\'s phone and name — so we can tell them when it arrives.'),
+             'more': DM_MORE_CUSTOMER},
+                {'target': 'demand-new-details', 'route': '/demand',
+                 'text': T('الفرع ومصدر الطلب والأولوية.',
+                           'Branch, request source and priority.'),
+                 'more': T(
+                     '• «الفرع» (إجباري): الفرع اللي العميل طلب منه.\n• «مصدر الطلب»: حضر للفرع، اتصال، واتساب، تطبيق توصيل، موقع، مركز الاتصالات.\n• «الأولوية»: منخفض، عادي، عالٍ، عاجل، أو «مزمن 💊».',
+                     '• "Branch" (required): the branch the customer asked at.\n• "Request source": walk-in, call, WhatsApp, delivery app, website, call center.\n• "Priority": low, normal, high, urgent, or "chronic 💊".')},
+                {'target': 'demand-list-create-items', 'route': '/demand',
+                 'text': T('الأصناف المطلوبة (ولو مش في الكتالوج اكتبها يدوي).',
+                           'The requested items (type them in if not in the catalog).')},
+                {'target': 'demand-list-create-submit', 'route': '/demand',
+                 'text': T('«📋 تسجيل الطلب». (في الجولة مش هنسجّل — اقفل النافذة.)',
+                           '"📋 Log request". (In this tour we will not save — close the window.)'),
+             'more': DM_MORE_SUBMIT},
+                {'target': 'demand-list-table', 'route': '/demand', 'wait': '/demand/:id',
+                 'text': T('افتح أي طلب عشان نشوف المتابعة. لو القائمة فاضية اضغط «إنهاء».',
+                           'Open any request to see the follow-up. If the list is empty, press "End".'),
+             'more': DM_MORE_OPEN},
+                {'target': 'demand-detail-header', 'route': '/demand/:id',
+                 'text': T('رقم الطلب وحالته وأولويته.',
+                           'The request number, status and priority.'),
+             'more': DM_MORE_DHEADER},
+                {'target': 'demand-detail-contact', 'route': '/demand/:id',
+                 'text': T('«📞 تواصلت مع العميل» وسجّل النتيجة.',
+                           '"📞 Contacted the customer" and record the outcome.'),
+             'more': DM_MORE_CONTACT},
+                {'target': 'demand-detail-fulfill', 'route': '/demand/:id',
+                 'text': T('«تم التوريد» لما العميل ياخد الصنف — بيقفل الطلب «تم التسليم».',
+                           '"Supplied" when the customer gets the item — closes the request as "Fulfilled".'),
+             'more': DM_MORE_FULFILL},
+            ],
+        },
+        {
+            'key': 'mobile',
+            'title': T('الطلب الضائع من الموبايل', 'Missed demand on mobile'),
+            'summary': T('تسجيل طلب ومتابعته من الموبايل.',
+                         'Logging and following a request on mobile.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'],
+            'mobile': True,
+            'steps': [
+                {'target': 'mshell-tabs',
+                 'text': T('الشاشات في الشريط اللي تحت. اللي مش ظاهر تلاقيه في «المزيد».',
+                           'Screens are in the bottom bar. Anything not shown is under "More".'),
+             'more': T('شاشات الموبايل في الشريط اللي تحت؛ لو «الطلب الضائع» مش ظاهر هتلاقيه في «المزيد».\n'
+                           '• الموبايل للتسجيل السريع قدام العميل والمتابعة؛ تغيير المراحل المتقدمة من الكمبيوتر.',
+                           'Mobile screens are in the bottom bar; if "Lost demand" is not shown, it is under "More".\n'
+                           '• The phone is for quick recording in front of the customer and follow-up; advanced stage changes are on the desktop.')},
+                {'target': 'demand-mobile-list-filters', 'route': '/m/demand',
+                 'text': T('فلتر الحالة.',
+                           'Status filter.'),
+             'more': MB_MORE_FILTERS},
+                {'target': 'demand-mobile-list-new', 'route': '/m/demand', 'wait': '/m/demand/new',
+                 'text': T('زر «+» لطلب جديد.',
+                           'The "+" button for a new request.'),
+             'more': MB_MORE_NEW},
+                {'target': 'demand-mobile-new-customer', 'route': '/m/demand/new',
+                 'text': T('رقم واسم العميل.',
+                           'The customer\'s phone and name.'),
+             'more': MB_MORE_CUSTOMER},
+                {'target': 'demand-mobile-new-items', 'route': '/m/demand/new',
+                 'text': T('الأصناف المطلوبة.',
+                           'The requested items.'),
+             'more': MB_MORE_ITEMS},
+                {'target': 'demand-mobile-new-details', 'route': '/m/demand/new',
+                 'text': T('الفرع والأولوية والمصدر.',
+                           'Branch, priority and source.'),
+             'more': MB_MORE_DETAILS},
+                {'target': 'demand-mobile-new-submit', 'route': '/m/demand/new',
+                 'text': T('«✅ تسجيل الطلب». (في الجولة مش هنسجّل.)',
+                           '"✅ Log request". (In this tour we will not save.)'),
+             'more': MB_MORE_SUBMIT},
+                {'target': 'demand-mobile-list-card', 'route': '/m/demand', 'wait': '/m/demand/:id',
+                 'text': T('افتح أي طلب. لو القائمة فاضية اضغط «إنهاء».',
+                           'Open any request. If the list is empty, press "End".'),
+             'more': MB_MORE_CARD},
+                {'target': 'demand-mobile-detail-header', 'route': '/m/demand/:id',
+                 'text': T('رقم الطلب وحالته.',
+                           'The request number and status.'),
+             'more': MD_MORE_HEADER},
+                {'target': 'demand-mobile-detail-call', 'route': '/m/demand/:id',
+                 'text': T('اتصل بالعميل.',
+                           'Call the customer.'),
+             'more': MD_MORE_CALL},
             ],
         },
     ],
@@ -206,7 +557,10 @@ SCREENS = [
              'text': T('يفتح نموذج تسجيل طلب لعميل طلب صنف مش موجود أو مش كفاية.',
                        'Opens the form to record a request from a customer who asked for an item we do not have, or not enough of.'),
              'when': T('فوراً والعميل قدامك أو على التليفون، حتى لو هيمشي.', 'Right away, while the customer is in front of you or on the phone, even if they are leaving.'),
-             'open_hint': T('الزر بيظهر لمن له صلاحية «إنشاء» على الطلب الضائع.', 'The button shows for users with "create" permission on lost demand.')},
+             'open_hint': T('الزر بيظهر لمن له صلاحية «إنشاء» على الطلب الضائع.', 'The button shows for users with "create" permission on lost demand.'),
+             'more': T(
+                 'استخدمه كل مرة عميل يطلب صنف مش قادرين نصرفه دلوقتي (نفد، قليل، مش متخزّن، أو بيسأل على السعر) — حتى لو العميل ماشي.\n• بيفتح نافذة «تسجيل طلب عميل جديد»: بيانات العميل، الفرع والمصدر والأولوية، والأصناف.\n• الطلب بيتسجّل «جديد» وبعدها بتتفتح صفحته، ولازم يتعيّن لموظف خلال 10 دقايق.',
+                 'Use it every time a customer asks for an item we cannot dispense right now (out, low, not stocked, or a price check) — even if the customer is leaving.\n• It opens the "Record a new customer request" window: customer data, branch, source and priority, and the items.\n• The request is saved as "New" and its page opens; it must be assigned to an employee within 10 minutes.')},
             {'target': 'demand-list-create-customer', 'label': T('هوية العميل', 'Customer identity'),
              'text': T('ابحث عن العميل بالاسم أو الهاتف أو PIC فتتملى الحقول، أو اكتب الهاتف والاسم يدوياً.',
                        'Search the customer by name, phone or PIC to fill the fields, or type the phone and name yourself.'),
@@ -226,22 +580,34 @@ SCREENS = [
             {'target': 'demand-list-tabs', 'label': T('الكل · جديد · مُعيَّن · ...', 'All · New · Assigned · ...'),
              'text': T('يحصر القائمة في مرحلة واحدة: جديد، مُعيَّن، متابعة، انتظار المخزون، للمشتريات، بيع ضائع، تم التسليم.',
                        'Limits the list to one stage: new, assigned, follow-up, waiting for stock, purchasing, lost, fulfilled.'),
-             'when': T('ابدأ يومك بتبويب «جديد» — دي طلبات محدش مسكها لسه.', 'Start your day on "New" — nobody has picked these up yet.')},
+             'when': T('ابدأ يومك بتبويب «جديد» — دي طلبات محدش مسكها لسه.', 'Start your day on "New" — nobody has picked these up yet.'),
+             'more': T(
+                 'كل تبويب بيعرض الطلبات اللي في المرحلة دي: جديد، مُعيَّن، متابعة، انتظار المخزون، للمشتريات، بيع ضائع، تم التسليم — و«الكل».\n• ابدأ بـ «جديد» عشان محدش يتعدى عليه وقت الـ SLA.\n• جنب البحث فيه فلتر «⚠ SLA تجاوز فقط» للطلبات المتأخرة.',
+                 'Each tab shows the requests at that stage: new, assigned, follow-up, waiting for stock, to purchasing, lost sale, fulfilled — and "All".\n• Start with "New" so nothing passes its SLA time.\n• Next to search there is an "⚠ SLA breached only" filter for late requests.')},
             {'target': 'demand-list-search', 'label': T('🔍 بحث بالهاتف، اسم العميل...', '🔍 Search by phone, customer...'),
              'text': T('ابحث بالهاتف أو اسم العميل أو PIC أو الصنف. جنبه فلتر الأولوية والفرع.',
                        'Search by phone, customer name, PIC or item. Next to it are the priority and branch filters.'),
-             'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls to ask about their request.')},
+             'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls to ask about their request.'),
+             'more': T(
+                 'اكتب رقم تليفون العميل أو اسمه أو كود PIC أو اسم الصنف.\n• مفيد لما العميل يتصل يسأل على طلبه، أو قبل ما تسجّل طلب جديد تتأكد إنه مش متسجّل.\n• جنبه فلاتر الأولوية والفرع، و«مسح» يرجّع كل الفلاتر.',
+                 'Type the customer\'s phone, name, PIC code or the item name.\n• Useful when a customer calls about their request, or to check a request is not already recorded before logging a new one.\n• Next to it are priority and branch filters, and "Clear" resets them all.')},
             {'target': 'demand-list-sla', 'label': T('⚠ SLA تجاوز فقط', '⚠ SLA breached only'),
              'text': T('يعرض بس الطلبات اللي عدّت وقت التعيين أو التواصل.', 'Shows only requests that passed their assign or contact time.'),
              'when': T('دي أول حاجة يراجعها المشرف كل ساعة.', 'The first thing a supervisor checks every hour.')},
             {'target': 'demand-list-recovery', 'label': T('🔔 عاد للمخزون', '🔔 Back in stock'),
              'text': T('يفتح قائمة الاسترداد: عملاء طلبوا صنف ورجع للمخزون. الرقم الأحمر = فرص مفتوحة.',
                        'Opens the recovery queue: customers whose item is back in stock. The red number = open opportunities.'),
-             'when': T('اتصل بالعملاء دول بدري — كل يوم تأخير بيقلل فرصة البيعة.', 'Call these customers early — every day of delay lowers the chance of the sale.')},
+             'when': T('اتصل بالعملاء دول بدري — كل يوم تأخير بيقلل فرصة البيعة.', 'Call these customers early — every day of delay lowers the chance of the sale.'),
+             'more': T(
+                 'بيفتح «قائمة الاسترداد»: عملاء طلبوا أصناف نفدت والمزامنة لقت إنها رجعت للمخزون.\n• الرقم الأحمر على الزر هو عدد الفرص المفتوحة.\n• اتصل بالعميل من هناك وحوّل الطلب لحجز أو سجّل البيعة المستردة.',
+                 'Opens the "Recovery queue": customers who asked for items that ran out and the sync found back in stock.\n• The red number on the button is how many opportunities are open.\n• Contact the customer from there and turn it into a reservation or record the recovered sale.')},
             {'target': 'demand-list-table',
              'text': T('اضغط أي سطر يفتح الطلب بتفاصيله. عمود SLA بيوضح لو الطلب متأخر.',
                        'Click a row to open the request. The SLA column shows if it is late.'),
-             'when': T('علّم المربع على يمين السطر عشان تعمل إجراء جماعي.', 'Tick the box on the row to run a bulk action.')},
+             'when': T('علّم المربع على يمين السطر عشان تعمل إجراء جماعي.', 'Tick the box on the row to run a bulk action.'),
+             'more': T(
+                 'كل صف: رقم الطلب، العميل، الفرع، الأصناف، الحالة، الأولوية، وقت الـ SLA، ومين مسؤول.\n• اضغط الصف عشان تفتح الطلب وتتابعه.\n• علّم أكتر من طلب بمربع الاختيار فيظهر شريط تعيين جماعي لموظف، أو إرسال للمشتريات، أو إلغاء.',
+                 'Each row: request number, customer, branch, items, status, priority, SLA time and owner.\n• Click a row to open the request and follow it.\n• Tick several requests and a bar appears to assign them to an employee, send them to purchasing, or cancel them.')},
             {'target': 'demand-list-bulk-assign', 'label': T('تعيين إلى... ← تعيين', 'Assign to... → Assign'),
              'text': T('يعيّن كل الطلبات المحددة لموظف واحد. الطلبات «الجديدة» بس اللي بتتعيّن، والباقي يتخطّى.',
                        'Assigns all selected requests to one employee. Only "New" requests are assigned; the rest are skipped.'),
@@ -257,8 +623,14 @@ SCREENS = [
              'warn': T('الإلغاء نهائي ومش بيرجع. الطلب الملغي مش بيدخل قائمة الاسترداد ولا إشارة المشتريات.',
                        'Cancelling is final. A cancelled request never enters the recovery queue or the purchasing signal.'),
              'open_hint': T('حدد طلبات من الجدول؛ يظهر لمن له صلاحية «حذف».', 'Select requests in the table; shows for users with "delete" permission.')},
+            {'target': 'demand-list-table', 'wait': '/demand/:id',
+             'text': T('افتح أي طلب — الجولة هتكمّل على صفحة تفاصيله. لو القائمة فاضية اضغط «إنهاء».',
+                       'Open any request — the tour continues on its detail page. If the list is empty, press "End".'),
+             'more': DM_MORE_OPEN},
         ],
+        'tour_continue': 'demand.detail',
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.detail',
@@ -307,7 +679,10 @@ SCREENS = [
             {'target': 'demand-detail-header',
              'text': T('رقم الطلب وحالته وأولويته، وعلامة «⚠ SLA تجاوز» لو اتأخر.',
                        'The request number, status and priority, with "⚠ SLA breached" if it is late.'),
-             'open_hint': T('افتح أي طلب من قائمة الطلب الضائع.', 'Open any request from the lost-demand list.')},
+             'open_hint': T('افتح أي طلب من قائمة الطلب الضائع.', 'Open any request from the lost-demand list.'),
+             'more': T(
+                 'رقم الطلب وحالته وأولويته، و«⚠ SLA تجاوز» لو اتأخر.\n• تحتهم اسم العميل والفرع من إمتى، وجنبهم عدّاد الـ SLA: أخضر لسه فيه وقت، أصفر قرب يخلص، أحمر اتعدّى.',
+                 'The request number, status and priority, and "⚠ SLA breached" if it is late.\n• Below them the customer, branch and how long ago, and next to them the SLA timer: green has time, amber is nearly out, red has passed.')},
             {'target': 'demand-detail-assign', 'label': T('👤 تعيين', '👤 Assign'),
              'text': T('اختار الموظف المسؤول (أو نفسك) ثم «تأكيد». الطلب يبقى «مُعيَّن».',
                        'Pick the responsible employee (or yourself) then "Confirm". The request becomes "Assigned".'),
@@ -317,12 +692,18 @@ SCREENS = [
              'text': T('بعد ما تكلّم العميل اكتب ملاحظة التواصل و«تأكيد». الطلب يبقى «متابعة».',
                        'After you call the customer, write the contact note and "Confirm". The request becomes "Follow-up".'),
              'when': T('خلال 20 دقيقة من التعيين.', 'Within 20 minutes of assignment.'),
-             'open_hint': T('بيظهر بعد تعيين الطلب.', 'Shows once the request is assigned.')},
+             'open_hint': T('بيظهر بعد تعيين الطلب.', 'Shows once the request is assigned.'),
+             'more': T(
+                 'بعد ما تكلّم العميل، اضغطه واكتب نتيجة المكالمة ثم «تأكيد».\n• الطلب بيتنقل لـ «متابعة» والملاحظة بتتسجّل في السجلات.\n• بيظهر بعد التعيين — الطلب «الجديد» لازم يتعيّن الأول.',
+                 'After calling the customer, press it, write the call outcome, then "Confirm".\n• The request moves to "Follow-up" and the note is saved in the logs.\n• It shows after assignment — a "New" request must be assigned first.')},
             {'target': 'demand-detail-fulfill', 'label': T('تم التوريد', 'Fulfilled'),
              'text': T('يقفل الطلب «تم التسليم» ويعلّم الأصناف المعلّقة كمُسلَّمة. رقم الفاتورة اختياري.',
                        'Closes the request as "Fulfilled" and marks pending items fulfilled. The invoice number is optional.'),
              'warn': T('حالة نهائية — بعد ما العميل يستلم الصنف فعلاً بس.', 'A final status — only after the customer really received the item.'),
-             'open_hint': T('بيظهر بعد التعيين لمن له صلاحية «إنهاء».', 'Shows after assignment for users with "finalize" permission.')},
+             'open_hint': T('بيظهر بعد التعيين لمن له صلاحية «إنهاء».', 'Shows after assignment for users with "finalize" permission.'),
+             'more': T(
+                 'لما العميل ياخد الصنف فعلاً: اضغطه، اكتب رقم الفاتورة (اختياري) و«تأكيد».\n• الطلب بيقفل «تم التسليم» والأصناف اللي لسه مستنية بتتعلّم مُسلَّمة.\n• مرحلة نهائية، ومحتاج صلاحية الإنهاء. مش بيكتب في SOFTECH.',
+                 'When the customer actually gets the item: press it, enter the invoice number (optional) and "Confirm".\n• The request closes as "Fulfilled" and the still-pending items are marked fulfilled.\n• A final stage that needs the finalize permission. It does not write to SOFTECH.')},
             {'target': 'demand-detail-lost', 'label': T('بيع ضائع', 'Lost sale'),
              'text': T('اختار السبب (مش متوفر، تأخير، متوقف، مفيش رد، السعر، منافس، أخرى) و«تأكيد».',
                        'Pick the reason (no stock, delay, discontinued, no response, price, competitor, other) and "Confirm".'),
@@ -340,7 +721,10 @@ SCREENS = [
              'open_hint': T('بيظهر لو الطلب مش مربوط بكود عميل، لمن له صلاحية «اعتماد».', 'Shows when the request has no customer code, for users with "approve" permission.')},
             {'target': 'demand-detail-tabs', 'label': T('التفاصيل · الأصناف · المتابعات · السجلات', 'Details · Items · Follow-ups · Logs'),
              'text': T('التفاصيل: العميل ومسار SLA. الأصناف: المخزون والقيمة. المتابعات: مواعيدك. السجلات: كل ما حصل.',
-                       'Details: customer and SLA path. Items: stock and value. Follow-ups: your reminders. Logs: everything that happened.')},
+                       'Details: customer and SLA path. Items: stock and value. Follow-ups: your reminders. Logs: everything that happened.'),
+             'more': T(
+                 '• «📋 التفاصيل»: بيانات العميل وربطه بـ SOFTECH وتفاصيل الطلب.\n• «💊 الأصناف»: الكميات والمخزون في الفرع والبدائل.\n• «🔔 المتابعات»: مهام تواصل مجدولة بتاريخ.\n• «💬 السجلات»: ملاحظات واتصالات وتغييرات الحالة.',
+                 '• "📋 Details": customer data, SOFTECH link and request details.\n• "💊 Items": quantities, branch stock and alternatives.\n• "🔔 Follow-ups": scheduled contact tasks with a date.\n• "💬 Logs": notes, calls and status changes.')},
             {'target': 'demand-detail-item-add', 'label': T('+ إضافة صنف', '+ Add item'),
              'text': T('يضيف صنف تاني للطلب نفسه، بالبحث أو الباركود.', 'Adds another item to the same request, by search or barcode.'),
              'open_hint': T('تبويب «الأصناف»، والطلب «جديد» أو «مُعيَّن» أو «متابعة».', 'The "Items" tab, while the request is "New", "Assigned" or "Follow-up".')},
@@ -357,8 +741,21 @@ SCREENS = [
                        'Pick the type and write the note or call log, then "Send" or Ctrl+Enter. It is stored internally only.'),
              'when': T('سجّل كل اتفاق مع العميل عشان أي زميل يكمّل مكانك.', 'Log every agreement with the customer so any colleague can carry on.'),
              'open_hint': T('افتح تبويب «السجلات».', 'Open the "Logs" tab.')},
+            {'target': 'demand-detail-content',  # from the GitHub-side tour
+             'text': T('محتوى التبويب المفتوح.',
+                       'The open tab\'s content.'),
+             'more': T(
+                 'هنا محتوى التبويب اللي فاتحه.\n• في «المتابعات» تقدر تجدول تذكير بالتواصل الجاي وتقفله بملاحظة لما تنفّذه.\n• في «السجلات» اكتب ملاحظة أو سجل اتصال وابعته بـ Ctrl+Enter.',
+                 'This is the content of the open tab.\n• In "Follow-ups" you can schedule a reminder for the next contact and close it with a note when done.\n• In "Logs" write a note or a call log and send it with Ctrl+Enter.')},
+            {'target': 'demand-detail-actions',  # from the GitHub-side tour
+             'text': T('الإجراءات المتاحة للحالة الحالية.',
+                       'The actions available in the current status.'),
+             'more': T(
+                 'الأزرار بتتغيّر حسب المرحلة والصلاحية:\n• «👤 تعيين» (للطلب الجديد) تختار الموظف المسؤول.\n• «📞 تواصلت مع العميل»، «⏳ ينتظر المخزون»، «تم التوريد»، «بيع ضائع» بسبب إجباري، و«إلغاء الطلب».\n• «بحث في ERP» يربط العميل بكوده في SOFTECH. كل تغيير حالة بيتسجّل في السجلات.',
+                 'The buttons change with the stage and your permission:\n• "👤 Assign" (for a new request) picks the responsible employee.\n• "📞 Contacted the customer", "⏳ Waiting for stock", "Supplied", "Lost sale" with a required reason, and "Cancel request".\n• "Search ERP" links the customer to their SOFTECH code. Every status change is recorded in the logs.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.dashboard',
@@ -389,20 +786,32 @@ SCREENS = [
         'related': ['demand.list', 'demand.recovery', 'purchasing.engine'],
         'tour': [
             {'target': 'demand-dashboard-days', 'label': T('7 · 14 · 30 · 60 · 90 يوم', '7 · 14 · 30 · 60 · 90 days'),
-             'text': T('يغيّر فترة الأرقام والترتيبات في الصفحة كلها.', 'Changes the period for the numbers and rankings on the whole page.')},
+             'text': T('يغيّر فترة الأرقام والترتيبات في الصفحة كلها.', 'Changes the period for the numbers and rankings on the whole page.'),
+             'more': T(
+                 'كل الأرقام والقوائم تحت بتتحسب على الفترة دي.\n• 7 أو 14 يوم للمتابعة الأسبوعية، 30 لـ 90 يوم لقرارات الشراء.',
+                 'All figures and lists below are calculated over this period.\n• 7 or 14 days for weekly follow-up, 30 to 90 days for purchasing decisions.')},
             {'target': 'demand-dashboard-new', 'label': T('+ تسجيل طلب جديد', '+ Record new request'),
-             'text': T('يرجعك لقائمة الطلب الضائع عشان تسجّل طلب من هناك.', 'Takes you back to the lost-demand list to record a request there.')},
+             'text': T('يرجعك لقائمة الطلب الضائع عشان تسجّل طلب من هناك.', 'Takes you back to the lost-demand list to record a request there.'),
+             'more': T(
+                 'بيوديك لشاشة الطلب الضائع عشان تسجّل طلب عميل من هناك بـ «+ تسجيل طلب جديد».\n• اللوحة نفسها للتحليل بس.',
+                 'Takes you to the lost-demand screen to record a customer request there with "+ Log new request".\n• The dashboard itself is for analysis only.')},
             {'target': 'demand-dashboard-kpis', 'label': T('إجمالي · تم التوريد · بيع ضائع · ...', 'Total · Fulfilled · Lost · ...'),
              'text': T('الطلبات ونسبة التوريد والبيع الضائع وقيمته المؤكدة والإيراد المسترد والمتابعات المتأخرة.',
                        'Requests, fulfilment rate, lost sales and their confirmed value, recovered revenue and overdue follow-ups.'),
-             'when': T('«متابعات متأخرة» عالية = الفريق محتاج متابعة النهارده.', 'High "overdue follow-ups" = the team needs a push today.')},
+             'when': T('«متابعات متأخرة» عالية = الفريق محتاج متابعة النهارده.', 'High "overdue follow-ups" = the team needs a push today.'),
+             'more': T(
+                 '• إجمالي الطلبات، ونسبة «تم التوريد»، و«بيع ضائع» ونسبته، و«قيمة مؤكدة ضائعة».\n• الصف التاني: النشط دلوقتي، الإيراد المُسترَد، المتابعات المتأخرة، وفرص الاسترداد المفتوحة.\nالمتابعات المتأخرة والفرص المفتوحة هي شغلك النهارده.',
+                 '• Total requests, the "Fulfilled" rate, "Lost sales" and their share, and "Confirmed lost value".\n• Second row: active now, recovered revenue, overdue follow-ups and open recovery opportunities.\nOverdue follow-ups and open opportunities are today\'s work.')},
             {'target': 'demand-dashboard-top', 'label': T('الأكثر ضياعاً · الأكثر طلباً', 'Most lost · Most requested'),
              'text': T('أكتر الأصناف اللي ضاعت بيعتها، وأكتر الأصناف المطلوبة في كل الحالات.',
                        'The items whose sale was lost most, and the most requested items across all statuses.')},
             {'target': 'demand-dashboard-chronic', 'label': T('نقص مزمن · متوقفة مع طلب نشط', 'Chronic shortage · Discontinued'),
              'text': T('أصناف بتتطلب كتير ومش متوفرة، وأصناف متوقفة لسه عليها طلبات مفتوحة.',
                        'Items asked for often and not available, and discontinued items that still have open requests.'),
-             'when': T('الطلبات على صنف متوقف: بلّغ العميل واقفلها.', 'Requests on a discontinued item: tell the customer and close them.')},
+             'when': T('الطلبات على صنف متوقف: بلّغ العميل واقفلها.', 'Requests on a discontinued item: tell the customer and close them.'),
+             'more': T(
+                 '• «نقص مزمن»: صنف بيتطلب كتير ومش بيتوفّر — يتضاف للأوردر الدوري أو طلب تحويل.\n• «أصناف متوقفة مع طلب نشط»: اقفل الطلبات دي أو بلّغ العملاء إن الصنف مش متاح.',
+                 '• "Chronic shortage": an item asked for often and not supplied — add it to the periodic order or request a transfer.\n• "Discontinued items with active requests": close those requests or tell customers the item is unavailable.')},
             {'target': 'demand-dashboard-reconciliation', 'label': T('مؤكد · تقديري · نسبة الالتقاط', 'Confirmed · Estimated · Capture rate'),
              'text': T('الخسارة المسجّلة باسم عميل مقابل تقدير محرك المشتريات. نسبة الالتقاط = قد إيه بنسجّل.',
                        'Loss recorded under a customer vs the purchasing engine estimate. Capture rate = how much we record.'),
@@ -416,8 +825,15 @@ SCREENS = [
              'warn': T('بيبعت كل الاقتراحات مش الـ 15 الظاهرين بس. المدير والمشتريات بس يقدروا.',
                        'It sends all suggestions, not just the 15 shown. Only admin and purchasing may do it.'),
              'open_hint': T('قسم «اقتراحات الشراء» لما يكون فيه اقتراحات.', 'The "purchase suggestions" section, when there are suggestions.')},
+            {'target': 'demand-dashboard-suggestions',  # from the GitHub-side tour
+             'text': T('في «اقتراحات الشراء»: «⬇ تصدير CSV» أو «📦 إرسال للمشتريات» — بيظهر لو فيه اقتراحات.',
+                       'In "Purchase suggestions": "⬇ Export CSV" or "📦 Send to purchasing" — shown when there are suggestions.'),
+             'more': T(
+                 'أصناف طلبها عملاء حقيقيون (مفتوحة + ضائعة) مرتّبة بالقيمة الضائعة المؤكدة.\n• «⬇ تصدير CSV» بينزّل القائمة.\n• «📦 إرسال للمشتريات» بيبعتها اقتراحات شراء للوحة المشتريات — المشتريات هي اللي بتقرر تطلب ولا لأ.',
+                 'Items real customers asked for (open + lost), sorted by confirmed lost value.\n• "⬇ Export CSV" downloads the list.\n• "📦 Send to purchasing" sends them as purchase suggestions to the purchasing board — purchasing decides whether to order.')},
         ],
         'updated': '2026-10-29',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.recovery',
@@ -430,38 +846,54 @@ SCREENS = [
             'sorted by value, so you can contact them and recover the sale. At the top: recovered revenue (30 days), recovery rate and open opportunity value.'),
         'audience': T('مركز الاتصال والصيادلة.', 'Call center and pharmacists.'),
         'steps': [
-            T('ابدأ بأعلى قيمة. اضغط «واتساب» لفتح المحادثة وتسجيل التواصل تلقائياً، أو «تواصل» بعد الاتصال.',
-              'Start with the highest value. Press "WhatsApp" to open the chat and log the contact automatically, or "Contact" after calling.'),
-            T('لو العميل يريد الصنف: «تحويل إلى حجز للعميل» لتجهيزه له.', 'If the customer wants it: "Convert to a reservation" to prepare it.'),
+            T('ابدأ بأعلى قيمة. اضغط «واتساب» لفتح المحادثة مع العميل وتسجيل التواصل تلقائياً (يظهر لو له رقم).',
+              'Start with the highest value. Press "WhatsApp" to open the chat with the customer and log the contact automatically (shown when there is a number).'),
+            T('لو العميل يريد الصنف: «حجز» يحوّل الطلب لحجز له (حسب صلاحية إنشاء الحجوزات).',
+              'If the customer wants it: "Reserve" turns it into a reservation for them (needs reservation-create permission).'),
             T('لو اشترى فعلاً: «استرداد» وأكّد الإيراد المسترد (القيمة المقترحة = السعر المجمّد × الكمية، عدّلها لتطابق الفاتورة).',
               'If they bought: "Recover" and confirm the recovered revenue (suggested = frozen price × qty; adjust to match the invoice).'),
-            T('لو رفض: «رفض التواصل بخصوص هذا الصنف» مع السبب (لم يعد بحاجته، انتقل…).',
-              'If they decline: "Customer declined" with the reason (no longer needed, moved…).'),
-            T('للأصناف التي لن تكون فرصة حقيقية (غير متوفرة في مصر، متوقفة، غير مسموح بيعها): «استبعاد» — يحتاج اعتماداً.',
-              'For items that are not a real opportunity (unavailable in Egypt, discontinued, not allowed): "Exclude" — needs approval.'),
+            T('لو رفض: زر «🔕» (رفض التواصل بخصوص هذا الصنف) مع السبب (لم يعد بحاجته، انتقل…).',
+              'If they decline: the "🔕" button (customer declined about this item) with the reason (no longer needed, moved…).'),
+            T('للأصناف التي لن تكون فرصة حقيقية (غير متوفرة في مصر، متوقفة، غير مسموح بيعها): زر «🚫» (استبعاد) — لمن لديه صلاحية الاعتماد.',
+              'For items that are not a real opportunity (unavailable in Egypt, discontinued, not allowed): the "🚫" button (exclude) — for those with approval permission.'),
         ],
         'related': ['demand.dashboard', 'demand.list'],
         'tour': [
             {'target': 'demand-recovery-kpis', 'label': T('إيراد مُسترَد · معدل الاسترداد · ...', 'Recovered · Rate · ...'),
              'text': T('الإيراد المسترد آخر 30 يوم، ومعدل الاسترداد، وعدد وقيمة الفرص المفتوحة.',
-                       'Recovered revenue for the last 30 days, the recovery rate, and the count and value of open opportunities.')},
+                       'Recovered revenue for the last 30 days, the recovery rate, and the count and value of open opportunities.'),
+             'more': T(
+                 '• «إيراد مُسترَد (30 يوم)» وعدد البيعات المستردة.\n• «معدل الاسترداد» من الأصناف اللي رجعت للمخزون.\n• «فرص مفتوحة» و«قيمة الفرص المفتوحة»: اللي لسه مستني تواصل.',
+                 '• "Recovered revenue (30 days)" and the number of recovered sales.\n• "Recovery rate" of items that came back in stock.\n• "Open opportunities" and "Open opportunity value": what is still waiting for contact.')},
             {'target': 'demand-recovery-queue',
              'text': T('عملاء طلبوا صنف ورجع للمخزون، مرتبين بالقيمة. بيظهروا لوحدهم بعد المزامنة.',
                        'Customers whose item is back in stock, sorted by value. They appear on their own after the sync.'),
              'when': T('ابدأ من فوق — أعلى قيمة الأول.', 'Start at the top — highest value first.'),
-             'open_hint': T('بيظهر لما يكون فيه فرص استرداد.', 'Shows when there are recovery opportunities.')},
+             'open_hint': T('بيظهر لما يكون فيه فرص استرداد.', 'Shows when there are recovery opportunities.'),
+             'more': T(
+                 'كل صف: العميل وتليفونه ورقم الطلب، الصنف والكمية، الفرع، المخزون المتاح، القيمة، وأيام الانتظار.\n• ابدأ بأعلى قيمة والأقدم.\n• «🔕» لو العميل مش عايز يتابع الصنف، و«🚫» لاستبعاد صنف مش فرصة حقيقية (للي عنده صلاحية الاعتماد).',
+                 'Each row: the customer, phone and request number, the item and quantity, branch, available stock, value and days waiting.\n• Start with the highest value and the oldest.\n• "🔕" if the customer no longer wants the item, and "🚫" to exclude an item that is not a real opportunity (for those with approval permission).')},
             {'target': 'demand-recovery-whatsapp', 'label': T('واتساب', 'WhatsApp'),
              'text': T('يفتح محادثة واتساب مع العميل ويسجّل إنك تواصلت.', 'Opens a WhatsApp chat with the customer and records that you contacted them.'),
              'warn': T('التواصل بيتسجل أول ما تضغط — ابعت الرسالة فعلاً.', 'The contact is recorded as soon as you click — really send the message.'),
-             'open_hint': T('بيظهر لما يكون للعميل رقم موبايل صالح.', 'Shows when the customer has a valid mobile number.')},
+             'open_hint': T('بيظهر لما يكون للعميل رقم موبايل صالح.', 'Shows when the customer has a valid mobile number.'),
+             'more': T(
+                 'بيفتح محادثة واتساب مع العميل في تبويب جديد، وفي نفس الوقت بيسجّل إنك تواصلت معاه.\n• بيظهر بس لو للعميل رقم صالح.',
+                 'Opens a WhatsApp chat with the customer in a new tab and records at the same time that you contacted them.\n• Shown only when the customer has a valid number.')},
             {'target': 'demand-recovery-reserve', 'label': T('حجز', 'Reserve'),
              'text': T('يحوّل الصنف لحجز للعميل ويفتح الحجز الجديد.', 'Turns the item into a reservation for the customer and opens the new reservation.'),
              'when': T('لما العميل يقول «جهّزهولي».', 'When the customer says "keep it for me".'),
              'warn': T('بيعمل حجز حقيقي — ماتضغطش مرتين.', 'It creates a real reservation — do not press it twice.'),
-             'open_hint': T('بيظهر لمن له صلاحية «إنشاء» على الحجوزات.', 'Shows for users with "create" permission on reservations.')},
+             'open_hint': T('بيظهر لمن له صلاحية «إنشاء» على الحجوزات.', 'Shows for users with "create" permission on reservations.'),
+             'more': T(
+                 'لو العميل عايز الصنف: بيعمل حجز باسم العميل للصنف ده ويفتح صفحة الحجز على طول.\n• بيظهر ويشتغل بس لو عندك صلاحية إنشاء الحجوزات (السيرفر بيتحقق).\n• بعدها الحجز بيمشي في موديول الحجوزات العادي.',
+                 'If the customer wants the item: creates a reservation for them for this item and opens the reservation page.\n• Shown and allowed only with reservation-create permission (the server checks).\n• From then on it follows the normal reservations module.')},
             {'target': 'demand-recovery-recover', 'label': T('استرداد', 'Recover'),
              'text': T('يفتح نافذة تأكيد استرداد البيعة بالإيراد.', 'Opens the window to confirm the recovered sale and its revenue.'),
-             'when': T('بعد ما العميل اشترى الصنف فعلاً.', 'After the customer really bought the item.')},
+             'when': T('بعد ما العميل اشترى الصنف فعلاً.', 'After the customer really bought the item.'),
+             'more': T(
+                 'لما العميل يشتري فعلاً: بيفتح «💰 تأكيد استرداد البيعة» بقيمة مقترحة (السعر المجمّد × الكمية).\n• عدّل القيمة عشان تطابق الفاتورة الفعلية ثم «تأكيد الاسترداد».\n• الصنف بيتعلّم «تم الاسترداد» ويتحسب في الإيراد المسترد ويختفي من القائمة.',
+                 'When the customer actually buys: opens "💰 Confirm sale recovery" with a suggested value (frozen price × quantity).\n• Adjust the value to match the real invoice, then "Confirm recovery".\n• The item is marked "Recovered", counts in recovered revenue and leaves the list.')},
             {'target': 'demand-recovery-recover-confirm', 'label': T('تأكيد الاسترداد', 'Confirm recovery'),
              'text': T('يسجّل البيعة مستردة ويشيلها من القائمة. القيمة المقترحة من السعر المجمّد × الكمية.',
                        'Records the sale as recovered and removes it from the queue. The suggested value is frozen price × quantity.'),
@@ -479,8 +911,15 @@ SCREENS = [
              'open_hint': T('بيظهر لمن له صلاحية «اعتماد» على الطلب الضائع.', 'Shows for users with "approve" permission on lost demand.')},
             {'target': 'demand-recovery-dashboard', 'label': T('📊 لوحة الطلب الضائع', '📊 Lost demand dashboard'),
              'text': T('يفتح لوحة التحليلات.', 'Opens the analytics dashboard.')},
+            {'target': 'demand-recovery-header',  # from the GitHub-side tour
+             'text': T('«قائمة الاسترداد»: عملاء طلبوا أصناف نفدت ورجعت للمخزون — بيظهروا هنا تلقائياً بعد المزامنة.',
+                       '"Recovery queue": customers who asked for items that ran out and are back in stock — they appear here automatically after sync.'),
+             'more': T(
+                 'الشاشة دي شغل يومي للكول سنتر والصيادلة: كل صف عميل صنفه رجع للمخزون.\n• بتتحدث لوحدها بعد المزامنة.\n• الهدف: تكلّم العميل بسرعة وترجّع البيعة.',
+                 'This screen is daily work for the call center and pharmacists: each row is a customer whose item is back in stock.\n• It updates by itself after the sync.\n• The goal: contact the customer quickly and win the sale back.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.mobile_list',
@@ -498,18 +937,31 @@ SCREENS = [
         'related': ['demand.mobile_new'],
         'tour': [
             {'target': 'demand-mobile-list-filters', 'label': T('جديد · الكل · متابعة · ...', 'New · All · Follow-up · ...'),
-             'text': T('يحصر الطلبات في حالة واحدة. القائمة بتفتح على «جديد».', 'Limits the requests to one status. The list opens on "New".')},
+             'text': T('يحصر الطلبات في حالة واحدة. القائمة بتفتح على «جديد».', 'Limits the requests to one status. The list opens on "New".'),
+             'more': T(
+                 'شرائح الحالة: «جديد» (الافتراضي)، الكل، متابعة، انتظار مخزون، تم التسليم، ضائعة.\n• ابدأ بـ «جديد» — دي اللي محتاجة حد يمسكها.',
+                 'Status chips: "New" (the default), all, follow-up, waiting for stock, fulfilled, lost.\n• Start with "New" — those need someone to take them.')},
             {'target': 'demand-mobile-list-list',
              'text': T('طلبات فرعك، الأحدث الأول. «تحميل المزيد» تحت لو فيه أكتر.', 'Your branch requests, newest first. "Load more" at the bottom if there are more.'),
-             'open_hint': T('بيظهر لما يكون فيه طلبات في الحالة المختارة.', 'Shows when there are requests in the chosen status.')},
+             'open_hint': T('بيظهر لما يكون فيه طلبات في الحالة المختارة.', 'Shows when there are requests in the chosen status.'),
+             'more': T(
+                 'طلبات الطلب الضائع اللي بتطابق الفلتر، والأحدث فوق.\n• «تحميل المزيد» في الآخر لو فيه طلبات أكتر.',
+                 'The lost-demand requests matching the filter, newest on top.\n• "Load more" at the end when there are more requests.')},
             {'target': 'demand-mobile-list-card',
              'text': T('اضغط الطلب يفتح تفاصيله. كلمة SLA الحمرا = الطلب متأخر.', 'Tap a request to open it. A red SLA word = the request is late.'),
-             'open_hint': T('بيظهر لما يكون فيه طلبات في الحالة المختارة.', 'Shows when there are requests in the chosen status.')},
+             'open_hint': T('بيظهر لما يكون فيه طلبات في الحالة المختارة.', 'Shows when there are requests in the chosen status.'),
+             'more': T(
+                 'الكارت فيه رقم الطلب والحالة، و«SLA» بالأحمر لو الطلب اتأخر.\n• اضغطه يفتح التفاصيل: الاتصال بالعميل والأصناف والملاحظات.',
+                 'The card shows the request number and status, and a red "SLA" if the request is late.\n• Tap it to open the details: call the customer, the items and the notes.')},
             {'target': 'demand-mobile-list-new', 'label': T('+', '+'),
              'text': T('يفتح نموذج تسجيل طلب ضائع جديد.', 'Opens the form to record a new lost-demand request.'),
-             'when': T('على الكاونتر والعميل قدامك.', 'At the counter with the customer in front of you.')},
+             'when': T('على الكاونتر والعميل قدامك.', 'At the counter with the customer in front of you.'),
+             'more': T(
+                 'بيفتح نموذج سريع لتسجيل الطلب قدام العميل على الكاونتر.\n• الهاتف إجباري، والأصناف من البحث أو مكتوبة يدوي.',
+                 'Opens a quick form to record the request in front of the customer at the counter.\n• The phone is required; items come from search or are typed in.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.mobile_new',
@@ -526,22 +978,38 @@ SCREENS = [
         'tour': [
             {'target': 'demand-mobile-new-customer', 'label': T('👤 العميل', '👤 Customer'),
              'text': T('رقم الهاتف إجباري والاسم اختياري.', 'The phone is required and the name is optional.'),
-             'warn': T('اقرأ الرقم على العميل قبل الحفظ — رقم غلط يعني بيعة ضايعة.', 'Read the number back before saving — a wrong number means a lost sale.')},
+             'warn': T('اقرأ الرقم على العميل قبل الحفظ — رقم غلط يعني بيعة ضايعة.', 'Read the number back before saving — a wrong number means a lost sale.'),
+             'more': T(
+                 '«رقم الهاتف» إجباري و«الاسم» اختياري.\n• الرقم ده اللي هنكلّم عليه العميل لما الصنف يرجع، فاتأكد منه.',
+                 '"Phone number" is required and "Name" is optional.\n• This is the number we call when the item is back, so double-check it.')},
             {'target': 'demand-mobile-new-items', 'label': T('💊 الأصناف المطلوبة *', '💊 Requested items *'),
-             'text': T('ابحث عن الصنف واضغطه يتضاف للطلب.', 'Search for the item and tap it to add it to the request.')},
+             'text': T('ابحث عن الصنف واضغطه يتضاف للطلب.', 'Search for the item and tap it to add it to the request.'),
+             'more': T(
+                 'ابحث عن الصنف أو امسح الباركود وضيفه، أو اكتب اسم صنف غير مكوَّد واضغط «إضافة».\n• لازم صنف واحد على الأقل.',
+                 'Search or scan the item and add it, or type an uncoded item name and press "Add".\n• At least one item is required.')},
             {'target': 'demand-mobile-new-manual', 'label': T('إضافة', 'Add'),
              'text': T('لصنف مش في الكتالوج: اكتب اسمه في الخانة جنبه واضغط «إضافة».', 'For an item not in the catalogue: type its name in the box beside it and press "Add".')},
             {'target': 'demand-mobile-new-lines',
              'text': T('الأصناف المضافة: عدّل الكمية أو 🗑 للحذف.', 'The added items: change the quantity or 🗑 to remove.'),
-             'open_hint': T('بيظهر بعد إضافة أول صنف.', 'Shows after the first item is added.')},
+             'open_hint': T('بيظهر بعد إضافة أول صنف.', 'Shows after the first item is added.'),
+             'more': T(
+                 'الأصناف اللي ضفتها، وجنب كل صنف كوده (أو «غير مكوَّد») وخانة الكمية.\n• عدّل الكمية أو شيل الصنف قبل التسجيل.',
+                 'The items you added, each with its code (or "uncoded") and a quantity box.\n• Change the quantity or remove the item before recording.')},
             {'target': 'demand-mobile-new-details', 'label': T('الفرع · الأولوية · المصدر', 'Branch · Priority · Source'),
              'text': T('الفرع هو فرعك (الكول سنتر والمدير يختاروه). حدد الأولوية والمصدر وأي ملاحظة.',
-                       'The branch is yours (call center and admin choose it). Set the priority, source and any note.')},
+                       'The branch is yours (call center and admin choose it). Set the priority, source and any note.'),
+             'more': T(
+                 '• الفرع بيتحط فرعك تلقائياً (بعض الأدوار تقدر تختار فرع تاني).\n• اختار الأولوية والمصدر بالضغط، وضيف ملاحظات لو فيه تفاصيل.',
+                 '• The branch is set to yours automatically (some roles can pick another).\n• Tap to choose the priority and the source, and add notes if there are details.')},
             {'target': 'demand-mobile-new-submit', 'label': T('✅ تسجيل الطلب', '✅ Record request'),
              'text': T('يحفظ الطلب ويفتح تفاصيله. لو النت مقطوع بيتحفظ ويتبعت لما يرجع.',
-                       'Saves the request and opens it. If you are offline it is queued and sent when you reconnect.')},
+                       'Saves the request and opens it. If you are offline it is queued and sent when you reconnect.'),
+             'more': T(
+                 'بيسجّل الطلب ويفتح صفحته.\n• لو النت قاطع الطلب بيتحفظ على الجهاز ويتبعت لوحده لما النت يرجع، وبترجع للقائمة.\n• «إلغاء» يرجعك من غير حفظ.',
+                 'Records the request and opens its page.\n• If offline, the request is kept on the device and sent automatically when the connection returns, and you go back to the list.\n• "Cancel" goes back without saving.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'demand.mobile_detail',
@@ -553,22 +1021,38 @@ SCREENS = [
         'steps': [T('اتصل بالعميل من الزر، ثم اكتب نتيجة التواصل في الملاحظات.', 'Call the customer from the button, then write the outcome in the notes.')],
         'tour': [
             {'target': 'demand-mobile-detail-back', 'label': T('الرجوع للقائمة', 'Back to the list'),
-             'text': T('يرجعك لقائمة الطلب الضائع.', 'Takes you back to the lost-demand list.')},
+             'text': T('يرجعك لقائمة الطلب الضائع.', 'Takes you back to the lost-demand list.'),
+             'more': T(
+                 'بيرجّعك لقائمة الطلبات على الموبايل.\n• الملاحظة اللي كتبتها بتفضل محفوظة على الطلب.',
+                 'Takes you back to the requests list on the phone.\n• Any note you wrote stays saved on the request.')},
             {'target': 'demand-mobile-detail-header',
              'text': T('رقم الطلب وحالته، وSLA بالأحمر لو متأخر.', 'The request number and status, with a red SLA if it is late.'),
-             'open_hint': T('افتح أي طلب من القائمة.', 'Open any request from the list.')},
+             'open_hint': T('افتح أي طلب من القائمة.', 'Open any request from the list.'),
+             'more': T(
+                 'رقم الطلب وحالته، و«SLA» بالأحمر لو اتأخر.\n• تغيير المراحل المتقدمة (تعيين، تم التوريد، بيع ضائع) بيتعمل من شاشة الكمبيوتر.',
+                 'The request number and status, and a red "SLA" if it is late.\n• Advanced stage changes (assign, supplied, lost sale) are done on the desktop screen.')},
             {'target': 'demand-mobile-detail-call', 'label': T('📞 رقم العميل', '📞 Customer number'),
              'text': T('اضغط يتصل بالعميل مباشرة من الموبايل.', 'Tap to call the customer straight from the phone.'),
-             'when': T('بعد المكالمة اكتب النتيجة في الملاحظات تحت.', 'After the call, write the outcome in the notes below.')},
+             'when': T('بعد المكالمة اكتب النتيجة في الملاحظات تحت.', 'After the call, write the outcome in the notes below.'),
+             'more': T(
+                 'بيفتح الاتصال برقم العميل من الموبايل على طول.\n• بعد المكالمة اكتب النتيجة في «💬 الملاحظات» تحت عشان الكل يشوفها.',
+                 'Starts a call to the customer\'s number straight from the phone.\n• After the call, write the outcome in "💬 Notes" below so everyone sees it.')},
             {'target': 'demand-mobile-detail-info',
-             'text': T('العميل والفرع والأولوية والمصدر وأي ملاحظات.', 'Customer, branch, priority, source and any notes.')},
+             'text': T('العميل والفرع والأولوية والمصدر وأي ملاحظات.', 'Customer, branch, priority, source and any notes.'),
+             'more': T(
+                 'العميل والفرع والأولوية والمصدر، والقيمة المتوقعة والملاحظات لو موجودة.\n• للعرض — التعديل من شاشة الكمبيوتر.',
+                 'Customer, branch, priority and source, plus the expected value and notes when present.\n• View only — editing is on the desktop screen.')},
             {'target': 'demand-mobile-detail-items', 'label': T('الأصناف', 'Items'),
-             'text': T('الأصناف المطلوبة وكمياتها.', 'The requested items and their quantities.')},
+             'text': T('الأصناف المطلوبة وكمياتها.', 'The requested items and their quantities.'),
+             'more': T(
+                 'الأصناف المطلوبة بكمياتها.\n• قولها للعميل وانت بتأكد معاه الطلب.',
+                 'The requested items with their quantities.\n• Read them to the customer while confirming the request.')},
             {'target': 'demand-mobile-detail-notes', 'label': T('💬 الملاحظات', '💬 Notes'),
              'text': T('اكتب نتيجة التواصل وابعتها؛ بتظهر في سجل الطلب على الكمبيوتر كمان.',
                        'Write the contact outcome and send it; it shows in the request log on the desktop too.'),
              'when': T('تغيير المرحلة (تعيين، تم التوريد، بيع ضائع) بيتعمل من الكمبيوتر.', 'Stage changes (assign, fulfilled, lost) are done on the desktop.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

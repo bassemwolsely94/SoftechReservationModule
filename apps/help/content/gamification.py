@@ -54,10 +54,10 @@ MODULE = {
          'steps': [
             {'screen': 'general.dashboard', 'target': 'general-dashboard-gamification', 'label': T('🏆 التحفيز', '🏆 Gamification'),
              'text': T('كل يوم بيبدأ هنا: نقاط اليوم والشهر، والأيام النظيفة، ورصيد المكافآت.', 'Every day starts here: today\'s and the month\'s points, clean days and your reward balance.')},
-            {'screen': 'gamification.main', 'target': 'gamification-main-level', 'label': T('المستوى · نقاط اليوم · أيام نظيفة', 'Level · Today · Clean days'),
+            {'screen': 'gamification.main', 'target': 'gamification-level', 'label': T('المستوى · نقاط اليوم · أيام نظيفة', 'Level · Today · Clean days'),
              'text': T('ملفك: مستواك وكام نقطة فاضلة للترقية، وترتيبك في الفرع وعلى الشبكة.', 'Your profile: your level, points left to the next one, and your branch and network rank.'),
              'open_hint': T('في تبويب «🙋 ملفي».', 'In the "🙋 My profile" tab.')},
-            {'screen': 'gamification.main', 'target': 'gamification-main-leave-nothing', 'label': T('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind'),
+            {'screen': 'gamification.main', 'target': 'gamification-open-items', 'label': T('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind'),
              'text': T('خلّص البنود دي قبل نص الليل تكسب «يوم نظيف» +10، وكل 7 أيام ورا بعض مكافأة زيادة.',
                        'Clear these before midnight to earn a "clean day" +10, and every 7 in a row adds a bonus.'),
              'warn': T('الأحمر اللي يفضل مفتوح بيخصم من ترتيبك.', 'Red items left open deduct from your ranking.'),
@@ -156,6 +156,40 @@ MODULE = {
              'text': T('ترتيبك بين زمايلك في الفرع الشهر ده — صفّك متعلّم بلون مختلف.', 'Your rank among branch colleagues this month — your row is highlighted.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في التحفيز والمستويات', 'A tour of gamification & levels'),
+            'summary': T('نقاطك بتيجي من شغلك المسجّل أصلاً، ومستواك عمره ما بينزل.',
+                         'Your points come from work already recorded, and your level never drops.'),
+            'steps': [
+                {'target': 'nav-gamification', 'nav': '/gamification',
+                 'text': T('«الرئيسية» ← «التحفيز والمستويات».', '"Home" → "Gamification & levels".'),
+                 'more': T('الشاشة دي للتقدير بس: النقاط بتتحسب من الشغل اللي اتسجّل في النظام (مبيعات، حجوزات، تحويلات، جرد…) كل نص ساعة.\n'
+                           '• مفيش حاجة تدخلها بإيدك عشان تاخد نقاط.',
+                           'This screen is for recognition only: points are counted every 30 minutes from work already recorded (sales, reservations, transfers, stock counts…).\n'
+                           '• There is nothing to enter by hand to earn points.')},
+                {'target': 'gamification-level', 'route': '/gamification',
+                 'text': T('مستواك ولقبك ونقاطك.', 'Your level, title and points.'),
+                 'more': T('شريط التقدم بيوريك فاضل كام نقطة على المستوى اللي بعده، وتحته نقاط النهارده والأسبوع والشهر وسلسلة الأيام النظيفة.\n'
+                           '• المستوى واللقب عمرهم ما بينزلوا، حتى لو اتخصم منك نقاط.',
+                           'The progress bar shows how many points remain to the next level, with today / this week / this month and your clean-day streak below it.\n'
+                           '• Your level and title never go down, even after a deduction.')},
+                {'target': 'gamification-open-items', 'route': '/gamification',
+                 'text': T('«لا تترك شيئاً خلفك»: الشغل المعلّق عليك.', '"Leave nothing behind": work still waiting on you.'),
+                 'more': T('دوس على أي بند يفتحلك شاشته عشان تخلّصه.\n'
+                           '• البنود الحمرا بتخصم نقاط عند قفل اليوم بعد نص الليل، فخلّصها الأول.',
+                           'Click any item to open its screen and finish it.\n'
+                           '• Red items deduct points at day close after midnight, so clear them first.')},
+                {'target': 'gamification-tabs', 'route': '/gamification',
+                 'text': T('الترتيب والشارات والمكافآت.', 'Rankings, badges and rewards.'),
+                 'more': T('«الترتيب» و«ترتيب الفروع» بيقارنوك بزمايلك، «كيف تكسب النقاط» بيشرح كل قاعدة، و«المكافآت» بتخليك تستبدل رصيدك بمكافأة بعد موافقة المدير.\n'
+                           '• المكافآت بتتصرف من الرصيد بس، مش من المستوى.',
+                           '"Leaderboard" and "Branches" compare you with colleagues, "How to earn" explains every rule, and "Rewards" lets you exchange your balance for a reward after a manager approves.\n'
+                           '• Rewards spend your balance only, never your level.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -233,17 +267,14 @@ SCREENS = [
         ],
         'related': ['general.dashboard', 'general.me', 'incentives.mine'],
         'tour': [
-            {'target': 'gamification-main-tabs', 'label': T('🙋 ملفي · 🏆 الترتيب · 🎁 المكافآت…', '🙋 Profile · 🏆 Leaderboard · 🎁 Rewards…'),
-             'text': T('تبويبات التحفيز. «طلبات المكافآت» و«التقارير» للمديرين، و«الإعدادات» لمن عنده صلاحية التعديل.',
-                       'The gamification tabs. "Reward requests" and "Reports" are for managers; "Settings" for those allowed to edit.'),
-             'when': T('كل خطوة جاية بتقولك في أنهي تبويب — اضغطه لو العنصر مش ظاهر.', 'Each next step says which tab it is on — press it if the element is not shown.')},
-            {'target': 'gamification-main-level', 'label': T('المستوى · نقاط اليوم · أيام نظيفة', 'Level · Today · Clean days'),
-             'text': T('لقبك ومستواك وشريط الترقية الجاية، ونقاطك اليوم والأسبوع والشهر، وترتيبك في الفرع وعلى الشبكة.',
-                       'Your title, level and progress to the next one, points today / week / month, and your rank in the branch and network.'),
+            {'target': 'gamification-level', 'text': T('مستواك ولقبك وشريط التقدم للترقية التالية، ونقاطك اليوم والأسبوع والشهر وسلسلة الأيام النظيفة.',
+                                                    'Your level, title and progress to the next promotion, plus your points today / this week / this month and your clean-day streak.'),
+             'label': T('المستوى · نقاط اليوم · أيام نظيفة', 'Level · Today · Clean days'),
              'when': T('النقاط بتظهر خلال نص ساعة من الشغل. المستوى عمره ما بينزل.', 'Points show within 30 minutes of the work. Your level never drops.'),
              'open_hint': T('في تبويب «🙋 ملفي».', 'In the "🙋 My profile" tab.')},
-            {'target': 'gamification-main-leave-nothing', 'label': T('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind'),
-             'text': T('الحاجات المتأخرة عليك. اضغط أي بند يفتح الشاشة بتاعته عشان تخلّصه.', 'What is overdue on you. Click any item to open its screen and clear it.'),
+            {'target': 'gamification-open-items', 'text': T('«لا تترك شيئاً خلفك»: الأعمال المعلقة عليك — اضغط بنداً يفتح شاشته؛ الأحمر يخصم نقاطاً عند إغلاق اليوم.',
+                                                         '"Leave nothing behind": work still waiting on you — click an item to open its screen; red items deduct points at day close.'),
+             'label': T('🧹 لا تترك شيئاً خلفك', '🧹 Leave nothing behind'),
              'warn': T('البنود الحمراء اللي تفضل مفتوحة لنص الليل بتخصم نقاط من ترتيبك وبتضيّع «اليوم النظيف».',
                        'Red items still open at midnight deduct points from your ranking and cost you the "clean day".'),
              'open_hint': T('في تبويب «🙋 ملفي».', 'In the "🙋 My profile" tab.')},
@@ -337,6 +368,10 @@ SCREENS = [
              'text': T('على الموبايل: البنود المتأخرة، والضغط يفتح نسخة الموبايل من الشاشة لو موجودة. تحتها ترتيب فرعك.',
                        'On the phone: overdue items; tapping opens the phone version of the screen when there is one. Your branch ranking is below.'),
              'open_hint': T('على الموبايل في /m/gamification.', 'On the phone at /m/gamification.')},
+            {'target': 'gamification-tabs', 'text': T('باقي التبويبات: «الترتيب»، «ترتيب الفروع»، «الشارات»، «كيف تكسب النقاط»، «أبطال الشهر» و«المكافآت».',
+                                                   'The other tabs: "Leaderboard", "Branches", "Badges", "How to earn", "Champions" and "Rewards".'),
+             'label': T('🙋 ملفي · 🏆 الترتيب · 🎁 المكافآت…', '🙋 Profile · 🏆 Leaderboard · 🎁 Rewards…'),
+             'when': T('كل خطوة جاية بتقولك في أنهي تبويب — اضغطه لو العنصر مش ظاهر.', 'Each next step says which tab it is on — press it if the element is not shown.')},
         ],
         'updated': '2026-10-30',
     },
