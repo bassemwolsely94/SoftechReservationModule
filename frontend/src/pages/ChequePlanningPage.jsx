@@ -49,7 +49,7 @@ function TreasuryStrip() {
   if (isLoading) return <div className="h-20 bg-gray-50 animate-pulse rounded-xl" />
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" data-tour="finance-cheques-treasury">
+    <div data-tour="finance-cheques-treasury" className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       <KpiCard label="الخطط النشطة"       value={data?.active_plans_count ?? 0}     unit="" color="blue" />
       <KpiCard label="إجمالي المتبقي"     value={fmt(data?.total_outstanding)}        unit="ج.م" color="indigo" />
       <KpiCard label="شيكات خلال 30 يوم" value={data?.upcoming_30d_count ?? 0}      unit={`(${fmt(data?.upcoming_30d_amount)} ج.م)`} color="yellow" />
@@ -94,16 +94,14 @@ function PlanList({ selectedId, onSelect, onNew }) {
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-800">خطط الشيكات</h2>
-          <button
-            data-tour="finance-cheques-new"
+          <button data-tour="finance-cheques-new"
             onClick={onNew}
             className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700"
           >
             + خطة جديدة
           </button>
         </div>
-        <input
-          data-tour="finance-cheques-search"
+        <input data-tour="finance-cheques-search"
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="بحث بالاسم أو المستفيد..."
@@ -661,7 +659,7 @@ function PlanDetail({ planId, onClose }) {
         {/* Instalments table */}
         <div data-tour="finance-cheques-schedule">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">جدول الشيكات</h3>
-          <div className="border border-gray-200 rounded-lg overflow-x-auto">
+          <div data-tour="finance-cheques-schedule" className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-sm" dir="rtl">
               <thead className="bg-gray-50 text-xs text-gray-600">
                 <tr>
@@ -721,7 +719,7 @@ export default function ChequePlanningPage() {
         </div>
 
         {/* Right: detail or form */}
-        <div className="flex-1 h-full overflow-hidden bg-white border-r border-gray-200">
+        <div data-tour="finance-cheques-detail" className="flex-1 h-full overflow-hidden bg-white border-r border-gray-200">
           {creating && (
             <PlanForm onSave={handleCreated} onCancel={() => setCreating(false)} />
           )}

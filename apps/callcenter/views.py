@@ -542,41 +542,41 @@ class CallLogViewSet(viewsets.ModelViewSet):
     def create_followup(self, request, pk=None):
         """
         POST /api/callcenter/calls/{id}/create-followup/
-        Body: { due_date, notes, item_id (opt) }
-        Creates a FollowUpTask linked to the call's customer.
+        Body: { due_date, task_type?, reminder_at?, notes?, item_id? }
+        Creates a FollowUpTask linked to the call's customer. Validated by the same
+        serializer as the standalone follow-up create (task type choices, dates), so
+        the modal's «نوع المهمة» and «⏰ موعد التذكير» are kept on both paths.
         """
         call = self.get_object()
         if not call.customer:
             return Response({'detail': 'لا يمكن إنشاء متابعة بدون عميل مرتبط'}, status=400)
-
-        due_date = request.data.get('due_date')
-        notes    = request.data.get('notes', '')
-        item_id  = request.data.get('item_id')
-
-        if not due_date:
+        if not request.data.get('due_date'):
             return Response({'detail': 'due_date مطلوب'}, status=400)
 
+        from apps.followups.serializers import FollowUpTaskCreateSerializer
         profile = _profile(request)
+        data = {
+            'customer':    call.customer.pk,
+            'branch':      call.branch_id,
+            'assigned_to': profile.pk if profile else None,
+            'due_date':    request.data.get('due_date'),
+            'notes':       request.data.get('notes', '') or '',
+        }
+        for f in ('task_type', 'reminder_at'):
+            if request.data.get(f):
+                data[f] = request.data.get(f)
+        if request.data.get('item_id'):
+            data['item'] = request.data.get('item_id')
+        ser = FollowUpTaskCreateSerializer(data=data)
+        if not ser.is_valid():
+            return Response({'detail': 'بيانات المتابعة غير صالحة', 'errors': ser.errors}, status=400)
         try:
-            from apps.followups.models import FollowUpTask
-            kwargs = {
-                'customer':    call.customer,
-                'due_date':    due_date,
-                'notes':       notes,
-                'assigned_to': profile,
-                'branch':      call.branch,
-                'status':      'pending',
-            }
-            if item_id:
-                from apps.catalog.models import Item
-                kwargs['item'] = Item.objects.filter(pk=item_id).first()
-            task = FollowUpTask.objects.create(**kwargs)
-
+            task = ser.save(status='pending')
             # Link call to this follow-up
             call.followup_task = task
             call.save(update_fields=['followup_task'])
-
-            return Response({'created': True, 'task_id': task.pk, 'due_date': str(task.due_date)}, status=201)
+            return Response({'created': True, 'task_id': task.pk, 'due_date': str(task.due_date),
+                             'task_type': task.task_type}, status=201)
         except Exception as e:
             return Response({'detail': f'فشل إنشاء المتابعة: {public_error(request, e)}'}, status=500)
 

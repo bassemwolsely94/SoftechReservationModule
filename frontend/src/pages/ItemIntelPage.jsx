@@ -799,7 +799,7 @@ export default function ItemIntelPage() {
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 text-sm text-gray-400">
+        <div data-tour="catalog-intel-breadcrumb" className="max-w-7xl mx-auto flex items-center gap-2 text-sm text-gray-400">
           <button onClick={() => navigate('/products')} className="hover:text-brand-600">الكتالوج</button>
           <span>›</span>
           <button onClick={() => navigate(`/products/${id}`)} className="hover:text-brand-600 truncate max-w-xs">{itemName}</button>

@@ -114,7 +114,7 @@ function Table({ rows, tab, qc }) {
               </td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {tab === 'flagged' ? (
-                  <div className="flex gap-1">
+                  <div data-tour="shortage-phantom-row-actions" className="flex gap-1">
                     {r.override !== 'confirmed' &&
                       <button data-tour="shortage-phantom-confirm" onClick={() => confirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-violet-700 border border-violet-200 rounded hover:bg-violet-50">تأكيد</button>}
                     <button data-tour="shortage-phantom-exclude" onClick={() => exclude.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">ليست وهمية</button>
@@ -145,7 +145,7 @@ export default function PhantomSalesPage() {
   })
   return (
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">
-      <div className="mb-4">
+      <div data-tour="shortage-phantom-header" className="mb-4">
         <h1 className="text-xl font-bold text-gray-800">🩹 مبيعات وهمية</h1>
         <p className="text-sm text-gray-500">أصناف يُعاد شراء معظم مبيعاتها من العميل/المريض (تعاقد) لا من الموردين — تُقلَّل كميتها في شيت النواقص.
           الحد: ≥ {pct(summary?.threshold)} من المبيعات خلال {summary?.window_months} شهر.</p>

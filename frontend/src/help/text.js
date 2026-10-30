@@ -17,6 +17,7 @@ const L = {
   purpose:       ['دور الشاشة', 'What this screen is for'],
   audience:      ['من يستخدمها', 'Who uses it'],
   howto:         ['طريقة الاستخدام', 'How to use it'],
+  buttons:       ['الأزرار والأجزاء — خطوة بخطوة', 'Buttons and parts — step by step'],
   tabs:          ['التبويبات', 'Tabs'],
   youAreHere:    ['أنت هنا', 'You are here'],
   workflow:      ['دورة العمل', 'Workflow'],

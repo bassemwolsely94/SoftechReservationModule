@@ -69,7 +69,7 @@ export default function NotificationsInboxPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <select data-tour="general-notifications-category" value={category} onChange={e => { setCategory(e.target.value); setLimit(PAGE) }}
+        <select value={category} onChange={e => { setCategory(e.target.value); setLimit(PAGE) }} data-tour="general-notifications-category"
           className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
           {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
@@ -83,7 +83,7 @@ export default function NotificationsInboxPage() {
 
       {/* Bulk bar */}
       {ids.length > 0 && (
-        <div className="flex items-center gap-2 mb-3 bg-brand-50 border border-brand-100 rounded-xl px-3 py-2">
+        <div className="flex items-center gap-2 mb-3 bg-brand-50 border border-brand-100 rounded-xl px-3 py-2" data-tour="general-notifications-bulk">
           <span className="text-sm font-medium text-brand-800">{ids.length} محدد</span>
           <div className="flex-1" />
           <button data-tour="general-notifications-mark-read" onClick={() => runBulk('read')} className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">تعليم كمقروء</button>
@@ -93,7 +93,7 @@ export default function NotificationsInboxPage() {
       )}
 
       {/* List */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-tour="general-notifications-list">
         <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50">
           <input data-tour="general-notifications-select-all" type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-brand-600" />
           <span className="text-xs text-gray-400">تحديد الكل</span>

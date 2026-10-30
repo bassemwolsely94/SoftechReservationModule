@@ -241,7 +241,7 @@ export default function DemandRecoveryPage() {
             </svg>
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-black text-gray-900">🔔 قائمة الاسترداد — عاد للمخزون</h1>
+            <h1 className="text-xl font-black text-gray-900" data-tour="demand-recovery-header">🔔 قائمة الاسترداد — عاد للمخزون</h1>
             <p className="text-xs text-gray-400 mt-0.5">
               عملاء طلبوا أصنافاً نفدت ثم عادت للمخزون — تواصل معهم لاسترداد البيعة
             </p>

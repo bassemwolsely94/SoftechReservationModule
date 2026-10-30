@@ -16,6 +16,152 @@ MODULE = {
         'The "demand engine" calculates, per item per branch, the weighted sales rate (30/90/365 days), ABC class (most valuable items), safety stock, coverage in months, '
         'and the gap that needs buying — and suggests transfers between branches before buying. On top: "Procurement intelligence" to analyse suppliers, prices, margins and bonuses, '
         '"Supply & rates" to follow supplier offers, daily shortages, supply requests and SOFTECH sales rates, and "Cash optimization" to prevent over-buying.'),
+    'flows': [
+        {
+            'key': 'cycle',
+            'title': T('دورة الشراء: من التوصية للفاتورة', 'Purchasing cycle: from recommendation to invoice'),
+            'summary': T('توصيات الشراء ← إتاحة الموردين وطلبات التوريد ← استلام فاتورة المورد ومراجعتها.',
+                         'Purchase recommendations → supplier availability and supply requests → receiving and reviewing the supplier invoice.'),
+            'roles': ['admin', 'purchasing'],
+            'steps': [
+                {'target': 'nav-purchasing', 'nav': '/purchasing',
+                 'text': T('نبدأ من «المشتريات» ← «توصيات الشراء».',
+                           'Start at "Purchasing" → "Purchase recommendations".'),
+                 'more': T('دورة الشراء بتبدأ من «توصيات الشراء»: المحرك بيقولك نشتري إيه وكام قبل ما تكلّم أي مورد.\n'
+                           '• الأرقام محسوبة من مبيعات ومخزون SOFTECH لكل فرع.\n'
+                           '• بعدها هنقارن بعروض الموردين، وفي الآخر نستلم الفاتورة ونراجعها.',
+                           'The purchasing cycle starts at "Purchase recommendations": the engine tells you what and how much to buy before you talk to any supplier.\n'
+                           '• Numbers are calculated from SOFTECH sales and stock per branch.\n'
+                           '• Then we compare with supplier offers, and finally receive and review the invoice.')},
+                {'target': 'purchasing-engine-summary', 'route': '/purchasing',
+                 'text': T('المحرك بيحسب المطلوب لكل صنف من المبيعات والمخزون — الملخص حسب الفئة وقيمة الفجوة.',
+                           'The engine works out what each item needs from sales and stock — summary by class and gap value.'),
+                 'more': T('البطاقات بتلخّص الشبكة: إجمالي الأصناف، عدد A وB وC، «أصناف تحتاج شراء» و«قيمة الفجوة» بالجنيه.\n'
+                           '• «قيمة الفجوة» = تقدير فلوس اللي محتاج يتشرى.\n'
+                           '• لو فيه «صنف غير مربوط»، أصناف من SOFTECH مش متطابقة مع الكتالوج.',
+                           'The cards summarise the network: total items, A, B and C counts, "Items needing purchase" and the "Gap value" in EGP.\n'
+                           '• "Gap value" = an estimate of the money needed for what must be bought.\n'
+                           '• If "unlinked items" appears, some SOFTECH items are not matched to the catalog.')},
+                {'target': 'purchasing-engine-view-tabs', 'route': '/purchasing',
+                 'text': T('العروض: الشبكة (ABC)، بالفرع، التحويلات المقترحة (قبل ما تشتري: يمكن فرع تاني عنده)، والمبيعات الضائعة.',
+                           'Views: network (ABC), by branch, suggested transfers (before buying: another branch may have it), lost sales.'),
+                 'more': T('قبل ما تشتري، افتح «🔄 التحويلات المقترحة»: يمكن فرع عنده فائض يغطي فرع ناقص — أرخص من الشراء.\n'
+                           '• الموافقة على اقتراح بتعمل طلب تحويل في موديول التحويلات.\n'
+                           '• «💸 مبيعات ضائعة» بتقدّر اللي ضاع علينا بسبب النفاد.',
+                           'Before buying, open "🔄 Suggested transfers": a branch with excess may cover one that is short — cheaper than buying.\n'
+                           '• Approving a suggestion creates a transfer request in the transfers module.\n'
+                           '• "💸 Lost sales" estimates what we lost to stock-outs.')},
+                {'target': 'purchasing-engine-abc-filter', 'route': '/purchasing',
+                 'text': T('ابدأ بالفئة A — الأكثر تأثيراً.',
+                           'Start with class A — the highest impact.'),
+                 'more': T('فئة A = الأصناف اللي بتعمل حوالي 70% من قيمة المبيعات — نقصها بيأثر أكتر.\n'
+                           '• خلّص فجوة A الأول، وبعدها B ثم C.\n'
+                           '• X = أصناف من غير مبيعات؛ متشتريهاش إلا لسبب واضح.',
+                           'Class A = the items making up about 70% of sales value — running short of them hurts most.\n'
+                           '• Close the A gap first, then B, then C.\n'
+                           '• X = items with no sales; do not buy them without a clear reason.')},
+                {'target': 'purchasing-engine-export', 'route': '/purchasing',
+                 'text': T('«⬇ تصدير» يطلع القائمة Excel للمراجعة.',
+                           '"⬇ Export" downloads the list to Excel for review.'),
+                 'more': T('التصدير بيطلع القائمة Excel أو CSV بفلتر الفئة (والفرع في عرض «بالفرع»).\n'
+                           '• فيه كمان «Pivot Excel (أولويات النواقص)» وخانة «تعبئة الطلب لـ X شهر» لو عايز طلب أقل أو أعمق من شهر.\n'
+                           '• الشيت ده اللي بتراجعه وتبني عليه طلبك للمورد.',
+                           'Export gives the list as Excel or CSV, filtered by class (and branch in the "By branch" view).\n'
+                           '• There is also "Pivot Excel (shortage priorities)" and an "Order fill for X months" box for a smaller or deeper order than one month.\n'
+                           '• This sheet is what you review and build your supplier order on.')},
+                {'target': 'nav-supply', 'nav': '/supply',
+                 'text': T('بعدها «التوريد والمعدلات».',
+                           'Next, "Supply & rates".'),
+                 'more': T('«التوريد والمعدلات» هي مساحة الشغل اليومية للمشتريات.\n'
+                           '• فيها عروض الموردين، متابعة النواقص، معدلات البيع، طلبات التوريد، وطلبات واتساب من الفروع.\n'
+                           '• مفيش حاجة هنا بتكتب في SOFTECH من غير اعتماد صريح وبوابة مفعّلة.',
+                           '"Supply & rates" is purchasing\'s daily workspace.\n'
+                           '• It holds supplier offers, shortage follow-up, sales rates, supply requests and branch WhatsApp requests.\n'
+                           '• Nothing here writes to SOFTECH without explicit approval and an enabled gate.')},
+                {'target': 'purchasing-supply-tabs', 'route': '/supply',
+                 'text': T('«صندوق الإتاحة» لعروض الموردين، و«طلبات التوريد / ISR» لمتابعة الطلبات.',
+                           '"Availability inbox" for supplier offers, "Supply requests / ISR" to follow requests.'),
+                 'more': T('• «صندوق الإتاحة»: قوائم الموردين المتاح عندهم إيه وبكام.\n'
+                           '• «متابعة النواقص»: كل احتياج مفتوح بيفضل حالة لحد ما يتحل بتحويل أو شراء.\n'
+                           '• «طلبات التوريد / ISR» للمعاينة، و«تلبية طلبات الفروع» لخطة تلبية طلبات الفروع من الفائض والرئيسي.',
+                           '• "Availability inbox": supplier lists of what they have and at what price.\n'
+                           '• "Shortage follow-up": every open need stays a case until solved by a transfer or a purchase.\n'
+                           '• "Supply requests / ISR" is a preview, and "Fill branch requests" plans filling branch requests from excess and HQ.')},
+                {'target': 'purchasing-supply-import', 'route': '/supply',
+                 'text': T('استورد قائمة إتاحة المورد: صورة أو ملف Excel / CSV.',
+                           'Import the supplier\'s availability list: an image or an Excel / CSV file.'),
+                 'more': T('اكتب اسم المورد زي ما هو في الرسالة، واختار المصدر، وارفع «📷 صورة / لقطة شاشة» أو «📄 Excel / CSV».\n'
+                           '• الملف بيتقري على طول ويتعمل منه قائمة جديدة؛ ملف Excel جديد الشكل ممكن يطلب منك تحدد الأعمدة.\n'
+                           '• القائمة بتظهر في شريط «القوائم» فوق.',
+                           'Enter the supplier name as in the message, choose the source, and upload "📷 Image / screenshot" or "📄 Excel / CSV".\n'
+                           '• The file is read at once and becomes a new list; an Excel file in a new layout may ask you to map the columns.\n'
+                           '• The list then appears in the "Lists" strip above.')},
+                {'target': 'purchasing-supply-paste', 'route': '/supply',
+                 'text': T('أو الصق نص رسالة المورد.',
+                           'Or paste the supplier\'s message text.'),
+                 'more': T('الصق رسالة الواتساب زي ما هي، سطر لكل صنف (مثال: «Zinnat 250 10+2 @ 90»).\n'
+                           '• النص الأصلي بيتحفظ زي ما هو عشان ترجع له وقت المراجعة.\n'
+                           '• Ctrl+Enter بيحلّل على طول.',
+                           'Paste the WhatsApp message as is, one line per item (e.g. "Zinnat 250 10+2 @ 90").\n'
+                           '• The original text is saved as is so you can go back to it during review.\n'
+                           '• Ctrl+Enter analyses straight away.')},
+                {'target': 'purchasing-supply-analyze', 'route': '/supply',
+                 'text': T('«تحليل القائمة» يطابق أصناف المورد مع الكتالوج ويقارنها بالاحتياج.',
+                           '"Analyze list" matches the supplier\'s items to the catalog and compares them with the need.'),
+                 'more': T('النظام بيطابق كل سطر بصنف من الكتالوج ويحسب: محتاجينه؟ كام؟ بتكلفة فعلية كام؟ وهل المخزون الداخلي يغطيه؟\n'
+                           '• راجع المطابقة وأكّدها — التأكيد بيعلّم النظام أكواد المورد ده للمرة الجاية.\n'
+                           '• اطلب اللي محتاجينه فعلاً بس، مش كل اللي المورد عارضه.',
+                           'The system matches each line to a catalog item and works out: do we need it, how many, at what real cost, and does internal stock cover it?\n'
+                       "• Review and confirm the matches — confirming teaches the system this supplier's codes for next time.\n"
+                           '• Order only what we actually need, not everything the supplier offers.')},
+                {'target': 'nav-invoices', 'nav': '/invoices',
+                 'text': T('لما البضاعة توصل: «فواتير الموردين».',
+                           'When the goods arrive: "Supplier invoices".'),
+                 'more': T('لما البضاعة توصل، فاتورة المورد بتتسجّل في «فواتير الموردين».\n'
+                           '• هنا بنتأكد إن اللي جه هو اللي اتطلب وبالسعر الصح.\n'
+                           '• بعد المراجعة الفاتورة بتترحّل لـ SOFTECH كمستند شراء — مرة واحدة بس.',
+                           'When the goods arrive, the supplier invoice is recorded in "Supplier invoices".\n'
+                           '• Here we check that what arrived is what was ordered, at the right price.\n'
+                           '• After review the invoice is posted to SOFTECH as a purchase document — once only.')},
+                {'target': 'invoices-main-new', 'route': '/invoices',
+                 'text': T('«+ فاتورة جديدة»: الفرع والمورد ونوع المستند وصورة الفاتورة.',
+                           '"+ New invoice": branch, supplier, document type and the invoice image.'),
+                 'more': T('اختار الفرع والمورد ونوع المستند وارفع صورة الفاتورة.\n'
+                           '• النظام بيقرا الصورة ويطلّع السطور تلقائياً (الحالة «جاري المعالجة»).\n'
+                           '• بعدها الفاتورة بتبقى «قيد المراجعة».',
+                           'Choose the branch, supplier and document type and upload the invoice image.\n'
+                           '• The system reads the image and extracts the lines automatically (status "Processing").\n'
+                           '• It then becomes "Under review".')},
+                {'target': 'invoices-main-list', 'route': '/invoices',
+                 'text': T('الفواتير وحالتها — افتح فاتورة لمراجعتها.',
+                           'The invoices and their status — open one to review it.'),
+                 'more': T('كل بطاقة فاتورة بحالتها: في الانتظار، قيد المراجعة، مُأكَّدة، بانتظار الترحيل، مُرحّلة إلى ERP، أو فشل الترحيل.\n'
+                           '• فوق تقدر تفلتر بالفرع والحالة.\n'
+                           '• اضغط الفاتورة عشان تفتح سطورها.',
+                           'Each invoice card has its status: pending, under review, confirmed, queued, posted to ERP, or posting failed.\n'
+                           '• At the top you can filter by branch and status.\n'
+                           '• Click an invoice to open its lines.')},
+                {'target': 'invoices-main-lines', 'route': '/invoices',
+                 'text': T('داخل الفاتورة: راجع كل سطر — الصنف المطابق والكمية والسعر.',
+                           'Inside an invoice: review each line — matched item, quantity and price.'),
+                 'more': T('لكل سطر: الصنف اللي اتطابق، الكمية، البونص والسعر — قارنهم بالفاتورة الورق.\n'
+                           '• صحّح أي مطابقة غلط قبل التأكيد.\n'
+                           '• الخطأ هنا بيوصل لـ SOFTECH لو اترحّل.',
+                           'For each line: the matched item, quantity, bonus and price — compare them with the paper invoice.\n'
+                           '• Fix any wrong match before confirming.\n'
+                           '• A mistake here reaches SOFTECH if it is posted.')},
+                {'target': 'invoices-main-actions', 'route': '/invoices',
+                 'text': T('«⚠ فحص الانحرافات» ثم «✓ تأكيد الفاتورة». الترحيل لـ SOFTECH لمن عنده الصلاحية بعد المراجعة، والأخطاء بتمنعه.',
+                           '"⚠ Check deviations" then "✓ Confirm invoice". Posting to SOFTECH is for authorised users after review, and errors block it.'),
+                 'more': T('«⚠ فحص الانحرافات» بيطلّع الأسعار أو الكميات الغريبة، و«✓ تأكيد الفاتورة» بيقفل المراجعة.\n'
+                           '• «🛡 فحص التحقق» بيراجع قواعد SOFTECH، و«⇪ ترحيل إلى ERP» بيعرض معاينة قبل الترحيل.\n'
+                           '• بعد الترحيل بيظهر «✓ مُرحّلة — مستند #…»، والفاتورة متترحّلش مرتين.',
+                           '"⚠ Check deviations" flags odd prices or quantities, and "✓ Confirm invoice" closes the review.\n'
+                           '• "🛡 Validate" checks SOFTECH rules, and "⇪ Post to ERP" shows a preview before posting.\n'
+                           '• After posting, "✓ Posted — document #…" appears, and the invoice cannot be posted twice.')},
+            ],
+        },
+    ],
     'journeys': [
         {'key': 'replenish', 'shell': 'desktop',
          'title': T('من تشغيل المحرك لطلب توريد في SOFTECH', 'From an engine run to a supply request in SOFTECH'),
@@ -202,7 +348,10 @@ SCREENS = [
                        'Quick run: pulls new sales from SOFTECH since the last date, then recalculates the recommendations. Usually under a minute.'),
              'when': T('أول اليوم، أو بعد ما «المبيعات حتى» تتأخر. شريط التقدم بيظهر لحد ما يخلص.',
                        'At the start of the day, or when "sales up to" is behind. A progress bar shows until it finishes.'),
-             'open_hint': T('يظهر للمدير والصيدلي والمشتريات ومجموعات التوريد في SOFTECH.', 'Shown to admin, pharmacist, purchasing and the SOFTECH supply groups.')},
+             'open_hint': T('يظهر للمدير والصيدلي والمشتريات ومجموعات التوريد في SOFTECH.', 'Shown to admin, pharmacist, purchasing and the SOFTECH supply groups.'),
+             'more': T(
+                 'تشغيل سريع: بيزامن مبيعات SOFTECH من آخر تاريخ عنده بس، ويعيد حساب التوصيات — عادةً أقل من دقيقة.\n• أثناء التشغيل بيظهر شريط تقدّم فوق.\n• لو المبيعات متأخرة أيام، استخدم «⟳ تعويض المبيعات» أو «🔄 مزامنة كاملة» (365 يوم، 5–8 دقايق).',
+                 'Quick run: syncs SOFTECH sales only from the last date it has, and recalculates the recommendations — usually under a minute.\n• While running, a progress bar appears at the top.\n• If sales are days behind, use "⟳ Catch up sales" or "🔄 Full sync" (365 days, 5–8 minutes).')},
             {'target': 'purchasing-engine-catchup', 'label': T('⟳ تعويض المبيعات', '⟳ Catch up sales'),
              'text': T('يسحب المبيعات المتأخرة على دفعات ثم يعيد تشغيل المحرك. بيبقى أحمر ونابض لما المبيعات متأخرة.',
                        'Pulls late sales in chunks, then reruns the engine. It turns red and pulses when sales are behind.'),
@@ -224,18 +373,31 @@ SCREENS = [
             {'target': 'purchasing-engine-summary', 'label': T('ملخص آخر تشغيل', 'Last run summary'),
              'text': T('ملخص آخر تشغيل: عدد الأصناف بكل فئة، الأصناف اللي محتاجة شراء، قيمة الفجوة، وقيمة المبيعات الشهرية.',
                        'Last run summary: items per class, items needing purchase, the gap value and monthly sales value.'),
-             'when': T('بعد كل تشغيل للمحرك. ابدأ بـ «أصناف تحتاج شراء» و«قيمة الفجوة (ج.م)» قبل ما تفتح الجدول.', 'After each engine run. Start with "Items needing purchase" and "Gap value (EGP)" before opening the table.')},
+             'when': T('بعد كل تشغيل للمحرك. ابدأ بـ «أصناف تحتاج شراء» و«قيمة الفجوة (ج.م)» قبل ما تفتح الجدول.', 'After each engine run. Start with "Items needing purchase" and "Gap value (EGP)" before opening the table.'),
+             'more': T(
+                 '• «فئة A/B/C»: الأصناف حسب نصيبها من قيمة المبيعات (A أعلى 70%).\n• «أصناف تحتاج شراء» و«قيمة الفجوة (ج.م)»: حجم الشراء المطلوب.\n• «قيمة مبيعات/شهر» للشبكة كلها، أو عدد الأصناف غير المربوطة لو موجودة.',
+                 '• "Class A/B/C": items by share of sales value (A is the top 70%).\n• "Items needing purchase" and "Gap value (EGP)": the size of the buying needed.\n• "Monthly sales value" for the whole network, or the number of unlinked items if any.'),
+         },
             {'target': 'purchasing-engine-view-tabs', 'label': T('الشبكة · بالفرع · التحويلات · الضائعة', 'Network · Branch · Transfers · Lost'),
              'text': T('الشبكة = كل الفروع مجمعة. بالفرع = حالة كل فرع. التحويلات المقترحة = نقل فائض قبل الشراء. الضائعة = مبيعات فاتت بسبب النفاد.',
                        'Network = all branches together. By branch = each branch. Suggested transfers = move excess before buying. Lost = sales missed to stock-outs.'),
-             'when': T('ابدأ بالتحويلات — أرخص من الشراء.', 'Start with transfers — cheaper than buying.')},
+             'when': T('ابدأ بالتحويلات — أرخص من الشراء.', 'Start with transfers — cheaper than buying.'),
+             'more': T(
+                 '• «📦 الشبكة (ABC)»: كل الفروع مجمّعة مع الهامش والنسبة التراكمية.\n• «🏭 بالفرع»: لكل فرع التغطية والأولوية والحالة (نفد/حرج/منخفض…)، والبضاعة في الطريق بتتخصم من الفجوة.\n• «🔄 التحويلات المقترحة» قبل الشراء، و«💸 مبيعات ضائعة» لتقدير خسارة النفاد.',
+                 '• "📦 Network (ABC)": all branches combined, with margin and cumulative %.\n• "🏭 By branch": per branch coverage, priority and status (out/critical/low…); goods in transit are deducted from the gap.\n• "🔄 Suggested transfers" before buying, and "💸 Lost sales" to estimate stock-out losses.')},
             {'target': 'purchasing-engine-abc-filter', 'label': T('A · B · C · X · فلاتر متقدمة', 'A · B · C · X · Advanced filters'),
              'text': T('A = الأعلى قيمة (أعلى 70%)، X = بلا مبيعات. «🔍 فلاتر متقدمة» تفتح فلاتر المورد والشركة والشكل.',
                        'A = highest value (top 70%), X = no sales. "🔍 Advanced filters" opens supplier, producer and form filters.'),
-             'open_hint': T('في تبويبي الشبكة وبالفرع.', 'On the Network and By branch tabs.')},
+             'open_hint': T('في تبويبي الشبكة وبالفرع.', 'On the Network and By branch tabs.'),
+             'more': T(
+                 'الأزرار بتفلتر القائمة: «كل الأصناف»، A الأكثر أهمية، B، C، أو X (بلا مبيعات).\n• «🔍 فلاتر متقدمة» بتفتح فلاتر إضافية لخصائص الأصناف.\n• الشريط ده مش موجود في عرضي التحويلات والمبيعات الضائعة.',
+                 'The buttons filter the list: "All items", A most important, B, C, or X (no sales).\n• "🔍 Advanced filters" opens extra filters on item attributes.\n• This bar is hidden in the transfers and lost-sales views.')},
             {'target': 'purchasing-engine-search', 'label': T('ابحث عن صنف...', 'Search an item...'),
              'text': T('اكتب اسم أو كود الصنف لتشوف حسابه.', 'Type an item name or code to see its numbers.'),
-             'open_hint': T('في تبويبي الشبكة وبالفرع.', 'On the Network and By branch tabs.')},
+             'open_hint': T('في تبويبي الشبكة وبالفرع.', 'On the Network and By branch tabs.'),
+             'more': T(
+                 'اكتب اسم الصنف أو جزء منه والجدول بيتصفّى.\n• مفيد لما فرع يسأل عن صنف معيّن: محتاج شراء ولا لأ، وكام.\n• البحث بيشتغل مع فلتر الفئة المختار.',
+                 'Type the item name or part of it and the table filters.\n• Useful when a branch asks about a specific item: does it need buying, and how much.\n• Search works together with the selected class filter.')},
             {'target': 'purchasing-engine-seasonality', 'label': T('⟳ تحديث الموسمية', '⟳ Refresh seasonality'),
              'text': T('يسحب الشهور الناقصة من SOFTECH (قراءة بس) ويعيد حساب مؤشر الموسمية. للعرض فقط.',
                        'Pulls the missing months from SOFTECH (read only) and recomputes the seasonal index. Display only.'),
@@ -243,7 +405,10 @@ SCREENS = [
              'open_hint': T('سطر «الموسمية» أعلى جدول الشبكة أو بالفرع، لمن له صلاحية التحديث.', 'The "seasonality" line above the Network or By-branch table, for users allowed to refresh.')},
             {'target': 'purchasing-engine-export', 'label': T('⬇ تصدير', '⬇ Export'),
              'text': T('قائمة التصدير: Excel أو CSV للعرض الحالي، والمحوري، والتحليل المتقدم وطلب الموردين.',
-                       'The export menu: Excel or CSV of the current view, the pivot, the advanced analysis and the supplier order sheet.')},
+                       'The export menu: Excel or CSV of the current view, the pivot, the advanced analysis and the supplier order sheet.'),
+             'more': T(
+                 'بيفتح خيارات: الفئة، الفرع (في عرض «بالفرع»)، و«تعبئة الطلب لـ X شهر» (فاضي = الطلب الشهري المعتاد).\n• «📊 Excel» و«📄 CSV» للقائمة، و«🗂 Pivot Excel (أولويات النواقص)» بنموذج المحوري.\n• التصدير قراءة بس — مش بيغيّر أي حاجة في SOFTECH.',
+                 'Opens options: class, branch (in the "By branch" view), and "Order fill for X months" (empty = the usual monthly order).\n• "📊 Excel" and "📄 CSV" for the list, and "🗂 Pivot Excel (shortage priorities)" in the pivot layout.\n• Export is read-only — it changes nothing in SOFTECH.')},
             {'target': 'purchasing-engine-pivot-export', 'label': T('🗂 Pivot Excel (أولويات النواقص)', '🗂 Pivot Excel (shortage priorities)'),
              'text': T('شيت النواقص: صف لكل صنف وأعمدة الفروع بالمطلوب، مع «يوجد أرخص» و«بونص زائد» و«الموسمية» في آخره.',
                        'The shortage sheet: one row per item, branch columns with the need, plus "cheaper exists", "excess bonus" and "seasonality" at the end.'),
@@ -257,6 +422,7 @@ SCREENS = [
              'open_hint': T('تبويب «🔄 التحويلات المقترحة»، على توصية «انتظار». للمدير والمشتريات وأعضاء مجموعات التوريد.', 'The "🔄 Suggested transfers" tab, on a "pending" suggestion. Admin, purchasing and the supply-group members.')},
         ],
         'updated': '2026-10-29',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.cash',
@@ -272,7 +438,10 @@ SCREENS = [
         'tour': [
             {'target': 'purchasing-cash-tabs', 'label': T('📈 ذروة الطلب', '📈 Demand spike'),
              'text': T('التبويب الشغال دلوقتي هو «ذروة الطلب». «مخزون راكد» و«فائض» لسه قريباً.',
-                       'The working tab today is "Demand spike". "Dead stock" and "Overstock" are coming soon.')},
+                       'The working tab today is "Demand spike". "Dead stock" and "Overstock" are coming soon.'),
+             'more': T(
+                 '«📈 ذروة الطلب» هو التبويب الشغال دلوقتي؛ «🧊 مخزون راكد» و«📦 فائض» مكتوب جنبهم «(قريبًا)».\n• الفكرة: منشتريش كميات كبيرة ورا قفزة طلب مؤقتة فيركد المخزون والفلوس.\n• النتائج بتظهر على شيت النواقص كتنبيهات.',
+                 '"📈 Demand spike" is the working tab now; "🧊 Dead stock" and "📦 Overstock" are marked "(soon)".\n• The idea: do not buy large amounts chasing a temporary jump in demand, which freezes stock and cash.\n• Results show on the shortage sheet as alerts.')},
             {'target': 'purchasing-cash-cap-status', 'label': T('التقليل مُفعَّل / غير مُفعَّل', 'Reduction on / off'),
              'text': T('هل التقليل بيتطبّق على شيت النواقص في تشغيل المحرك ولا رصد فقط.',
                        'Whether the reduction is applied to the shortage sheet in the engine run, or monitor-only.'),
@@ -280,19 +449,34 @@ SCREENS = [
             {'target': 'purchasing-cash-kpis', 'label': T('📈 مكتشفة · قوية · للمراقبة · ✓ مؤكَّدة', '📈 Found · Strong · Watch · ✓ Confirmed'),
              'text': T('عدد الذروات المكتشفة، القوية (قابلة للتقليل)، للمراقبة، المؤكدة، وتوفير الطلب المؤكَّد.',
                        'Spikes found, strong (reducible), watch, confirmed, and the saving on confirmed orders.'),
-             'when': T('لو «قوية» أكبر من «مؤكَّدة»، فيه ذروات لسه مستنية مراجعتك.', 'If "Strong" is more than "Confirmed", some spikes still wait for your review.')},
+             'when': T('لو «قوية» أكبر من «مؤكَّدة»، فيه ذروات لسه مستنية مراجعتك.', 'If "Strong" is more than "Confirmed", some spikes still wait for your review.'),
+             'more': T(
+                 '• «📈 مكتشفة»: كل الأصناف اللي فيها ذروة. «قوية»: قابلة للتقليل بعد تأكيدك. «للمراقبة»: للمتابعة بس.\n• «✓ مؤكَّدة»: اللي أكّدها حد، و«توفير الطلب المؤكَّد» = قيمة الشراء اللي اتفادينا.\n• الشارة فوق بتقول هل «التقليل مُفعَّل» في تشغيل المحرك ولا «رصد فقط».',
+                 '• "📈 Found": all items with a spike. "Strong": can be reduced after you confirm. "Watch": monitor only.\n• "✓ Confirmed": those someone confirmed, and "Confirmed order saving" = the purchase value avoided.\n• The badge above says whether "Reduction is enabled" in the engine run or "monitor only".'),
+         },
             {'target': 'purchasing-cash-filters', 'label': T('الكل · قوية · مراقبة', 'All · Strong · Watch'),
              'text': T('فلتر الدرجة والتصنيف، والبحث بالكود أو الاسم.', 'Filter by grade and category, and search by code or name.'),
-             'when': T('ابدأ بـ «قوية» — دي بس اللي ينفع تتأكد.', 'Start with "Strong" — only those can be confirmed.')},
+             'when': T('ابدأ بـ «قوية» — دي بس اللي ينفع تتأكد.', 'Start with "Strong" — only those can be confirmed.'),
+             'more': T(
+                 'فلتر القوة: «الكل» أو «قوية» أو «مراقبة»، وقائمة التصنيف، وبحث بالكود أو الاسم.\n• ابدأ بـ«قوية» — دي اللي ممكن تقلّل طلبها فعلاً.\n• الفلاتر بتغيّر الجدول بس، مش الملخص فوق.',
+                 'Strength filter: "All", "Strong" or "Watch", a category list, and search by code or name.\n• Start with "Strong" — those are the ones whose order can actually be reduced.\n• Filters change the table only, not the summary above.'),
+         },
             {'target': 'purchasing-cash-table', 'label': T('جدول الذروات', 'Spikes table'),
              'text': T('لكل صنف: المضاعف (المعدل الحديث ÷ السابق)، الرصيد، المطلوب، وبعد التقليل. اضغط عنوان العمود للترتيب.',
                        'Per item: the multiplier (recent ÷ previous rate), stock, required qty and after reduction. Click a column header to sort.'),
-             'when': T('قارن المضاعف بـ «المعدل الحديث/شهر» و«السابق/شهر» قبل ما تأكد أي صف.', 'Check the multiplier against "Recent/month" and "Previous/month" before confirming any row.')},
+             'when': T('قارن المضاعف بـ «المعدل الحديث/شهر» و«السابق/شهر» قبل ما تأكد أي صف.', 'Check the multiplier against "Recent/month" and "Previous/month" before confirming any row.'),
+             'more': T(
+                 'لكل صنف: الدرجة، «المضاعف» (المعدل الحديث ÷ السابق — «جديد» لو مكانش بيتباع)، المعدلين، الرصيد والمطلوب.\n• بعد التأكيد بيظهر «بعد التقليل» و«توفير محتمل».\n• اسأل نفسك: القفزة دي ليها سبب دائم (صنف جديد في السوق، نقص عند المنافسين) ولا مؤقتة؟',
+                 'For each item: grade, "multiplier" (recent ÷ previous rate — "new" if it was not selling), both rates, stock and required qty.\n• After confirming, "After reduction" and "Potential saving" appear.\n• Ask yourself: does this jump have a lasting reason (new on the market, competitor shortage) or is it temporary?'),
+         },
             {'target': 'purchasing-cash-confirm', 'label': T('تأكيد (طبّق التقليل)', 'Confirm (apply reduction)'),
              'text': T('تأكد إن القفزة مؤقتة، فتبقى الذروة قابلة لتقليل الكمية المطلوبة. بيتسجل باسمك ووقته.',
                        'Confirm the jump is temporary, so the spike can cut the required quantity. Recorded with your name and time.'),
              'warn': T('ماتأكدش صنف جديد بيكبر فعلاً — هتقلل شراءه وهيقع نقص.', 'Do not confirm a new item that is really growing — you will under-buy it and run short.'),
-             'open_hint': T('على صف ذروة «قوية» غير مؤكدة.', 'On an unconfirmed "strong" spike row.')},
+             'open_hint': T('على صف ذروة «قوية» غير مؤكدة.', 'On an unconfirmed "strong" spike row.'),
+             'more': T(
+                 'بيأكّد إن الذروة مؤقتة فيبقى الصنف قابل لتقليل كمية الشراء.\n• التقليل بيوصل لشيت النواقص بس لما يكون مفعّل في تشغيل المحرك.\n• لو غيّرت رأيك، «إلغاء التأكيد» بيرجّعه. أصناف «مراقبة» مفيهاش زرار تأكيد.',
+                 'Confirms the spike is temporary so the item\'s purchase quantity can be reduced.\n• The reduction reaches the shortage sheet only when enabled in the engine run.\n• If you change your mind, "Unconfirm" reverts it. "Watch" items have no confirm button.')},
             {'target': 'purchasing-cash-unconfirm', 'label': T('إلغاء التأكيد', 'Unconfirm'),
              'text': T('يرجّع الذروة للرصد فقط بدون تقليل.', 'Returns the spike to monitor-only, with no reduction.'),
              'when': T('لما يتضح إن الطلب حقيقي ومستمر.', 'When the demand turns out to be real and lasting.'),
@@ -303,6 +487,7 @@ SCREENS = [
               'Confirming or un-confirming a spike is checked on the server: it needs "edit" or "approve" on the purchasing module; viewing is open to everyone who can open the screen.'),
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.supply',
@@ -353,16 +538,25 @@ SCREENS = [
             {'target': 'purchasing-supply-tabs', 'label': T('تبويبات التوريد والمعدلات', 'Supply & rates tabs'),
              'text': T('تبويبات مساحة التوريد: الإتاحة، مقارنة الموردين والأسعار، النواقص، المعدلات، طلبات التوريد، تلبية الفروع، واتساب، التوزيعة.',
                        'The supply workspace tabs: availability, supplier and price comparison, shortages, rates, supply requests, branch fill, WhatsApp, distribution.'),
-             'when': T('الشاشة بتفتكر آخر تبويب فتحته.', 'The screen remembers the last tab you opened.')},
+             'when': T('الشاشة بتفتكر آخر تبويب فتحته.', 'The screen remembers the last tab you opened.'),
+             'more': T(
+                 'كل تبويب شغلانة يومية: الإتاحة، النواقص، معدلات البيع، طلبات التوريد، تلبية طلبات الفروع، طلبات واتساب، والتوزيعة.\n• الشاشة بتفتكر آخر تبويب فتحته.\n• «معدلات البيع» بتكتب في SOFTECH بس بعد اعتماد وبوابة مفعّلة.',
+                 'Each tab is a daily job: availability, shortages, sales rates, supply requests, filling branch requests, WhatsApp requests, and distribution.\n• The screen remembers the last tab you opened.\n• "Sales rates" writes to SOFTECH only after approval and with the gate enabled.')},
             {'target': 'purchasing-supply-paste', 'label': T('نص رسالة المورد', 'Supplier message text'),
              'text': T('الصق قائمة «الوارد» من واتساب، أو ارفع صورة أو Excel من الأزرار فوقها. اكتب اسم المورد زي ما في الرسالة.',
                        'Paste the supplier «الوارد» list from WhatsApp, or upload a photo or Excel with the buttons above. Type the supplier name as in the message.'),
-             'open_hint': T('تبويب «صندوق الإتاحة». لو فيه قائمة مفتوحة اضغط «+ قائمة جديدة».', 'The "Availability inbox" tab. If a list is open, press "+ New list".')},
+             'open_hint': T('تبويب «صندوق الإتاحة». لو فيه قائمة مفتوحة اضغط «+ قائمة جديدة».', 'The "Availability inbox" tab. If a list is open, press "+ New list".'),
+             'more': T(
+                 'الصق نص رسالة المورد زي ما هو — سطر لكل صنف، بالعربي أو الإنجليزي.\n• النص الأصلي بيتحفظ للمراجعة.\n• لو نفس المحتوى اتضاف قبل كده، هيظهر تنبيه إنه مكرر.',
+                 "Paste the supplier's message as is — one line per item, Arabic or English.\n• The original text is kept for review.\n• If the same content was added before, a duplicate warning appears.")},
             {'target': 'purchasing-supply-analyze', 'label': T('تحليل القائمة', 'Analyze list'),
              'text': T('يطابق كل سطر بصنف، ويقرأ الكوتة والبونص، ويحسب لكل صنف: محتاجينه؟ كام؟ المخزون الداخلي يغطيه؟',
                        'Matches each line to an item, reads quota and bonus, and works out per item: do we need it, how many, does internal stock cover it?'),
              'when': T('Ctrl+Enter بيعمل نفس الحاجة. النص الأصلي بيتحفظ للمراجعة.', 'Ctrl+Enter does the same. The original text is kept for review.'),
-             'open_hint': T('تبويب «صندوق الإتاحة».', 'The "Availability inbox" tab.')},
+             'open_hint': T('تبويب «صندوق الإتاحة».', 'The "Availability inbox" tab.'),
+             'more': T(
+                 'بيحلل النص ويطابق كل سطر بصنف ويعرض لكل صنف الاحتياج والكمية والتكلفة الفعلية.\n• الزرار شغال بس لو فيه نص. Ctrl+Enter اختصاره.\n• بعد التحليل راجع وأكّد المطابقات، واطلب اللي محتاجينه بس.',
+                 'It analyses the text, matches each line to an item, and shows need, quantity and real cost per item.\n• The button works only when there is text. Ctrl+Enter is the shortcut.\n• After analysis, review and confirm the matches, and order only what we need.')},
             {'target': 'purchasing-supply-build-order', 'label': T('بناء طلب الشراء ←', 'Build purchase order →'),
              'text': T('يفتح لوحة الطلب للأصناف المحددة: نسخ النص، إرسال عبر واتساب، Excel، و«تسجيل الطلب».',
                        'Opens the order panel for the picked items: copy text, send via WhatsApp, Excel, and "Record order".'),
@@ -410,8 +604,25 @@ SCREENS = [
                        'Creates the branch shortage list from the confirmed lines only, and learns the matches.'),
              'when': T('بعد مراجعة كل سطر (Enter للتأكيد) أو «تأكيد الآمنة».', 'After reviewing each line (Enter confirms) or "Confirm safe ones".'),
              'open_hint': T('تبويب «طلبات واتساب»: الصق الرسائل و«استخراج الأصناف» الأول.', 'The "WhatsApp requests" tab: paste the messages and press "Extract items" first.')},
+            {'target': 'purchasing-supply-batches',  # from the GitHub-side tour
+             'label': T('القوائم', 'Lists'),
+             'when': T('لفتح قائمة توافر سابقة ومراجعة مطابقتها.', 'To open an earlier availability list and review its matching.'),
+             'text': T('القوائم المستوردة من الموردين.',
+                       'The lists imported from suppliers.'),
+             'more': T(
+                 'كل قائمة مورد اتستوردت ليها زرار: المورد، رقمها، عدد السطور والمطابق والمؤكد، والتاريخ.\n• 🔒 = قائمة نهائية مقفولة. اضغط القائمة تفتح مراجعتها تحت.\n• «+ قائمة جديدة» يرجّع خانة الإدخال، و«📊 مطابقة الأكواد» بيوضح نسبة المطابقة بأكواد المورد.',
+                 'Each imported supplier list has a button: supplier, its number, line, matched and confirmed counts, and date.\n• 🔒 = a final locked list. Click a list to open its review below.\n• "+ New list" brings back the input box, and "📊 Code matching" shows how many lines match by supplier code.')},
+            {'target': 'purchasing-supply-import',  # from the GitHub-side tour
+             'label': T('إدخال قائمة جديدة', 'New list entry'),
+             'when': T('لما يوصلك عرض توافر من مورد (رسالة أو صورة أو ملف).', 'When a supplier sends an availability offer (message, image or file).'),
+             'text': T('اختار المورد والمصدر، وارفع صورة أو ملف Excel / CSV.',
+                       'Choose the supplier and source, and upload an image or an Excel / CSV file.'),
+             'more': T(
+                 '«المورد (كما في الرسالة)» والمصدر (واتساب، نص، بريد، يدوي)، وبعدين ارفع صورة أو Excel/CSV.\n• الملف بيتقري ويعمل قائمة جديدة فوراً.\n• لو شكل ملف Excel جديد بيطلب تحديد الأعمدة مرة، وبيفتكرها للمورد ده.',
+                 '"Supplier (as in the message)" and the source (WhatsApp, text, email, manual), then upload an image or Excel/CSV.\n• The file is read and a new list is created at once.\n• A new Excel layout asks you to map the columns once and remembers them for that supplier.')},
         ],
         'updated': '2026-10-28',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.overview',
@@ -452,7 +663,10 @@ SCREENS = [
              'when': T('قارن الشهر الحالي باللي قبله؛ القفزة المفاجئة تستاهل مراجعة في «سجل المشتريات».', 'Compare this month with the ones before; a sudden jump is worth checking in "Purchase history".')},
             {'target': 'purchasing-overview-alerts', 'label': T('عرض الكل ←', 'View all →'),
              'text': T('التنبيهات المفتوحة حسب الخطورة. «عرض الكل» يفتح تبويب التنبيهات في شاشة التحسين.',
-                       'Open alerts by severity. "View all" opens the alerts tab on the optimization screen.')},
+                       'Open alerts by severity. "View all" opens the alerts tab on the optimization screen.'),
+             'more': T(
+                 'عدد التنبيهات المفتوحة حسب الخطورة: 🔴 حرجة، تحذير، ومعلومة (زي قفزة سعر أو تركّز على مورد).\n• «عرض الكل ←» بيفتح تبويب التنبيهات في «تحسين المشتريات».\n• عالج الحرجة الأول وعلّمها «حل ✓» هناك.',
+                 'Open alerts by severity: 🔴 critical, warning and info (such as a price jump or supplier concentration).\n• "View all ←" opens the alerts tab in "Procurement optimization".\n• Handle the critical ones first and mark them "Resolve ✓" there.')},
             {'target': 'purchasing-overview-alert-resolve', 'label': T('حل', 'Resolve'),
              'text': T('يقفل التنبيه كـ «محلول» مع وقت الحل.', 'Closes the alert as "resolved" with the time.'),
              'warn': T('اضغطه بعد ما تعالج السبب فعلاً — التنبيه بيختفي من القائمة المفتوحة.', 'Press it only after you really handled the cause — the alert leaves the open list.'),
@@ -463,8 +677,17 @@ SCREENS = [
              'text': T('اختصارات: أداء الموردين، الهوامش، خريطة المورد-صنف، والتحسين والتنبيهات.',
                        'Shortcuts: supplier performance, margins, the supplier-item map, and optimization and alerts.'),
              'when': T('لما تحب تتعمق في جزء معيّن؛ كل بطاقة بتفتح شاشتها.', 'When you want to dig into one area; each card opens its screen.')},
+            {'target': 'purchasing-overview-header',  # from the GitHub-side tour
+             'label': T('ذكاء المشتريات', 'Procurement intelligence'),
+             'when': T('ابدأ من هنا: اتأكد من تاريخ آخر تحديث قبل ما تعتمد على الأرقام.', 'Start here: check the last-update date before relying on the figures.'),
+             'text': T('ذكاء المشتريات مع تاريخ آخر تحديث للبيانات.',
+                       'Procurement intelligence, with the date of the last data update.'),
+             'more': T(
+                 '«آخر تحديث» = تاريخ آخر لقطة حسبها المحرك؛ لو قديم الأرقام مش محدّثة.\n• «🔄 تحديث» بيعيد تحميل الصفحة بس.\n• تحت العنوان بيظهر آخر تشغيل للمحرك ونجح ولا لأ.',
+                 '"Last update" = the date of the engine\'s last snapshot; if old, the numbers are stale.\n• "🔄 Refresh" only reloads the page.\n• Under the title you see the engine\'s last run and whether it succeeded.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.history',
@@ -489,7 +712,10 @@ SCREENS = [
              'when': T('Enter في خانة البحث العام بيدوّر فوراً.', 'Enter in the general search box searches at once.')},
             {'target': 'purchasing-history-ranges', 'label': T('هامش · تكلفة فعلية · قيمة', 'Margin · effective cost · value'),
              'text': T('حدود من/إلى للهامش والتكلفة الفعلية (بعد البونص والضريبة) والقيمة.',
-                       'From/to limits on margin, effective cost (after bonus and VAT) and value.')},
+                       'From/to limits on margin, effective cost (after bonus and VAT) and value.'),
+             'more': T(
+                 'حدود من/إلى لـ: الهامش %، التكلفة الفعلية، والقيمة.\n• مثال: هامش من 0 لـ 5 يطلّع المشتريات اللي هامشها ضعيف.\n• «التكلفة الفعلية» = بعد البونص والضريبة، وهي الأصدق للمقارنة.',
+                 'From/to limits for: margin %, effective cost, and value.\n• Example: margin 0 to 5 shows purchases with a weak margin.\n• "Effective cost" = after bonus and VAT, the fairest for comparison.')},
             {'target': 'purchasing-history-movement', 'label': T('كل الحركات · مشتريات · مرتجعات', 'All · Purchases · Returns'),
              'text': T('يعرض المشتريات بس أو المرتجعات بس.', 'Shows purchases only or returns only.')},
             {'target': 'purchasing-history-foc-only', 'label': T('🎁 بونص فقط', '🎁 Bonus only'),
@@ -498,15 +724,31 @@ SCREENS = [
              'text': T('نوع المرتجع: تالف أو عادي. اضغط تاني يلغي الفلتر.', 'Return type: damaged or normal. Press again to clear it.'),
              'when': T('لما تدوّر على سبب المرتجع: التالف بيكشف شراء زيادة أو صلاحية قصيرة.', 'When looking into why goods came back: damaged returns point to over-buying or short expiry.')},
             {'target': 'purchasing-history-search', 'label': T('بحث', 'Search'),
-             'text': T('يطبّق الفلاتر ويحدّث الجدول والإجماليات.', 'Applies the filters and refreshes the table and totals.')},
+             'text': T('يطبّق الفلاتر ويحدّث الجدول والإجماليات.', 'Applies the filters and refreshes the table and totals.'),
+             'more': T(
+                 '«بحث عام» بالاسم أو كود الصنف أو رقم الفاتورة، وجنبه «كود المورد» و«كود الصنف» و«كود المشتري» والترتيب.\n• Enter في خانة البحث بيطبّق على طول.\n• الأكواد هي أكواد SOFTECH.',
+                 '"General search" by item name or code or invoice number, next to "Supplier code", "Item code", "Buyer code" and ordering.\n• Enter in the search box applies at once.\n• The codes are SOFTECH codes.')},
             {'target': 'purchasing-history-reset', 'label': T('إعادة ضبط', 'Reset'),
              'text': T('يمسح كل فلاتر الشاشة دي.', 'Clears every filter on this screen.')},
             {'target': 'purchasing-history-table', 'label': T('جدول سطور الشراء', 'Purchase lines table'),
              'text': T('سطور الشراء والمرتجعات من SOFTECH. بيعرض أول 1000 سطر بس، والإجماليات فوق على كل النتائج — ضيّق الفلاتر.',
                        'Purchase and return lines from SOFTECH. Only the first 1000 lines show; the totals above cover all matches — narrow the filters.'),
-             'when': T('بعد «بحث». لو وصل لـ 1000 سطر، ضيّق الفترة أو حدد مورد أو صنف.', 'After "Search". If it reaches 1000 lines, narrow the period or pick a supplier or item.')},
+             'when': T('بعد «بحث». لو وصل لـ 1000 سطر، ضيّق الفترة أو حدد مورد أو صنف.', 'After "Search". If it reaches 1000 lines, narrow the period or pick a supplier or item.'),
+             'more': T(
+                 'لكل سطر: التاريخ، رقم الفاتورة، الفرع، المورد وفئته، الصنف، الاتجاه، الكمية والبونص، السعر والتكلفة الفعلية، الهامش والضريبة ونوع المرتجع.\n• الجدول بيعرض أول 1,000 سطر؛ ضيّق الفلاتر لو محتاج تشوف الباقي.\n• البيانات من SOFTECH للقراءة بس.',
+                 'For each line: date, invoice number, branch, supplier and category, item, direction, quantity and bonus, price and effective cost, margin, VAT and return type.\n• The table shows the first 1,000 lines; narrow the filters to see the rest.\n• The data comes from SOFTECH and is read-only.'),
+         },
+            {'target': 'purchasing-history-toggles',  # from the GitHub-side tour
+             'label': T('كل الحركات / مشتريات فقط / مرتجعات فقط', 'All / Purchases only / Returns only'),
+             'when': T('لما تحتاج تشوف نوع واحد من الحركات بس، زي المرتجعات أو البونص.', 'When you need just one kind of movement, such as returns or bonus.'),
+             'text': T('اختر نوع الحركة، أو «🎁 بونص فقط»، أو نوع المرتجع (تالف/عادي).',
+                       'Pick the movement type, "🎁 Bonus only", or the return type (damaged/normal).'),
+             'more': T(
+                 '• «كل الحركات» أو «مشتريات فقط» أو «مرتجعات فقط».\n• «🎁 بونص فقط» للسطور اللي فيها بضاعة مجانية.\n• نوع المرتجع: ⚠️ تالف أو ↩️ عادي — الضغطة التانية بتلغيه.',
+                 '• "All movements", "Purchases only" or "Returns only".\n• "🎁 Bonus only" for lines with free goods.\n• Return type: ⚠️ damaged or ↩️ normal — a second click clears it.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.segments',
@@ -524,19 +766,34 @@ SCREENS = [
             {'target': 'purchasing-segments-cards', 'label': T('بطاقات الفئات', 'Category cards'),
              'text': T('بطاقة لكل فئة موردين: القيمة والنصيب. اضغط بطاقة تصفّي القائمة تحت؛ اضغطها تاني تلغي.',
                        'A card per supplier category: value and share. Click a card to filter the list below; click again to clear.'),
-             'when': T('لما تحب تشوف موردين فئة واحدة بس في «قائمة الموردين».', 'When you want only one category\'s suppliers in "Supplier list".')},
+             'when': T('لما تحب تشوف موردين فئة واحدة بس في «قائمة الموردين».', 'When you want only one category\'s suppliers in "Supplier list".'),
+             'more': T(
+                 'كل بطاقة فئة موردين (موزّع رئيسي، مصنع…) بقيمة مشترياتها ونصيبها.\n• الضغط على بطاقة بيفلتر قائمة الموردين تحت على الفئة دي، والضغطة التانية بتلغي.\n• الفئات نفسها بتتدار من «فئات وقواعد تصنيف الموردين».',
+                 'Each card is a supplier category (main distributor, manufacturer…) with its purchase value and share.\n• Clicking a card filters the supplier list below to that category; clicking again clears it.\n• The categories themselves are managed in "Supplier categories & rules".'),
+         },
             {'target': 'purchasing-segments-distribution', 'label': T('توزيع قيمة المشتريات', 'Purchase value distribution'),
              'text': T('توزيع قيمة المشتريات على الفئات.', 'How purchase value splits across the categories.'),
-             'when': T('نظرة سريعة: لو فئة واحدة واخدة معظم الشريط، اعتمادنا عليها كبير.', 'A quick look: if one category fills most of the bar, we depend on it heavily.')},
+             'when': T('نظرة سريعة: لو فئة واحدة واخدة معظم الشريط، اعتمادنا عليها كبير.', 'A quick look: if one category fills most of the bar, we depend on it heavily.'),
+             'more': T(
+                 'شريط ملوّن بيوضح كل فئة واخدة كام في المية من قيمة المشتريات.\n• يوضح بسرعة إحنا معتمدين على الموزعين ولا الشراء المباشر من المصانع.\n• النسبة مكتوبة جنب كل لون تحت الشريط.',
+                 'A coloured bar shows what percent of purchase value each category takes.\n• It shows at a glance whether we rely on distributors or buy direct from manufacturers.\n• The percentage is written next to each colour below the bar.'),
+         },
             {'target': 'purchasing-segments-search', 'label': T('بحث بالاسم أو الكود...', 'Search by name or code...'),
-             'text': T('ابحث عن مورد.', 'Find a supplier.')},
+             'text': T('ابحث عن مورد.', 'Find a supplier.'),
+             'more': T(
+                 'اكتب اسم المورد أو كوده والقائمة بتتصفّى.\n• البحث بيشتغل مع فلتر الفئة لو مختار؛ «إلغاء الفلتر» بيرجّع الكل.\n• مفيد قبل ما تعدّل فئة مورد معيّن.',
+                 'Type the supplier name or code and the list filters.\n• Search works with the category filter if one is selected; "Clear filter" brings back all.\n• Useful before changing a particular supplier\'s category.'),
+         },
             {'target': 'purchasing-segments-table', 'label': T('قائمة الموردين', 'Supplier list'),
              'text': T('لكل مورد: الفئة، أكواد SOFTECH (ptcode والتصنيف)، قيمة الشراء، الفواتير، البونص، المرتجعات، وآلي أو يدوي.',
                        'Per supplier: category, SOFTECH codes (ptcode and classification), purchase value, invoices, bonus, returns, and auto or manual.'),
              'when': T('لو مورد في فئة غلط، صحّحه من «تعديل» (للمدير).', 'If a supplier sits in the wrong category, fix it with "Edit" (admins).')},
             {'target': 'purchasing-segments-edit', 'label': T('تعديل', 'Edit'),
              'text': T('يغيّر فئة المورد يدوياً مع سبب.', 'Changes the supplier category by hand, with a reason.'),
-             'open_hint': T('عمود «إجراء» بيظهر للمدير بس.', 'The "Action" column shows for admins only.')},
+             'open_hint': T('عمود «إجراء» بيظهر للمدير بس.', 'The "Action" column shows for admins only.'),
+             'more': T(
+                 'بيفتح نافذة تغيّر فيها فئة المورد وتكتب ملاحظة.\n• التعديل اليدوي بيثبّت الفئة: «إعادة تصنيف الموردين» مش هتغيّرها بعد كده.\n• الزرار والعمود بيظهروا للمدير بس.',
+                 'Opens a window to change the supplier\'s category and write a note.\n• A manual edit pins the category: "Reclassify suppliers" will not change it afterwards.\n• The button and column show for admins only.')},
             {'target': 'purchasing-segments-save', 'label': T('حفظ التعديل', 'Save edit'),
              'text': T('يحفظ الفئة ويعلّم المورد «✋ يدوي».', 'Saves the category and marks the supplier "✋ manual".'),
              'warn': T('التعديل اليدوي بيوقف التصنيف الآلي للمورد ده نهائياً، حتى بعد «إعادة التصنيف».',
@@ -544,6 +801,7 @@ SCREENS = [
              'open_hint': T('اضغط «تعديل» على مورد الأول.', 'Press "Edit" on a supplier first.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.categories',
@@ -561,23 +819,38 @@ SCREENS = [
             {'target': 'purchasing-categories-reclassify', 'label': T('🔄 إعادة تصنيف الموردين', '🔄 Reclassify suppliers'),
              'text': T('يطبّق القواعد الحالية على كل الموردين في الخلفية (حوالي دقيقة). التعديلات اليدوية بتفضل زي ما هي.',
                        'Applies the current rules to every supplier in the background (about a minute). Manual edits stay as they are.'),
-             'when': T('بعد ما تعدّل فئة أو قاعدة.', 'After you change a category or rule.')},
+             'when': T('بعد ما تعدّل فئة أو قاعدة.', 'After you change a category or rule.'),
+             'more': T(
+                 'بيطبّق قواعد التصنيف من جديد على كل الموردين في الخلفية — النتيجة بتتحدّث خلال دقيقة تقريباً.\n• استخدمه بعد ما تضيف أو تعدّل قاعدة.\n• الموردين المثبّتين يدوياً مش بيتغيّروا.',
+                 'Re-applies the classification rules to all suppliers in the background — results update within about a minute.\n• Use it after adding or editing a rule.\n• Manually pinned suppliers are not changed.')},
             {'target': 'purchasing-categories-new-category', 'label': T('+ فئة جديدة', '+ New category'),
              'text': T('فئة جديدة: الاسم والكود واللون والترتيب، وهل هي الفئة الافتراضية لغير المصنّف.',
                        'A new category: name, code, colour, order, and whether it is the default for unclassified suppliers.')},
             {'target': 'purchasing-categories-list', 'label': T('الفئات', 'Categories'),
              'text': T('الفئات مع عدد الموردين والقواعد لكل فئة. «تعديل» لتغيير بياناتها.', 'The categories with their supplier and rule counts. "Edit" to change one.'),
-             'when': T('قبل ما تضيف فئة، اتأكد إنها مش موجودة باسم تاني.', 'Before adding a category, make sure it does not already exist under another name.')},
+             'when': T('قبل ما تضيف فئة، اتأكد إنها مش موجودة باسم تاني.', 'Before adding a category, make sure it does not already exist under another name.'),
+             'more': T(
+                 'لكل فئة: الترتيب، الاسم، الكود، عدد الموردين، عدد القواعد، والحالة.\n• من السطر تقدر تعدّل أو تحذف الفئة (الحذف بيسأل تأكيد).\n• فئة «الموزّع الرئيسي/المصنع» بتدخل في تقارير الصلاحية، فصنّف بدقة.',
+                 'For each category: order, name, code, supplier count, rule count, and status.\n• From the row you can edit or delete the category (delete asks for confirmation).\n• The "main distributor/manufacturer" category feeds the expiry reports, so classify carefully.'),
+         },
             {'target': 'purchasing-categories-delete-category', 'label': T('حذف', 'Delete'),
              'text': T('يحذف الفئة بعد تأكيد.', 'Deletes the category after a confirmation.'),
              'warn': T('نهائي، وبيترفض لو فيه قواعد لسه بتشاور عليها. لو مش متأكد عطّلها بدل الحذف، وبعدها «إعادة التصنيف».',
                        'Final, and refused while rules still point to it. If unsure, deactivate it instead, then "Reclassify".')},
             {'target': 'purchasing-categories-new-rule', 'label': T('+ قاعدة جديدة', '+ New rule'),
              'text': T('قاعدة تربط نوع الشخص في SOFTECH (ptcode) وتصنيفه بفئة، بأولوية — الرقم الأقل يكسب.',
-                       'A rule mapping a SOFTECH person type (ptcode) and classification to a category, with a priority — the lowest wins.')},
+                       'A rule mapping a SOFTECH person type (ptcode) and classification to a category, with a priority — the lowest wins.'),
+             'more': T(
+                 'بيفتح نموذج القاعدة: نوع الشخص، التصنيف، الفئة، الأولوية، والحالة.\n• القاعدة مش بتتطبّق على الموردين الحاليين لوحدها — اضغط «🔄 إعادة تصنيف الموردين» بعدها.\n• خلّي الأولوية أقل للقواعد الأدق.',
+                 'Opens the rule form: person type, classification, category, priority, and status.\n• The rule does not apply to existing suppliers by itself — press "🔄 Reclassify suppliers" afterwards.\n• Give more specific rules a lower priority.'),
+         },
             {'target': 'purchasing-categories-rules', 'label': T('قواعد التصنيف', 'Classification rules'),
              'text': T('القواعد الحالية: النوع والتصنيف والفئة والأولوية والحالة.', 'The current rules: type, classification, category, priority and status.'),
-             'when': T('لما مورد يتصنّف غلط تلقائياً: عدّل القاعدة، وبعدين «🔄 إعادة تصنيف الموردين».', 'When a supplier is auto-classified wrongly: fix the rule, then "🔄 Reclassify suppliers".')},
+             'when': T('لما مورد يتصنّف غلط تلقائياً: عدّل القاعدة، وبعدين «🔄 إعادة تصنيف الموردين».', 'When a supplier is auto-classified wrongly: fix the rule, then "🔄 Reclassify suppliers".'),
+             'more': T(
+                 'كل قاعدة بتربط «نوع الشخص» (ptcode) و«التصنيف» (ptclassifcode) في SOFTECH بفئة.\n• لو أكتر من قاعدة تنطبق على مورد، صاحبة الأولوية الأقل هي اللي بتكسب.\n• تقدر تعدّل أو تحذف أي قاعدة من سطرها.',
+                 'Each rule maps a SOFTECH "person type" (ptcode) and "classification" (ptclassifcode) to a category.\n• If several rules match a supplier, the one with the lowest priority wins.\n• You can edit or delete any rule from its row.'),
+         },
             {'target': 'purchasing-categories-save-rule', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ القاعدة. ماينفعش قاعدتين بنفس النوع والتصنيف.', 'Saves the rule. Two rules with the same type and classification are not allowed.'),
              'open_hint': T('اضغط «+ قاعدة جديدة» أو «تعديل» على قاعدة.', 'Press "+ New rule" or "Edit" on a rule.')},
@@ -586,6 +859,7 @@ SCREENS = [
              'warn': T('نهائي. الموردين اللي كانت بتصنفهم بيتنقلوا مع أول إعادة تصنيف.', 'Final. The suppliers it classified move on the next reclassify.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.foc',
@@ -606,9 +880,17 @@ SCREENS = [
             {'target': 'purchasing-foc-kpis', 'label': T('بطاقات المؤشرات', 'KPI cards'),
              'text': T('البونص (وحدات ونسبة)، نسبة مرتجعات التالف، نسبة الضريبة، وفرق التكلفة الفعلية عن سعر الوحدة.',
                        'Bonus (units and rate), damaged-return rate, VAT rate, and the effective-cost gap to the unit price.'),
-             'when': T('نظرة عامة قبل التبويبات تحت، اللي بتفصّل البونص والتالف والضريبة.', 'An overview before the tabs below, which break down bonus, damage and tax.')},
+             'when': T('نظرة عامة قبل التبويبات تحت، اللي بتفصّل البونص والتالف والضريبة.', 'An overview before the tabs below, which break down bonus, damage and tax.'),
+             'more': T(
+                 '• «البضاعة المجانية (بونص)»: الوحدات المجانية ونسبتها من الكمية.\n• «مرتجعات التالف»: نسبة التالف من كل المرتجعات (بالأحمر فوق 30%). «نسبة الضريبة (VAT)» على المشتريات.\n• «فرق التكلفة الفعلية»: التكلفة بعد البونص والضريبة مقارنة بسعر الوحدة.',
+                 '• "Free goods (bonus)": free units and their share of quantity.\n• "Damaged returns": damaged share of all returns (red above 30%). "VAT rate" on purchases.\n• "Effective cost difference": cost after bonus and VAT compared with the unit price.'),
+         },
             {'target': 'purchasing-foc-tabs', 'label': T('🎁 FOC · ⚠️ التالف · 🧾 الضريبة', '🎁 FOC · ⚠️ Damaged · 🧾 Tax'),
-             'text': T('ثلاث زوايا للتكلفة الحقيقية: البونص، مرتجعات التالف، والعبء الضريبي.', 'Three views of real cost: bonus, damaged returns and tax burden.')},
+             'text': T('ثلاث زوايا للتكلفة الحقيقية: البونص، مرتجعات التالف، والعبء الضريبي.', 'Three views of real cost: bonus, damaged returns and tax burden.'),
+             'more': T(
+                 '• «🎁 تحليل FOC»: البونص والموردين الأكرم ومقارنة التكلفة.\n• «⚠️ مرتجعات التالف»: التالف مقابل العادي، وأكتر الأصناف والفروع.\n• «🧾 العبء الضريبي»: الضريبة على المشتريات واتجاهها.',
+                 '• "🎁 FOC analysis": bonus, most generous suppliers and cost comparison.\n• "⚠️ Damaged returns": damaged versus normal, and the top items and branches.\n• "🧾 Tax burden": VAT on purchases and its trend.'),
+         },
             {'target': 'purchasing-foc-generous', 'label': T('🎁 أكثر الموردين كرمًا (أعلى بونص)', '🎁 Most generous suppliers (top bonus)'),
              'text': T('أكثر الموردين إعطاءً للبونص.', 'The suppliers that give the most bonus.'),
              'when': T('قبل التفاوض: البونص العالي بيقلل التكلفة الفعلية حتى لو سعر الوحدة أعلى.', 'Before negotiating: a high bonus lowers effective cost even when the unit price is higher.'),
@@ -626,8 +908,25 @@ SCREENS = [
              'text': T('أعلى الموردين في العبء الضريبي.', 'The suppliers with the highest tax burden.'),
              'when': T('لما تقارن تكلفة الموردين؛ الضريبة جزء من التكلفة الفعلية.', 'When comparing supplier costs; VAT is part of the effective cost.'),
              'open_hint': T('تبويب «🧾 العبء الضريبي».', 'The "🧾 Tax burden" tab.')},
+            {'target': 'purchasing-foc-expiry',  # from the GitHub-side tour
+             'label': T('⚠️ ملخص مرتجعات التالف', '⚠️ Damaged returns summary'),
+             'when': T('لمعرفة حجم المرتجعات التالفة مقارنة بالعادية.', 'To see how large damaged returns are versus normal ones.'),
+             'text': T('في تبويب «⚠️ مرتجعات التالف»: ملخص المرتجعات التالفة مقابل العادية.',
+                       'In the "⚠️ Damaged returns" tab: damaged versus normal returns summary.'),
+             'more': T(
+                 'ملخص المرتجعات التالفة مقابل العادية: العدد والقيمة والنسبة.\n• تحتها أكتر الأصناف والفروع في مرتجعات التالف.\n• تالف كتير في صنف = بنشتري أكتر من اللي بيتباع قبل الصلاحية.',
+                 'Summary of damaged versus normal returns: count, value and share.\n• Below are the items and branches with the most damaged returns.\n• Many damaged returns on an item = we buy more than sells before expiry.')},
+            {'target': 'purchasing-foc-tax',  # from the GitHub-side tour
+             'label': T('🧾 ملخص العبء الضريبي', '🧾 Tax burden summary'),
+             'when': T('لمعرفة إجمالي الضريبة على المشتريات ونسبتها.', 'To see the total tax on purchases and its rate.'),
+             'text': T('في تبويب «🧾 العبء الضريبي»: إجمالي الضريبة على المشتريات ونسبتها.',
+                       'In the "🧾 Tax burden" tab: total VAT on purchases and its rate.'),
+             'more': T(
+                 'إجمالي ضريبة القيمة المضافة على المشتريات ونسبتها من القيمة واتجاهها.\n• بيساعد في التخطيط المالي ومقارنة الموردين.\n• الأرقام للفترة والفلاتر المختارة في الشريط اللي فوق.',
+                 'Total VAT on purchases, its share of value and its trend.\n• It helps financial planning and supplier comparison.\n• Figures follow the period and filters chosen in the top bar.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.suppliers',
@@ -639,17 +938,33 @@ SCREENS = [
         'related': ['purchasing.overview'],
         'tour': [
             {'target': 'purchasing-suppliers-search', 'label': T('بحث باسم أو كود المورد…', 'Search supplier name or code…'),
-             'text': T('ابحث عن مورد.', 'Find a supplier.')},
+             'text': T('ابحث عن مورد.', 'Find a supplier.'),
+             'more': T(
+                 'اكتب اسم المورد أو كوده والجدول بيتصفّى.\n• عدد الموردين مكتوب جنب العنوان.\n• «🔄 تحديث» بيعيد تحميل البيانات.',
+                 'Type the supplier name or code and the table filters.\n• The supplier count is shown beside the title.\n• "🔄 Refresh" reloads the data.'),
+         },
             {'target': 'purchasing-suppliers-sort', 'label': T('الدرجة ↓ · الأعلى شراءً ↓ · أعلى هامش ↓', 'Score ↓ · Top purchases ↓ · Top margin ↓'),
              'text': T('رتّب بالدرجة أو المشتريات أو الهامش أو المرتجعات وغيرها.', 'Sort by score, purchases, margin, returns and more.'),
-             'when': T('«أقل مرتجعات ↑» لاختيار مورد موثوق، و«الأعلى شراءً ↓» لمعرفة أكبر مورّدينا.', '"Fewest returns ↑" to pick a reliable supplier, "Top purchases ↓" to see our biggest suppliers.')},
+             'when': T('«أقل مرتجعات ↑» لاختيار مورد موثوق، و«الأعلى شراءً ↓» لمعرفة أكبر مورّدينا.', '"Fewest returns ↑" to pick a reliable supplier, "Top purchases ↓" to see our biggest suppliers.'),
+             'more': T(
+                 'رتّب بـ: الدرجة، الأعلى شراءً، أعلى هامش، أقل مرتجعات، أو شراء 30 يوم.\n• «الدرجة» بتجمع الهامش والتوافر والمرتجعات واستقرار الأسعار.\n• جرّب «أقل مرتجعات» لما تختار مورد لصنف حساس.',
+                 'Sort by: score, highest purchases, highest margin, fewest returns, or 30-day purchases.\n• "Score" combines margin, availability, returns and price stability.\n• Try "Fewest returns" when choosing a supplier for a sensitive item.'),
+         },
             {'target': 'purchasing-suppliers-table', 'label': T('جدول الموردين', 'Suppliers table'),
              'text': T('كل مورد ودرجته من 100، مشتريات 30 و365 يوم، الهامش، المرتجع، وآخر شراء. أحمر = هامش ضعيف أو مرتجع عالي.',
                        'Every supplier with its score out of 100, 30 and 365-day purchases, margin, returns and last purchase. Red = weak margin or high returns.'),
-             'when': T('دوّر على الأحمر واضغط المورد عشان تعرف السبب.', 'Look for red and click the supplier to see why.')},
+             'when': T('دوّر على الأحمر واضغط المورد عشان تعرف السبب.', 'Look for red and click the supplier to see why.'),
+             'more': T(
+                 'لكل مورد: الاسم والكود، الدرجة، شراء 30 و365 يوم، الهامش، وباقي المؤشرات.\n• الدرجة العالية = مورد مربح ومنتظم ومرتجعاته قليلة.\n• الأرقام من مشتريات SOFTECH.',
+                 'For each supplier: name and code, score, 30- and 365-day purchases, margin, and the other indicators.\n• A high score = a profitable, regular supplier with few returns.\n• Figures come from SOFTECH purchases.'),
+         },
             {'target': 'purchasing-suppliers-row', 'label': T('صف المورد', 'Supplier row'),
              'text': T('اضغط مورد يفتح صفحته.', 'Click a supplier to open its page.'),
-             'when': T('لما تحب تشوف درجة مورد وتاريخ مشترياته بالتفصيل.', 'When you want a supplier\'s score and purchase history in detail.')},
+             'when': T('لما تحب تشوف درجة مورد وتاريخ مشترياته بالتفصيل.', 'When you want a supplier\'s score and purchase history in detail.'),
+             'more': T(
+                 'الضغط على مورد بيفتح صفحته: أول وآخر شراء، المشتريات الشهرية، الأصناف، الفروع اللي بيورّد لها.\n• «تفصيل الدرجة»: هامش الربح ×0.30، التوافر ×0.25، المرتجعات ×0.25، استقرار الأسعار ×0.20.\n• يوضح المورد ضعيف في أنهي نقطة بالظبط.',
+                 'Clicking a supplier opens its page: first and last purchase, monthly purchases, items, branches supplied.\n• "Score breakdown": margin ×0.30, availability ×0.25, returns ×0.25, price stability ×0.20.\n• It shows exactly where the supplier is weak.'),
+         },
             {'target': 'purchasing-suppliers-detail', 'label': T('بطاقة المورد', 'Supplier card'),
              'text': T('بيانات المورد: الدرجة، أول وآخر شراء، المشتريات والفواتير والأصناف والفروع المُزوّدة.',
                        'The supplier facts: score, first and last purchase, purchases, invoices, items and branches supplied.'),
@@ -669,6 +984,7 @@ SCREENS = [
              'open_hint': T('داخل صفحة مورد.', 'Inside a supplier page.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.margins',
@@ -683,10 +999,17 @@ SCREENS = [
         'related': ['pricing.approvals'],
         'tour': [
             {'target': 'purchasing-margins-tabs', 'label': T('تحليل الهوامش · مراقبة الأسعار', 'Margin analysis · Price control'),
-             'text': T('الهوامش لفترة معيّنة، ومراقبة تذبذب أسعار الشراء.', 'Margins for a period, and purchase-price volatility.')},
+             'text': T('الهوامش لفترة معيّنة، ومراقبة تذبذب أسعار الشراء.', 'Margins for a period, and purchase-price volatility.'),
+             'more': T(
+                 '• «تحليل الهوامش»: متوسط الهامش وأضعف الأصناف والهوامش حسب المورد.\n• «مراقبة الأسعار»: أصناف سعر شرائها بيتذبذب أكتر من حد تحدده.\n• التذبذب ممكن يكون فرصة تفاوض أو غلطة إدخال.',
+                 '• "Margin analysis": average margin, weakest items and margins by supplier.\n• "Price control": items whose purchase price varies more than a threshold you set.\n• Volatility may be a negotiation opportunity or an entry error.')},
             {'target': 'purchasing-margins-period', 'label': T('30ي · 90ي · 180ي · 365ي', '30d · 90d · 180d · 365d'),
              'text': T('فترة تحليل الهوامش.', 'The period for the margin analysis.'),
-             'open_hint': T('تبويب «تحليل الهوامش».', 'The "Margin analysis" tab.')},
+             'open_hint': T('تبويب «تحليل الهوامش».', 'The "Margin analysis" tab.'),
+             'more': T(
+                 'اختار 30 أو 90 أو 180 أو 365 يوم — كل أرقام «تحليل الهوامش» بتتحسب على الفترة دي.\n• الأزرار دي بتظهر في تبويب «تحليل الهوامش» بس.\n• فترة أطول بتدّي صورة أثبت، وأقصر بتكشف التغيير الحديث.',
+                 'Pick 30, 90, 180 or 365 days — all "Margin analysis" figures use this period.\n• These buttons show in the "Margin analysis" tab only.\n• A longer period gives a steadier picture; a shorter one reveals recent change.'),
+         },
             {'target': 'purchasing-margins-histogram', 'label': T('توزيع الهامش', 'Margin distribution'),
              'text': T('توزيع الأصناف على شرائح الهامش.', 'How items spread across margin bands.'),
              'when': T('لو أصناف كتير في الشرائح الواطية، راجع «أدنى هوامش (أصناف)» جنبها.', 'If many items sit in the low bands, check "Lowest margins (items)" beside it.'),
@@ -701,14 +1024,27 @@ SCREENS = [
              'open_hint': T('تبويب «تحليل الهوامش».', 'The "Margin analysis" tab.')},
             {'target': 'purchasing-margins-price-filters', 'label': T('حد التذبذب · أدنى عدد مشتريات · تطبيق', 'Volatility limit · min purchases · Apply'),
              'text': T('اختار أقل نسبة تذبذب وأقل عدد مشتريات، ثم «تطبيق».', 'Set the minimum volatility % and minimum number of purchases, then "Apply".'),
-             'open_hint': T('تبويب «مراقبة الأسعار».', 'The "Price control" tab.')},
+             'open_hint': T('تبويب «مراقبة الأسعار».', 'The "Price control" tab.'),
+             'more': T(
+                 'حدد «حد التذبذب المئوي» و«أدنى عدد مشتريات» واضغط «تطبيق».\n• مثال: تذبذب 10% وأدنى 3 مشتريات يطلّع الأصناف اللي سعرها اتغيّر كتير بين فواتير متكررة.\n• لكل صنف: أدنى وأعلى ومتوسط وآخر سعر.',
+                 'Set the "Volatility threshold %" and "Minimum purchases" and press "Apply".\n• Example: 10% volatility and at least 3 purchases shows items whose price changed a lot across repeated invoices.\n• For each item: minimum, maximum, average and last price.'),
+         },
             {'target': 'purchasing-margins-price-table', 'label': T('جدول تذبذب الأسعار', 'Price volatility table'),
              'text': T('الأصناف اللي سعر شرائها اتذبذب: أدنى وأعلى ومتوسط وآخر سعر — فرصة تفاوض أو خطأ إدخال.',
                        'Items whose purchase price moved: min, max, average and last price — a negotiation chance or an entry error.'),
              'when': T('بعد «تطبيق». السعر الشاذ مرة واحدة غالباً خطأ إدخال؛ راجع الفاتورة في «سجل المشتريات».', 'After "Apply". A one-off odd price is usually an entry error; check the invoice in "Purchase history".'),
              'open_hint': T('تبويب «مراقبة الأسعار».', 'The "Price control" tab.')},
+            {'target': 'purchasing-margins-kpis',  # from the GitHub-side tour
+             'label': T('بطاقات الملخص', 'Summary cards'),
+             'when': T('نظرة سريعة: متوسط هامش أقل من 15% بيظهر بالأحمر.', 'Quick look: an average margin under 15% shows in red.'),
+             'text': T('متوسط الهامش وصافي قيمة المشتريات وعدد السطور للفترة.',
+                       'Average margin, net purchase value and line count for the period.'),
+             'more': T(
+                 '«متوسط الهامش» (بالأحمر لو أقل من 15%)، «صافي قيمة المشتريات»، وعدد السطور للفترة.\n• لو المتوسط نازل، شوف أدنى الأصناف هامشاً تحت.\n• الهامش هنا هامش المشتريات (سعر البيع مقابل تكلفة الشراء).',
+                 '"Average margin" (red below 15%), "Net purchase value", and line count for the period.\n• If the average is falling, check the lowest-margin items below.\n• Margin here is the purchase margin (selling price versus purchase cost).')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'purchasing.optimization',
@@ -726,10 +1062,17 @@ SCREENS = [
         'tour': [
             {'target': 'purchasing-optimization-tabs', 'label': T('🎯 التحسين · 🔗 الخريطة · 🚨 التنبيهات', '🎯 Optimization · 🔗 Map · 🚨 Alerts'),
              'text': T('ثلاث تبويبات: أين نوفّر، خريطة المورد-صنف، والتنبيهات.', 'Three tabs: where to save, the supplier-item map, and alerts.'),
-             'when': T('رابط «خريطة المورد-صنف» بيفتح الشاشة دي — اختار تبويب «🔗» بنفسك.', 'The "supplier-item map" link opens this screen — pick the "🔗" tab yourself.')},
+             'when': T('رابط «خريطة المورد-صنف» بيفتح الشاشة دي — اختار تبويب «🔗» بنفسك.', 'The "supplier-item map" link opens this screen — pick the "🔗" tab yourself.'),
+             'more': T(
+                 '• «🎯 التحسين»: موردين نفضّلهم ونتجنبهم وفرص التوفير.\n• «🔗 خريطة المورد-صنف»: مين بيورّد كل صنف وبكام.\n• «🚨 التنبيهات»: تحذيرات المشتريات اللي محتاجة تصرّف.',
+                 '• "🎯 Optimization": suppliers to prefer and avoid, and savings opportunities.\n• "🔗 Supplier-item map": who supplies each item and at what price.\n• "🚨 Alerts": purchasing warnings that need action.')},
             {'target': 'purchasing-optimization-period', 'label': T('30ي · 90ي · 365ي', '30d · 90d · 365d'),
              'text': T('فترة تحليل التحسين.', 'The period for the optimization analysis.'),
-             'open_hint': T('تبويب «🎯 التحسين».', 'The "🎯 Optimization" tab.')},
+             'open_hint': T('تبويب «🎯 التحسين».', 'The "🎯 Optimization" tab.'),
+             'more': T(
+                 'اختار 30 أو 90 أو 365 يوم لتبويب «🎯 التحسين».\n• بتغيّر الموردين الموصى بهم وفرص التوفير حسب الفترة.\n• مش موجودة في تبويبي الخريطة والتنبيهات.',
+                 'Pick 30, 90 or 365 days for the "🎯 Optimization" tab.\n• It changes the recommended suppliers and savings opportunities by period.\n• It is not shown in the map and alerts tabs.'),
+         },
             {'target': 'purchasing-optimization-recommended', 'label': T('✅ الموردون الموصى بهم', '✅ Recommended suppliers'),
              'text': T('الموردون الموصى بهم (هامش أعلى).', 'Recommended suppliers (higher margin).'),
              'when': T('لما تختار مورد لصنف ليه أكتر من مورد.', 'When choosing a supplier for an item that has several.'),
@@ -741,11 +1084,19 @@ SCREENS = [
             {'target': 'purchasing-optimization-savings', 'label': T('💡 فرص توفير السعر (أصناف بعدة موردين)', '💡 Price saving chances (multi-supplier)'),
              'text': T('أصناف بأكتر من مورد: أقل وأعلى سعر لنفس الصنف — فرصة توفير.', 'Items with several suppliers: the lowest vs highest price for the same item — a saving chance.'),
              'when': T('قبل طلب الشراء الجاي: اطلب الصنف من المورد الأرخص لو متاح عنده.', 'Before the next order: buy the item from the cheaper supplier if it has it.'),
-             'open_hint': T('تبويب «🎯 التحسين».', 'The "🎯 Optimization" tab.')},
+             'open_hint': T('تبويب «🎯 التحسين».', 'The "🎯 Optimization" tab.'),
+             'more': T(
+                 'أصناف بتتشرى من أكتر من مورد: عدد الموردين، أقل سعر وأعلى سعر.\n• الفرق الكبير = ممكن نوفّر لو اشترينا من الأرخص.\n• اتأكد من البونص والصلاحية والتوافر قبل ما تغيّر المورد.',
+                 'Items bought from more than one supplier: supplier count, lowest and highest price.\n• A big gap = we may save by buying from the cheapest.\n• Check bonus, expiry and availability before switching supplier.'),
+         },
             {'target': 'purchasing-optimization-mapping-filters', 'label': T('بحث · كود المورد · حد الثقة · 🔍 بحث', 'Search · supplier · confidence · 🔍'),
              'text': T('صفّي الخريطة بالصنف أو المورد أو أقل ثقة، أو المورد الرئيسي فقط، ثم «🔍 بحث».',
                        'Filter the map by item or supplier, minimum confidence, or main supplier only, then "🔍 Search".'),
-             'open_hint': T('تبويب «🔗 خريطة المورد-صنف».', 'The "🔗 Supplier-item map" tab.')},
+             'open_hint': T('تبويب «🔗 خريطة المورد-صنف».', 'The "🔗 Supplier-item map" tab.'),
+             'more': T(
+                 'ابحث بالصنف أو المورد، أو بكود المورد، وحدد «حد الثقة» أو «مورد رئيسي فقط»، واضغط «🔍 بحث».\n• لكل صنف: مورّدينه، درجة الثقة، الرئيسي، متوسط السعر وتذبذبه وآخر شراء.\n• مفيد لما صنف ينقص وعايز تعرف تطلبه من مين.',
+                 'Search by item or supplier, or by supplier code, set a "Confidence threshold" or "Main supplier only", and press "🔍 Search".\n• For each item: its suppliers, confidence, the main one, average price, volatility and last purchase.\n• Useful when an item runs short and you want to know whom to order from.'),
+         },
             {'target': 'purchasing-optimization-mapping-table', 'label': T('خريطة مورد-صنف', 'Supplier-item map'),
              'text': T('لكل صنف: مورّدوه، درجة الثقة، المورد الرئيسي، متوسط السعر وتذبذبه وآخر شراء.',
                        'Per item: its suppliers, confidence, the main supplier, average price, volatility and last purchase.'),
@@ -753,12 +1104,24 @@ SCREENS = [
              'open_hint': T('تبويب «🔗 خريطة المورد-صنف».', 'The "🔗 Supplier-item map" tab.')},
             {'target': 'purchasing-optimization-alert-filters', 'label': T('المستوى · مفتوحة/محلولة', 'Severity · Open/Resolved'),
              'text': T('فلتر التنبيهات بالخطورة وبالحالة.', 'Filter alerts by severity and status.'),
-             'open_hint': T('تبويب «🚨 التنبيهات».', 'The "🚨 Alerts" tab.')},
+             'open_hint': T('تبويب «🚨 التنبيهات».', 'The "🚨 Alerts" tab.'),
+             'more': T(
+                 'فلتر بالمستوى (حرجة، تحذير، معلومة) والحالة («مفتوحة فقط» افتراضياً، أو محلولة، أو الكل).\n• بعد ما تعالج التنبيه اضغط «حل ✓» — بيتقفل ويتسجّل إنه اتحل يدوياً.\n• عدد التنبيهات مكتوب على الشمال.',
+                 'Filter by severity (critical, warning, info) and state ("Open only" by default, resolved, or all).\n• Once you have handled an alert, press "Resolve ✓" — it closes and is logged as resolved manually.\n• The alert count is shown at the end of the bar.')},
             {'target': 'purchasing-optimization-alert-resolve', 'label': T('حل ✓', 'Resolve ✓'),
              'text': T('يقفل التنبيه كمحلول؛ بيظهر تحته مين حلّه.', 'Closes the alert as resolved; who resolved it shows below.'),
              'warn': T('بعد معالجة السبب فعلاً بس — التنبيه بيختفي من «مفتوحة فقط».', 'Only after really handling the cause — the alert leaves "Open only".'),
              'open_hint': T('تبويب «🚨 التنبيهات»، على تنبيه مفتوح.', 'The "🚨 Alerts" tab, on an open alert.')},
+            {'target': 'purchasing-optimization-suppliers',  # from the GitHub-side tour
+             'label': T('✅ الموصى بهم / ⚠️ المحذورون', '✅ Recommended / ⚠️ Cautioned'),
+             'when': T('قبل اختيار مورد لطلبية جديدة.', 'Before choosing a supplier for a new order.'),
+             'text': T('الموردون الموصى بهم والمحذورون.',
+                       'Recommended and avoided suppliers.'),
+             'more': T(
+                 '«✅ الموردون الموصى بهم» (هامش عالي) والمحذورون (مرتجعات عالية).\n• اضغط أي مورد يفتح صفحة أدائه.\n• القرار النهائي بتاعك — دي توصيات من الأرقام.',
+                 '"✅ Recommended suppliers" (high margin) and avoided ones (high returns).\n• Click any supplier to open its performance page.\n• The final decision is yours — these are recommendations from the numbers.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

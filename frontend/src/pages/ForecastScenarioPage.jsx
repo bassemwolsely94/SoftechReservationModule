@@ -120,7 +120,7 @@ function BacktestPanel({ canEdit }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+    <div data-tour="analytics-scenarios-backtest" className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
       <div className="flex items-center justify-between">
         <button onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
           <span>{open ? '▾' : '▸'}</span> 🏁 دقة النماذج (اختبار رجعي على التاريخ)
@@ -442,7 +442,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
         <FactorTable rows={factorRows} onChange={setFactorRows} canEdit={canEdit} />
 
         {canEdit && (
-          <div className="flex gap-2 mt-4 flex-wrap items-center">
+          <div data-tour="analytics-scenarios-actions" className="flex gap-2 mt-4 flex-wrap items-center">
             <button data-tour="analytics-scenarios-apply-references" onClick={() => applyRefs.mutate()} disabled={applyRefs.isPending}
                     title="تطبيق القيم المرجعية (الموسمية + النمو المرجعي + التضخم) على عوامل هذا السيناريو"
                     className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">

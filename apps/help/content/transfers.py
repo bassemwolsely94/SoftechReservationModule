@@ -1,5 +1,238 @@
 from . import T
 
+# Longer explanations ("more") shared by the screen tours and the module tours.
+TR_MORE_NEW_BTN = T(
+    'استخدمه لما فرعك محتاج صنف موجود في فرع تاني (لحجز عميل أو نقص عندك).\n'
+    '• بيفتح صفحة «طلب تحويل مخزون جديد»: الفرعين، الأصناف بالكميات، والملاحظات.\n'
+    '• الطلب نفسه مش بيحرّك مخزون — الحركة الفعلية بتحصل لما الفرع المصدر يصدر التحويل في SOFTECH.',
+    'Use it when your branch needs an item that another branch has (for a customer reservation or a shortage).\n'
+    '• It opens the "New stock transfer request" page: both branches, items with quantities, and notes.\n'
+    '• The request itself moves no stock — the real movement happens when the supplying branch issues the transfer in SOFTECH.')
+TR_MORE_TABS = T(
+    'كل تبويب حالة بيعرض الطلبات اللي في المرحلة دي:\n'
+    '• «مسوداتي»: لسه ما اتقدمتش، و«يحتاج تعديل»: الفرع المصدر رجّعها بملاحظات.\n'
+    '• «بانتظار الموافقة»: لو فرعك هو المصدر، دي طلبات فروع تانية مستنياك.\n'
+    '• «معتمد» ← «تم الإرسال للـ ERP» ← «مكتمل»، و«ملغي» للي اتلغى.',
+    'Each status tab shows the requests at that stage:\n'
+    '• "My drafts": not submitted yet, and "Needs revision": the supplying branch sent it back with notes.\n'
+    '• "Waiting for approval": if your branch is the supplier, these are other branches waiting on you.\n'
+    '• "Approved" → "Sent to ERP" → "Completed", and "Cancelled" for cancelled ones.')
+TR_MORE_SEARCH = T(
+    'اكتب رقم الطلب عشان توصله على طول.\n'
+    '• جنبه فلاتر الفرع الطالب والفرع المصدر والتاريخ لو عايز تضيّق القائمة.',
+    'Type the request number to jump straight to it.\n'
+    '• Next to it are requesting-branch, supplying-branch and date filters to narrow the list.')
+TR_MORE_VIEW = T(
+    '• «☰ قائمة»: جدول فيه رقم الطلب والفرعين والأصناف والحالة ومين عمله.\n'
+    '• «⬛ كانبان»: أعمدة حسب الحالة، تشوف فيها الشغل ماشي فين بنظرة واحدة.\n'
+    'العرض بس اللي بيتغيّر — مفيش حاجة بتتحفظ.',
+    '• "☰ List": a table with request number, both branches, items, status and who created it.\n'
+    '• "⬛ Kanban": columns by status, to see where the work stands at a glance.\n'
+    'Only the view changes — nothing is saved.')
+TR_MORE_TABLE = T(
+    'كل صف طلب تحويل: الرقم، الفرع الطالب، الفرع المصدر، عدد الأصناف، الحالة ومين عمله.\n'
+    '• اضغط الصف عشان تفتح التفاصيل — هناك الأزرار المتاحة لك حسب فرعك والحالة.',
+    'Each row is a transfer request: number, requesting branch, supplying branch, item count, status and creator.\n'
+    '• Click the row to open its details — the buttons there depend on your branch and the status.')
+TR_MORE_OPEN = T(
+    'افتح أي طلب عشان تكمّل الجولة على صفحة تفاصيله.\n'
+    '• صفحة التفاصيل فيها الفرعين والأصناف وأزرار الخطوة الجاية والمحادثة.\n'
+    '• لو القائمة فاضية اضغط «إنهاء».',
+    'Open any request to continue the tour on its detail page.\n'
+    '• The detail page has both branches, the items, the next-step buttons and the chat.\n'
+    '• If the list is empty, press "End".')
+TR_MORE_BRANCHES = T(
+    '• «الفرع الطالب»: الفرع اللي محتاج الصنف (فرعك عادةً).\n'
+    '• «الفرع المصدر (يمتلك المخزون)»: الفرع اللي هيبعت.\n'
+    'الاتنين إجباريين ومينفعش يكونوا نفس الفرع. اختار المصدر بدري عشان رصيده يظهر جنب كل صنف.',
+    '• "Requesting branch": the branch that needs the item (usually yours).\n'
+    '• "Supplying branch (has the stock)": the branch that will send.\n'
+    'Both are required and cannot be the same branch. Pick the supplier early so its stock shows next to each item.')
+TR_MORE_ITEMS = T(
+    'ابحث بالاسم أو الكود أو الباركود (القارئ الضوئي شغال) وضيف كل صنف، واكتب الكمية لكل واحد (إجبارية).\n'
+    '• تحت كل صنف بيظهر رصيده في الفرع المصدر وفي باقي الفروع اللي عندها منه.\n'
+    '• لو ظهر «لا يوجد مخزون في أي فرع» التحويل مش هيفيد — سجّله طلب ضائع أو نقص للمشتريات.',
+    'Search by name, code or barcode (the scanner works), add each item and enter its quantity (required).\n'
+    '• Under each item its stock at the supplying branch and other branches that have it is shown.\n'
+    '• If "no stock in any branch" appears, a transfer will not help — record lost demand or a shortage for purchasing.')
+TR_MORE_NOTES = T(
+    'اكتب سبب الطلب أو أي تفاصيل للفرع المصدر (مثلاً: لحجز عميل، نقص متكرر، مستعجل).\n'
+    '• اختياري، بس بيساعد الفرع المصدر يقرر بسرعة.',
+    'Write the reason or any details for the supplying branch (e.g. for a customer reservation, repeated shortage, urgent).\n'
+    '• Optional, but it helps the supplying branch decide quickly.')
+TR_MORE_SENDNOW = T(
+    '• من غير العلامة: الزر بيبقى «💾 حفظ كمسودة» والطلب بيتحفظ عندك من غير ما يوصل للفرع المصدر.\n'
+    '• بالعلامة: الزر بيبقى «📤 حفظ وتقديم» والطلب بيروح «بانتظار الموافقة» عند الفرع المصدر على طول.',
+    '• Unticked: the button reads "💾 Save as draft" and the request is kept with you without reaching the supplying branch.\n'
+    '• Ticked: the button reads "📤 Save & submit" and the request goes straight to "Waiting for approval" at the supplying branch.')
+TR_MORE_SUBMIT = T(
+    'بيتأكد من الفرعين والأصناف والكميات قبل الحفظ.\n'
+    '• المسودة بترجعك للقائمة، و«حفظ وتقديم» بيفتح صفحة الطلب الجديد.\n'
+    '• المسودة تقدر تعدّلها وتقدّمها بعدين بـ «تقديم الطلب».',
+    'It checks the branches, items and quantities before saving.\n'
+    '• A draft takes you back to the list, and "Save & submit" opens the new request\'s page.\n'
+    '• A draft can be edited and submitted later with "Submit".')
+TR_MORE_DHEADER = T(
+    'رقم الطلب وحالته، وتحتهم من أنهي فرع لأنهي فرع ومين عمله وإمتى.\n'
+    '• لو التحويل اتصدر في SOFTECH بيظهر زر «🚛 قيد النقل ← رقم المستند» يفتح الشحنة في شاشة «قيد النقل».',
+    'The request number and status, with from which branch to which, who created it and when.\n'
+    '• Once the transfer is issued in SOFTECH a "🚛 In transit ← document number" button opens the shipment on the "In transit" screen.')
+TR_MORE_DDETAILS = T(
+    'الفرع الطالب والمصدر، الحالة، مين أنشأه ومين راجعه، ومرجع ERP لو اتكتب.\n'
+    '• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.',
+    'Requesting and supplying branch, status, who created and who reviewed it, and the ERP reference if entered.\n'
+    '• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.')
+TR_MORE_DITEMS = T(
+    'الأصناف بالكمية المطلوبة، والمعتمدة بعد الموافقة، والمستلمة بعد تأكيد الاستلام.\n'
+    '• قارن المعتمد بالمستلم — أي فرق محتاج متابعة بين الفرعين.',
+    'The items with the requested quantity, the approved quantity after approval, and the received quantity after receipt is confirmed.\n'
+    '• Compare approved with received — any gap needs follow-up between the branches.')
+TR_MORE_DACTIONS = T(
+    '«طباعة» و«واتساب» لمشاركة الطلب، وبعدهم أزرار الخطوة الجاية — بتظهر بس اللي مسموح لك حسب فرعك والحالة:\n'
+    '• الفرع الطالب: «تقديم الطلب»، «إلغاء الطلب» (قبل الاعتماد)، و«🏁 تأكيد الاستلام».\n'
+    '• الفرع المصدر: «اعتماد»، «رفض» بسبب، «✏️ طلب تعديل»، «🚀 إرسال للـ ERP» بعد إصدار التحويل في SOFTECH، و«🚚 تسجيل الإرسال» باسم المندوب.\n'
+    '«إرسال للـ ERP» بيسجّل الحالة والمرجع هنا بس — مش بيكتب في SOFTECH.',
+    '"Print" and "WhatsApp" to share the request, then the next-step buttons — only those allowed for your branch and the status show:\n'
+    '• Requesting branch: "Submit", "Cancel request" (before approval), and "🏁 Confirm receipt".\n'
+    '• Supplying branch: "Approve", "Reject" with a reason, "✏️ Request changes", "🚀 Send to ERP" after issuing the transfer in SOFTECH, and "🚚 Record dispatch" with the courier name.\n'
+    '"Send to ERP" only records the status and reference here — it does not write to SOFTECH.')
+TR_MORE_APPROVE = T(
+    'بيفتح نافذة «✅ اعتماد الطلب» فيها كل صنف بالكمية المطلوبة وخانة للكمية المعتمدة (ممكن جزئي).\n'
+    '• «تأكيد الاعتماد» بيحوّل الطلب لـ «معتمد» — ومش بيحجز ولا يحرّك مخزون.\n'
+    '• بعدها أصدر التحويل في SOFTECH واضغط «🚀 إرسال للـ ERP». متعتمدش أكتر من الموجود فعلاً عندك.',
+    'Opens the "✅ Approve request" window with each item\'s requested quantity and a box for the approved quantity (partial allowed).\n'
+    '• "Confirm approval" moves the request to "Approved" — it does not reserve or move stock.\n'
+    '• Then issue the transfer in SOFTECH and press "🚀 Send to ERP". Do not approve more than you really have.')
+TR_MORE_CHATTER = T(
+    'محادثة بين الفرعين على نفس الطلب: رسائل، ومرفقات، ورسائل صوتية.\n'
+    '• استخدمها بدل التليفون عشان كل حاجة تفضل متسجّلة على الطلب.',
+    'A chat between the two branches on the request: messages, attachments and voice notes.\n'
+    '• Use it instead of the phone so everything stays recorded on the request.')
+TT_MORE_TABS = T(
+    'الشريط ده بينقلك بين نصّين التحويل:\n'
+    '• «🔀 طلبات التحويل»: الطلب والموافقة جوه النظام.\n'
+    '• «🚛 قيد النقل»: الشحنات اللي اتصدرت فعلاً من SOFTECH (مستند 125) ولسه ما اتستلمتش.',
+    'This bar switches between the two halves of a transfer:\n'
+    '• "🔀 Transfer requests": the request and approval inside the system.\n'
+    '• "🚛 In transit": shipments actually issued in SOFTECH (doc 125) and not received yet.')
+TT_MORE_KPIS = T(
+    '• «قيد النقل» وقيمتها، و«متوسط أيام النقل».\n'
+    '• «حرج / طارئ»: الشحنات القديمة اللي محتاجة تدخّل.\n'
+    '• «تنتهي مهلة الإلغاء» خلال 24 ساعة، و«تم الاستلام/الإصدار اليوم».\n'
+    '• «تباين مع ERP»: شحنات الصرف (125) فيها مختلف عن الاستلام (25).',
+    '• "In transit" and its value, and "Average days in transit".\n'
+    '• "Critical / urgent": old shipments that need action.\n'
+    '• "Cancellation window ending" within 24 hours, and "Received/issued today".\n'
+    '• "ERP mismatch": shipments whose issue (125) differs from the receipt (25).')
+TT_MORE_FILTERS = T(
+    'صفّي بالأولوية (طازج ← مراقبة ← متابعة ← طارئ ← حرج حسب عمر الشحنة)، والحالة، وفرع المصدر، وفرع المستلم، وعدد الأيام.\n'
+    '• ابدأ دايماً بالحرج والطارئ.',
+    'Filter by priority (fresh → watch → follow-up → urgent → critical, by shipment age), status, supplying branch, receiving branch and days.\n'
+    '• Always start with critical and urgent.')
+TT_MORE_AWAITING = T(
+    'بيعرض الشحنات اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.\n'
+    '• دي اللي لازم الفرع المستلم يسجّل استلامها في SOFTECH.\n'
+    '• لو فضلت كده أكتر من عدد الأيام في الإعدادات (افتراضي 3) بيوصل تنبيه يومي. اضغطه تاني عشان ترجع للعرض العادي.',
+    'Shows shipments received here whose receipt document (25) has not appeared in SOFTECH yet.\n'
+    '• These are the ones the receiving branch must still receive in SOFTECH.\n'
+    '• If they stay like that longer than the days set in settings (default 3), a daily alert is sent. Press it again to return to the normal view.')
+TT_MORE_GRID = T(
+    'كل صف شحنة: رقم المستند، الفرعين، العمر، الأولوية بلون على الجنب، والقيمة — الأقدم فوق.\n'
+    '• اضغط الصف عشان تفتح لوحة تفاصيلها، أو علّم أكتر من شحنة لورقة تجميع موحدة.\n'
+    '• تقدر ترتّب بأي عمود بالضغط على عنوانه.',
+    'Each row is a shipment: document number, both branches, age, priority colour on the side, and value — oldest on top.\n'
+    '• Click a row to open its detail panel, or tick several shipments for one combined picking sheet.\n'
+    '• Click a column header to sort by it.')
+TT_MORE_SCORECARD = T(
+    'بيفتح «بطاقة مساءلة الفروع»: أداء كل فرع في استلام التحويلات والمخزون العائم (المصروف ولسه ما اتستلمش).\n'
+    '• تختار الفترة (30 أو 90 أو 180 يوم أو سنة). للعرض بس.',
+    'Opens the "Branch accountability card": each branch\'s transfer-receiving performance and floating stock (issued but not yet received).\n'
+    '• Choose the period (30, 90, 180 days or a year). View only.')
+TT_MORE_PICK = T(
+    'بينزّل ورقة Excel للفرع المصدر فيها أصناف الشحنة مرتّبة بمسار السير في المخزن (حسب «مناطق التجميع»).\n'
+    '• بيتقفل لحد ما بيانات الأصناف توصل من المزامنة.',
+    'Downloads an Excel sheet for the supplying branch with the shipment items in warehouse walking order (per "Picking zones").\n'
+    '• Disabled until the item data arrives from the sync.')
+TT_MORE_STOCK = T(
+    'بينزّل ورقة Excel للفرع المستلم بالأصناف مرتّبة حسب رفوفه، عشان الترصيص يبقى أسرع.\n'
+    '• الترتيب جاي من إعداد «ترصيص» في «مناطق التجميع».',
+    'Downloads an Excel sheet for the receiving branch with the items in its shelf order, so stocking is faster.\n'
+    '• The order comes from the "Stocking" setup in "Picking zones".')
+TT_MORE_DTABS = T(
+    '• «الأصناف»: الكميات والصلاحية والتشغيلات، وتحذير FEFO للأصناف قريبة الانتهاء.\n'
+    '• «مطابقة 125↔25»: بتظهر بعد الاستلام في SOFTECH وتقارن الصرف بالاستلام.\n'
+    '• «الملاحظات» و«السجل»: ملاحظات الفرعين وكل اللي حصل على الشحنة.',
+    '• "Items": quantities, expiry and batches, with a FEFO warning for near-expiry items.\n'
+    '• "Reconcile 125↔25": appears after receipt in SOFTECH and compares issue with receipt.\n'
+    '• "Notes" and "Timeline": both branches\' notes and everything that happened to the shipment.')
+TT_MORE_DITEMS = T(
+    'أصناف الشحنة بالكمية والصلاحية والتشغيلة والتكلفة.\n'
+    '• لو فيه «🌡️ تحذير FEFO» الأصناف دي صلاحيتها قريبة — رصّها واصرفها الأول.\n'
+    '• عدّ الكرتونة على القائمة دي وانت بتستلم.',
+    'The shipment items with quantity, expiry, batch and cost.\n'
+    '• A "🌡️ FEFO warning" means those items expire soon — shelve and sell them first.\n'
+    '• Count the carton against this list while receiving.')
+TT_MORE_NOTES = T(
+    'اكتب الملاحظة واضغط «إرسال» — بتظهر للفرعين في تبويب الملاحظات باسمك ووقتها.\n'
+    '• للنقص أو الكسر أو التأخير أو مكالمة مع الفرع التاني. ملاحظة داخلية — مش بتروح SOFTECH.',
+    'Write the note and press "Send" — it shows to both branches in the Notes tab with your name and time.\n'
+    '• For missing items, breakage, delays or a call with the other branch. An internal note — it does not go to SOFTECH.')
+TT_MORE_RECEIVED = T(
+    'للفرع المستلم (أو المدير والمشتريات): بيسجّل إن الشحنة وصلت — هنا بس.\n'
+    '• مش بيكتب في SOFTECH: الشحنة بتفضل «⏳ مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل هناك.\n'
+    '• بعدها المزامنة بتطابق الكميات، ولو فيه فرق بيظهر «تباين مع ERP». للحالات الاستثنائية فيه «🔒 إغلاق قسري» بسبب مكتوب (10 أحرف على الأقل).',
+    'For the receiving branch (or admin and purchasing): records that the shipment arrived — here only.\n'
+    '• It does not write to SOFTECH: the shipment stays "⏳ Received locally — awaiting SOFTECH" until the receipt document (25) is recorded there.\n'
+    '• The sync then reconciles quantities, and a difference shows as "ERP mismatch". For exceptions there is "🔒 Force close" with a written reason (at least 10 characters).')
+PZ_MORE_PURPOSE = T(
+    '• «🚚 تجميع — مخزن المصدر»: ترتيب الأصناف في ورقة التجميع حسب مسار السير في المخزن اللي بيصرف.\n'
+    '• «🗄️ ترصيص — أرفف الفرع»: ترتيب ورقة الترصيص للفرع المستلم، وبيُستخدم كمان في أوراق الجرد.\n'
+    'كل غرض ليه مناطق وقواعد لوحده.',
+    '• "🚚 Picking — source store": item order on the picking sheet by the walking path of the issuing store.\n'
+    '• "🗄️ Stocking — branch shelves": order of the receiving branch\'s stocking sheet, also used on stock-count sheets.\n'
+    'Each purpose has its own zones and rules.')
+PZ_MORE_LOCATION = T(
+    'كل مخزن أو فرع ممكن يبقى له إعداده الخاص؛ اللي ملوش إعداد بيمشي على «الإعداد الافتراضي».\n'
+    '• لو اخترت موقع ملوش إعداد، بيظهر زر «📋 نسخ الإعداد المطبق حالياً كنقطة بداية» تبدأ منه وتعدّل.',
+    'Each store or branch can have its own setup; one without a setup follows the "Default setup".\n'
+    '• If you pick a location without a setup, a "📋 Copy the setup currently applied as a starting point" button appears so you can start from it and edit.')
+PZ_MORE_TABS = T(
+    '• «المناطق»: الممرات والرفوف بترتيب المسار.\n'
+    '• «القواعد»: بتحط الصنف في منطقة بكلمات في الاسم أو أعمدة الكتالوج — أول قاعدة تطابق تكسب.\n'
+    '• «غير مصنف»: أصناف ما طابقتش أي قاعدة.\n'
+    '• «تخصيصات الأصناف»: صنف معيّن في منطقة يدوي، وبيتغلب على كل القواعد.',
+    '• "Zones": aisles and shelves in path order.\n'
+    '• "Rules": put an item in a zone by words in its name or catalog columns — the first matching rule wins.\n'
+    '• "Uncategorized": items that matched no rule.\n'
+    '• "Item assignments": a specific item placed in a zone by hand, beating all rules.')
+PZ_MORE_SETTINGS = T(
+    '• «حد سعر الغوالي (ج.م)»: عام لكل المخازن؛ الصنف بسعر أعلى أو يساويه بيروح منطقة الغوالي.\n'
+    '• الأدوار الخاصة: أنهي منطقة هي «غوالي» وأنهي «ثلاجة» وأنهي «غير مصنف».\n'
+    '• ترتيب التصنيف: تخصيص يدوي ← ثلاجة ← حد الغوالي ← القواعد ← غير مصنف. التعديل للإدارة والمشتريات.',
+    '• "High-value price threshold (EGP)": global for all stores; items priced at or above it go to the high-value zone.\n'
+    '• Special roles: which zone is "high-value", which is "fridge" and which is "uncategorized".\n'
+    '• Classification order: manual assignment → fridge → high-value threshold → rules → uncategorized. Editing is for admin and purchasing.')
+PZ_MORE_ZONES = T(
+    'كل صف منطقة: ترتيب المسار، الاسم، الموقع/الرف، الأدوار الخاصة، عدد القواعد والتخصيصات، والتفعيل.\n'
+    '• الرقم الأصغر بيتجمّع الأول — رتّبهم زي ما الموظف بيمشي فعلاً في المخزن.',
+    'Each zone row: path order, name, location/shelf, special roles, number of rules and assignments, and on/off.\n'
+    '• The lowest number is picked first — order them the way staff actually walk the store.')
+TM_MORE_NEW = T(
+    'بيفتح «طلب تحويل جديد» على الموبايل: الفرعين، الأصناف بالكميات، والملاحظات.\n'
+    '• في الآخر تختار «حفظ كمسودة» أو «✅ حفظ وتقديم».',
+    'Opens "New transfer request" on the phone: both branches, items with quantities, and notes.\n'
+    '• At the end choose "Save as draft" or "✅ Save & submit".')
+TM_MORE_FILTERS = T(
+    'شرائح الحالة: «بانتظار الموافقة» (الافتراضي)، الكل، مسودة، معتمد، يحتاج تعديل، أُرسل للـ ERP، مكتمل، مرفوض.\n'
+    '• لو فرعك مصدر، «بانتظار الموافقة» هي اللي مستنياك.',
+    'Status chips: "Waiting for approval" (the default), all, draft, approved, needs revision, sent to ERP, completed, rejected.\n'
+    '• If your branch supplies, "Waiting for approval" is what is waiting on you.')
+TM_MORE_CARD = T(
+    'الكارت فيه رقم الطلب، ومن أنهي فرع لأنهي فرع، والحالة.\n'
+    '• اضغطه يفتح التفاصيل والإجراءات المتاحة لك.',
+    'The card shows the request number, from which branch to which, and the status.\n'
+    '• Tap it to open the details and the actions available to you.')
+
 MODULE = {
     'key': 'transfers', 'group': 'operations', 'icon': '🔀',
     'brief': T('اطلب صنف من فرع تاني وتابع الشحنة لحد ما توصل وتتستلم.',
@@ -48,6 +281,191 @@ MODULE = {
             {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('ألغاه الفرع الطالب قبل الاعتماد. مرحلة نهائية.', 'Cancelled by the requesting branch before approval. Final.')},
         ],
     }],
+    'flows': [
+        {
+            'key': 'lifecycle',
+            'title': T('دورة طلب التحويل', 'A transfer request, start to finish'),
+            'summary': T('من القائمة لطلب جديد، وبعدين الموافقة والمتابعة في صفحة التفاصيل.',
+                         'From the menu to a new request, then approval and follow-up on the detail page.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'],
+            'steps': [
+                {'target': 'nav-transfers', 'nav': '/transfers',
+                 'text': T('طلبات التحويل من القائمة: «العمليات» ← «طلبات التحويل».',
+                           'Transfer requests from the menu: "Operations" → "Transfer requests".'),
+             'more': T('هنا الفرع اللي محتاج صنف بيطلبه من فرع تاني، والفرع التاني بيعتمد أو يرفض.\n'
+                           '• الطلب هنا مش بيحرّك مخزون — الحركة بتتعمل في SOFTECH، وبعد الإصدار الشحنة بتظهر في «قيد النقل».\n'
+                           '• المسار: مسودة ← بانتظار الموافقة ← معتمد ← تم الإرسال للـ ERP ← مكتمل.',
+                           'Here a branch that needs an item requests it from another branch, which approves or rejects.\n'
+                           '• The request moves no stock — the movement is done in SOFTECH, and once issued the shipment shows under "In transit".\n'
+                           '• The path: draft → waiting for approval → approved → sent to ERP → completed.')},
+                {'target': 'transfers-list-tabs', 'route': '/transfers',
+                 'text': T('تبويبات الحالة: مسودة ← بانتظار الموافقة ← موافق عليه ← اتبعت لـ SOFTECH.',
+                           'Status tabs: draft → waiting for approval → approved → sent to SOFTECH.'),
+             'more': TR_MORE_TABS},
+                {'target': 'transfers-list-new', 'route': '/transfers', 'wait': '/transfers/new',
+                 'text': T('اضغط «+ طلب تحويل جديد».',
+                           'Click "+ New transfer request".'),
+             'more': TR_MORE_NEW_BTN},
+                {'target': 'transfers-new-branches', 'route': '/transfers/new',
+                 'text': T('الفرع الطالب والفرع المصدر.',
+                           'The requesting and supplying branches.'),
+             'more': TR_MORE_BRANCHES},
+                {'target': 'transfers-new-items', 'route': '/transfers/new',
+                 'text': T('الأصناف والكميات.',
+                           'The items and quantities.'),
+             'more': TR_MORE_ITEMS},
+                {'target': 'transfers-new-send-now', 'route': '/transfers/new',
+                 'text': T('علّم هنا عشان يتقدّم على طول بدل المسودة.',
+                           'Tick this to submit right away instead of a draft.'),
+             'more': TR_MORE_SENDNOW},
+                {'target': 'transfers-new-submit', 'route': '/transfers/new',
+                 'text': T('حفظ أو «حفظ وتقديم». (في الجولة مش هنحفظ.)',
+                           'Save, or "Save & submit". (In this tour we will not save.)'),
+             'more': TR_MORE_SUBMIT},
+                {'target': 'transfers-list-table', 'route': '/transfers', 'wait': '/transfers/:id',
+                 'text': T('افتح أي طلب عشان نشوف الموافقة والمتابعة. لو القائمة فاضية اضغط «إنهاء».',
+                           'Open any request to see approval and follow-up. If the list is empty, press "End".'),
+             'more': TR_MORE_OPEN},
+                {'target': 'transfers-detail-header', 'route': '/transfers/:id',
+                 'text': T('رقم الطلب وحالته.',
+                           'The request number and status.'),
+             'more': TR_MORE_DHEADER},
+                {'target': 'transfers-detail-approve', 'route': '/transfers/:id',
+                 'text': T('الفرع المصدر (أو المشرف) يضغط «اعتماد» — حسب الصلاحية.',
+                           'The supplying branch (or a supervisor) presses "Approve" — depending on permission.'),
+             'more': TR_MORE_APPROVE},
+                {'target': 'transfers-detail-chatter', 'route': '/transfers/:id',
+                 'text': T('التواصل بين الفرعين على نفس الطلب.',
+                           'Communication between the two branches on the request.'),
+             'more': TR_MORE_CHATTER},
+            ],
+        },
+        {
+            'key': 'mobile',
+            'title': T('طلب التحويل من الموبايل', 'A transfer request on mobile'),
+            'summary': T('طلب صنف من فرع تاني ومتابعته من الموبايل.',
+                         'Requesting an item from another branch and following it on mobile.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'],
+            'mobile': True,
+            'steps': [
+                {'target': 'mshell-tabs',
+                 'text': T('الشاشات في الشريط اللي تحت. اللي مش ظاهر تلاقيه في «المزيد».',
+                           'Screens are in the bottom bar. Anything not shown is under "More".'),
+             'more': T('شاشات الموبايل في الشريط اللي تحت؛ لو «التحويلات» مش ظاهرة هتلاقيها في «المزيد».\n'
+                           '• من الموبايل تقدر تطلب وتعتمد وتتابع من غير كمبيوتر.',
+                           'Mobile screens are in the bottom bar; if "Transfers" is not shown, it is under "More".\n'
+                           '• On the phone you can request, approve and follow up without a computer.')},
+                {'target': 'mnav-transfers',
+                 'text': T('«التحويلات».',
+                           '"Transfers".'),
+             'more': T('بيفتح قائمة طلبات التحويل على الموبايل، وأول ما تفتح بتعرض «بانتظار الموافقة».',
+                           'Opens the transfer requests list on the phone; it opens on "Waiting for approval".')},
+                {'target': 'transfers-mobile-list-filters', 'route': '/m/transfers',
+                 'text': T('فلتر الحالة.',
+                           'Status filter.'),
+             'more': TM_MORE_FILTERS},
+                {'target': 'transfers-mobile-list-new', 'route': '/m/transfers', 'wait': '/m/transfers/new',
+                 'text': T('زر «+» لطلب جديد.',
+                           'The "+" button for a new request.'),
+                 'more': T(
+                     'بيفتح «طلب تحويل جديد» على الموبايل: الفرعين، الأصناف بالكميات، والملاحظات.\n• في الآخر تختار «حفظ كمسودة» أو «✅ حفظ وتقديم».',
+                     'Opens "New transfer request" on the phone: both branches, items with quantities, and notes.\n• At the end choose "Save as draft" or "✅ Save & submit".')},
+                {'target': 'transfers-new-branches', 'route': '/m/transfers/new',
+                 'text': T('الفرع الطالب والمصدر.',
+                           'The requesting and supplying branches.')},
+                {'target': 'transfers-new-items', 'route': '/m/transfers/new',
+                 'text': T('الأصناف والكميات.',
+                           'The items and quantities.')},
+                {'target': 'transfers-new-submit', 'route': '/m/transfers/new',
+                 'text': T('«حفظ كمسودة» أو «حفظ وتقديم». (في الجولة مش هنحفظ.)',
+                           '"Save as draft" or "Save & submit". (In this tour we will not save.)'),
+             'more': T('• «حفظ كمسودة»: بيتحفظ عندك ولسه ما وصلش للفرع المصدر.\n'
+                           '• «✅ حفظ وتقديم»: بيتحفظ ويتقدّم «بانتظار الموافقة».\n'
+                           'في الحالتين بيفتح صفحة الطلب؛ ولو التقديم فشل تقدر تقدّمه من هناك.',
+                           '• "Save as draft": kept with you, not yet sent to the supplying branch.\n'
+                           '• "✅ Save & submit": saved and submitted as "Waiting for approval".\n'
+                           'Either way the request page opens; if submitting fails you can submit from there.')},
+                {'target': 'transfers-mobile-list-card', 'route': '/m/transfers', 'wait': '/m/transfers/:id',
+                 'text': T('افتح أي طلب. لو القائمة فاضية اضغط «إنهاء».',
+                           'Open any request. If the list is empty, press "End".'),
+                 'more': T(
+                     'الكارت فيه رقم الطلب، ومن أنهي فرع لأنهي فرع، والحالة.\n• اضغطه يفتح التفاصيل والإجراءات المتاحة لك.',
+                     'The card shows the request number, from which branch to which, and the status.\n• Tap it to open the details and the actions available to you.')},
+                {'target': 'transfers-detail-header', 'route': '/m/transfers/:id',
+                 'text': T('رقم الطلب وحالته والفروع.',
+                           'The request number, status and branches.'),
+             'more': T('رقم الطلب وحالته والفرعين.\n'
+                           '• تحته الأصناف بالكميات، والمحادثة مع الفرع التاني.',
+                           'The request number, status and both branches.\n'
+                           '• Below it the items with quantities, and the chat with the other branch.')},
+                {'target': 'transfers-mdetail-actions', 'route': '/m/transfers/:id',
+                 'text': T('الإجراءات المتاحة لك (اعتماد، رفض…) حسب صلاحيتك.',
+                           'The actions available to you (approve, reject…) per your permission.'),
+             'more': T('الأزرار هنا جاية من السيرفر حسب فرعك والحالة: تقديم للموافقة، اعتماد، رفض، طلب تعديل، إرسال للـ ERP، تسجيل الإرسال، إغلاق الطلب، إلغاء.\n'
+                           '• الرفض وطلب التعديل واسم المندوب محتاجين تكتب سبب/اسم، وكل إجراء بيتأكد قبل التنفيذ.\n'
+                           '• الاعتماد من الموبايل بيعتمد الكميات المطلوبة كاملة؛ للاعتماد الجزئي استخدم الكمبيوتر.',
+                           'The buttons here come from the server per your branch and the status: submit, approve, reject, request changes, send to ERP, record dispatch, close request, cancel.\n'
+                           '• Reject, request changes and the courier name need a reason/name, and every action asks for confirmation.\n'
+                           '• Approving on the phone approves the full requested quantities; for a partial approval use the desktop.')},
+            ],
+        },
+        {
+            'key': 'receiving',
+            'title': T('التحويلات قيد النقل ← الاستلام', 'Transfers in transit → receiving'),
+            'summary': T('الشحنات اللي اتصرفت من SOFTECH ولسه ما اتستلمتش: التجميع والترصيص، والملاحظات، ومتابعة الاستلام.',
+                         'Shipments issued in SOFTECH but not yet received: picking and stocking sheets, notes, and following the receipt.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'salesperson', 'purchasing', 'supervisor', 'viewer', 'quality_manager'],
+            'steps': [
+                {'target': 'nav-transits', 'nav': '/transits',
+                 'text': T('«العمليات» ← «التحويلات قيد النقل».',
+                           '"Operations" → "Transfers in transit".'),
+             'more': T('«قيد النقل» هي النص التاني من التحويل: الشحنات اللي الفرع المصدر أصدرها فعلاً في SOFTECH (مستند 125).\n'
+                           '• بتفضل هنا لحد ما الفرع المستلم يستلمها في SOFTECH (مستند 25).\n'
+                           '• منها بتطلع أوراق التجميع والترصيص وبتتابع الاستلام والفروق.',
+                           '"In transit" is the second half of a transfer: shipments the supplying branch actually issued in SOFTECH (doc 125).\n'
+                           '• They stay here until the receiving branch receives them in SOFTECH (doc 25).\n'
+                           '• From here come the picking and stocking sheets, and you follow receipt and differences.')},
+                {'target': 'transfers-transits-kpis', 'route': '/transits',
+                 'text': T('ملخص الشحنات قيد النقل.',
+                           'A summary of shipments in transit.'),
+             'more': TT_MORE_KPIS},
+                {'target': 'transfers-transits-filters', 'route': '/transits',
+                 'text': T('فلتر الأولوية والفرع.',
+                           'Filter by priority and branch.'),
+             'more': TT_MORE_FILTERS},
+                {'target': 'transfers-transits-row', 'route': '/transits',
+                 'text': T('اضغط على شحنة تفتح تفاصيلها، وبعدين «التالي». لو مفيش شحنات اضغط «إنهاء».',
+                           'Click a shipment to open its details, then "Next". If there are none, press "End".'),
+                 'more': T(
+                     'اضغط الشحنة عشان تفتح لوحة تفاصيلها على نفس الصفحة، وبعدين «التالي».\n• اللون على جنب الصف هو الأولوية حسب عمر الشحنة.\n• لو مفيش شحنات اضغط «إنهاء».',
+                     'Click the shipment to open its detail panel on the same page, then "Next".\n• The colour on the row side is the priority by shipment age.\n• If there are no shipments, press "End".')},
+                {'target': 'transfers-transits-picking', 'route': '/transits',
+                 'text': T('«ورقة التجميع» للفرع المصدر — مرتّبة بمسار المخزن.',
+                           '"Picking sheet" for the supplying branch — in warehouse walking order.')},
+                {'target': 'transfers-transits-stocking', 'route': '/transits',
+                 'text': T('«ورقة الترصيص» للفرع المستلم — مرتّبة حسب رفوفه.',
+                           '"Stocking sheet" for the receiving branch — in its shelf order.')},
+                {'target': 'transfers-transits-detail-tabs', 'route': '/transits',
+                 'text': T('الأصناف، مطابقة الصرف مع الاستلام (125↔25)، الملاحظات، والسجل.',
+                           'Items, issue-vs-receipt reconciliation (125↔25), notes and the log.'),
+             'more': TT_MORE_DTABS},
+                {'target': 'transfers-transit-items', 'route': '/transits',
+                 'text': T('الأصناف والكميات — راجعها وانت بتستلم.',
+                           'The items and quantities — check them while receiving.'),
+             'more': TT_MORE_DITEMS},
+                {'target': 'transfers-transit-notes', 'route': '/transits',
+                 'text': T('أي ملاحظة (نقص، كسر، تأخير) اكتبها هنا عشان الفرعين يشوفوها.',
+                           'Any note (missing, broken, delayed) goes here so both branches see it.'),
+                 'more': T(
+                     'اكتب الملاحظة واضغط «إرسال» — بتظهر للفرعين في تبويب الملاحظات باسمك ووقتها.\n• للنقص أو الكسر أو التأخير أو مكالمة مع الفرع التاني. ملاحظة داخلية — مش بتروح SOFTECH.',
+                     'Write the note and press "Send" — it shows to both branches in the Notes tab with your name and time.\n• For missing items, breakage, delays or a call with the other branch. An internal note — it does not go to SOFTECH.')},
+                {'target': 'transfers-transits-receive', 'route': '/transits',
+                 'text': T('«✅ تسجيل الاستلام» للفرع المستلم بيسجّله هنا ويظهر «⏳ مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل في SOFTECH، وبعدها المطابقة بتظهر.',
+                           '"✅ Record receipt" (receiving branch) records it here and shows "⏳ Received locally — awaiting SOFTECH" until the receipt document (25) is in SOFTECH; then the reconciliation appears.'),
+             'more': TT_MORE_RECEIVED},
+            ],
+        },
+    ],
     'journeys': [
         {'key': 'lifecycle', 'shell': 'desktop',
          'title': T('رحلة التحويل: طلب ← اعتماد ← شحن ← استلام', 'Transfer: request → approve → ship → receive'),
@@ -197,19 +615,32 @@ SCREENS = [
             {'target': 'transfers-list-new', 'label': T('+ طلب تحويل جديد', '+ New transfer request'),
              'text': T('يفتح نموذج طلب أصناف من فرع تاني عنده المخزون.', 'Opens the form to request items from another branch that has the stock.'),
              'when': T('لما فرعك محتاج صنف وفرع تاني عنده رصيد منه.', 'When your branch needs an item and another branch has it in stock.'),
-             'open_hint': T('الزر بيظهر بس لو دورك عنده صلاحية إنشاء طلبات التحويل.', 'The button shows only if your role may create transfer requests.')},
+             'open_hint': T('الزر بيظهر بس لو دورك عنده صلاحية إنشاء طلبات التحويل.', 'The button shows only if your role may create transfer requests.'),
+             'more': T(
+                 'استخدمه لما فرعك محتاج صنف موجود في فرع تاني (لحجز عميل أو نقص عندك).\n• بيفتح صفحة «طلب تحويل مخزون جديد»: الفرعين، الأصناف بالكميات، والملاحظات.\n• الطلب نفسه مش بيحرّك مخزون — الحركة الفعلية بتحصل لما الفرع المصدر يصدر التحويل في SOFTECH.',
+                 'Use it when your branch needs an item that another branch has (for a customer reservation or a shortage).\n• It opens the "New stock transfer request" page: both branches, items with quantities, and notes.\n• The request itself moves no stock — the real movement happens when the supplying branch issues the transfer in SOFTECH.')},
             {'target': 'transfers-list-tabs', 'label': T('الكل · مسوداتي · بانتظار الموافقة …', 'All · My drafts · Waiting …'),
              'text': T('يحصر القائمة في مرحلة واحدة من مراحل الطلب.', 'Limits the list to one stage of the request.'),
              'when': T('لو فرعك هو المصدر ابدأ بـ«بانتظار الموافقة» — فروع تانية مستنياك.',
-                       'If your branch is the supplier, start with "Waiting for approval" — other branches are waiting on you.')},
+                       'If your branch is the supplier, start with "Waiting for approval" — other branches are waiting on you.'),
+             'more': T(
+                 'كل تبويب حالة بيعرض الطلبات اللي في المرحلة دي:\n• «مسوداتي»: لسه ما اتقدمتش، و«يحتاج تعديل»: الفرع المصدر رجّعها بملاحظات.\n• «بانتظار الموافقة»: لو فرعك هو المصدر، دي طلبات فروع تانية مستنياك.\n• «معتمد» ← «تم الإرسال للـ ERP» ← «مكتمل»، و«ملغي» للي اتلغى.',
+                 'Each status tab shows the requests at that stage:\n• "My drafts": not submitted yet, and "Needs revision": the supplying branch sent it back with notes.\n• "Waiting for approval": if your branch is the supplier, these are other branches waiting on you.\n• "Approved" → "Sent to ERP" → "Completed", and "Cancelled" for cancelled ones.')},
             {'target': 'transfers-list-search', 'label': T('🔍 بحث برقم الطلب...', '🔍 Search by request number...'),
-             'text': T('اكتب رقم الطلب (مثل TR-000123) عشان توصله على طول.', 'Type the request number (like TR-000123) to jump to it.')},
+             'text': T('اكتب رقم الطلب (مثل TR-000123) عشان توصله على طول.', 'Type the request number (like TR-000123) to jump to it.'),
+             'more': T(
+                 'اكتب رقم الطلب عشان توصله على طول.\n• جنبه فلاتر الفرع الطالب والفرع المصدر والتاريخ لو عايز تضيّق القائمة.',
+                 'Type the request number to jump straight to it.\n• Next to it are requesting-branch, supplying-branch and date filters to narrow the list.')},
             {'target': 'transfers-list-filters', 'label': T('الفرع الطالب · الفرع المصدر · من · إلى', 'Requesting · Supplying · From · To'),
              'text': T('فلتر بالفرع الطالب أو المصدر وبفترة الإنشاء. «مسح الفلاتر» يرجّع كل حاجة.',
                        'Filter by requesting or supplying branch and by creation period. "Clear filters" resets them.')},
             {'target': 'transfers-list-view', 'label': T('☰ قائمة · ⬛ كانبان', '☰ List · ⬛ Kanban'),
              'text': T('القائمة جدول مفصّل، والكانبان أعمدة حسب المرحلة.', 'The list is a detailed table; Kanban shows columns by stage.'),
-             'when': T('الكانبان مفيد للمتابعة اليومية لمين واقف فين.', 'Kanban is handy for a daily look at what is stuck where.')},
+             'when': T('الكانبان مفيد للمتابعة اليومية لمين واقف فين.', 'Kanban is handy for a daily look at what is stuck where.'),
+             'more': T(
+                 '• «☰ قائمة»: جدول فيه رقم الطلب والفرعين والأصناف والحالة ومين عمله.\n• «⬛ كانبان»: أعمدة حسب الحالة، تشوف فيها الشغل ماشي فين بنظرة واحدة.\nالعرض بس اللي بيتغيّر — مفيش حاجة بتتحفظ.',
+                 '• "☰ List": a table with request number, both branches, items, status and who created it.\n• "⬛ Kanban": columns by status, to see where the work stands at a glance.\nOnly the view changes — nothing is saved.'),
+         },
             {'target': 'transfers-list-table', 'label': T('جدول طلبات التحويل', 'Transfer requests table'),
              'text': T('كل سطر طلب: الفرعين وعدد الأصناف والحالة. اضغط السطر يفتح الطلب.',
                        'Each row is a request: both branches, item count and status. Click a row to open it.'),
@@ -220,8 +651,14 @@ SCREENS = [
                        'Stage columns from "Draft" to "Completed". Click a card to open the request.'),
              'when': T('لما تحب تشوف كل طلب واقف فين وعند مين في نظرة واحدة.', 'When you want to see at a glance where each request stands and who holds it.'),
              'open_hint': T('اختار «⬛ كانبان» من أعلى الصفحة.', 'Choose "⬛ Kanban" at the top of the page.')},
+            {'target': 'transfers-list-table', 'label': T('جدول طلبات التحويل', 'Transfer requests table'), 'when': T('لما تحب تفتح طلب وتتابعه.', 'When you want to open a request and follow it up.'), 'wait': '/transfers/:id',
+             'text': T('افتح أي طلب من القائمة — الجولة هتكمّل على صفحة تفاصيله. لو القائمة فاضية اضغط «إنهاء».',
+                       'Open any request from the list — the tour continues on its detail page. If the list is empty, press "End".'),
+             'more': TR_MORE_OPEN},
         ],
+        'tour_continue': 'transfers.detail',
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'transfers.new',
@@ -240,11 +677,17 @@ SCREENS = [
              'text': T('الفرع الطالب هو اللي محتاج الصنف (فرعك عادةً)، والمصدر هو اللي عنده المخزون.',
                        'The requesting branch needs the item (usually yours); the supplying branch has the stock.'),
              'warn': T('ماينفعش الفرعين يبقوا نفس الفرع. راجع الاختيار — الطلب بيروح للفرع المصدر اللي اخترته.',
-                       'The two branches cannot be the same. Check your choice — the request goes to the supplier you pick.')},
+                       'The two branches cannot be the same. Check your choice — the request goes to the supplier you pick.'),
+             'more': T(
+                 '• «الفرع الطالب»: الفرع اللي محتاج الصنف (فرعك عادةً).\n• «الفرع المصدر (يمتلك المخزون)»: الفرع اللي هيبعت.\nالاتنين إجباريين ومينفعش يكونوا نفس الفرع. اختار المصدر بدري عشان رصيده يظهر جنب كل صنف.',
+                 '• "Requesting branch": the branch that needs the item (usually yours).\n• "Supplying branch (has the stock)": the branch that will send.\nBoth are required and cannot be the same branch. Pick the supplier early so its stock shows next to each item.')},
             {'target': 'transfers-new-items', 'label': T('الأصناف المطلوبة', 'Requested items'),
              'text': T('ابحث بالاسم أو الكود أو امسح الباركود، واكتب الكمية لكل صنف. تقدر تضيف أكتر من صنف.',
                        'Search by name or code or scan the barcode, and enter a quantity per item. You can add several items.'),
-             'when': T('علامة ✕ جنب الصنف بتشيله من الطلب.', 'The ✕ next to an item removes it from the request.')},
+             'when': T('علامة ✕ جنب الصنف بتشيله من الطلب.', 'The ✕ next to an item removes it from the request.'),
+             'more': T(
+                 'ابحث بالاسم أو الكود أو الباركود (القارئ الضوئي شغال) وضيف كل صنف، واكتب الكمية لكل واحد (إجبارية).\n• تحت كل صنف بيظهر رصيده في الفرع المصدر وفي باقي الفروع اللي عندها منه.\n• لو ظهر «لا يوجد مخزون في أي فرع» التحويل مش هيفيد — سجّله طلب ضائع أو نقص للمشتريات.',
+                 'Search by name, code or barcode (the scanner works), add each item and enter its quantity (required).\n• Under each item its stock at the supplying branch and other branches that have it is shown.\n• If "no stock in any branch" appears, a transfer will not help — record lost demand or a shortage for purchasing.')},
             {'target': 'transfers-new-stock', 'label': T('🏭 رصيد الفروع', '🏭 Branch stock'),
              'text': T('تحت كل صنف رصيده في الفرع المصدر (مميز) وفي باقي الفروع.',
                        'Under each item: its stock at the supplying branch (highlighted) and at the other branches.'),
@@ -253,19 +696,29 @@ SCREENS = [
              'open_hint': T('بيظهر بعد ما تضيف صنف واحد على الأقل.', 'Appears after you add at least one item.')},
             {'target': 'transfers-new-notes', 'label': T('ملاحظات عامة (اختياري)', 'General notes (optional)'),
              'text': T('اكتب سبب الطلب أو أولويته — الفرع المصدر بيقراها وهو بيراجع.',
-                       'Write the reason or priority — the supplying branch reads it while reviewing.')},
+                       'Write the reason or priority — the supplying branch reads it while reviewing.'),
+             'more': T(
+                 'اكتب سبب الطلب أو أي تفاصيل للفرع المصدر (مثلاً: لحجز عميل، نقص متكرر، مستعجل).\n• اختياري، بس بيساعد الفرع المصدر يقرر بسرعة.',
+                 'Write the reason or any details for the supplying branch (e.g. for a customer reservation, repeated shortage, urgent).\n• Optional, but it helps the supplying branch decide quickly.')},
             {'target': 'transfers-new-send-now', 'label': T('حفظ وتقديم الطلب مباشرةً', 'Save and submit right away'),
              'text': T('لو علّمته، الطلب بيتقدّم للفرع المصدر فوراً بدل ما يتحفظ مسودة.',
                        'When ticked, the request goes to the supplying branch at once instead of staying a draft.'),
              'warn': T('بعد التقديم الفرع المصدر بيتبلّغ ومش هتقدر تعدّل الأصناف إلا لو طلب تعديل.',
-                       'After submitting, the supplier is notified and you cannot edit items unless they ask for changes.')},
+                       'After submitting, the supplier is notified and you cannot edit items unless they ask for changes.'),
+             'more': T(
+                 '• من غير العلامة: الزر بيبقى «💾 حفظ كمسودة» والطلب بيتحفظ عندك من غير ما يوصل للفرع المصدر.\n• بالعلامة: الزر بيبقى «📤 حفظ وتقديم» والطلب بيروح «بانتظار الموافقة» عند الفرع المصدر على طول.',
+                 '• Unticked: the button reads "💾 Save as draft" and the request is kept with you without reaching the supplying branch.\n• Ticked: the button reads "📤 Save & submit" and the request goes straight to "Waiting for approval" at the supplying branch.')},
             {'target': 'transfers-new-submit', 'label': T('💾 حفظ كمسودة · 📤 حفظ وتقديم', '💾 Save as draft · 📤 Save & submit'),
              'text': T('يحفظ الطلب. المسودة بترجع للقائمة، والتقديم بيفتح الطلب مباشرة.',
                        'Saves the request. A draft returns to the list; submitting opens the request.'),
              'when': T('الطلب نفسه مابيحرّكش أي مخزون — الحركة الفعلية في SOFTECH بعد الاعتماد.',
-                       'The request itself moves no stock — the real movement happens in SOFTECH after approval.')},
+                       'The request itself moves no stock — the real movement happens in SOFTECH after approval.'),
+             'more': T(
+                 'بيتأكد من الفرعين والأصناف والكميات قبل الحفظ.\n• المسودة بترجعك للقائمة، و«حفظ وتقديم» بيفتح صفحة الطلب الجديد.\n• المسودة تقدر تعدّلها وتقدّمها بعدين بـ «تقديم الطلب».',
+                 'It checks the branches, items and quantities before saving.\n• A draft takes you back to the list, and "Save & submit" opens the new request\'s page.\n• A draft can be edited and submitted later with "Submit".')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'transfers.detail',
@@ -298,11 +751,17 @@ SCREENS = [
             {'target': 'transfers-detail-actions', 'label': T('طباعة · واتساب · أزرار الخطوة التالية', 'Print · WhatsApp · next-step buttons'),
              'text': T('شريط الإجراءات: طباعة إيصال الطلب، مشاركته واتساب، وأزرار المرحلة المسموحة لك بس.',
                        'The action bar: print the request, share it on WhatsApp, and only the stage buttons you may use.'),
-             'when': T('لو مفيش زر خطوة، الدور على الفرع التاني.', 'If no stage button shows, it is the other branch turn.')},
+             'when': T('لو مفيش زر خطوة، الدور على الفرع التاني.', 'If no stage button shows, it is the other branch turn.'),
+             'more': T(
+                 '«طباعة» و«واتساب» لمشاركة الطلب، وبعدهم أزرار الخطوة الجاية — بتظهر بس اللي مسموح لك حسب فرعك والحالة:\n• الفرع الطالب: «تقديم الطلب»، «إلغاء الطلب» (قبل الاعتماد)، و«🏁 تأكيد الاستلام».\n• الفرع المصدر: «اعتماد»، «رفض» بسبب، «✏️ طلب تعديل»، «🚀 إرسال للـ ERP» بعد إصدار التحويل في SOFTECH، و«🚚 تسجيل الإرسال» باسم المندوب.\n«إرسال للـ ERP» بيسجّل الحالة والمرجع هنا بس — مش بيكتب في SOFTECH.',
+                 '"Print" and "WhatsApp" to share the request, then the next-step buttons — only those allowed for your branch and the status show:\n• Requesting branch: "Submit", "Cancel request" (before approval), and "🏁 Confirm receipt".\n• Supplying branch: "Approve", "Reject" with a reason, "✏️ Request changes", "🚀 Send to ERP" after issuing the transfer in SOFTECH, and "🚚 Record dispatch" with the courier name.\n"Send to ERP" only records the status and reference here — it does not write to SOFTECH.')},
             {'target': 'transfers-detail-items', 'label': T('💊 الأصناف', '💊 Items'),
              'text': T('المطلوب والمعتمد والمستلم لكل صنف ورصيده. «جزئي» و«نقص» بيوضحوا الفرق.',
                        'Requested, approved and received per item, with stock. "Partial" and "Short" show the gaps.'),
-             'when': T('في المسودة أو «يحتاج تعديل» تقدر «+ إضافة صنف» أو تشيل صنف.', 'In draft or "Needs revision" you can "+ Add item" or remove one.')},
+             'when': T('في المسودة أو «يحتاج تعديل» تقدر «+ إضافة صنف» أو تشيل صنف.', 'In draft or "Needs revision" you can "+ Add item" or remove one.'),
+             'more': T(
+                 'الأصناف بالكمية المطلوبة، والمعتمدة بعد الموافقة، والمستلمة بعد تأكيد الاستلام.\n• قارن المعتمد بالمستلم — أي فرق محتاج متابعة بين الفرعين.',
+                 'The items with the requested quantity, the approved quantity after approval, and the received quantity after receipt is confirmed.\n• Compare approved with received — any gap needs follow-up between the branches.')},
             {'target': 'transfers-detail-submit', 'label': T('تقديم الطلب', 'Submit request'),
              'text': T('يبعت الطلب للفرع المصدر ويبلّغه. الحالة تبقى «بانتظار الموافقة».',
                        'Sends the request to the supplying branch and notifies it. Status becomes "Waiting for approval".'),
@@ -312,7 +771,10 @@ SCREENS = [
                        'Opens the approved-quantity form per item — you may approve less (partial).'),
              'warn': T('اعتمد اللي عندك فعلاً على الرف بس. الاعتماد بيتسجل باسمك وبيبلّغ الفرع الطالب.',
                        'Approve only what is really on your shelf. It is recorded under your name and notifies the requester.'),
-             'open_hint': T('للفرع المصدر أو الإدارة والمشتريات، والطلب «بانتظار الموافقة».', 'For the supplying branch, admin or purchasing, on a request waiting for approval.')},
+             'open_hint': T('للفرع المصدر أو الإدارة والمشتريات، والطلب «بانتظار الموافقة».', 'For the supplying branch, admin or purchasing, on a request waiting for approval.'),
+             'more': T(
+                 'بيفتح نافذة «✅ اعتماد الطلب» فيها كل صنف بالكمية المطلوبة وخانة للكمية المعتمدة (ممكن جزئي).\n• «تأكيد الاعتماد» بيحوّل الطلب لـ «معتمد» — ومش بيحجز ولا يحرّك مخزون.\n• بعدها أصدر التحويل في SOFTECH واضغط «🚀 إرسال للـ ERP». متعتمدش أكتر من الموجود فعلاً عندك.',
+                 'Opens the "✅ Approve request" window with each item\'s requested quantity and a box for the approved quantity (partial allowed).\n• "Confirm approval" moves the request to "Approved" — it does not reserve or move stock.\n• Then issue the transfer in SOFTECH and press "🚀 Send to ERP". Do not approve more than you really have.')},
             {'target': 'transfers-detail-reject', 'label': T('رفض', 'Reject'),
              'text': T('يرفض الطلب بسبب مكتوب إجباري، ثم «تأكيد الرفض».', 'Rejects the request with a required written reason, then "Confirm rejection".'),
              'warn': T('الرفض نهائي — الفرع الطالب لازم يعمل طلب جديد. لو محتاج تغيير بس استخدم «طلب تعديل».',
@@ -351,9 +813,25 @@ SCREENS = [
              'text': T('رسائل بين الفرعين على نفس الطلب، مع سجل كل خطوة اتعملت.',
                        'Messages between the two branches on this request, with a log of every step.'),
              'when': T('اكتب هنا أي اتفاق (موعد، بديل كمية) بدل التليفون عشان يفضل متسجل.',
-                       'Write any agreement (timing, quantity change) here instead of by phone, so it stays on record.')},
+                       'Write any agreement (timing, quantity change) here instead of by phone, so it stays on record.'),
+             'more': T(
+                 'محادثة بين الفرعين على نفس الطلب: رسائل، ومرفقات، ورسائل صوتية.\n• استخدمها بدل التليفون عشان كل حاجة تفضل متسجّلة على الطلب.',
+                 'A chat between the two branches on the request: messages, attachments and voice notes.\n• Use it instead of the phone so everything stays recorded on the request.')},
+            {'target': 'transfers-detail-header', 'label': T('رقم الطلب وحالته', 'Request number and status'), 'when': T('أول ما تفتح الطلب.', 'As soon as you open the request.'),  # from the GitHub-side tour
+             'text': T('رقم الطلب وحالته.',
+                       'The request number and its status.'),
+             'more': T(
+                 'رقم الطلب وحالته، وتحتهم من أنهي فرع لأنهي فرع ومين عمله وإمتى.\n• لو التحويل اتصدر في SOFTECH بيظهر زر «🚛 قيد النقل ← رقم المستند» يفتح الشحنة في شاشة «قيد النقل».',
+                 'The request number and status, with from which branch to which, who created it and when.\n• Once the transfer is issued in SOFTECH a "🚛 In transit ← document number" button opens the shipment on the "In transit" screen.')},
+            {'target': 'transfers-detail-details', 'label': T('📋 التفاصيل', '📋 Details'), 'when': T('لما تحب تعرف مين طلب ومن أي فرع وإمتى.', 'When you want to know who asked, from which branch and when.'),  # from the GitHub-side tour
+             'text': T('التفاصيل: الفرع الطالب والمصدر والتواريخ.',
+                       'Details: requesting and supplying branch, dates.'),
+             'more': T(
+                 'الفرع الطالب والمصدر، الحالة، مين أنشأه ومين راجعه، ومرجع ERP لو اتكتب.\n• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.',
+                 'Requesting and supplying branch, status, who created and who reviewed it, and the ERP reference if entered.\n• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'transfers.transits',
@@ -392,6 +870,10 @@ SCREENS = [
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
         'tips': [
+            T('لو تحويل اتسجّل استلامه هنا ومستند الاستلام (25) ما ظهرش في SOFTECH بعد عدد الأيام المحدد في الإعدادات (افتراضي 3)، بيوصل تنبيه يومي للفرع المستلم والإدارة. زر «⏳ بانتظار تأكيد SOFTECH» يعرضهم كلهم.',
+              'If a transfer was received here and its receipt document (25) has not appeared in SOFTECH after the number of days set in settings (default 3), a daily alert goes to the receiving branch and admins. The "⏳ Awaiting SOFTECH" button lists them all.'),
+            T('«تسجيل الاستلام» هنا ما بيكتبش في SOFTECH: الشحنة بتفضل «مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل هناك، وساعتها المزامنة بتطابق الكميات (ولو فيه فرق تظهر «تباين مع ERP»).',
+              '"Record receipt" here does not write to SOFTECH: the shipment stays "received locally — awaiting SOFTECH" until the receipt document (25) is recorded there; the sync then reconciles quantities (a difference shows as "ERP mismatch").'),
             T('الشحنة يجب أن تُستلم في SOFTECH قبل انتهاء مهلة الإلغاء، وإلا تظهر «انتهت مهلة الإلغاء — يجب الاستلام».',
               'The shipment must be received in SOFTECH before its cancellation window ends, otherwise "cancellation window over — must receive" appears.'),
             T('«بطاقة مساءلة الفروع» أسفل الصفحة تعرض أداء كل فرع في الاستلام والمخزون العائم.', 'The "branch accountability card" at the bottom shows each branch\'s receiving performance and floating stock.'),
@@ -400,14 +882,25 @@ SCREENS = [
         'tour': [
             {'target': 'transfers-transits-kpis', 'label': T('قيد النقل · الحرج · مهلة الإلغاء …', 'In transit · critical · cancel window …'),
              'text': T('ملخص الشحنات اللي صدرت (125) ولسه ما اتستلمتش (25): العدد والقيمة والحرج واللي مهلته قربت تخلص.',
-                       'Summary of shipments issued (125) but not received (25): count, value, critical, and windows about to end.')},
+                       'Summary of shipments issued (125) but not received (25): count, value, critical, and windows about to end.'),
+             'more': T(
+                 '• «قيد النقل» وقيمتها، و«متوسط أيام النقل».\n• «حرج / طارئ»: الشحنات القديمة اللي محتاجة تدخّل.\n• «تنتهي مهلة الإلغاء» خلال 24 ساعة، و«تم الاستلام/الإصدار اليوم».\n• «تباين مع ERP»: شحنات الصرف (125) فيها مختلف عن الاستلام (25).',
+                 '• "In transit" and its value, and "Average days in transit".\n• "Critical / urgent": old shipments that need action.\n• "Cancellation window ending" within 24 hours, and "Received/issued today".\n• "ERP mismatch": shipments whose issue (125) differs from the receipt (25).')},
             {'target': 'transfers-transits-filters', 'label': T('الأولوية · الحالة · الفروع · العمر', 'Priority · status · branches · age'),
              'text': T('فلتر الشحنات. «مسح الفلاتر» يرجّع الكل.', 'Filters the shipments. "Clear filters" shows them all again.'),
-             'when': T('ابدأ يومك بأولوية «حرج» و«طارئ» لفرعك.', 'Start your day with "Critical" and "Urgent" for your branch.')},
+             'when': T('ابدأ يومك بأولوية «حرج» و«طارئ» لفرعك.', 'Start your day with "Critical" and "Urgent" for your branch.'),
+             'more': T(
+                 'صفّي بالأولوية (طازج ← مراقبة ← متابعة ← طارئ ← حرج حسب عمر الشحنة)، والحالة، وفرع المصدر، وفرع المستلم، وعدد الأيام.\n• ابدأ دايماً بالحرج والطارئ.',
+                 'Filter by priority (fresh → watch → follow-up → urgent → critical, by shipment age), status, supplying branch, receiving branch and days.\n• Always start with critical and urgent.'),
+         },
             {'target': 'transfers-transits-grid', 'label': T('جدول الشحنات قيد النقل', 'In-transit shipments table'),
              'text': T('كل سطر شحنة 125. اضغط عنوان العمود للترتيب، واضغط السطر يفتح لوحة تفاصيلها.',
                        'Each row is a doc-125 shipment. Click a column header to sort; click the row to open its panel.'),
-             'when': T('كل يوم — دوّر على الشحنات اللي طوّلت ولسه ماتستلمتش في SOFTECH.', 'Every day — look for shipments out for long and still not received in SOFTECH.')},
+             'when': T('كل يوم — دوّر على الشحنات اللي طوّلت ولسه ماتستلمتش في SOFTECH.', 'Every day — look for shipments out for long and still not received in SOFTECH.'),
+             'more': T(
+                 'كل صف شحنة: رقم المستند، الفرعين، العمر، الأولوية بلون على الجنب، والقيمة — الأقدم فوق.\n• اضغط الصف عشان تفتح لوحة تفاصيلها، أو علّم أكتر من شحنة لورقة تجميع موحدة.\n• تقدر ترتّب بأي عمود بالضغط على عنوانه.',
+                 'Each row is a shipment: document number, both branches, age, priority colour on the side, and value — oldest on top.\n• Click a row to open its detail panel, or tick several shipments for one combined picking sheet.\n• Click a column header to sort by it.'),
+         },
             {'target': 'transfers-transits-select', 'label': T('☐ تحديد الكل', '☐ Select all'),
              'text': T('علّم أكتر من شحنة عشان تطلع ورقة تجميع أو ترصيص موحدة.', 'Tick several shipments to export one combined picking or stocking sheet.')},
             {'target': 'transfers-transits-bulk-sheets', 'label': T('🚚 ورقة التجميع (n) · 🗄️ ورقة الترصيص (n)', '🚚 Picking sheet (n) · 🗄️ Stocking (n)'),
@@ -441,9 +934,25 @@ SCREENS = [
              'text': T('يفتح إعداد المناطق والقواعد اللي بتحدد ترتيب الأصناف في الأوراق.', 'Opens the zones and rules that set the item order on the sheets.')},
             {'target': 'transfers-transits-scorecard', 'label': T('🏆 بطاقة المساءلة', '🏆 Accountability card'),
              'text': T('أداء الفروع: الأسرع والأبطأ استلاماً، أعلى مخزون عائم، وأكتر تباينات 125↔25.',
-                       'Branch performance: fastest and slowest receivers, highest floating stock, most 125↔25 mismatches.')},
+                       'Branch performance: fastest and slowest receivers, highest floating stock, most 125↔25 mismatches.'),
+             'more': T(
+                 'بيفتح «بطاقة مساءلة الفروع»: أداء كل فرع في استلام التحويلات والمخزون العائم (المصروف ولسه ما اتستلمش).\n• تختار الفترة (30 أو 90 أو 180 يوم أو سنة). للعرض بس.',
+                 'Opens the "Branch accountability card": each branch\'s transfer-receiving performance and floating stock (issued but not yet received).\n• Choose the period (30, 90, 180 days or a year). View only.')},
+            {'target': 'transfers-transits-tabs', 'label': T('🔀 طلبات التحويل · 🚛 قيد النقل', '🔀 Transfer requests · 🚛 In transit'), 'when': T('لما تحب تنقل بين الطلبات والنقل.', 'When you want to switch between requests and transits.'),  # from the GitHub-side tour
+             'text': T('تبويبات موديول التحويلات.',
+                       'The transfers module tabs.'),
+             'more': T(
+                 'الشريط ده بينقلك بين نصّين التحويل:\n• «🔀 طلبات التحويل»: الطلب والموافقة جوه النظام.\n• «🚛 قيد النقل»: الشحنات اللي اتصدرت فعلاً من SOFTECH (مستند 125) ولسه ما اتستلمتش.',
+                 'This bar switches between the two halves of a transfer:\n• "🔀 Transfer requests": the request and approval inside the system.\n• "🚛 In transit": shipments actually issued in SOFTECH (doc 125) and not received yet.')},
+            {'target': 'transfers-transits-awaiting-erp', 'label': T('⏳ بانتظار تأكيد SOFTECH', '⏳ Awaiting SOFTECH confirmation'), 'when': T('لما تحب تتابع استلامات لسه ما ظهرتش في SOFTECH.', 'When you want to follow receipts not yet showing in SOFTECH.'),  # from the GitHub-side tour
+             'text': T('«⏳ بانتظار تأكيد SOFTECH»: اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.',
+                       '"⏳ Awaiting SOFTECH": shipments received here whose receipt document (25) is not in SOFTECH yet.'),
+             'more': T(
+                 'بيعرض الشحنات اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.\n• دي اللي لازم الفرع المستلم يسجّل استلامها في SOFTECH.\n• لو فضلت كده أكتر من عدد الأيام في الإعدادات (افتراضي 3) بيوصل تنبيه يومي. اضغطه تاني عشان ترجع للعرض العادي.',
+                 'Shows shipments received here whose receipt document (25) has not appeared in SOFTECH yet.\n• These are the ones the receiving branch must still receive in SOFTECH.\n• If they stay like that longer than the days set in settings (default 3), a daily alert is sent. Press it again to return to the normal view.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'transfers.pick_zones',
@@ -479,22 +988,34 @@ SCREENS = [
         'tour': [
             {'target': 'transfers-pick-zones-purpose', 'label': T('🚚 تجميع · 🗄️ ترصيص', '🚚 Picking · 🗄️ Stocking'),
              'text': T('التجميع = مسار السير في مخزن المصدر. الترصيص = ترتيب أرفف الفرع المستلم (وأوراق الجرد).',
-                       'Picking = the walk path in the source store. Stocking = the receiving branch shelf order (and count sheets).')},
+                       'Picking = the walk path in the source store. Stocking = the receiving branch shelf order (and count sheets).'),
+             'more': T(
+                 '• «🚚 تجميع — مخزن المصدر»: ترتيب الأصناف في ورقة التجميع حسب مسار السير في المخزن اللي بيصرف.\n• «🗄️ ترصيص — أرفف الفرع»: ترتيب ورقة الترصيص للفرع المستلم، وبيُستخدم كمان في أوراق الجرد.\nكل غرض ليه مناطق وقواعد لوحده.',
+                 '• "🚚 Picking — source store": item order on the picking sheet by the walking path of the issuing store.\n• "🗄️ Stocking — branch shelves": order of the receiving branch\'s stocking sheet, also used on stock-count sheets.\nEach purpose has its own zones and rules.')},
             {'target': 'transfers-pick-zones-location', 'label': T('الموقع:', 'Location:'),
              'text': T('الإعداد الافتراضي العام أو فرع بعينه. الفرع اللي مالوش إعداد بيتبع الافتراضي.',
-                       'The general default setup or one branch. A branch without its own setup follows the default.')},
+                       'The general default setup or one branch. A branch without its own setup follows the default.'),
+             'more': T(
+                 'كل مخزن أو فرع ممكن يبقى له إعداده الخاص؛ اللي ملوش إعداد بيمشي على «الإعداد الافتراضي».\n• لو اخترت موقع ملوش إعداد، بيظهر زر «📋 نسخ الإعداد المطبق حالياً كنقطة بداية» تبدأ منه وتعدّل.',
+                 'Each store or branch can have its own setup; one without a setup follows the "Default setup".\n• If you pick a location without a setup, a "📋 Copy the setup currently applied as a starting point" button appears so you can start from it and edit.')},
             {'target': 'transfers-pick-zones-copy', 'label': T('📋 نسخ الإعداد المطبق حالياً كنقطة بداية', '📋 Copy the current setup as a start'),
              'text': T('ينسخ المناطق والقواعد المطبقة دلوقتي للموقع ده عشان تعدّل عليها.', 'Copies the zones and rules in use now to this location so you can adjust them.'),
              'open_hint': T('يظهر للإدارة والمشتريات لما الموقع المختار مالوش إعداد.', 'Shown to admin and purchasing when the chosen location has no setup.')},
             {'target': 'transfers-pick-zones-tabs', 'label': T('المناطق · القواعد · غير مصنف · تخصيصات', 'Zones · Rules · Uncategorized · Items'),
              'text': T('التصنيف بيمشي كده: تخصيص يدوي ← ثلاجة ← حد الغوالي ← القواعد بالترتيب ← غير مصنف.',
-                       'Classification order: manual assignment → fridge → high-value threshold → rules in order → uncategorized.')},
+                       'Classification order: manual assignment → fridge → high-value threshold → rules in order → uncategorized.'),
+             'more': T(
+                 '• «المناطق»: الممرات والرفوف بترتيب المسار.\n• «القواعد»: بتحط الصنف في منطقة بكلمات في الاسم أو أعمدة الكتالوج — أول قاعدة تطابق تكسب.\n• «غير مصنف»: أصناف ما طابقتش أي قاعدة.\n• «تخصيصات الأصناف»: صنف معيّن في منطقة يدوي، وبيتغلب على كل القواعد.',
+                 '• "Zones": aisles and shelves in path order.\n• "Rules": put an item in a zone by words in its name or catalog columns — the first matching rule wins.\n• "Uncategorized": items that matched no rule.\n• "Item assignments": a specific item placed in a zone by hand, beating all rules.')},
             {'target': 'transfers-pick-zones-settings', 'label': T('⚙️ إعدادات التصنيف', '⚙️ Classification settings'),
              'text': T('حد سعر الغوالي (عام لكل المخازن)، واختيار منطقة الغوالي والثلاجة وغير المصنف.',
                        'The high-value price threshold (global), and which zone is high-value, fridge and uncategorized.'),
              'warn': T('الحد عام لكل المخازن — تغييره بيغيّر تصنيف أصناف كتير في كل الأوراق.',
                        'The threshold is global — changing it reclassifies many items on every sheet.'),
-             'open_hint': T('في تبويب «📍 المناطق». التعديل للإدارة والمشتريات.', 'On the "📍 Zones" tab. Admin and purchasing edit.')},
+             'open_hint': T('في تبويب «📍 المناطق». التعديل للإدارة والمشتريات.', 'On the "📍 Zones" tab. Admin and purchasing edit.'),
+             'more': T(
+                 '• «حد سعر الغوالي (ج.م)»: عام لكل المخازن؛ الصنف بسعر أعلى أو يساويه بيروح منطقة الغوالي.\n• الأدوار الخاصة: أنهي منطقة هي «غوالي» وأنهي «ثلاجة» وأنهي «غير مصنف».\n• ترتيب التصنيف: تخصيص يدوي ← ثلاجة ← حد الغوالي ← القواعد ← غير مصنف. التعديل للإدارة والمشتريات.',
+                 '• "High-value price threshold (EGP)": global for all stores; items priced at or above it go to the high-value zone.\n• Special roles: which zone is "high-value", which is "fridge" and which is "uncategorized".\n• Classification order: manual assignment → fridge → high-value threshold → rules → uncategorized. Editing is for admin and purchasing.')},
             {'target': 'transfers-pick-zones-zone-row', 'label': T('ترتيب المسار · اسم المنطقة · الموقع', 'Path order · zone name · location'),
              'text': T('كل منطقة: رقم المسار (الأصغر يتجمع الأول)، الاسم، مكانها، وتفعيلها. «حفظ» بيظهر لما تعدّل.',
                        'Each zone: path number (lowest picked first), name, place and on/off. "Save" appears when you edit.'),
@@ -517,8 +1038,15 @@ SCREENS = [
              'text': T('اختار صنف ومنطقة (ووسم/رف لو حابب) — التخصيص اليدوي بيغلب كل القواعد.',
                        'Pick an item and a zone (and a tag/shelf if you like) — a manual assignment beats every rule.'),
              'open_hint': T('في تبويب «🏷️ تخصيصات الأصناف» للإدارة والمشتريات.', 'On the "🏷️ Item assignments" tab, for admin and purchasing.')},
+            {'target': 'transfers-pick-zones-zones', 'label': T('جدول المناطق', 'Zones table'), 'when': T('لما تحب تضبط ترتيب مسار التجميع.', 'When you want to set the picking route order.'),  # from the GitHub-side tour
+             'text': T('جدول المناطق بترتيب المسار: الأصغر يُجمَّع الأول، مع الموقع/الرف والأدوار والتفعيل.',
+                       'The zones table in path order: the lowest is picked first, with location/shelf, roles and on/off.'),
+             'more': T(
+                 'كل صف منطقة: ترتيب المسار، الاسم، الموقع/الرف، الأدوار الخاصة، عدد القواعد والتخصيصات، والتفعيل.\n• الرقم الأصغر بيتجمّع الأول — رتّبهم زي ما الموظف بيمشي فعلاً في المخزن.',
+                 'Each zone row: path order, name, location/shelf, special roles, number of rules and assignments, and on/off.\n• The lowest number is picked first — order them the way staff actually walk the store.')},
         ],
         'updated': '2026-10-28',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'transfers.mobile_list',
@@ -534,24 +1062,44 @@ SCREENS = [
         'related': ['transfers.new', 'transfers.detail'],
         'tour': [
             {'target': 'transfers-mobile-list-filters', 'label': T('بانتظار الموافقة · الكل · مسودة …', 'Waiting · All · Draft …'),
-             'text': T('بيفتح على «بانتظار الموافقة». اختار مرحلة تانية أو «الكل».', 'Opens on "Waiting for approval". Pick another stage or "All".')},
+             'text': T('بيفتح على «بانتظار الموافقة». اختار مرحلة تانية أو «الكل».', 'Opens on "Waiting for approval". Pick another stage or "All".'),
+             'more': T(
+                 'شرائح الحالة: «بانتظار الموافقة» (الافتراضي)، الكل، مسودة، معتمد، يحتاج تعديل، أُرسل للـ ERP، مكتمل، مرفوض.\n• لو فرعك مصدر، «بانتظار الموافقة» هي اللي مستنياك.',
+                 'Status chips: "Waiting for approval" (the default), all, draft, approved, needs revision, sent to ERP, completed, rejected.\n• If your branch supplies, "Waiting for approval" is what is waiting on you.'),
+         },
             {'target': 'transfers-mobile-list-list', 'label': T('قائمة التحويلات', 'Transfers list'),
              'text': T('الطلبات اللي فرعك طالب فيها أو مصدر ليها. «تحميل المزيد» تحت بيجيب الباقي.',
                        'Requests where your branch is requesting or supplying. "Load more" at the bottom fetches the rest.'),
              'when': T('لما تتابع طلبات فرعك، سواء طالب أو مصدر.', "When following your branch's requests, as requester or supplier."),
-             'open_hint': T('بتظهر لما يكون فيه طلبات في الفلتر المختار.', 'Shows when the chosen filter has requests.')},
+             'open_hint': T('بتظهر لما يكون فيه طلبات في الفلتر المختار.', 'Shows when the chosen filter has requests.'),
+             'more': T(
+                 'قائمة طلبات التحويل اللي بتطابق الفلتر، والأحدث فوق.\n• «تحميل المزيد» في الآخر لو فيه طلبات أكتر.',
+                 'The transfer requests matching the filter, newest on top.\n• "Load more" at the end when there are more requests.'),
+         },
             {'target': 'transfers-mobile-list-card', 'label': T('كارت الطلب', 'Request card'),
              'text': T('رقم الطلب، ومن أنهي فرع لأنهي فرع، وعدد الأصناف. اضغط الكارت يفتح الطلب.',
                        'Request number, from which branch to which, and item count. Tap the card to open it.'),
              'when': T('لما تحتاج تراجع الأصناف أو تتابع الطلب بنفسك.', 'When you need to review the items or follow the request yourself.'),
-             'open_hint': T('بتظهر لما يكون فيه طلبات في الفلتر المختار.', 'Shows when the chosen filter has requests.')},
+             'open_hint': T('بتظهر لما يكون فيه طلبات في الفلتر المختار.', 'Shows when the chosen filter has requests.'),
+             'more': T(
+                 'الكارت فيه رقم الطلب، ومن أنهي فرع لأنهي فرع، والحالة.\n• اضغطه يفتح التفاصيل والإجراءات المتاحة لك.',
+                 'The card shows the request number, from which branch to which, and the status.\n• Tap it to open the details and the actions available to you.'),
+         },
             {'target': 'transfers-mobile-list-status', 'label': T('حالة الطلب', 'Request status'),
              'text': T('حالة الطلب دلوقتي — بتقولك الدور على مين.', 'The request status now — it tells you whose turn it is.'),
              'when': T('قبل ما تكلّم الفرع التاني — الحالة بتقولك الطلب مستني مين.', 'Before calling the other branch — the status tells you who the request waits on.'),
-             'open_hint': T('على كل كارت طلب.', 'On every request card.')},
+             'open_hint': T('على كل كارت طلب.', 'On every request card.'),
+             'more': T(
+                 'حالة الطلب الحالية بلونها: مسودة، بانتظار الموافقة، معتمد، يحتاج تعديل، أُرسل للـ ERP، مكتمل، مرفوض أو ملغي.\n• الحالة بتحدد الأزرار اللي هتلاقيها جوه.',
+                 "The request's current status with its colour: draft, waiting for approval, approved, needs revision, sent to ERP, completed, rejected or cancelled.\n• The status decides which buttons you find inside."),
+         },
             {'target': 'transfers-mobile-list-new', 'label': T('+', '+'),
-             'text': T('يفتح طلب تحويل جديد من الموبايل.', 'Opens a new transfer request on the phone.')},
+             'text': T('يفتح طلب تحويل جديد من الموبايل.', 'Opens a new transfer request on the phone.'),
+             'more': T(
+                 'بيفتح «طلب تحويل جديد» على الموبايل: الفرعين، الأصناف بالكميات، والملاحظات.\n• في الآخر تختار «حفظ كمسودة» أو «✅ حفظ وتقديم».',
+                 'Opens "New transfer request" on the phone: both branches, items with quantities, and notes.\n• At the end choose "Save as draft" or "✅ Save & submit".')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

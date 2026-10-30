@@ -27,7 +27,7 @@ function useRunJourney() {
 }
 
 /**
- * «🚀 جولة في النظام» — the role product tour (server-built from the training path: one
+ * «🗺️ جولة في موديولات دورك» — the role product tour (server-built from the training path: one
  * stop per module). `role` = a trainer previewing another role. Resolves false when
  * the role has no tour on this shell.
  */
@@ -55,7 +55,7 @@ export function ProductTourButton({ lang, role, className = '' }) {
             onClick={async () => setNone(!(await start(role)))}
             title={none ? (en ? 'No tour for this role yet' : 'مفيش جولة للدور ده') : undefined}
             className={`text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700 ${className}`}>
-      🚀 {en ? 'System tour' : 'جولة في النظام'}
+      🗺️ {en ? 'Your modules tour' : 'جولة في موديولات دورك'}
     </button>
   )
 }

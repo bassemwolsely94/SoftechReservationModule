@@ -281,7 +281,7 @@ export default function TaskDashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4" data-tour="tasks-dashboard-breakdown">
 
           {/* ── Status distribution ── */}
           <div data-tour="tasks-dashboard-status" className="bg-white rounded-xl border border-gray-200 p-4">

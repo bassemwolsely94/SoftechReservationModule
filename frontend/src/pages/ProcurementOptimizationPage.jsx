@@ -37,7 +37,7 @@ function OptimizationTab({ days }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div data-tour="purchasing-optimization-suppliers" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Top suppliers to use */}
         <div data-tour="purchasing-optimization-recommended" className="bg-white border border-gray-200 rounded-xl p-5">

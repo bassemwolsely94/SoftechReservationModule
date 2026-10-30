@@ -480,7 +480,7 @@ export default function DemandDashboardPage() {
               <p className="text-xs text-gray-400">
                 أصناف طلبها عملاء حقيقيون (مفتوحة + ضائعة) — أعلى إشارة شراء ثقةً. مرتّبة حسب القيمة الضائعة المؤكدة.
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2" data-tour="demand-dashboard-suggestions">
                 <button onClick={exportSuggestionsCsv} className="btn-secondary text-xs px-3" data-tour="demand-dashboard-export">⬇ تصدير CSV</button>
                 <button onClick={pushSuggestions} disabled={pushing} data-tour="demand-dashboard-push-purchasing"
                   className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold disabled:opacity-50"

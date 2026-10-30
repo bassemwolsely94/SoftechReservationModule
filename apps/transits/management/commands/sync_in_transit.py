@@ -34,6 +34,7 @@ ABSOLUTE RULE: SELECT ONLY on Sybase. Never INSERT/UPDATE/DELETE on SOFTECH.
 import datetime
 import logging
 
+from django.db.models import Q
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -93,6 +94,21 @@ _QUERY_ITEMS_LEGACY = """
 NEAR_EXPIRY_DAYS = 45   # keep in sync with InTransitTransfer.has_near_expiry
 
 
+# Documents in a final state (fully received without a mismatch, or force-closed)
+# are not re-read from SOFTECH on every run (doc 30 F3) — only once per
+# FINAL_RECHECK_HOURS (the first run after a scheduler restart is always full), so
+# a late correction in SOFTECH is still picked up the same day. Mismatches and
+# anything still open are re-read on every run, as before.
+FINAL_RECHECK_HOURS = 24
+_last_full_pass = None   # monotonic seconds; per process (the scheduler)
+
+
+def _full_pass_due(now=None) -> bool:
+    import time
+    now = time.monotonic() if now is None else now
+    return _last_full_pass is None or now - _last_full_pass >= FINAL_RECHECK_HOURS * 3600
+
+
 class Command(BaseCommand):
     help = (
         'Sync SOFTECH inter-branch transfers (doccode=125) into InTransitTransfer cache. '
@@ -114,6 +130,11 @@ class Command(BaseCommand):
                  'header scan so it can use the docdate index (stktransm has '
                  'no index on docnumber alone)',
         )
+        parser.add_argument(
+            '--full', action='store_true',
+            help='Re-read every document in the window from SOFTECH, including '
+                 'final (received / force-closed) ones — otherwise done once a day',
+        )
 
     def handle(self, *args, **options):
         days   = options['days']
@@ -134,8 +155,13 @@ class Command(BaseCommand):
             self.stderr.write(f'SOFTECH connection failed: {exc}')
             return
 
+        global _last_full_pass
+        import time
+        full = bool(options.get('full')) or bool(single) or _full_pass_due()
         try:
-            stats = self._sync(conn, days, single, single_date)
+            stats = self._sync(conn, days, single, single_date, full=full)
+            if full and not single:
+                _last_full_pass = time.monotonic()
         finally:
             try:
                 conn.close()
@@ -146,7 +172,9 @@ class Command(BaseCommand):
         msg = (
             f'[sync_in_transit] Done in {elapsed:.1f}s — '
             f'created={stats["created"]}, updated={stats["updated"]}, '
-            f'skipped={stats["skipped"]}, errors={stats["errors"]}'
+            f'skipped={stats["skipped"]}, errors={stats["errors"]}, '
+            f'final_not_reread={stats.get("final_cached", 0)}'
+            + (' (full pass)' if full else '')
         )
         self.stdout.write(msg)
         logger.info(msg)
@@ -157,8 +185,10 @@ class Command(BaseCommand):
         from config.sybase import get_sybase_connection
         return get_sybase_connection()
 
-    def _sync(self, conn, days: int, single_doc: str, single_date: str = '') -> dict:
-        """Main sync loop. Returns stats dict."""
+    def _sync(self, conn, days: int, single_doc: str, single_date: str = '',
+              full: bool = True) -> dict:
+        """Main sync loop. Returns stats dict. `full=False` answers final documents
+        from the cache instead of SOFTECH (see FINAL_RECHECK_HOURS)."""
         from django.db import transaction
         from apps.branches.models import Branch
         from apps.transits.models import (
@@ -167,7 +197,7 @@ class Command(BaseCommand):
         )
         from apps.transfers.models import TransferRequest
 
-        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
+        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'final_cached': 0}
 
         # ── Build branch lookup: softech_branch_id → Branch ──────────────────
         branch_map = {
@@ -225,6 +255,17 @@ class Command(BaseCommand):
 
         logger.info('[sync_in_transit] %d headers fetched from SOFTECH', len(rows))
 
+        # Final documents in the window: answered from the cache unless this is a
+        # full pass. received = SOFTECH receipt recorded and no discrepancy.
+        finals = {}
+        if not full:
+            for tt in (InTransitTransfer.objects
+                       .filter(Q(transit_status='force_closed')
+                               | (Q(transit_status='received', has_discrepancy=False)
+                                  & ~Q(erp_receipt_doc_number='') & ~Q(items_snapshot=[])))
+                       .filter(issue_date__gte=since)):
+                finals[(tt.erp_doc_number, tt.erp_supplying_branch_code)] = tt
+
         # (doc_num, supply_code) keys handled by the header-window loop below —
         # so the wide re-check pass afterwards can skip them (no double work).
         processed_keys: set = set()
@@ -259,26 +300,43 @@ class Command(BaseCommand):
                 # Authoritative destination from the 125 header itself
                 recv_code  = str(hdr[7] or '').strip() if len(hdr) > 7 else ''
 
-                # ── Detect receipt: the 25-doc at the destination whose
-                #    docnumber2 points back at this 125 ─────────────────────────
-                received_date, receipt_doc = self._detect_receipt(
-                    conn, doc_num, supply_code, recv_code, issue_date
-                )
+                final = finals.get((doc_num, supply_code))
+                if final is not None and recv_code in ('', final.erp_receiving_branch_code):
+                    # Final and unchanged header → no receipt / line queries; the
+                    # upsert below only refreshes local computed fields.
+                    stats['final_cached'] += 1
+                    received_date = final.erp_received_date
+                    receipt_doc = final.erp_receipt_doc_number
+                    items_data = final.items_snapshot
+                    item_count, total_qty = final.item_count, final.total_quantity
+                    received_items = []
+                    t_status = final.transit_status
+                else:
+                    t_status = None
 
-                # ── Get line items (issued / 125 side) ────────────────────────
-                items_data, item_count, total_qty = self._fetch_items(
-                    conn, doc_num, supply_code, branch_map, doccode='125'
-                )
-
-                # ── Reconcile against the receipt (25) document's own lines ───
-                received_items = []
-                if received_date and receipt_doc:
-                    received_items, _, _ = self._fetch_items(
-                        conn, receipt_doc, recv_code, branch_map, doccode='25'
+                if t_status is None:
+                    # ── Detect receipt: the 25-doc at the destination whose
+                    #    docnumber2 points back at this 125 ─────────────────────
+                    received_date, receipt_doc = self._detect_receipt(
+                        conn, doc_num, supply_code, recv_code, issue_date
                     )
 
+                    # ── Get line items (issued / 125 side) ────────────────────
+                    items_data, item_count, total_qty = self._fetch_items(
+                        conn, doc_num, supply_code, branch_map, doccode='125'
+                    )
+
+                    # ── Reconcile against the receipt (25) document's own lines
+                    received_items = []
+                    if received_date and receipt_doc:
+                        received_items, _, _ = self._fetch_items(
+                            conn, receipt_doc, recv_code, branch_map, doccode='25'
+                        )
+
                 # ── Determine transit status ──────────────────────────────────
-                if received_date and receipt_doc:
+                if t_status is not None:
+                    pass   # final document answered from the cache
+                elif received_date and receipt_doc:
                     # Only reconcile when we actually fetched the 25-side lines;
                     # an empty fetch must NOT be read as "everything missing".
                     if received_items:
@@ -307,9 +365,14 @@ class Command(BaseCommand):
                         changed = False
                         prev_status = existing.transit_status
 
-                        # Only update ERP-derived fields; leave local-only fields intact
+                        # Only update ERP-derived fields; leave local-only fields intact.
+                        # A local receipt («تسجيل الاستلام») stands until SOFTECH's own
+                        # receipt (doc 25) appears — no 25 yet must not undo it; once the
+                        # 25 exists, SOFTECH's result (received / erp_mismatch) wins.
+                        keep_local_receipt = (existing.manually_received_at is not None
+                                              and t_status == 'in_transit')
                         if existing.transit_status not in ('force_closed',):
-                            if existing.transit_status != t_status:
+                            if existing.transit_status != t_status and not keep_local_receipt:
                                 existing.transit_status = t_status
                                 changed = True
                             # Receiver is authoritative from the 125 header —
@@ -442,6 +505,7 @@ class Command(BaseCommand):
 
         # ── Fire alerts for overdue in-transit transfers ──────────────────────
         self._fire_alerts()
+        self._fire_local_receipt_alerts()
 
         return stats
 
@@ -461,9 +525,13 @@ class Command(BaseCommand):
             InTransitAuditEvent, InTransitTransfer, compute_reconciliation,
         )
 
+        # Open = not yet received in SOFTECH: still in transit, or received locally
+        # and awaiting the 25 document (so a late 25 still reconciles it).
         open_qs = (
             InTransitTransfer.objects
-            .filter(transit_status='in_transit')
+            .filter(Q(transit_status='in_transit')
+                    | Q(manually_received_at__isnull=False, erp_receipt_doc_number=''))
+            .exclude(transit_status='force_closed')
             .exclude(erp_receiving_branch_code='')
         )
         rechecked = resolved = 0
@@ -870,7 +938,76 @@ class Command(BaseCommand):
             ])
 
 
+    def _fire_local_receipt_alerts(self):
+        """
+        Transfers received LOCALLY («تسجيل الاستلام») whose SOFTECH receipt (doc 25)
+        still hasn't appeared after `transit_local_receipt_alert_days` days (default 3):
+        the goods are on the shelf but SOFTECH stock is wrong until the 25 is recorded.
+        Notify the receiving branch (+ admins) at most once a day per transfer, with a
+        note + audit entry — the same guard fields as the in-transit alerts (level
+        'local'; those levels no longer apply once received).
+        Nothing is written to SOFTECH.
+        """
+        from apps.transits.models import InTransitAuditEvent, InTransitNote, InTransitTransfer
+
+        days = _get_local_receipt_alert_days()
+        if days <= 0:
+            return 0
+        now = timezone.now()
+        today = timezone.localdate()
+        qs = (InTransitTransfer.objects
+              .filter(transit_status='received', manually_received_at__isnull=False,
+                      erp_received_date__isnull=True,
+                      manually_received_at__lte=now - datetime.timedelta(days=days))
+              .select_related('supplying_branch', 'receiving_branch'))
+        sent = 0
+        for transfer in qs:
+            if (transfer.last_alert_level == 'local' and transfer.last_alert_sent_at
+                    and timezone.localdate(transfer.last_alert_sent_at) == today):
+                continue
+            waited = (now - transfer.manually_received_at).days
+            body = (f'تحويل {transfer.erp_doc_number} اتسجّل استلامه هنا من {waited} يوم '
+                    f'ولسه مستند الاستلام (25) مش متسجّل في SOFTECH — سجّله في SOFTECH '
+                    f'عشان رصيد المخزون يبقى صحيح.')
+            try:
+                from apps.notifications.models import Notification
+                branch = transfer.receiving_branch or transfer.supplying_branch
+                if branch:
+                    Notification.send_to_branch(
+                        branch=branch,
+                        notification_type='transit_overdue',
+                        title=f'⏳ استلام غير مؤكَّد في SOFTECH — {transfer.erp_doc_number}',
+                        body=body,
+                        dedup_key=f'transit_local_unconfirmed_{transfer.id}_{today.isoformat()}',
+                        include_admins=True,
+                        dedup_once=True,
+                    )
+            except Exception as exc:
+                logger.warning('[sync_in_transit] local-receipt alert failed: %s', exc)
+            InTransitNote.objects.create(transfer=transfer, note_type='alert',
+                                         body=f'🔔 تنبيه تلقائي: {body}', created_by=None)
+            InTransitAuditEvent.log(transfer, 'alert_sent',
+                                    detail=f'level=local, days_since_local_receipt={waited}')
+            transfer.last_alert_level = 'local'
+            transfer.last_alert_sent_at = now
+            transfer.alert_notification_count += 1
+            transfer.save(update_fields=['last_alert_level', 'last_alert_sent_at',
+                                         'alert_notification_count', 'updated_at'])
+            sent += 1
+        return sent
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_local_receipt_alert_days() -> int:
+    """Days a LOCAL receipt may wait for SOFTECH's doc 25 before alerting
+    (SystemSetting transit_local_receipt_alert_days, default 3; 0 = off)."""
+    try:
+        from apps.config.models import SystemSetting
+        return int(SystemSetting.get('transit_local_receipt_alert_days', 3))
+    except Exception:
+        return 3
+
 
 def _get_cancel_window() -> int:
     """Read SOFTECH cancellation window from SystemSetting or use default (5 days)."""

@@ -145,7 +145,7 @@ export default function MobileApprovalsPage() {
   return (
     <div className="p-3 space-y-3">
       {/* Segmented toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1" data-tour="hr-mobile-approvals-tabs">
+      <div data-tour="hr-mobile-approvals-tabs" className="flex bg-gray-100 rounded-xl p-1">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -159,7 +159,7 @@ export default function MobileApprovalsPage() {
         ))}
       </div>
 
-      <div className="flex items-center justify-between">
+      <div data-tour="hr-mobile-approvals-header" className="flex items-center justify-between">
         <h1 className="text-base font-bold text-gray-900">
           {tab === 'hr' ? 'موافقات الموارد البشرية' : 'الموافقات التشغيلية'}
         </h1>
@@ -173,10 +173,10 @@ export default function MobileApprovalsPage() {
       ) : items.length === 0 ? (
         <MobileEmpty icon="🎉" text="لا توجد موافقات بانتظارك" />
       ) : (
-        <div className="space-y-2.5">
+        <div data-tour="hr-mobile-approvals-list" className="space-y-2.5">
           {items.map(it => (
             <div key={`${it.kind}-${it.id}`} data-tour="hr-mobile-approvals-card" className="bg-white rounded-2xl border border-gray-200 p-4">
-              <div className="flex items-start justify-between gap-2 mb-1.5">
+              <div data-tour="hr-mobile-approvals-tag" className="flex items-start justify-between gap-2 mb-1.5">
                 <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                   it.kind === 'pricing' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                 }`}>{it.tag}</span>
@@ -195,7 +195,7 @@ export default function MobileApprovalsPage() {
                 <span>{ago(it.when)}</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3">
+              <div data-tour="hr-mobile-approvals-decide" className="grid grid-cols-2 gap-2 mt-3">
                 <button data-tour="hr-mobile-approvals-approve"
                   onClick={() => { setTarget({ kind: it.kind, id: it.id, decision: 'approved' }); setNotes(''); setError('') }}
                   className="py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold active:opacity-90"

@@ -56,7 +56,7 @@ export default function MobileTasksPage() {
         : isError ? <MobileError text="تعذّر تحميل المهام" onRetry={refetch} />
         : rows.length === 0 ? <MobileEmpty icon="✅" text="لا توجد مهام" />
         : (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5" data-tour="tasks-mobile-list">
             {rows.map(t => (
               <button data-tour="tasks-mobile-card" key={t.id} onClick={() => navigate(`/m/tasks/${t.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">

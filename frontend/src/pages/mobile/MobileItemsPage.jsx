@@ -48,7 +48,7 @@ export default function MobileItemsPage() {
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               <span className="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">كود: {item.softech_id}</span>
               {fmt(item.pack_price) && <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">💰 {fmt(item.pack_price)} ج.م</span>}
-              <span className="text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">إجمالي الشبكة: {toLatin(total)}</span>
+              <span data-tour="catalog-mobile-items-total" className="text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">إجمالي الشبكة: {toLatin(total)}</span>
             </div>
           </div>
 

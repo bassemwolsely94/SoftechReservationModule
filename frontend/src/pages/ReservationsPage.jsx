@@ -312,7 +312,7 @@ export default function ReservationsPage() {
       )}
 
       {/* Table */}
-      <div className={`card p-0 overflow-hidden transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
+      <div data-tour="reservations-list-table" className={`card p-0 overflow-hidden transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
         {isError ? (
           <div className="p-10 text-center">
             <div className="text-3xl mb-2">⚠️</div>

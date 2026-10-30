@@ -33,7 +33,7 @@ export default function TargetsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-5">
+      <div data-tour="analytics-targets-header" className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🎯 الأهداف البيعية</h1>
           <p className="text-sm text-gray-500 mt-0.5">حدّد الهدف وتابع التحقيق لحظياً مقابل المبيعات الفعلية</p>
@@ -52,7 +52,7 @@ export default function TargetsPage() {
       ) : targets.length === 0 ? (
         <div className="text-center py-16 text-gray-400">لا توجد أهداف بعد</div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div data-tour="analytics-targets-list" className="grid gap-3 md:grid-cols-2">
           {targets.map(t => {
             const a = t.attainment || {}
             const pace = PACE[a.pace] || {}

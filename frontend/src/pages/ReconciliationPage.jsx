@@ -151,7 +151,7 @@ function Kpis({ d }) {
     { label: 'استثناءات', value: d.exceptions?.total, sub: `حرجة: ${d.exceptions?.by_severity?.critical || 0}`, warn: (d.exceptions?.total || 0) > 0 },
   ]
   return (
-    <div className="grid grid-cols-2 md:grid-cols-6 gap-3" data-tour="finance-reconciliation-kpis">
+    <div data-tour="finance-reconciliation-kpis" className="grid grid-cols-2 md:grid-cols-6 gap-3">
       {tiles.map((t, i) => (
         <div key={i} className={`rounded-xl border p-3 ${t.warn ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}>
           <div className="text-xs text-gray-500">{t.label}</div>
@@ -741,8 +741,8 @@ function CandidatesTab({ scope }) {
                   ['subset_oldest', 'بالأقدم'], ['multi_ref', 'عدة فواتير'], ['installments', 'أقساط'], ['fifo_residual', 'توزيع المتبقي']]
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2 text-sm flex-wrap">
-        <span className="text-gray-500" data-tour="finance-reconciliation-status">الحالة:</span>
+      <div data-tour="finance-reconciliation-status" className="flex items-center gap-2 mb-2 text-sm flex-wrap">
+        <span className="text-gray-500">الحالة:</span>
         {STATUSES.map(([k, l]) => (
           <button key={k} onClick={() => setStatus(k)} className={`px-2 py-1 rounded-lg border ${status === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
         ))}
@@ -859,7 +859,7 @@ function CandidatesTab({ scope }) {
           <Pager page={page} setPage={setPage} count={data?.count} size={20} />
         </div>
       ) : (
-        <div className="space-y-2">
+        <div data-tour="finance-reconciliation-list" className="space-y-2">
           {rows.length === 0 && <div className="text-gray-400 py-8 text-center">لا يوجد في هذا النطاق</div>}
           <Pager page={page} setPage={setPage} count={data?.count} size={pageSize} />
           <div className="overflow-x-auto">
@@ -1389,7 +1389,7 @@ function FilterBar({ partyType, filters, setFilters }) {
     </div>
   )
   return (
-    <div className="flex items-start gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-xl p-2 text-sm" data-tour="finance-reconciliation-filters">
+    <div data-tour="finance-reconciliation-filters" className="flex items-start gap-3 flex-wrap bg-gray-50 border border-gray-200 rounded-xl p-2 text-sm">
       <SupplierMultiSelect partyType={partyType} selected={filters.personcodes}
                            onChange={(codes) => setFilters(f => ({ ...f, personcodes: codes }))} />
       {dateRange('تاريخ الفاتورة', 'inv_date_from', 'inv_date_to', 'border-green-200 bg-green-50/60 text-green-900')}
@@ -1470,7 +1470,7 @@ export default function ReconciliationPage() {
 
       <Kpis d={dash} />
 
-      <div className="flex gap-2 border-b border-gray-200" data-tour="finance-reconciliation-tabs">
+      <div data-tour="finance-reconciliation-tabs" className="flex gap-2 border-b border-gray-200">
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-[#022871] text-[#022871] font-semibold' : 'border-transparent text-gray-500'}`}>{l}</button>
         ))}

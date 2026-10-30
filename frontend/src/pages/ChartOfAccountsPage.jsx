@@ -97,7 +97,7 @@ export default function ChartOfAccountsPage() {
         <h2 className="text-base font-semibold text-gray-700">دليل الحسابات</h2>
         <div className="flex gap-2 mr-auto flex-wrap">
           {/* View toggle */}
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm" data-tour="finance-coa-view">
+          <div data-tour="finance-coa-view" className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
             {['flat','tree'].map(v => (
               <button key={v}
                 onClick={() => setView(v)}
@@ -110,8 +110,7 @@ export default function ChartOfAccountsPage() {
 
           {view === 'flat' && (
             <>
-              <input
-                data-tour="finance-coa-search"
+              <input data-tour="finance-coa-search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="بحث بالاسم أو الكود…"
@@ -189,7 +188,7 @@ export default function ChartOfAccountsPage() {
 
       {/* Tree view */}
       {view === 'tree' && !treeLoading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4" data-tour="finance-coa-tree">
+        <div data-tour="finance-coa-tree" className="bg-white rounded-xl border border-gray-200 p-4">
           {tree.length === 0
             ? <div className="text-center py-8 text-gray-400 text-sm">لا يوجد هيكل حسابي — لم تُزامن الحسابات بعد</div>
             : tree.map(root => <TreeNode key={root.id} node={root} depth={0} />)

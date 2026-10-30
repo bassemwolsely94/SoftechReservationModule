@@ -45,8 +45,29 @@ class ERPMatcher:
     This method does NOT write to the database — the caller persists the result.
     """
 
-    def __init__(self, transfer):
+    def __init__(self, transfer, conn=None):
+        """`conn`: an open SOFTECH connection shared across many matches (the poll
+        loop — doc 30 F4). It is never closed here; when a query on it fails,
+        `shared_conn_failed` is set so the caller can reconnect and retry instead of
+        recording the error as "not found". Without `conn` each lookup opens and
+        closes its own connection, as before."""
         self.transfer = transfer
+        self._shared_conn = conn
+        self.shared_conn_failed = False
+
+    def _open(self):
+        """(connection, opened_here)."""
+        if self._shared_conn is not None:
+            return self._shared_conn, False
+        from config.sybase import get_sybase_connection
+        return get_sybase_connection(), True
+
+    def _close(self, conn, own):
+        if conn is not None and own:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     # ── public entry point ────────────────────────────────────────────────────
 
@@ -189,7 +210,6 @@ class ERPMatcher:
         ABSOLUTE RULE: SELECT ONLY. Never INSERT/UPDATE/DELETE on Sybase.
         """
         import datetime as _dt
-        from config.sybase import get_sybase_connection
         from apps.sync.sybase_queries import QUERY_STKTRANS_LINES
 
         tr     = self.transfer
@@ -217,9 +237,9 @@ class ERPMatcher:
             f'window={date_from}…{date_to}, items={item_codes}'
         )
 
-        conn = None
+        conn, own = None, True
         try:
-            conn = get_sybase_connection()
+            conn, own = self._open()
             cur  = conn.cursor()
 
             # ── Step 1: stktransm candidates ─────────────────────────────────
@@ -347,17 +367,15 @@ class ERPMatcher:
             return best_header, best_lines, best_branch_matched, best_user_info, discovered_doc
 
         except Exception as exc:
+            if not own:
+                self.shared_conn_failed = True
             logger.warning(
                 f'ERPMatcher [{tr_num}]: auto-search error: {exc}',
                 exc_info=True,
             )
             return None, [], False, None, None
         finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            self._close(conn, own)
 
     def _supplying_branch_code(self) -> str:
         sb = self.transfer.supplying_branch
@@ -383,7 +401,6 @@ class ERPMatcher:
         Never raises — returns (None, [], False, None) on any error.
         ABSOLUTE RULE: SELECT ONLY. Never INSERT/UPDATE/DELETE on Sybase.
         """
-        from config.sybase import get_sybase_connection
         from apps.sync.sybase_queries import (
             QUERY_VALIDATE_STKTRANS,
             QUERY_VALIDATE_STKTRANS_ANY,
@@ -402,9 +419,9 @@ class ERPMatcher:
         except (ValueError, TypeError):
             doc_num_param = doc_number  # non-numeric docnumber: pass as-is
 
-        conn = None
+        conn, own = None, True
         try:
-            conn = get_sybase_connection()
+            conn, own = self._open()
             cur  = conn.cursor()
 
             # ── Pass 1: stktransm — exact branch + doccode=125 ───────────────
@@ -475,17 +492,15 @@ class ERPMatcher:
             return None, [], False, None
 
         except Exception as exc:
+            if not own:
+                self.shared_conn_failed = True
             logger.warning(
                 f'ERPMatcher [{tr_num}]: Sybase error for doc={doc_number}: {exc}',
                 exc_info=True,
             )
             return None, [], False, None
         finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            self._close(conn, own)
 
     @staticmethod
     def _lookup_user(cur, usercode, _unused_query, tr_num) -> dict | None:

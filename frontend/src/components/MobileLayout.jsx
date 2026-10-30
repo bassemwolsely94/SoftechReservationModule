@@ -32,6 +32,9 @@ const MODE_NEXT_AR = {
 // Keep the bottom bar to 5 slots; beyond that, overflow into a "More" sheet.
 const INLINE_MAX = 5
 
+// Product-tour anchor for a tab: '/m/reservations' → 'mnav-reservations' ('/m' → 'mnav-home').
+const tourId = (to) => 'mnav-' + (to.replace(/^\/m\/?/, '').replace(/[^a-z0-9]+/g, '-').replace(/-$/, '') || 'home')
+
 export default function MobileLayout({ title = 'صيدليات الرزيقي', tabs = [], children }) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
@@ -86,7 +89,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
     <div className="min-h-screen bg-gray-50 font-cairo flex flex-col" dir="rtl">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 bg-brand-600 text-white px-4 py-2.5 flex items-center justify-between shadow">
+      <header data-tour="mshell-header" className="sticky top-0 z-30 bg-brand-600 text-white px-4 py-2.5 flex items-center justify-between shadow">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center shrink-0">
             <span className="text-white font-black text-sm leading-none">ر</span>
@@ -110,6 +113,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
             <span className="text-base leading-none">{MODE_EMOJI[mode]}</span>
           </button>
           <button
+            data-tour="mshell-notifications"
             onClick={() => navigate('/m/notifications')}
             className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-white/15 active:bg-white/30"
             title="الإشعارات"
@@ -169,7 +173,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
 
       {/* ── Bottom tab bar ───────────────────────────────────────────────── */}
       {visibleTabs.length > 0 && (
-        <nav className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex pb-safe-bottom shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
+        <nav data-tour="mshell-tabs" className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex pb-safe-bottom shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
           {inlineTabs.map(tab => {
             const count = badgeFor(tab)
             return (
@@ -177,6 +181,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
                 key={tab.to}
                 to={tab.to}
                 end={tab.end}
+                data-tour={tourId(tab.to)}
                 className={({ isActive }) =>
                   `relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
                     isActive ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'
@@ -198,6 +203,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
 
           {overflow && (
             <button
+              data-tour="mshell-more"
               onClick={() => setMoreOpen(true)}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
                 moreActive ? 'text-brand-600' : 'text-gray-400'
@@ -226,6 +232,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
                   <NavLink
                     key={tab.to}
                     to={tab.to}
+                    data-tour={tourId(tab.to)}
                     onClick={() => setMoreOpen(false)}
                     className={({ isActive }) =>
                       `relative flex flex-col items-center justify-center gap-1 py-4 rounded-xl border text-xs font-medium ${

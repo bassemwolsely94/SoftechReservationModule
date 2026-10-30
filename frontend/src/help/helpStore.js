@@ -35,8 +35,13 @@ const useHelpStore = create(
       hints: false,
       offered: {},
 
-      startTour(key, steps, { journey = false, title = null } = {}) {
-        if (steps?.length) set({ tour: { key, steps, i: 0, journey, title }, isOpen: false })
+      // opts: the screen's own pages (list + detail…) as an array — moving between them keeps
+      // a screen tour going (then the 4th argument is the tour's title) — or
+      // { routes, journey, title } (journeys move across screens)
+      startTour(key, steps, opts = {}, arrayTitle = null) {
+        const { routes = [], journey = false, title = null } =
+          Array.isArray(opts) ? { routes: opts, title: arrayTitle } : (opts || {})
+        if (steps?.length) set({ tour: { key, steps, routes, i: 0, journey, title }, isOpen: false })
       },
       startJourney(j) { get().startTour(`journey:${j.id}`, j.steps, { journey: true, title: j.title }) },
       tourStep(i) { const t = get().tour; if (t) set({ tour: { ...t, i: Math.max(0, Math.min(i, t.steps.length - 1)) } }) },

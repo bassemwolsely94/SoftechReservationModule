@@ -204,7 +204,7 @@ export default function MobileReservationDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="text-center text-xs text-gray-400 py-2">هذا الحجز في حالة نهائية</div>
+        <div data-tour="reservations-mdetail-status" className="text-center text-xs text-gray-400 py-2">هذا الحجز في حالة نهائية</div>
       )}
 
       {/* Confirm sheet */}

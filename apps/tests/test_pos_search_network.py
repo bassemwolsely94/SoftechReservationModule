@@ -137,6 +137,7 @@ class PosSearchApiTests(TestCase):
         from django.core.cache import cache
         from apps.catalog.views import _softech_live_search
         cache.delete('catalog:softech_search_down')
+        self.addCleanup(cache.clear)                     # don't leave cached '%x%' rows for other tests
         self.it.pack_qty = 2
         self.it.save(update_fields=['pack_qty'])
         conn = MagicMock()

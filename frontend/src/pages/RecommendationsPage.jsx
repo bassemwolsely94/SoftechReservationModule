@@ -167,7 +167,7 @@ function EngineStatusStrip({ onTriggerSuccess }) {
 
         {/* Trigger controls (admin only) */}
         {isAdmin && (
-          <div className="flex items-center gap-2 mr-auto">
+          <div data-tour="catalog-recommendations-run-controls" className="flex items-center gap-2 mr-auto">
             <button
               data-tour="catalog-recommendations-settings"
               onClick={() => setShowConfig(v => !v)}
@@ -259,7 +259,7 @@ function FBTPairsTab() {
   return (
     <div dir="rtl">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
+      <div data-tour="catalog-recommendations-fbt-toolbar" className="flex flex-wrap items-center gap-2 p-4 border-b border-gray-100">
         <div className="relative flex-1 min-w-48">
           <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 pointer-events-none text-sm">🔍</span>
           <input
@@ -279,7 +279,7 @@ function FBTPairsTab() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div data-tour="catalog-recommendations-fbt-table" className="overflow-x-auto">
         {isLoading ? (
           <div className="p-12 text-center text-gray-400">جارٍ التحميل…</div>
         ) : rows.length === 0 ? (
@@ -612,7 +612,7 @@ export default function RecommendationsPage() {
     <div dir="rtl" className="flex flex-col h-full bg-gray-50 min-h-screen">
 
       {/* Page header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
+      <div data-tour="catalog-recommendations-header" className="bg-white border-b border-gray-100 px-6 py-5">
         <h1 className="text-xl font-black text-gray-900">محرك التوصيات الذكية</h1>
         <p className="text-xs text-gray-500 mt-0.5">
           اقترانات الأصناف FBT · التوصيات الشخصية للعملاء
@@ -627,7 +627,7 @@ export default function RecommendationsPage() {
 
       {/* Tab bar */}
       <div className="bg-white border-b border-gray-100 px-6" data-tour="catalog-recommendations-tabs">
-        <div className="flex gap-1 -mb-px">
+        <div data-tour="catalog-recommendations-tabs" className="flex gap-1 -mb-px">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors

@@ -15,11 +15,14 @@ import { useHelpIndex } from '../help/useHelpIndex'
 import HelpArticle, { Workflow } from '../help/HelpArticle'
 import HelpEditor from '../help/HelpEditor'
 import HelpFeedback from '../help/HelpFeedback'
+import { FlowList } from '../help/HelpPanel'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
 import Journeys, { ProductTourButton } from '../help/Journeys'
 import HelpUsage from '../help/HelpUsage'
+import NotesLog from '../help/NotesLog'
+import Glossary from '../help/Glossary'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
 export default function HelpCenterPage() {
@@ -52,15 +55,16 @@ export default function HelpCenterPage() {
     <div dir={lang === 'en' ? 'ltr' : 'rtl'} className="p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-content">📖 {label('guide', lang)}</h1>
+          <h1 className="text-xl font-bold text-content" data-tour="general-help-center-header">📖 {label('guide', lang)}</h1>
           <p className="text-sm text-muted">
             {lang === 'en'
               ? 'Every screen of the system explained — what it is for, how to use it, its tabs and the module workflow. Press F1 on any screen to open its help.'
               : 'شرح كل شاشات النظام — دور الشاشة، طريقة الاستخدام، التبويبات، ودورة عمل الموديول. اضغط F1 في أي شاشة لفتح شرحها.'}
           </p>
         </div>
+        <SystemTourButton lang={lang} />
         <ProductTourButton lang={lang} className="text-sm px-4 py-2" />
-        <div data-tour="general-help-center-lang" className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
+        <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm" data-tour="general-help-center-lang">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}
                     className={`px-3 py-1.5 ${lang === l ? 'bg-brand-600 text-white' : 'text-muted hover:bg-surface-3'}`}>
@@ -77,7 +81,7 @@ export default function HelpCenterPage() {
         <SearchResults q={q.trim()} lang={lang} onOpen={(k) => { setQ(''); go({ tab: 'browse', screen: k }) }} />
       ) : (
         <>
-          <div data-tour="general-help-center-tabs" className="flex gap-1 border-b border-line">
+          <div className="flex gap-1 border-b border-line" data-tour="general-help-center-tabs">
             {tabs.map(([k, t]) => (
               <button key={k} type="button" onClick={() => go({ tab: k })}
                       className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-muted hover:text-content'}`}>
@@ -102,7 +106,7 @@ export default function HelpCenterPage() {
 
 function Browse({ index, lang, go }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="general-help-center-modules">
       {index.groups.map((g) => {
         const mods = index.modules.filter((m) => m.group === g.key)
         if (!mods.length) return null
@@ -140,6 +144,8 @@ function Crumbs({ lang, go, module, screen }) {
 }
 
 function ModuleView({ moduleKey, lang, go, canEdit }) {
+  const role = useAuthStore((s) => s.user?.role)
+  const startTour = useHelpStore((s) => s.startTour)
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'module', moduleKey],
     queryFn: () => helpApi.module(moduleKey).then((r) => r.data),
@@ -166,6 +172,11 @@ function ModuleView({ moduleKey, lang, go, canEdit }) {
           </div>
         </div>
       )}
+      {(data.flows || []).length > 0 && (
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <FlowList flows={data.flows} role={role} lang={lang} onStart={startTour} />
+        </div>
+      )}
       <Journeys journeys={data.journeys} lang={lang} canEdit={canEdit} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.screens.map((s) => (
@@ -184,7 +195,10 @@ function ScreenView({ screenKey, lang, go, index }) {
   const role = useAuthStore((s) => s.user?.role)
   const navigate = useNavigate()
   const startTour = useHelpStore((s) => s.startTour)
-  const [editing, setEditing] = useState(false)
+  // ?edit=1&tour_step=N — opened from the trainers' usage report to fix a weak tour step
+  const [params] = useSearchParams()
+  const focusStep = params.get('tour_step') != null ? Number(params.get('tour_step')) : null
+  const [editing, setEditing] = useState(params.get('edit') === '1')
   const { data, isLoading } = useQuery({
     queryKey: ['help', 'screen', screenKey],
     queryFn: () => helpApi.screen(screenKey).then((r) => r.data),
@@ -204,7 +218,7 @@ function ScreenView({ screenKey, lang, go, index }) {
             </Link>
           )}
           {openRoute && data.tour?.length > 0 && (
-            <button type="button" data-tour="general-help-center-show-me-screen" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour), 400) }}
+            <button type="button" data-tour="general-help-center-show-me-screen" onClick={() => { navigate(openRoute); setTimeout(() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title), 400) }}
                     className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
               👆 {lang === 'en' ? 'Show me on the screen' : 'اعرض لي على الشاشة'}
             </button>
@@ -216,14 +230,17 @@ function ScreenView({ screenKey, lang, go, index }) {
           )}
         </div>
         {editing
-          ? <HelpEditor data={data} onDone={() => setEditing(false)} />
+          ? (data.can_edit
+              ? <HelpEditor data={data} focusTourStep={focusStep} onDone={() => { setEditing(false); go({ tab: 'browse', screen: screenKey }) }} />
+              : <div className="text-sm text-faint">ليس لديك صلاحية تعديل الشرح</div>)
           : <HelpArticle data={data} lang={lang} role={role} showAllRoles={data.can_edit}
                          onOpenScreen={(k) => go({ tab: 'browse', screen: k })} />}
         {!editing && (
           <div className="pt-3 border-t border-line flex flex-wrap items-center gap-4">
             <HelpFeedback screenKey={data.key} lang={lang} />
             <LearnedButton screenKey={data.key} lang={lang} />
-            {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span></span>}
+            {data.updated && <span className="text-[11px] text-faint ms-auto">{label('updated', lang)}: <span className="tabnum">{data.updated}</span>
+              {data.change_note && <span className="text-amber-800"> — {pick(data.change_note, lang)}</span>}</span>}
           </div>
         )}
       </div>
@@ -273,7 +290,8 @@ function WhatsNew({ index, lang, go }) {
                   className="w-full text-start px-4 py-2.5 flex items-center gap-3 hover:bg-surface-2">
             <span className="text-xs text-faint tabnum w-24 shrink-0">{s.updated}</span>
             <span className="text-sm text-content flex-1">{pick(s.title, lang)}
-              <span className="text-xs text-faint"> · {modTitle[s.module]?.icon} {pick(modTitle[s.module]?.title, lang)}</span></span>
+              <span className="text-xs text-faint"> · {modTitle[s.module]?.icon} {pick(modTitle[s.module]?.title, lang)}</span>
+              {s.change_note && <span className="block text-xs text-amber-800">{lang === 'en' ? 'Updated: ' : 'اتحدّث: '}«{pick(s.change_note, lang)}»</span>}</span>
             {unread && <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5">{label('newBadge', lang)}</span>}
           </button>
         )
@@ -333,6 +351,8 @@ function Trainers({ index, lang, go }) {
       )}
       <HelpUsage days={days} go={go} />
       <TeamProgress />
+      <NotesLog go={go} />
+      <Glossary index={index} go={go} />
       <TrainingEditor index={index} />
       <Box t="ملاحظات المستخدمين المفتوحة">
         {(fb.data || []).length === 0 && <div className="text-sm text-faint">لا توجد ملاحظات مفتوحة 🎉</div>}
@@ -367,5 +387,23 @@ function Rows({ rows, render, onClick }) {
         </div>
       ))}
     </div>
+  )
+}
+
+/** «🧭 جولة تعريفية بالنظام» — the app-frame tour (general module flow 'system'). */
+function SystemTourButton({ lang }) {
+  const startTour = useHelpStore((s) => s.startTour)
+  const { data } = useQuery({
+    queryKey: ['help', 'module', 'general'],
+    queryFn: () => helpApi.module('general').then((r) => r.data),
+    staleTime: 300_000,
+  })
+  const flow = (data?.flows || []).find((f) => f.id === 'flow:general.system')
+  if (!flow) return null
+  return (
+    <button type="button" onClick={() => startTour(flow.id, flow.steps, [], flow.title)} data-tour="general-help-center-system-tour"
+            className="text-sm bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700">
+      🧭 {lang === 'en' ? 'System tour' : 'جولة تعريفية بالنظام'}
+    </button>
   )
 }

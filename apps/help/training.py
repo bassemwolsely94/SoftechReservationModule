@@ -29,8 +29,69 @@ def base_quiz(module):
     return list(onboarding.QUIZZES.get(module, []))
 
 
+def base_flow(key):
+    """A workflow tour as written in the repo ('<module>.<flow key>') — title, summary, steps."""
+    modules, _ = registry.load()
+    f = registry.flows(modules).get('flow:' + key)
+    return None if f is None else {'title': f['title'], 'summary': f.get('summary'), 'steps': f['steps']}
+
+
 def base_hash(kind, key):
+    if kind == HelpTrainingOverride.KIND_FLOW:
+        return _hash(base_flow(key))
     return _hash(base_path(key) if kind == HelpTrainingOverride.KIND_PATH else base_quiz(key))
+
+
+def merge_flow(base, data):
+    """A trainer's flow text on top of the repo flow: title / summary replaced when given;
+    steps keep the code's targets and order, text matched by position + target."""
+    if not data:
+        return dict(base)
+    out = dict(base)
+    for f in ('title', 'summary'):
+        if _t_ok(data.get(f)):
+            out[f] = data[f]
+    out['steps'] = registry._merge_tour(base['steps'], data.get('steps'))
+    return out
+
+
+def flows_effective(modules=None, ov=None):
+    """{'flow:<module>.<key>': flow} with trainers' text applied — what users run."""
+    if modules is None:
+        modules, _ = registry.load()
+    ov = overrides(HelpTrainingOverride.KIND_FLOW) if ov is None else ov
+    notes = flow_notes()
+    out = {}
+    for fid, f in registry.flows(modules).items():
+        o = ov.get(fid[5:])
+        out[fid] = {**f, **merge_flow({'title': f['title'], 'summary': f.get('summary'), 'steps': f['steps']},
+                                      o.data if o else None),
+                    'change_note': notes.get(fid)}
+    return out
+
+
+FLOW_NOTE_DAYS = 14
+
+
+def flow_notes(days=FLOW_NOTE_DAYS):
+    """'flow:<module>.<key>' → {'ar', 'en'}: the trainer's one-line «what changed» when
+    their save is the latest change to that workflow tour and is under `days` old (a
+    later save without a note, or a revert, clears it)."""
+    from django.utils import timezone
+    from .models import HelpRevision
+    latest = {}
+    for r in (HelpRevision.objects.filter(screen_key__startswith='flow:',
+                                          created_at__gte=timezone.now() - timezone.timedelta(days=days))
+              .order_by('screen_key', '-created_at', '-id').values('screen_key', 'action', 'public_note')):
+        latest.setdefault(r['screen_key'], r)
+    return {k: {'ar': r['public_note'], 'en': r['public_note']} for k, r in latest.items()
+            if r['action'] == HelpRevision.ACTION_SAVE and r['public_note']}
+
+
+def flow_brief(fid, f):
+    """What the panel / module page need to list and start a workflow tour."""
+    return {'id': fid, 'title': f['title'], 'summary': f.get('summary'), 'roles': f.get('roles'),
+            'mobile': bool(f.get('mobile')), 'steps': f['steps'], 'change_note': f.get('change_note')}
 
 
 def path(role, ov=None):
@@ -96,7 +157,7 @@ def _screens_ar(n):
 
 
 def product_tour(role, shell='desktop', keys=None):
-    """«🚀 جولة في النظام»: a journey built from the role's training path (trainer edits
+    """«🗺️ جولة في موديولات دورك»: a journey built from the role's training path (trainer edits
     included) — a welcome, then one stop per module in path order (its first screen on this
     shell that has a tour and a route without parameters; highlights that screen's first
     tour step and shows the module's one-line `brief`), then where help is. None when no
@@ -173,6 +234,38 @@ def validate_quiz(data):
         if not _t_ok(q.get('explain')):
             errs.append(f'سؤال {n}: التوضيح مطلوب')
     return errs
+
+
+def validate_flow(data, base):
+    if not isinstance(data, dict):
+        return ['data: يجب أن تكون كائناً']
+    errs = []
+    if not _t_ok(data.get('title')):
+        errs.append('العنوان العربي مطلوب')
+    if data.get('summary') not in (None, '') and not isinstance(data.get('summary'), dict):
+        errs.append('الملخص: صيغة غير صالحة')
+    steps = data.get('steps')
+    if not isinstance(steps, list) or len(steps) != len(base['steps']):
+        errs.append(f'الخطوات: لازم {len(base["steps"])} خطوة (الخطوات ثابتة — عدّل النص فقط)')
+        return errs
+    for i, (st, b) in enumerate(zip(steps, base['steps'])):
+        if not isinstance(st, dict) or st.get('target') != b['target'] or not _t_ok(st.get('text')):
+            errs.append(f'خطوة {i + 1}: النص العربي مطلوب')
+        elif st.get('more') not in (None, '') and not isinstance(st.get('more'), dict):
+            errs.append(f'خطوة {i + 1}: الشرح الإضافي: صيغة غير صالحة')
+    return errs
+
+
+def clean_flow(data):
+    def t(v):
+        return {'ar': v['ar'].strip(), 'en': (v.get('en') or '').strip()}
+    out = {'title': t(data['title']),
+           'steps': [{'target': st['target'], 'text': t(st['text']),
+                      **({'more': t(st['more'])} if isinstance(st.get('more'), dict)
+                         and (st['more'].get('ar') or '').strip() else {})} for st in data['steps']]}
+    if isinstance(data.get('summary'), dict) and (data['summary'].get('ar') or '').strip():
+        out['summary'] = t(data['summary'])
+    return out
 
 
 def clean_path(data):

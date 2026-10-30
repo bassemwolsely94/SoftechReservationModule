@@ -66,7 +66,7 @@ export default function OmniWallboardPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-5" dir="rtl">
-      <div className="flex items-center justify-between">
+      <div data-tour="omni-wallboard-header" className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">📊 لوحة المشرف الحية</h1>
         <span className="text-xs text-gray-400">تحديث كل 5 ثوانٍ</span>
       </div>

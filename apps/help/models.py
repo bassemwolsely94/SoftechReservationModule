@@ -14,6 +14,7 @@ people add on top of it:
                   so trainers can see where users get stuck.
   HelpLearned   — onboarding checklist: «فهمت هذه الشاشة» per staff + screen.
   HelpQuizAttempt — server-graded module quiz attempts.
+  HelpGlossaryTerm — «قاموس المصطلحات»: agreed word + words to avoid (hints only).
 """
 from django.db import models
 
@@ -45,7 +46,9 @@ class HelpRevision(models.Model):
     action     = models.CharField(max_length=10, choices=ACTION_CHOICES)
     before     = models.JSONField(null=True, blank=True)   # effective content before
     after      = models.JSONField(null=True, blank=True)   # effective content after
-    note       = models.CharField(max_length=300, blank=True, default='')
+    note       = models.CharField(max_length=300, blank=True, default='')   # reason — trainers' history only
+    # one line for users: what changed (shown in «الجديد» and on the home card)
+    public_note = models.CharField(max_length=120, blank=True, default='')
     staff      = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -140,7 +143,9 @@ class HelpTrainingOverride(models.Model):
     screen_key 'path:<role>' / 'quiz:<module>'."""
     KIND_PATH = 'path'
     KIND_QUIZ = 'quiz'
-    KIND_CHOICES = [(KIND_PATH, 'مسار تدريبي لدور'), (KIND_QUIZ, 'اختبار موديول')]
+    KIND_FLOW = 'flow'      # a module workflow tour's text: key '<module>.<flow key>'
+    KIND_CHOICES = [(KIND_PATH, 'مسار تدريبي لدور'), (KIND_QUIZ, 'اختبار موديول'),
+                    (KIND_FLOW, 'جولة دورة عمل')]
 
     kind       = models.CharField(max_length=10, choices=KIND_CHOICES)
     key        = models.CharField(max_length=40)          # role or module key
@@ -168,3 +173,46 @@ class HelpTrainingSnapshot(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['kind', 'key'], name='help_training_snapshot_once')]
+
+
+class HelpPreference(models.Model):
+    """Per-person help preferences. first_day_hidden_at: the person hid the «أول يوم»
+    cards on the home page (they stay reachable from «مساري التدريبي»)."""
+    staff               = models.OneToOneField('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    first_day_hidden_at = models.DateTimeField(null=True, blank=True)
+    # «تمام، شفتها» on the home «الجديد» card: help changes up to this moment count as read
+    whats_new_seen_at   = models.DateTimeField(null=True, blank=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+
+class HelpReminder(models.Model):
+    """A supervisor's «تذكير» to someone stuck on their training path (who, whom,
+    when) — the audit trail, and the per-person cool-down."""
+    staff      = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    sent_by    = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    percent    = models.PositiveSmallIntegerField(default=0)   # their progress when reminded
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class HelpGlossaryTerm(models.Model):
+    """«قاموس المصطلحات» — one agreed word and the words to avoid for it (e.g. «الكاشير»,
+    not «الخزنة»), kept by trainers so help text and «إيه الجديد» notes say things the
+    same way. `modules` limits a term to some modules (empty = everywhere) — «طلب» is
+    wrong for a reservation but right for a purchase request. Only used for gentle hints
+    (notecheck.py); never changes text by itself. History → HelpRevision 'glossary:<id>'."""
+    preferred  = models.CharField(max_length=60)
+    avoid      = models.JSONField(default=list)            # ['الخزنة', 'الخزينة']
+    modules    = models.JSONField(default=list, blank=True)  # [] = all modules
+    why        = models.CharField(max_length=200, blank=True, default='')
+    updated_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['preferred']
+        verbose_name = 'مصطلح في القاموس'
+        verbose_name_plural = 'قاموس المصطلحات'

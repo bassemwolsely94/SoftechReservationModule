@@ -87,7 +87,7 @@ export default function MobileShortagePage() {
       ) : rows.length === 0 ? (
         <MobileEmpty icon="🚨" text="لا توجد قوائم نواقص" />
       ) : (
-        <div className="space-y-2.5">
+        <div data-tour="shortage-mobile-lists" className="space-y-2.5">
           {rows.map(l => <ListCard key={l.id} l={l} onOpen={() => navigate(`/m/shortage/${l.id}`)} />)}
           {hasNextPage && (
             <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}

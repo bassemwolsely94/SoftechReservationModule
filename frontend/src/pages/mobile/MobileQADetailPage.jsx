@@ -114,7 +114,7 @@ export default function MobileQADetailPage() {
             <textarea rows={2} className="input-field w-full resize-none" value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600 text-center">{error}</div>}
-          <div className="flex gap-2">
+          <div data-tour="hr-qa-save" className="flex gap-2">
             <button data-tour="hr-qa-save-draft" onClick={() => save(false)} disabled={busy} className="btn-secondary flex-1 disabled:opacity-50">حفظ كمسودة</button>
             <button data-tour="hr-qa-submit" onClick={() => save(true)} disabled={busy || answered === 0} className="btn-primary flex-1 py-3 disabled:opacity-50">
               {busy ? '...' : '✅ إرسال'}

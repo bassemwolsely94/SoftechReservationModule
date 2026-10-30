@@ -48,6 +48,77 @@ MODULE = {
              'open_hint': T('قرار «معتمد».', 'An "approved" decision.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول الدفعات والصلاحية', 'A tour of the Batches & expiry module'),
+            'summary': T('من الأرقام اليومية لقرب الانتهاء، للجرد على الرف، لحد قرار النقل أو الإتلاف/المرتجع واعتماده.',
+                         'From the daily near-expiry figures, to checking the shelf, to the transfer or disposal/return decision and its approval.'),
+            'roles': ['admin', 'pharmacist', 'purchasing', 'quality_manager', 'supervisor'],
+            'steps': [
+                {'target': 'nav-batches', 'nav': '/batches',
+                 'text': T('الموديول من القائمة: «المخزون» ← «الدفعات والانتهاء».',
+                           'The module from the menu: "Inventory" → "Batches & expiry".'),
+                 'more': T('كل شغل الصلاحية في شاشة واحدة بتبويبات. البيانات جاية من أرصدة SOFTECH الفعلية في كل الفروع، وبتتحدّث بمزامنة يومية.\n'
+                           '• الموديول ده بيرصد ويقترح؛ التنفيذ الفعلي (تحويل، إتلاف، مرتجع) بيتم في SOFTECH أو في موديول التحويلات.',
+                           'All expiry work is on one screen with tabs. The data comes from the actual SOFTECH balances in every branch and is refreshed by a daily sync.\n'
+                           '• This module monitors and suggests; the real action (transfer, disposal, return) happens in SOFTECH or in the Transfers module.')},
+                {'target': 'batches-main-kpis', 'route': '/batches',
+                 'text': T('ابدأ من الأرقام: اللي بينتهي خلال 30 و90 و180 يوم، والمنتهي بالمخزون.',
+                           'Start with the figures: what expires within 30, 90 and 180 days, and what has expired in stock.'),
+                 'more': T('الأرقام دي على كل الفروع مع قيمتها بالجنيه. لو «منتهية ولا تزال بالمخزون» فيها رقم، ده شغل النهارده: تتشال من الرف وياخد قرار.\n'
+                           '• «خلال 30 يوم» = لسه فيه وقت للتصريف أو النقل.',
+                           'These figures cover all branches with their value in EGP. If "Expired but still in stock" has a number, that is today\'s job: take it off the shelf and decide.\n'
+                           '• "Within 30 days" = there is still time to sell or move it.')},
+                {'target': 'batches-main-tabs', 'route': '/batches',
+                 'text': T('التبويبات ماشية بترتيب الشغل: رصد ← تدقيق ← تحليل الشراء ← إنقاذ ← قرار.',
+                           'The tabs follow the work order: monitor → audit → purchase analysis → rescue → decision.'),
+                 'more': T('• «قرب الانتهاء» و«أرصدة الصلاحية»: إيه اللي هيخلص وفين.\n'
+                           '• «تدقيق صلاحيات الشراء»: نتأكد إن التاريخ المسجّل عند الشراء مطابق للرف.\n'
+                           '• «أداء الموردين» و«مراجعة الشراء»: للمشتريات — مين بيورّد قصير الأجل وإيه اللي نقلل كميته.',
+                           '• "Near expiry" and "Expiry balances": what will expire and where.\n'
+                           '• "Purchase-expiry audit": check that the date entered at purchase matches the shelf.\n'
+                           '• "Supplier expiry performance" and "Purchase review": for purchasing — who supplies short-dated and what to order less of.')},
+                {'target': 'batches-main-scope', 'route': '/batches',
+                 'text': T('ضيّق القائمة: المدة والفرع والمخزن.',
+                           'Narrow the list: period, branch and store.'),
+                 'more': T('اختار فرعك عشان تشوف اللي على رفك إنت. «آخر مزامنة» بيوضح البيانات من إمتى؛ لو قديمة، المدير أو المشرف يقدر يضغط «🔄 مزامنة الآن».',
+                           'Choose your branch to see what is on your own shelf. "Last sync" shows how old the data is; if it is old, an admin or supervisor can press "🔄 Sync now".')},
+                {'target': 'batches-main-table', 'route': '/batches',
+                 'text': T('الجدول: كل صنف بكميته وتكلفته وأقرب صلاحية والفروع اللي فيها.',
+                           'The table: each item with its quantity, cost, earliest expiry and the branches holding it.'),
+                 'more': T('رتّب بـ«قيمة معرّضة» عشان تبدأ بالأغلى. عمود «الفروع» بيوضح الصنف موجود فين — مفيد لو هتنقله.\n'
+                           '• القاعدة على الرف: الأقرب انتهاءً يتصرف الأول (FEFO).',
+                           'Sort by "Value at risk" to start with the most expensive. The "Branches" column shows where the item is — useful if you will move it.\n'
+                           '• The shelf rule: the nearest expiry goes out first (FEFO).')},
+                {'target': 'batches-main-actions', 'route': '/batches',
+                 'text': T('اتأكد على الرف: «▶️ بدء جرد مادي» (بعد اختيار فرع).',
+                           'Check the shelf: "▶️ Start physical count" (after choosing a branch).'),
+                 'more': T('بينشئ جلسة جرد صلاحية بالأصناف المعروضة ويفتحها في «الجرد الفعلي»، فتعدّ وتسجّل التاريخ الحقيقي من على العلبة.\n'
+                           '• «⬇️ تصدير Excel» لو محتاج القائمة ورق أو تبعتها لحد.',
+                           'It creates an expiry count session with the listed items and opens it in "Stock count", where you count and record the real date from the pack.\n'
+                           '• "⬇️ Export Excel" if you need the list on paper or to send it to someone.')},
+                {'target': 'batches-main-table', 'route': '/batches',
+                 'text': T('مش هيتباع في الوقت؟ «🗑️ إتلاف/مرتجع» من صف الصنف.',
+                           'Will not sell in time? "🗑️ Disposal/return" on the item\'s row.'),
+                 'more': T('اختار القرار (إتلاف، مرتجع للمورد، عزل، مراجعة) والكمية والسبب ثم «تسجيل القرار».\n'
+                           '• بيتسجّل «مسودة» في تبويب «إتلاف/مرتجع» — لسه محتاج اعتماد.\n'
+                           '• لو الصنف لسه صالح وفرع تاني بيبيعه أسرع، استخدم تبويب «إنقاذ قبل الانتهاء» اللي بينشئ مسودة طلب تحويل بدل الإتلاف.',
+                           'Choose the decision (destroy, return to supplier, quarantine, review), the quantity and the reason, then "Record decision".\n'
+                           '• It is saved as a "draft" in the "Disposal/return" tab — it still needs approval.\n'
+                           '• If the item is still valid and another branch sells it faster, use the "Rescue before expiry" tab, which creates a draft transfer request instead.')},
+                {'target': 'batches-main-tabs', 'route': '/batches',
+                 'text': T('آخر محطة: تبويب «🗑️ إتلاف/مرتجع» — اعتماد ثم «تم التنفيذ».',
+                           'Last stop: the "🗑️ Disposal/return" tab — approve, then "Done".'),
+                 'more': T('المدير أو المشرف أو الجودة بس يقدر يضغط «اعتماد» ثم «تم التنفيذ»، و«تم التنفيذ» ما ينفعش قبل الاعتماد.\n'
+                           '• اضغط «تم التنفيذ» بعد ما تطبّق القرار بإيدك في SOFTECH — النظام مش بيخصم المخزون لوحده.\n'
+                           '• «⬇️ تصدير / طباعة» يطلع مستند القرارات.',
+                           'Only an admin, supervisor or quality manager can press "Approve" and then "Done", and "Done" is not allowed before approval.\n'
+                           '• Press "Done" after you apply the decision by hand in SOFTECH — the system never deducts stock on its own.\n'
+                           '• "⬇️ Export / print" produces the decisions document.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -84,12 +155,18 @@ SCREENS = [
         'tour': [
             {'target': 'batches-main-tabs', 'label': T('🚨 قرب الانتهاء · 📦 أرصدة الصلاحية · …', '🚨 Near expiry · 📦 Expiry balances · …'),
              'text': T('سبع تبويبات من الرصد للقرار: قرب الانتهاء، الأرصدة، تدقيق الشراء، الموردين، مراجعة الشراء، الإنقاذ، والإتلاف/المرتجع.',
-                       'Seven tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, rescue, and disposal/return.')},
+                       'Seven tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, rescue, and disposal/return.'),
+             'more': T(
+                 '• «قرب الانتهاء» و«أرصدة الصلاحية»: الرصد اليومي.\n• «تدقيق صلاحيات الشراء» و«أداء الموردين» و«مراجعة الشراء»: هل بنشتري قصير الأجل ومن مين.\n• «إنقاذ قبل الانتهاء»: ينشئ مسودة طلب تحويل لفرع بيبيع أسرع.\n• «إتلاف/مرتجع»: اعتماد وتنفيذ القرارات.',
+                 '• "Near expiry" and "Expiry balances": daily monitoring.\n• "Purchase-expiry audit", "Supplier expiry performance" and "Purchase review": are we buying short-dated, and from whom.\n• "Rescue before expiry": creates a draft transfer request to a branch that sells faster.\n• "Disposal/return": approving and completing decisions.')},
             {'target': 'batches-main-scope', 'label': T('خلال 180 يوم · كل الفروع · كل المخازن', 'Within 180 days · All branches'),
              'text': T('حدد المدة والفرع والمخزن. في «أرصدة الصلاحية» تختار كمان الوضع: قرب الانتهاء، نطاق تاريخ، منتهية، أو الكل.',
                        'Set the period, branch and store. In "Expiry balances" you also pick the mode: near expiry, date range, expired, or all.'),
              'when': T('ابدأ يومك بـ «خلال 30 يوم» لفرعك.', 'Start your day with "within 30 days" for your branch.'),
-             'open_hint': T('تبويب «🚨 قرب الانتهاء» أو «📦 أرصدة الصلاحية».', '"🚨 Near expiry" or "📦 Expiry balances" tab.')},
+             'open_hint': T('تبويب «🚨 قرب الانتهاء» أو «📦 أرصدة الصلاحية».', '"🚨 Near expiry" or "📦 Expiry balances" tab.'),
+             'more': T(
+                 'المدة (30 / 90 / 180 يوم / سنة)، والفرع والمخزن بيضيّقوا القائمة، و«يشمل العزل/التالف» يضيف مخازن العزل.\n• في «أرصدة الصلاحية» تقدر تختار وضع «منتهية (متبقية)» أو «نطاق تاريخ الصلاحية».\n• «آخر مزامنة» بيقولك البيانات حديثة ولا لأ؛ «🔄 مزامنة الآن» بيسحب من SOFTECH من غير ما يكتب فيه.',
+                 'The period (30 / 90 / 180 days / a year), branch and store narrow the list; "Include quarantine/damaged" adds quarantine stores.\n• In "Expiry balances" you can pick the "Expired (remaining)" or "Expiry date range" mode.\n• "Last sync" tells you how fresh the data is; "🔄 Sync now" reads from SOFTECH without writing to it.')},
             {'target': 'batches-main-sync', 'label': T('🔄 مزامنة الآن', '🔄 Sync now'),
              'text': T('يسحب أرصدة الصلاحية من SOFTECH لكل الفروع دلوقتي بدل انتظار المزامنة اليومية. قراءة بس.',
                        'Pulls expiry balances from SOFTECH for every branch now instead of waiting for the daily sync. Read only.'),
@@ -135,7 +212,32 @@ SCREENS = [
                        'Closes the decision after you apply it yourself in SOFTECH. The system never deducts stock.'),
              'warn': T('اضغطه بعد التنفيذ الفعلي في SOFTECH بس — الحالة نهائية.', 'Press it only after it is really applied in SOFTECH — the status is final.'),
              'open_hint': T('قرار «معتمد» — للمدير والجودة والمشرف.', 'An "approved" decision — admin, quality and supervisor.')},
+            {'target': 'batches-main-header', 'label': T('إدارة الدفعات (FEFO)', 'Batch management (FEFO)'), 'when': T('لما تحب تتابع الصلاحيات في الفروع.', 'When you want to watch expiry across branches.'),  # from the GitHub-side tour
+             'text': T('«إدارة الدفعات (FEFO)»: مراقبة الصلاحية — الأقرب انتهاءً يُصرف أولاً.',
+                       '«Batch management (FEFO)»: expiry monitoring — first to expire goes out first.'),
+             'more': T(
+                 'الشاشة دي بتقرا أرصدة المخزون الفعلية بتواريخ صلاحيتها من SOFTECH في كل الفروع والمخازن (مزامنة يومية).\n• هدفها إننا نلحق الصنف قبل ما يخلص تاريخه: نصرفه الأول، ننقله لفرع بيبيعه أسرع، أو نقرر إتلاف/مرتجع.\n• النظام بيقترح بس — أي حركة مخزون حقيقية بتتعمل في SOFTECH.',
+                 'This screen reads actual stock balances with their expiry dates from SOFTECH across every branch and store (daily sync).\n• The goal is to catch an item before it expires: sell it first, move it to a branch that sells it faster, or decide disposal/return.\n• The system only suggests — any real stock movement is done in SOFTECH.')},
+            {'target': 'batches-main-kpis', 'label': T('أصناف تنتهي خلال 30 يوم', 'Items expiring within 30 days'), 'when': T('أول ما تفتح الشاشة، عشان تعرف حجم الخطر.', 'As soon as you open the screen, to see the size of the risk.'),  # from the GitHub-side tour
+             'text': T('أصناف تنتهي خلال 30 و90 و180 يوماً، القيمة المعرّضة للخطر، والمنتهية بالمخزون.',
+                       'Items expiring within 30, 90 and 180 days, value at risk, and expired items still in stock.'),
+             'more': T(
+                 'كل كارت فيه عدد الأصناف وقيمتها بالجنيه، محسوبة على كل الفروع.\n• «خلال 30 يوم» بالأحمر هو الأهم — دي اللي محتاجة تصرّف أو نقل فوراً.\n• «منتهية ولا تزال بالمخزون» لازم تتشال من الرف وياخد قرار إتلاف/مرتجع.',
+                 'Each card shows the number of items and their value in EGP, across all branches.\n• "Within 30 days" in red matters most — these need selling or moving right away.\n• "Expired but still in stock" must come off the shelf and get a disposal/return decision.')},
+            {'target': 'batches-main-actions', 'label': T('⬇️ تصدير Excel · ▶️ بدء جرد مادي', '⬇️ Export Excel · ▶️ Start a count'), 'when': T('بعد ما تفلتر القائمة أو تختار فرع.', 'After filtering the list or picking a branch.'),  # from the GitHub-side tour
+             'text': T('«تصدير Excel» للقائمة، و«بدء جرد مادي» بعد اختيار فرع.',
+                       '«Export Excel» for the list, and «Start physical count» once a branch is chosen.'),
+             'more': T(
+                 '• «⬇️ تصدير Excel» بينزّل القائمة زي ما هي معروضة (بعد الفلاتر).\n• «▶️ بدء جرد مادي» بيشتغل بس لما تختار فرع: بينشئ جلسة جرد صلاحية بالأصناف المعروضة ويفتحها في شاشة «الجرد الفعلي» عشان تتأكد من التواريخ على الرف.',
+                 '• "⬇️ Export Excel" downloads the list exactly as shown (after filters).\n• "▶️ Start physical count" only works once a branch is chosen: it creates an expiry count session with the listed items and opens it in the "Stock count" screen so you can check the dates on the shelf.')},
+            {'target': 'batches-main-table', 'label': T('جدول الأصناف', 'Items table'), 'when': T('لما تحب تقرّر إيه اللي يتصرف أو يترجع.', 'When you want to decide what to dispense or return.'),  # from the GitHub-side tour
+             'text': T('الأصناف بصلاحيتها وكمياتها؛ زر «إتلاف/مرتجع» يُنشئ مسودة قرار تحتاج اعتماداً.',
+                       'Items with expiry and quantities; «Disposal/return» creates a draft decision that needs approval.'),
+             'more': T(
+                 'اضغط عنوان أي عمود للترتيب (مثلاً «قيمة معرّضة» أو «أقرب صلاحية»)، والصف الأحمر صنف منتهي.\n• «🗑️ إتلاف/مرتجع» بيفتح نافذة: القرار (إتلاف، مرتجع للمورد، عزل، مراجعة) والكمية والسبب، ثم «تسجيل القرار».\n• القرار بيتسجّل مسودة في تبويب «إتلاف/مرتجع» ومش بيخصم من SOFTECH.',
+                 'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
         'updated': '2026-10-29',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

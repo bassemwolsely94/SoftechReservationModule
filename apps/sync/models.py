@@ -95,3 +95,34 @@ class SoftechPersonClassif(models.Model):
 
     def __str__(self):
         return f'{self.ptclassifcode} — {self.ptclassifdescr}'
+
+
+class SoftechLoadStat(models.Model):
+    """Hourly roll-up of what the platform asks of SOFTECH (doc 30, step 1.0).
+
+    One row per (hour, node, scope, caller). Filled from an in-memory buffer by
+    apps.sync.softech_load — never one write per query. `scope` is the scheduled job,
+    management command or 'web'; `caller` is the first apps/ function on the stack.
+    """
+    hour        = models.DateTimeField(db_index=True, verbose_name='الساعة')
+    node        = models.CharField(max_length=64, verbose_name='السيرفر')
+    scope       = models.CharField(max_length=80, verbose_name='المهمة / المصدر')
+    caller      = models.CharField(max_length=200, verbose_name='الكود المستدعي')
+    connects         = models.PositiveIntegerField(default=0, verbose_name='اتصالات')
+    connect_failures = models.PositiveIntegerField(default=0, verbose_name='اتصالات فاشلة')
+    connect_ms       = models.BigIntegerField(default=0, verbose_name='زمن الاتصال (مللي)')
+    queries          = models.PositiveIntegerField(default=0, verbose_name='استعلامات')
+    query_errors     = models.PositiveIntegerField(default=0, verbose_name='استعلامات فاشلة')
+    query_ms         = models.BigIntegerField(default=0, verbose_name='زمن الاستعلامات (مللي)')
+    max_query_ms     = models.PositiveIntegerField(default=0, verbose_name='أبطأ استعلام (مللي)')
+    rows             = models.BigIntegerField(default=0, verbose_name='صفوف مسحوبة')
+
+    class Meta:
+        verbose_name = 'حمل SOFTECH (ساعي)'
+        verbose_name_plural = 'حمل SOFTECH (ساعي)'
+        constraints = [models.UniqueConstraint(fields=['hour', 'node', 'scope', 'caller'],
+                                               name='uniq_softech_load_bucket')]
+        ordering = ['-hour']
+
+    def __str__(self):
+        return f'{self.hour:%Y-%m-%d %H}h {self.scope} {self.caller}'

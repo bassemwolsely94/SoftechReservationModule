@@ -67,6 +67,53 @@ MODULE = {
              'text': T('ينزّل الملاحظات بالفلاتر الحالية للمتابعة مع الفرع.', 'Downloads the findings with the current filters to follow up with the branch.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في تدقيق حركات المخزون', 'A tour of the stock transactions audit'),
+            'summary': T('النظام بيفحص حركات المخزون كل يوم ويطلّع الملاحظات؛ إنت بتراجعها وتقفلها.',
+                         'The system checks stock movements every day and raises findings; you review and close them.'),
+            'roles': ['admin', 'supervisor', 'quality_manager'],
+            'steps': [
+                {'target': 'nav-stock-audit', 'nav': '/stock-audit',
+                 'text': T('«المخزون» ← «تدقيق حركات المخزون».', '"Inventory" → "Stock transactions audit".'),
+                 'more': T('الشاشة دي بتقرا حركات المخزون من SOFTECH وبتطبّق عليها فحوص ثابتة (بيع تحت التكلفة، تكرار، تسويات، بعد مواعيد العمل…).\n'
+                           '• قراءة بس: مفيش أي حاجة بتتكتب في SOFTECH من هنا.',
+                           'This screen reads stock movements from SOFTECH and applies fixed checks to them (sales below cost, duplicates, adjustments, after-hours entries…).\n'
+                           '• Read-only: nothing is written to SOFTECH from here.')},
+                {'target': 'stock-audit-main-filters', 'route': '/stock-audit',
+                 'text': T('اختار الفترة والفرع والحالة.', 'Choose the period, branch and status.'),
+                 'more': T('ابدأ بحالة «مفتوح» عشان تشوف الملاحظات اللي لسه محدش راجعها.\n'
+                           '• مدير الفرع بيشوف فرعه بس.',
+                           'Start with the "Open" status to see findings nobody has reviewed yet.\n'
+                           '• A branch manager sees their own branch only.')},
+                {'target': 'stock-audit-main-cards', 'route': '/stock-audit',
+                 'text': T('بطاقة لكل فحص بعدد ملاحظاته.', 'One card per check with its number of findings.'),
+                 'more': T('دوس على بطاقة عشان تفلتر القايمة على الفحص ده بس.\n'
+                           '• وجدول «الفرع × الفحص» تحتها بيوريك أنهي فرع فيه أكتر ملاحظات.',
+                           'Click a card to filter the list to that check only.\n'
+                           '• The "Branch × check" table below shows which branch has the most findings.')},
+                {'target': 'stock-audit-main-grid', 'route': '/stock-audit',
+                 'text': T('قائمة الملاحظات: الصنف والمستند والمبلغ والسبب.', 'The findings list: item, document, amount and reason.'),
+                 'more': T('كل سطر ملاحظة واحدة بالمستند بتاعها في SOFTECH، عشان ترجع له وتتأكد.\n'
+                           '• الأسهم والمسافة وEnter بيشتغلوا في الجدول للاختيار السريع.',
+                           'Each row is one finding with its SOFTECH document, so you can look it up and confirm.\n'
+                           '• Arrow keys, Space and Enter work in the grid for quick selection.')},
+                {'target': 'stock-audit-main-review', 'route': '/stock-audit',
+                 'text': T('راجع أو تجاهل أو صعّد.', 'Review, dismiss or escalate.'),
+                 'more': T('«تمت المراجعة» لما الحركة سليمة أو اتصلحت، «تجاهل» لما الفحص مش منطبق، و«تصعيد» لما محتاجة مدير.\n'
+                           '• كل قرار بيتسجّل باسمك ووقته.',
+                           '"Reviewed" when the movement is fine or was corrected, "Dismiss" when the check does not apply, and "Escalate" when a manager is needed.\n'
+                           '• Every decision is recorded with your name and the time.')},
+                {'target': 'stock-audit-main-export', 'route': '/stock-audit',
+                 'text': T('صدّر الملاحظات لـ Excel.', 'Export the findings to Excel.'),
+                 'more': T('الملف بيطلع بنفس الفلاتر اللي إنت مختارها، بأسماء الفروع كاملة.\n'
+                           '• مفيد للاجتماع الأسبوعي مع مديري الفروع.',
+                           'The file follows the filters you have chosen, with full branch names.\n'
+                           '• Useful for the weekly meeting with branch managers.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [

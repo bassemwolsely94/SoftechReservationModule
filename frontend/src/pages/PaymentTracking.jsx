@@ -261,7 +261,7 @@ function PaymentRow({ payment, onConfirm, onDispute }) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div data-tour="finance-payments-actions" className="flex items-center gap-2 shrink-0">
           {payment.status === 'pending' && (
             <>
               <button data-tour="finance-payments-confirm" onClick={() => onConfirm(payment)}
@@ -373,7 +373,7 @@ export default function PaymentTracking() {
 
       {/* Summary */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-tour="finance-payments-summary">
+        <div data-tour="finance-payments-summary" className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-brand-50 border border-brand-200 rounded-xl p-4">
             <p className="text-xs text-gray-400">إجمالي اليوم</p>
             <p className="text-2xl font-bold text-brand-700 font-mono mt-1">{fmt(summary.total_value_today, 2)} جم</p>
@@ -401,7 +401,7 @@ export default function PaymentTracking() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <div data-tour="finance-payments-filters" className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         {/* Row 1: main filters */}
         <div className="flex flex-wrap gap-3 items-end" data-tour="finance-payments-filters">
           <div>
@@ -501,7 +501,7 @@ export default function PaymentTracking() {
       </div>
 
       {/* Payments list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div data-tour="finance-payments-list" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-600">{payments.length} دفعة</span>
           <RefreshButton loading={isFetching} onClick={invalidate} variant="ghost" size="sm" data-tour="finance-payments-refresh">

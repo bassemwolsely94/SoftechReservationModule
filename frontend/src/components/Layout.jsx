@@ -92,6 +92,9 @@ const GroupIcon = ({ id, size = 20 }) => {
 }
 
 // ── Navigation data ───────────────────────────────────────────────────────────
+/** «اعرض لي» anchor of a side-menu item: '/pos/exceptions' → 'nav-pos-exceptions'. */
+const navTourId = (to) => 'nav-' + to.replace(/^\//, '').replace(/[^a-z0-9]+/g, '-').replace(/-$/, '')
+
 const NAV_GROUPS = [
   {
     id: 'home', label: 'الرئيسية', section: null,
@@ -266,6 +269,16 @@ export default function Layout() {
     if (activeRouteGroup) setPinnedGroup(activeRouteGroup)
   }, [activeRouteGroup])
 
+  // «اعرض لي» workflow tours open the menu group of a page to point at its item
+  useEffect(() => {
+    const onShow = (e) => {
+      const g = groupForPath(e.detail || '', visibleGroups)
+      if (g) { setRailOnly(false); setHoverGroup(null); setPinnedGroup(g) }
+    }
+    window.addEventListener('help:nav-show', onShow)
+    return () => window.removeEventListener('help:nav-show', onShow)
+  }, [visibleGroups])
+
   // Clicking a desktop (OS) notification → navigate to the linked record
   useEffect(() => {
     const onNav = (e) => { if (e.detail) navigate(e.detail) }
@@ -320,13 +333,14 @@ export default function Layout() {
           </div>
 
           {/* Group icons */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col items-center gap-0.5 scrollbar-hide">
+          <div data-tour="shell-rail" className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col items-center gap-0.5 scrollbar-hide">
             {visibleGroups.map(group => {
               const isActive = displayedGroupId === group.id
               const hasActiveRoute = activeRouteGroup === group.id
               return (
                 <button
                   key={group.id}
+                  data-tour={`nav-group-${group.id}`}
                   onMouseEnter={() => handleRailEnter(group.id)}
                   onMouseLeave={handleRailLeave}
                   onClick={() => { handleGroupClick(group.id); if (railOnly) setRailOnly(false) }}
@@ -420,11 +434,12 @@ export default function Layout() {
               </div>
 
               {/* Items */}
-              <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+              <nav data-tour="shell-nav-panel" className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
                 {displayedGroup.items.map(item => (
                   <NavLink
                     key={item.to}
                     to={item.to}
+                    data-tour={navTourId(item.to)}
                     end={item.to === '/procurement'}
                     onClick={() => setHoverGroup(null)}
                     className={({ isActive }) =>

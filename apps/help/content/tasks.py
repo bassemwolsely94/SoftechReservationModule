@@ -121,6 +121,100 @@ MODULE = {
              'open_hint': T('افتح مهمة لسه مش مكتملة.', 'Open a task that is not completed yet.')},
          ]},
     ],
+    'flows': [
+        {
+            'key': 'overview',
+            'title': T('جولة في موديول المهام التشغيلية', 'A tour of the operational tasks module'),
+            'summary': T('إزاي تسند مهمة وتتابعها لحد ما تتقفل، وإزاي تشوف الصورة العامة في لوحة التحكم وتخلّي المهام المتكررة تتعمل لوحدها بالجداول التلقائية.',
+                         'How to assign a task and follow it until it is closed, how to see the big picture on the dashboard, and how to let recurring tasks create themselves with automatic schedules.'),
+            'roles': ['admin', 'call_center', 'pharmacist', 'supervisor'],
+            'steps': [
+                {'target': 'nav-tasks', 'nav': '/tasks',
+                 'text': T('«العمليات» ← «المهام التشغيلية».', '"Operations" → "Operational tasks".'),
+                 'more': T('هنا كل الشغل المطلوب من الفروع والفريق: جرد، استلام، صيانة، تدريب، متابعة عملاء…\n'
+                           '• كل مهمة ليها مسؤول وموعد نهائي وأولوية.\n'
+                           '• الموديول فيه 3 شاشات: قائمة المهام، لوحة التحكم، والجداول التلقائية.',
+                           'This holds all the work asked of branches and the team: counts, receiving, maintenance, training, customer follow-up…\n'
+                           '• Every task has an owner, a deadline and a priority.\n'
+                           '• The module has 3 screens: the task list, the dashboard, and automatic schedules.')},
+                {'target': 'tasks-list-new', 'route': '/tasks',
+                 'text': T('«+ مهمة جديدة» لإسناد شغل لحد.', '"+ New task" to assign work to someone.'),
+                 'more': T('بيفتح نموذج: «العنوان» (مطلوب)، النوع، الأولوية، الفرع، الموعد النهائي، «تعيين إلى»، والوصف.\n'
+                           '• بعد الإنشاء بتتنقل على طول لصفحة المهمة عشان تضيف قائمة الأعمال.',
+                           'Opens a form: "Title" (required), type, priority, branch, deadline, "Assign to" and description.\n'
+                           '• After creating it you are taken straight to the task page to add its checklist.')},
+                {'target': 'tasks-list-views', 'route': '/tasks',
+                 'text': T('ثلاث طرق عرض: «≡ قائمة»، «⊟ كانبان»، «👤 مهامي».', 'Three views: "≡ List", "⊟ Kanban", "👤 My tasks".'),
+                 'more': T('• «قائمة»: جدول بكل المهام وعلامة «متأخر».\n'
+                           '• «كانبان»: أعمدة بالحالة تشوف فيها الشغل ماشي فين.\n'
+                           '• «مهامي»: المسندة ليك بس — ابدأ يومك منها.',
+                           '• "List": a table of all tasks with an "overdue" mark.\n'
+                           '• "Kanban": columns by status to see where work stands.\n'
+                           '• "My tasks": only those assigned to you — start your day here.')},
+                {'target': 'tasks-list-filters', 'route': '/tasks',
+                 'text': T('فلتر بالحالة والأولوية والنوع والفرع، و«متأخرة فقط».', 'Filter by status, priority, type, branch and "Overdue only".'),
+                 'more': T('الفلاتر بتشتغل مع بعض؛ مثلاً فرع معيّن + «متأخرة فقط» يوريك اللي محتاج تدخّل فوراً.\n'
+                           '• «مسح الفلاتر» بيرجّع كل المهام.',
+                           'Filters combine; for example one branch + "Overdue only" shows what needs action right now.\n'
+                           '• "Clear filters" brings every task back.')},
+                {'target': 'tasks-list-content', 'route': '/tasks', 'wait': '/tasks/:id',
+                 'text': T('افتح أي مهمة — الجولة هتكمّل جوّاها. لو مفيش مهام اضغط «إنهاء».',
+                           'Open any task — the tour continues inside it. If there are none, press "End".'),
+                 'more': T('اضغط على صف المهمة (أو الكارت في الكانبان) يفتح صفحتها.\n'
+                           '• هناك بتحدّث الحالة، تعلّم قائمة الأعمال، وتكتب تحديثاتك.',
+                           'Click a task row (or its Kanban card) to open its page.\n'
+                           '• There you update the status, tick the checklist and post updates.')},
+                {'target': 'tasks-detail-info', 'route': '/tasks/:id',
+                 'text': T('«تفاصيل المهمة»: الحالة، الأولوية، النوع، الفرع، المسؤول والموعد.', '"Task details": status, priority, type, branch, owner and deadline.'),
+                 'more': T('دي البيانات الأساسية للمهمة.\n'
+                           '• عشان تغيّر أي حاجة منها (زي تخليها «قيد التنفيذ» أو تأجل الموعد) اضغط «✎ تعديل» فوق، وبعدين «حفظ».',
+                           'These are the task\'s main facts.\n'
+                           '• To change any of them (like setting it "In progress" or moving the deadline) press "✎ Edit" at the top, then "Save".')},
+                {'target': 'tasks-detail-checklist', 'route': '/tasks/:id',
+                 'text': T('«قائمة الأعمال»: البنود المطلوبة ونسبة الإنجاز.', '"Checklist": the required items and the progress.'),
+                 'more': T('علّم البند لما تخلصه، والنسبة فوق بتتحدّث.\n'
+                           '• اكتب بند جديد في «أضف عنصراً…» واضغط Enter، و«✕» يشيل بند.',
+                           'Tick an item when you finish it and the progress at the top updates.\n'
+                           '• Type a new item in "Add an item…" and press Enter; "✕" removes an item.')},
+                {'target': 'tasks-detail-comments', 'route': '/tasks/:id',
+                 'text': T('«التعليقات والنشاط»: تحديثاتك وتحديثات الفريق.', '"Comments & activity": your updates and the team\'s.'),
+                 'more': T('اكتب إيه اللي اتعمل أو إيه اللي موقفك، وابعته بالزر أو Ctrl+Enter.\n'
+                           '• تغييرات النظام (زي تغيير الحالة) بتظهر هنا كسطور رمادي، فتعرف مين عمل إيه وإمتى.',
+                           'Write what was done or what is blocking you, and send it with the button or Ctrl+Enter.\n'
+                           '• System changes (like a status change) appear here as grey lines, so you know who did what and when.')},
+                {'target': 'tasks-detail-complete', 'route': '/tasks/:id',
+                 'text': T('«✓ إغلاق المهمة» لما الشغل يخلص.', '"✓ Close task" when the work is done.'),
+                 'more': T('بيطلب تأكيد مع «ملاحظات الإغلاق» (اختيارية)، وبعد «تأكيد الإغلاق» المهمة تبقى «مكتملة».\n'
+                           '• لو طلع فيها شغل تاني، «↩ إعادة فتح» بيرجّعها مفتوحة.',
+                           'It asks for confirmation with optional "Closing notes"; after "Confirm close" the task becomes "Completed".\n'
+                           '• If more work turns up, "↩ Reopen" makes it open again.')},
+                {'target': 'tasks-dashboard-kpis', 'route': '/tasks/dashboard',
+                 'text': T('لوحة التحكم (زر «📊 لوحة التحكم» في القائمة): الأرقام الأساسية.', 'The dashboard ("📊 Dashboard" button on the list): the key figures.'),
+                 'more': T('للمدير والمشرف: «إجمالي المهام»، «نشطة»، «متأخرة»، و«معدل الإتمام (30 يوم)».\n'
+                           '• اضغط أي كارت يفتح قائمة المهام متفلترة عليه.',
+                           'For managers and supervisors: "Total tasks", "Active", "Overdue" and "Completion rate (30 days)".\n'
+                           '• Click any card to open the task list filtered on it.')},
+                {'target': 'tasks-dashboard-due-soon', 'route': '/tasks/dashboard',
+                 'text': T('«المهام المستحقة قريباً» — اللي لازم تخلص الأسبوع ده.', '"Due soon" — what must finish this week.'),
+                 'more': T('اضغط مهمة تفتحها على طول وتتابع مع المسؤول قبل ما تتأخر.\n'
+                           '• «عرض الكل» بيفتح المهام المتأخرة.',
+                           'Click a task to open it and follow up with the owner before it runs late.\n'
+                           '• "View all" opens the overdue tasks.')},
+                {'target': 'tasks-schedules-header', 'route': '/tasks/schedules',
+                 'text': T('«الجداول التلقائية» (زر «⏱ إدارة الجداول»): مهام بتتعمل لوحدها.', '"Automatic schedules" ("⏱ Manage schedules" button): tasks that create themselves.'),
+                 'more': T('للشغل اللي بيتكرر زي جرد يومي أو تدقيق أسبوعي: بتعرّفه مرة واحدة، والنظام بينشئ المهمة في معادها.\n'
+                           '• المهام المولَّدة بتظهر في قائمة المهام زي أي مهمة.',
+                           'For repeating work like a daily count or a weekly audit: define it once and the system creates the task on time.\n'
+                           '• Generated tasks show in the task list like any other task.')},
+                {'target': 'tasks-schedules-new', 'route': '/tasks/schedules',
+                 'text': T('«+ جدول جديد» لتعريف مهمة متكررة.', '"+ New schedule" to define a recurring task.'),
+                 'more': T('بتكتب اسم الجدول وقالب العنوان (ينفع فيه {date} و{branch})، والنوع والأولوية والفرع والمسؤول، والتكرار (يومي/أسبوعي/شهري).\n'
+                           '• بعد «حفظ» تقدر تضغط «تشغيل» تجرّبه وتشوف المهمة اتعملت.',
+                           'You enter the schedule name and a title template (it can use {date} and {branch}), type, priority, branch, owner and frequency (daily/weekly/monthly).\n'
+                           '• After "Save" you can press "Run" to test it and see the task created.')},
+            ],
+        },
+    ],
 }
 
 SCREENS = [
@@ -146,7 +240,10 @@ SCREENS = [
             {'target': 'tasks-list-new', 'label': T('+ مهمة جديدة', '+ New task'),
              'text': T('يفتح نموذج مهمة جديدة: العنوان، النوع، الأولوية، الفرع، الموعد النهائي، المسؤول والوصف.',
                        'Opens the new-task form: title, type, priority, branch, deadline, assignee and description.'),
-             'when': T('أي شغل محتاج متابعة لحد ما يخلص: جرد، استلام، صيانة، تدريب…', 'Any work that needs following up until it is done: a count, receiving, maintenance, training…')},
+             'when': T('أي شغل محتاج متابعة لحد ما يخلص: جرد، استلام، صيانة، تدريب…', 'Any work that needs following up until it is done: a count, receiving, maintenance, training…'),
+             'more': T(
+                 'بيفتح نموذج مهمة: «العنوان» (مطلوب)، النوع، الأولوية، الفرع، الموعد النهائي، «تعيين إلى»، والوصف.\n• بعد الإنشاء بتتنقل لصفحة المهمة الجديدة على طول.\n• اختار مسؤول وموعد واضح — المهمة من غير موعد عمرها ما هتتعلّم «متأخرة».',
+                 'Opens a task form: "Title" (required), type, priority, branch, deadline, "Assign to" and description.\n• After creating it you go straight to the new task\'s page.\n• Pick a clear owner and deadline — a task with no deadline can never be flagged "overdue".')},
             {'target': 'tasks-list-new-assignee', 'label': T('تعيين إلى', 'Assign to'),
              'text': T('الموظف المسؤول عن المهمة. بيوصله إشعار أول ما المهمة تتحفظ.', 'The employee who owns the task. They get a notification as soon as it is saved.'),
              'warn': T('من غير مسؤول المهمة بتفضل «غير معيَّن» ومحدش بيتبلّغ بيها.', 'Without an assignee the task stays "Unassigned" and nobody is notified.'),
@@ -158,11 +255,20 @@ SCREENS = [
             {'target': 'tasks-list-views', 'label': T('≡ قائمة · ⊟ كانبان · 👤 مهامي', '≡ List · ⊟ Kanban · 👤 My tasks'),
              'text': T('القائمة جدول بكل المهام، والكانبان أعمدة حسب الحالة، و«مهامي» المسندة ليك بس.',
                        'List is a table of all tasks, Kanban shows columns by status, and "My tasks" only those assigned to you.'),
-             'when': T('ابدأ يومك من «مهامي». المدير يتابع سير الشغل من الكانبان.', 'Start your day from "My tasks". Managers follow the flow on the Kanban.')},
+             'when': T('ابدأ يومك من «مهامي». المدير يتابع سير الشغل من الكانبان.', 'Start your day from "My tasks". Managers follow the flow on the Kanban.'),
+             'more': T(
+                 '• «≡ قائمة»: جدول المهام بالرقم والحالة والمسؤول والموعد.\n• «⊟ كانبان»: أعمدة حسب الحالة تشوف الشغل واقف فين.\n• «👤 مهامي»: المسندة ليك بس.\nجنبهم زر «📊 لوحة التحكم» للصورة العامة.',
+                 '• "≡ List": the task table with number, status, owner and deadline.\n• "⊟ Kanban": columns by status to see where work is stuck.\n• "👤 My tasks": only those assigned to you.\nBeside them, "📊 Dashboard" gives the big picture.')},
             {'target': 'tasks-list-search', 'label': T('بحث...', 'Search...'),
-             'text': T('ابحث في المهام بالعنوان أو الرقم.', 'Search the tasks by title or number.')},
+             'text': T('ابحث في المهام بالعنوان أو الرقم.', 'Search the tasks by title or number.'),
+             'more': T(
+                 'اكتب كلمة من عنوان المهمة أو رقمها والقائمة بتتفلتر.\n• بيشتغل مع باقي الفلاتر اللي جنبه.',
+                 'Type a word from the task title or its number and the list filters.\n• It works together with the other filters beside it.')},
             {'target': 'tasks-list-filters', 'label': T('الحالة · الأولوية · النوع · الفرع', 'Status · priority · type · branch'),
-             'text': T('فلتر بالحالة والأولوية والنوع والفرع. «مسح الفلاتر» يرجّع كل حاجة.', 'Filter by status, priority, type and branch. "Clear filters" resets them all.')},
+             'text': T('فلتر بالحالة والأولوية والنوع والفرع. «مسح الفلاتر» يرجّع كل حاجة.', 'Filter by status, priority, type and branch. "Clear filters" resets them all.'),
+             'more': T(
+                 'اجمع كذا فلتر مع بعض، مثلاً: فرع + أولوية «عاجلة» + «متأخرة فقط».\n• «مسح الفلاتر» بيظهر لما يكون فيه فلتر شغال، وبيرجّع كل المهام.',
+                 'Combine several filters, e.g. a branch + "Urgent" priority + "Overdue only".\n• "Clear filters" appears when a filter is on and brings every task back.')},
             {'target': 'tasks-list-overdue', 'label': T('متأخرة فقط', 'Overdue only'),
              'text': T('يعرض المهام اللي عدّى موعدها النهائي ولسه ما اتقفلتش.', 'Shows tasks past their deadline that are not closed yet.'),
              'when': T('أول حاجة يبص عليها المشرف كل صبح.', 'The first thing a supervisor checks every morning.')},
@@ -178,10 +284,17 @@ SCREENS = [
              'open_hint': T('اختار عرض «⊟ كانبان».', 'Switch to the "⊟ Kanban" view.')},
             {'target': 'tasks-list-dashboard', 'label': T('📊 لوحة التحكم', '📊 Dashboard'),
              'text': T('ينقلك للوحة المهام: المتأخر، معدل الإتمام، والتوزيع حسب الفرع.', 'Goes to the tasks dashboard: overdue, completion rate and the split by branch.')},
+            {'target': 'tasks-list-content', 'label': T('قائمة المهام', 'Tasks list'), 'when': T('لما تحب تفتح مهمة وتحدّثها.', 'When you want to open a task and update it.'),  # from the GitHub-side tour
+             'text': T('المهام — افتح أي مهمة لتحديثها.',
+                       'The tasks — open one to update it.'),
+             'more': T(
+                 'اضغط على مهمة تفتح صفحتها: التفاصيل، قائمة الأعمال، التعليقات والمرفقات.\n• فوق الشاشة عدد المهام والنشطة والمتأخرة والعاجلة.\n• لو القائمة فاضية فيه زر سريع لإنشاء مهمة.',
+                 'Click a task to open its page: details, checklist, comments and attachments.\n• The top of the screen shows the total, active, overdue and urgent counts.\n• If the list is empty there is a quick button to create a task.')},
         ],
         'tips': [T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
                    'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
         'updated': '2026-10-28',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'tasks.detail',
@@ -205,7 +318,10 @@ SCREENS = [
              'text': T('يخلّي العنوان والوصف والحالة والأولوية والنوع والفرع والمسؤول والموعد قابلين للتعديل.',
                        'Makes the title, description, status, priority, type, branch, assignee and deadline editable.'),
              'when': T('لما تبدأ الشغل غيّر الحالة لـ«قيد التنفيذ»؛ ولو اتوقف «متوقفة» واكتب السبب في التعليقات.',
-                       'When you start, set the status to "In progress"; if it stalls, "On hold" and write why in the comments.')},
+                       'When you start, set the status to "In progress"; if it stalls, "On hold" and write why in the comments.'),
+             'more': T(
+                 'بيفتح الخانات للتعديل، ومكانه بيظهر «حفظ» و«إلغاء».\n• مفيش حاجة بتتغيّر غير لما تضغط «حفظ».\n• تقدر كمان تغيّر النوع والفرع والمسؤول — مفيد لو المهمة محتاجة تتنقل لزميل.',
+                 'It opens the fields for editing, and "Save" and "Cancel" take its place.\n• Nothing changes until you press "Save".\n• You can also change the type, branch and owner — useful when the task must move to a colleague.')},
             {'target': 'tasks-detail-save', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ التعديلات. تغيير الحالة أو الأولوية أو المسؤول بيتسجل في سجل الأحداث باسمك.',
                        'Saves the changes. A status, priority or assignee change is logged in the event log under your name.'),
@@ -215,7 +331,10 @@ SCREENS = [
             {'target': 'tasks-detail-checklist', 'label': T('✅ قائمة الأعمال', '✅ Checklist'),
              'text': T('خطوات الشغل. علّم كل عنصر لما يخلص، وضيف عناصر جديدة من «أضف عنصراً...».',
                        'The work steps. Tick each item when done, and add new ones from "Add an item...".'),
-             'when': T('شريط النسبة بيوضح فاضل قد إيه قبل ما تقفل المهمة.', 'The progress bar shows how much is left before you close the task.')},
+             'when': T('شريط النسبة بيوضح فاضل قد إيه قبل ما تقفل المهمة.', 'The progress bar shows how much is left before you close the task.'),
+             'more': T(
+                 'فوقها شريط فيه عدد المنجز من الإجمالي والنسبة.\n• اكتب في «أضف عنصراً…» واضغط Enter أو الزر عشان تضيف بند.\n• «✕» جنب البند بيشيله.',
+                 'Above it a bar shows done out of total and the percentage.\n• Type in "Add an item…" and press Enter or the button to add one.\n• "✕" beside an item removes it.')},
             {'target': 'tasks-detail-chatter', 'label': T('💬 التعليقات والنشاط', '💬 Comments and activity'),
              'text': T('اكتب التحديثات هنا وابعت بـ«إرسال» أو Ctrl+Enter. تغييرات الحالة بتظهر فيها تلقائياً.',
                        'Post updates here and send with "Send" or Ctrl+Enter. Status changes appear here automatically.'),
@@ -248,8 +367,21 @@ SCREENS = [
                        'Returns a completed or cancelled task to "Open" after a confirmation, and it is logged.'),
              'when': T('لما المراجع يلاقي الشغل ناقص.', 'When the reviewer finds the work incomplete.'),
              'open_hint': T('يظهر بدل «إغلاق المهمة» في المهام المكتملة أو الملغاة.', 'Shown instead of "Close task" on completed or cancelled tasks.')},
+            {'target': 'tasks-detail-header', 'label': T('رقم المهمة وحالتها', 'Task number and status'), 'when': T('أول ما تفتح المهمة.', 'As soon as you open the task.'),  # from the GitHub-side tour
+             'text': T('رأس المهمة: رقمها وحالتها وعلامة «⚠ متأخرة» لو عدّت موعدها.',
+                       'The task header: its number, status and an "⚠ Overdue" mark if past its deadline.'),
+             'more': T(
+                 '«← المهام» بيرجّعك للقائمة.\n• الأزرار على الطرف: «✓ إغلاق المهمة» (أو «↩ إعادة فتح» لو مقفولة) و«✎ تعديل».\n• علامة «⚠ متأخرة» معناها إن الموعد النهائي عدّى والمهمة لسه مفتوحة.',
+                 '"← Tasks" takes you back to the list.\n• The buttons at the side: "✓ Close task" (or "↩ Reopen" when closed) and "✎ Edit".\n• "⚠ Overdue" means the deadline has passed and the task is still open.')},
+            {'target': 'tasks-detail-comments', 'label': T('💬 التعليقات والنشاط', '💬 Comments and activity'), 'when': T('لما تحب تكتب تحديث على المهمة.', 'When you want to post an update on the task.'),  # from the GitHub-side tour
+             'text': T('«التعليقات والنشاط»: اكتب تحديثك وابعته بـ Ctrl+Enter.',
+                       '"Comments & activity": write your update and send it with Ctrl+Enter.'),
+             'more': T(
+                 'المكان اللي الفريق بيتكلم فيه عن المهمة بدل الرسائل الجانبية.\n• كل تعليق بيتسجّل باسم كاتبه ووقته.\n• تغييرات النظام (زي تغيير الحالة) بتظهر في النص كسطور رمادي.',
+                 'Where the team talks about the task instead of side messages.\n• Each comment is saved with its author and time.\n• System changes (like a status change) show in the middle as grey lines.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'tasks.dashboard',
@@ -262,11 +394,18 @@ SCREENS = [
         'related': ['tasks.list', 'tasks.schedules'],
         'tour': [
             {'target': 'tasks-dashboard-branch', 'label': T('كل الفروع', 'All branches'),
-             'text': T('يحصر كل أرقام اللوحة في فرع واحد.', 'Limits every number on the dashboard to one branch.')},
+             'text': T('يحصر كل أرقام اللوحة في فرع واحد.', 'Limits every number on the dashboard to one branch.'),
+             'more': T(
+                 'كل الكروت والتوزيعات تحت بتتحسب على الفرع اللي تختاره.\n• جنبه «← المهام» يرجّعك للقائمة و«⏱ إدارة الجداول» يفتح الجداول التلقائية.',
+                 'Every card and breakdown below is calculated for the branch you choose.\n• Beside it, "← Tasks" goes back to the list and "⏱ Manage schedules" opens automatic schedules.')},
             {'target': 'tasks-dashboard-kpis', 'label': T('إجمالي · نشطة · متأخرة · معدل الإتمام', 'Total · active · overdue · completion'),
              'text': T('إجمالي المهام، النشطة (مفتوحة + تنفيذ)، المتأخرة، ومعدل الإتمام آخر 30 يوم. اضغط الكارت تتفتح القائمة مفلترة.',
                        'Total, active (open + in progress), overdue, and the 30-day completion rate. Click a card to open the filtered list.'),
-             'when': T('رقم «متأخرة» الأحمر هو أول حاجة تتعامل معاها.', 'A red "Overdue" number is the first thing to deal with.')},
+             'when': T('رقم «متأخرة» الأحمر هو أول حاجة تتعامل معاها.', 'A red "Overdue" number is the first thing to deal with.'),
+             'more': T(
+                 '• «متأخرة» أهم رقم: لو أكبر من صفر اضغطه وشوف مين محتاج متابعة.\n• «معدل الإتمام (30 يوم)» بيقيس قد إيه المهام بتتقفل فعلاً.\n• لو فيه مهام حرجة أو عاجلة بيظهر تحت الكروت زر بعددها يفتحها.',
+                 '• "Overdue" is the key number: if above zero, click it and see who needs follow-up.\n• "Completion rate (30 days)" measures how many tasks actually get closed.\n• If there are critical or urgent tasks, a button with their count appears under the cards to open them.'),
+         },
             {'target': 'tasks-dashboard-priority', 'label': T('🔴 مهام حرجة · 🟠 مهام عاجلة', '🔴 Critical tasks · 🟠 Urgent tasks'),
              'text': T('تنبيه بعدد المهام الحرجة والعاجلة. اضغطه تتفتح القائمة بالأولوية دي.', 'An alert with the number of critical and urgent tasks. Click it to open the list at that priority.'),
              'when': T('بيظهر بس لو فيه مهام حرجة أو عاجلة — ابدأ بيها قبل أي حاجة.', 'Shows only when critical or urgent tasks exist — handle them first.'),
@@ -278,11 +417,17 @@ SCREENS = [
              'text': T('لكل فرع: عدد المفتوح بالأزرق والإجمالي.', 'For each branch: the open count in blue and the total.')},
             {'target': 'tasks-dashboard-due-soon', 'label': T('المهام المستحقة قريباً', 'Due soon'),
              'text': T('المهام اللي موعدها خلال الأسبوع ده. اضغط أي مهمة تفتحها.', 'Tasks due within this week. Click one to open it.'),
-             'when': T('«عرض الكل» هنا بيفتح القائمة على المتأخر بس.', '"View all" here opens the list on overdue tasks only.')},
+             'when': T('«عرض الكل» هنا بيفتح القائمة على المتأخر بس.', '"View all" here opens the list on overdue tasks only.'),
+             'more': T(
+                 'المهام اللي موعدها الأسبوع ده — تابعها قبل ما تتأخر.\n• جنبها «آخر النشاطات» بآخر المهام اللي اتحركت.',
+                 'Tasks due this week — follow them up before they run late.\n• Beside it, "Latest activity" lists the most recently changed tasks.')},
             {'target': 'tasks-dashboard-recent', 'label': T('آخر النشاطات', 'Latest activity'),
              'text': T('آخر المهام اللي اتحركت. اضغط أي مهمة تفتحها.', 'The tasks that moved most recently. Click one to open it.')},
             {'target': 'tasks-dashboard-schedules', 'label': T('الجداول التلقائية النشطة', 'Active schedules'),
-             'text': T('أول 5 جداول نشطة: التكرار والفرع وعدد المهام اللي اتولّدت.', 'The first 5 active schedules: frequency, branch and how many tasks they generated.')},
+             'text': T('أول 5 جداول نشطة: التكرار والفرع وعدد المهام اللي اتولّدت.', 'The first 5 active schedules: frequency, branch and how many tasks they generated.'),
+             'more': T(
+                 'بيعرض أول 5 جداول نشطة.\n• «تشغيل» بيعمل مهمة حقيقية دلوقتي من غير ما يستنى المعاد — استخدمه لو المهمة اتنست أو للتجربة.\n• التعديل والإيقاف من شاشة «إدارة الجداول».',
+                 'It shows the first 5 active schedules.\n• "Run" creates a real task now without waiting for its time — use it if a task was missed or to test.\n• Editing and pausing are done on the "Manage schedules" screen.')},
             {'target': 'tasks-dashboard-schedules-run', 'label': T('تشغيل', 'Run'),
              'text': T('ينشئ مهمة جديدة من الجدول ده دلوقتي، من غير ما يستنى موعده.', 'Creates a new task from this schedule now, without waiting for its time.'),
              'warn': T('كل ضغطة بتعمل مهمة زيادة. ماتضغطش مرتين ولا تشغّله لو مهمة النهارده موجودة.',
@@ -290,8 +435,15 @@ SCREENS = [
              'open_hint': T('يظهر جنب كل جدول نشط في القسم ده.', 'Shown beside each active schedule in this section.')},
             {'target': 'tasks-dashboard-manage', 'label': T('⏱ إدارة الجداول', '⏱ Manage schedules'),
              'text': T('ينقلك لصفحة الجداول التلقائية تضيف أو تعدّل أو توقف جدول.', 'Goes to the schedules page to add, edit or pause a schedule.')},
+            {'target': 'tasks-dashboard-breakdown', 'label': T('توزيع الحالات · حسب النوع · حسب الفرع', 'Status split · By type · By branch'), 'when': T('لما تحب تعرف المهام متركّزة فين.', 'When you want to see where the tasks pile up.'),  # from the GitHub-side tour
+             'text': T('توزيع المهام حسب الحالة والنوع والفرع.',
+                       'Tasks broken down by status, type and branch.'),
+             'more': T(
+                 'تلات مربعات: «توزيع الحالات»، «حسب النوع»، و«حسب الفرع».\n• منها تعرف فين الضغط: فرع عليه مهام كتير مفتوحة، أو نوع شغل دايماً بيتأخر.',
+                 'Three boxes: "Status distribution", "By type" and "By branch".\n• They show where the pressure is: a branch with many open tasks, or a kind of work that is always late.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'tasks.schedules',
@@ -309,11 +461,17 @@ SCREENS = [
         'tour': [
             {'target': 'tasks-schedules-new', 'label': T('+ جدول جديد', '+ New schedule'),
              'text': T('يفتح نموذج جدول جديد فوق القائمة.', 'Opens a new schedule form above the list.'),
-             'when': T('لأي شغل بيتكرر بانتظام: جرد يومي، تدقيق أسبوعي، صيانة شهرية.', 'For any work that repeats regularly: a daily count, a weekly audit, monthly maintenance.')},
+             'when': T('لأي شغل بيتكرر بانتظام: جرد يومي، تدقيق أسبوعي، صيانة شهرية.', 'For any work that repeats regularly: a daily count, a weekly audit, monthly maintenance.'),
+             'more': T(
+                 'النموذج بيظهر في نفس الصفحة فوق الجدول.\n• مفيش حاجة بتتحفظ غير لما تضغط «حفظ» في آخر النموذج.',
+                 'The form opens on the same page above the table.\n• Nothing is saved until you press "Save" at the end of the form.')},
             {'target': 'tasks-schedules-form', 'label': T('اسم الجدول *', 'Schedule name *'),
              'text': T('النموذج: الاسم، قالب العنوان، النوع، الأولوية، الفرع، المسؤول، التكرار والساعات المقدّرة.',
                        'The form: name, title template, type, priority, branch, assignee, frequency and estimated hours.'),
-             'open_hint': T('اضغط «+ جدول جديد» أو «تعديل» على أي جدول.', 'Press "+ New schedule" or "Edit" on any schedule.')},
+             'open_hint': T('اضغط «+ جدول جديد» أو «تعديل» على أي جدول.', 'Press "+ New schedule" or "Edit" on any schedule.'),
+             'more': T(
+                 '• «اسم الجدول» و«قالب عنوان المهمة» مطلوبين؛ القالب ينفع فيه {date} و{branch} عشان كل مهمة تاخد التاريخ والفرع.\n• «التكرار»: يومي، أو أسبوعي مع «يوم الأسبوع» (0 = الاثنين)، أو شهري مع «يوم الشهر».\n• «أيام مسبقة للاستحقاق» والساعات المقدَّرة وقالب الوصف اختياريين.',
+                 '• "Schedule name" and "Task title template" are required; the template can use {date} and {branch} so each task gets its date and branch.\n• "Frequency": daily, weekly with "Day of week" (0 = Monday), or monthly with "Day of month".\n• "Days ahead of due date", estimated hours and the description template are optional.')},
             {'target': 'tasks-schedules-title-template', 'label': T('قالب عنوان المهمة *', 'Task title template *'),
              'text': T('عنوان كل مهمة هتتولد. {date} بيتبدل بتاريخ اليوم و{branch} باسم الفرع.',
                        'The title of every generated task. {date} becomes the day date and {branch} the branch name.'),
@@ -331,7 +489,10 @@ SCREENS = [
             {'target': 'tasks-schedules-active', 'label': T('نشط', 'Active'),
              'text': T('شيل العلامة واحفظ عشان توقف الجدول من غير ما تمسحه. الموقوف ما بيولّدش مهام.',
                        'Untick and save to pause the schedule without deleting it. A paused schedule generates no tasks.'),
-             'open_hint': T('في نموذج الجدول — اضغط «تعديل» على الجدول.', 'In the schedule form — press "Edit" on the schedule.')},
+             'open_hint': T('في نموذج الجدول — اضغط «تعديل» على الجدول.', 'In the schedule form — press "Edit" on the schedule.'),
+             'more': T(
+                 'شيل العلامة لو عايز توقف الجدول مؤقتاً من غير ما تمسحه (مثلاً فرع مقفول للتجديد).\n• الجدول الموقوف ما بينشئش مهام، وزر «تشغيل» ما بيظهرلوش.',
+                 'Untick it to pause the schedule without deleting it (e.g. a branch closed for renovation).\n• A paused schedule creates no tasks and has no "Run" button.')},
             {'target': 'tasks-schedules-save', 'label': T('حفظ', 'Save'),
              'text': T('يحفظ الجدول. الاسم وقالب العنوان مطلوبين.', 'Saves the schedule. The name and title template are required.'),
              'open_hint': T('اضغط «+ جدول جديد» أو «تعديل» على أي جدول.', 'Press "+ New schedule" or "Edit" on any schedule.')},
@@ -339,7 +500,11 @@ SCREENS = [
              'text': T('كل الجداول: التكرار، الفرع، المسؤول، عدد المهام المولّدة، آخر تشغيل والحالة (نشط/موقوف).',
                        'All schedules: frequency, branch, assignee, tasks generated, last run and status (active/paused).'),
              'when': T('لما تتأكد إن الجداول شغالة — «آخر تشغيل» قديم أو حالة موقوف = مفيش مهام بتتولّد.', 'To check schedules run — an old "Last run" or a paused status means no tasks are made.'),
-             'open_hint': T('يظهر لما يكون فيه جدول واحد على الأقل.', 'Shown when there is at least one schedule.')},
+             'open_hint': T('يظهر لما يكون فيه جدول واحد على الأقل.', 'Shown when there is at least one schedule.'),
+             'more': T(
+                 'راجع «آخر تشغيل» و«المهام المولَّدة» تتأكد إن الجدول شغال فعلاً.\n• عمود «الحالة» بيوضح النشط من الموقوف.',
+                 'Check "Last run" and "Tasks generated" to make sure the schedule is really working.\n• The "Status" column shows active versus paused.'),
+         },
             {'target': 'tasks-schedules-run', 'label': T('تشغيل', 'Run'),
              'text': T('ينشئ مهمة من الجدول دلوقتي ويعرض رقمها فوق.', 'Creates a task from the schedule now and shows its number above.'),
              'warn': T('كل ضغطة بتعمل مهمة زيادة — استخدمه للتجربة مرة واحدة بس.', 'Every click makes another task — use it once, to test.'),
@@ -349,8 +514,21 @@ SCREENS = [
             {'target': 'tasks-schedules-delete', 'label': T('حذف', 'Delete'),
              'text': T('يمسح الجدول بعد تأكيد. المهام اللي اتولدت قبل كده بتفضل موجودة.', 'Deletes the schedule after a confirmation. Tasks it already generated stay.'),
              'warn': T('الحذف نهائي. لو عايز توقفه مؤقتاً شيل علامة «نشط» بدل الحذف.', 'Deleting is final. To pause it, untick "Active" instead of deleting.')},
+            {'target': 'tasks-schedules-header', 'label': T('الجداول التلقائية', 'Automatic schedules'), 'when': T('لما تحب مهمة تتكرر لوحدها.', 'When you want a task to repeat by itself.'),  # from the GitHub-side tour
+             'text': T('دي «الجداول التلقائية»: النظام بينشئ المهام المتكررة في معادها من القالب.',
+                       'These are "Automatic schedules": the system creates recurring tasks on time from a template.'),
+             'more': T(
+                 'بدل ما تكتب نفس المهمة كل يوم أو كل أسبوع، عرّفها هنا مرة واحدة.\n• المهام المولَّدة بتظهر في قائمة المهام عادي وبتتابعها زي أي مهمة.',
+                 'Instead of writing the same task every day or week, define it here once.\n• Generated tasks show in the task list and are followed like any task.')},
+            {'target': 'tasks-schedules-actions', 'label': T('تشغيل · تعديل · حذف', 'Run · Edit · Delete'), 'when': T('لما تحب تجرّب جدول أو تغيّره.', 'When you want to try or change a schedule.'),  # from the GitHub-side tour
+             'text': T('«تشغيل» ينشئ مهمة دلوقتي للتجربة (للجداول النشطة)، و«تعديل» و«حذف» للجدول.',
+                       '"Run" creates a task now as a test (active schedules only); "Edit" and "Delete" act on the schedule.'),
+             'more': T(
+                 '• «تشغيل» بيعمل مهمة حقيقية في القائمة — امسحها أو اقفلها لو كانت تجربة.\n• «تعديل» بيفتح نفس النموذج بالبيانات الحالية.\n• «حذف» بيطلب تأكيد، ولو عايز توقفه بس استخدم علامة «نشط» بدل الحذف.',
+                 '• "Run" creates a real task in the list — close it if it was only a test.\n• "Edit" opens the same form with the current data.\n• "Delete" asks for confirmation; to just pause it, untick "Active" instead of deleting.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
         'key': 'tasks.mobile',
@@ -362,7 +540,11 @@ SCREENS = [
         'steps': [T('افتح المهمة، نفّذ قائمة التحقق، ثم «إنهاء المهمة».', 'Open the task, work through the checklist, then "Complete task".')],
         'tour': [
             {'target': 'tasks-mobile-filters', 'label': T('مفتوحة · الكل · جارية', 'Open · All · In progress'),
-             'text': T('شرائح الحالة. بتفتح على «مفتوحة» عشان تشوف المطلوب منك الأول.', 'Status chips. It opens on "Open" so you see what is waiting first.')},
+             'text': T('شرائح الحالة. بتفتح على «مفتوحة» عشان تشوف المطلوب منك الأول.', 'Status chips. It opens on "Open" so you see what is waiting first.'),
+             'more': T(
+                 'الشاشة بتفتح على «مفتوحة» — يعني اللي لسه مطلوب منك.\n• «منجزة» لو عايز ترجع لمهمة خلّصتها.',
+                 'The screen opens on "Open" — what is still expected of you.\n• "Done" if you want to look back at a finished task.'),
+         },
             {'target': 'tasks-mobile-card', 'label': T('كارت المهمة', 'Task card'),
              'text': T('كارت لكل مهمة بعنوانها وحالتها وموعدها. اضغطه يفتح التفاصيل.', 'One card per task with title, status and deadline. Tap it to open the details.'),
              'when': T('إنشاء المهام من الكمبيوتر بس — الموبايل لتنفيذها.', 'Tasks are created on the computer only — the phone is for doing them.'),
@@ -374,7 +556,10 @@ SCREENS = [
              'open_hint': T('افتح أي مهمة من القائمة.', 'Open any task from the list.')},
             {'target': 'tasks-mobile-checklist', 'label': T('قائمة التحقق', 'Checklist'),
              'text': T('خطوات المهمة للقراءة. التعليم على العناصر بيتم من الكمبيوتر.', 'The task steps, read-only. Ticking items is done on the computer.'),
-             'open_hint': T('افتح مهمة ليها قائمة أعمال.', 'Open a task that has a checklist.')},
+             'open_hint': T('افتح مهمة ليها قائمة أعمال.', 'Open a task that has a checklist.'),
+             'more': T(
+                 '☑️ = بند متعلّم إنه خلص، و⬜ = لسه.\n• على الموبايل القائمة للعرض بس؛ تعليم البنود بيتم من صفحة المهمة على الكمبيوتر.',
+                 '☑️ = an item marked done, ⬜ = not yet.\n• On the phone the list is view-only; ticking items is done on the task page on the desktop.')},
             {'target': 'tasks-mobile-chatter', 'label': T('💬 المحادثة', '💬 Chat'),
              'text': T('ابعت تحديث أو سؤال للفريق. بيظهر في تعليقات المهمة على الكمبيوتر.', 'Send an update or a question to the team. It shows in the task comments on the computer.'),
              'when': T('لو المهمة اتعطلت اكتب السبب هنا قبل ما تسيبها.', 'If the task is stuck, write the reason here before leaving it.'),
@@ -383,11 +568,21 @@ SCREENS = [
              'text': T('يحوّل المهمة لـ«مكتملة» باسمك ويبلّغ الفريق.', 'Sets the task to "Completed" under your name and notifies the team.'),
              'warn': T('بيقفلها فوراً من غير تأكيد ولا ملاحظات — اكتب اللي عملته في المحادثة الأول.',
                        'It closes at once with no confirmation or notes — write what you did in the chat first.'),
-             'open_hint': T('افتح مهمة لسه مش مكتملة.', 'Open a task that is not completed yet.')},
+             'open_hint': T('افتح مهمة لسه مش مكتملة.', 'Open a task that is not completed yet.'),
+             'more': T(
+                 'بيقفل المهمة على طول (من غير ملاحظات إغلاق)، والمسؤول يشوفها مكتملة.\n• لو عايز تسيب ملاحظة اكتبها في «💬 المحادثة» تحت قبل ما تنهي.',
+                 'It closes the task straight away (without closing notes), and the manager sees it completed.\n• To leave a note, write it in "💬 Chat" below before you finish.')},
             {'target': 'tasks-mobile-back', 'label': T('الرجوع للمهام', 'Back to tasks'),
              'text': T('يرجّعك لقائمة المهام.', 'Takes you back to the task list.'),
              'open_hint': T('افتح أي مهمة من القائمة.', 'Open any task from the list.')},
+            {'target': 'tasks-mobile-list', 'label': T('قائمة مهامي', 'My tasks list'), 'when': T('لما تحب تفتح مهمة من الموبايل.', 'When you want to open a task on mobile.'),  # from the GitHub-side tour
+             'text': T('دي مهامك بحالتها وموعد استحقاقها؛ اضغط على مهمة عشان تفتحها.',
+                       'These are your tasks with status and due date; tap a task to open it.'),
+             'more': T(
+                 'كل كارت فيه العنوان والحالة والأولوية و«يستحق:» بالتاريخ.\n• إنشاء المهام بيتم من الكمبيوتر؛ هنا بتنفّذ وتقفل.',
+                 'Each card shows the title, status, priority and "Due:" with the date.\n• Tasks are created on the desktop; here you carry them out and finish them.')},
         ],
         'updated': '2026-10-26',
+        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

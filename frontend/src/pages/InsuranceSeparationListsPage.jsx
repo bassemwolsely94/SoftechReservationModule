@@ -79,9 +79,9 @@ export default function InsuranceSeparationListsPage() {
 
       <div className="px-6 py-5 grid grid-cols-3 gap-6">
         {/* Lists */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div data-tour="insurance-separation-lists-lists" className="bg-white rounded-xl border border-gray-200 p-4">
           <h3 className="font-semibold text-gray-700 mb-3">القوائم</h3>
-          <div className="flex gap-2 mb-3">
+          <div data-tour="insurance-separation-lists-new" className="flex gap-2 mb-3">
             <input className={inp} placeholder="اسم قائمة جديدة…" value={newLabel}
               onChange={e => setNewLabel(e.target.value)} onKeyDown={e => e.key === 'Enter' && createList()} />
             <button onClick={createList} data-tour="insurance-separation-lists-create" className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">+ إضافة</button>
@@ -103,7 +103,7 @@ export default function InsuranceSeparationListsPage() {
                       <div className="text-sm font-medium text-gray-800">{l.label}</div>
                       <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}</div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
+                    <div data-tour="insurance-separation-lists-list-actions" className="flex items-center gap-2 text-xs">
                       <button onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
                       <button onClick={() => toggleListActive(l)} data-tour="insurance-separation-lists-toggle-active" title={l.is_active ? 'إيقاف' : 'تفعيل'}
                         className={l.is_active ? 'text-green-600' : 'text-gray-400'}>{l.is_active ? 'مُفعَّلة' : 'موقوفة'}</button>
@@ -118,7 +118,7 @@ export default function InsuranceSeparationListsPage() {
         </div>
 
         {/* Names of selected list */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 col-span-2">
+        <div data-tour="insurance-separation-lists-names" className="bg-white rounded-xl border border-gray-200 p-4 col-span-2">
           {!sel ? (
             <p className="text-sm text-gray-400 text-center py-16">اختر قائمة لعرض أسمائها.</p>
           ) : (
@@ -128,7 +128,7 @@ export default function InsuranceSeparationListsPage() {
                 <input className="border border-gray-300 rounded px-3 py-1.5 text-sm w-56" placeholder="بحث في الأسماء…" data-tour="insurance-separation-lists-search"
                   value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
               </div>
-              <div className="mb-3">
+              <div data-tour="insurance-separation-lists-add-names" className="mb-3">
                 <label className="block text-xs text-gray-600 mb-1">إضافة أسماء (اسم في كل سطر)</label>
                 <textarea className={inp + ' h-24 font-mono'} value={bulkText} data-tour="insurance-separation-lists-paste"
                   onChange={e => setBulkText(e.target.value)} placeholder={'اسم أول\nاسم ثانى\n…'} />

@@ -152,7 +152,7 @@ export default function PaymentAuditPage() {
         </button>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6" data-tour="finance-payment-audit-tabs">
+      <div data-tour="finance-payment-audit-tabs" className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {[
           { key: 'exceptions', label: '⚠️ الاستثناءات' },
           { key: 'statements', label: '🏦 الكشوف البنكية' },
@@ -181,7 +181,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد استثناءات مفتوحة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-payment-audit-exceptions">
+          <div data-tour="finance-payment-audit-exceptions" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -238,7 +238,7 @@ export default function PaymentAuditPage() {
             <p>لا توجد كشوف حساب مرفوعة</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-payment-audit-statements">
+          <div data-tour="finance-payment-audit-statements" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">

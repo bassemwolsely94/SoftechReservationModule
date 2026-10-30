@@ -149,7 +149,7 @@ export default function MobileTransferDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="text-center text-xs text-gray-400 py-2">لا توجد إجراءات متاحة لك في هذه الحالة</div>
+        <div data-tour="transfers-mdetail-actions" className="text-center text-xs text-gray-400 py-2">لا توجد إجراءات متاحة لك في هذه الحالة</div>
       )}
 
       {/* Confirm sheet */}

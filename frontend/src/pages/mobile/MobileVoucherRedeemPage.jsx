@@ -69,12 +69,12 @@ export default function MobileVoucherRedeemPage() {
   if (step === 'list') {
     return (
       <div className="p-3 space-y-3">
-        <h1 className="text-base font-bold text-gray-900">صرف قسيمة</h1>
+        <h1 data-tour="vouchers-mobile-header" className="text-base font-bold text-gray-900">صرف قسيمة</h1>
         {isLoading ? <MobileLoading />
           : isError ? <MobileError text="تعذّر تحميل القسائم" onRetry={refetch} />
           : vouchers.length === 0 ? <MobileEmpty icon="🎫" text="لا توجد قسائم فعّالة" />
           : (
-            <div className="space-y-2.5">
+            <div data-tour="vouchers-mobile-list" className="space-y-2.5">
               {vouchers.map(v => (
                 <button data-tour="vouchers-mobile-voucher" key={v.id} onClick={() => pick(v)}
                   className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">

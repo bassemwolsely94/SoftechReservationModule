@@ -74,17 +74,17 @@ export default function InsurancePrintProfilesPage() {
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
+        <div data-tour="insurance-print-profiles-header">
           <button onClick={() => navigate('/insurance')} className="text-blue-600 text-sm hover:underline">← مطالبات التأمين</button>
           <h1 className="text-xl font-bold text-gray-900 mt-1">تخصيص طباعة المطالبات</h1>
         </div>
-        <button onClick={() => setEditing({ ...BLANK })} data-tour="insurance-print-profiles-new"
+        <button data-tour="insurance-print-profiles-new" onClick={() => setEditing({ ...BLANK })}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">+ ملف جديد</button>
       </div>
 
       <div className="p-6 max-w-5xl mx-auto">
         {!editing ? (
-          <div className="space-y-2">
+          <div data-tour="insurance-print-profiles-list" className="space-y-2">
             {profiles.length === 0 && (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
                 لا توجد ملفات طباعة مخصّصة — تُستخدم الإعدادات الافتراضية. أنشئ ملفاً لتخصيص الترويسة والخطوط والألوان.
@@ -107,7 +107,7 @@ export default function InsurancePrintProfilesPage() {
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             {/* Scope */}
-            <div className="grid grid-cols-3 gap-3" data-tour="insurance-print-profiles-scope">
+            <div data-tour="insurance-print-profiles-scope" className="grid grid-cols-3 gap-3">
               <div><label className={lbl}>اسم الملف</label>
                 <input className={inp} value={editing.name} onChange={e => set('name', e.target.value)} /></div>
               <div><label className={lbl}>خاص بالفئة (اختياري)</label>
@@ -221,8 +221,8 @@ export default function InsurancePrintProfilesPage() {
               </p>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-gray-100">
-              <button onClick={save} disabled={saving} data-tour="insurance-print-profiles-save"
+            <div data-tour="insurance-print-profiles-save" className="flex gap-2 pt-2 border-t border-gray-100">
+              <button onClick={save} disabled={saving}
                 className="px-5 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
                 {saving ? 'جارٍ الحفظ…' : 'حفظ'}
               </button>

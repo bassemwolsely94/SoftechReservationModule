@@ -89,7 +89,7 @@ function AccountCard({ acc, onEdit, onProbe, probing }) {
         <span className="text-gray-400">{acc.branch_name || 'كل الفروع'}</span>
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-gray-100">
+      <div data-tour="omni-accounts-actions" className="flex gap-2 pt-1 border-t border-gray-100">
         <button data-tour="omni-accounts-edit" onClick={() => onEdit(acc)}
                 className="flex-1 text-xs text-gray-600 hover:text-indigo-600 py-1">
           ✏️ تعديل
@@ -264,7 +264,7 @@ export default function OmniAccountsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto" dir="rtl">
-      <div className="flex items-center justify-between mb-4">
+      <div data-tour="omni-accounts-header" className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-gray-800">📡 حسابات القنوات</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -298,7 +298,7 @@ export default function OmniAccountsPage() {
           <p>لا توجد حسابات — أضف رقم واتساب أول</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div data-tour="omni-accounts-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {accounts.map(acc => (
             <AccountCard key={acc.id} acc={acc}
                          onEdit={setModal} onProbe={probe} probing={probing} />

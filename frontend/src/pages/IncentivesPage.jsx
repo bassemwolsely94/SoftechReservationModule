@@ -222,7 +222,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
       {loading ? <Spinner /> : programs.length === 0 ? (
         <EmptyState icon="🏆" title="لا توجد برامج حوافز" sub="أنشئ برنامجاً جديداً للبدء" />
       ) : (
-        <div className="space-y-3">
+        <div data-tour="incentives-programs-list" className="space-y-3">
           {programs.map(p => (
             <div key={p.id} data-tour="incentives-programs-card" onClick={() => onSelect(p)}
               className={`rounded-xl border p-4 cursor-pointer transition-all ${
@@ -244,7 +244,7 @@ function ProgramsTab({ selectedProgram, onSelect }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <button data-tour="incentives-programs-clone"
                     className="text-xs text-brand-600 hover:text-brand-700 border border-brand-200 rounded-lg px-2 py-1 hover:bg-brand-50"
                     onClick={e => { e.stopPropagation(); setShowCloneModal(p) }}
                   >
@@ -3022,7 +3022,7 @@ export default function IncentivesPage() {
             </p>
           </div>
           {selectedProgram && (
-            <div className="flex items-center gap-2 text-sm bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-lg">
+            <div data-tour="incentives-programs-selected" className="flex items-center gap-2 text-sm bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-lg">
               <span className="text-gray-500">البرنامج:</span>
               <span className="font-semibold text-brand-700">{selectedProgram.name}</span>
               <button className="text-gray-400 hover:text-gray-600 mr-1"
@@ -3047,7 +3047,7 @@ export default function IncentivesPage() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div data-tour="incentives-programs-content" className="flex-1 overflow-auto p-6">
         {/* Incentives are computed from actual SOFTECH sales */}
         <DataFreshnessBar domains={['sales']} canEdit={user?.is_staff || user?.role === 'admin'} />
         {activeTab === 'programs'    && <ProgramsTab    selectedProgram={selectedProgram} onSelect={handleSelectProgram} />}

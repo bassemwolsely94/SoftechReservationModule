@@ -240,7 +240,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
       {/* Flexible selector */}
       <div data-tour="pos-offers-items">
       <Section title="اختيار الأصناف (مرن)" icon="🎯">
-        <label className="flex items-center gap-2 text-sm mb-2">
+        <label className="flex items-center gap-2 text-sm mb-2" data-tour="pos-offers-targets">
           <input type="checkbox" checked={o.target_all} onChange={e => set('target_all', e.target.checked)} /> كل الأصناف
         </label>
         {!o.target_all && (
@@ -330,13 +330,13 @@ function WarningsPanel({ offerId, refreshKey }) {
   useEffect(() => { run() }, [offerId, refreshKey])
   if (loading && warnings === null) return null
   if (warnings && !warnings.length) {
-    return <div className="card mb-3 border-emerald-200 bg-emerald-50/60">
+    return <div className="card mb-3 border-emerald-200 bg-emerald-50/60" data-tour="pos-offers-warnings">
       <div className="text-sm text-emerald-700 flex items-center gap-2">✓ لا تعارضات — الإعداد سليم.
         <button className="text-[11px] text-emerald-600 underline" onClick={run}>إعادة الفحص</button></div>
     </div>
   }
   return (
-    <div className="card mb-3 border-amber-300 bg-amber-50/60">
+    <div className="card mb-3 border-amber-300 bg-amber-50/60" data-tour="pos-offers-warnings">
       <div className="section-title flex items-center justify-between text-amber-800">
         <span>⚠ تنبيهات الإعداد</span>
         <button className="text-[11px] text-amber-700 underline" onClick={run} disabled={loading}>{loading ? '…' : 'إعادة الفحص'}</button>

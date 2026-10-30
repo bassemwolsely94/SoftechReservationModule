@@ -103,7 +103,7 @@ export default function OmniAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div data-tour="omni-analytics-breakdown" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* By channel */}
         <div data-tour="omni-analytics-channels">
         <Card title="الحجم حسب القناة">
@@ -167,7 +167,7 @@ export default function OmniAnalyticsPage() {
         {data.by_agent.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">لا توجد بيانات</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+          <div data-tour="omni-analytics-agents" className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
             {data.by_agent.map(a => (
               <div key={a.actor} className="flex items-center justify-between text-sm px-2 py-1 rounded hover:bg-gray-50">
                 <span className="text-gray-700 truncate">{a.agent_name}</span>

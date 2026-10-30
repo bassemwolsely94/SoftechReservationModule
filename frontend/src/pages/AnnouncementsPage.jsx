@@ -37,11 +37,11 @@ export default function AnnouncementsPage() {
     <div className="p-6 max-w-3xl mx-auto" dir="rtl">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📢 الإعلانات الداخلية</h1>
+          <h1 className="text-2xl font-bold text-gray-900" data-tour="general-announcements-header">📢 الإعلانات الداخلية</h1>
           <p className="text-sm text-gray-500 mt-0.5">تعميمات الإدارة للفروع مع تأكيد القراءة</p>
         </div>
         {canBroadcast && (
-          <button data-tour="general-announcements-new" onClick={() => setShowForm(s => !s)} className="btn-primary text-sm">
+          <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm" data-tour="general-announcements-new">
             {showForm ? 'إغلاق' : '+ إعلان جديد'}
           </button>
         )}
@@ -54,7 +54,7 @@ export default function AnnouncementsPage() {
       ) : items.length === 0 ? (
         <div className="text-center py-16 text-gray-400">لا توجد إعلانات</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="general-announcements-list">
           {items.map(a => {
             const mine = a.author === user?.staff_profile_id || ['admin', 'supervisor'].includes(user?.role)
             return (

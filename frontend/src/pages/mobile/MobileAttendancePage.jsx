@@ -69,7 +69,7 @@ export default function MobileAttendancePage() {
           {open ? 'أنت مسجّل حضور الآن' : rec ? 'أنهيت يومك' : 'لم تسجّل الحضور بعد'}
         </div>
         {rec && (
-          <div className="mt-3 text-sm text-gray-700 space-y-1.5">
+          <div data-tour="hr-attendance-times" className="mt-3 text-sm text-gray-700 space-y-1.5">
             <div className="flex items-center justify-center gap-2">
               <span className="text-gray-400">حضور:</span>
               <span className="font-medium">{fmtTime(rec.check_in_at)}</span>
