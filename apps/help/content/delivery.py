@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'delivery', 'group': 'operations', 'icon': '🚚',
+    'brief': T('طلبات التوصيل من التجهيز للمندوب للتسليم وتحصيل الفلوس.',
+               'Delivery orders from preparation to the rider, handover and cash collection.'),
     'title': T('توصيل الطلبات', 'Home delivery'),
     'summary': T(
         'إدارة طلبات التوصيل من الإنشاء حتى التسليم والتحصيل: الطلب يأتي من الكول سنتر أو الفرع، يُجهَّز في الفرع، '

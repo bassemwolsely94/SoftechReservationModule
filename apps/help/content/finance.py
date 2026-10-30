@@ -4,6 +4,8 @@ _SYNC = T('لو ظهرت «لا توجد بيانات» فالمزامنة ال�
 
 MODULE = {
     'key': 'finance', 'group': 'finance', 'icon': '💹',
+    'brief': T('لوحة المالية: الإيرادات والربح والمصروفات والتدفق النقدي وسداد الموردين.',
+               'The finance board: revenue, profit, expenses, cash flow and supplier payments.'),
     'title': T('المالية', 'Finance'),
     'summary': T(
         'الذكاء المالي مبني على بيانات SOFTECH المحاسبية: لوحة قيادة (الإيرادات، الأرباح، المشتريات، المصروفات، التدفق النقدي، المخزون)، قائمة الأرباح والخسائر، '

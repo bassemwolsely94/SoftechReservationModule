@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'general', 'group': 'home', 'icon': '◈',
+    'brief': T('صفحتك الرئيسية وإشعاراتك وإعلانات الإدارة وأمان حسابك — ومنها بتبدأ يومك.',
+               'Your home page, notifications, management announcements and account security — where your day starts.'),
     'title': T('الرئيسية والحساب', 'Home & account'),
     'summary': T(
         'الشاشات العامة التي يستخدمها كل الموظفين: الصفحة الرئيسية، لوحتك الشخصية، الإشعارات، '
@@ -603,6 +605,8 @@ SCREENS = [
               'The first time you open a screen that has a tour, "New here? 👆 Show me" shows once at the bottom — press it for the tour or ✕ to hide it.'),
             T('اكتب سؤالك في خانة البحث (زي «ازاي أعمل تحويل لفرع تاني؟») واضغط «💬 اسأل النظام»: الرد مكتوب من دليل الاستخدام فقط، وتحته الشاشات اللي اتاخد منها. لو الدليل مش بيغطي السؤال هيقولك كده.',
               'Type your question in the search box (e.g. "How do I transfer to another branch?") and press "💬 Ask the system": the answer is written only from the help guide, with the screens it came from underneath. If the guide does not cover it, it says so.'),
+            T('«🚀 جولة في النظام» (أعلى الصفحة وفي «مساري التدريبي»): محطة لكل موديول في مسار دورك — بتفتح الشاشة الحقيقية وتقولك الموديول بيعمل إيه ليك ومنين تبدأ. أول مرة تفتح الرئيسية بيظهر عرض «أول مرة؟ 🚀 خد جولة في النظام».',
+              '"🚀 System tour" (top of this page and in "My training path"): one stop per module on your role\'s path — it opens the real screen and tells you what the module does for you and where to start. The first time you open the home page, "First time? 🚀 Take the system tour" is offered.'),
             T('موظف جديد؟ افتح تبويب «مساري التدريبي» واتبع الترتيب: اقرأ الشاشة، جرّبها، اضغط «فهمت هذه الشاشة ✓»، وبعدين اختبار الموديول.',
               'New here? Open the "My training path" tab and follow the order: read the screen, try it, press "I understand this screen ✓", then take the module quiz.'),
             T('في آخر كل شرح اضغط «مفيد» أو «غير مفيد» واكتب ما ليس واضحاً — يصل للمدرب ليحسّن الشرح.',
@@ -676,6 +680,11 @@ SCREENS = [
                        'The first time you open a screen that has a tour, this offer shows once at the bottom. Press it to start the screen\'s tour.'),
              'when': T('✕ يقفله، ومش هيظهر تاني إلا لو شرح الشاشة اتحدّث.', '✕ closes it; it only comes back when the screen\'s help is updated.'),
              'open_hint': T('بيظهر لوحده في شاشة جديدة عليك.', 'It appears by itself on a screen that is new to you.')},
+            {'target': 'general-help-center-product-tour', 'label': T('🚀 جولة في النظام', '🚀 System tour'),
+             'text': T('جولة على كل الموديولات اللي في مسار دورك: محطة لكل موديول على الشاشة الحقيقية، وبيعمل إيه ليك.',
+                       'A tour of every module on your role\'s path: one stop per module on the real screen, and what it does for you.'),
+             'when': T('أول يوم ليك، أو لما تحب تشوف الصورة الكاملة. بعدها كمّل شاشة شاشة من «مساري التدريبي».',
+                       'On your first day, or whenever you want the whole picture. Then go screen by screen in "My training path".')},
             {'target': 'general-help-center-search', 'label': T('ابحث في الشرح…', 'Search the help…'),
              'text': T('ابحث بكلمة عربي أو إنجليزي في كل الشروحات. اضغط النتيجة يفتح الشرح.', 'Search every article by an Arabic or English word. Click a result to open it.')},
             {'target': 'general-help-center-ask', 'label': T('💬 اسأل النظام', '💬 Ask the system'),

@@ -76,6 +76,29 @@ ROLE_PATHS = {
 }
 
 
+# «🚀 جولة في النظام» — the role product tour (training.product_tour): built from the role's
+# path, one stop per module (its MODULE['brief']); only the welcome and finish text live here.
+PRODUCT_TOUR = {
+    'title': T('🚀 جولة في النظام', '🚀 System tour'),
+    'summary': T('محطة لكل موديول في مسار دورك: بيعمل إيه ليك، ومنين تبدأ فيه.',
+                 "One stop per module on your role's path: what it does for you and where to start."),
+    'welcome': {
+        'label': T('🚀 جولة في النظام', '🚀 System tour'),
+        'text': T('أهلاً! هنلف على الموديولات اللي في شغلك — محطة لكل موديول، وكل محطة بتفتح الشاشة الحقيقية.',
+                  'Welcome! We will visit the modules of your work — one stop per module, each on the real screen.'),
+        'when': T('«التالي» أو Enter للي بعده، و«روح للشاشة» يفتحها. الجولة ما بتضغطش ولا بتحفظ حاجة.',
+                  '"Next" or Enter moves on, and "Go to screen" opens it. The tour never presses or saves anything.'),
+    },
+    'finish': {
+        'label': T('؟ مساعدة', '? Help'),
+        'text': T('خلصنا! في أي شاشة: F1 للشرح، «👆 اعرض لي» لجولة الشاشة، وShift+F1 لتلميحات الأزرار.',
+                  'Done! On any screen: F1 for help, "👆 Show me" for its tour, and Shift+F1 for button hints.'),
+        'when': T('كمّل من «🎓 مساري التدريبي» في دليل الاستخدام: شاشة شاشة، واختبار قصير لكل موديول.',
+                  'Carry on in "🎓 My training path" in the help guide: screen by screen, with a short quiz per module.'),
+    },
+}
+
+
 def Q(q, options, answer, explain):
     return {'q': q, 'options': options, 'answer': answer, 'explain': explain}
 

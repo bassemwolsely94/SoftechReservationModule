@@ -253,6 +253,39 @@ class HelpContentCoverageTests(SimpleTestCase):
             if key not in registry.TOUR_PENDING:
                 self.assertTrue(m.get('journeys'), f'{key}: no journey (رحلة عمل)')
 
+    def test_every_module_has_a_brief(self):
+        """«🚀 جولة في النظام» shows each module's one-line brief — short and bilingual."""
+        for key, m in self.modules.items():
+            b = m.get('brief') or {}
+            for lang in ('ar', 'en'):
+                self.assertTrue((b.get(lang) or '').strip(), f'{key}: brief missing {lang}')
+                self.assertLessEqual(len(b[lang]), registry.TOUR_LIMITS['text'], f'{key}: brief.{lang} too long')
+
+    def test_product_tours_valid(self):
+        """Every role's product tour (repo paths, both shells) follows the journey rules:
+        real screens and anchors, the shell's routes, rich-step limits, ≥3 steps."""
+        from apps.help import training
+        from apps.help.content import onboarding
+        anchors = self._anchors()
+        built = 0
+        for role in onboarding.ROLE_PATHS:
+            for shell in training.PRODUCT_SHELLS:
+                j = training.product_tour(role, shell, training.base_path(role))
+                if j is None:
+                    continue
+                built += 1
+                jid = j['id']
+                self.assertGreaterEqual(len(j['steps']), 3, jid)
+                mods = [self.screens[st['screen']]['module'] for st in j['steps'][1:-1]]
+                self.assertEqual(len(mods), len(set(mods)), f'{jid}: a module stops twice')
+                for i, st in enumerate(j['steps']):
+                    where = f'{jid}.steps[{i}]'
+                    self.assertIn(st['screen'], self.screens, where)
+                    self.assertIn(st['target'], anchors, f'{where}: no data-tour anchor')
+                    self.assertTrue(registry.journey_routes(j, self.screens[st['screen']]), f'{where}: no {shell} route')
+                    self._check_rich_step(where, st, registry.JOURNEY_STEP_KEYS)
+        self.assertGreater(built, len(onboarding.ROLE_PATHS) - 1, 'most roles should have a desktop tour')
+
     def test_workflow_explains_every_status(self):
         for m in self.modules.values():
             for wf in m.get('workflows') or []:
@@ -861,3 +894,49 @@ class JourneyApiTests(TestCase):
         rows = c.get('/api/help/usage/').json()['tours']
         row = next(x for x in rows if x['screen_key'] == f'journey:{self.jid}')
         self.assertEqual((row['kind'], row['runs'], row['done']), ('journey', 1, 1))
+
+
+class ProductTourApiTests(TestCase):
+    """«🚀 جولة في النظام»: built from the caller's role path, trainers may preview another
+    role, tour events are accepted and listed in the usage report."""
+
+    def setUp(self):
+        self.branch = make_branch()
+
+    def _client(self, role, name):
+        user, _, _ = make_user(name, role=role, branch=self.branch)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        return c
+
+    def test_own_role_tour_with_routes(self):
+        c = self._client('pharmacist', 'pt_ph')
+        r = c.get('/api/help/product-tour/')
+        self.assertEqual(r.status_code, 200)
+        j = r.json()
+        self.assertEqual((j['id'], j['shell']), ('product.pharmacist.desktop', 'desktop'))
+        self.assertEqual(j['steps'][0]['screen'], 'general.dashboard')
+        self.assertTrue(all('routes' in st and 'screen_title' in st for st in j['steps']))
+        self.assertIn('pos', [st['screen'].split('.')[0] for st in j['steps']])
+        self.assertEqual(c.get('/api/help/product-tour/?shell=tv').status_code, 400)
+
+    def test_preview_other_role_needs_help_edit(self):
+        ph = self._client('pharmacist', 'pt_ph2')
+        self.assertEqual(ph.get('/api/help/product-tour/?role=admin').json()['id'], 'product.pharmacist.desktop')
+        admin = self._client('admin', 'pt_admin')
+        self.assertEqual(admin.get('/api/help/product-tour/?role=purchasing').json()['id'], 'product.purchasing.desktop')
+
+    def test_no_tour_on_a_shell_is_404(self):
+        c = self._client('viewer', 'pt_viewer')
+        self.assertEqual(c.get('/api/help/product-tour/?shell=mobile').status_code, 404)
+
+    def test_tour_events_and_usage(self):
+        c = self._client('pharmacist', 'pt_ph3')
+        n = len(c.get('/api/help/product-tour/').json()['steps'])
+        key = 'journey:product.pharmacist.desktop'
+        self.assertEqual(c.post('/api/help/tour-event/', {'screen_key': key, 'reached': n, 'done': True}, format='json').status_code, 201)
+        self.assertEqual(c.post('/api/help/tour-event/', {'screen_key': 'journey:product.nobody.tv'}, format='json').status_code, 400)
+        admin = self._client('admin', 'pt_admin2')
+        rows = admin.get('/api/help/usage/').json()['tours']
+        row = next(x for x in rows if x['screen_key'] == key)
+        self.assertEqual((row['kind'], row['runs'], row['done']), ('product', 1, 1))

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'reservations', 'group': 'operations', 'icon': '📋',
+    'brief': T('صنف مش موجود؟ احجزه للعميل وتابعه لحد ما يستلمه — من غير ورق.',
+               'Item not available? Reserve it for the customer and follow it until they collect it — no paper.'),
     'title': T('الحجوزات', 'Reservations'),
     'summary': T(
         'الحجز = عميل طلب صنفاً غير متوفر الآن (أو يريد تجهيزه)، فنسجّل طلبه ونتابعه حتى يُصرف له. '

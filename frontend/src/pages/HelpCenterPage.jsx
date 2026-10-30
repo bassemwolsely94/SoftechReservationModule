@@ -18,7 +18,7 @@ import HelpFeedback from '../help/HelpFeedback'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
-import Journeys from '../help/Journeys'
+import Journeys, { ProductTourButton } from '../help/Journeys'
 import HelpUsage from '../help/HelpUsage'
 import { LearnedButton, MyPath, Quiz, TeamProgress } from '../help/Onboarding'
 
@@ -59,6 +59,7 @@ export default function HelpCenterPage() {
               : 'شرح كل شاشات النظام — دور الشاشة، طريقة الاستخدام، التبويبات، ودورة عمل الموديول. اضغط F1 في أي شاشة لفتح شرحها.'}
           </p>
         </div>
+        <ProductTourButton lang={lang} className="text-sm px-4 py-2" />
         <div data-tour="general-help-center-lang" className="flex items-center border border-line rounded-lg overflow-hidden text-sm">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}

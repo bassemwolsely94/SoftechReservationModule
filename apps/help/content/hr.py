@@ -8,6 +8,8 @@ _QA_OPEN = T('افتح مراجعة «مسودة» من القائمة.', 'Open 
 
 MODULE = {
     'key': 'hr', 'group': 'hr', 'icon': '👥',
+    'brief': T('طلبات الإجازة والأذونات والسلف واعتمادها، والحضور، ومراجعات الجودة.',
+               'Leave, permits and advances and their approval, attendance, and quality inspections.'),
     'title': T('الموارد البشرية والموافقات والجودة', 'HR, approvals & quality'),
     'summary': T(
         'طلبات الموظفين (إجازة، إذن مأمورية أو تعديل شيفت، ساعات إضافية، سلفة، مطالبة مصروفات) تمر بمحرك موافقات موحّد: كل نوع طلب له خطوات اعتماد محددة '

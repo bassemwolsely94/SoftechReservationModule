@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'gamification', 'group': 'home', 'icon': '🏆',
+    'brief': T('شغلك المسجّل بيكسبك نقاط ومستويات وشارات، وتقدر تستبدل النقاط بمكافآت.',
+               'The work you record earns points, levels and badges, and you can redeem points for rewards.'),
     'title': T('التحفيز — النقاط والمستويات', 'Gamification — points & levels'),
     'summary': T(
         'كل عمل تنجزه في النظام أو في SOFTECH يُحتسب لك نقاطاً تلقائياً: فواتير البيع وربحيتها (الكاش أعلى)، المرتجعات، '

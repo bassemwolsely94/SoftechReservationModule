@@ -20,6 +20,7 @@ urlpatterns = [
     path('journeys/<str:jid>/', views.journey_detail, name='help-journey'),
     path('onboarding/', ob.my_path, name='help-onboarding'),
     path('onboarding/learned/', ob.mark_learned, name='help-onboarding-learned'),
+    path('product-tour/', ob.product_tour, name='help-product-tour'),
     path('onboarding/team/', ob.team, name='help-onboarding-team'),
     path('training/<str:kind>/<str:key>/', ob.training_edit, name='help-training-edit'),
     path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),

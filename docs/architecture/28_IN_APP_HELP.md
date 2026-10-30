@@ -141,6 +141,24 @@ must not get wrong → add a quiz question.
   `screens/<key>/?log=0`, so it does not count as "help opened" in the trainers' report.
 - Mounted by `HelpPanel` next to `TourRunner`, so both shells (desktop + `/m/`) get it.
 
+### «🚀 جولة في النظام» — role product tour (built 2026-10-30, batch 9)
+
+- **Generated, not written:** `training.product_tour(role, shell)` builds a journey from the role's
+  training path (trainer path edits included): a welcome on the dashboard, then **one stop per module**
+  in path order — that module's first path screen on the shell with a tour and a param-free route; the
+  step highlights that screen's first tour anchor, labelled with the module icon + short title, text =
+  the module's one-line **`MODULE['brief']`** (≤160 chars, every module has one — tested), «متى؟» = how many
+  path screens it has — then a finish step on «؟ مساعدة» (F1, «اعرض لي», Shift+F1, «مساري التدريبي»).
+  Welcome / finish text: `content/onboarding.py` `PRODUCT_TOUR`. Module `general` gets no stop of its own.
+- **API:** `GET /api/help/product-tour/?shell=desktop|mobile` (own role; trainers `&role=`) → a journey
+  (`id = product.<role>.<shell>`, steps with routes like module journeys) or 404. Tour events use
+  `journey:product.<role>.<shell>`; the usage report lists every role × shell (`kind: 'product'`).
+- **Entry points:** «🚀 جولة في النظام» on `/help` (header) and in «مساري التدريبي» (follows the role a
+  trainer previews); the first dashboard visit ever offers «أول مرة؟ 🚀 خد جولة في النظام» (TourOffer,
+  `offered.product`). Started with the same runner as journeys (`useStartProductTour` in `Journeys.jsx`).
+- **Not wired yet:** a mobile entry point (the API supports `shell=mobile`); the tours for roles whose
+  path is mostly mobile are thin on desktop.
+
 ## «اسأل النظام» (built 2026-10-10)
 
 - Type a question in the panel / help-center search box → «💬 اسأل النظام» (one click, never while
@@ -239,4 +257,5 @@ as they appear on screen («…»).
 - Batch 7: enrich the remaining thin steps (no «label» / «متى؟») in finished modules — most in purchasing.
 - ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
   anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
-- Batch 9: role product tour «جولة في النظام» across modules, from `/help` and onboarding.
+- ~~Batch 9: role product tour «جولة في النظام»~~ ✅ built 2026-10-30 (desktop entry points; mobile
+  entry still open).

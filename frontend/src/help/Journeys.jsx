@@ -6,7 +6,7 @@
  * steps, screens and buttons follow the code.
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import useHelpStore from './helpStore'
@@ -14,6 +14,51 @@ import { StepFields, TField } from './HelpEditor'
 import { pick } from './text'
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
+
+/** Open a journey's first screen, then run it with the «اعرض لي» runner. */
+function useRunJourney() {
+  const navigate = useNavigate()
+  const startJourney = useHelpStore((s) => s.startJourney)
+  return (j) => {
+    const first = j.steps[0]
+    if (first?.route) navigate(first.route)
+    setTimeout(() => startJourney(j), 400)
+  }
+}
+
+/**
+ * «🚀 جولة في النظام» — the role product tour (server-built from the training path: one
+ * stop per module). `role` = a trainer previewing another role. Resolves false when
+ * the role has no tour on this shell.
+ */
+export function useStartProductTour() {
+  const run = useRunJourney()
+  const { pathname } = useLocation()
+  const shell = pathname.startsWith('/m/') || pathname === '/m' ? 'mobile' : 'desktop'
+  return async (role) => {
+    try {
+      const { data } = await helpApi.productTour(role ? { shell, role } : { shell })
+      run(data)
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+export function ProductTourButton({ lang, role, className = '' }) {
+  const start = useStartProductTour()
+  const [none, setNone] = useState(false)
+  const en = lang === 'en'
+  return (
+    <button type="button" data-tour="general-help-center-product-tour"
+            onClick={async () => setNone(!(await start(role)))}
+            title={none ? (en ? 'No tour for this role yet' : 'مفيش جولة للدور ده') : undefined}
+            className={`text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 hover:bg-brand-700 ${className}`}>
+      🚀 {en ? 'System tour' : 'جولة في النظام'}
+    </button>
+  )
+}
 
 export default function Journeys({ journeys, lang, canEdit }) {
   if (!journeys?.length) return null
@@ -36,14 +81,9 @@ export default function Journeys({ journeys, lang, canEdit }) {
 
 function JourneyCard({ j, lang, canEdit }) {
   const en = lang === 'en'
-  const navigate = useNavigate()
-  const startJourney = useHelpStore((s) => s.startJourney)
+  const run = useRunJourney()
   const [editing, setEditing] = useState(false)
-  const start = () => {
-    const first = j.steps[0]
-    if (first?.route) navigate(first.route)
-    setTimeout(() => startJourney(j), 400)
-  }
+  const start = () => run(j)
   if (editing) return <JourneyEditor j={j} onDone={() => setEditing(false)} />
   return (
     <div className="rounded-lg border border-line p-4 space-y-3">

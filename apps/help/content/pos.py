@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'pos', 'group': 'operations', 'icon': '🧾',
+    'brief': T('شاشة البيع: تسجّل طلب العميل هنا ويتبعت للكاشير في SOFTECH يقفله.',
+               'The sales screen: record the customer\'s order here and it goes to the SOFTECH cashier to settle.'),
     'title': T('نقطة البيع (POS غير المباشر)', 'Point of sale (indirect POS)'),
     'summary': T(
         'شاشة البيع في النظام تطابق شاشة «نقطة البيع غير المباشرة» في SOFTECH حقلاً بحقل، بنفس الاختصارات. '

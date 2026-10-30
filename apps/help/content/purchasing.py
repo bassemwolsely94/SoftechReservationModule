@@ -6,6 +6,8 @@ _HUB_NOTE = T(
 
 MODULE = {
     'key': 'purchasing', 'group': 'purchasing', 'icon': '🛒',
+    'brief': T('محرك الطلب بيحسب كام يحتاج كل فرع من كل صنف، ومنه التوريد والموردين.',
+               'The demand engine works out how much of each item each branch needs, plus supply and suppliers.'),
     'title': T('المشتريات والتوريد', 'Purchasing & supply'),
     'summary': T(
         '«محرك الطلب» يحسب لكل صنف في كل فرع معدل البيع الموزون (30/90/365 يوماً)، فئة ABC (الأصناف الأهم قيمة)، حد الأمان، التغطية بالشهور، '

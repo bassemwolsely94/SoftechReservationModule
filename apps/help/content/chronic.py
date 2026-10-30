@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'chronic', 'group': 'inventory', 'icon': '🧬',
+    'brief': T('الأدوية المزمنة والمواد الفعّالة: ابحث بالمادة الفعالة وصنّف الأصناف المزمنة.',
+               'Chronic medicines and active ingredients: search by ingredient and classify chronic items.'),
     'title': T('الأدوية المزمنة والمواد الفعّالة', 'Chronic medicines & active ingredients'),
     'summary': T(
         'تصنيف الأصناف كأدوية مزمنة بربطها بمادة فعّالة وتصنيف مرض (سكري، ضغط، قلب، غدة…)، وتعريف «بروتوكولات المتابعة» التي تولّد مهام متابعة المرضى. '

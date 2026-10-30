@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'vouchers', 'group': 'customers', 'icon': '🎫',
+    'brief': T('قسائم الخصم وكوبونات الهدايا: التحقق بالكود (OTP) والاستخدام عند البيع.',
+               'Discount vouchers and gift coupons: the code (OTP) check and redemption at the sale.'),
     'title': T('القسائم وكوبونات الهدايا', 'Vouchers & gift coupons'),
     'summary': T(
         'قسائم الخصم الإلكترونية: تُنشئها الإدارة (عامة، خاصة بعميل، أول مرة، أو مخصصة بأرقام هواتف) بأنواع خصم نسبة أو مبلغ أو رصيد نقدي أو صنف مجاني، '

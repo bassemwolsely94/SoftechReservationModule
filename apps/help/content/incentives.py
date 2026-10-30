@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'incentives', 'group': 'analytics', 'icon': '💰',
+    'brief': T('برامج حوافز البيع على الأصناف، وحافزك إنت.',
+               'Item-based sales incentive programs, and your own incentive.'),
     'title': T('الحوافز', 'Sales incentives'),
     'summary': T(
         'محرك حوافز البيع على الأصناف: «برنامج» لفترة (أسبوعي/شهري/مخصص، ويمكن أن يرعاه مورد) فيه «قواعد» تحدد الأصناف المستهدفة وطريقة الحافز '

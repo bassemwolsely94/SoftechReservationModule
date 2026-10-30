@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'tasks', 'group': 'operations', 'icon': '✅',
+    'brief': T('مهام الفروع اليومية: مين يعمل إيه وامتى، ومتابعة اللي اتأخر.',
+               'The branches\' daily tasks: who does what and when, and follow-up on what is late.'),
     'title': T('المهام التشغيلية', 'Operational tasks'),
     'summary': T(
         'إسناد ومتابعة أعمال الفروع اليومية (جرد، استلام، تحويل، توصيل، نقص، مشتريات، صيانة، اجتماع، تدريب، تدقيق، عملاء…): '

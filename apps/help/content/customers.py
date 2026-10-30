@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'customers', 'group': 'customers', 'icon': '👥',
+    'brief': T('ملف كامل لكل عميل: مشترياته وحجوزاته وأدويته المزمنة ونقاطه في مكان واحد.',
+               'A full file per customer: purchases, reservations, chronic medicines and points in one place.'),
     'title': T('العملاء', 'Customers'),
     'summary': T(
         'ملف كامل لكل عميل (360°) مبني على بيانات SOFTECH: مشترياته ومرتجعاته، حجوزاته، أدويته المزمنة وملفه الصحي (حساسية، حمل، أطفال)، '

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'callcenter', 'group': 'callcenter', 'icon': '📞',
+    'brief': T('شغل الكول سنتر: رقم المتصل يفتح ملف العميل، والحالات تتسجّل وتتابع.',
+               'Call-center work: the caller\'s number opens the customer file, and cases are logged and followed.'),
     'title': T('مركز الاتصال والحالات', 'Call center & cases'),
     'summary': T(
         'عمل الكول سنتر اليومي: البحث برقم المتصل يفتح ملف العميل كاملاً (الشريحة، القيمة، الحالات والطلبات المفتوحة)، تسجيل المكالمة وغرضها ونتيجتها، '

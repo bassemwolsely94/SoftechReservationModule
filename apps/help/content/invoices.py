@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'invoices', 'group': 'purchasing', 'icon': '🧾',
+    'brief': T('فاتورة المورد بالصورة: النظام يقراها، تراجعها، وبعدين تترحّل لـ SOFTECH.',
+               'A supplier invoice from a photo: the system reads it, you review it, then it is posted to SOFTECH.'),
     'title': T('فواتير الموردين', 'Supplier invoices'),
     'summary': T(
         'إدخال فواتير الشراء من الموردين (ومرتجعاتها) بدل كتابتها يدوياً في SOFTECH: ارفع صورة/PDF الفاتورة ← النظام يقرأها (OCR) ويطابق كل سطر بصنف من الكتالوج ← '

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'stockcount', 'group': 'operations', 'icon': '📦',
+    'brief': T('جرد فعلي يتقارن برصيد SOFTECH المتجمّد لحظة البداية، فتعرف الفرق بدقة.',
+               'A physical count compared with the SOFTECH balance frozen at the start, so you see the exact difference.'),
     'title': T('الجرد الفعلي', 'Physical stock count'),
     'summary': T(
         'جرد المخزون الفعلي ومقارنته بأرصدة SOFTECH. الفكرة الأساسية «اللقطة»: نجمّد الكميات المتوقعة من SOFTECH في لحظة بعينها، '

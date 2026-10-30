@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'omni', 'group': 'callcenter', 'icon': '📥',
+    'brief': T('واتساب والمكالمات والسوشيال لكل عميل في محادثة واحدة.',
+               'WhatsApp, calls and social messages for each customer in one conversation.'),
     'title': T('التواصل الموحّد (واتساب والمكالمات والسوشيال)', 'Unified communications (WhatsApp, calls, social)'),
     'summary': T(
         'كل قنوات التواصل مع العميل في مكان واحد: رسائل واتساب (عدة أرقام)، المكالمات، ماسنجر، إنستجرام، تيليجرام — مجمّعة لكل عميل في خط زمني واحد مع أحداث SOFTECH (حجوزات، فواتير). '

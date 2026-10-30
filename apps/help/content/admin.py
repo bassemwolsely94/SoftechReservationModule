@@ -10,6 +10,8 @@ _LOGS = T('افتح تبويب «📋 سجل الإجراءات».', 'Open the "
 
 MODULE = {
     'key': 'admin', 'group': 'admin', 'icon': '⚙️',
+    'brief': T('المستخدمين وأدوارهم وصلاحياتهم، والإعدادات، والمزامنة مع SOFTECH.',
+               'Users, their roles and permissions, settings, and the sync with SOFTECH.'),
     'title': T('الإدارة والنظام', 'Administration & system'),
     'summary': T(
         'إدارة المستخدمين وأدوارهم وفروعهم، مصفوفة الصلاحيات (ما يراه ويفعله كل دور في كل موديول) والصلاحيات الموروثة من مجموعات SOFTECH، '

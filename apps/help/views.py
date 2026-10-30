@@ -68,14 +68,30 @@ def _journeys_for(request, module_key, screens, overrides=None):
             continue
         ov = overrides.get(registry.journey_override_key(jid))
         eff = registry.effective_journey(j, ov)
-        steps = []
-        for st in eff['steps']:
-            routes = registry.journey_routes(j, screens[st['screen']])
-            steps.append({**st, 'routes': routes,
-                          'route': next((r for r in routes if ':' not in r), None),
-                          'screen_title': screens[st['screen']]['title']})
-        out.append({**eff, 'steps': steps, 'edited': ov is not None})
+        out.append({**eff, 'steps': _routed_steps(j, eff['steps'], screens), 'edited': ov is not None})
     return out
+
+
+def _routed_steps(journey, steps, screens):
+    """Journey steps with their screen's routes (journey shell), a param-free 'route' for
+    «روح للشاشة» (None for record pages) and the screen title."""
+    out = []
+    for st in steps:
+        routes = registry.journey_routes(journey, screens[st['screen']])
+        out.append({**st, 'routes': routes,
+                    'route': next((r for r in routes if ':' not in r), None),
+                    'screen_title': screens[st['screen']]['title']})
+    return out
+
+
+def _product_tour_steps(jid):
+    """'product.<role>.<shell>' → the product tour's steps (None if unknown / empty)."""
+    from . import training
+    parts = jid.split('.')
+    if len(parts) != 3 or parts[0] != 'product' or parts[2] not in training.PRODUCT_SHELLS:
+        return None
+    j = training.product_tour(parts[1], parts[2])
+    return j['steps'] if j else None
 
 
 @api_view(['GET'])
@@ -475,7 +491,9 @@ def tour_event(request):
     {screen_key, reached (steps seen), done (bool)} — for the trainers' usage report."""
     _, screens = registry.load()
     key = str(request.data.get('screen_key', ''))
-    if key.startswith('journey:'):
+    if key.startswith('journey:product.'):
+        steps = _product_tour_steps(key[len('journey:'):])
+    elif key.startswith('journey:'):
         j = registry.journeys().get(key[len('journey:'):])
         steps = j['steps'] if j else None
     else:
@@ -529,6 +547,12 @@ def usage(request):
     runnable = [(k, s['title'], s['tour'], 'screen') for k, s in screens.items() if s.get('tour')]
     runnable += [(registry.journey_override_key(jid), j['title'], j['steps'], 'journey')
                  for jid, j in registry.journeys().items()]
+    for role, _ in ROLE_CHOICES:
+        for shell in training.PRODUCT_SHELLS:
+            pj = training.product_tour(role, shell, training.path(role, path_ov))
+            if pj:
+                runnable.append((f"journey:{pj['id']}", {k: f"{v} · {role} · {shell}" for k, v in pj['title'].items()},
+                                 pj['steps'], 'product'))
     for k, title, steps, kind in runnable:
         t = tours.get(k, {'runs': 0, 'done': 0, 'stops': {}})
         stop = max(t['stops'].items(), key=lambda kv: kv[1])[0] if t['stops'] else None

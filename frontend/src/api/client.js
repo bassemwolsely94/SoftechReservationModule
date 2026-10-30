@@ -375,6 +375,7 @@ export const helpApi = {
   saveTraining: (kind, key, data, note) => api.put(`/help/training/${kind}/${key}/`, { data, note }),
   revertTraining: (kind, key, note) => api.delete(`/help/training/${kind}/${key}/`, { data: { note } }),
   onboarding: (role)             => api.get('/help/onboarding/', { params: role ? { role } : {} }),
+  productTour: (params = {})     => api.get('/help/product-tour/', { params }),
   learned:    (screen_key, done = true) => api.post('/help/onboarding/learned/', { screen_key, done }),
   team:       (params = {})      => api.get('/help/onboarding/team/', { params }),
   quiz:       (module)           => api.get(`/help/quizzes/${module}/`),

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'catalog', 'group': 'inventory', 'icon': '💊',
+    'brief': T('كل الأصناف بسعرها ومخزونها في كل فرع، وملف كامل لكل صنف.',
+               'Every item with its price and stock in every branch, and a full file per item.'),
     'title': T('المنتجات والمخزون', 'Products & stock'),
     'summary': T(
         'كتالوج كل الأصناف (أكثر من 37 ألف صنف) المتزامن من SOFTECH مع السعر والتوافر بالفروع، وملف شامل لكل صنف، '

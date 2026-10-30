@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'pricing', 'group': 'purchasing', 'icon': '🏷️',
+    'brief': T('أي تغيير سعر أو خصم بيمر بطلب واعتماد قبل ما يتنفّذ في SOFTECH.',
+               'Any price or discount change goes through a request and approval before it runs in SOFTECH.'),
     'title': T('الأسعار والخصومات', 'Prices & discounts'),
     'summary': T(
         'أي تعديل في سعر صنف أو خصوماته يمر بطلب واعتماد: الموظف يطلب، والمدير يعتمد فيُنفَّذ مباشرة في SOFTECH باسم مستخدم SOFTECH الخاص بالمعتمد وينتشر لكل الفروع تلقائياً. '

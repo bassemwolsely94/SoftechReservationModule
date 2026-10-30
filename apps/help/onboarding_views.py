@@ -24,7 +24,7 @@ from apps.users.models import ROLE_CHOICES, StaffProfile
 
 from . import registry, training
 from .models import HelpLearned, HelpOverride, HelpQuizAttempt, HelpRevision, HelpTrainingOverride
-from .views import _can_edit, _profile, _staff_name, _updated
+from .views import _can_edit, _profile, _routed_steps, _staff_name, _updated
 
 ROLES = [r for r, _ in ROLE_CHOICES]
 
@@ -117,6 +117,28 @@ def my_path(request):
         # every screen I ticked (also outside my path), so the «فهمت» button knows its state
         'learned': {k: _state(v, versions.get(k)) for k, v in learned.items()},
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def product_tour(request):
+    """«🚀 جولة في النظام» for the caller's role (?shell=desktop|mobile); trainers may
+    preview another role (?role=). 404 when the role's path has nothing on that shell."""
+    profile = _profile(request)
+    if profile is None:
+        return Response({'detail': 'no staff profile'}, status=400)
+    shell = request.query_params.get('shell', 'desktop')
+    if shell not in training.PRODUCT_SHELLS:
+        return Response({'detail': 'unknown shell'}, status=400)
+    role = profile.role
+    asked = request.query_params.get('role')
+    if asked and asked != role and _can_edit(profile) and asked in ROLES:
+        role = asked
+    j = training.product_tour(role, shell)
+    if j is None:
+        return Response({'detail': 'no tour for this role'}, status=404)
+    _, screens = registry.load()
+    return Response({**j, 'steps': _routed_steps(j, j['steps'], screens)})
 
 
 @api_view(['POST'])

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'replacement', 'group': 'inventory', 'icon': '🔁',
+    'brief': T('بدل الروشتة: رصيد العميل من أدوية رجّعها، ومتابعته لحد ما يستبدله.',
+               'Prescription replacement: the customer\'s balance from returned medicines, followed until it is exchanged.'),
     'title': T('بدل الروشتة وشراء أدوية العملاء', 'Prescription replacement & customer buy-back'),
     'summary': T(
         '«البدل»: عميل (غالباً مريض تأمين) يعيد أدوية روشتته أو يبيع لنا أدوية، فيحصل على «رصيد» يستبدله بمنتجات أخرى أو نقداً. '

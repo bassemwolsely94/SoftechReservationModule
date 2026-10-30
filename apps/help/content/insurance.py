@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'insurance', 'group': 'finance', 'icon': '🏥',
+    'brief': T('مطالبات التأمين والتعاقدات: من استيرادها من SOFTECH لحد طباعتها وتقديمها.',
+               'Insurance and contract claims: from importing them from SOFTECH to printing and submitting.'),
     'title': T('مطالبات التأمين', 'Insurance claims'),
     'summary': T(
         'تجهيز مطالبات جهات التأمين والتعاقدات من بيانات SOFTECH: تُستورد المطالبة (الموتالبة) بروشتاتها وأصنافها وتُجمَّد قيمها، '

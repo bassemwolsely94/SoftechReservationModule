@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'shortage', 'group': 'inventory', 'icon': '🚨',
+    'brief': T('سجّل نواقص الفرع (كتابة أو صوت أو صورة)، والنظام يطابقها بالأصناف للمشتريات.',
+               'Log the branch\'s shortages (typed, voice or photo); the system matches them to items for purchasing.'),
     'title': T('النواقص', 'Shortages'),
     'summary': T(
         'تسجيل الأصناف الناقصة في الفرع (يدوياً، بالصوت، بصورة لقائمة مكتوبة، أو بلصق قائمة) — النظام يطابق كل سطر مع صنف من الكتالوج ويطلب منك تأكيد المطابقة، '

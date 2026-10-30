@@ -7,6 +7,8 @@ _GRID = T('افتح مستند «شبكة توزيع» له جهة.', 'Open an "
 
 MODULE = {
     'key': 'commerce', 'group': 'finance', 'icon': '🧩',
+    'brief': T('عروض أسعار وفواتير وشبكات توزيع للمستشفيات خارج نقطة البيع.',
+               'Quotations, invoices and hospital allocation grids outside the POS.'),
     'title': T('المستندات التجارية', 'Commercial documents'),
     'summary': T(
         'إصدار مستندات تجارية خارج نقطة البيع: عروض أسعار، فواتير بيع لعميل تجزئة/توصيل، و«شبكات توزيع» للمستشفيات والجهات متعددة الفروع '

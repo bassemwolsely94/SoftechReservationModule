@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'analytics', 'group': 'analytics', 'icon': '📈',
+    'brief': T('تقارير المبيعات والأداء والتارجت والتحقيق لكل فرع.',
+               'Reports on sales, performance, targets and achievement per branch.'),
     'title': T('التحليلات والأهداف', 'Analytics & targets'),
     'summary': T(
         'تقارير المبيعات وأداء الموظفين والحجوزات والتحويلات من فواتير SOFTECH، والأهداف البيعية ومتابعة تحقيقها لكل فرع (لوحة «تارجت/تحقيق»)، '

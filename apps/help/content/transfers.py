@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'transfers', 'group': 'operations', 'icon': '🔀',
+    'brief': T('اطلب صنف من فرع تاني وتابع الشحنة لحد ما توصل وتتستلم.',
+               'Request an item from another branch and follow the shipment until it arrives and is received.'),
     'title': T('التحويلات بين الفروع', 'Inter-branch transfers'),
     'summary': T(
         'التحويل له نصفان مرتبطان:\n'

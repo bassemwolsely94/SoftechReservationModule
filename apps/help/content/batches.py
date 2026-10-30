@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'batches', 'group': 'inventory', 'icon': '🧪',
+    'brief': T('صلاحية المخزون الفعلي في كل فرع: القريب من الانتهاء وإنقاذه قبل ما يضيع.',
+               'Expiry of real stock in every branch: what is near expiry and rescuing it before it is lost.'),
     'title': T('الدفعات والصلاحية', 'Batches & expiry'),
     'summary': T(
         'متابعة تواريخ صلاحية المخزون الفعلي في كل الفروع والمخازن (بيانات يومية من SOFTECH) حتى لا نخسر أصنافاً بانتهاء صلاحيتها: '

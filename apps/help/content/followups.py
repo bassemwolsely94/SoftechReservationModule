@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'followups', 'group': 'operations', 'icon': '💊',
+    'brief': T('النظام بيحسب امتى دوا المريض المزمن هيخلص، ويديك مهمة تكلمه قبلها.',
+               'The system works out when a chronic patient\'s medicine runs out and gives you a task to call before then.'),
     'title': T('متابعة المرضى المزمنين', 'Chronic patient follow-up'),
     'summary': T(
         'النظام يحسب لكل مريض مزمن موعد نفاد دوائه من تاريخ آخر صرف ومعدل الاستخدام، ويُنشئ «مهمة متابعة» قبل الموعد '

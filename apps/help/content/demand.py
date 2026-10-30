@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'demand', 'group': 'operations', 'icon': '🔍',
+    'brief': T('أي طلب عميل ما اتلبّاش يتسجّل هنا، علشان نجيب الصنف ونرجع للعميل بدل ما نخسره.',
+               'Every unmet customer request is logged here, so we get the item and call the customer back instead of losing them.'),
     'title': T('الطلب الضائع (طلبات العملاء غير المُلبّاة)', 'Lost demand (unmet customer requests)'),
     'summary': T(
         'كل مرة يطلب عميل صنفاً ولا نستطيع صرفه (نفد، منخفض، غير مُخزَّن، أو استفسار سعر) نسجّله هنا بدل أن ينصرف بصمت. '

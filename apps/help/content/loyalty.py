@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'loyalty', 'group': 'customers', 'icon': '🏆',
+    'brief': T('نقاط العملاء وبرنامج الولاء والإحالات، ونقاط كل فرع.',
+               'Customer points, the loyalty program and referrals, and each branch\'s points.'),
     'title': T('النقاط والولاء والإحالات', 'Points, loyalty & referrals'),
     'summary': T(
         'رصيد نقاط العميل الأساسي يُحفظ في SOFTECH ويكتسبه من مشتريات قنوات النقدي والتوصيل (التعاقد والتأمين لا يكتسبان نقاطاً). '
