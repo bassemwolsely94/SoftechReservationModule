@@ -19,6 +19,7 @@ import HelpEditor from './HelpEditor'
 import HelpFeedback from './HelpFeedback'
 import { LearnedButton } from './Onboarding'
 import TourRunner from './Tour'
+import { HintsLayer, TourOffer } from './Hints'
 import AskBox from './AskBox'
 import { pick, label } from './text'
 
@@ -26,25 +27,26 @@ import { pick, label } from './text'
 export function useHelpShortcuts() {
   const toggle = useHelpStore((s) => s.toggle)
   const open = useHelpStore((s) => s.open)
+  const toggleHints = useHelpStore((s) => s.toggleHints)
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'F1') { e.preventDefault(); toggle() }
+      if (e.key === 'F1') { e.preventDefault(); e.shiftKey ? toggleHints() : toggle() }
     }
     const onOpen = (e) => open(e?.detail?.key || null, e?.detail?.tab || null)
     window.addEventListener('keydown', onKey)
     window.addEventListener('help:open', onOpen)
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('help:open', onOpen) }
-  }, [toggle, open])
+  }, [toggle, open, toggleHints])
 }
 
 export default function HelpPanel() {
   useHelpShortcuts()
   const isOpen = useHelpStore((s) => s.isOpen)
-  return <>{isOpen && <PanelBody />}<TourRunner /></>
+  return <>{isOpen && <PanelBody />}<TourRunner /><HintsLayer /><TourOffer /></>
 }
 
 function PanelBody() {
-  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney } = useHelpStore()
+  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney, hints, toggleHints } = useHelpStore()
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -175,6 +177,14 @@ function PanelBody() {
                 🧭 {pick(j.title, lang)}
               </button>
             ))}
+            {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
+              <button type="button" onClick={() => { toggleHints(); close() }} title="Shift+F1" data-tour="general-help-center-panel-hints"
+                      className={`text-xs rounded-lg px-3 py-1.5 border ${hints
+                        ? 'bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
+                        : 'border-line text-content hover:bg-surface-2'}`}>
+                💡 {hints ? (lang === 'en' ? 'Hints off' : 'إيقاف التلميحات') : (lang === 'en' ? 'Button hints' : 'تلميحات الأزرار')}
+              </button>
+            )}
             {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>

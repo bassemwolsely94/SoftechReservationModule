@@ -127,6 +127,20 @@ must not get wrong → add a quiz question.
   check; commerce quotation, hospital grid.
 - `/help/manual` sits outside `Layout` (no `HelpPanel`), so it mounts `TourRunner` itself (`no-print`).
 
+### Button hints + first-visit offer (built 2026-10-30, batch 8 — `frontend/src/help/Hints.jsx`)
+
+- **«💡 تلميحات الأزرار»** (help-panel footer, or **Shift+F1** anywhere): every element of the current
+  screen that has a tour step (the screen's `tour`, plus its module's journey steps on this screen;
+  the screen's own step wins) gets a dashed outline — amber when the step has a `warn`. Hover or focus
+  shows a small card (label, text, «متى؟», ⚠); it never takes clicks. A bar «💡 … — N عنصر مشروح هنا»
+  with «إيقاف ✕» stays while it is on. Off during a tour. Same text as the tours — nothing new to write.
+- **«جديد هنا؟ 👆 اعرض لي»**: a small chip (no modal), 1.5 s after arriving on a screen that has a tour
+  whose current help version the user has neither read (`seen`) nor been offered (`offered`). Shown
+  once per screen version; ✕ or leaving the screen hides it.
+- State in `helpStore` (persisted per browser): `hints`, `offered`. The hints fetch uses
+  `screens/<key>/?log=0`, so it does not count as "help opened" in the trainers' report.
+- Mounted by `HelpPanel` next to `TourRunner`, so both shells (desktop + `/m/`) get it.
+
 ## «اسأل النظام» (built 2026-10-10)
 
 - Type a question in the panel / help-center search box → «💬 اسأل النظام» (one click, never while
@@ -223,6 +237,6 @@ as they appear on screen («…»).
 
 - ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
 - Batch 7: enrich the remaining thin steps (no «label» / «متى؟») in finished modules — most in purchasing.
-- Batch 8: hints mode (hover / focus card on every anchored button from the same tour text) +
-  a once-per-screen «جديد هنا؟ اعرض لي» chip; anchor the main buttons that have none.
+- ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
+  anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
 - Batch 9: role product tour «جولة في النظام» across modules, from `/help` and onboarding.
