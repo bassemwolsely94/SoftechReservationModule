@@ -26,6 +26,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from . import pricing
@@ -39,7 +40,7 @@ class WriterDisabled(RuntimeError):
 
 
 def writer_enabled():
-    return bool(getattr(settings, 'INVOICE_WRITER_ENABLED', False))
+    return writer_allowed('INVOICE_WRITER_ENABLED')
 
 
 def _write_charset():

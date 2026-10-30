@@ -610,6 +610,7 @@ SCREENS = [
               'On the phone: turn on "Browser notifications" to get alerts even when the app is closed.'),
         ],
         'tips': [
+            T('الإشعارات المقروءة بتتمسح بعد ٣٠ يوم وغير المقروءة بعد ٩٠ يوم (الإعلانات الداخلية مش بتتمسح). المدير يقدر يقفل نوع إشعار أو يحدد أدواره من إعداد notification_routing.', 'Read notifications are deleted after 30 days and unread ones after 90 (internal announcements are kept). An admin can switch a notification type off or limit it to roles with the notification_routing setting.'),
             T('«التأجيل» يخفي الإشعار ساعة ثم يعيده — مفيد لما تحتاج تتصرف لاحقاً ولا تريد أن تنساه.',
               '"Snooze" hides the notification for an hour then brings it back — handy when you will act later and don\'t want to forget.'),
             T('لو رفضت إذن الإشعارات في المتصفح، فعّله من إعدادات المتصفح نفسه ثم ارجع هنا.',
@@ -689,7 +690,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('مدة حفظ الإشعارات والتحكم في توجيهها', 'Notification retention and routing'),
     },
     {
         'key': 'general.announcements',

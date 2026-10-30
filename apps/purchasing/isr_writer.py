@@ -30,6 +30,7 @@ import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.purchasing')
@@ -47,7 +48,7 @@ class WriterDisabled(RuntimeError):
 
 
 def writer_enabled() -> bool:
-    return bool(getattr(settings, 'ISR_WRITER_ENABLED', False))
+    return writer_allowed('ISR_WRITER_ENABLED')
 
 
 def auto_approve_enabled() -> bool:

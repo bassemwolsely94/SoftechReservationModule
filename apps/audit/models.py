@@ -363,3 +363,29 @@ def _get_ip(request):
         return client_ip(request)
     except Exception:
         return None
+
+
+class ScreenView(models.Model):
+    """P-57 usage telemetry: one row per screen a staff member opens.
+
+    `route` is the route PATTERN (/transits/:id), never the raw URL — no ids, no
+    query strings, no search text, no customer identifiers. `tab` is the page's
+    useHelpTab value where it has tabs. Kept 12 months (apps.sync.maintenance).
+    Staff are told in-app (post_usage_notice) that this is recorded and may be used
+    in evaluation together with outcome measures — never on usage alone."""
+    staff  = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='screen_views')
+    role   = models.CharField(max_length=20)
+    branch = models.ForeignKey('branches.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='+')
+    route  = models.CharField(max_length=200, db_index=True)
+    tab    = models.CharField(max_length=60, blank=True)
+    at     = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-at']
+        indexes = [models.Index(fields=['staff', '-at'])]
+        verbose_name = 'فتح شاشة'
+        verbose_name_plural = 'استخدام الشاشات'
+
+    def __str__(self):
+        return f'{self.staff_id} {self.route} {self.at:%Y-%m-%d %H:%M}'

@@ -138,7 +138,7 @@ import FinanceHubPage from './pages/FinanceHubPage'
 import FinanceDashboardPage from './pages/FinanceDashboardPage'
 import ChartOfAccountsPage from './pages/ChartOfAccountsPage'
 import ProfitLossPage from './pages/ProfitLossPage'
-import CashFlowPage from './pages/CashFlowPage'
+import CashFlowRetired from './pages/CashFlowRetired'   // P-43 — CashFlowPage.jsx kept, not routed
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
 import FinanceSchemaPage from './pages/FinanceSchemaPage'
 import ProductCatalogPage from './pages/ProductCatalogPage'
@@ -486,7 +486,8 @@ export default function App() {
               <Route path="dashboard" element={<FinanceDashboardPage />} />
               <Route path="coa"       element={<ChartOfAccountsPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
-              <Route path="cashflow"  element={<CashFlowPage />} />
+              {/* P-43: cash flow retired (unused; replaced by the planned 13-week cash view). */}
+              <Route path="cashflow"  element={<CashFlowRetired />} />
               <Route path="expenses"  element={<ExpenseAnalyticsPage />} />
               <Route path="schema"    element={<FinanceSchemaPage />} />
             </Route>

@@ -642,11 +642,27 @@ SCREENS = [
             T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة السيرفر.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
             T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة الخادم.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
         ],
-        'tips': [T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.'),
+        'tips': [
+            T('«🔐 مفاتيح الكتابة في SOFTECH»: كل مفتاح كتابة وقيمته في الإعدادات وهل بيكتب فعلاً. سيرفر واحد بس (الإنتاج، WRITER_INSTANCE=True) هو اللي يكتب؛ أي سيرفر تاني مقفول حتى لو المفتاح شغال — علشان مفيش مستند يترحّل مرتين. السيرفر مش بيشتغل لو مفتاح متكرر في ملف .env.',
+              '"🔐 SOFTECH writer switches": every writer switch, its setting and whether it really writes. Only one server (production, WRITER_INSTANCE=True) writes; any other server is locked even with the switch on — so no document is ever posted twice. The server refuses to start if a key is repeated in the .env file.'),
+            T('مزامنة شغالة أكتر من ساعة بتتعلّم «فشلت» تلقائياً (العملية وقفت)، ولو نفس المزامنة فشلت ٣ مرات ورا بعض المدير بيوصله إشعار واحد في اليوم. أي انقطاع في الاتصال بيتعاد مرة واحدة قبل ما المزامنة تفشل.',
+              'A sync still "running" after an hour is marked "failed" automatically (the process died), and when the same sync fails 3 times in a row admins get one notification a day. A dropped connection is retried once before a sync fails.'),
+            T('«🐢 أبطأ الطلبات»: أبطأ ١٠ شاشات/طلبات في آخر ١٤ يوم (أي طلب أبطأ من ثانية بيتسجّل). نحسّن بس اللي بيظهر هنا.',
+              '"🐢 Slowest requests": the 10 slowest endpoints over the last 14 days (any request slower than one second is recorded). Only what shows here gets optimised.'),
+            T('كل يوم ٤:٤٥ الصبح النظام بينضّف الجداول الكبيرة: بيسيب آخر ١٠ تشغيلات للمحرك + آخر تشغيل كل شهر، الإشعارات المقروءة بعد ٣٠ يوم وغير المقروءة بعد ٩٠، وأحداث السنترال بعد ٩٠ يوم. سجل المراجعة الخاص بالفلوس وSOFTECH والاعتمادات مش بيتمسح أبداً.',
+              'Every day at 04:45 the system cleans the large tables: it keeps the last 10 engine runs + the last run of each month, read notifications 30 days and unread 90, PBX events 90 days. Audit entries about money, SOFTECH and approvals are never deleted.'),T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.'),
                  T('المزامنة قراءة فقط من SOFTECH إلى النظام؛ لا تكتب أي شيء في SOFTECH.', 'Sync only reads from SOFTECH into the system; it writes nothing to SOFTECH.'),
                  T('«حمل SOFTECH» يعرض كم مرة اتصلنا بالسيرفر وكم استعلاماً وصفاً سحبنا وكم استغرق — حسب المهمة أو الكود أو السيرفر. الأثقل في أول الجدول؛ الأرقام تُحفظ كل دقيقة تقريباً.',
                    '"SOFTECH load" shows how many times we logged in to the server, how many queries and rows we pulled and how long it took — by job, code or server. The heaviest come first; figures are saved about once a minute.')],
         'tour': [
+            {'target': 'admin-sync-writer-switches', 'label': T('🔐 مفاتيح الكتابة في SOFTECH', '🔐 SOFTECH writer switches'),
+             'text': T('هل السيرفر ده هو اللي بيكتب، وكل مفتاح: في الإعدادات وفعلياً.', 'Whether this server is the writer, and every switch: in settings and in effect.'),
+             'when': T('يوم التشغيل وبعد أي تغيير في الإعدادات — راجعه مع جدول المفاتيح المعتمد.', 'At go-live and after any settings change — check it against the signed-off switch table.'),
+             'open_hint': T('للمدير بس.', 'Admins only.')},
+            {'target': 'admin-sync-slow-requests', 'label': T('🐢 أبطأ الطلبات', '🐢 Slowest requests'),
+             'text': T('أبطأ ١٠ طلبات في آخر ١٤ يوم مرتبة بزمن ٩٥٪ من المرات.', 'The 10 slowest requests over the last 14 days, ranked by their 95th-percentile time.'),
+             'when': T('لما حد يشتكي إن شاشة بطيئة — شوف هي هنا ولا لأ قبل أي تعديل.', 'When someone says a screen is slow — check whether it shows here before changing anything.'),
+             'open_hint': T('للمدير بس؛ بيظهر بعد ما يتسجّل أول طلب بطيء.', 'Admins only; shows once a slow request has been recorded.')},
             {'target': 'admin-sync-status', 'label': T('حالة المزامنة', 'Sync status'),
              'text': T('آخر مزامنة: وقتها، عدد السجلات والمدة. أخضر نجحت، أصفر جارية، أحمر فشلت والسبب مكتوب تحت.',
                        'Last sync: time, records and duration. Green succeeded, yellow running, red failed with the reason below.'),
@@ -707,7 +723,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('مفاتيح الكتابة في SOFTECH، تنظيف يومي، تنبيه الفشل المتكرر، وأبطأ الطلبات', 'SOFTECH writer switches, daily clean-up, repeated-failure alert and slowest requests'),
     },
     {
         'key': 'admin.audit',
@@ -716,10 +732,15 @@ SCREENS = [
         'summary': T('تتبع كل إجراء مهم وكشف الأنماط المشبوهة لحماية العمليات.', 'Track every important action and detect suspicious patterns to protect operations.'),
         'audience': T('المدير والمشرف ومدير الجودة.', 'Admins, supervisors and the quality manager.'),
         'tabs': [
+            {'key': 'usage', 'title': T('استخدام الشاشات', 'Screen usage'), 'body': T('مين بيفتح أنهي شاشة: حسب الشاشة أو القسم (مستخدمين الأسبوع) أو الموظف، وقائمة الشاشات اللي محدش فتحها من ٦٠ يوم. بيتسجّل اسم الشاشة بس — من غير بيانات العملاء أو اللي اتكتب. التقرير الفردي للمدير والموارد البشرية بس، ومدير الفرع بيشوف فرعه بس. الاستخدام لوحده مش حكم على أداء حد — اقراه جنب نتائج الشغل. البيانات بتتحفظ ١٢ شهر.', 'Who opens which screen: by screen, by module (weekly active users) or by staff member, plus the screens nobody opened in 60 days. Only the screen name is recorded — no customer data or what was typed. The per-staff view is for admins and HR only; a branch manager sees their own branch only. Usage alone is never a verdict on anyone — read it next to work outcomes. Kept 12 months.')},
             {'key': 'flags', 'title': T('الإشارات المشبوهة', 'Suspicious flags'), 'body': T('أنماط يكشفها النظام (إلغاءات متكررة، تعديلات متكررة، عدم تطابق ERP، نشاط خارج الدوام) بدرجة خطورتها. «مراجعة» ← القرار: راجعت، تجاهل، أو تصعيد مع ملاحظة. «فحص الآن» لتشغيل الكشف.', 'Patterns the system detects (repeated cancellations, repeated edits, ERP mismatch, out-of-hours activity) by severity. "Review" → decision: reviewed, ignore or escalate with a note. "Scan now" runs detection.')},
             {'key': 'logs', 'title': T('سجل الإجراءات', 'Action log'), 'body': T('من فعل ماذا ومتى ومن أي عنوان IP، مع التغييرات قبل وبعد — صفِّ بنوع الإجراء (إنشاء حجوزات، تغيير حالة، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة…).', 'Who did what, when and from which IP, with before/after changes — filter by action (reservations created, status changes, transfer approvals, logins, failed attempts, sync…).')},
         ],
         'tour': [
+            {'target': 'admin-audit-usage', 'label': T('📈 استخدام الشاشات', '📈 Screen usage'),
+             'text': T('الشاشات · الأقسام · الموظفين، مع الفترة.', 'Screens · modules · staff, with the period.'),
+             'when': T('قبل ما تقرر تطوّر أو تشيل شاشة، أو مع تقييم موظف جنب نتايجه.', 'Before deciding to improve or remove a screen, or in a staff review next to their results.'),
+             'open_hint': T('افتح تبويب «📈 استخدام الشاشات».', 'Open the "📈 Screen usage" tab.')},
             {'target': 'admin-audit-tabs', 'label': T('⚠️ الإشارات المشبوهة · 📋 سجل الإجراءات', '⚠️ Suspicious flags · 📋 Action log'),
              'text': T('الإشارات = أنماط النظام كشفها. السجل = كل إجراء مهم بالتفصيل.', 'Flags = patterns the system detected. The log = every important action in detail.'),
              'more': T('• «⚠️ الإشارات المشبوهة»: أنماط النظام كشفها وتحتاج حد يراجعها.\n'
@@ -793,6 +814,6 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('تبويب جديد: استخدام الشاشات', 'New tab: screen usage'),
     },
 ]

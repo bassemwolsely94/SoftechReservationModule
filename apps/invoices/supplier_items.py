@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 from .writer import _q1, _sql_literal, _run_batch_lastrow
 
@@ -200,4 +201,4 @@ def open_conn():
 
 
 def write_enabled() -> bool:
-    return bool(getattr(settings, 'INVOICE_SUPPLIER_ITEM_WRITE_ENABLED', False))
+    return writer_allowed('INVOICE_SUPPLIER_ITEM_WRITE_ENABLED')

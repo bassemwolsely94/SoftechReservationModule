@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reconciliationApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1463,6 +1464,10 @@ export default function ReconciliationPage() {
           ))}
         </div>
         <span className="text-xs text-gray-400 mr-auto">الاعتماد يُنشئ ربطًا داخليًا — الكتابة في SOFTECH (سداد من الرئيسي) خطوة منفصلة قابلة للعكس</span>
+      </div>
+
+      <div data-tour="finance-reconciliation-freshness">
+        <DataFreshnessBar domains={['ap_reconciliation']} />
       </div>
 
       <FilterBar key={partyType} partyType={partyType} filters={filters}

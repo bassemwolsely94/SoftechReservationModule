@@ -1104,8 +1104,11 @@ is down during the window and that the new address is `https://elrezeikyapp.dawa
 
 > The order exists to make a double post to SOFTECH impossible. Don't reorder.
 
-**11.1 Freeze the office writers.** In the office `.env` set `SOFTECH_READ_ONLY=True`, restart
-the office web + scheduler. From now on the office machine cannot write to SOFTECH.
+**11.1 Freeze the office writers.** In the office `.env` set `SOFTECH_READ_ONLY=True` and
+`WRITER_INSTANCE=False` (P-54), remove any duplicated key (the processes now refuse to start
+on one), restart the office web + scheduler. The boot log must read
+`WRITER_INSTANCE=False … (not the writer instance — none of them can write)`. From now on the
+office machine cannot write to SOFTECH — two independent locks.
 
 **11.2 Drain what's in flight — checked on the office instance:**
 - `/api/pos-orders/queue-status/` → queued / push_failed must be **0**. If not, temporarily
@@ -1143,14 +1146,17 @@ journalctl -u elrezeiky-scheduler -f          # watch the jobs register and the 
 ```
 Watch one full sync cycle succeed (sales, stock, in-transit, expiry, …) on the freshness bar.
 
-**11.6 Turn SOFTECH writes back on — one writer at a time.** In the VPS `.env`:
-1. `SOFTECH_READ_ONLY=False`
+**11.6 Turn SOFTECH writes back on — one writer at a time.** First the kill-switch test (P-54):
+with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the VPS `.env`:
+1. `SOFTECH_READ_ONLY=False` and `WRITER_INSTANCE=True` (this server only — never the office)
 2. Set each `*_ENABLED` flag to its **office value** from your inventory (1.2) — no more than the
    office had. Recommended order, verifying each with a real transaction and a SOFTECH read-back
    before the next: POS writer → POS cancel log → discount/pricing → ISR (+auto-approve) →
    coverage → invoices → A/P (still OFF — it was gated OFF in the office) → insurance → shortage →
    loyalty/others.
 3. `sudo systemctl restart elrezeiky-web elrezeiky-scheduler` after each change.
+4. Check `/sync` → «🔐 مفاتيح الكتابة في SOFTECH» against the signed-off switch table
+   (docs/product-review/06_SPEC_P-54 appendix — value, initials, date for every flag).
 
 **11.7 External channels.** Put the WhatsApp / Meta / AMI / Issabel / VAPID values into the VPS
 `.env`, restart, then:
@@ -1513,6 +1519,8 @@ echo "== migrations to apply:"; $U $PY manage.py migrate --plan | tail -25
 read -p "Apply these migrations and restart production? [y/N] " a
 if [[ $a != y ]]; then echo "Stopped. Code is pulled but NOT live. Undo: sudo -u elrezeiky git checkout $OLD"; exit 1; fi
 $U $PY manage.py migrate
+# P-56: EVERY process restarts after migrate (below). A process started before a migration
+# inserts with the old column set — that caused the 2026-10 schema-mismatch sync failures.
 echo "== frontend";           (cd frontend && $U npm ci --silent && $U npm run build)
 $U $PY manage.py collectstatic --noinput
 $U $PY manage.py check --deploy

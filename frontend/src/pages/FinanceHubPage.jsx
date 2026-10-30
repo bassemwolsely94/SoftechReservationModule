@@ -5,7 +5,7 @@
  * Tabs:
  *   Dashboard   /finance/dashboard
  *   P&L         /finance/pnl
- *   Cash Flow   /finance/cashflow
+ *   Cash Flow   /finance/cashflow   (retired from the tabs — P-43; the URL shows a note)
  *   Expenses    /finance/expenses
  *   COA         /finance/coa
  *   Schema      /finance/schema   (admin only)
@@ -13,11 +13,15 @@
 
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
+import DataFreshnessBar from '../components/DataFreshnessBar'
+import { financeApi } from '../api/client'
+
+// P-43: every finance tab shows how old the mirrored numbers are.
+const FINANCE_DOMAINS = ['finance_pl', 'finance_expenses', 'finance_journal']
 
 const TABS = [
   { to: '/finance/dashboard', label: 'لوحة القيادة',     icon: '💹' },
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
-  { to: '/finance/cashflow',  label: 'التدفق النقدي',    icon: '🌊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
   { to: '/finance/coa',       label: 'دليل الحسابات',    icon: '🗂️' },
   { to: '/finance/schema',    label: 'اكتشاف المخطط',   icon: '🔍', adminOnly: true },
@@ -68,6 +72,10 @@ export default function FinanceHubPage() {
 
       {/* ── Tab content ─────────────────────────────────────────────────────── */}
       <div className="p-6">
+        <div data-tour="finance-freshness">
+          <DataFreshnessBar domains={FINANCE_DOMAINS} canEdit={isAdmin}
+            onRefresh={() => financeApi.triggerSync({ months: 1 })} />
+        </div>
         <Outlet />
       </div>
     </div>

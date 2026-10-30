@@ -43,6 +43,7 @@ import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.purchasing')
@@ -80,7 +81,7 @@ MAXQTY_FLOOR = 1.0
 
 def _refresh_maxqty() -> bool:
     """True when we are allowed to write maxnowqty (settings.COVERAGE_WRITE_MAXQTY)."""
-    return bool(getattr(settings, 'COVERAGE_WRITE_MAXQTY', False))
+    return writer_allowed('COVERAGE_WRITE_MAXQTY')
 
 
 def _expected_maxqty(rate, months) -> float:
@@ -252,7 +253,7 @@ class WriterDisabled(RuntimeError):
 
 
 def writer_enabled() -> bool:
-    return bool(getattr(settings, 'SALES_RATE_WRITER_ENABLED', False))
+    return writer_allowed('SALES_RATE_WRITER_ENABLED')
 
 
 def _service_usercode() -> str:

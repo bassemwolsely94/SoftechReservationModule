@@ -287,9 +287,13 @@ SCREENS = [
         'summary': T('مؤشرات الفترة المختارة: صافي الإيرادات، إجمالي الربح وهامشه، صافي الربح، صافي المشتريات، المصروفات، صافي التدفق النقدي، قيمة المخزون، المرتجعات، الاتجاه الشهري، وتفصيل الفروع.',
                      'KPIs for the chosen period: net revenue, gross profit and margin, net profit, net purchases, expenses, net cash flow, stock value, returns, the monthly trend and a branch breakdown.'),
         'audience': T('الإدارة والمالية والمشتريات والجودة.', 'Management, finance, purchasing and quality.'),
-        'tips': [_SYNC, T('«بيانات غير مكتملة» تعني أن بعض المصادر لم تُزامن بعد لهذه الفترة.', '"Incomplete data" means some sources are not synced yet for this period.')],
+        'tips': [
+            T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC, T('«بيانات غير مكتملة» تعني أن بعض المصادر لم تُزامن بعد لهذه الفترة.', '"Incomplete data" means some sources are not synced yet for this period.')],
         'related': ['finance.pnl', 'finance.cashflow'],
         'tour': [
+            {'target': 'finance-freshness', 'label': T('عمر البيانات المالية', 'Finance data age'),
+             'text': T('إمتى اتحدّثت الأرباح والمصروفات والقيود آخر مرة.', 'When P&L, expenses and the journal were last refreshed.'),
+             'when': T('قبل ما تاخد أي رقم من الشاشة دي.', 'Before taking any figure from this screen.')},
             {'target': 'finance-dashboard-tabs',
              'label': T('تبويبات الذكاء المالي', 'Finance tabs'),
              'text': T('تنقّل بين لوحة القيادة والأرباح والخسائر والتدفق النقدي والمصروفات ودليل الحسابات.',
@@ -361,7 +365,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
         'key': 'finance.pnl',
@@ -370,8 +374,12 @@ SCREENS = [
         'summary': T('الإيرادات (المبيعات − المرتجعات) ← تكلفة البضاعة (المشتريات − مرتجعاتها) ← إجمالي الربح ← المصروفات التشغيلية (رواتب، إيجارات، مرافق، أخرى) ← الربح التشغيلي وصافي الربح، موحّدة أو لفرع.',
                      'Revenue (sales − returns) → cost of goods (purchases − returns) → gross profit → operating expenses (salaries, rent, utilities, other) → operating and net profit, consolidated or per branch.'),
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
-        'tips': [_SYNC],
+        'tips': [
+            T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC],
         'tour': [
+            {'target': 'finance-freshness', 'label': T('عمر البيانات المالية', 'Finance data age'),
+             'text': T('إمتى اتحدّثت الأرباح والمصروفات والقيود آخر مرة.', 'When P&L, expenses and the journal were last refreshed.'),
+             'when': T('قبل ما تاخد أي رقم من الشاشة دي.', 'Before taking any figure from this screen.')},
             {'target': 'finance-pnl-period',
              'label': T('السنة والشهر', 'Year and month'),
              'text': T('اختر الشهر الذي تريد قائمته.', 'Pick the month you want the statement for.'),
@@ -418,16 +426,18 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
         'key': 'finance.cashflow',
         'routes': ['/finance/cashflow'],
         'title': T('التدفقات النقدية', 'Cash flows'),
-        'summary': T('إجمالي الداخل والخارج والصافي حسب طريقة الدفع (نقدي، شيك، تحويل بنكي، بطاقة، آجل).', 'Total inflow, outflow and net by payment method (cash, cheque, bank transfer, card, credit).'),
+        'summary': T('الصفحة دي اتشالت من تبويبات المالية (مكانتش مستخدمة وبياناتها قديمة) وهتتبدّل بعرض النقدية لـ ١٣ أسبوع. الرابط القديم بيعرض ملاحظة بس.', 'This page was removed from the finance tabs (it was unused and its data was old) and will be replaced by the 13-week cash view. The old link shows a note only.'),
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
         'tips': [_SYNC],
         'tour': [
+            {'target': 'finance-cashflow-retired', 'label': T('صفحة التدفق النقدي اتشالت', 'Cash-flow page retired'),
+             'text': T('استخدم الأرباح والخسائر والمصروفات لحد ما عرض الـ ١٣ أسبوع يجهز.', 'Use P&L and expenses until the 13-week view is ready.')},
             {'target': 'finance-cashflow-period',
              'label': T('السنة والشهر', 'Year and month'),
              'text': T('اختر شهر حركات الخزينة.', 'Pick the month of treasury movements.'),
@@ -468,7 +478,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('الصفحة اتشالت — هتتبدّل بعرض ١٣ أسبوع', 'Page retired — to be replaced by the 13-week view'),
     },
     {
         'key': 'finance.expenses',
@@ -477,8 +487,12 @@ SCREENS = [
         'summary': T('المصروفات حسب الفئة (رواتب، إيجارات، مرافق، صيانة، توصيل، تسويق، فاقد، منتهي الصلاحية…) والتصنيف الفرعي والفرع ومركز التكلفة، بفترة شهر/سنة أو نطاق تاريخ. اضغط فئة لتصفية التفاصيل.',
                      'Expenses by category (salaries, rent, utilities, maintenance, delivery, marketing, shrinkage, expired…), sub-category, branch and cost center, by month/year or a date range. Click a category to filter the details.'),
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
-        'tips': [_SYNC],
+        'tips': [
+            T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC],
         'tour': [
+            {'target': 'finance-freshness', 'label': T('عمر البيانات المالية', 'Finance data age'),
+             'text': T('إمتى اتحدّثت الأرباح والمصروفات والقيود آخر مرة.', 'When P&L, expenses and the journal were last refreshed.'),
+             'when': T('قبل ما تاخد أي رقم من الشاشة دي.', 'Before taking any figure from this screen.')},
             {'target': 'finance-expenses-mode',
              'label': T('شهر / سنة · نطاق تاريخ', 'Month / year · Date range'),
              'text': T('اختر طريقة تحديد الفترة: شهر بعينه أو من تاريخ إلى تاريخ.', 'Choose how to set the period: one month, or from a date to a date.'),
@@ -548,7 +562,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
     },
     {
         'key': 'finance.coa',
@@ -825,6 +839,7 @@ SCREENS = [
             T('المالية: «تأكيد» بعد التحقق، أو «اعتراض» بسبب.', 'Finance: "Confirm" after checking, or "Dispute" with a reason.'),
         ],
         'tips': [
+            T('الصفحة دي مخفية من القائمة لحد ما المالية تحتاجها — الرابط لسه شغال.', 'This page is hidden from the menu until finance needs it — the link still works.'),
             T('تعديل الدفعة مسموح وهي «انتظار» أو «متنازع عليه» فقط؛ بعد التأكيد أو التسوية تُقفل، والحذف للدفعة المنتظرة فقط.',
               'A payment can be edited only while "pending" or "disputed"; once confirmed or reconciled it is closed, and only a pending payment can be deleted.'),
         ],
@@ -931,7 +946,7 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('مخفية من القائمة', 'Hidden from the menu'),
     },
     {
         'key': 'finance.payment_audit',
@@ -1058,10 +1073,13 @@ SCREENS = [
         ],
         'related': ['invoices.main', 'replacement.cases'],
         'tips': [
+            T('الشريط فوق بيقول آخر تشغيل للتسوية إمتى (بيشتغل كل يوم الصبح بعد سحب السداد من SOFTECH). لو أصفر يبقى المقترحات ممكن تكون قديمة.', 'The bar at the top says when reconciliation last ran (every morning after the payments are pulled from SOFTECH). Amber means the proposals may be out of date.'),
             T('«🖊 كتابة في SOFTECH» خطوة منفصلة بعد الاعتماد، للمدير فقط. وهي معطّلة بإعداد في السيرفر: تعرض «تشغيل تجريبي» ولا تكتب شيئاً.',
               '"🖊 Write to SOFTECH" is a separate step after approval, admins only. While a server setting keeps it off it shows a "dry run" and writes nothing.'),
         ],
         'tour': [
+            {'target': 'finance-reconciliation-freshness', 'label': T('آخر تشغيل للتسوية', 'Last reconciliation run'),
+             'text': T('إمتى اتحسبت المقترحات آخر مرة.', 'When the proposals were last computed.')},
             {'target': 'finance-reconciliation-party-type',
              'label': T('موردون · عملاء', 'Suppliers · Customers'),
              'text': T('اختر نوع الطرف: سداد فواتير الموردين أو مقبوضات العملاء.', 'Pick the party type: supplier invoice payments or customer receipts.'),
@@ -1218,6 +1236,6 @@ SCREENS = [
         ],
         'updated': '2026-10-30',
     
-        'change_note': _NOTE,
+        'change_note': T('شريط آخر تشغيل للتسوية', 'Last-run bar'),
     },
 ]

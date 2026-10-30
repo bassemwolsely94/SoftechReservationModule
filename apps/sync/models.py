@@ -17,6 +17,12 @@ class SyncRun(models.Model):
     # {'phase': 'items', 'message': '...', 'done': int, 'total': int}. Optional —
     # scheduled lanes leave it empty.
     progress = models.JSONField(default=dict, blank=True)
+    # Which job produced the run ('fast' | 'slow' | 'full' | 'items' | 'retention' |
+    # 'morning_chain' | …; blank on rows written before P-56) and whether a person
+    # started it from /sync. A scheduled lane skips its tick while a manual run of
+    # the same lane is in flight.
+    lane = models.CharField(max_length=30, blank=True, default='', db_index=True)
+    manual = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-started_at']
@@ -126,3 +132,22 @@ class SoftechLoadStat(models.Model):
 
     def __str__(self):
         return f'{self.hour:%Y-%m-%d %H}h {self.scope} {self.caller}'
+
+
+class SlowRequest(models.Model):
+    """One API request slower than settings.SLOW_REQUEST_MS (default 1000), written by
+    apps.sync.middleware.SlowRequestMiddleware. `path` is the URL ROUTE pattern
+    (e.g. api/transits/<int:pk>/), never the raw URL with ids or query strings.
+    Kept 30 days (apps.sync.maintenance). Feeds the /sync slow-endpoint report (P-56)."""
+    at          = models.DateTimeField(auto_now_add=True, db_index=True)
+    path        = models.CharField(max_length=255, db_index=True)
+    method      = models.CharField(max_length=8)
+    status_code = models.PositiveSmallIntegerField()
+    duration_ms = models.PositiveIntegerField()
+    role        = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ['-at']
+
+    def __str__(self):
+        return f'{self.method} {self.path} {self.duration_ms}ms'

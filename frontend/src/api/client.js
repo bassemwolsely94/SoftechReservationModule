@@ -334,6 +334,8 @@ export const syncApi = {
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
   softechLoad:  (hours = 24) => api.get('/sync/softech-load/', { params: { hours } }),
+  slowRequests: (days = 14) => api.get('/sync/slow-requests/', { params: { days } }),   // P-56
+  writerSwitches: () => api.get('/sync/writer-switches/'),                              // P-54
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
   // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').
@@ -1818,6 +1820,10 @@ export const callCenterApi = {
 // ── Audit & Abuse Flags ───────────────────────────────────────────────────────
 
 export const auditApi = {
+  // P-57 screen-usage telemetry — the beacon every page sends + the usage report
+  screenView: (data)      => api.post('/audit/screen-view/', data),
+  usage:      (params)    => api.get('/audit/usage/', { params }),
+
   // Audit logs (read-only)
   logs:      (params)     => api.get('/audit/logs/', { params }),
   logForObject: (model, id) => api.get('/audit/logs/for-object/', { params: { model, id } }),

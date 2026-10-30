@@ -43,6 +43,7 @@ import datetime
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from .models import Allocation
@@ -62,7 +63,7 @@ class ReconWriteIntegrityError(ReconWriteError):
 # ── settings gates ────────────────────────────────────────────────────────────
 
 def writer_enabled() -> bool:
-    return bool(getattr(settings, 'AP_RECONCILE_WRITER_ENABLED', False))
+    return writer_allowed('AP_RECONCILE_WRITER_ENABLED')
 
 
 def _update_patientdata() -> bool:

@@ -90,12 +90,12 @@ staff-development goals. It started on 2026-10-30.
 | P-58 EDA track-and-trace foundation (dormant) | **Approved — foundation, left unused** (owner 2026-10-30) | GS1 parse + PackCode/PackEvent on purchase and sale behind `TRACK_TRACE_ENABLED=False`; no EDA reporting until guideline 804/2025 is read | — | Guideline 804/2025; SOFTECH plans; 2D scanners | Spec written | Foundation yes, in principle; confirm with wave 0 |
 
 **Wave-0 specification status (2026-10-30):** written. Spec files:
-- [P-54](06_SPEC_P-54_cutover_single_writer.md)
-- [P-55](06_SPEC_P-55_transit_sync_and_alerts.md) — **Part A sync fix BUILT, owner-authorised; not committed**
-- [P-56](06_SPEC_P-56_retention_and_sync_health.md)
-- [P-57](06_SPEC_P-57_usage_telemetry.md)
-- [P-43](06_SPEC_P-43_finance_freshness.md)
-- [P-58](06_SPEC_P-58_track_and_trace_foundation.md)
+- [P-54](06_SPEC_P-54_cutover_single_writer.md) — **BUILT 2026-10-30 on owner go-ahead** (`config/writers.py` writer_allowed on all 24 gates, writer jobs unscheduled off-instance, startup guard in asgi/wsgi/runserver/run_scheduler, `/api/sync/writer-switches/` + /sync card). ⚠ Office `.env` has 11 duplicated keys — must be cleaned before its processes restart; office writers stop until `WRITER_INSTANCE=True` is set where writing is wanted
+- [P-55](06_SPEC_P-55_transit_sync_and_alerts.md) — Part A committed (ad89b6be); **Parts B–C BUILT 2026-10-30** (daily per-branch digest, `notification_routing`, 3-failures sync alert, notification retention). Clean-up run 2026-10-30: in transit ≥14 days 776 → **149**, `receipt_check_failed=0`
+- [P-56](06_SPEC_P-56_retention_and_sync_health.md) — **BUILT 2026-10-30** (retention job 04:45, change-only stock upsert, stale runs, lane retry, manual-run skip, morning chain, `customers/0030`, slow-request log + /sync card)
+- [P-57](06_SPEC_P-57_usage_telemetry.md) — **BUILT 2026-10-30** (ScreenView, beacon in both layouts, /audit «استخدام الشاشات», `post_usage_notice` to run at go-live)
+- [P-43](06_SPEC_P-43_finance_freshness.md) — **BUILT 2026-10-30** (nightly 02:15 finance sync, 4 freshness domains, cash flow retired, /payments hidden)
+- [P-58](06_SPEC_P-58_track_and_trace_foundation.md) — **BUILT dormant 2026-10-30** (`apps/catalog/gs1.py`, `apps/trace`, `/api/trace/parse|scan/`; `TRACK_TRACE_ENABLED=False`; no scan field on screens yet)
 
 **Owner process rule (2026-10-30):** go through all recommendations first; building and development start after all
 the discussions. Approved cards wait as "approved for specification" until the review is complete.

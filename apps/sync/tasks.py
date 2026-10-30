@@ -21,6 +21,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from django.utils import timezone
 
 from config.sybase import get_sybase_connection
+from config.writers import writer_allowed
 from apps.sync.sybase_queries import (
     QUERY_BRANCHES, QUERY_CATEGORIES, QUERY_ITEMS, QUERY_STOCK,
     QUERY_CUSTOMERS, QUERY_CUSTOMER_PHONES,
@@ -44,6 +45,56 @@ logger = logging.getLogger('elrezeiky.sync')
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+# jConnect / socket messages that mean "the session is gone", not "the data is bad".
+_CONNECTION_ERROR_MARKERS = (
+    'jz0c0', 'jz006', 'jz0t3', 'connection is already closed', 'connection reset',
+    'connection refused', 'broken pipe', 'socket closed', 'timed out', 'timeout',
+)
+
+
+def _is_connection_error(exc):
+    msg = str(exc).lower()
+    return any(m in msg for m in _CONNECTION_ERROR_MARKERS)
+
+
+class _LaneConnection:
+    """One SOFTECH connection for a sync lane, with ONE reconnect-and-retry per run
+    (P-56 §3; same rule as the transit receipt fix). A step that hits a dropped
+    session is re-run from the start on a fresh connection; a second failure fails
+    the lane. Steps only write after their full SELECT has been read, so a failed
+    read never leaves partial "zero" values behind. Other errors are not retried."""
+
+    def __init__(self):
+        self.retried = False
+        try:
+            self.conn = get_sybase_connection()
+        except Exception as exc:
+            if not _is_connection_error(exc):
+                raise
+            self.retried = True
+            logger.warning('[sync] SOFTECH connect failed (%s) — retrying once', exc)
+            self.conn = get_sybase_connection()
+
+    def run(self, step, *args, **kwargs):
+        try:
+            return step(self.conn, *args, **kwargs)
+        except Exception as exc:
+            if self.retried or not _is_connection_error(exc):
+                raise
+            self.retried = True
+            logger.warning('[sync] %s lost the SOFTECH connection (%s) — reconnecting once',
+                           getattr(step, '__name__', 'step'), exc)
+            self.close()
+            self.conn = get_sybase_connection()
+            return step(self.conn, *args, **kwargs)
+
+    def close(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+
 
 def _to_decimal(val):
     try:
@@ -80,27 +131,27 @@ def _aware(dt):
 
 # ── main entry point ──────────────────────────────────────────────────────────
 
-def run_full_sync(full_history=False):
+def run_full_sync(full_history=False, manual=False):
     """
-    Main sync entry point. Called by scheduler every 5 minutes.
+    Main sync entry point (manual trigger / initial backfill).
     Pass full_history=True for the initial backfill (90 days of sales).
     """
-    sync_run = SyncRun.objects.create(status='running')
+    sync_run = SyncRun.objects.create(status='running', lane='full', manual=manual)
     total = 0
     try:
-        conn = get_sybase_connection()
+        lc = _LaneConnection()
 
-        total += sync_branches(conn, sync_run)
-        total += sync_categories(conn, sync_run)
-        total += sync_items(conn, sync_run)
-        total += sync_item_barcodes(conn, sync_run)
-        total += sync_stock(conn, sync_run)
-        total += sync_customers(conn, sync_run)
-        total += sync_sales(conn, sync_run, full_history=full_history)
-        total += sync_users(conn, sync_run)
-        total += _maybe_sync_permissions(conn, sync_run)
+        total += lc.run(sync_branches, sync_run)
+        total += lc.run(sync_categories, sync_run)
+        total += lc.run(sync_items, sync_run)
+        total += lc.run(sync_item_barcodes, sync_run)
+        total += lc.run(sync_stock, sync_run)
+        total += lc.run(sync_customers, sync_run)
+        total += lc.run(sync_sales, sync_run, full_history=full_history)
+        total += lc.run(sync_users, sync_run)
+        total += lc.run(_maybe_sync_permissions, sync_run)
 
-        conn.close()
+        lc.close()
 
         sync_run.status = 'success'
         sync_run.records_synced = total
@@ -225,13 +276,13 @@ def _run_master_hooks():
         logger.warning('softech_points_sync failed (non-fatal): %s', loyalty_err)
 
 
-def run_fast_sync():
+def run_fast_sync(manual=False):
     """
     FAST lane (default every 5 min): fast-changing data only — stock + sales —
     plus the reactive stock hooks. branches is included because it's instant and
     keeps branch_map fresh so new-branch stock/sales rows resolve their FK.
     """
-    sync_run = SyncRun.objects.create(status='running')
+    sync_run = SyncRun.objects.create(status='running', lane='fast', manual=manual)
     total = 0
 
     def _p(step, phase, message):
@@ -241,14 +292,14 @@ def run_fast_sync():
 
     try:
         _p(0, 'connect', 'الاتصال بسيرفر SOFTECH…')
-        conn = get_sybase_connection()
+        lc = _LaneConnection()
         _p(1, 'branches', 'تحديث الفروع…')
-        total += sync_branches(conn, sync_run)
+        total += lc.run(sync_branches, sync_run)
         _p(2, 'stock', 'سحب أرصدة الفروع (stkbal)…')
-        total += sync_stock(conn, sync_run)
+        total += lc.run(sync_stock, sync_run)
         _p(3, 'sales', 'سحب حركات البيع (stktrans)…')
-        total += sync_sales(conn, sync_run, full_history=False)
-        conn.close()
+        total += lc.run(sync_sales, sync_run, full_history=False)
+        lc.close()
         sync_run.progress = {'phase': 'done', 'message': 'اكتملت مزامنة الأرصدة والمبيعات', 'step': 4, 'steps': 4}
 
         sync_run.status = 'success'
@@ -268,24 +319,24 @@ def run_fast_sync():
     return sync_run
 
 
-def run_slow_sync():
+def run_slow_sync(manual=False):
     """
     SLOW lane (default every 60 min): expensive, slow-changing master data —
     categories, items, barcodes, customers, users, permissions — plus the master
     post-hooks. This carries the heavy full-snapshot cost that used to run on
     every tick.
     """
-    sync_run = SyncRun.objects.create(status='running')
+    sync_run = SyncRun.objects.create(status='running', lane='slow', manual=manual)
     total = 0
     try:
-        conn = get_sybase_connection()
-        total += sync_categories(conn, sync_run)
-        total += sync_items(conn, sync_run)
-        total += sync_item_barcodes(conn, sync_run)
-        total += sync_customers(conn, sync_run)
-        total += sync_users(conn, sync_run)
-        total += _maybe_sync_permissions(conn, sync_run)
-        conn.close()
+        lc = _LaneConnection()
+        total += lc.run(sync_categories, sync_run)
+        total += lc.run(sync_items, sync_run)
+        total += lc.run(sync_item_barcodes, sync_run)
+        total += lc.run(sync_customers, sync_run)
+        total += lc.run(sync_users, sync_run)
+        total += lc.run(_maybe_sync_permissions, sync_run)
+        lc.close()
 
         sync_run.status = 'success'
         sync_run.records_synced = total
@@ -304,6 +355,30 @@ def run_slow_sync():
     return sync_run
 
 
+def _manual_run_in_flight(lane):
+    """A manual run of `lane` (or a manual full run, which covers every lane) that
+    started within the last hour and is still running."""
+    import datetime as _d
+    return SyncRun.objects.filter(
+        status='running', manual=True, lane__in=[lane, 'full'],
+        started_at__gte=timezone.now() - _d.timedelta(minutes=60),
+    ).exists()
+
+
+def _scheduled_fast_sync():
+    if _manual_run_in_flight('fast'):
+        logger.info('[sync] fast lane tick skipped — a manual run is in flight')
+        return None
+    return run_fast_sync()
+
+
+def _scheduled_slow_sync():
+    if _manual_run_in_flight('slow'):
+        logger.info('[sync] slow lane tick skipped — a manual run is in flight')
+        return None
+    return run_slow_sync()
+
+
 def run_items_sync(sync_run=None):
     """
     CATALOG lane (on-demand): refresh categories + items + barcodes ONLY — picks
@@ -319,7 +394,7 @@ def run_items_sync(sync_run=None):
     poll it); one is created when None.
     """
     if sync_run is None:
-        sync_run = SyncRun.objects.create(status='running')
+        sync_run = SyncRun.objects.create(status='running', lane='items', manual=True)
     total = 0
 
     def _p(phase, message, step):
@@ -331,14 +406,14 @@ def run_items_sync(sync_run=None):
             pass
 
     try:
-        conn = get_sybase_connection()
+        lc = _LaneConnection()
         _p('categories', 'مزامنة الفئات…', 1)
-        total += sync_categories(conn, sync_run)
+        total += lc.run(sync_categories, sync_run)
         _p('items', 'مزامنة الأصناف (قد تستغرق ~دقيقتين)…', 2)
-        total += sync_items(conn, sync_run)
+        total += lc.run(sync_items, sync_run)
         _p('barcodes', 'مزامنة الباركود…', 3)
-        total += sync_item_barcodes(conn, sync_run)
-        conn.close()
+        total += lc.run(sync_item_barcodes, sync_run)
+        lc.close()
 
         sync_run.status = 'success'
         sync_run.records_synced = total
@@ -885,6 +960,11 @@ def sync_item_barcodes(conn, sync_run):
 
 # ── sync_stock ────────────────────────────────────────────────────────────────
 
+# The sold-out reconcile only runs after a pull at least this big, so a partial or
+# empty Sybase fetch can never wipe the table.
+STOCK_RECONCILE_MIN_ROWS = 1000
+
+
 def sync_stock(conn, sync_run):
     """
     stkbal PK: storecode + itemcode + branchcode
@@ -893,9 +973,12 @@ def sync_stock(conn, sync_run):
     Optimisation: this is the largest table (~130k+ rows).
     Old approach: 3 queries × 130k rows ≈ 390,000 DB round-trips → ~6 min.
     New approach: 2 pre-load queries + batched bulk INSERT … ON CONFLICT → ~10 sec.
+    P-56: only rows whose quantity / monthly / on-order changed (or are new) are
+    written; an unchanged snapshot writes nothing. `last_synced` on a row is
+    therefore "last changed"; data freshness reads the SyncRun/SyncLog, not rows.
     """
     from django.utils import timezone
-    run_ts = timezone.now()   # rows refreshed this run get last_synced >= run_ts
+    run_ts = timezone.now()
 
     cursor = conn.cursor()
     cursor.execute(QUERY_STOCK)
@@ -926,15 +1009,24 @@ def sync_stock(conn, sync_run):
             logger.warning(f"Stock build error itemcode={row[0]}: {e}")
 
     # Deduplicate on composite key — last-seen wins
-    objs = list(
-        {(o.item_id, o.branch_id, o.softech_store_code): o for o in objs}.values()
-    )
-    count = len(objs)
-    if objs:
-        # last_synced (auto_now) is refreshed on conflict too, so we can tell which
-        # rows this run touched and reconcile the rest below.
+    snapshot = {(o.item_id, o.branch_id, o.softech_store_code): o for o in objs}
+    count = len(snapshot)
+
+    # Current mirror, to write only what changed.
+    current = {
+        (i, b, s): (pk, q, m, o)
+        for pk, i, b, s, q, m, o in ItemStock.objects.values_list(
+            'pk', 'item_id', 'branch_id', 'softech_store_code',
+            'quantity_on_hand', 'monthly_qty', 'on_order_qty').iterator(chunk_size=5000)
+    }
+    changed = [
+        o for key, o in snapshot.items()
+        if key not in current
+        or current[key][1:] != (o.quantity_on_hand, o.monthly_qty, o.on_order_qty)
+    ]
+    if changed:
         ItemStock.objects.bulk_create(
-            objs,
+            changed,
             update_conflicts=True,
             unique_fields=['item', 'branch', 'softech_store_code'],
             update_fields=['quantity_on_hand', 'monthly_qty', 'on_order_qty', 'last_synced'],
@@ -949,15 +1041,16 @@ def sync_stock(conn, sync_run):
     # Guard: only reconcile after a healthy pull, so a partial/failed Sybase fetch
     # can never wipe the whole table.
     zeroed = 0
-    if count >= 1000:
-        zeroed = (ItemStock.objects
-                  .filter(quantity_on_hand__gt=0, last_synced__lt=run_ts)
-                  .update(quantity_on_hand=0, last_synced=run_ts))
+    if count >= STOCK_RECONCILE_MIN_ROWS:
+        gone = [v[0] for key, v in current.items() if v[1] > 0 and key not in snapshot]
+        for i in range(0, len(gone), 5000):
+            zeroed += (ItemStock.objects.filter(pk__in=gone[i:i + 5000])
+                       .update(quantity_on_hand=0, last_synced=run_ts))
 
     if skipped:
         logger.debug(f"Stock: skipped {skipped} rows (item or branch not found yet)")
     SyncLog.objects.create(sync_run=sync_run, table_name='stkbal', records_processed=count)
-    logger.info(f"Stock synced: {count} (zeroed {zeroed} sold-out rows)")
+    logger.info(f"Stock synced: {count} rows, {len(changed)} changed (zeroed {zeroed} sold-out rows)")
     return count
 
 
@@ -1718,6 +1811,38 @@ def _sync_finance_snapshots():
             logger.warning(f"[finance-snap] {yr}-{mo:02d} failed: {exc}")
 
 
+def _run_finance_nightly_sync(months=3):
+    """P-43: nightly full finance mirror (P&L, journal, inventory estimate, expenses,
+    treasury) for the last `months` calendar months, oldest first — what used to need a
+    manual `sync_finance --months 3`. SELECT-only on SOFTECH. Each month gets its own
+    connection; a month that loses the connection is retried once (P-56 rule), any
+    other failure is logged and the next month still runs."""
+    import datetime as _dt2
+    from apps.finance.engine.sync_engine import FinanceSyncEngine
+    from apps.finance.models import FinanceSyncRun
+
+    cur = _dt2.date.today().replace(day=1)
+    periods = []
+    for _ in range(months):
+        periods.append((cur.year, cur.month))
+        cur = (cur - _dt2.timedelta(days=1)).replace(day=1)
+    for yr, mo in reversed(periods):
+        for attempt in (1, 2):
+            run = FinanceSyncRun.objects.create(sync_type='incremental', status='running',
+                                                triggered_by='scheduler:finance_nightly_sync')
+            try:
+                FinanceSyncEngine(year=yr, month=mo, sync_run=run).run()
+                break
+            except Exception as exc:
+                FinanceSyncRun.objects.filter(pk=run.pk, status='running').update(
+                    status='failed', finished_at=timezone.now())
+                if attempt == 1 and _is_connection_error(exc):
+                    logger.warning('[finance-nightly] %s-%02d lost the connection — retrying once', yr, mo)
+                    continue
+                logger.error('[finance-nightly] %s-%02d failed: %s', yr, mo, exc)
+                break
+
+
 # ── ERP match polling ─────────────────────────────────────────────────────────
 
 # 96 polls × 30 min = 48 hours maximum wait before marking timeout
@@ -1944,10 +2069,57 @@ def _write_heartbeat():
     except Exception as exc:
         logger.debug('[scheduler] heartbeat write failed: %s', exc)
     try:
+        from apps.sync.maintenance import alert_failing_lanes, mark_stale_runs
+        if mark_stale_runs():
+            logger.warning('[scheduler] marked stale sync run(s) as failed')
+        alert_failing_lanes()
+    except Exception as exc:
+        logger.debug('[scheduler] stale-run / failing-lane check failed: %s', exc)
+    try:
         from apps.sync import softech_load
         softech_load.flush()   # save SOFTECH load counts at least once a minute
     except Exception as exc:
         logger.debug('[scheduler] softech load flush failed: %s', exc)
+
+
+MORNING_CHAIN = (
+    ('_run_ap_reconciliation_sync', 'A/P–A/R reconciliation mirror'),
+    ('_insights_daily', 'daily insight report'),
+    ('_run_supply_case_sweep', 'supply follow-up sweep'),
+    ('_run_replacement_check', 'replacement daily check'),
+)
+
+
+def _run_morning_chain():
+    """P-56: the 07:30 jobs run as ONE chain, in order, instead of on clock offsets
+    that assume the previous one finished. Each step is logged as its own SyncLog
+    (1 = ok, 0 = failed); a failing step never stops the next one."""
+    import sys
+    run = SyncRun.objects.create(status='running', lane='morning_chain')
+    errors = []
+    me = sys.modules[__name__]
+    for name, label in MORNING_CHAIN:
+        ok = 1
+        try:
+            getattr(me, name)()
+        except Exception as exc:
+            ok = 0
+            errors.append(f'{label}: {exc}')
+            logger.exception('[morning_chain] %s failed', name)
+        SyncLog.objects.create(sync_run=run, table_name=f'chain:{name.lstrip("_")}', records_processed=ok)
+    run.status = 'failed' if errors else 'success'
+    run.error_message = '\n'.join(errors)
+    run.completed_at = timezone.now()
+    run.save()
+    return run
+
+
+def _run_daily_retention():
+    try:
+        from apps.sync.maintenance import run_daily_retention
+        run_daily_retention()
+    except Exception as exc:
+        logger.error('[APScheduler] daily retention failed: %s', exc)
 
 
 def _run_segment_customers():
@@ -2356,7 +2528,7 @@ def _run_demand_engine_scheduled():
     job picks the new run up automatically within 30 minutes."""
     try:
         from django.conf import settings as _s
-        if not getattr(_s, 'DEMAND_ENGINE_SCHEDULE_ENABLED', False):
+        if not writer_allowed('DEMAND_ENGINE_SCHEDULE_ENABLED'):
             return
         from apps.purchasing.models import DemandCalculationRun
         if DemandCalculationRun.objects.filter(status='running').exists():
@@ -2840,7 +3012,7 @@ def _run_replication_audit(full_catalog=False):
                     full_catalog, scan.pk, scan.items_with_gaps, scan.branches_down)
 
         from django.conf import settings as _s
-        if not getattr(_s, 'REPLICATION_REPAIR_ENABLED', True):
+        if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
             logger.info('[APScheduler] replication_audit: auto-repair skipped '
                         '(REPLICATION_REPAIR_ENABLED=False)')
         elif pol.auto_repair_enabled and scan.items_with_gaps:
@@ -2978,13 +3150,19 @@ def start_scheduler():
     from apps.sync import softech_load as _sl
     _add_job = _scheduler.add_job
 
+    from config.writers import WRITER_JOBS, writer_instance
+
     def _scoped_add_job(func, *args, **kwargs):
         name = kwargs.get('id') or getattr(func, '__name__', 'job')
+        if name in WRITER_JOBS and not writer_instance():
+            # P-54: only the writer instance schedules jobs that call a SOFTECH writer
+            logger.info('[scheduler] %s not scheduled — WRITER_INSTANCE is False', name)
+            return None
         return _add_job(_sl.scoped(func, f'job:{name}'), *args, **kwargs)
     _scheduler.add_job = _scoped_add_job
     # FAST lane — stock + sales + reactive hooks (cheap, high-frequency).
     _scheduler.add_job(
-        run_fast_sync,
+        _scheduled_fast_sync,
         'interval',
         minutes=_fast_min,
         id='softech_sync_fast',
@@ -2994,7 +3172,7 @@ def start_scheduler():
     )
     # SLOW lane — items/customers/etc + master hooks (expensive, low-frequency).
     _scheduler.add_job(
-        run_slow_sync,
+        _scheduled_slow_sync,
         'interval',
         minutes=_slow_min,
         id='softech_sync_slow',
@@ -3286,16 +3464,23 @@ def start_scheduler():
         _run_purchase_expiry_sync, 'cron', hour=7, minute=0, id='purchase_expiry_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
-    # Daily incremental A/P–A/R reconciliation mirror sync (doc 23) — 07:30, after
-    # the procurement/purchase-expiry syncs. Rolling ~4-month window, idempotent.
+    # Morning chain (P-56) — 07:30, after the procurement/purchase-expiry syncs:
+    # A/P–A/R mirror (doc 23) → daily insights (doc 18) → supply follow-up sweep
+    # (doc 24) → بدل الروشتة check (doc 25), each starting when the previous ends.
     _scheduler.add_job(
-        _run_ap_reconciliation_sync, 'cron', hour=7, minute=30, id='ap_reconciliation_sync',
+        _run_morning_chain, 'cron', hour=7, minute=30, id='morning_chain',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
-    # Daily supply follow-up sweep (doc 24 Phase 4) — 08:00, after the procurement /
-    # purchase-expiry / A/P syncs so sourcing history is current. Writes apps.supply only.
+    # Nightly finance mirror (P-43) — 02:15, before the 03:xx catch-ups: last 3 months
+    # of journal / expenses / treasury so /finance never shows a months-old ledger.
     _scheduler.add_job(
-        _run_supply_case_sweep, 'cron', hour=8, minute=0, id='supply_case_sweep',
+        _run_finance_nightly_sync, 'cron', hour=2, minute=15, id='finance_nightly_sync',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Daily retention (P-56) — 04:45, quiet hour: engine-run detail rows, old
+    # notifications, PBX raw events, allow-listed audit noise, slow-request log.
+    _scheduler.add_job(
+        _run_daily_retention, 'cron', hour=4, minute=45, id='daily_retention',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Weekly per-branch near-expiry worklist → branch managers (Sunday 08:00, D4).
@@ -3338,11 +3523,6 @@ def start_scheduler():
     # WhatsApp refill reminders — 10:10 Cairo (customers awake, branches open).
     _scheduler.add_job(
         _run_refill_reminders, 'cron', hour=10, minute=10, id='refill_reminders',
-        replace_existing=True, max_instances=1, misfire_grace_time=3600,
-    )
-    # بدل الروشتة daily check — 08:40, after the 07:30 A/P mirror sync.
-    _scheduler.add_job(
-        _run_replacement_check, 'cron', hour=8, minute=40, id='replacement_daily_check',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Customer status HQ vs branch nodes (B7, read-only) — 06:40.
@@ -3409,10 +3589,6 @@ def start_scheduler():
     )
     _scheduler.add_job(   # in-app help: tell staff about training changes (cheap)
         _help_announce_training, 'cron', minute=20, id='help_announce_training',
-        replace_existing=True, max_instances=1, misfire_grace_time=1800,
-    )
-    _scheduler.add_job(
-        _insights_daily, 'cron', hour=7, minute=30, id='insights_daily',
         replace_existing=True, max_instances=1, misfire_grace_time=1800,
     )
     _scheduler.add_job(   # Sunday = start of the Egyptian work-week → prior-week report

@@ -144,6 +144,86 @@ function scopeLabel(s) {
   return s
 }
 
+// P-54 switch table: which SOFTECH writers are on, and whether THIS server is the one
+// allowed to write (admin only — the card stays hidden on a 403).
+function WriterSwitchesPanel() {
+  const { data, error } = useQuery({
+    queryKey: ['writerSwitches'],
+    queryFn: () => syncApi.writerSwitches().then(r => r.data),
+    retry: false,
+  })
+  if (error || !data) return null
+  const role = data.writer_instance
+    ? { cls: 'bg-emerald-50 border-emerald-200 text-emerald-800', text: 'السيرفر ده هو اللي بيكتب في SOFTECH' }
+    : { cls: 'bg-gray-50 border-gray-200 text-gray-700', text: 'السيرفر ده مش بيكتب في SOFTECH (نسخة تطوير / قراءة بس) — حتى لو المفتاح شغال' }
+  return (
+    <div data-tour="admin-sync-writer-switches" className="bg-white rounded-2xl border border-gray-200 p-4">
+      <SectionTitle icon="🔐">مفاتيح الكتابة في SOFTECH</SectionTitle>
+      <div className={`text-sm rounded-lg border px-3 py-2 mb-3 ${role.cls}`}>
+        {role.text}
+        {data.softech_read_only && <span className="font-bold"> · قفل القراءة فقط شغال</span>}
+      </div>
+      <table className="w-full text-sm">
+        <thead className="text-xs text-gray-500"><tr>
+          <th className="text-right p-1.5">المفتاح</th><th className="text-right p-1.5">بيحمي</th>
+          <th className="p-1.5">في الإعدادات</th><th className="p-1.5">فعلياً</th>
+        </tr></thead>
+        <tbody>
+          {data.flags.map(f => (
+            <tr key={f.flag} className="border-t border-gray-100">
+              <td className="p-1.5 font-mono text-[11px]" dir="ltr">{f.flag}</td>
+              <td className="p-1.5 text-xs text-gray-600">{f.protects}</td>
+              <td className="p-1.5 text-center">{f.value ? 'ON' : 'OFF'}</td>
+              <td className={`p-1.5 text-center font-bold ${f.effective ? 'text-emerald-700' : 'text-gray-400'}`}>
+                {f.effective ? 'بيكتب' : 'مقفول'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// P-56 "measure before optimising": the 10 slowest API endpoints by p95 (admin only —
+// the server returns 403 for anyone else and the card then stays hidden).
+function SlowRequestsPanel() {
+  const { data, error } = useQuery({
+    queryKey: ['slowRequests'],
+    queryFn: () => syncApi.slowRequests(14).then(r => r.data),
+    retry: false,
+  })
+  if (error || !data) return null
+  return (
+    <div data-tour="admin-sync-slow-requests" className="bg-white rounded-2xl border border-gray-200 p-4">
+      <SectionTitle icon="🐢">أبطأ الطلبات (آخر {data.days} يوم)</SectionTitle>
+      <p className="text-xs text-gray-500 mb-2">
+        بيتسجّل بس أي طلب أبطأ من {data.threshold_ms} مللي ثانية. الترتيب بزمن ٩٥٪ من المرات (p95).
+      </p>
+      {data.endpoints.length === 0 ? (
+        <div className="text-sm text-gray-400">مفيش طلبات بطيئة متسجّلة.</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-xs text-gray-500"><tr>
+            <th className="text-right p-1.5">المسار</th><th className="p-1.5">مرات بطيئة</th>
+            <th className="p-1.5">p95 (مللي)</th><th className="p-1.5">أقصى (مللي)</th>
+          </tr></thead>
+          <tbody>
+            {data.endpoints.map(r => (
+              <tr key={r.method + r.path} className="border-t border-gray-100">
+                <td className="p-1.5 font-mono text-xs" dir="ltr">{r.method} /{r.path}</td>
+                <td className="p-1.5 text-center tabnum">{r.count}</td>
+                <td className="p-1.5 text-center tabnum font-bold">{r.p95_ms}</td>
+                <td className="p-1.5 text-center tabnum">{r.max_ms}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function SoftechLoadPanel() {
   const [hours, setHours] = useState(24)
   const [group, setGroup] = useState('by_scope')
@@ -382,6 +462,12 @@ export default function SyncPage() {
 
         {/* What we ask of SOFTECH (doc 30) */}
         <SoftechLoadPanel />
+
+        {/* Slowest endpoints (P-56) */}
+        <SlowRequestsPanel />
+
+        {/* SOFTECH writer switches (P-54) */}
+        <WriterSwitchesPanel />
 
         {/* Logs */}
         <div data-tour="admin-sync-logs">

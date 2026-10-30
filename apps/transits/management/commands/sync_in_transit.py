@@ -904,6 +904,12 @@ class Command(BaseCommand):
         - day 7:  high priority alert
         - day 14: critical escalation
 
+        P-55 Part B: people get ONE DIGEST per receiving branch per day (count + oldest
+        age + deep link) — to that branch's managers (pharmacist / supervisor) and the
+        HQ coordinators (SystemSetting `transit_digest_recipients`, default all admins) —
+        instead of one notification per transfer per person per day. The per-transfer
+        note, audit event and alert guard fields are still written.
+
         Each transfer is alerted at its SINGLE highest applicable level, at most
         once per calendar day (guarded by last_alert_level/last_alert_sent_at, and
         by dedup_once on the day-scoped dedup_key). Transfers older than
@@ -946,6 +952,7 @@ class Command(BaseCommand):
         if verified_since is not None:
             qs = qs.filter(last_synced_at__gte=verified_since)
 
+        digest = {}   # receiving branch → [(transfer, level), ...]
         for transfer in qs:
             # Pick the single highest threshold this transfer has reached.
             for days_threshold, level, alert_label, body_fn, notif_type in thresholds:
@@ -963,40 +970,9 @@ class Command(BaseCommand):
                 continue
 
             body = body_fn(transfer)
-
-            # Notify receiving branch (they must receive it)
-            try:
-                from apps.notifications.models import Notification
-                target_branch = transfer.receiving_branch or transfer.supplying_branch
-                if target_branch:
-                    dedup = f'{notif_type}_{transfer.id}_{today.isoformat()}'
-                    Notification.send_to_branch(
-                        branch=target_branch,
-                        notification_type=notif_type,
-                        title=f'تحويل قيد النقل — {transfer.erp_doc_number}',
-                        body=body,
-                        dedup_key=dedup,
-                        include_admins=True,
-                        dedup_once=True,
-                    )
-            except Exception as exc:
-                logger.warning('[sync_in_transit] notification failed: %s', exc)
-
-            # Also notify supplying branch for critical
-            if level == 'd14' and transfer.supplying_branch:
-                try:
-                    from apps.notifications.models import Notification
-                    Notification.send_to_branch(
-                        branch=transfer.supplying_branch,
-                        notification_type=notif_type,
-                        title=f'🚨 تحويل حرج — {transfer.erp_doc_number}',
-                        body=body,
-                        dedup_key=f'{notif_type}_{transfer.id}_supply_{today.isoformat()}',
-                        include_admins=True,
-                        dedup_once=True,
-                    )
-                except Exception:
-                    pass
+            target_branch = transfer.receiving_branch or transfer.supplying_branch
+            if target_branch:
+                digest.setdefault(target_branch, []).append((transfer, notif_type))
 
             InTransitNote.objects.create(
                 transfer=transfer,
@@ -1016,6 +992,55 @@ class Command(BaseCommand):
                 'last_alert_level', 'last_alert_sent_at',
                 'alert_notification_count', 'updated_at',
             ])
+
+        for branch, rows in digest.items():
+            try:
+                self._send_branch_digest(branch, rows, today)
+            except Exception as exc:
+                logger.warning('[sync_in_transit] digest for branch %s failed: %s', branch.pk, exc)
+
+    _DIGEST_RANK = {'transit_approaching_cancel': 0, 'transit_overdue': 1, 'transit_critical': 2}
+    DIGEST_BRANCH_ROLES = ('pharmacist', 'supervisor')
+
+    @classmethod
+    def _digest_recipients(cls, branch):
+        """The branch's managers + the HQ transfers coordinators."""
+        from apps.users.models import StaffProfile
+        try:
+            from apps.config.models import SystemSetting
+            coordinator_ids = SystemSetting.get('transit_digest_recipients')
+        except Exception:
+            coordinator_ids = None
+        managers = StaffProfile.objects.filter(branch=branch, is_active=True,
+                                               role__in=cls.DIGEST_BRANCH_ROLES)
+        if isinstance(coordinator_ids, list) and coordinator_ids:
+            hq = StaffProfile.objects.filter(pk__in=coordinator_ids, is_active=True)
+        else:
+            hq = StaffProfile.objects.filter(role='admin', is_active=True)
+        seen, out = set(), []
+        for staff in list(managers.select_related('branch')) + list(hq.select_related('branch')):
+            if staff.pk not in seen:
+                seen.add(staff.pk)
+                out.append(staff)
+        return out
+
+    def _send_branch_digest(self, branch, rows, today):
+        from apps.notifications.models import Notification
+        notif_type = max((t for _, t in rows), key=self._DIGEST_RANK.get)
+        oldest = max(t.days_in_transit for t, _ in rows)
+        name = branch.name_ar or branch.name
+        title = f'🚛 {len(rows)} تحويل في انتظار الاستلام — {name}'
+        docs = '، '.join(str(t.erp_doc_number) for t, _ in sorted(rows, key=lambda r: -r[0].days_in_transit)[:10])
+        body = (f'{len(rows)} تحويل لفرع {name} لسه ما اتسجّلش استلامه في SOFTECH — أقدمها من {oldest} يوم. '
+                f'سجّل مستند الاستلام (25) في SOFTECH. المستندات: {docs}. '
+                f'/transits?status=in_transit&branch={branch.pk}')
+        sent = 0
+        for staff in self._digest_recipients(branch):
+            if Notification.send_to_user(staff, notif_type, title, body,
+                                         dedup_key=f'transit_digest_{branch.pk}_{today.isoformat()}',
+                                         dedup_once=True):
+                sent += 1
+        return sent
 
 
     def _fire_local_receipt_alerts(self):
