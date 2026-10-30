@@ -90,12 +90,31 @@ staff-development goals. It started on 2026-10-30.
 | P-58 EDA track-and-trace foundation (dormant) | **Approved — foundation, left unused** (owner 2026-10-30) | GS1 parse + PackCode/PackEvent on purchase and sale behind `TRACK_TRACE_ENABLED=False`; no EDA reporting until guideline 804/2025 is read | — | Guideline 804/2025; SOFTECH plans; 2D scanners | Spec written | Foundation yes, in principle; confirm with wave 0 |
 
 **Wave-0 specification status (2026-10-30):** written. Spec files:
-- [P-54](06_SPEC_P-54_cutover_single_writer.md) — **BUILT 2026-10-30 on owner go-ahead** (`config/writers.py` writer_allowed on all 24 gates, writer jobs unscheduled off-instance, startup guard in asgi/wsgi/runserver/run_scheduler, `/api/sync/writer-switches/` + /sync card). ⚠ Office `.env` has 11 duplicated keys — must be cleaned before its processes restart; office writers stop until `WRITER_INSTANCE=True` is set where writing is wanted
+- [P-54](06_SPEC_P-54_cutover_single_writer.md) — **BUILT 2026-10-30 on owner go-ahead** (`config/writers.py` writer_allowed on all 24 gates, writer jobs unscheduled off-instance, startup guard in asgi/wsgi/runserver/run_scheduler, `/api/sync/writer-switches/` + /sync card). Committed e4984829. **Live in the office 2026-10-31:** the 11 duplicated `.env` keys were removed (backup `.env.bak-2026-10-31`), and the office is the writer instance (`WRITER_INSTANCE=True`, `SOFTECH_READ_ONLY=False`) until the VPS cutover. At cutover, switch the two: VPS `True`, office `False` — never both
 - [P-55](06_SPEC_P-55_transit_sync_and_alerts.md) — Part A committed (ad89b6be); **Parts B–C BUILT 2026-10-30** (daily per-branch digest, `notification_routing`, 3-failures sync alert, notification retention). Clean-up run 2026-10-30: in transit ≥14 days 776 → **149**, `receipt_check_failed=0`
 - [P-56](06_SPEC_P-56_retention_and_sync_health.md) — **BUILT 2026-10-30** (retention job 04:45, change-only stock upsert, stale runs, lane retry, manual-run skip, morning chain, `customers/0030`, slow-request log + /sync card)
 - [P-57](06_SPEC_P-57_usage_telemetry.md) — **BUILT 2026-10-30** (ScreenView, beacon in both layouts, /audit «استخدام الشاشات», `post_usage_notice` to run at go-live)
 - [P-43](06_SPEC_P-43_finance_freshness.md) — **BUILT 2026-10-30** (nightly 02:15 finance sync, 4 freshness domains, cash flow retired, /payments hidden)
 - [P-58](06_SPEC_P-58_track_and_trace_foundation.md) — **BUILT dormant 2026-10-30** (`apps/catalog/gs1.py`, `apps/trace`, `/api/trace/parse|scan/`; `TRACK_TRACE_ENABLED=False`; no scan field on screens yet)
+
+**Wave-1 specification status (2026-10-31):** written; build **not** authorised. Repo-only (no SOFTECH or database
+queries); every unverified fact is an open question or a read-only check for the owner. Spec files:
+- [P-26](06_SPEC_P-26_one_expiry_number.md) — store-role map (live / 105 return / 102 write-off / 103 cosmetics / 110
+  closed). Found: the `/batches` "expired still in stock" card still counts store 110 (`stock_expiry._QUARANTINE_STORES`
+  omits it); `forecasting._expiry_risk` reads the empty `StockBatch` table, so expiry risk is always 0
+- [P-29](06_SPEC_P-29_return_window_calendar.md) — `return_window.window_for` (P-28 reuses it), `SupplierReturnPolicy`
+  seeded for 565 + 260 only, auto-close from doc 120 lines, `/batches` «📆 تقويم المرتجع»
+- [P-31](06_SPEC_P-31_unordered_delivery_detector.md) — order record = `SupplyDecision(kind='purchase')` written by the
+  order Excel exports; `ReceiptCheck` per doc-10 line; no price check. Note: `PurchaseLine` refreshes daily (20 h rule),
+  not every 30 min
+- [P-33](06_SPEC_P-33_supply_quick_fixes.md) — "create transfer" on the shortage panel (WhatsApp path already has it),
+  hourly shortage-flag retry (stop-and-ask: scheduled SOFTECH write), transit link key, exports from mirrors
+- [P-41](06_SPEC_P-41_contract_receivables.md) — customer side limited to listed contracts (today's customer query would
+  read all retail sales); SOFTECH's own allocations, no matching; `ar_contracts` freshness domain
+- [P-42](06_SPEC_P-42_supplier_terms.md) — `SupplierTerm` per supplier × category, invoice slices, early-pay list
+- [P-40](06_SPEC_P-40_13_week_cash_view.md) — `/finance/cash` from P-41 + P-42 + cheques + fixed outflows; low/base/high;
+  `/finance/cashflow` redirects there
+- All three finance specs need `core/branch_scope.py` (security batch 5, not merged on this branch) before building
 
 **Owner process rule (2026-10-30):** go through all recommendations first; building and development start after all
 the discussions. Approved cards wait as "approved for specification" until the review is complete.
