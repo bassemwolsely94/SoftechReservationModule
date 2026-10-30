@@ -438,7 +438,9 @@ class DemandViewSet(viewsets.ModelViewSet):
 
         from apps.reservations.models import Reservation
         try:
-            res = Reservation.objects.get(pk=s.validated_data['reservation_id'])
+            from core import branch_scope
+            res = branch_scope.scope(Reservation.objects.all(), request.user).get(
+                pk=s.validated_data['reservation_id'])
         except Reservation.DoesNotExist:
             return Response({'detail': 'الحجز غير موجود'}, status=404)
         if res.status not in ('expired', 'cancelled'):

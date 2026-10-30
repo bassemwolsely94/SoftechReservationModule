@@ -183,6 +183,7 @@ apps/customers/management/commands/investigate_pic_merge.py::Command.s_relatives
 apps/customers/management/commands/investigate_pic_merge.py::Command.s_triggers
 apps/customers/management/commands/investigate_pic_replication.py::Command._trace_one
 apps/customers/management/commands/investigate_pic_replication.py::Command.s_side
+apps/customers/management/commands/relink_purchase_customers.py::Command.handle
 apps/delivery/management/commands/sync_crm_orders.py::Command.handle
 apps/delivery/management/commands/sync_crm_orders.py::_apply_branch_status_updates
 apps/finance/management/commands/backfill_ap_invoice_comments.py::Command.handle

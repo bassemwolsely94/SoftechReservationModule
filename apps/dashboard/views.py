@@ -24,11 +24,10 @@ def _profile(request):
     return getattr(request.user, 'staff_profile', None)
 
 
-def _scope_reservations(qs, profile, branch_id=None):
-    """Apply branch scoping based on role."""
-    if profile and profile.role not in ('admin', 'call_center', 'purchasing'):
-        if profile.branch:
-            return qs.filter(branch=profile.branch)
+def _scope_reservations(qs, user, branch_id=None):
+    """The user's branches (core.branch_scope, fail-closed), then the optional ?branch narrowing."""
+    from core import branch_scope
+    qs = branch_scope.scope(qs, user)
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     return qs
@@ -46,7 +45,7 @@ def dashboard_summary(request):
     profile    = _profile(request)
     branch_id  = request.query_params.get('branch')
 
-    res_qs = _scope_reservations(Reservation.objects.all(), profile, branch_id)
+    res_qs = _scope_reservations(Reservation.objects.all(), request.user, branch_id)
 
     # ── Reservation KPIs ──────────────────────────────────────────────────────
     active_statuses = ['pending', 'available', 'contacted', 'confirmed']
@@ -88,7 +87,7 @@ def dashboard_summary(request):
     by_branch = []
     if profile and profile.role in ('admin', 'call_center', 'purchasing'):
         by_branch = list(
-            Reservation.objects.filter(status__in=active_statuses)
+            _scope_reservations(Reservation.objects.filter(status__in=active_statuses), request.user)
             .values('branch__name_ar', 'branch__name', 'branch__id')
             .annotate(count=Count('id'))
             .order_by('-count')[:8]
@@ -101,10 +100,8 @@ def dashboard_summary(request):
         invoice_date__date__gte=today - timedelta(days=7),
         doc_code='115'
     )
-    if branch_id:
-        sales_qs = sales_qs.filter(branch_id=branch_id)
-    elif profile and profile.branch and profile.role not in ('admin', 'call_center', 'purchasing'):
-        sales_qs = sales_qs.filter(branch=profile.branch)
+    # ?branch only narrows — it never widens past the user's branches (Batch 5)
+    sales_qs = _scope_reservations(sales_qs, request.user, branch_id)
 
     sales = {
         'invoices_7d': sales_qs.count(),
@@ -231,7 +228,7 @@ def followups_today(request):
         status__in=['pending', 'available', 'contacted', 'confirmed'],
     ).select_related('customer', 'item', 'branch', 'assigned_to__user')
 
-    qs = _scope_reservations(qs, profile)
+    qs = _scope_reservations(qs, request.user)
 
     results = [
         {

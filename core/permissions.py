@@ -56,7 +56,7 @@ class IsAdminRole(BasePermission):
 
 
 class IsHQRole(BasePermission):
-    """Admin, call_center, or purchasing (HQ roles that see all branches)."""
+    """The all-branch roles (core.branch_scope.ALL_BRANCH_ROLES) or access_all_branches."""
 
     def has_permission(self, request, view):
         profile = _get_profile(request)

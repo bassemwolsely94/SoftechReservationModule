@@ -182,6 +182,62 @@ cutover (owner decision 1). Tests: `test_rbac_*.py`, `test_mass_assignment_*.py`
 Open: the two reviewed config leak lines, who confirmed an
 invoice (`confirmed_by` / audit on confirm), and branch / task visibility scoping (Batch 5).
 
+## Batch 5 — branch scoping (2026-10-30, first part)
+
+Branch `claude/security-batch5-branch-scoping`. Tests: `test_branch_scope.py`, `test_branch_isolation.py`,
+`test_permission_matrix.py`. Reviewable matrix: [PERMISSION_MATRIX.md](PERMISSION_MATRIX.md) (generated, drift-tested).
+
+- **B5-1 one helper** — `core/branch_scope.py` (`branch_ids` / `allows` / `scope` / `get_or_404` /
+  `check_branch_value` / `BranchScopedMixin`) implements owner decision 3: home + `allowed_branches`,
+  `restricted_branches` always wins (also over admin / all-branch roles), fail-closed (no branch, inactive,
+  no profile → nothing; a profile-less superuser → all). `StaffProfile.accessible_branch_ids` delegates to it.
+  `users.0033` copies every `UserBranchAccess` row into `allowed_branches` (idempotent; old rows kept);
+  `stock_audit` moved off `extra_branches`.
+- **B5-2 POS orders** — list, detail (GET / PATCH / DELETE), ready / push / cancel / share / prescription,
+  queue status, exception center, flush-now and referral stats read only the user's branches; another
+  branch's order is a 404 (also an unknown id: 404, was a 500); a replayed `client_token` from another branch
+  answers 409 instead of returning that order. *Touches the POS push path (only adds a refusal before it) —
+  owner to confirm before merge (CLAUDE.md stop-and-ask).*
+- **B5-3 payments** — list, detail, confirm / reconcile / dispute / screenshot, summary, bank-statement imports,
+  lines and exceptions, manual match; create / edit refuse a branch outside the user's. *Payments — owner to
+  confirm before merge.*
+- **B5-4 cheques** — plans, plan actions, instalments, treasury dashboard; create checks the branch.
+- **B5-5 delivery** — list, detail, all 17 order actions, dashboards / reports / heat-map / shift report /
+  route building; riders keep orders assigned to them; supervisor / quality_manager stay chain-wide (B-3).
+- **B5-6 reservations** — fail-open closed (a branch role with no branch saw every branch), activity, merge
+  target, dashboard + analytics, create / edit branch check; home dashboard's `?branch=` no longer widens the
+  sales KPIs past the user's branches; demand «from reservation» scoped.
+- **B5-7 independent review (2026-10-30)** — a cold read of the diff found three cross-branch writes the first
+  pass missed and they are closed: POS order *create* into a foreign branch, PATCH moving a pending payment or a
+  delivery to a foreign branch (views overriding `perform_update` skipped the mixin); also POS return lookup /
+  lost sales / selection events trusting `?branch`, delivery routes (list / detail / dispatch / driver), the
+  reservation duplicate check leaking before the 403, the home dashboard's by-branch table and a profile-less
+  superuser. `UserBranchAccess` admin is read-only (rows nothing reads any more).
+- **Guards** — every isolation test proves both sides (other branch refused with no row change, no SOFTECH /
+  network call; own branch still works); a static test fails when a `BranchScopedMixin` view overrides
+  `get_queryset()` without calling `branch_scope` (how cheques / payments first slipped through).
+  Mutation-checked: disabling the branch check or returning "all branches" turns every case red. Each
+  refused action has a positive control (the record's own branch gets past permission + branch, rolled back)
+  and must answer exactly 404; allowed / restricted grants and a rider's assigned order are tested over HTTP;
+  the override guard parses the code (AST) and covers `get_queryset`, `perform_create`, `perform_update`.
+
+- **B5-8 owner decisions (2026-10-30)** — **B-3** supervisor and quality manager are all-branch roles
+  (`ALL_BRANCH_ROLES`; deliveries' special case removed). **B-1** finance: consolidated snapshots and every
+  branch's P&L for the all-branch roles (admin, quality manager, HQ); a branch user's finance screens show
+  their own branch's rows only; supplier A/P reconciliation is company-only (`recon_views._company_only`).
+  **B-2** customers (`apps/customers/access.py`): browse / name search / churn list = own branches; any customer
+  is found by a full phone (10+ digits) in the list, recognize-on-type and the universal search; another
+  branch's numbers are masked (and every number for `can_see_customer_phone = False`); a found customer opens
+  so POS can serve them; edits = own branches (+ branch-less records the user created) or the all-branch roles
+  (call center). `can_see_all_customers` widens name search, still masked. Universal search now also scopes
+  orders and reservations. Tests: `test_customer_access.py` (mutation-checked: finding, masking, editing),
+  `OwnerBranchDecisions`. Screenshots cannot be blocked by a web app — masking is what keeps them harmless.
+
+Still open in Batch 5: stockcount / shortage / batches / insurance / tasks / incentives / analytics / offers /
+supply scoping (`permission_matrix.py` `BRANCH_SCOPE` = "open"), customer phones shown by OTHER modules
+(reservations, delivery, POS order customer fields, call center, campaigns, analytics), the generic canary
+sweep over every list route, and moving demand / transfers / callcenter / followups' role lists onto the helper.
+
 ## Pending owner decisions
 
 A test exposing a hole whose fix needs the owner's OK (SOFTECH writes, auth, pricing, checkout)

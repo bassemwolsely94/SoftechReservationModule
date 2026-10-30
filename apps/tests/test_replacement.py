@@ -397,7 +397,8 @@ class ReplacementApiTests(SamraFixture):
     def test_branch_scope(self):
         from apps.branches.models import Branch
         other = Branch.objects.get(softech_branch_id='140')
-        _, _, client = make_user('sup_140', role='supervisor', branch=other)
+        # a branch role (supervisor is an all-branch role since owner decision B-3, 2026-10-30)
+        _, _, client = make_user('ph_140', role='pharmacist', branch=other)
         r = client.get('/api/replacement/cases/')
         self.assertEqual(r.data['count'], 0)
         self.assertEqual(client.get(f'/api/replacement/cases/{self.case.pk}/').status_code, 404)
