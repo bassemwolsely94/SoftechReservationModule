@@ -253,6 +253,16 @@ class HelpContentCoverageTests(SimpleTestCase):
             if key not in registry.TOUR_PENDING:
                 self.assertTrue(m.get('journeys'), f'{key}: no journey (رحلة عمل)')
 
+    def test_every_step_names_its_element(self):
+        """Every «اعرض لي» / journey step shows the element's on-screen name in bold
+        («label»), so people can find it — and none is left with neither a name nor a
+        «متى؟» (batch 7)."""
+        missing = [f'{k}.tour[{i}]' for k, s in self.screens.items()
+                   for i, st in enumerate(s.get('tour') or []) if 'label' not in st]
+        missing += [f'{jid}.steps[{i}]' for jid, j in registry.journeys().items()
+                    for i, st in enumerate(j['steps']) if 'label' not in st]
+        self.assertEqual(missing, [], 'Steps without a «label» (the element\'s name as on screen)')
+
     def test_every_module_has_a_brief(self):
         """«🚀 جولة في النظام» shows each module's one-line brief — short and bilingual."""
         for key, m in self.modules.items():

@@ -33,6 +33,9 @@ MODULE = {
                       'Share the code, invite the referred person, validate them, then see the referrer points on their account.'),
          'steps': [
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-mycode', 'perm': 'customers',
+             'label': T('شارك هذا الكود مع أصدقائك', 'Share this code with your friends'),
+             'when': T('لما عميل راضي يقول إنه هيرشّح الصيدلية لحد يعرفه.',
+                       'When a happy customer says they will recommend the pharmacy to someone.'),
              'text': T('شارك الكود أو الـ QR مع العميل اللي هيحيل أصحابه.', 'Share the code or QR with the customer who will refer friends.'),
              'open_hint': T('تبويب «كودي».', 'The "My code" tab.')},
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-invite', 'perm': 'customers',
@@ -109,6 +112,7 @@ SCREENS = [
         'related': ['loyalty.branch', 'customers.detail'],
         'tour': [
             {'target': 'loyalty-program-customer',
+             'label': T('ابحث عن عميل باسم أو رقم هاتف…', 'Search a customer by name or phone…'),
              'text': T('ابحث عن العميل بالاسم أو الهاتف أو كود PIC، فيظهر حسابه وسجلاته.', 'Search the customer by name, phone or PIC to show their account and logs.'),
              'when': T('لما عميل يتصل يسأل على نقاطه أو يشتكي من رصيده.', 'When a customer calls about their points or complains about their balance.')},
             {'target': 'loyalty-program-account', 'label': T('رصيد SOFTECH (الأساسي)', 'SOFTECH balance (main)'),

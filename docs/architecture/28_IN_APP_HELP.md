@@ -90,7 +90,8 @@ must not get wrong → add a quiz question.
 
 ### Rich steps + journeys (built 2026-10-26, batch 1 of 6 — design: `docs/superpowers/specs/2026-10-26-rich-tours-design.md`)
 
-- **Step format:** `{'target', 'text', 'label'?, 'when'?, 'warn'?, 'open_hint'?}` — the card shows the
+- **Step format:** `{'target', 'label', 'text', 'when'?, 'warn'?, 'open_hint'?}` (`label` required on every
+  tour and journey step since batch 7, 2026-10-30 — the element's name exactly as on screen; tested) — the card shows the
   button name («label», bold), what it does, «متى؟» (when / what happens next), an amber ⚠ box, and
   `open_hint` when the element is not on screen (another tab, a record to open, a status). Limits per
   language: label ≤ 40, others ≤ 160 (`registry.TOUR_LIMITS`).
@@ -254,7 +255,8 @@ as they appear on screen («…»).
 ## Next steps (proposed, not built)
 
 - ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
-- Batch 7: enrich the remaining thin steps (no «label» / «متى؟») in finished modules — most in purchasing.
+- ~~Batch 7: every step names its element~~ ✅ done 2026-10-30 — 189 steps got a «label» (every one that had neither label nor «متى؟» also got a «متى؟» — 155);
+  `test_every_step_names_its_element` keeps it so.
 - ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
   anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
 - ~~Batch 9: role product tour «جولة في النظام»~~ ✅ built 2026-10-30 (desktop entry points; mobile
