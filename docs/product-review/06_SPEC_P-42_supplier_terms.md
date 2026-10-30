@@ -13,6 +13,10 @@ Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
 - The residue clean-up list (open items more than 1 year old) stays.
 - Finance data is all-branch only (security Batch 5, B-1).
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- **"Non-discounted" has no written criteria**, and no one tells purchasing which lines are non-discounted. So that category is **dropped** for now. Terms are per supplier × **local / imported** only. A supplier-wide default applies when the category is unknown. If the owner later defines the category, it can be added as a third category with its own rule.
+
 ## 1. Problem (measured)
 
 - **No due dates.** 0 of 6,919 supplier invoices in the last 90 days carry `docpaydue`. Credit terms are unknown to

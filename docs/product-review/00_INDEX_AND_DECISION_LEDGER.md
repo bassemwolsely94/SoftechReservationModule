@@ -114,6 +114,13 @@ queries); every unverified fact is an open question or a read-only check for the
 - [P-42](06_SPEC_P-42_supplier_terms.md) — `SupplierTerm` per supplier × category, invoice slices, early-pay list
 - [P-40](06_SPEC_P-40_13_week_cash_view.md) — `/finance/cash` from P-41 + P-42 + cheques + fixed outflows; low/base/high;
   `/finance/cashflow` redirects there
+- **Owner decisions 2026-10-31** (written into each spec):
+  - P-26: store 110 is excluded from everything; the alert and the clean-up export are dropped.
+  - P-29: returns are owned by the HQ purchasing and replenishment specialists (`purchasing` role).
+  - P-31: the buyers are named, but which Excel they send is still open (0 recorded orders; exports are not logged).
+  - P-41: agreed days count from the month end.
+  - P-42: "non-discounted" has no criteria, so it is dropped; terms are local / imported only.
+  - P-40: weeks start Saturday. Cheque due date = `cheqdate` for `financialdoccode='20'` (read-only probe; `cheqcashdate` is empty on bank cheques).
 - All three finance specs need `core/branch_scope.py` (security batch 5, not merged on this branch) before building
 
 **Owner process rule (2026-10-30):** go through all recommendations first; building and development start after all

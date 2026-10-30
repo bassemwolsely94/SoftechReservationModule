@@ -14,6 +14,15 @@ Replaces the retired `/finance/cashflow` page (P-43).
 - The **P-34 purchase budget comes later**. Until then, a run-rate plus a "what if" input.
 - Finance data is all-branch only (security Batch 5, B-1).
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- **The week starts Saturday.** Week buckets run Saturday to Friday.
+- **Cheque due date — probed read-only 2026-10-31** (SOFTECH `cheques`, by the `personcode` index, suppliers 565, 260 and 30):
+  - Bank cheques are `financialdoccode='20'`, `cashtype=2`. For these, `cheqdate` **is the due date**: it is more than 3 days after the entry time in 931 of the 1,102 `cheqtype='20'` rows, and it runs up to 2027-02. `cheqcashdate` is **always empty** for them. `cheqregisterdate` is the entry (issue) date and matches `trans_time` (only 5 rows differ by more than 3 days). `cheqtobankdate` is filled on about 60% of rows; its meaning is not verified and it is not used.
+  - Cash vouchers (`financialdoccode` 10 and 90) have `cheqcashdate = cheqdate`.
+  - **Rule:** outflow date = `cheqdate` for `financialdoccode='20'`.
+  - `cheques` has **no index on `cheqdate`** (395k rows; the only indexes are branchcode+cheqsno, branchcode+bankcode+cheqtype, personcode+cheqcashdate and personcode+cheqregisterdate). A date-range scan timed out at 120 s during the probe. So the forward read of open post-dated cheques must be a **separate**, bounded, off-hours job (for example by `personcode` for open suppliers, or by `cheqregisterdate` per person). It must not widen the existing supplier sync window.
+
 ## 1. Problem (measured)
 
 - The business is cash-constrained (owner). Purchase cover, supplier payments and collections are decided without one

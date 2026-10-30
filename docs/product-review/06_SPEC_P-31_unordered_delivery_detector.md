@@ -12,6 +12,12 @@ Depends on P-29 (return fast) for the return hand-off; the detector itself can s
   SOFTECH طلب توريد is rare.
 - Pilot with the **two largest suppliers**.
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- The people who send orders to suppliers are mainly Gerges Shawky. Sometimes it is the owner, Mosa Farag, Dr Gerges, an admin or Youssef William.
+- **Which Excel they send is still unknown.** On 2026-10-31 the local database showed no export audit rows (only one coupon export in 120 days) and **0** `SupplyDecision(kind='purchase')` rows. So the order record does not exist today, and the data cannot tell which screen the file comes from.
+- Still needed before the build: the owner or Gerges names the screen and the file (/supply order Excel, /purchasing export, the shortage-list PO, or a hand-edited file). P-57 screen telemetry, live from 2026-10-31, will also show it after a few weeks.
+
 ## 1. Problem (measured)
 
 - **Nothing records what we ordered from a supplier in a usable way.**

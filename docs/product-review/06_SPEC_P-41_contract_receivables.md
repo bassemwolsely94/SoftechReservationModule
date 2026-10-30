@@ -12,6 +12,11 @@ Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
 - Insurance claim embedding stays later (P-45). This tracker works from SOFTECH invoices and receipts only.
 - Finance data is **all-branch only** (security Batch 5 decision B-1).
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- **Agreed payment days count from the month end** of the invoice month. Expected date = last day of the invoice month + agreed days.
+- The read-only pass across all 38 contracts is still needed. It is the step-0 probe in this spec: one SELECT-only pass, per contract, over invoices, receipts and allocations. It gives the measured days to the agreed-days entry and checks that receipts land on the contract account. It is run off-hours with the owner's OK.
+
 ## 1. Problem (measured)
 
 - About **46% of sales are contract credit**: channel 10 (تعاقدات/آجل), 11.26M per 90 days, 38 contracts, top 4 =

@@ -12,6 +12,11 @@ after all discussions".
 - A standing alert fires when any closed store holds stock.
 - The clean-up of 110 (write-off or transfer) is the **accountant's** decision, posted natively in SOFTECH.
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- Store 110 (closed branch) is **excluded from every number, screen, export and alert**. It "does not matter to us right now".
+- So the closed-store alert, the `closed_store_stock` notification type and the accountant clean-up export are **dropped from scope**. The role map keeps `closed` only so that 110 is filtered out everywhere; nothing else reads it.
+
 ## 1. Problem (measured)
 
 - **Four expiry sources** exist (`02_CURRENT_STATE_FINDINGS.md` §3.2, §5):

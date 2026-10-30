@@ -15,6 +15,11 @@ depends on fast returns.
 - **Advisory only.** No return document is drafted or posted by us (owner rule 2026-09-15).
 - Store meanings come from P-26: 105 = return candidates, 102 = write-off, 103 = expired cosmetics, 110 = closed.
 
+
+**Owner decisions 2026-10-31** (these override anything below that disagrees)
+- Supplier returns are owned by the **HQ purchasing and replenishment specialists**. Today both use the `purchasing` role (HQ only); there is no separate replenishment role. The monthly digest and the worklist go to that role. Confirm at build time that every replenishment specialist holds it.
+- Store 110 is excluded (P-26 decision).
+
 ## 1. Problem (measured)
 
 - Measured with the owner's window rule (backlog, Batch 2). A stock batch was matched to a 565 / 260 purchase entry
