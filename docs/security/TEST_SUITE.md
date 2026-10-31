@@ -256,12 +256,14 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
 
 ## Known dependency advisories (2026-10-26)
 
-- **Python** (`pip-audit-ignore.txt`, owner Batch 6): direct pins — Django 4.2.13 (81; the 4.2
-  line is past end of support and several fixes ship only in 5.2+), djangorestframework 3.15.1 (7),
-  djangorestframework-simplejwt 5.3.1 (2), twisted 26.4.0 (6); installed transitive packages —
-  147 advisories in 21 packages, notably Pillow (62), **PyJWT (19 — login tokens)**, aiohttp (14),
-  cryptography (7), sqlparse (9), daphne (4). The CI check audits the installed environment
-  (exactly what requirements-ci.txt installs); run it inside the production venv to cover
-  production-only packages.
+- **Python — none (Batch 6, 2026-10-31).** The allow-list (`pip-audit-ignore.txt`) is empty. Before:
+  259 advisories in 25 packages (Django 4.2.13 alone 81). Upgraded: Django 5.2.18 (LTS, supported to
+  April 2028; 4.2 is past end of support and several fixes ship only in 5.2+), djangorestframework
+  3.18.3, simplejwt 5.5.1, django-filter 26.2, django-cors-headers 4.9.0, django-extensions 4.1,
+  Pillow 13, PyJWT 2.15.1, daphne 4.2.3; transitive packages get security floors in
+  `requirements*.txt` (Twisted, cryptography, sqlparse, aiohttp, filelock, msgpack, torch, …).
+  Checked both ways: the CI set (installed) and the full production set (`pip install --dry-run
+  --report -r requirements.txt`, then `pip-audit --no-deps -r` on the resolved pins) — no findings.
+  The CI check audits the installed environment; run it inside the production venv after a deploy.
 - **npm (production deps) — 35 advisories** (`npm-audit-allow.txt`): axios (most, several high),
   follow-redirects, form-data, react-router / react-router-dom. Owner: Batch 6.

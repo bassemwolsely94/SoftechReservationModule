@@ -88,7 +88,7 @@ def sync_reservations() -> dict:
           .exclude(status__in=('fulfilled',) + _RES_CANCELLED)
           .select_related('customer', 'branch', 'item')
           .prefetch_related('lines'))
-    for res in qs.iterator():
+    for res in qs.iterator(chunk_size=500):   # Django 5: prefetch + iterator needs a chunk_size
         lines = [l for l in res.lines.all() if l.item_id]
         # Multi-item basket → one signal per line; else the header item.
         entries = ([(f'{res.pk}:{l.pk}', l.item_id, l.quantity_requested) for l in lines]
