@@ -37,7 +37,8 @@ class Command(BaseCommand):
         report = N.run(o['branch'], since)
         samples = None
         if o['score']:
-            samples = N.score_samples(self._read_sheet(o['score']))
+            rows = self._read_sheet(o['score'])
+            samples = {**N.score_samples(rows), 'rows': len(rows)}
             report['verdict'] = N.verdict(report['chain']['pct'], report['end_state']['pct'], samples)
         else:
             path = o['out'] or f'newqty_check_{o["branch"]}_{today.isoformat()}.xlsx'
@@ -60,7 +61,10 @@ class Command(BaseCommand):
         self.stdout.write(f'  3 end state equal {e["equal"]}/{e["compared"]} = {e["pct"]}%')
         self.stdout.write(f'  4 fractional {u["fractional"]} · negative {u["negative"]} · ≤0 {u["zero_or_less"]}')
         if samples is not None:
-            self.stdout.write(f'  5 sample matches {samples["matches"]}/{samples["filled"]}')
+            self.stdout.write(f'  5 sample: {samples["filled"]} of {samples["rows"]} cases filled in «{SEEN}» · '
+                              f'matches {samples["matches"]}/{samples["filled"]}')
+            if samples['filled'] < samples['rows']:
+                self.stdout.write(f'    fill every case in the «{SAMPLE_SHEET}» sheet, save the file, then score again')
         v = r['verdict']
         self.stdout.write(f'verdict: {v["result"]} ({v["rule"]}) {v["checks"]}')
 
