@@ -2,6 +2,8 @@ from rest_framework import serializers
 from apps.whatsapp.models import WAConversation, WAMessage, WATemplate, WAMediaFile
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class WATemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = WATemplate
@@ -32,7 +34,14 @@ class WAMessageSerializer(serializers.ModelSerializer):
         return obj.template.name if obj.template else None
 
 
-class WAConversationSerializer(serializers.ModelSerializer):
+class WAConversationSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('wa_id', 'customer_phone')
+
+    def phones_visible_for(self, user, instance):
+        # the WhatsApp inbox isn't branch-scoped — numbers for the all-branch roles (agents) only
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
+
     customer_name   = serializers.SerializerMethodField()
     customer_phone  = serializers.SerializerMethodField()
     window_open     = serializers.BooleanField(read_only=True)

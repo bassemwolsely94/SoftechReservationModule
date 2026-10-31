@@ -690,7 +690,8 @@ SCREENS = [
             T('«حملة جديدة» ← الاسم ونص الرسالة (اضغط المتغير لإضافته مثل اسم العميل) ← الجمهور ← «معاينة الجمهور» ← «حفظ الحملة».', '"New campaign" → name and message text (click a variable such as the customer name to insert it) → audience → "Preview audience" → "Save campaign".'),
             T('«طلب الموافقة»؛ بعد الاعتماد «جدولة الإرسال» أو الإرسال يدوياً.', '"Request approval"; once approved, "Schedule sending" or send manually.'),
         ],
-        'tips': [T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
+        'tips': [T('أرقام المستلمين بتظهر للي بيبعتوا أو بيعتمدوا الحملات بس؛ صلاحية العرض بس بتشوفها مخفية.', "Recipients' numbers show only to the people who send or approve campaigns; view-only access sees them hidden."),
+                 T('فعّل «لديهم رقم واتساب مسجّل فقط» حتى لا تضيع رسائل.', 'Turn on "registered WhatsApp number only" so no messages are wasted.')],
         'workflows': ['campaign'],
         'related': ['omni.inbox'],
         'tour': [
@@ -778,7 +779,7 @@ SCREENS = [
                  '• مسودة: «📤 طلب الموافقة» (لازم يكون فيها نص رسالة).\n• بانتظار الموافقة: «✅ اعتماد» أو «❌ رفض» مع سبب إجباري. معتمدة: اختار موعد لـ«جدولة الإرسال» أو سيبه فاضي لـ«إرسال فوري».\n• «🚫 إلغاء الحملة» متاح قبل ما تبدأ أو وهي موقوفة. الإرسال الفوري بيبدأ على طول، فراجع النص والجمهور الأول.',
                  '• Draft: "📤 Request approval" (it must have a message text).\n• Pending approval: "✅ Approve" or "❌ Reject" with a required reason. Approved: pick a time to "Schedule sending" or leave it empty for "Send now".\n• "🚫 Cancel campaign" is available before it starts or while paused. Send now starts at once, so check the text and audience first.')},
         ],
-        'updated': '2026-10-28',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

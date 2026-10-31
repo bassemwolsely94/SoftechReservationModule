@@ -40,9 +40,13 @@ def branch_linked_models():
     return out
 
 
+PHONE_KEYS = ('phone', 'mobile', 'wa_id', 'caller_number', 'caller_id')
+
+
 class Planter:
-    def __init__(self, branch, user, profile):
+    def __init__(self, branch, user, profile, phone=None):
         self.branch, self.user, self.profile = branch, user, profile
+        self.phone = phone           # phone sweep: every phone-like field gets this number
         self.neutral = {}            # model → a neutral instance reused as a dependency
         self.planted = {}            # model label → pk
         self.skipped = {}            # model label → reason
@@ -53,6 +57,8 @@ class Planter:
         if f.choices:
             return f.choices[0][0]
         max_len = getattr(f, 'max_length', None) or 200
+        if self.phone and any(k in f.name for k in PHONE_KEYS):
+            return self.phone[:max_len]
         if f.name in CODE_FIELDS:
             return self.branch.softech_branch_id[:max_len]
         if not marked:
@@ -133,7 +139,8 @@ class Planter:
                     continue
                 needed = not f.null and not f.has_default() and not f.blank
                 text = isinstance(f, (models.CharField, models.TextField)) and not f.choices
-                if f.name in CODE_FIELDS or needed or (marked and text):
+                phone = text and self.phone and any(k in f.name for k in PHONE_KEYS)
+                if f.name in CODE_FIELDS or needed or (marked and text) or phone:
                     val = self._value(f, marked)
                     if val is None and needed:
                         return None
@@ -146,6 +153,26 @@ class Planter:
                 return None
         finally:
             self._depth -= 1
+
+    def plant_phones(self):
+        """Phone sweep: this branch's customer first (every phone field = self.phone), then every
+        model with a phone-like field or a branch link, attached to that customer."""
+        Customer = apps.get_model('customers', 'Customer')
+        cust = self.build(Customer, marked=True)
+        self.customer = cust
+        if cust is not None:
+            self.neutral[Customer] = cust
+        linked = {m for m, _, _ in branch_linked_models()}
+        phoney = {m for m in apps.get_models()
+                  if m._meta.app_label not in SKIP_APPS and not m._meta.proxy and m._meta.managed
+                  and any(isinstance(f, (models.CharField, models.TextField))
+                          and any(k in f.name for k in PHONE_KEYS) for f in m._meta.concrete_fields)}
+        for model in sorted(linked | phoney, key=lambda m: m._meta.label):
+            if model is Customer:
+                continue
+            obj = self.build(model, marked=True)
+            (self.planted if obj is not None else self.skipped)[model._meta.label] = getattr(obj, 'pk', 'skip')
+        return self
 
     def plant_all(self):
         for model, _, _ in branch_linked_models():

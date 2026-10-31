@@ -175,6 +175,11 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if not phone:
             return Response({'detail': 'phone مطلوب'}, status=400)
 
+        # Batch 5b (B-2): branch staff look a number up by the FULL number only — a fragment
+        # listed up to 10 customers with their full numbers. Call-center agents (all-branch) keep it.
+        from apps.customers import access as _ca
+        if branch_scope.branch_ids(request.user) is not None and len(_ca.digits(phone)) < _ca.MIN_PHONE_DIGITS:
+            return Response({'detail': 'اكتب رقم الموبايل كامل.'}, status=400)
         tail = phone.replace(' ', '')[-9:]
         result = {
             'phone':             phone,
@@ -382,8 +387,17 @@ class CallLogViewSet(viewsets.ModelViewSet):
         recent = CallLog.objects.filter(
             phone_number__endswith=tail
         ).select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
-        result['recent_calls'] = CallLogListSerializer(recent, many=True).data
+        result['recent_calls'] = CallLogListSerializer(recent, many=True, context={'request': request}).data
 
+        # mask what this user may not see (B-2 per customer; can_see_customer_phone)
+        from apps.customers.models import Customer as _Cust
+        _found = {c.id: c for c in _Cust.objects.filter(id__in=[r['id'] for r in result['customers']])
+                  .only('id', 'preferred_branch_id', 'created_by_id')}
+        for row in result['customers']:
+            _ca.mask_payload(row, row['id'] in _found and _ca.phones_visible(request.user, _found[row['id']]))
+        sel = result.get('customer')
+        if sel and not (sel.get('id') in _found and _ca.phones_visible(request.user, _found[sel['id']])):
+            _ca.mask_payload(result, False)
         return Response(result)
 
     # ── Attachments ───────────────────────────────────────────────────────────
@@ -503,7 +517,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         # Log opening event
         case._log_event(f'حالة مفتوحة من مكالمة #{call.pk}', profile)
 
-        return Response(CustomerCaseDetailSerializer(case).data, status=201)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data, status=201)
 
     @action(detail=True, methods=['patch'], url_path='link-case')
     def link_case(self, request, pk=None):
@@ -636,7 +650,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
             call_log=call,
             collected_by=_profile(request),
         )
-        return Response(AddressUpdateSerializer(update).data, status=201)
+        return Response(AddressUpdateSerializer(update, context={'request': request}).data, status=201)
 
     @action(detail=True, methods=['post'], url_path=r'address-updates/(?P<update_id>[0-9]+)/apply')
     def apply_address_update(self, request, pk=None, update_id=None):
@@ -672,7 +686,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         if profile and profile.role not in ('admin', 'call_center', 'supervisor'):
             qs = qs.filter(handled_by=profile)
 
-        return Response(CallLogListSerializer(qs, many=True).data)
+        return Response(CallLogListSerializer(qs, many=True, context={'request': request}).data)
 
     @action(detail=False, methods=['get'], url_path='agents')
     def agents(self, request):
@@ -1014,7 +1028,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'الموظف غير موجود'}, status=404)
 
         case.assign(staff=staff, note=note)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def escalate(self, request, pk=None):
@@ -1034,7 +1048,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'الموظف غير موجود'}, status=404)
 
         case.escalate(to_staff=to_staff, reason=reason, by_staff=profile)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
@@ -1048,7 +1062,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'resolution مطلوب'}, status=400)
 
         case.resolve(resolution=resolution, root_cause=root_cause, by_staff=profile)
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
@@ -1060,7 +1074,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
                 status=400,
             )
         case.close(by_staff=_profile(request))
-        return Response(CustomerCaseDetailSerializer(case).data)
+        return Response(CustomerCaseDetailSerializer(case, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
     def csat(self, request, pk=None):
@@ -1153,7 +1167,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
             status__in=('open', 'working', 'waiting', 'escalated'),
         ).select_related('customer', 'branch').order_by('-created_at')
 
-        return Response(CustomerCaseListSerializer(qs, many=True).data)
+        return Response(CustomerCaseListSerializer(qs, many=True, context={'request': request}).data)
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):

@@ -203,7 +203,8 @@ SCREENS = [
                        'Supervisors: select tasks then "Assign to" an employee, role or branch, with a preview of who will get them.'),
              'roles': ['admin', 'supervisor']},
         ],
-        'tips': [T('موظف الفرع بيشوف متابعات فرعه بس، والأرقام في اللوحة لفرعه. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's follow-ups only, and the dashboard figures are for their branch. Supervisors and the quality manager see every branch."),
+        'tips': [T('لو عرض الأرقام مقفول عندك، زرار واتساب بيختفي كمان (الرابط فيه الرقم).', 'If phone numbers are turned off for you, the WhatsApp button is hidden too (its link contains the number).'),
+                 T('موظف الفرع بيشوف متابعات فرعه بس، والأرقام في اللوحة لفرعه. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's follow-ups only, and the dashboard figures are for their branch. Supervisors and the quality manager see every branch."),
                  
             T('الهاتف يظهر محجوباً (●●●) لو دورك لا يسمح برؤيته؛ في هذه الحالة زر واتساب لا يظهر.',
               'The phone appears masked (●●●) if your role may not see it; then the WhatsApp button is hidden.'),

@@ -513,7 +513,7 @@ def update_message_status(request, pk, msg_pk):
 
     # Update campaign counters
     _refresh_campaign_counters(msg.campaign)
-    return Response(CampaignMessageSerializer(msg).data)
+    return Response(CampaignMessageSerializer(msg, context={'request': request}).data)
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────

@@ -344,7 +344,8 @@ SCREENS = [
             T('سجّل الأمراض المزمنة في البطاقة (تعديل) لو العميل أخبرك بها.', 'Record chronic conditions on the card (edit) if the customer tells you.'),
             T('«+ حجز جديد» يفتح نموذج الحجز (اختر العميل فيه)، و«طلبات لم تُلبَّ» تفتح طلبات العميل.', '"+ New reservation" opens the reservation form (pick the customer there); "Unmet requests" opens the customer\'s requests.'),
         ],
-        'tips': [
+        'tips': [T('أرقام عميل فرع تاني بتظهر مخفية (آخر 3 أرقام) — حتى في ملخص الكاشير والفاتورة والملف الطبي.', "Another branch's customer's numbers show hidden (last 3 digits) — also in the cashier summary, the receipt and the patient profile."),
+                 
             T('الملف الصحي معلومة حساسة — لا تشاركها خارج العمل.', 'The health profile is sensitive — never share it outside work.'),
             T('تعديل النقاط يؤثر على رصيد العميل في كل الفروع ويُسجَّل باسمك.', 'Adjusting points affects the customer\'s balance in all branches and is recorded under your name.'),
         ],
@@ -431,7 +432,7 @@ SCREENS = [
                  '«فاتورة» = عدد فواتيره، «إجمالي (ج.م)» = قيمة مشترياته، و«حجز نشط» بيتلوّن لو عنده حجز مفتوح.\n• تحته البطاقة الجانبية: الشريحة وخطر الانقطاع وأيام من آخر زيارة؛ ولو ظهر «⚡ يُنصح بالتواصل مع هذا العميل فوراً» كلّمه.',
                  '"Invoice" = number of invoices, "Total (EGP)" = their spend, and "Active reservation" is highlighted when one is open.\n• Below it is the side card: segment, churn risk and days since the last visit; if "⚡ Contact this customer now" shows, call them.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

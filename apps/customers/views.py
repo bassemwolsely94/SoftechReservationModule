@@ -306,7 +306,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def pos_summary(self, request, pk=None):
         from .pos_summary import build_pos_summary
         customer = self.get_object()
-        data = build_pos_summary(customer)
+        data = access.mask_payload(build_pos_summary(customer), access.phones_visible(request.user, customer))
         # بدل الروشتة balance — staff with the replacement «view» right only, never printed for the
         # patient (owner D14). ?branch= marks what is redeemable at this POS. Non-fatal.
         try:
@@ -335,7 +335,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'لا توجد فاتورة'}, status=status.HTTP_404_NOT_FOUND)
         if request.method == 'POST':
             return Response(send_receipt(purchase, request.data.get('channel', 'print')))
-        return Response(build_receipt(purchase))
+        return Response(access.mask_payload(build_receipt(purchase), access.phones_visible(request.user, customer)))
 
     # ── GET /api/customers/{id}/repeat-order/?branch=&invoice= ────────────────
     # Rebuild a past order into a REVALIDATED cart proposal (never blind-copy).
@@ -370,7 +370,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
         """
         customer = self.get_object()
         from .patient_profile import build_patient_profile
-        return Response(build_patient_profile(customer, request_user=request.user))
+        return Response(access.mask_payload(build_patient_profile(customer, request_user=request.user),
+                                            access.phones_visible(request.user, customer)))
 
     # ── GET /api/customers/{id}/timeline/ ────────────────────────────────────
 

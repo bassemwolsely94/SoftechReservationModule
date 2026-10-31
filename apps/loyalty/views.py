@@ -237,6 +237,9 @@ class AdjustPointsView(APIView):
         })
 
 
+from apps.customers import access as _cust_access   # Batch 5b
+
+
 class SoftechBalanceView(APIView):
     """
     Branch staff endpoint: look up current SOFTECH points balance for a walk-in customer.
@@ -275,7 +278,7 @@ class SoftechBalanceView(APIView):
                 'softech_pic':            None,
                 'enrolled':               False,
                 'customer_name':          customer.name,
-                'customer_phone':         customer.phone or '',
+                'customer_phone':         _cust_access.customer_phone(request.user, customer, customer.phone or ''),
                 'warning': 'العميل لا يملك كود PIC — نقاط الشراء غير متاحة',
             })
 
@@ -298,7 +301,7 @@ class SoftechBalanceView(APIView):
             'softech_pic':            softech_pic,
             'enrolled':               enrolled,
             'customer_name':          customer.name,
-            'customer_phone':         customer.phone or '',
+            'customer_phone':         _cust_access.customer_phone(request.user, customer, customer.phone or ''),
             # UI hint: if not enrolled, show referral points only + suggest referral adjust
             'purchase_points_blocked': not enrolled,
         })

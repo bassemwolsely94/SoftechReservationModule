@@ -369,7 +369,8 @@ SCREENS = [
             T('حدد الحجوزات ثم اختر من «تغيير الحالة…» واضغط «تطبيق».', 'Select reservations, pick from "Change status…" and press "Apply".'),
             T('حدد الحجوزات الأول، وبعدين «📥 تصدير Excel» يصدّر الحجوزات المحددة بس.', 'Select reservations first; "📥 Export Excel" then exports only the selected ones.'),
         ],
-        'tips': [
+        'tips': [T('رقم العميل بيظهر لموظفي الفرع اللي بيخدموا الحجز علشان يتصلوا؛ دور «مشاهد» وأي حد مقفول عنده عرض الأرقام بيشوفه مخفي.', 'The customer\'s number shows to the branch staff serving the reservation so they can call; the "viewer" role and anyone with phone numbers turned off see it hidden.'),
+                 
             T('الحجوزات التي لا تسمح حالتها بالانتقال المختار يتم تخطيها تلقائياً، والنظام يخبرك بعددها.',
               'Reservations whose status does not allow the chosen move are skipped automatically, and the system tells you how many.'),
         ],
@@ -411,7 +412,7 @@ SCREENS = [
                  'علّم المربع جنب أي حجز عشان تحدده، أو مربع العنوان لتحديد الصفحة كلها. أول ما تحدد بيظهر شريط فوق فيه عدد المحدد والإجراءات.\n• اضغط على بيانات الحجز في الصف يفتحه.',
                  'Tick the box next to a reservation to select it, or the header box for the whole page. As soon as you select, a bar appears on top with the count and the actions.\n• Click the reservation details in the row to open it.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -230,7 +230,8 @@ SCREENS = [
             T('لصرف قسيمة: تبويب «استرداد» أو زر «استرداد» بجانب القسيمة.', 'To redeem: the "Redeem" tab or the "Redeem" button next to the voucher.'),
             {'text': T('لإنشاء قسيمة: تبويب «القسائم» ← «قسيمة جديدة».', 'To create one: the "Vouchers" tab → "New voucher".'), 'roles': ['admin', 'supervisor', 'purchasing']},
         ],
-        'tips': [
+        'tips': [T('أرقام العملاء في التوزيع والاستخدام بتظهر مخفية لموظفي الفروع؛ رمز التحقق بيتبعت على الرقم اللي اتكتب وقت الاستخدام.', 'Customer numbers in assignments and redemptions show hidden to branch staff; the one-time code goes to the number typed at redemption.'),
+                 
             T('لا تطلب من العميل إرسال الرمز في رسالة؛ يقرأه لك فقط.', 'Do not ask the customer to forward the code in a message; they only read it to you.'),
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
             T('بعد استخدام القسيمة أو تخصيصها لا تتغير قيمتها ولا حدودها، والعميل يُحدَّد من «تخصيص» فقط.',
@@ -313,7 +314,7 @@ SCREENS = [
                  'عمود «الاستخدام» بيوضح اتصرفت كام مرة من الحد الكلي.\n• «استرداد» بيبدأ خطوات الصرف (الهاتف ← الرمز ← التحقق ← المستند).\n• «📱 تخصيص» يضيف رقم عميل مسموح له بالقسيمة.\n• «إلغاء» بيوقف القسيمة نهائياً بعد تأكيد، والسيستم بيسمح بيه للمدير بس.',
                  'The "Usage" column shows how many times it was used out of the total limit.\n• "Redeem" starts the redemption steps (phone → code → verify → document).\n• "📱 Assign" adds a customer phone allowed to use the voucher.\n• "Cancel" stops the voucher for good after a confirmation, and the system allows it for managers only.')},
         ],
-        'updated': '2026-10-28',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

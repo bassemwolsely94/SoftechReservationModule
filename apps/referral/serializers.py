@@ -2,6 +2,8 @@ from rest_framework import serializers
 from apps.referral.models import ReferralCode, ReferralLead, ReferralEvent
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class ReferralCodeSerializer(serializers.ModelSerializer):
     referral_url = serializers.CharField(read_only=True)
     qr_code      = serializers.SerializerMethodField()
@@ -15,7 +17,12 @@ class ReferralCodeSerializer(serializers.ModelSerializer):
         return obj.generate_qr_svg()
 
 
-class ReferralLeadSerializer(serializers.ModelSerializer):
+class ReferralLeadSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('lead_phone',)
+    def phones_visible_for(self, user, instance):
+        from core import branch_scope
+        return super().phones_visible_for(user, instance) and branch_scope.branch_ids(user) is None
+
     status_display  = serializers.CharField(source='get_status_display', read_only=True)
     referrer_name   = serializers.SerializerMethodField()
 

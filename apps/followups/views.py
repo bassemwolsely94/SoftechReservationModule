@@ -36,6 +36,7 @@ from .serializers import (
 from . import services
 from apps.catalog.wildcard import wq
 from core import branch_scope
+from apps.customers import access as _ca   # Batch 5b
 from core.errors import public_error
 
 
@@ -407,12 +408,12 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         services.mark_task_called(
             task, note='تم التواصل عبر واتساب', staff=_profile(request),
         )
-        return Response({
+        return Response(_ca.mask_payload({
             'whatsapp_url':         task.whatsapp_url_with_message,
             'whatsapp_url_plain':   task.whatsapp_url,
             'message':              task.render_whatsapp_message(),
             'task': self._detail(task),
-        })
+        }, _ca.record_phones_visible(request.user)))
 
     # ── Call Center connection: create a CallLog from the follow-up ───────────
     @action(detail=True, methods=['post'], url_path='log-call')
@@ -722,12 +723,12 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
                     staff=_profile(request),
                 )
 
-        return Response({
+        return Response(_ca.mask_payload({
             'message':         msg,
             'whatsapp_url':    wa_url,
             'character_count': len(msg),
             'tasks_count':     len(tasks),
-        })
+        }, _ca.record_phones_visible(request.user)))
 
     # ── Feature 9: Outcome preset (per task) ──────────────────────────────────
     @action(detail=True, methods=['post'], url_path='outcome')
@@ -841,7 +842,8 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             f'https://wa.me/{task._normalise_phone(phone)}?text={urllib.parse.quote(msg)}'
             if phone else None
         )
-        return Response({'message': msg, 'whatsapp_url': wa_url})
+        return Response(_ca.mask_payload({'message': msg, 'whatsapp_url': wa_url},
+                                         _ca.record_phones_visible(request.user)))
 
     # ── Feature 10: Bulk actions ───────────────────────────────────────────────
     @action(detail=False, methods=['post'], url_path='bulk-action')
