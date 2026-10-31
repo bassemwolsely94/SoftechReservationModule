@@ -17,6 +17,21 @@ Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
 - **Agreed payment days count from the month end** of the invoice month. Expected date = last day of the invoice month + agreed days.
 - The read-only pass across all 38 contracts is still needed. It is the step-0 probe in this spec: one SELECT-only pass, per contract, over invoices, receipts and allocations. It gives the measured days to the agreed-days entry and checks that receipts land on the contract account. It is run off-hours with the owner's OK.
 
+**Step 0 run 2026-10-31** (owner «Run it now»; SELECT-only, 12 months, `logs/contract_receivables_probe_2026-10-31.csv`):
+- 53 contract accounts (all `ptcode 10 / ptclassif 10`), sales 37.73M in 12 months; top 10 accounts = 84%.
+- **Acceptance check met:** 4227 = 44.3 days, 4288 = 42.0 days (probe of 2026-10-30: ≈44 / ≈42).
+- Value-weighted collection days across all accounts: **57.8**. Range 18 (4973) to 432 (4465, EGYMED 0%).
+- **Link coverage:** 22 accounts have ≥ 70% of their sales linked to receipts in SOFTECH («reliable»), 75.8% of the
+  value; 31 accounts are below (24.2% of the value) — open question 1 now needs the owner's answer.
+- **Receivable sign confirmed:** Σ SOFTECH balance (owed convention) = −6.24M → contract receivables ≈ **6.24M**
+  (estimate was 5.4M). Negative = they owe us.
+- Receipts are `cheqtype 10`; 16 accounts also have a few `20` (refunds) — answers question 6.
+- **Insurance TPAs are split into one account per co-pay %** (D M S 0/5/10/20/25/30/35%, EGYMED, ايجيكير, عناية مصر,
+  Med Sure, كير بلاس) — the registry should group them by company (question 5).
+- On-account (receipts not linked to invoices): 2.48M, of which 1.49M on 4227.
+- Odd: 5009 has negative days (receipts linked to invoices dated after them — advance payments?); 4 accounts have
+  under 1,000 EGP of sales in the year (4222, 4594, 4875, 5117).
+
 ## 1. Problem (measured)
 
 - About **46% of sales are contract credit**: channel 10 (تعاقدات/آجل), 11.26M per 90 days, 38 contracts, top 4 =
