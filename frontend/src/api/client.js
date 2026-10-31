@@ -1974,6 +1974,17 @@ export const financeApi = {
   receivablesTerms:    (body)   => api.patch('/finance/receivables/terms/', body),
   receivablesExport:   ()       => api.get('/finance/receivables/export/', { responseType: 'blob' }),
   receivablesRefresh:  ()       => api.post('/finance/receivables/refresh/'),
+  // P-42 supplier terms («شروط الموردين»)
+  supplierTerms:          ()       => api.get('/finance/supplier-terms/'),
+  supplierTermCreate:     (body)   => api.post('/finance/supplier-terms/', body),
+  supplierTermUpdate:     (body)   => api.patch('/finance/supplier-terms/', body),
+  supplierTermsCalendar:  (params) => api.get('/finance/supplier-terms/calendar/', { params }),
+  supplierTermsOnTime:    ()       => api.get('/finance/supplier-terms/on-time/'),
+  supplierTermsEarlyPay:  ()       => api.get('/finance/supplier-terms/early-pay/'),
+  supplierTermsResidue:   ()       => api.get('/finance/supplier-terms/residue/'),
+  supplierTermsExport:    (sheet)  => api.get('/finance/supplier-terms/export/', { params: { sheet }, responseType: 'blob' }),
+  supplierTermsRecompute: ()       => api.post('/finance/supplier-terms/recompute/'),
+  supplierTermsRecomputeStatus: () => api.get('/finance/supplier-terms/recompute/'),
   // Dashboard — consolidated KPIs for the current or specified period
   dashboard:       (params)       => api.get('/finance/dashboard/', { params }),
 

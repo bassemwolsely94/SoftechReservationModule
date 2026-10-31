@@ -2302,6 +2302,12 @@ def _run_ap_reconciliation_sync():
             logger.info('[APScheduler] AP-reconciliation %s done', cmd)
         except Exception as exc:
             logger.error('[APScheduler] AP-reconciliation %s failed: %s', cmd, exc)
+    # P-42: open supplier invoices → category slices + due dates from the finance-entered terms (PostgreSQL only).
+    try:
+        from apps.finance.supplier_terms import recompute
+        logger.info('[APScheduler] supplier terms recompute: %s slices', recompute())
+    except Exception as exc:
+        logger.error('[APScheduler] supplier terms recompute failed: %s', exc)
     # P-41: contract receivables — the tracked contract accounts only, one account at a time (SELECT-only). No
     # matching, chains, bindings or anomaly scans on the customer side.
     try:

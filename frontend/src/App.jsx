@@ -142,6 +142,7 @@ import CashFlowRetired from './pages/CashFlowRetired'   // P-43 — CashFlowPage
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
 import FinanceSchemaPage from './pages/FinanceSchemaPage'
 import ContractReceivablesPage from './pages/ContractReceivablesPage'   // P-41
+import SupplierTermsPage from './pages/SupplierTermsPage'               // P-42
 import ProductCatalogPage from './pages/ProductCatalogPage'
 import ProductDetailPage from './pages/ProductDetailPage'
 import ProductContentAdminPage from './pages/ProductContentAdminPage'
@@ -491,6 +492,7 @@ export default function App() {
               <Route path="cashflow"  element={<CashFlowRetired />} />
               <Route path="expenses"  element={<ExpenseAnalyticsPage />} />
               <Route path="receivables" element={<ContractReceivablesPage />} />
+              <Route path="supplier-terms" element={<SupplierTermsPage />} />
               <Route path="schema"    element={<FinanceSchemaPage />} />
             </Route>
 

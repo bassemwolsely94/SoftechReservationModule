@@ -64,8 +64,8 @@ staff-development goals. It started on 2026-10-30.
 | P-39 POS go-live: 100% SOFTECH parity | **Approved for specification** (2026-10-30) | Parity suite across sale shapes; performance fixes; phased pilot | Cutover; stop-and-ask on every posting step | Pilot branch | — | No |
 
 | P-40 13-week cash view | **Approved for specification** (2026-10-30) | Audience: all finance users + admins; measured contract settlement; supplier terms by category; early-pay foregone line | P-41, P-42 for completeness; P-34 budget | Fixed outflows input | — | No |
-| P-41 Contract receivables tracker | **Approved for specification** (2026-10-30) | Reuse the customer side of the A/P–A/R engine; 4227 ≈44d, 4288 ≈42d measured | Agreed days per contract (finance entry) | Wider read-only check across all 38 contracts | — | No |
-| P-42 Supplier terms by item category + early-pay opportunities | **Approved for specification** (2026-10-30) | Terms per supplier × category (local / imported / non-discounted); paid on time | — | Terms entry | — | No |
+| P-41 Contract receivables tracker | **Built** (2026-10-31) | Reuse the customer side of the A/P–A/R engine; 4227 ≈44d, 4288 ≈42d measured | Agreed days per contract (finance entry) | Wider read-only check across all 38 contracts | — | No |
+| P-42 Supplier terms by item category + early-pay opportunities | **Built** (2026-10-31) | Terms per supplier × category (local / imported; non-discounted dropped); paid on time | — | Terms entry | — | No |
 | P-43 Finance hub hygiene | **Approved for specification** (2026-10-30) | Keep and freshen the GP and expense pages; cash flow → P-40 | — | — | — | No |
 | P-44 Full accounting module | **Deferred (owner: later)** | — | — | — | — | No |
 | P-45 Insurance claim collection embedding | **Deferred (owner: later)** | — | P-41 meanwhile | — | — | No |
@@ -140,7 +140,13 @@ check for the owner. Spec files:
   70 % links), `/finance/receivables`, `ar_contracts` freshness, writer refuses customer allocations. Earlier note:
   customer side limited to listed contracts (today's customer query would
   read all retail sales); SOFTECH's own allocations, no matching; `ar_contracts` freshness domain
-- [P-42](06_SPEC_P-42_supplier_terms.md) — `SupplierTerm` per supplier × category, invoice slices, early-pay list
+- [P-42](06_SPEC_P-42_supplier_terms.md) — **BUILT 2026-10-31**: `SupplierTerm` (local / imported / supplier-wide
+  «any»; days from invoice date or month end; effective-dated; audited) + `APInvoiceSlice` (finance/0018), split from
+  `PurchaseLine` with Σ slices = open exactly; `finance/supplier_terms.py` (calendar Saturday weeks, on-time with
+  link coverage, early-pay by annualised return + foregone, residue >365 days, P-40 `supplier_outflows` /
+  `early_pay_by_week`); nightly recompute after the supplier sync + `recompute_supplier_terms`;
+  `/finance/supplier-terms`. Internal accounts: setting `finance_internal_supplier_codes` (default 1268, 3068,
+  4469–4472). Local run: 8,160 slices; since June 2025, 7.0M of 8.9M open real payables classified.
 - [P-40](06_SPEC_P-40_13_week_cash_view.md) — `/finance/cash` from P-41 + P-42 + cheques + fixed outflows; low/base/high;
   `/finance/cashflow` redirects there
 - **Owner decisions 2026-10-31** (written into each spec):

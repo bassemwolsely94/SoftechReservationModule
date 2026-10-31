@@ -24,6 +24,7 @@ const TABS = [
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
   { to: '/finance/receivables', label: 'مستحقات التعاقدات', icon: '🧾' },
+  { to: '/finance/supplier-terms', label: 'شروط الموردين', icon: '📅' },
   { to: '/finance/coa',       label: 'دليل الحسابات',    icon: '🗂️' },
   { to: '/finance/schema',    label: 'اكتشاف المخطط',   icon: '🔍', adminOnly: true },
 ]
