@@ -8,6 +8,9 @@ from django.db.models import Sum, Count
 
 from .models import Customer, CustomerNote, CustomerHealthProfile, PurchaseHistory
 from core.errors import public_error
+from rest_framework.exceptions import PermissionDenied
+
+from . import access
 from .serializers import (
     CustomerSerializer, CustomerListSerializer,
     CustomerCreateSerializer, CustomerUpdateSerializer,
@@ -49,7 +52,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             # sales-account placeholders (Walk-In 1510 …) are not people; still openable by id
             qs = qs.filter(is_account_placeholder=False)
+            # B-2: browse own branches; other branches only by full phone (customers/access.py)
+            limit = access.findable_q(self.request.user, self.request.query_params.get('search', ''))
+            if limit is not None:
+                qs = qs.filter(limit)
         return qs
+
+    # B-2: a customer of another branch opens (to be served anywhere) but is edited only by
+    # their own branches or the all-branch roles
+    _WRITE_ACTIONS = {'update', 'partial_update', 'destroy', 'update_conditions', 'notes',
+                      'delete_note', 'refresh_health'}
+
+    def get_object(self):
+        obj = super().get_object()
+        writing = self.action in self._WRITE_ACTIONS or (
+            self.action == 'health_profile_view' and self.request.method != 'GET')
+        if writing and not access.can_edit(self.request.user, obj):
+            raise PermissionDenied('هذا العميل تابع لفرع آخر — التعديل لفرعه أو لمركز الاتصال.')
+        return obj
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -96,7 +116,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             limit = min(int(request.query_params.get('limit', 6)), 15)
         except (TypeError, ValueError):
             limit = 6
-        data = _recognize(request.query_params.get('q', ''), limit=max(1, limit))
+        data = _recognize(request.query_params.get('q', ''), limit=max(1, limit), user=request.user)
         return Response(data)
 
     # ── GET /api/customers/address-suggest/?field=area|district|landmark&q=&area= ──
@@ -454,6 +474,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
         """
         p       = request.query_params
         qs      = Customer.objects.filter(churn_score__gt=0).order_by('-churn_score')
+        own     = access.own_q(request.user)          # B-2: a list of people = own branches only
+        if own is not None:
+            qs = qs.filter(own)
 
         segment = p.get('segment')
         if segment:
@@ -484,7 +507,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         data = []
         for c in qs.select_related('preferred_branch')[:limit]:
-            data.append({
+            data.append(access.mask_dict(request.user, c, {
                 'id':                 c.pk,
                 'name':               c.name,
                 'phone':              c.phone,
@@ -498,5 +521,5 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 'ltv':                float(c.ltv or 0),
                 'preferred_branch':   c.preferred_branch.name_ar if c.preferred_branch else '',
                 'purchase_count_90d': c.purchase_count_90d,
-            })
+            }))
         return Response({'count': len(data), 'results': data})

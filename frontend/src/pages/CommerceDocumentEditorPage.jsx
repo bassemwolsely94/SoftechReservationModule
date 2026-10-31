@@ -120,7 +120,7 @@ export default function CommerceDocumentEditorPage() {
               </tr>
             ))}
             {/* Add-line row */}
-            <tr data-tour="commerce-editor-add-row" className="bg-blue-50/40">
+            <tr data-tour="commerce-editor-add-line" className="bg-blue-50/40">
               <td className="px-3 py-2 text-gray-300">+</td>
               <td className="px-3 py-2"><input className={`${inp} w-44`} placeholder="اسم الصنف…" value={draft.item_name}
                 onChange={e => setDraft(d => ({ ...d, item_name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addLine()} /></td>

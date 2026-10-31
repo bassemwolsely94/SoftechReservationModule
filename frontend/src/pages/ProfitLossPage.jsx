@@ -120,7 +120,7 @@ export default function ProfitLossPage() {
           </table>
 
           {!data.is_complete && (
-            <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700" data-tour="finance-pnl-incomplete">
+            <div data-tour="finance-pnl-partial" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
               ⚠ بيانات جزئية — بعض مصادر البيانات لم تُزامن بعد
             </div>
           )}

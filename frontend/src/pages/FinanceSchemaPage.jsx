@@ -196,8 +196,7 @@ export default function FinanceSchemaPage() {
             </button>
 
             {/* Sync enabled toggle */}
-            <button
-              data-tour="finance-schema-sync-toggle"
+            <button data-tour="finance-schema-sync"
               onClick={e => {
                 e.stopPropagation()
                 updateMut.mutate({ id: t.id, data: { sync_enabled: !t.sync_enabled } })

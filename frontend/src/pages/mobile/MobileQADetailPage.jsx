@@ -89,7 +89,7 @@ export default function MobileQADetailPage() {
               </div>
             ) : (
               <>
-                <div data-tour="hr-qa-result" className="grid grid-cols-3 gap-1.5">
+                <div data-tour="hr-qa-item-result" className="grid grid-cols-3 gap-1.5">
                   {RESULTS.map(opt => (
                     <button key={opt.v} onClick={() => setResult(i, opt.v)}
                       className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${r.result === opt.v ? `${opt.on} border-transparent` : `bg-white ${opt.off}`}`}>

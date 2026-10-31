@@ -35,11 +35,25 @@ from core.permissions import matrix_permission
 
 # Every reconciliation view checks the finance matrix too (Batch 4, Z-3); the admin / pharmacist
 # checks inside stay until the owner's overblock review.
-FINANCE          = matrix_permission('finance')
-FINANCE_APPROVE  = matrix_permission('finance', post=('approve',))
-FINANCE_EDIT     = matrix_permission('finance', post=('edit',))
-FINANCE_FINALIZE = matrix_permission('finance', post=('finalize',))     # SOFTECH write-back
-FINANCE_EXPORT   = matrix_permission('finance', get=('export',))
+def _company_only(perm):
+    """Supplier A/P reconciliation is company-level finance: on top of the matrix grant, only an
+    all-branch user may open it (owner decision B-1, 2026-10-30 — core.branch_scope)."""
+    from core.branch_scope import sees_everything
+
+    class CompanyFinance(perm):
+        message = 'تسوية الموردين متاحة للإدارة فقط.'
+
+        def has_permission(self, request, view):
+            return sees_everything(request.user) and super().has_permission(request, view)
+
+    return CompanyFinance
+
+
+FINANCE          = _company_only(matrix_permission('finance'))
+FINANCE_APPROVE  = _company_only(matrix_permission('finance', post=('approve',)))
+FINANCE_EDIT     = _company_only(matrix_permission('finance', post=('edit',)))
+FINANCE_FINALIZE = _company_only(matrix_permission('finance', post=('finalize',)))     # SOFTECH write-back
+FINANCE_EXPORT   = _company_only(matrix_permission('finance', get=('export',)))
 
 
 def _scope(request, qs, party_path='party'):

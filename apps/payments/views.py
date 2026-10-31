@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework import filters, generics, status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 
+from core import branch_scope
 from core.permissions import matrix_permission
 
 # External payments sit in the finance module (Batch 4, Z-3): read = view, record = create,
@@ -40,7 +41,7 @@ def _log_action(payment, action, user, notes='', variance=0):
 
 # ── CRUD views ────────────────────────────────────────────────────────────────
 
-class ExternalPaymentListView(generics.ListCreateAPIView):
+class ExternalPaymentListView(branch_scope.BranchScopedMixin, generics.ListCreateAPIView):
     """
     GET  /api/payments/  — list with filters
     POST /api/payments/  — create new payment record
@@ -52,9 +53,9 @@ class ExternalPaymentListView(generics.ListCreateAPIView):
     ordering           = ['-created_at']
 
     def get_queryset(self):
-        qs = ExternalPayment.objects.select_related(
+        qs = branch_scope.scope(ExternalPayment.objects.select_related(
             'branch', 'customer', 'created_by', 'confirmed_by'
-        ).prefetch_related('reconciliation_logs')
+        ).prefetch_related('reconciliation_logs'), self.request.user)
 
         method       = self.request.query_params.get('method')
         pay_status   = self.request.query_params.get('status')
@@ -77,7 +78,7 @@ class ExternalPaymentListView(generics.ListCreateAPIView):
         return ExternalPaymentSerializer
 
 
-class ExternalPaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
+class ExternalPaymentDetailView(branch_scope.BranchScopedMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     GET    /api/payments/{id}/
     PATCH  /api/payments/{id}/
@@ -106,6 +107,7 @@ class ExternalPaymentDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().update(request, *args, **kwargs)
 
     def perform_update(self, serializer):
+        self.check_branch_value(serializer)
         # each correction lands in the payment's log, before → after (Batch 4, Z-10c)
         before = {f: getattr(serializer.instance, f) for f in serializer.validated_data}
         payment = serializer.save()
@@ -133,7 +135,7 @@ def payment_confirm(request, pk):
     used to sit here too — pharmacists hold finance view only, so in practice only admin could
     confirm, against the matrix and the help (Batch 4, Z-11d — overblock review decision 2).
     """
-    payment = get_object_or_404(ExternalPayment, pk=pk)
+    payment = branch_scope.get_or_404(ExternalPayment, request.user, pk=pk)
     if payment.status not in (ExternalPayment.STATUS_PENDING, ExternalPayment.STATUS_DISPUTED):
         return Response(
             {'detail': f'لا يمكن تأكيد دفعة بحالة "{payment.get_status_display()}".'},
@@ -158,7 +160,7 @@ def payment_reconcile(request, pk):
     POST /api/payments/{id}/reconcile/
     Body: { notes (optional), variance (optional, default 0) }
     """
-    payment = get_object_or_404(ExternalPayment, pk=pk)
+    payment = branch_scope.get_or_404(ExternalPayment, request.user, pk=pk)
     if payment.status not in (ExternalPayment.STATUS_CONFIRMED, ExternalPayment.STATUS_DISPUTED):
         return Response(
             {'detail': f'لا يمكن تسوية دفعة بحالة "{payment.get_status_display()}".'},
@@ -188,7 +190,7 @@ def payment_dispute(request, pk):
     POST /api/payments/{id}/dispute/
     Body: { reason (required) }
     """
-    payment = get_object_or_404(ExternalPayment, pk=pk)
+    payment = branch_scope.get_or_404(ExternalPayment, request.user, pk=pk)
     if payment.status in (ExternalPayment.STATUS_CANCELLED, ExternalPayment.STATUS_RECONCILED):
         return Response(
             {'detail': f'لا يمكن الاعتراض على دفعة بحالة "{payment.get_status_display()}".'},
@@ -215,7 +217,8 @@ def payment_summary(request):
     Returns aggregated stats for today's payments.
     """
     today = timezone.localdate()
-    today_qs = ExternalPayment.objects.filter(payment_date=today)
+    mine = branch_scope.scope(ExternalPayment.objects.all(), request.user)
+    today_qs = mine.filter(payment_date=today)
 
     total_today = today_qs.count()
 
@@ -239,12 +242,12 @@ def payment_summary(request):
                 'total': float(row['total'] or 0),
             }
 
-    total_confirmed = ExternalPayment.objects.filter(
+    total_confirmed = mine.filter(
         status=ExternalPayment.STATUS_CONFIRMED,
         payment_date=today,
     ).count()
 
-    total_pending = ExternalPayment.objects.filter(
+    total_pending = mine.filter(
         status=ExternalPayment.STATUS_PENDING,
         payment_date=today,
     ).count()
@@ -268,7 +271,7 @@ def payment_upload_screenshot(request, pk):
     POST /api/payments/{id}/screenshot/
     Multipart: file field name = 'screenshot'
     """
-    payment = get_object_or_404(ExternalPayment, pk=pk)
+    payment = branch_scope.get_or_404(ExternalPayment, request.user, pk=pk)
 
     screenshot = request.FILES.get('screenshot')
     if not screenshot:

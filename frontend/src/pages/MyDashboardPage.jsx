@@ -286,9 +286,9 @@ function WidgetCard({ widget, index, canEdit, onDragStart, onDragEnter, onDragEn
             )}
           </div>
         </div>
-        <div data-tour="general-me-widget-controls" className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0" data-tour="general-me-widget-controls">
           <button data-tour="general-me-widget-size" title={`العرض: ${SIZE_HINT[widget.size] || SIZE_HINT.md} — اضغط للتوسيع`} className="text-gray-400 hover:text-brand-600 p-1" onClick={cycleSize}>⤢</button>
-          <button data-tour="general-me-widget-refresh" title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
+          <button title="تحديث" className="text-gray-400 hover:text-brand-600 p-1" onClick={() => setRefreshTick(t => t + 1)}>↻</button>
           <button data-tour="general-me-widget-remove" title="حذف" className="text-gray-400 hover:text-red-600 p-1" onClick={() => removeM.mutate()}>✕</button>
         </div>
       </div>
@@ -1023,7 +1023,7 @@ function AdminApprovalQueue() {
 
   if (pending.length === 0) return null
   return (
-    <div data-tour="general-me-identity-queue" className="mt-4 card border-amber-200 bg-amber-50/40">
+    <div className="mt-4 card border-amber-200 bg-amber-50/40" data-tour="general-me-approvals">
       <SectionTitle icon="🪪">طلبات اعتماد الهويات ({pending.length})</SectionTitle>
       <div className="space-y-2">
         {pending.map(p => (

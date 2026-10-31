@@ -36,7 +36,7 @@ MODULE = {
              'label': T('إنشاء وفتح', 'Create and open'),
              'text': T('ينشئ المستند ويفتحه للتحرير.', 'Creates the document and opens it for editing.'),
              'open_hint': _NEW},
-            {'screen': 'commerce.editor', 'target': 'commerce-editor-add-row', 'perm': 'commerce',
+            {'screen': 'commerce.editor', 'target': 'commerce-editor-add-line', 'perm': 'commerce',
              'label': T('اسم الصنف… · الكمية · السعر', 'Item name… · qty · price'),
              'text': T('اكتب الصنف والكمية والسعر الشامل للضريبة، وعلّم «خاضع للضريبة» لو عليه 14%، وEnter أو «إضافة».',
                        'Type the item, quantity and VAT-inclusive price, tick "taxable" for 14% items, then Enter or "Add".'),
@@ -76,7 +76,6 @@ MODULE = {
              'open_hint': _DOC},
          ]},
     ],
-
     'flows': [
         {
             'key': 'overview',
@@ -118,7 +117,7 @@ MODULE = {
                            '• باقي الأنواع ليها محرر بنود عادي.',
                            'For an "allocation grid" you get a table with items as rows and the client\'s branches as columns, each cell being that branch\'s quantity.\n'
                            '• Other types have a normal line editor.')},
-                {'target': 'commerce-editor-add-row', 'route': '/commerce/documents/:id',
+                {'target': 'commerce-editor-add-line', 'route': '/commerce/documents/:id',
                  'text': T('أضف بند: اسم الصنف، الكمية، السعر الشامل، وخاضع للضريبة.', 'Add a line: item name, quantity, inclusive price and taxable.'),
                  'more': T('السعر اللي بتكتبه شامل الضريبة؛ لو علّمت «خاضع للضريبة» النظام بيطلّع جزء الـ14% منه — مش بيزوده فوق السعر.\n'
                            '• «إضافة» أو Enter في خانة الصنف.',
@@ -153,15 +152,15 @@ SCREENS = [
                  T('لو ظهر «وحدة المستندات التجارية غير مُفعَّلة» يجب تفعيلها من إعدادات الخادم.', 'If "commercial documents module is not enabled" shows, it must be enabled in the server settings.')],
         'related': ['commerce.editor'],
         'tour': [
-            {'target': 'commerce-documents-header',
-             'label': T('المستندات التجارية', 'Commercial documents'),
-             'when': T('لعمل عرض سعر أو فاتورة بيع أو شبكة توزيع لمستشفى.', 'To prepare a quotation, a sales invoice or a hospital distribution grid.'),
-             'text': T('عروض الأسعار وفواتير البيع وشبكات توزيع المستشفيات — لا تكتب في SOFTECH.',
+            {'target': 'commerce-documents-header', 'text': T('عروض الأسعار وفواتير البيع وشبكات توزيع المستشفيات — لا تكتب في SOFTECH.',
                                               'Quotations, sales invoices and hospital allocation grids — nothing is written to SOFTECH.'),
              'more': T('للمستندات اللي بتطلع لجهات برّه نقطة البيع، زي عرض سعر لمستشفى.\n'
                        '• المستند هنا مش بيخصم من المخزون ولا بيتسجّل في SOFTECH — هو ملف تبعته للجهة.',
                        'For documents issued to clients outside the POS, like a quotation for a hospital.\n'
-                       '• A document here does not deduct stock or post to SOFTECH — it is a file you send to the client.')},
+                       '• A document here does not deduct stock or post to SOFTECH — it is a file you send to the client.'),
+             'label': T('المستندات التجارية', 'Commercial documents'),
+             'when': T('لعمل عرض سعر أو فاتورة بيع أو شبكة توزيع لمستشفى.', 'To prepare a quotation, a sales invoice or a hospital distribution grid.'),
+         },
             {'target': 'commerce-documents-new', 'label': T('+ مستند جديد', '+ New document'),
              'text': T('يفتح نافذة إنشاء مستند: النوع والجهة والتاريخ.', 'Opens the new-document window: type, client and date.'),
              'when': T('لعرض أسعار أو فاتورة بيع أو شبكة توزيع لجهة.', 'For a quotation, a sales invoice or an allocation grid for a client.'),
@@ -171,25 +170,16 @@ SCREENS = [
                        '• "Type" is required and "Client" is optional.\n'
                        '• New client? Type it in "+ New client (hospital)…" and press "Add".\n'
                        '• "Create and open" opens the document right away so you can add lines.'),
-         },
-            {'target': 'commerce-documents-table', 'label': T('جدول المستندات', 'Documents table'),
-             'text': T('رقم المستند، النوع، الجهة، التاريخ، الحالة، عدد البنود والإجمالي. اضغط الصف يفتحه.',
-                       'Number, type, client, date, status, line count and total. Click a row to open it.'),
-             'when': T('ارجع لمستند قديم تعدّله أو تصدّره تاني.', 'Go back to an old document to edit or export it again.'),
+             'label': T('+ مستند جديد', '+ New document'),
+             'when': T('لعرض أسعار أو فاتورة بيع أو شبكة توزيع لجهة.', 'For a quotation, a sales invoice or an allocation grid for a client.')},
+            {'target': 'commerce-documents-table', 'text': T('المستندات بالرقم والنوع والجهة والتاريخ والحالة وعدد البنود والإجمالي.',
+                                              'The documents with number, type, client, date, status, line count and total.'),
              'more': T('كل المستندات اللي اتعملت قبل كده.\n'
                        '• لو فاضية هتلاقي «لا توجد مستندات — أنشئ أول مستند».',
                        'Every document made so far.\n'
                        '• When empty it shows "No documents — create the first one".'),
-         },
-            {'target': 'commerce-documents-row',
-             'label': T('صف المستند', 'Document row'),
-             'when': T('لفتح مستند وتعديل بنوده.', 'To open a document and edit its lines.'),
-             'text': T('اضغط أي صف لفتح المستند وتحرير بنوده؛ يظهر عند وجود مستندات.',
-                                              'Click any row to open the document and edit its lines; shown when documents exist.'),
-             'more': T('الصف كله قابل للضغط (أو «فتح ←») ويفتح محرر المستند.\n'
-                       '• من هناك تعدّل البنود وتصدّر Excel.',
-                       'The whole row is clickable (or "Open ←") and opens the document editor.\n'
-                       '• From there you edit lines and export to Excel.')},
+             'label': T('جدول المستندات', 'Documents table'),
+             'when': T('ارجع لمستند قديم تعدّله أو تصدّره تاني.', 'Go back to an old document to edit or export it again.')},
             {'target': 'commerce-documents-type', 'label': T('النوع *', 'Type *'),
              'text': T('نوع المستند — الوحيد المطلوب.', 'The document type — the only required field.'),
              'when': T('شبكة التوزيع محتاجة جهة كمان.', 'An allocation grid also needs a client.'),
@@ -204,10 +194,18 @@ SCREENS = [
             {'target': 'commerce-documents-create', 'label': T('إنشاء وفتح', 'Create and open'),
              'text': T('ينشئ المستند برقم جديد ويفتح صفحة تحريره.', 'Creates the document with a new number and opens its editor.'),
              'open_hint': _NEW},
+            {'target': 'commerce-documents-row', 'text': T('اضغط أي صف لفتح المستند وتحرير بنوده؛ يظهر عند وجود مستندات.',
+                                              'Click any row to open the document and edit its lines; shown when documents exist.'),
+             'more': T('الصف كله قابل للضغط (أو «فتح ←») ويفتح محرر المستند.\n'
+                       '• من هناك تعدّل البنود وتصدّر Excel.',
+                       'The whole row is clickable (or "Open ←") and opens the document editor.\n'
+                       '• From there you edit lines and export to Excel.'),
+             'label': T('صف المستند', 'Document row'),
+             'when': T('لفتح مستند وتعديل بنوده.', 'To open a document and edit its lines.'),
+         },
         ],
-        'updated': '2026-10-30',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-30',
     },
     {
         'key': 'commerce.editor',
@@ -220,17 +218,17 @@ SCREENS = [
         'tips': [T('الضريبة لا تُضاف فوق السعر؛ السعر المكتوب شامل، ويُستخرج منه جزء 14% للأصناف المعلَّمة.', 'VAT is not added on top; the entered price already includes it, and the 14% portion is extracted for flagged items.')],
         'related': ['commerce.documents'],
         'tour': [
-            {'target': 'commerce-editor-header',
-             'label': T('نوع المستند — الرقم', 'Document type — number'),
-             'when': T('اتأكد من الجهة والتاريخ ونسبة الضريبة قبل التصدير.', 'Check the recipient, date and VAT rate before exporting.'),
-             'text': T('نوع المستند ورقمه والجهة والتاريخ ونسبة ضريبة القيمة المضافة.',
+            {'target': 'commerce-editor-header', 'text': T('نوع المستند ورقمه والجهة والتاريخ ونسبة ضريبة القيمة المضافة.',
                                               'The document type and number, client, date and VAT rate.'),
              'more': T('اتأكد إنك على المستند الصح قبل ما تعدّل.\n'
                        '• «← المستندات التجارية» فوق بيرجّعك للقائمة.\n'
                        '• «شبكة التوزيع» بتظهر جدول فروع بدل محرر البنود.',
                        'Make sure you are on the right document before editing.\n'
                        '• "← Commercial documents" at the top returns to the list.\n'
-                       '• An "allocation grid" shows a branch table instead of the line editor.')},
+                       '• An "allocation grid" shows a branch table instead of the line editor.'),
+             'label': T('نوع المستند — الرقم', 'Document type — number'),
+             'when': T('اتأكد من الجهة والتاريخ ونسبة الضريبة قبل التصدير.', 'Check the recipient, date and VAT rate before exporting.'),
+         },
             {'target': 'commerce-editor-export', 'label': T('⬇ تصدير Excel', '⬇ Export Excel'),
              'text': T('ينزّل المستند ملف Excel باسم رقمه.', 'Downloads the document as an Excel file named after its number.'),
              'when': T('بعد ما تراجع الإجماليات. مفيش حاجة بتتكتب في SOFTECH.', 'After checking the totals. Nothing is written to SOFTECH.'),
@@ -238,32 +236,37 @@ SCREENS = [
                        '• صدّر بعد ما تخلص كل البنود؛ لو عدّلت بعدها صدّر تاني.',
                        'The file is named after the document number and holds the lines and totals.\n'
                        '• Export after finishing all lines; if you edit afterwards, export again.'),
-         },
-            {'target': 'commerce-editor-totals', 'label': T('قبل الضريبة · الضريبة · شامل الضريبة', 'Before VAT · VAT · Including VAT'),
-             'text': T('الإجماليات بتتحدث مع كل تعديل.', 'The totals update with every change.'),
-             'open_hint': _LINES,
+             'label': T('⬇ تصدير Excel', '⬇ Export Excel'),
+             'when': T('بعد ما تراجع الإجماليات. مفيش حاجة بتتكتب في SOFTECH.', 'After checking the totals. Nothing is written to SOFTECH.')},
+            {'target': 'commerce-editor-totals', 'text': T('الإجمالي قبل الضريبة والضريبة والإجمالي شامل الضريبة، يتحدث مع كل بند (لغير شبكات التوزيع).',
+                                              'Totals before VAT, VAT and including VAT, updated per line (not for allocation grids).'),
              'more': T('بتتحسب أوتوماتيك من البنود.\n'
                        '• «إجمالى الضريبة» = جزء الـ14% المستخرج من أسعار البنود المعلَّمة «خاضع للضريبة» بس.',
                        'Calculated automatically from the lines.\n'
                        '• "VAT total" = the 14% portion extracted from the prices of lines ticked "Taxable" only.'),
-         },
-            {'target': 'commerce-editor-lines', 'label': T('جدول البنود', 'Lines table'),
-             'text': T('كل بند: الصنف، الكمية، سعر الوحدة (شامل)، خاضع للضريبة، الضريبة والإجمالي. عدّل في الخانة والحفظ لما تخرج منها.',
-                       'Each line: item, quantity, unit price (inclusive), taxable, VAT and total. Edit in the cell; it saves when you leave it.'),
-             'open_hint': _LINES,
+             'label': T('قبل الضريبة · الضريبة · شامل الضريبة', 'Before VAT · VAT · Including VAT'),
+             'open_hint': _LINES},
+            {'target': 'commerce-editor-lines', 'text': T('البنود: عدّل الصنف أو الكمية أو السعر الشامل مباشرة، و«حذف» لإزالة بند.',
+                                              'The lines: edit item, quantity or inclusive price in place; "Delete" removes a line.'),
              'more': T('التعديل بيتحفظ لما تخرج من الخانة، والإجماليات بتتحدّث.\n'
                        '• علامة «خاضع للضريبة» بتتحفظ على طول.\n'
                        '• «حذف» بيطلب تأكيد.',
                        'An edit saves when you leave the box, and the totals update.\n'
                        '• The "Taxable" tick saves straight away.\n'
                        '• "Delete" asks for confirmation.'),
-         },
+             'label': T('جدول البنود', 'Lines table'),
+             'open_hint': _LINES},
             {'target': 'commerce-editor-vat', 'label': T('خاضع للضريبة', 'Taxable'),
              'text': T('علّمه للأصناف اللي عليها ضريبة: 14% بتتحسب من جوه السعر، مش فوقه.', 'Tick it for taxed items: 14% is extracted from the price, not added on top.'),
              'warn': T('علامة غلط بتغيّر الضريبة المكتوبة في المستند — راجعها صنف صنف.', 'A wrong tick changes the VAT on the document — check it item by item.'),
              'open_hint': _LINES},
-            {'target': 'commerce-editor-add-row', 'label': T('اسم الصنف… · الكمية · السعر', 'Item name… · qty · price'),
-             'text': T('صف إضافة بند جديد: الصنف (مطلوب)، الكمية، والسعر الشامل.', 'The new-line row: item (required), quantity and inclusive price.'),
+            {'target': 'commerce-editor-add-line', 'text': T('صف الإضافة: اسم الصنف والكمية والسعر وخاضع للضريبة ثم «إضافة».',
+                                              'The add row: item name, quantity, price and taxable flag, then "Add".'),
+             'more': T('اكتب السعر شامل الضريبة؛ لو علّمت «خاضع للضريبة» الـ14% بتتحسب من جوه السعر — مش بتتزود فوقه.\n'
+                       '• «إضافة» (أو Enter في خانة الصنف) بيشتغل لما تكتب اسم الصنف.',
+                       'Enter the VAT-inclusive price; if you tick "Taxable" the 14% is calculated inside the price — not added on top.\n'
+                       '• "Add" (or Enter in the item box) works once an item name is typed.'),
+             'label': T('اسم الصنف… · الكمية · السعر', 'Item name… · qty · price'),
              'when': T('Enter في خانة الصنف بيضيف على طول.', 'Enter in the item box adds it straight away.'),
              'open_hint': _LINES,
              'more': T('اكتب السعر شامل الضريبة؛ لو علّمت «خاضع للضريبة» الـ14% بتتحسب من جوه السعر — مش بتتزود فوقه.\n'
@@ -287,8 +290,7 @@ SCREENS = [
              'when': T('الكمية بتتحفظ لما تخرج من الخلية.', 'A quantity saves when you leave the cell.'),
              'open_hint': _GRID},
         ],
-        'updated': '2026-10-30',
-    
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-30',
     },
 ]

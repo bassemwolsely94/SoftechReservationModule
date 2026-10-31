@@ -708,7 +708,7 @@ export default function DashboardPage() {
               {user?.branch_name && <span className="mr-2">· {user.branch_name}</span>}
             </p>
           </div>
-          <div data-tour="general-dashboard-quick-actions" className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" data-tour="general-dashboard-actions">
             <button
               onClick={() => navigate('/reservations')}
               className="btn-secondary text-sm flex items-center gap-1.5"

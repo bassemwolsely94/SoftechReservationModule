@@ -1455,7 +1455,7 @@ export default function ReconciliationPage() {
     <div className="p-5 space-y-4" dir="rtl">
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-[#022871]">سداد فواتير الموردين — التسوية</h1>
-        <div className="flex gap-1 text-sm" data-tour="finance-reconciliation-party-type">
+        <div data-tour="finance-reconciliation-party" className="flex gap-1 text-sm">
           {['supplier', 'customer'].map(t => (
             <button key={t} onClick={() => setPartyType(t)} className={`px-3 py-1 rounded-lg border ${partyType === t ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>
               {t === 'supplier' ? 'موردون' : 'عملاء'}

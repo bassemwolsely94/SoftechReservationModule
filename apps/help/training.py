@@ -141,7 +141,7 @@ def path_modules(keys, qz):
 
 
 PRODUCT_SHELLS = ('desktop', 'mobile')
-_HELP_BUTTON = {'desktop': 'general-help-center-open-help', 'mobile': 'general-help-center-open-help-mobile'}
+_HELP_BUTTON = {'desktop': 'shell-help', 'mobile': 'mshell-help'}
 
 
 def _short(title):

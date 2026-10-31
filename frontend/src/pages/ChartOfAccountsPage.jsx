@@ -134,7 +134,7 @@ export default function ChartOfAccountsPage() {
 
       {/* Flat list */}
       {view === 'flat' && !flatLoading && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-tour="finance-coa-table">
+        <div data-tour="finance-coa-list" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {accounts.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-4xl mb-2">🗂️</div>

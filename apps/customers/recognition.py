@@ -16,6 +16,8 @@ from django.db.models import Q
 from .models import Customer
 from apps.catalog.wildcard import wq
 
+from . import access
+
 _NON_DIGIT = re.compile(r'\D+')
 
 
@@ -23,8 +25,8 @@ def _digits(s):
     return _NON_DIGIT.sub('', s or '')
 
 
-def _snippet(c):
-    return {
+def _snippet(c, user=None):
+    data = {
         'id': c.id,
         'name': c.name,
         'phone': c.phone,
@@ -41,10 +43,13 @@ def _snippet(c):
         'purchase_count_90d': c.purchase_count_90d,
         'customer_type_label': c.customer_type_label,
     }
+    return access.mask_dict(user, c, data) if user is not None else data
 
 
-def recognize(query, *, limit=6):
-    """Return {'matches': [...], 'duplicates': [...]} for a typed phone/name."""
+def recognize(query, *, limit=6, user=None):
+    """Return {'matches': [...], 'duplicates': [...]} for a typed phone/name.
+    With `user`, results follow customers/access.py (B-2): other branches only on a full phone,
+    their numbers masked."""
     raw = (query or '').strip()
     if len(raw) < 3:
         return {'matches': [], 'duplicates': []}
@@ -59,20 +64,22 @@ def recognize(query, *, limit=6):
         base = Customer.objects.filter(
             Q(phone__icontains=d) | Q(phone_alt__icontains=d) | Q(whatsapp_phone__icontains=d),
             is_account_placeholder=False,
-        ).only(*fields)
+        ).only(*fields, 'preferred_branch_id', 'created_by_id')
+        if user is not None and (limit_q := access.findable_q(user, raw)) is not None:
+            base = base.filter(limit_q)
         rows = list(base[: limit * 4])
         rows.sort(key=lambda c: _phone_rank(c, d))
         rows = rows[:limit]
     else:
         # Name path.
-        rows = list(
-            Customer.objects.filter(wq(raw, 'name') | Q(softech_pic__iexact=raw),
-                                    is_account_placeholder=False)
-            .only(*fields)[:limit]
-        )
+        base = Customer.objects.filter(wq(raw, 'name') | Q(softech_pic__iexact=raw),
+                                       is_account_placeholder=False)
+        if user is not None and (limit_q := access.findable_q(user, raw)) is not None:
+            base = base.filter(limit_q)
+        rows = list(base.only(*fields, 'preferred_branch_id', 'created_by_id')[:limit])
 
-    matches = [_snippet(c) for c in rows]
-    return {'matches': matches, 'duplicates': _duplicate_clusters(rows)}
+    matches = [_snippet(c, user) for c in rows]
+    return {'matches': matches, 'duplicates': _duplicate_clusters(rows, user)}
 
 
 def _phone_rank(c, d):
@@ -86,7 +93,7 @@ def _phone_rank(c, d):
     return (9, c.is_guest)
 
 
-def _duplicate_clusters(rows):
+def _duplicate_clusters(rows, user=None):
     """Group loaded rows whose primary phone normalizes identically (>1 = dup)."""
     by_phone = {}
     for c in rows:
@@ -96,5 +103,7 @@ def _duplicate_clusters(rows):
     clusters = []
     for pd, members in by_phone.items():
         if len(members) > 1:
-            clusters.append({'phone': pd, 'customers': [_snippet(m) for m in members]})
+            visible = user is None or all(access.phones_visible(user, m) for m in members)
+            clusters.append({'phone': pd if visible else access.mask(pd),
+                             'customers': [_snippet(m, user) for m in members]})
     return clusters

@@ -448,7 +448,7 @@ export default function PaymentTracking() {
               placeholder="اسم / هاتف / مرجع..."
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none min-w-36" />
           </div>
-          <button type="button" data-tour="finance-payments-time-filters" onClick={() => setShowTimeFilters(v => !v)}
+          <button data-tour="finance-payments-time" type="button" onClick={() => setShowTimeFilters(v => !v)}
             className={`self-end flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border transition-colors
               ${showTimeFilters ? 'bg-brand-50 border-brand-400 text-brand-700' : 'bg-white border-gray-300 text-gray-600 hover:border-brand-400'}`}>
             🕐 وقت {showTimeFilters ? '▲' : '▼'}

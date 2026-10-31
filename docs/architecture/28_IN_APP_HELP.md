@@ -194,7 +194,7 @@ must not get wrong → add a quiz question.
 
 ### Button hints + first-visit offer (built 2026-10-30, batch 8 — `frontend/src/help/Hints.jsx`)
 
-- **«💡 تلميحات الأزرار»** (help-panel footer, or **Alt+F1** anywhere — Shift+F1 is «اعرض لي»): every element of the current
+- **«💡 تلميحات الأزرار»** (help-panel footer, or **Ctrl+F1** anywhere — Shift+F1 is «اعرض لي»): every element of the current
   screen that has a tour step (the screen's `tour`, plus its module's journey steps on this screen;
   the screen's own step wins) gets a dashed outline — amber when the step has a `warn`. Hover or focus
   shows a small card (label, text, «متى؟», ⚠); it never takes clicks. A bar «💡 … — N عنصر مشروح هنا»
@@ -217,7 +217,7 @@ notifications) — both exist; this one visits the modules of the person's work.
   in path order — that module's first path screen on the shell with a tour and a param-free route; the
   step highlights that screen's first tour anchor, labelled with the module icon + short title, text =
   the module's one-line **`MODULE['brief']`** (≤160 chars, every module has one — tested), «متى؟» = how many
-  path screens it has — then a finish step on «؟ مساعدة» (F1, Shift+F1 «اعرض لي», Alt+F1 hints, «مساري التدريبي»).
+  path screens it has — then a finish step on «؟ مساعدة» (F1, Shift+F1 «اعرض لي», Ctrl+F1 hints, «مساري التدريبي»).
   Welcome / finish text: `content/onboarding.py` `PRODUCT_TOUR`. Module `general` gets no stop of its own.
 - **API:** `GET /api/help/product-tour/?shell=desktop|mobile` (own role; trainers `&role=`) → a journey
   (`id = product.<role>.<shell>`, steps with routes like module journeys) or 404. Tour events use

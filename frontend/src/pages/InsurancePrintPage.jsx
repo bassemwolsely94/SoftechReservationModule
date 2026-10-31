@@ -156,7 +156,7 @@ export default function InsurancePrintPage() {
       <div className="px-6 py-6 grid grid-cols-3 gap-6">
         {/* Left: Cover summary */}
         <div className="col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 p-5" data-tour="insurance-print-cover-summary">
+          <div data-tour="insurance-print-cover" className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-bold text-gray-800 mb-4 text-base">ملخص الغلاف</h2>
 
             <div className="space-y-2 text-sm mb-5">

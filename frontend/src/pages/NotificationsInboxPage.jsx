@@ -74,8 +74,8 @@ export default function NotificationsInboxPage() {
           {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <input value={search} onChange={e => { setSearch(e.target.value); setLimit(PAGE) }}
-          placeholder="بحث…" data-tour="general-notifications-search" className="text-sm border border-gray-200 rounded-lg px-3 py-2 flex-1 min-w-[160px]" />
-        <button data-tour="general-notifications-unread-only" onClick={() => { setUnreadOnly(u => !u); setLimit(PAGE) }}
+          placeholder="بحث…" className="text-sm border border-gray-200 rounded-lg px-3 py-2 flex-1 min-w-[160px]" data-tour="general-notifications-search" />
+        <button onClick={() => { setUnreadOnly(u => !u); setLimit(PAGE) }} data-tour="general-notifications-unread"
           className={`text-sm rounded-lg px-3 py-2 border font-medium ${unreadOnly ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>
           غير المقروء فقط
         </button>

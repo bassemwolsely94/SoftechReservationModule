@@ -14,6 +14,7 @@ from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
+from core import branch_scope
 from core.permissions import deny_unless, matrix_permission
 
 FINANCE = matrix_permission('finance')        # every finance view checks the matrix (Batch 4, Z-3)
@@ -48,6 +49,18 @@ from .serializers import (
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
+
+# Owner decision B-1 (2026-10-30): company-wide finance (consolidated snapshots, every branch's
+# P&L) is for the all-branch roles — admin, quality manager and the HQ roles. A branch user with a
+# finance grant (pharmacist) sees their own branch's rows only; branch-less (company) rows never.
+def _fin(qs, request):
+    ids = branch_scope.branch_ids(request.user)
+    return qs if ids is None else qs.filter(branch_id__in=ids)
+
+
+def _company(request):
+    return branch_scope.sees_everything(request.user)
+
 
 def _is_admin_or_pharmacist(user) -> bool:
     try:
@@ -92,21 +105,23 @@ def finance_dashboard(request):
     branch_id = request.query_params.get('branch_id')
 
     # Consolidated (branch=None) snapshot
-    qs = FinancialSnapshot.objects.filter(period=period)
+    qs = _fin(FinancialSnapshot.objects.filter(period=period), request)
     consolidated = qs.filter(branch__isnull=True).first()
 
     # All branch snapshots for this period
     branch_snapshots = qs.filter(branch__isnull=False)
     if branch_id:
         branch_snapshots = branch_snapshots.filter(branch_id=branch_id)
+    if consolidated is None and not _company(request):
+        consolidated = branch_snapshots.first()     # a branch user's headline = their branch
 
     # YTD monthly trend (current year)
     trend = list(
-        FinancialSnapshot.objects.filter(
+        _fin(FinancialSnapshot.objects.filter(
             period__year=period.year,
             period__period_type='month',
-            branch__isnull=True,
-        )
+            **({'branch__isnull': True} if _company(request) else {}),
+        ), request)
         .order_by('period__month')
         .values(
             'period__label', 'period__month',
@@ -196,7 +211,7 @@ class FinancialSnapshotListView(generics.ListAPIView):
     ordering           = ['-period']
 
     def get_queryset(self):
-        qs = FinancialSnapshot.objects.select_related('period', 'branch')
+        qs = _fin(FinancialSnapshot.objects.select_related('period', 'branch'), self.request)
         period_id = self.request.query_params.get('period_id')
         branch_id = self.request.query_params.get('branch_id')
         year      = self.request.query_params.get('year')
@@ -228,10 +243,10 @@ def profit_and_loss(request):
         return Response({'detail': 'Period not found.'}, status=404)
 
     branch_id = request.query_params.get('branch_id')
-    snap_qs   = FinancialSnapshot.objects.filter(period=period)
+    snap_qs   = _fin(FinancialSnapshot.objects.filter(period=period), request)
     if branch_id:
         snap_qs = snap_qs.filter(branch_id=branch_id)
-    else:
+    elif _company(request):
         snap_qs = snap_qs.filter(branch__isnull=True)
 
     snap = snap_qs.first()
@@ -289,7 +304,7 @@ class JournalEntryListView(generics.ListAPIView):
         return JournalEntryListSerializer
 
     def get_queryset(self):
-        qs = JournalEntry.objects.select_related('branch', 'period')
+        qs = _fin(JournalEntry.objects.select_related('branch', 'period'), self.request)
         period_id  = self.request.query_params.get('period_id')
         entry_type = self.request.query_params.get('entry_type')
         branch_id  = self.request.query_params.get('branch_id')
@@ -307,6 +322,9 @@ class JournalEntryDetailView(generics.RetrieveAPIView):
     serializer_class   = JournalEntrySerializer
     queryset           = JournalEntry.objects.prefetch_related('lines__account')
 
+    def get_queryset(self):
+        return _fin(super().get_queryset(), self.request)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ACCOUNT BALANCES  (Trial Balance)
@@ -320,7 +338,7 @@ class AccountBalanceListView(generics.ListAPIView):
     ordering           = ['account__code']
 
     def get_queryset(self):
-        qs = AccountBalance.objects.select_related('account', 'period', 'branch')
+        qs = _fin(AccountBalance.objects.select_related('account', 'period', 'branch'), self.request)
         period_id    = self.request.query_params.get('period_id')
         branch_id    = self.request.query_params.get('branch_id')
         account_type = self.request.query_params.get('account_type')
@@ -345,7 +363,7 @@ def trial_balance(request):
         return Response({'detail': 'Period not found.'}, status=404)
 
     branch_id = request.query_params.get('branch_id')
-    qs = AccountBalance.objects.filter(period=period).select_related('account', 'branch')
+    qs = _fin(AccountBalance.objects.filter(period=period).select_related('account', 'branch'), request)
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
 
@@ -382,7 +400,7 @@ class TreasuryMovementListView(generics.ListAPIView):
     ordering           = ['-movement_date']
 
     def get_queryset(self):
-        qs = TreasuryMovement.objects.select_related('branch', 'period')
+        qs = _fin(TreasuryMovement.objects.select_related('branch', 'period'), self.request)
         period_id      = self.request.query_params.get('period_id')
         direction      = self.request.query_params.get('direction')
         payment_method = self.request.query_params.get('payment_method')
@@ -409,10 +427,13 @@ def cash_flow_summary(request):
     if not period:
         return Response({'detail': 'Period not found.'}, status=404)
 
-    snap = FinancialSnapshot.objects.filter(period=period, branch__isnull=True).first()
+    if _company(request):
+        snap = FinancialSnapshot.objects.filter(period=period, branch__isnull=True).first()
+    else:
+        snap = _fin(FinancialSnapshot.objects.filter(period=period), request).first()
 
     by_method = list(
-        TreasuryMovement.objects.filter(period=period)
+        _fin(TreasuryMovement.objects.filter(period=period), request)
         .values('direction', 'payment_method')
         .annotate(total=Sum('amount'))
         .order_by('payment_method', 'direction')
@@ -440,7 +461,7 @@ class ExpenseRecordListView(generics.ListAPIView):
     ordering           = ['-expense_date']
 
     def get_queryset(self):
-        qs = ExpenseRecord.objects.select_related('branch', 'period')
+        qs = _fin(ExpenseRecord.objects.select_related('branch', 'period'), self.request)
         p  = self.request.query_params
 
         period_id    = p.get('period_id')
@@ -506,6 +527,7 @@ def expense_breakdown(request):
         qs = ExpenseRecord.objects.filter(period=period)
         period_label = period.label
 
+    qs = _fin(qs, request)
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     if category:
@@ -569,6 +591,7 @@ def expense_subcategories(request):
         else:
             qs = ExpenseRecord.objects.all()
 
+    qs = _fin(qs, request)
     if category:
         qs = qs.filter(category=category)
     if branch_id:

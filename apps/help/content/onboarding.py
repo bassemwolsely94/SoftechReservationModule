@@ -91,8 +91,8 @@ PRODUCT_TOUR = {
     },
     'finish': {
         'label': T('؟ مساعدة', '? Help'),
-        'text': T('خلصنا! في أي شاشة: F1 للشرح، Shift+F1 لجولة «👆 اعرض لي»، وAlt+F1 لتلميحات الأزرار.',
-                  'Done! On any screen: F1 for help, Shift+F1 for the "👆 Show me" tour, and Alt+F1 for button hints.'),
+        'text': T('خلصنا! في أي شاشة: F1 للشرح، Shift+F1 لجولة «👆 اعرض لي»، وCtrl+F1 لتلميحات الأزرار.',
+                  'Done! On any screen: F1 for help, Shift+F1 for the "👆 Show me" tour, and Ctrl+F1 for button hints.'),
         'when': T('كمّل من «🎓 مساري التدريبي» في دليل الاستخدام: شاشة شاشة، واختبار قصير لكل موديول.',
                   'Carry on in "🎓 My training path" in the help guide: screen by screen, with a short quiz per module.'),
     },

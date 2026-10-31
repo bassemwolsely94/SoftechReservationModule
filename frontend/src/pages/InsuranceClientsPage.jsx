@@ -424,7 +424,7 @@ export default function InsuranceClientsPage() {
         <p className="text-sm text-gray-500 mt-0.5">جهات التأمين — الفئات — العقود ونسب الخصم</p>
       </div>
 
-      <div className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]" data-tour="insurance-clients-columns">
+      <div data-tour="insurance-clients-columns" className="px-6 py-6 grid grid-cols-3 gap-6 h-[calc(100vh-130px)]">
         <div data-tour="insurance-clients-payers" className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden flex flex-col">
           <ClientPanel
             selected={selectedClient}

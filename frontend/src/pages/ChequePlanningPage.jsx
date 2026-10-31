@@ -111,7 +111,7 @@ function PlanList({ selectedId, onSelect, onNew }) {
       </div>
 
       {/* Status tabs */}
-      <div className="flex border-b border-gray-200 bg-gray-50" data-tour="finance-cheques-status-tabs">
+      <div data-tour="finance-cheques-status" className="flex border-b border-gray-200 bg-gray-50">
         {[
           { k: '', l: 'الكل' },
           { k: 'draft', l: 'مسودة' },

@@ -491,3 +491,20 @@ pharmacist PATCH /api/transits/pick-zones/987654321/
 pharmacist PUT /api/transits/item-overrides/987654321/
 pharmacist PUT /api/transits/pick-rules/987654321/
 pharmacist PUT /api/transits/pick-zones/987654321/
+
+# reason: owner decision B-1 (2026-10-30) — supplier A/P reconciliation is company-level finance: all-branch roles only; a branch pharmacist keeps the finance grant for their own branch's screens.
+pharmacist GET /api/finance/reconciliation/candidates/
+pharmacist GET /api/finance/reconciliation/candidates/groups/
+pharmacist GET /api/finance/reconciliation/dashboard/
+pharmacist GET /api/finance/reconciliation/exceptions/
+pharmacist GET /api/finance/reconciliation/invoices/
+pharmacist GET /api/finance/reconciliation/invoices/987654321/lines/
+pharmacist GET /api/finance/reconciliation/partial/
+pharmacist GET /api/finance/reconciliation/parties/
+pharmacist GET /api/finance/reconciliation/parties/x/ledger/
+pharmacist GET /api/finance/reconciliation/parties/x/timeline/
+pharmacist GET /api/finance/reconciliation/payments/
+pharmacist GET /api/finance/reconciliation/runs/
+pharmacist GET /api/finance/reconciliation/supplier-options/
+pharmacist GET /api/finance/reconciliation/unpaid/
+pharmacist GET /api/finance/reconciliation/workbench/

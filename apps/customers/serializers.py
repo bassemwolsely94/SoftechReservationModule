@@ -50,7 +50,19 @@ class PurchaseHistorySerializer(serializers.ModelSerializer):
         ]
 
 
-class CustomerSerializer(serializers.ModelSerializer):
+class _MaskedPhones:
+    """B-2: another branch's customer's numbers are masked (customers/access.py)."""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request is not None and getattr(request, 'user', None) is not None:
+            from .access import mask_dict
+            mask_dict(request.user, instance, data)
+        return data
+
+
+class CustomerSerializer(_MaskedPhones, serializers.ModelSerializer):
     customer_type_label  = serializers.CharField(read_only=True)
     customer_type_color  = serializers.CharField(read_only=True)
     preferred_branch_name = serializers.SerializerMethodField()
@@ -142,7 +154,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         ]
 
 
-class CustomerListSerializer(serializers.ModelSerializer):
+class CustomerListSerializer(_MaskedPhones, serializers.ModelSerializer):
     customer_type_label   = serializers.CharField(read_only=True)
     customer_type_color   = serializers.CharField(read_only=True)
     preferred_branch_name = serializers.SerializerMethodField()

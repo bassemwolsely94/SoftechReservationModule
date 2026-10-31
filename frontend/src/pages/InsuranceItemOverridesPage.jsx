@@ -178,7 +178,7 @@ export default function InsuranceItemOverridesPage() {
                         : <CatBadge value={o.forced_category} />}
                     </td>
                     <td className="px-3 py-2">
-                      <button onClick={() => toggleActive(o)} data-tour="insurance-item-overrides-toggle-active"
+                      <button data-tour="insurance-item-overrides-status" onClick={() => toggleActive(o)}
                         className={`rounded px-2 py-0.5 text-xs font-medium ${
                           o.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {o.is_active ? 'مُفعَّل' : 'موقوف'}
@@ -187,7 +187,7 @@ export default function InsuranceItemOverridesPage() {
                     <td className="px-3 py-2 text-gray-500 text-xs">{o.reason}</td>
                     <td className="px-3 py-2">
                       <div data-tour="insurance-item-overrides-actions" className="flex items-center gap-1 justify-end">
-                        <Btn variant="secondary" onClick={() => toggleAffected(o)} data-tour="insurance-item-overrides-affected">المطالبات المتأثرة</Btn>
+                        <Btn data-tour="insurance-item-overrides-affected" variant="secondary" onClick={() => toggleAffected(o)}>المطالبات المتأثرة</Btn>
                         <Btn variant="secondary" onClick={() => openEdit(o)}>تعديل</Btn>
                         <Btn variant="danger" onClick={() => remove(o)} data-tour="insurance-item-overrides-delete">حذف</Btn>
                       </div>
