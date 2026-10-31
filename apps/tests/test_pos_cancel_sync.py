@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from apps.pos_orders.pos_cancel_sync import _parse_day, _dec
 from apps.pos_orders.models import PosCancelDaily
-from .factories import make_pharmacist
 
 
 class SyncHelperTests(TestCase):
@@ -30,7 +29,9 @@ class SyncHelperTests(TestCase):
 
 class LostSalesTrendsViewTests(TestCase):
     def setUp(self):
-        self.client = make_pharmacist()[2]   # (user, profile, api_client)
+        # cross-branch view = an all-branch role (Batch 5: a branch user sees their own branch only)
+        from .factories import make_branch, make_user
+        self.client = make_user('lost_sup', role='supervisor', branch=make_branch('B170', softech_id='170'))[2]
         today = timezone.now().date()
         # branch 170: two items across two days; branch 130: one item
         PosCancelDaily.objects.bulk_create([
@@ -68,6 +69,16 @@ class LostSalesTrendsViewTests(TestCase):
         self.assertAlmostEqual(d['summary']['lost_value'], 75.00, places=2)
         self.assertEqual(len(d['top_items']), 1)
         self.assertEqual(d['top_items'][0]['item_code'], '96690')
+
+    def test_branch_user_sees_own_branch_only(self):
+        """Batch 5 canary sweep: a pharmacist of 130 never gets 170's lost sales, also via ?branch=."""
+        from .factories import make_branch, make_user
+        ph = make_user('lost_ph', role='pharmacist', branch=make_branch('B130', softech_id='130'))[2]
+        for params in ({'days': 30}, {'days': 30, 'branch': '170'}):
+            d = ph.get('/api/pos-orders/lost-sales-trends/', params).json()
+            self.assertNotIn('170', {b['branch_code'] for b in d['by_branch']})
+        d = ph.get('/api/pos-orders/lost-sales-trends/', {'days': 30}).json()
+        self.assertAlmostEqual(d['summary']['lost_value'], 75.00, places=2)
 
     def test_window_excludes_old_rows(self):
         old = timezone.now().date() - timedelta(days=200)

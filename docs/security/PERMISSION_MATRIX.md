@@ -16,9 +16,9 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 |---|---|---|---|---|---|---|---|---|---|---|
 | `pos` | all | VC | VC | VC | — | — | — | VCE | — | own — orders, actions, queue, exceptions, flush, referral stats |
 | `reservations` | all | VCEXS | VCEAF | VCE | — | — | V | VCEAXS | VX | own — list, detail, activity, merge target, dashboard, analytics |
-| `demand` | all | VCEXS | VCE | VCE | — | — | V | VCEAXS | VX | role — branch staff own branch (fail-closed); from-reservation uses own |
-| `transfers` | all | V | VCEAF | VC | VCEAXF | — | V | VAX | VX | all — branch roles read requesting OR supplying side (decision 3) |
-| `followups` | all | VCEXS | VCEA | VCE | — | — | V | VCEDAXSF | VX | role — own branch for tasks; dashboard ?branch open (later batch) |
+| `demand` | all | VCEXS | VCE | VCE | — | — | V | VCEAXS | VX | own — list, detail, actions, create (branch_scope); analytics pages network-wide (open) |
+| `transfers` | all | V | VCEAF | VC | VCEAXF | — | V | VAX | VX | own side — requesting OR supplying (decision 3) via branch_scope; workflow sides stay home-branch / HQ lists; create + edit own requesting side |
+| `followups` | all | VCEXS | VCEA | VCE | — | — | V | VCEDAXSF | VX | own — tasks, dashboard (?branch narrows), generate, reminders (branch_scope) |
 | `delivery` | all | VCS | VCEAF | VC | VX | VEAF | V | VCEAXS | VX | own (+ rider: orders assigned to them) |
 | `customers` | all | VE | VE | V | VX | V | V | VEX | VX | find any by full phone (masked), browse / name-search / edit / churn list own (B-2) |
 | `chronic` | all | VE | VE | V | V | — | V | VE | VX | all — catalogue data |
@@ -36,7 +36,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — softech branch code only; HQ claims module (later batch) |
 | `commerce` | all | — | — | — | VCEDAXF | — | — | — | — | all — no branch field (feature-flag gated) |
 | `replacement` | all | — | VC | — | VX | — | — | VCEAXF | VX | own — scoped_cases + authz.require (accessible_branch_ids = branch_scope) |
-| `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | role — HQ roles incl. supervisor / quality_manager see all (matches B-3) |
+| `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | own — calls, cases (+ assigned to me), dashboards, converts; omni inbox own + assigned (branch_scope) |
 | `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | role — own records; managers see all |
 | `approvals` | all | — | VA | — | VA | — | V | VA | VA | n/a — scoped by requester / approver |
 | `analytics` | all | V | V | — | VX | — | V | VX | VX | own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2 |

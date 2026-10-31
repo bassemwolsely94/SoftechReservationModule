@@ -33,6 +33,7 @@ from rest_framework.response import Response
 
 from .models import InTransitAuditEvent, InTransitNote, InTransitTransfer
 from apps.catalog.wildcard import wq
+from core import branch_scope
 from core.errors import public_error
 from core.permissions import matrix_permission
 from .serializers import (
@@ -53,6 +54,24 @@ def _profile(request):
 
 def _is_hq(profile):
     return profile and profile.role in ('admin', 'purchasing', 'call_center')
+
+
+def _visible(qs, user):
+    """A branch sees a transit it supplies OR receives (owner decision 3). Batch 5: through the one
+    helper — all-branch roles (B-3) see all; a branch role without a branch sees nothing."""
+    ids = branch_scope.branch_ids(user)
+    if ids is None:
+        return qs
+    return qs.filter(db_models.Q(supplying_branch_id__in=ids) | db_models.Q(receiving_branch_id__in=ids))
+
+
+def _is_receiving_side(profile, transit):
+    """Branch staff of the receiving branch (home + allowed − restricted). An all-branch role keeps
+    its home branch only — seeing every branch does not make it every branch's receiver."""
+    ids = branch_scope.branch_ids(profile)
+    if ids is None:
+        return bool(profile and profile.branch_id == transit.receiving_branch_id)
+    return transit.receiving_branch_id in ids
 
 
 # In-transit transfers = the `transfers` matrix module (Batch 4, Z-7c): reads need view (the
@@ -155,20 +174,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
             ),
         )
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # HQ roles see everything
-        if _is_hq(profile):
-            pass
-        elif profile.branch:
-            qs = qs.filter(
-                db_models.Q(supplying_branch=profile.branch) |
-                db_models.Q(receiving_branch=profile.branch)
-            )
-        else:
-            return qs.none()
+        qs = _visible(qs, self.request.user)
 
         # Extra query-param filters
         qp = self.request.query_params
@@ -323,7 +329,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Permission: receiving branch or HQ
         if not _is_hq(profile):
-            if not (profile and profile.branch_id == transfer.receiving_branch_id):
+            if not (profile and _is_receiving_side(profile, transfer)):
                 return Response(
                     {'detail': 'فقط موظفو الفرع المستلم أو المشرفون يمكنهم تسجيل الاستلام'},
                     status=status.HTTP_403_FORBIDDEN,
@@ -515,11 +521,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'غير مصرح'}, status=status.HTTP_403_FORBIDDEN)
 
         qs = InTransitTransfer.objects.all()
-        if not _is_hq(profile) and profile.branch:
-            qs = qs.filter(
-                db_models.Q(supplying_branch=profile.branch) |
-                db_models.Q(receiving_branch=profile.branch)
-            )
+        qs = _visible(qs, request.user)
 
         today = datetime.date.today()
 
@@ -603,11 +605,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         since = datetime.date.today() - datetime.timedelta(days=days)
 
         qs = InTransitTransfer.objects.filter(issue_date__gte=since)
-        if not _is_hq(profile) and profile.branch:
-            qs = qs.filter(
-                db_models.Q(supplying_branch=profile.branch) |
-                db_models.Q(receiving_branch=profile.branch)
-            )
+        qs = _visible(qs, request.user)
 
         total   = qs.count()
         in_tr   = qs.filter(transit_status='in_transit').count()
@@ -693,11 +691,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
         since = datetime.date.today() - datetime.timedelta(days=days)
 
         base = InTransitTransfer.objects.all()
-        if not _is_hq(profile) and profile.branch:
-            base = base.filter(
-                db_models.Q(supplying_branch=profile.branch) |
-                db_models.Q(receiving_branch=profile.branch)
-            )
+        base = _visible(base, request.user)
 
         # Received (incl. mismatched) within window — grouped by receiving branch
         received_rows = (

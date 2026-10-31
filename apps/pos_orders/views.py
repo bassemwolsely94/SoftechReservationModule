@@ -535,7 +535,7 @@ def lost_sales_trends_view(request):
         limit = 25
     since = (timezone.now() - timedelta(days=days)).date()
 
-    qs = PosCancelDaily.objects.filter(day__gte=since)
+    qs = branch_scope.scope_code(PosCancelDaily.objects.filter(day__gte=since), request.user)
     branch = (request.query_params.get('branch') or '').strip()
     if branch:
         qs = qs.filter(branch_code=branch)

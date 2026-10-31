@@ -14,6 +14,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from apps.catalog.wildcard import wq
 from core.errors import public_error
+from core import branch_scope
+from django.db.models import Q as _Q
+
+
+def _scope_conversations(qs, user):
+    """Batch 5 canary sweep: the all-branch roles (call center…) see the whole inbox; a branch role
+    holding callcenter view sees its branches' conversations and the ones assigned to it."""
+    ids = branch_scope.branch_ids(user)
+    if ids is None:
+        return qs
+    q = _Q(branch_id__in=ids)
+    profile = getattr(user, 'staff_profile', None)
+    if profile is not None:
+        q |= _Q(assigned_to=profile)
+    return qs.filter(q)
 
 from apps.omni.models import (
     AutomationRule, AutomationRun, ChannelAccount, Conversation, TimelineEvent,
@@ -64,6 +79,7 @@ class ConversationListView(generics.ListAPIView):
             .select_related('customer', 'assigned_to', 'branch')
             .prefetch_related('wa_threads')
         )
+        qs = _scope_conversations(qs, self.request.user)
         p = self.request.query_params
 
         status_filter = p.get('status')
@@ -100,13 +116,16 @@ class ConversationDetailView(generics.RetrieveUpdateAPIView):
     """PATCH: status / priority / assigned_to / subject / branch."""
     serializer_class = ConversationSerializer
     permission_classes = [IsAuthenticated, OMNI]
-    queryset = (
-        Conversation.objects
-        .select_related('customer', 'assigned_to', 'branch')
-        .prefetch_related('wa_threads')
-    )
+
+    def get_queryset(self):
+        return _scope_conversations(
+            Conversation.objects.select_related('customer', 'assigned_to', 'branch')
+            .prefetch_related('wa_threads'),
+            self.request.user)
 
     def perform_update(self, serializer):
+        if serializer.validated_data.get('branch') is not None:
+            branch_scope.check_branch_value(self.request.user, serializer)
         old = {f: getattr(serializer.instance, f) for f in ('status', 'assigned_to_id')}
         convo = serializer.save()
 

@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Avg
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
+from core import branch_scope
 from core.errors import public_error
 from .serializers import (
     CallLogListSerializer, CallLogDetailSerializer, CallLogCreateSerializer,
@@ -81,19 +82,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
             'reservation', 'followup_task', 'case', 'pbx_session',
         ).prefetch_related('address_updates', 'attachments', 'items__item')
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # Call center / supervisor / admin see all
-        if profile.role in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            return qs
-
-        # Branch staff see only their branch
-        if profile.branch:
-            return qs.filter(branch=profile.branch)
-
-        return qs.none()
+        # Batch 5: the one branch helper (all-branch roles see all; branch staff their branches)
+        return branch_scope.scope(qs, self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -762,6 +752,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         branch_id = request.data.get('branch_id') or (call.branch_id)
         if not branch_id:
             return Response({'detail': 'branch_id مطلوب'}, status=400)
+        branch_scope.require(request.user, branch_id)     # Batch 5: own branches (HQ: any)
 
         try:
             from apps.branches.models import Branch
@@ -833,6 +824,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         )
         if not requesting_branch_id:
             return Response({'detail': 'requesting_branch_id مطلوب'}, status=400)
+        branch_scope.require(request.user, requesting_branch_id)   # Batch 5: request for own branch
 
         try:
             from apps.branches.models import Branch
@@ -913,10 +905,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         cutoff = timezone.now() - timedelta(days=30)
         qs     = CallLog.objects.filter(called_at__gte=cutoff)
 
-        profile = _profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         answered_qs = qs.filter(status='answered')
         stats = {
@@ -948,9 +937,9 @@ class CallLogViewSet(viewsets.ModelViewSet):
                 max(answered_qs.count(), 1) * 100, 1
             ),
             # Case metrics
-            'open_cases':      CustomerCase.objects.filter(status__in=('open', 'working', 'waiting')).count(),
-            'escalated_cases': CustomerCase.objects.filter(status='escalated').count(),
-            'resolved_today':  CustomerCase.objects.filter(resolved_at__date=today).count(),
+            'open_cases':      branch_scope.scope(CustomerCase.objects.all(), request.user).filter(status__in=('open', 'working', 'waiting')).count(),
+            'escalated_cases': branch_scope.scope(CustomerCase.objects.all(), request.user).filter(status='escalated').count(),
+            'resolved_today':  branch_scope.scope(CustomerCase.objects.all(), request.user).filter(resolved_at__date=today).count(),
             # Sentiment breakdown (AI)
             'sentiment': {
                 s: qs.filter(ai_sentiment=s).count()
@@ -983,18 +972,13 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         ).prefetch_related('events__created_by__user')
 
         profile = _profile(self.request)
+        ids = branch_scope.branch_ids(self.request.user)
+        if ids is None:
+            return qs
         if not profile:
             return qs.none()
-
-        if profile.role in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            return qs
-
-        # Regular staff see cases for their branch or assigned to them
-        if profile.branch:
-            return qs.filter(
-                Q(branch=profile.branch) | Q(assigned_to=profile)
-            )
-        return qs.filter(assigned_to=profile)
+        # Regular staff see cases for their branches or assigned to them
+        return qs.filter(Q(branch_id__in=ids) | Q(assigned_to=profile))
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -1178,10 +1162,7 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         today   = date.today()
         qs      = CustomerCase.objects.all()
 
-        profile = _profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'supervisor', 'quality_manager'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         total = qs.count()
         stats = {

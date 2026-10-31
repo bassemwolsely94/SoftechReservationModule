@@ -598,7 +598,8 @@ SCREENS = [
             T('«طلب تحويل جديد» لإنشاء طلب.', '"New transfer request" to create one.'),
             T('اضغط رقم الطلب لفتح تفاصيله واتخاذ الإجراء.', 'Click a request number to open it and act.'),
         ],
-        'tips': [
+        'tips': [T('الفرع بيشوف التحويل لو هو الطالب أو المورّد. المشرف ومدير الجودة بيشوفوا كل التحويلات، لكن الموافقة والإرسال والاستلام بتفضل لموظفي الفرعين والإدارة. تعديل أو حذف الطلب للفرع الطالب بس.', "A branch sees a transfer when it is the requesting or the supplying side. Supervisors and the quality manager see every transfer, but approving, sending and receiving stay with the two branches' staff and HQ. Only the requesting branch edits or deletes the request."),
+                 
             T('الطلب لا يؤثر على المخزون حتى يُصدر فعلاً في SOFTECH.', 'A request does not affect stock until it is actually issued in SOFTECH.'),
         ],
         'related': ['transfers.new', 'transfers.detail', 'transfers.transits'],
@@ -653,7 +654,7 @@ SCREENS = [
              'more': TR_MORE_OPEN},
         ],
         'tour_continue': 'transfers.detail',
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -865,7 +866,8 @@ SCREENS = [
             T('«تسجيل الاستلام» عند الاستلام، أو «إغلاق قسري» بسبب مكتوب (10 أحرف على الأقل) للحالات الاستثنائية.',
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
-        'tips': [
+        'tips': [T('الفرع بيشوف التحويلات اللي بيبعتها أو بيستلمها بس؛ المشرف ومدير الجودة بيشوفوا الكل.', 'A branch sees the transits it sends or receives only; supervisors and the quality manager see all.'),
+                 
             T('لو تحويل اتسجّل استلامه هنا ومستند الاستلام (25) ما ظهرش في SOFTECH بعد عدد الأيام المحدد في الإعدادات (افتراضي 3)، بيوصل تنبيه يومي للفرع المستلم والإدارة. زر «⏳ بانتظار تأكيد SOFTECH» يعرضهم كلهم.',
               'If a transfer was received here and its receipt document (25) has not appeared in SOFTECH after the number of days set in settings (default 3), a daily alert goes to the receiving branch and admins. The "⏳ Awaiting SOFTECH" button lists them all.'),
             T('«تسجيل الاستلام» هنا ما بيكتبش في SOFTECH: الشحنة بتفضل «مستلم محلياً — في انتظار تأكيد SOFTECH» لحد ما مستند الاستلام (25) يتسجّل هناك، وساعتها المزامنة بتطابق الكميات (ولو فيه فرق تظهر «تباين مع ERP»).',
@@ -944,7 +946,7 @@ SCREENS = [
                  'بيعرض الشحنات اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.\n• دي اللي لازم الفرع المستلم يسجّل استلامها في SOFTECH.\n• لو فضلت كده أكتر من عدد الأيام في الإعدادات (افتراضي 3) بيوصل تنبيه يومي. اضغطه تاني عشان ترجع للعرض العادي.',
                  'Shows shipments received here whose receipt document (25) has not appeared in SOFTECH yet.\n• These are the ones the receiving branch must still receive in SOFTECH.\n• If they stay like that longer than the days set in settings (default 3), a daily alert is sent. Press it again to return to the normal view.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

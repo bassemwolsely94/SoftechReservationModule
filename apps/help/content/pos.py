@@ -438,7 +438,8 @@ SCREENS = [
             T('الأوامر «بانتظار الكاشير متأخر» تحتاج اتصالاً بالفرع: هل حصّل الكاشير بدون الأمر؟', '"Awaiting cashier — late" orders need a call to the branch: did the cashier collect without the order?'),
             T('قسم «المبيعات غير المخزنة» (اختر فرعاً): أكثر الأصناف ضياعاً والإلغاءات حسب الكاشير.', 'The "unsaved sales" section (pick a branch): most-lost items and removals by cashier.'),
         ],
-        'tips': [T('الصفحة تتحدّث تلقائياً كل 30 ثانية، ولا تكتب في SOFTECH من نفسها.', 'The page refreshes every 30 seconds and never writes to SOFTECH on its own.')],
+        'tips': [T('الصيدلي بيشوف المبيعات الضايعة لفرعه بس؛ المشرف بيشوف كل الفروع.', "A pharmacist sees their own branch's lost sales only; a supervisor sees every branch."),
+                 T('الصفحة تتحدّث تلقائياً كل 30 ثانية، ولا تكتب في SOFTECH من نفسها.', 'The page refreshes every 30 seconds and never writes to SOFTECH on its own.')],
         'related': ['pos.order'],
         'workflows': ['order'],
         'tour': [
@@ -490,7 +491,7 @@ SCREENS = [
                  'أصناف اتكتبت على الشاشة بسعر وبعدين اتلغت قبل الحفظ — فرص بيع ضاعت. بتختار آخر 30 أو 60 أو 90 يوم، وبيتحدّث بالليل.\n• بيوضح إجمالي القيمة الضايعة وعدد الأسطر الملغية ورسم يومي — مفيد للتدريب ومتابعة الكاشير.',
                  'Items entered on the screen with a price and then removed before saving — lost sales. You choose the last 30, 60 or 90 days; it updates overnight.\n• It shows the total lost value, the number of removed lines and a daily chart — useful for training and following up cashiers.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
