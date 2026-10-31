@@ -839,6 +839,7 @@ You flip them to the office values only at cutover (section 11). Fill in:
 
 ```env
 DEBUG=False
+DJANGO_ADMIN_ENABLED=False        # Django admin has no 2FA; set True only for a maintenance window, then back to False
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_urlsafe(50))">
 ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
@@ -1015,16 +1016,18 @@ WireGuard is dormant and disabled — section 5.0.)
 
 ```bash
 sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # overwrites X-Forwarded-For
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the owner's ZeroTier IP(s)
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/elrezeiky
 sudo sed -i 's#YOUR_DOMAIN_OR_IP#elrezeikyapp.dawalvry.com#g; s#YOUR_DOMAIN#elrezeikyapp.dawalvry.com#g; s#/opt/elrezeiky/#/opt/elrezeiky/app/#g; s#root /opt/elrezeiky;#root /opt/elrezeiky/app;#' \
      /etc/nginx/sites-available/elrezeiky
 sudo ln -s /etc/nginx/sites-available/elrezeiky /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
-`/admin/` is limited to private ranges. Through the public name your request arrives from a
-public address and is refused; over ZeroTier your laptop (a 10.50.50.x member, section 13.3) is
-inside 10/8, so open Django admin at `https://10.50.50.77/admin/` (accept the name warning) —
-admin works only via the VPN. Good.
+`/admin/` is limited to the addresses in `/etc/nginx/elrezeiky-admin-allow.conf` (127.0.0.1 plus the
+owner's ZeroTier IP(s) you add — not the whole 10/8 range), and Django only mounts it when
+`DJANGO_ADMIN_ENABLED=True` (off in production; otherwise `/admin/` is a 404). For a maintenance
+window: set it True in `.env`, restart the app, open `https://10.50.50.77/admin/` (accept the name
+warning) from an allowed address, then set it back to False and restart.
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 

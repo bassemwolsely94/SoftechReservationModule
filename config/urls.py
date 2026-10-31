@@ -1,10 +1,10 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 
 from core.media import serve_media
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('api/auth/',  include('apps.users.auth_urls')),
     path('api/users/', include('apps.users.management_urls')),
     path('api/reservations/', include('apps.reservations.urls')),
@@ -72,3 +72,8 @@ urlpatterns = [
     # not just DEBUG — protected files need a signed, unexpired URL.
     path('media/<path:path>', serve_media, name='media'),
 ]
+
+# N0/H9: Django admin has no 2FA, so it is mounted only when DJANGO_ADMIN_ENABLED (default: DEBUG).
+# In production leave it off; turn it on for a maintenance window only.
+if settings.DJANGO_ADMIN_ENABLED:
+    urlpatterns.insert(0, path('admin/', admin.site.urls))
