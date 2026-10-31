@@ -133,7 +133,12 @@ check for the owner. Spec files:
   `audit_transit_links [--commit]` repair command (owner runs once). (d) shortage supplier exports read
   `ItemSupplierLink` + `PurchaseLine`; live SOFTECH only when a mirror is stale; the file names the source.
   (e) runbook §11.8b 7-morning purchases check. **(b) hourly shortage-flag retry NOT built** (owner deferred)
-- [P-41](06_SPEC_P-41_contract_receivables.md) — customer side limited to listed contracts (today's customer query would
+- [P-41](06_SPEC_P-41_contract_receivables.md) — **BUILT 2026-10-31**: step-0 probe (53 accounts, 37.7M sales/yr,
+  57.8 days, ≈6.24M receivable; 4227 = 44.3 / 4288 = 42.0 days), `ContractReceivableTerms` (finance/0017,
+  `seed_contract_terms`, co-pay accounts grouped), customer sync per tracked account (`--contracts`; unfiltered
+  customer reads refused in sync and backfill), `finance/receivables.py` (month-end + agreed days; FIFO estimate under
+  70 % links), `/finance/receivables`, `ar_contracts` freshness, writer refuses customer allocations. Earlier note:
+  customer side limited to listed contracts (today's customer query would
   read all retail sales); SOFTECH's own allocations, no matching; `ar_contracts` freshness domain
 - [P-42](06_SPEC_P-42_supplier_terms.md) — `SupplierTerm` per supplier × category, invoice slices, early-pay list
 - [P-40](06_SPEC_P-40_13_week_cash_view.md) — `/finance/cash` from P-41 + P-42 + cheques + fixed outflows; low/base/high;

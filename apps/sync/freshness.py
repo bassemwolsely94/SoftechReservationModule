@@ -49,6 +49,7 @@ DOMAINS = {
     'finance_expenses': {'label_ar': 'المصروفات',        'source': 'finance_expenses', 'cadence_min': 1440, 'kind': 'snapshot'},
     'finance_journal':  {'label_ar': 'القيود والخزينة',   'source': 'finance_journal',  'cadence_min': 1440, 'kind': 'snapshot'},
     'ap_reconciliation': {'label_ar': 'سداد الموردين',  'source': 'ap_reconciliation', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'ar_contracts':      {'label_ar': 'مستحقات التعاقدات', 'source': 'ar_contracts',    'cadence_min': 1440, 'kind': 'snapshot'},
 }
 
 # A domain is "stale" once its last success is older than this many sync
@@ -118,6 +119,19 @@ def _source_stock_audit():
     }
 
 
+def _source_ar_contracts():
+    """Contract receivables (P-41) — the customer-side mirror sync of the tracked contract accounts."""
+    from apps.finance.recon_models import ReconciliationRun
+    runs = ReconciliationRun.objects.filter(party_type='customer')
+    ok = runs.filter(status__in=['success', 'partial']).order_by('-started_at').first()
+    last = runs.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
 def _source_finance_pl():
     """P&L snapshots — FinancialSnapshot.computed_at (auto_now on every refresh)."""
     from apps.finance.models import FinancialSnapshot
@@ -143,9 +157,9 @@ def _finance_run_source(stat_key):
 def _source_ap_reconciliation():
     """A/P reconciliation (doc 23) — the engine run that follows the 07:30 mirror sync."""
     from apps.finance.recon_models import ReconciliationRun
-    ok = (ReconciliationRun.objects.filter(status__in=['success', 'partial'])
-          .order_by('-started_at').first())
-    last = ReconciliationRun.objects.order_by('-started_at').first()
+    runs = ReconciliationRun.objects.filter(party_type__in=['supplier', ''])   # P-41: customer runs feed ar_contracts
+    ok = runs.filter(status__in=['success', 'partial']).order_by('-started_at').first()
+    last = runs.order_by('-started_at').first()
     return {
         'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
         'last_attempt_at': (last.finished_at or last.started_at) if last else None,
@@ -154,6 +168,7 @@ def _source_ap_reconciliation():
 
 
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
+            'ar_contracts': _source_ar_contracts,
             'stock_audit': _source_stock_audit, 'purchase_expiry': _source_purchase_expiry,
             'finance_pl': _source_finance_pl,
             'finance_expenses': lambda: _finance_run_source('expense_records'),

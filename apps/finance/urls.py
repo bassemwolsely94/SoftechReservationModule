@@ -6,10 +6,17 @@ from django.urls import path
 
 from . import views
 from . import recon_views
+from . import receivables_views   # P-41
 
 urlpatterns = [
 
     # ── A/P–A/R Reconciliation (سداد فواتير) — doc 23 ─────────────────────────
+    path('receivables/summary/', receivables_views.receivables_summary, name='receivables-summary'),
+    path('receivables/terms/', receivables_views.receivables_terms, name='receivables-terms'),
+    path('receivables/export/', receivables_views.receivables_export, name='receivables-export'),
+    path('receivables/refresh/', receivables_views.receivables_refresh, name='receivables-refresh'),
+    path('receivables/<str:personcode>/invoices/', receivables_views.receivables_invoices,
+         name='receivables-invoices'),
     path('reconciliation/dashboard/',   recon_views.reconciliation_dashboard,  name='recon-dashboard'),
     path('reconciliation/parties/',     recon_views.ReconPartyListView.as_view(),   name='recon-parties'),
     path('reconciliation/supplier-options/', recon_views.supplier_options, name='recon-supplier-options'),

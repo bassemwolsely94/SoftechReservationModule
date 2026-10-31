@@ -1,7 +1,7 @@
 # 06 · SPEC P-41 — Contract receivables: who owes us, since when
 
-**Status:** specification (approved for spec 2026-10-30). **Build:** not yet authorised.
-Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
+**Status:** **BUILT 2026-10-31** (owner go-ahead with the PR 17 merge; «Oldest invoice first» for weakly linked contracts). Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
+Deviation, on purpose: the customer sync reads one tracked account at a time with the existing single-account queries, so the shared query functions (and the supplier sync) are unchanged.
 
 **Owner input** (ledger row P-41; overrides the backlog card)
 - Reuse the **customer side of the existing A/P–A/R reconciliation engine** (Rule 6). No new engine.
@@ -31,6 +31,11 @@ Read-only toward SOFTECH. Feeds P-40 (13-week cash view).
 - On-account (receipts not linked to invoices): 2.48M, of which 1.49M on 4227.
 - Odd: 5009 has negative days (receipts linked to invoices dated after them — advance payments?); 4 accounts have
   under 1,000 EGP of sales in the year (4222, 4594, 4875, 5117).
+
+**Owner decision 2026-10-31 («Oldest invoice first»):** where SOFTECH links under 70 % of a contract's sales to
+receipts, measured days are an estimate in which each receipt pays the oldest invoices first, labelled «تقدير — أقدم
+فاتورة أولاً». Insurance co-pay accounts are grouped by company (`group_name`). `expected_contract_inflows` moves to
+P-40, where the cash weeks are defined.
 
 ## 1. Problem (measured)
 

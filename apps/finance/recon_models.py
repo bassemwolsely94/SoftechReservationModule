@@ -681,3 +681,31 @@ class ReconAuditEvent(models.Model):
 
     def __str__(self):
         return f'{self.action} | {self.performed_at:%Y-%m-%d %H:%M}'
+
+
+class ContractReceivableTerms(models.Model):
+    """
+    P-41: one contract account tracked as a receivable (the customer side of this mirror), with the payment days
+    agreed in writing — a finance entry. Agreed days count from the END of the invoice month (owner 2026-10-31).
+    `group_name` puts the insurance companies' co-pay accounts (D M S 10% / 20% / …) under one company.
+    Changes are audited in ReconAuditEvent ('contract_terms_changed').
+    """
+    personcode  = models.CharField(max_length=12, unique=True, verbose_name='كود الحساب')
+    party       = models.ForeignKey(ReconParty, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='contract_terms')
+    name        = models.CharField(max_length=300, blank=True, verbose_name='الاسم')
+    group_name  = models.CharField(max_length=300, blank=True, db_index=True, verbose_name='الجهة')
+    agreed_days = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='أيام السداد المتفق عليها')
+    is_tracked  = models.BooleanField(default=True, db_index=True, verbose_name='متابَع')
+    source_note = models.CharField(max_length=300, blank=True, verbose_name='مرجع الاتفاق')
+    entered_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['group_name', 'personcode']
+        verbose_name        = 'شروط سداد تعاقد'
+        verbose_name_plural = 'شروط سداد التعاقدات'
+
+    def __str__(self):
+        return f'{self.personcode} {self.name} ({self.agreed_days or "—"} يوم)'

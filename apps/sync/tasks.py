@@ -2302,6 +2302,16 @@ def _run_ap_reconciliation_sync():
             logger.info('[APScheduler] AP-reconciliation %s done', cmd)
         except Exception as exc:
             logger.error('[APScheduler] AP-reconciliation %s failed: %s', cmd, exc)
+    # P-41: contract receivables — the tracked contract accounts only, one account at a time (SELECT-only). No
+    # matching, chains, bindings or anomaly scans on the customer side.
+    try:
+        from apps.finance.models import ContractReceivableTerms
+        if ContractReceivableTerms.objects.filter(is_tracked=True).exists():
+            call_command('sync_ap_reconciliation', party_type='customer', contracts=True,
+                         date_from=frm, date_to=to, verbosity=0)
+            logger.info('[APScheduler] contract receivables sync done (from %s)', frm)
+    except Exception as exc:
+        logger.error('[APScheduler] contract receivables sync failed: %s', exc)
 
 
 def _run_expiry_worklists():

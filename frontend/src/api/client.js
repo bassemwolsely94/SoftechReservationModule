@@ -1968,6 +1968,12 @@ export const followupsApi = {
 // ── Finance Intelligence Platform ─────────────────────────────────────────────
 
 export const financeApi = {
+  // P-41 contract receivables («مستحقات التعاقدات»)
+  receivablesSummary:  ()       => api.get('/finance/receivables/summary/'),
+  receivablesInvoices: (pc)     => api.get(`/finance/receivables/${pc}/invoices/`),
+  receivablesTerms:    (body)   => api.patch('/finance/receivables/terms/', body),
+  receivablesExport:   ()       => api.get('/finance/receivables/export/', { responseType: 'blob' }),
+  receivablesRefresh:  ()       => api.post('/finance/receivables/refresh/'),
   // Dashboard — consolidated KPIs for the current or specified period
   dashboard:       (params)       => api.get('/finance/dashboard/', { params }),
 

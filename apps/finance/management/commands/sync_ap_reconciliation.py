@@ -37,6 +37,9 @@ class Command(BaseCommand):
                             help='window size when --from/--to omitted (default 90)')
         parser.add_argument('--branch', default='', help='limit to one SOFTECH branchcode')
         parser.add_argument('--personcode', default='', help='limit to one party personcode')
+        parser.add_argument('--contracts', action='store_true',
+                            help='customer side: the tracked contract accounts (P-41 ContractReceivableTerms), '
+                                 'read one account at a time')
         parser.add_argument('--rowcount', type=int, default=100_000, help='per-feed row cap')
         parser.add_argument('--dry-run', action='store_true',
                             help='fetch + count only; do not upsert the mirror')
@@ -59,6 +62,19 @@ class Command(BaseCommand):
         personcode = o['personcode'] or None
         rc = o['rowcount']
         party_types = ['supplier', 'customer'] if o['party_type'] == 'both' else [o['party_type']]
+        # P-41: an unfiltered customer read pulls every retail sale (doccode 115) and every non-supplier voucher.
+        # The customer side is only ever read for named accounts.
+        contract_codes = []
+        if 'customer' in party_types:
+            if o['contracts']:
+                from apps.finance.models import ContractReceivableTerms
+                contract_codes = list(ContractReceivableTerms.objects.filter(is_tracked=True)
+                                      .order_by('personcode').values_list('personcode', flat=True))
+                if not contract_codes:
+                    raise CommandError('No tracked contract accounts — run seed_contract_terms first.')
+            elif not personcode:
+                raise CommandError('The customer side needs --contracts or --personcode '
+                                   '(an unfiltered read would pull every retail sale).')
 
         self.stdout.write(self.style.MIGRATE_HEADING(
             f'AP/AR reconciliation ingest  {date_from} → {date_to}  '
@@ -71,7 +87,8 @@ class Command(BaseCommand):
             party_type='' if o['party_type'] == 'both' else o['party_type'],
             date_from=datetime.date.fromisoformat(date_from),
             date_to=datetime.date.fromisoformat(date_to),
-            params={k: o[k] for k in ('party_type', 'branch', 'personcode', 'days', 'dry_run')},
+            params={**{k: o[k] for k in ('party_type', 'branch', 'personcode', 'days', 'dry_run', 'contracts')},
+                    'contract_count': len(contract_codes)},
             triggered_by='sync_ap_reconciliation',
         )
 
@@ -79,14 +96,18 @@ class Command(BaseCommand):
                   'unallocated_flagged': 0, 'skipped': 0, 'fetched': {}}
         try:
             for pt in party_types:
-                invoices    = q.get_invoices(pt, date_from, date_to, branch, personcode, rowcount=rc)
-                vouchers    = q.get_vouchers(pt, date_from, date_to, branch, personcode, rowcount=rc)
-                allocations = q.get_allocations(pt, date_from, date_to, branch, personcode, rowcount=rc)
-
-                for label, rows in (('invoices', invoices), ('vouchers', vouchers),
-                                    ('allocations', allocations)):
-                    if rows and isinstance(rows[0], dict) and '_error' in rows[0]:
-                        raise CommandError(f'{pt} {label} read failed: {rows[0]["_error"]}')
+                codes = contract_codes if (pt == 'customer' and contract_codes) else [personcode]
+                invoices, vouchers, allocations = [], [], []
+                for pc in codes:
+                    feeds = (q.get_invoices(pt, date_from, date_to, branch, pc, rowcount=rc),
+                             q.get_vouchers(pt, date_from, date_to, branch, pc, rowcount=rc),
+                             q.get_allocations(pt, date_from, date_to, branch, pc, rowcount=rc))
+                    for label, rows in zip(('invoices', 'vouchers', 'allocations'), feeds):
+                        if rows and isinstance(rows[0], dict) and '_error' in rows[0]:
+                            raise CommandError(f'{pt} {label} read failed for {pc or "all"}: {rows[0]["_error"]}')
+                    invoices += feeds[0]
+                    vouchers += feeds[1]
+                    allocations += feeds[2]
 
                 totals['fetched'][pt] = {
                     'invoices': len(invoices), 'vouchers': len(vouchers),
@@ -128,6 +149,8 @@ class Command(BaseCommand):
                 scope = ReconParty.objects.filter(party_type__in=party_types)
                 if personcode:
                     scope = scope.filter(softech_personcode=personcode)
+                elif contract_codes and party_types == ['customer']:
+                    scope = scope.filter(softech_personcode__in=contract_codes)
                 codes = list(scope.values_list('softech_personcode', flat=True))
                 brows = q.get_party_balances(codes) if codes else []
                 if brows and not (isinstance(brows[0], dict) and '_error' in brows[0]):
