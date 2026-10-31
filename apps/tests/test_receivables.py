@@ -54,6 +54,11 @@ class GroupNameTests(SimpleTestCase):
         self.assertEqual(group_name('Med sure 25%'), 'Med sure')
         self.assertEqual(group_name('ك(عاملين)_جنوب القاهرة توزيع'), 'ك(عاملين)_جنوب القاهرة توزيع')
 
+    def test_same_company_whatever_the_letter_case(self):
+        from apps.finance.receivables import group_key
+        self.assertEqual(group_key('Med sure'), group_key('Med Sure'))
+        self.assertEqual(group_key('D M S'), group_key('d  m s'))
+
 
 class EngineTests(TestCase):
 

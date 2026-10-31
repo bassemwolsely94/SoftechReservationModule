@@ -39,6 +39,11 @@ def group_name(name):
     return _COPAY.sub('', str(name or '')).strip(' -') or str(name or '').strip()
 
 
+def group_key(name):
+    """One company whatever SOFTECH's spelling: «Med sure» and «Med Sure» are the same group."""
+    return ' '.join(str(name or '').split()).casefold()
+
+
 def month_end(d):
     return d.replace(day=calendar.monthrange(d.year, d.month)[1])
 
@@ -173,13 +178,16 @@ def contract_summary(personcode, as_of):
 def summary(as_of):
     """Every tracked contract, grouped by company, with totals."""
     from apps.finance.models import ContractReceivableTerms
-    groups = defaultdict(list)
+    groups, labels = defaultdict(list), {}
     for t in ContractReceivableTerms.objects.filter(is_tracked=True).order_by('group_name', 'personcode'):
-        groups[t.group_name or t.name or t.personcode].append(contract_summary(t.personcode, as_of))
+        label = t.group_name or t.name or t.personcode
+        key = group_key(label)
+        labels.setdefault(key, label)
+        groups[key].append(contract_summary(t.personcode, as_of))
     keys = ('open', 'overdue', 'on_account', 'open_returns', 'net_receivable')
     out, totals = [], {k: ZERO for k in keys}
-    for name, contracts in groups.items():
-        g = {'group_name': name, 'contracts': contracts}
+    for key, contracts in groups.items():
+        g = {'group_name': labels[key], 'contracts': contracts}
         for k in keys:
             g[k] = sum((c[k] for c in contracts), ZERO)
             totals[k] += g[k]
@@ -208,7 +216,11 @@ def seed_terms():
     if rows and '_error' not in rows[0]:
         names = {str(r['personcode']).strip(): str(r.get('personname') or '').strip() for r in rows}
     parties = {p.softech_personcode: p for p in ReconParty.objects.filter(softech_personcode__in=codes)}
+    known = {group_key(g): g for g in ContractReceivableTerms.objects.exclude(group_name='')
+             .values_list('group_name', flat=True)}
     for c in codes:
         name = names.get(c) or (parties[c].name if c in parties else '')
-        ContractReceivableTerms.objects.create(personcode=c, party=parties.get(c), name=name, group_name=group_name(name))
+        g = group_name(name)
+        g = known.setdefault(group_key(g), g)            # one spelling per company
+        ContractReceivableTerms.objects.create(personcode=c, party=parties.get(c), name=name, group_name=g)
     return len(codes)
