@@ -301,6 +301,7 @@ REST_FRAMEWORK = {
     'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',   # max 10 login attempts per IP per minute
+        'personal_person_search': '30/hour',   # live SOFTECH personsdata search (N0/H1)
         # Customer portal (external) magic-link request + token exchange
         'portal_request_link': config('PORTAL_REQUEST_LINK_RATE', default='5/min'),
         'portal_auth':         config('PORTAL_AUTH_RATE',         default='10/min'),

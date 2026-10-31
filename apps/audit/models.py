@@ -114,6 +114,9 @@ class AuditLog(models.Model):
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
 
+        # Personal dashboard live person search (N0/H1)
+        ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────
