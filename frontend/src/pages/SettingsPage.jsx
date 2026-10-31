@@ -156,7 +156,7 @@ function SettingRow({ setting, onSaved, isAdmin = false }) {
               {valueDisplay()}
             </span>
             {isAdmin && (
-              <button onClick={() => { setDraft(setting.value); setEditing(true) }}
+              <button data-tour="admin-settings-setting-edit" onClick={() => { setDraft(setting.value); setEditing(true) }}
                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
                 تعديل
               </button>
@@ -194,7 +194,7 @@ function LanguageSelector({ isAdmin }) {
         <span className="text-sm font-semibold text-gray-700">لغة الواجهة / Interface Language</span>
         {saving && <span className="text-xs text-gray-400 animate-pulse">…</span>}
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-3" data-tour="admin-settings-language">
         {[
           { val: 'ar', label: 'العربية',  flag: '🇪🇬', sub: 'Arabic · RTL' },
           { val: 'en', label: 'English',  flag: '🇬🇧', sub: 'إنجليزي · LTR' },
@@ -355,7 +355,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
           </div>
         </div>
         {isAdmin && (
-          <button onClick={() => setEditMode(e => !e)}
+          <button data-tour="admin-settings-branch-edit" onClick={() => setEditMode(e => !e)}
             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 shrink-0">
             {editMode ? '✕ إغلاق' : '✎ تعديل'}
           </button>
@@ -424,7 +424,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
 
       {/* Operational toggles — admin only */}
       {isAdmin && (
-        <div className="px-4 pb-3 border-t border-gray-100 pt-3 flex gap-2 flex-wrap">
+        <div data-tour="admin-settings-branch-state" className="px-4 pb-3 border-t border-gray-100 pt-3 flex gap-2 flex-wrap">
           {[
             { field: 'is_active',      label: 'نشط',         label_en: 'Active',      value: branch.is_active,      danger: true },
             { field: 'is_operational', label: 'قيد التشغيل', label_en: 'Operational', value: branch.is_operational, danger: false },
@@ -450,7 +450,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
         onRefresh={onRefresh} showToast={showToast} />
 
       {/* Feature flags */}
-      <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+      <div data-tour="admin-settings-branch-features" className="px-4 pb-4 border-t border-gray-100 pt-3">
         <div className="text-[11px] text-gray-400 font-medium mb-2 uppercase tracking-wide">الميزات المتاحة</div>
         <div className="grid grid-cols-3 gap-1.5">
           {FEATURE_FLAGS.map(({ field, label }) => {
@@ -586,7 +586,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
             </div>
           </div>
         ) : (
-          <button onClick={() => setAdding(true)}
+          <button data-tour="admin-settings-dropdown-add" onClick={() => setAdding(true)}
             className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-400 rounded-xl text-sm hover:border-brand-400 hover:text-brand-600 transition-colors">
             + إضافة خيار جديد
           </button>
@@ -728,7 +728,7 @@ function PharmacyProfileEditor({ isAdmin }) {
             </div>
           </div>
           {isAdmin && (
-            <button
+            <button data-tour="admin-settings-profile-edit"
               onClick={() => setEditing(true)}
               className="px-3 py-1.5 border border-emerald-400 text-emerald-700 rounded-lg text-xs font-medium hover:bg-emerald-100 transition-colors shrink-0"
             >
@@ -963,7 +963,7 @@ function AppearanceTab({ isAdmin, lang, showToast }) {
       {/* Actions */}
       {isAdmin && (
         <div className="flex items-center gap-2 sticky bottom-0 bg-gray-50/90 backdrop-blur py-3">
-          <button onClick={save} disabled={saving || !dirty}
+          <button data-tour="admin-settings-theme-save" onClick={save} disabled={saving || !dirty}
             className="px-5 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 disabled:opacity-40 transition-colors">
             {saving ? '…' : (t ? '💾 Save theme' : '💾 حفظ المظهر')}
           </button>

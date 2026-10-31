@@ -13,7 +13,7 @@ import useHelpTab from '../help/useHelpTab'
 // Small inline print action used across all request tables
 function PrintLink({ kind, row }) {
   return (
-    <button onClick={() => printHRRequest(kind, row)} title="طباعة"
+    <button data-tour="hr-requests-print" onClick={() => printHRRequest(kind, row)} title="طباعة"
       className="text-xs text-gray-500 hover:text-brand-700 hover:underline">🖨️</button>
   )
 }
@@ -175,7 +175,7 @@ function LeaveTab() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <PrintLink kind="leave" row={r} />
                     {CANCELLABLE.has(r.status) && (
-                      <button onClick={() => cancel.mutate(r.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
+                      <button data-tour="hr-requests-cancel" onClick={() => cancel.mutate(r.id)} className="text-xs text-red-600 hover:underline mr-2">إلغاء</button>
                     )}
                   </td>
                 </tr>

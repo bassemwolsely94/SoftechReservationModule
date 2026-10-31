@@ -98,8 +98,8 @@ export default function InsurancePrintProfilesPage() {
                   {p.subclient_name && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 rounded mr-2">{p.subclient_name}</span>}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setEditing(p)} className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200">تعديل</button>
-                  <button onClick={() => del(p.id)} className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</button>
+                  <button onClick={() => setEditing(p)} data-tour="insurance-print-profiles-edit" className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200">تعديل</button>
+                  <button onClick={() => del(p.id)} data-tour="insurance-print-profiles-delete" className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</button>
                 </div>
               </div>
             ))}
@@ -151,7 +151,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Typography */}
-            <div>
+            <div data-tour="insurance-print-profiles-fonts">
               <p className="text-sm font-semibold text-gray-700 mb-2">الخطوط والألوان</p>
               <div className="grid grid-cols-4 gap-3">
                 <div><label className={lbl}>الخط</label>
@@ -199,7 +199,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Watermark */}
-            <div>
+            <div data-tour="insurance-print-profiles-watermark">
               <p className="text-sm font-semibold text-gray-700 mb-2">العلامة المائية (شعار باهت)</p>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className={lbl}>صورة PNG (يفضّل فاتحة/شفافة)</label>

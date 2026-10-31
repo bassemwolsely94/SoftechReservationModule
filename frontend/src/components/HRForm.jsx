@@ -103,7 +103,7 @@ export function IdentityFields({ onChange }) {
   return (
     <div className="border-t border-gray-200 pt-4 mt-2 space-y-4">
       <div className="grid grid-cols-3 gap-4">
-        <div>
+        <div data-tour="hr-requests-subject">
           <label className="block text-xs text-gray-500 mb-1">الطلب باسم</label>
           <select value={subject} onChange={e => onSubjectChange(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 text-sm">
@@ -128,7 +128,7 @@ export function IdentityFields({ onChange }) {
         )}
       </div>
 
-      <div>
+      <div data-tour="hr-requests-approvers">
         <label className="block text-xs text-gray-500 mb-1">
           المعتمِدون المختارون {selectedNames.length > 0 && <span className="text-brand-600">({selectedNames.length})</span>}
         </label>

@@ -25,7 +25,7 @@ export default function AskBox({ question, lang, screenKey, onOpen }) {
   const { busy, res, err } = state
   if (!res && !busy && !err) {
     return (
-      <button type="button" onClick={ask}
+      <button type="button" onClick={ask} data-tour="general-help-center-ask"
               className="w-full text-start rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 hover:border-brand-400">
         💬 {en ? 'Ask the system: ' : 'اسأل النظام: '}<span className="font-semibold">«{question}»</span>
       </button>

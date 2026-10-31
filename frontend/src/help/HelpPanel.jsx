@@ -19,6 +19,7 @@ import HelpEditor from './HelpEditor'
 import HelpFeedback from './HelpFeedback'
 import { LearnedButton } from './Onboarding'
 import TourRunner, { startScreenTour } from './Tour'
+import { HintsLayer, TourOffer } from './Hints'
 import AskBox from './AskBox'
 import { pick, label } from './text'
 
@@ -26,16 +27,18 @@ import { pick, label } from './text'
 export function useHelpShortcuts() {
   const toggle = useHelpStore((s) => s.toggle)
   const open = useHelpStore((s) => s.open)
+  const toggleHints = useHelpStore((s) => s.toggleHints)
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); window.dispatchEvent(new Event('help:show-me')); return }
+      if (e.key === 'F1' && e.ctrlKey) { e.preventDefault(); toggleHints(); return }
       if (e.key === 'F1') { e.preventDefault(); toggle() }
     }
     const onOpen = (e) => open(e?.detail?.key || null, e?.detail?.tab || null)
     window.addEventListener('keydown', onKey)
     window.addEventListener('help:open', onOpen)
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('help:open', onOpen) }
-  }, [toggle, open])
+  }, [toggle, open, toggleHints])
 }
 
 /** Shift+F1 → the current screen's «اعرض لي» tour (or its help when it has none). */
@@ -55,11 +58,11 @@ export default function HelpPanel() {
   useHelpShortcuts()
   useShowMeShortcut()
   const isOpen = useHelpStore((s) => s.isOpen)
-  return <>{isOpen && <PanelBody />}<TourRunner /></>
+  return <>{isOpen && <PanelBody />}<TourRunner /><HintsLayer /><TourOffer /></>
 }
 
 function PanelBody() {
-  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney } = useHelpStore()
+  const { close, open, forcedKey, forcedTab, markSeen, startTour, startJourney, hints, toggleHints } = useHelpStore()
   const helpLang = useHelpStore((s) => s.lang)
   const setHelpLang = useHelpStore((s) => s.setLang)
   const uiLang = useLangStore((s) => s.lang)
@@ -165,6 +168,7 @@ function PanelBody() {
             )}
             {data.tour?.length > 0 && data.key === screen?.key && (
               <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
+                      data-tour="general-help-center-panel-show-me"
                       className="w-full mb-4 flex items-center gap-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 text-start">
                 <span className="text-2xl">👆</span>
                 <span className="flex-1">
@@ -194,11 +198,19 @@ function PanelBody() {
           {data && !term && <HelpFeedback screenKey={data.key} tab={tab} lang={lang} />}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             {data && !term && (data.module?.journeys || []).map((j) => (
-              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)}
+              <button key={j.id} type="button" onClick={() => startJourney(j)} title={pick(j.summary, lang)} data-tour="general-help-center-panel-journey"
                       className="text-xs border border-brand-300 text-brand-700 dark:text-brand-300 rounded-lg px-3 py-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/30">
                 🧭 {pick(j.title, lang)}
               </button>
             ))}
+            {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
+              <button type="button" onClick={() => { toggleHints(); close() }} title="Ctrl+F1" data-tour="general-help-center-panel-hints"
+                      className={`text-xs rounded-lg px-3 py-1.5 border ${hints
+                        ? 'bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
+                        : 'border-line text-content hover:bg-surface-2'}`}>
+                💡 {hints ? (lang === 'en' ? 'Hints off' : 'إيقاف التلميحات') : (lang === 'en' ? 'Button hints' : 'تلميحات الأزرار')}
+              </button>
+            )}
             {data && !term && <LearnedButton screenKey={data.key} lang={lang} />}
             <Link to="/help" onClick={close} className="text-brand-600 hover:underline">{label('openCenter', lang)}</Link>
             <Link to="/help?tab=path" onClick={close} className="text-brand-600 hover:underline">🎓 {lang === 'en' ? 'My path' : 'مساري'}</Link>

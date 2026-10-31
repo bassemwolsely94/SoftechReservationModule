@@ -13,6 +13,10 @@
  *                             key is 'journey:<module>.<key>' and it survives navigation.
  *   seen                    — screen key → 'updated' date the user last read, for the
  *                             "new" dot (per browser; a convenience, not a record)
+ *   hints                   — «💡 تلميحات الأزرار» on: explained buttons are outlined and show
+ *                             their tour text on hover / focus (Shift+F1; per browser)
+ *   offered                 — screen key → 'updated' date the «جديد هنا؟ اعرض لي» chip was
+ *                             last offered, so it shows once per screen version
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -28,6 +32,8 @@ const useHelpStore = create(
       lang: null,           // null → follow the UI language
       seen: {},
       tour: null,
+      hints: false,
+      offered: {},
 
       // opts: the screen's own pages (list + detail…) as an array — moving between them keeps
       // a screen tour going (then the 4th argument is the tour's title) — or
@@ -59,11 +65,16 @@ const useHelpStore = create(
         if (!key || !updated || get().seen[key] === updated) return
         set({ seen: { ...get().seen, [key]: updated } })
       },
+      toggleHints() { set({ hints: !get().hints }) },
+      markOffered(key, updated) {
+        if (!key || !updated || get().offered[key] === updated) return
+        set({ offered: { ...get().offered, [key]: updated } })
+      },
     }),
     {
       name: 'elrezeiky-help',
       version: 1,
-      partialize: (s) => ({ lang: s.lang, seen: s.seen }),
+      partialize: (s) => ({ lang: s.lang, seen: s.seen, hints: s.hints, offered: s.offered }),
     }
   )
 )

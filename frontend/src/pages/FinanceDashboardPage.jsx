@@ -168,7 +168,7 @@ export default function FinanceDashboardPage() {
           <span className="text-sm text-gray-500">الفترة: {data.period_label}</span>
         )}
         {!kpi.is_complete && kpi.net_revenue > 0 && (
-          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full" data-tour="finance-dashboard-incomplete">
             ⚠ بيانات غير مكتملة
           </span>
         )}
@@ -281,7 +281,7 @@ export default function FinanceDashboardPage() {
 
           {/* ── Last sync info ─────────────────────────────────────────────── */}
           {data?.last_sync && (
-            <div className="text-xs text-gray-400 text-center">
+            <div className="text-xs text-gray-400 text-center" data-tour="finance-dashboard-last-sync">
               آخر مزامنة: {data.last_sync.status} —{' '}
               {data.last_sync.started_at
                 ? format(new Date(data.last_sync.started_at), 'dd/MM/yyyy HH:mm', { locale: ar })

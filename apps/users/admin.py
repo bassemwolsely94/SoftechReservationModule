@@ -39,6 +39,14 @@ class StaffProfileAdmin(admin.ModelAdmin):
 
 @admin.register(UserBranchAccess)
 class UserBranchAccessAdmin(admin.ModelAdmin):
+    # Legacy (security Batch 5, users.0033): branch grants live in StaffProfile.allowed_branches,
+    # which core.branch_scope reads. These rows are kept for history only.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
     list_display  = ['staff', 'branch', 'granted_by', 'granted_at']
     list_filter   = ['branch']
     search_fields = ['staff__user__username', 'branch__name']

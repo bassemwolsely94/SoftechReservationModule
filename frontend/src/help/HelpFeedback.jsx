@@ -32,7 +32,7 @@ export default function HelpFeedback({ screenKey, tab, lang }) {
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div data-tour="general-help-center-feedback" className="flex items-center gap-2 text-xs">
       <span className="text-muted">{label('wasHelpful', lang)}</span>
       <button type="button" onClick={() => { setVote(true); send(true) }}
               className="border border-line rounded-full px-2.5 py-0.5 hover:bg-emerald-50 hover:border-emerald-300">{label('yes', lang)}</button>

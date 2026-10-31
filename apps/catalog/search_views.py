@@ -40,6 +40,6 @@ def universal_search_view(request):
         requested = [t.strip() for t in types_param.split(',') if t.strip()]
         types = [t for t in requested if t in TYPES] or None
 
-    results = universal_search(q, branch_id=branch_id, limit=limit, types=types)
+    results = universal_search(q, branch_id=branch_id, limit=limit, types=types, user=request.user)
     total = sum(len(v) for v in results.values())
     return Response({'query': q.strip(), 'count': total, 'results': results})

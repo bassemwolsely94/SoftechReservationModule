@@ -141,6 +141,12 @@ Each batch ends green (full backend suite + build) before the next starts.
    gift-voucher exports hold supplier/document data and one customer code, no patient names or
    phones → no history rewrite; they're removed from git and moved to the ignored scratch area.
 
+5. **Branch scope details (2026-10-30, B-1…B-3):** supervisor and quality manager are all-branch roles;
+   company-wide finance (consolidated, every branch's P&L, supplier A/P) is for the all-branch roles, a branch
+   user sees their own branch's finance only; customers are findable by anyone through their full phone
+   number (numbers of other branches masked), while browsing, name search, edits and exports stay with the
+   customer's own branch — call center edits anyone.
+
 ## Left to the builder
 
 Fixture shapes, file layout under `apps/tests/` (suggest `apps/tests/security/` package), the

@@ -234,7 +234,7 @@ export default function PermissionsMatrixPage() {
           )}
           {isAdmin && totalDirty > 0 && (
             <>
-              <button
+              <button data-tour="admin-permissions-undo"
                 onClick={handleReset}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-xl hover:bg-gray-50"
               >
@@ -363,7 +363,7 @@ export default function PermissionsMatrixPage() {
                           {/* Grant/revoke all toggle */}
                           {isAdmin && (
                             <td className="px-3 py-3 text-center">
-                              <button
+                              <button data-tour="admin-permissions-row-all"
                                 onClick={() => setAllActions(activeRole, mod.value, !allOn)}
                                 className={`
                                   px-2 py-1 rounded text-xs font-medium transition-colors
@@ -389,7 +389,7 @@ export default function PermissionsMatrixPage() {
                     الدور الحالي: <strong>{roles.find(r => r.value === activeRole)?.label}</strong>
                   </p>
                   {isAdmin && (
-                    <div className="flex gap-3">
+                    <div className="flex gap-3" data-tour="admin-permissions-role-all">
                       <button
                         onClick={() => {
                           for (const mod of modules) setAllActions(activeRole, mod.value, true)
@@ -412,7 +412,7 @@ export default function PermissionsMatrixPage() {
                 </div>
               </div>
             ) : activeRole && view === 'notifiers' ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" data-tour="admin-permissions-notifiers">
                 <div className="px-5 py-3 border-b bg-gray-50">
                   <p className="text-sm text-gray-600">
                     تحكّم في إشعارات دور <strong>{roles.find(r => r.value === activeRole)?.label}</strong>:

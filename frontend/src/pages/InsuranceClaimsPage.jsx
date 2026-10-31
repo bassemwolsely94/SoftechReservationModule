@@ -39,7 +39,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function Btn({ children, onClick, variant = 'primary', size = 'md', className = '', disabled }) {
+function Btn({ children, onClick, variant = 'primary', size = 'md', className = '', disabled, 'data-tour': dataTour }) {
   const base = 'inline-flex items-center gap-1.5 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
   const sizes = { sm: 'px-2.5 py-1 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-base' }
   const variants = {
@@ -50,7 +50,7 @@ function Btn({ children, onClick, variant = 'primary', size = 'md', className = 
     ghost:     'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
   }
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} data-tour={dataTour}
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>
       {children}
     </button>
@@ -178,7 +178,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                 {filteredSubs.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
               </select>
             </div>
-            <Btn onClick={discover} disabled={loading || !dateFrom || !dateTo} size="md">
+            <Btn onClick={discover} disabled={loading || !dateFrom || !dateTo} size="md" data-tour="insurance-claims-discover-search">
               {loading ? 'جارٍ البحث...' : '🔍 بحث في سوفتك'}
             </Btn>
           </div>
@@ -225,7 +225,7 @@ function DiscoverPanel({ clients, subclients, onImported, onClose }) {
                   )}
                 </div>
                 {selected.size > 0 && (
-                  <Btn onClick={importSelected} disabled={importing} variant="success" size="sm">
+                  <Btn onClick={importSelected} disabled={importing} variant="success" size="sm" data-tour="insurance-claims-discover-import">
                     {importing
                       ? 'جارٍ الاستيراد...'
                       : `⬇ استيراد ${selected.size} مطالبة`}
@@ -480,7 +480,7 @@ function ImportModal({ subclients, onClose, onCreated }) {
           {contracts.length > 0 && (
             <div>
               <label className={lbl}>العقد (لنسب الخصم)</label>
-              <select className={inp} value={form.contract_id}
+              <select className={inp} value={form.contract_id} data-tour="insurance-claims-import-contract"
                 onChange={e => set('contract_id', e.target.value)}>
                 <option value="">بدون عقد محدد</option>
                 {contracts.map(c => (
@@ -723,22 +723,22 @@ export default function InsuranceClaimsPage() {
                 💾 {(cacheStats.motalba?.rows || 0).toLocaleString('en-US')} / {(cacheStats.companiesitems?.rows || 0).toLocaleString('en-US')}
               </span>
             )}
-            <Btn variant="secondary" onClick={runSync} size="sm" disabled={syncing}>
+            <Btn variant="secondary" onClick={runSync} size="sm" disabled={syncing} data-tour="insurance-claims-sync">
               {syncing ? '⏳ جارٍ المزامنة...' : '🔄 مزامنة بيانات سوفتك'}
             </Btn>
-            <Btn variant="secondary" onClick={() => navigate('/insurance/clients')} size="sm">
+            <Btn variant="secondary" onClick={() => navigate('/insurance/clients')} size="sm" data-tour="insurance-claims-clients">
               ⚙ إدارة العملاء والعقود
             </Btn>
-            <Btn variant="secondary" onClick={() => navigate('/insurance/print-profiles')} size="sm">
+            <Btn variant="secondary" onClick={() => navigate('/insurance/print-profiles')} size="sm" data-tour="insurance-claims-print-profiles">
               🖨 تخصيص الطباعة
             </Btn>
-            <Btn variant="secondary" onClick={() => navigate('/insurance/item-overrides')} size="sm">
+            <Btn variant="secondary" onClick={() => navigate('/insurance/item-overrides')} size="sm" data-tour="insurance-claims-item-overrides">
               🏷 تصويب تصنيف الأصناف
             </Btn>
-            <Btn variant="secondary" onClick={() => setShowDiscover(true)} size="sm">
+            <Btn variant="secondary" onClick={() => setShowDiscover(true)} size="sm" data-tour="insurance-claims-discover">
               🔍 استعراض من سوفتك
             </Btn>
-            <Btn onClick={() => setShowImport(true)} size="sm">
+            <Btn onClick={() => setShowImport(true)} size="sm" data-tour="insurance-claims-import">
               + استيراد مطالبة
             </Btn>
           </div>
@@ -786,7 +786,7 @@ export default function InsuranceClaimsPage() {
             {filteredSubclients.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
           </select>
 
-          <Btn variant="secondary" size="sm" onClick={load}>تحديث</Btn>
+          <Btn variant="secondary" size="sm" onClick={load} data-tour="insurance-claims-refresh">تحديث</Btn>
 
           {(filters.status || filters.year || filters.client_id || filters.subclient_id ||
             filters.date_from || filters.date_to || filters.search) && (
@@ -819,7 +819,7 @@ export default function InsuranceClaimsPage() {
         <div className="mx-6 mb-3 px-4 py-2.5 bg-blue-600 text-white rounded-lg flex items-center justify-between">
           <span className="text-sm font-medium">تم تحديد {selected.size} مطالبة</span>
           <div className="flex gap-2 items-center">
-            <button onClick={() => deleteClaims(selected)} disabled={deleting}
+            <button onClick={() => deleteClaims(selected)} disabled={deleting} data-tour="insurance-claims-delete-selected"
               className="text-xs bg-white/15 hover:bg-red-600 border border-white/30 rounded px-3 py-1 font-medium disabled:opacity-50">
               {deleting ? '⏳ جارٍ الحذف…' : `🗑 حذف المحدد (${selected.size})`}
             </button>
@@ -898,7 +898,7 @@ export default function InsuranceClaimsPage() {
                     <td className="px-3 py-2.5"><StatusBadge status={claim.status} /></td>
                     <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <button
-                        onClick={() => navigate(`/insurance/claims/${claim.id}/print`)}
+                        onClick={() => navigate(`/insurance/claims/${claim.id}/print`)} data-tour="insurance-claims-row-print"
                         className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5">
                         طباعة
                       </button>

@@ -58,7 +58,7 @@ export default function AnnouncementsPage() {
           {items.map(a => {
             const mine = a.author === user?.staff_profile_id || ['admin', 'supervisor'].includes(user?.role)
             return (
-              <div key={a.id} className={`bg-white rounded-2xl border p-4 ${a.priority === 'high' ? 'border-red-200' : 'border-gray-100'}`}>
+              <div key={a.id} data-tour="general-announcements-card" className={`bg-white rounded-2xl border p-4 ${a.priority === 'high' ? 'border-red-200' : 'border-gray-100'}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export default function AnnouncementsPage() {
                       ? <span className="text-[11px] text-emerald-600 font-medium">✓ مقروء</span>
                       : <button onClick={() => ack.mutate(a.id)} data-tour="general-announcements-ack" className="text-xs bg-brand-600 text-white rounded-lg px-3 py-1.5 font-medium">تأكيد القراءة</button>}
                     {mine && <button onClick={() => setStatsFor(a.id)} data-tour="general-announcements-stats" className="text-[11px] text-gray-500 hover:text-gray-800">📊 من قرأ</button>}
-                    {mine && <button onClick={() => del.mutate(a.id)} className="text-[11px] text-gray-300 hover:text-red-500">حذف</button>}
+                    {mine && <button data-tour="general-announcements-delete" onClick={() => del.mutate(a.id)} className="text-[11px] text-gray-300 hover:text-red-500">حذف</button>}
                   </div>
                 </div>
               </div>
@@ -138,11 +138,11 @@ function AnnForm({ onDone }) {
   }
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 space-y-3">
-      <input className="input-field" placeholder="عنوان الإعلان" value={f.title} onChange={e => setF(s => ({ ...s, title: e.target.value }))} />
+      <input data-tour="general-announcements-title" className="input-field" placeholder="عنوان الإعلان" value={f.title} onChange={e => setF(s => ({ ...s, title: e.target.value }))} />
       <textarea className="input-field min-h-[90px]" placeholder="نص الإعلان…" value={f.body} onChange={e => setF(s => ({ ...s, body: e.target.value }))} />
       <div>
         <div className="text-xs font-semibold text-gray-500 mb-1">الأدوار المستهدفة (فارغ = الجميع)</div>
-        <div className="flex flex-wrap gap-1.5">
+        <div data-tour="general-announcements-roles" className="flex flex-wrap gap-1.5">
           {ROLES.map(([v, l]) => (
             <button key={v} type="button" onClick={() => toggle('roles', v)}
               className={`text-xs rounded-lg px-2.5 py-1 border ${f.roles.includes(v) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
@@ -151,7 +151,7 @@ function AnnForm({ onDone }) {
       </div>
       <div>
         <div className="text-xs font-semibold text-gray-500 mb-1">الفروع المستهدفة (فارغ = كل الفروع)</div>
-        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+        <div data-tour="general-announcements-branches" className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
           {branches.map(b => (
             <button key={b.id} type="button" onClick={() => toggle('branches', b.id)}
               className={`text-xs rounded-lg px-2.5 py-1 border ${f.branches.includes(b.id) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200'}`}>{b.name_ar || b.name}</button>
@@ -159,11 +159,11 @@ function AnnForm({ onDone }) {
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <label className="text-sm flex items-center gap-2">
+        <label data-tour="general-announcements-important" className="text-sm flex items-center gap-2">
           <input type="checkbox" checked={f.priority === 'high'} onChange={e => setF(s => ({ ...s, priority: e.target.checked ? 'high' : 'normal' }))} className="accent-red-600" />
           إعلان هام
         </label>
-        <button onClick={submit} disabled={!f.title || !f.body || create.isPending} className="btn-primary text-sm disabled:opacity-40">
+        <button data-tour="general-announcements-publish" onClick={submit} disabled={!f.title || !f.body || create.isPending} className="btn-primary text-sm disabled:opacity-40">
           {create.isPending ? 'جارٍ النشر…' : 'نشر الإعلان'}
         </button>
       </div>

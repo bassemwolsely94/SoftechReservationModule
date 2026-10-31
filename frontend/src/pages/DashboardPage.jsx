@@ -141,7 +141,7 @@ function StatusFunnel({ funnel, onClick }) {
   if (!funnel || funnel.length === 0) return null
 
   return (
-    <div className="space-y-2">
+    <div data-tour="general-dashboard-funnel" className="space-y-2">
       {funnel.map(f => {
         const cfg = STATUS_CFG[f.status] || {}
         const pct = Math.round((f.count / max) * 100)
@@ -302,7 +302,7 @@ function TransferStrip({ transfers, navigate }) {
   if (!pending && !flagged && !incoming_to_my_branch) return null
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div data-tour="general-dashboard-transfer-alerts" className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {pending > 0 && (
         <button
           onClick={() => navigate('/transfers?status=sent')}
@@ -388,7 +388,7 @@ function BranchBreakdown({ byBranch, navigate }) {
 function SalesMini({ sales }) {
   if (!sales) return null
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div data-tour="general-dashboard-sales" className="grid grid-cols-2 gap-3">
       <div className="bg-gray-50 rounded-xl p-3 text-center">
         <div className="text-2xl font-black text-gray-800 tabular-nums">
           {sales.invoices_7d?.toLocaleString('en-US')}
@@ -411,12 +411,12 @@ function SalesMini({ sales }) {
 
 function StockAlerts({ alerts }) {
   if (!alerts || alerts.length === 0) return (
-    <div className="text-center py-6 text-gray-300 text-sm">
+    <div data-tour="general-dashboard-stock-alerts" className="text-center py-6 text-gray-300 text-sm">
       لا توجد تنبيهات مخزون منخفض
     </div>
   )
   return (
-    <div className="divide-y divide-gray-50">
+    <div data-tour="general-dashboard-stock-alerts" className="divide-y divide-gray-50">
       {alerts.map((a, i) => (
         <div key={i} className="flex items-center justify-between py-2.5 text-sm">
           <div className="min-w-0 flex-1">
@@ -498,7 +498,7 @@ function IntelligenceAlertsRow({ customers, chronicFollowup, navigate }) {
   if (!hasAlerts) return null
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div data-tour="general-dashboard-intel-alerts" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
       {/* Churn: critical */}
       {churnCritical > 0 && (
@@ -699,7 +699,7 @@ export default function DashboardPage() {
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-3">
-          <div>
+          <div data-tour="general-dashboard-greeting">
             <h1 className="text-xl font-black text-gray-900">
               {greeting}، {user?.full_name?.split(' ')[0] || user?.username} 👋
             </h1>
@@ -722,6 +722,7 @@ export default function DashboardPage() {
               🔀 التحويلات
             </button>
             <button
+              data-tour="general-dashboard-new-reservation"
               onClick={() => navigate('/reservations/new')}
               className="btn-primary text-sm flex items-center gap-1.5"
             >
@@ -797,6 +798,7 @@ export default function DashboardPage() {
         {/* ── Stale warning banner ────────────────────────────────── */}
         {!isLoading && r.stale_7d > 0 && (
           <button
+            data-tour="general-dashboard-stale"
             onClick={() => navigate('/reservations?status=pending')}
             className="w-full flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 hover:bg-amber-100 transition-colors text-right"
           >

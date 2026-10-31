@@ -86,22 +86,22 @@ export default function NotificationsInboxPage() {
         <div className="flex items-center gap-2 mb-3 bg-brand-50 border border-brand-100 rounded-xl px-3 py-2" data-tour="general-notifications-bulk">
           <span className="text-sm font-medium text-brand-800">{ids.length} محدد</span>
           <div className="flex-1" />
-          <button onClick={() => runBulk('read')} className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">تعليم كمقروء</button>
-          <button onClick={() => runBulk('snooze', 60)} className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-amber-50">تأجيل ساعة</button>
-          <button onClick={() => runBulk('delete')} className="text-xs bg-white border border-red-200 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">حذف</button>
+          <button data-tour="general-notifications-mark-read" onClick={() => runBulk('read')} className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">تعليم كمقروء</button>
+          <button data-tour="general-notifications-snooze" onClick={() => runBulk('snooze', 60)} className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-amber-50">تأجيل ساعة</button>
+          <button data-tour="general-notifications-delete" onClick={() => runBulk('delete')} className="text-xs bg-white border border-red-200 text-red-600 rounded-lg px-3 py-1.5 hover:bg-red-50">حذف</button>
         </div>
       )}
 
       {/* List */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-tour="general-notifications-list">
         <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50">
-          <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-brand-600" />
+          <input data-tour="general-notifications-select-all" type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-brand-600" />
           <span className="text-xs text-gray-400">تحديد الكل</span>
         </div>
         {items.length === 0 ? (
           <div className="py-16 text-center text-gray-400 text-sm">{isFetching ? 'جارٍ التحميل…' : 'لا توجد إشعارات'}</div>
         ) : items.map(n => (
-          <div key={n.id} className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${!n.is_read ? 'bg-blue-50/40' : ''}`}>
+          <div key={n.id} data-tour="general-notifications-row" className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${!n.is_read ? 'bg-blue-50/40' : ''}`}>
             <input type="checkbox" checked={selected.has(n.id)} onChange={() => toggleOne(n.id)} className="mt-1 accent-brand-600" />
             <span className="text-lg leading-none mt-0.5">{n.type_icon}</span>
             <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openNotif(n)}>
@@ -116,7 +116,7 @@ export default function NotificationsInboxPage() {
 
       {items.length >= limit && (
         <div className="text-center mt-4">
-          <button onClick={() => setLimit(l => l + PAGE)} disabled={isFetching}
+          <button data-tour="general-notifications-load-more" onClick={() => setLimit(l => l + PAGE)} disabled={isFetching}
             className="text-sm border border-gray-200 rounded-xl px-5 py-2 hover:bg-gray-50 disabled:opacity-50">
             {isFetching ? 'جارٍ التحميل…' : 'تحميل المزيد'}
           </button>

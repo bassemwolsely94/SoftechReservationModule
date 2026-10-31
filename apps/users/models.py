@@ -258,9 +258,8 @@ class StaffProfile(models.Model):
 
     @property
     def can_see_all_branches(self):
-        if self.access_all_branches:
-            return True
-        return self.role in ('admin', 'call_center', 'purchasing')
+        from core.branch_scope import sees_all_branches
+        return sees_all_branches(self)
 
     # Backward-compat alias
     @property
@@ -269,13 +268,9 @@ class StaffProfile(models.Model):
 
     @property
     def accessible_branch_ids(self):
-        """Return set of branch PKs this user may access, or None for all."""
-        if self.can_see_all_branches:
-            return None  # None signals "unrestricted"
-        ids = set(self.extra_branches.values_list('branch_id', flat=True))
-        if self.branch_id:
-            ids.add(self.branch_id)
-        return ids
+        """Return set of branch PKs this user may access, or None for all (core.branch_scope)."""
+        from core.branch_scope import branch_ids
+        return branch_ids(self)
 
     @property
     def is_call_center(self):

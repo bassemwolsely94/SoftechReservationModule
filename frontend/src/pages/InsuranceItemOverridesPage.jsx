@@ -19,14 +19,14 @@ const catInfo = (v) => CATS.find(c => c.value === v) || { label: v, cls: 'bg-gra
 const inp = 'w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 const lbl = 'block text-xs font-medium text-gray-600 mb-1'
 
-function Btn({ children, onClick, variant = 'primary', disabled, className = '' }) {
+function Btn({ children, onClick, variant = 'primary', disabled, className = '', 'data-tour': dataTour }) {
   const v = {
     primary:   'bg-blue-600 text-white hover:bg-blue-700',
     secondary: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50',
     danger:    'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100',
   }
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} data-tour={dataTour}
       className={`inline-flex items-center gap-1 rounded font-medium transition-colors disabled:opacity-50 px-2.5 py-1 text-xs ${v[variant]} ${className}`}>
       {children}
     </button>
@@ -125,7 +125,7 @@ export default function InsuranceItemOverridesPage() {
               تصحيح الأصناف المُعرّفة خطأً كمستورد/محلى — تُطبَّق على المطالبات المسودة قبل الإصدار
             </p>
           </div>
-          <Btn onClick={openAdd}>+ تصويب صنف</Btn>
+          <Btn onClick={openAdd} data-tour="insurance-item-overrides-add">+ تصويب صنف</Btn>
         </div>
       </div>
 
@@ -189,7 +189,7 @@ export default function InsuranceItemOverridesPage() {
                       <div data-tour="insurance-item-overrides-actions" className="flex items-center gap-1 justify-end">
                         <Btn variant="secondary" onClick={() => toggleAffected(o)}>المطالبات المتأثرة</Btn>
                         <Btn variant="secondary" onClick={() => openEdit(o)}>تعديل</Btn>
-                        <Btn variant="danger" onClick={() => remove(o)}>حذف</Btn>
+                        <Btn variant="danger" onClick={() => remove(o)} data-tour="insurance-item-overrides-delete">حذف</Btn>
                       </div>
                     </td>
                   </tr>
@@ -234,7 +234,7 @@ export default function InsuranceItemOverridesPage() {
                   <input className={inp} value={form.item_code} disabled={!!editId}
                     onChange={e => setForm(f => ({ ...f, item_code: e.target.value }))}
                     onBlur={doLookup} placeholder="مثال: 128331" />
-                  <Btn variant="secondary" onClick={doLookup} disabled={!!editId}>بحث بالكتالوج</Btn>
+                  <Btn variant="secondary" onClick={doLookup} disabled={!!editId} data-tour="insurance-item-overrides-lookup">بحث بالكتالوج</Btn>
                 </div>
                 {lookup && (
                   <p className="mt-1 text-xs">
@@ -251,7 +251,7 @@ export default function InsuranceItemOverridesPage() {
               </div>
               <div>
                 <label className={lbl}>النوع</label>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5" data-tour="insurance-item-overrides-mode">
                   {MODES.map(m => (
                     <label key={m.value}
                       className={`flex items-start gap-2 rounded border p-2 cursor-pointer ${
@@ -292,7 +292,7 @@ export default function InsuranceItemOverridesPage() {
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <Btn variant="secondary" onClick={() => setShowForm(false)}>إلغاء</Btn>
-              <Btn onClick={save} disabled={saving}>{saving ? 'جارٍ الحفظ…' : 'حفظ'}</Btn>
+              <Btn onClick={save} disabled={saving} data-tour="insurance-item-overrides-save">{saving ? 'جارٍ الحفظ…' : 'حفظ'}</Btn>
             </div>
           </div>
         </div>

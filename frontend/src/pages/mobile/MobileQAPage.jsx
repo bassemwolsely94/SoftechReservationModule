@@ -89,7 +89,7 @@ export default function MobileQAPage() {
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="flex gap-2">
             <button onClick={() => setCreating(false)} className="btn-secondary flex-1">إلغاء</button>
-            <button onClick={start} disabled={busy} className="btn-primary flex-1 disabled:opacity-50">{busy ? '...' : 'ابدأ المراجعة'}</button>
+            <button data-tour="hr-qa-start" onClick={start} disabled={busy} className="btn-primary flex-1 disabled:opacity-50">{busy ? '...' : 'ابدأ المراجعة'}</button>
           </div>
         </div>
       )}
@@ -100,7 +100,7 @@ export default function MobileQAPage() {
         : (
           <div data-tour="hr-qa-list" className="space-y-2.5">
             {rows.map(r => (
-              <button key={r.id} onClick={() => navigate(`/m/qa/${r.id}`)}
+              <button key={r.id} data-tour="hr-qa-card" onClick={() => navigate(`/m/qa/${r.id}`)}
                 className="w-full text-right bg-white rounded-2xl border border-gray-200 p-4 active:bg-gray-50">
                 <div data-tour="hr-qa-status" className="flex items-start justify-between gap-2">
                   <span className="font-bold text-sm text-gray-900">{r.branch_name || `فرع ${r.branch}`}</span>

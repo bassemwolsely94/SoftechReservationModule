@@ -192,6 +192,7 @@ export default function NotificationBell() {
         {/* ── Desktop push toggle (OS notification when tab unfocused) ──────── */}
         {pushSupported() && (
           <button
+            data-tour="general-notifications-desktop-alerts"
             onClick={toggleDesktop}
             title={desktopOn ? 'إيقاف تنبيهات سطح المكتب'
                   : (Notification.permission === 'denied'
@@ -209,6 +210,7 @@ export default function NotificationBell() {
         )}
         {/* ── Bell button ──────────────────────────────────────────────────── */}
         <button
+          data-tour="general-notifications-bell"
           onClick={handleOpen}
           className={`relative p-2 rounded-lg transition-colors duration-150
             ${flashing
