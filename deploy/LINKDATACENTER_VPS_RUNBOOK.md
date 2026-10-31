@@ -1071,6 +1071,132 @@ Check (the forged header must lose):
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
+#### Company network through the tunnel (split DNS)
+
+Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
+through the tunnel **with its own address intact**, so nginx labels the request `internal` and
+the app can tell which site it came from. Anything else (mobile data, home, guest Wi-Fi) goes to
+the public address and is labelled `external`. Design: `docs/security/2026-10-31-network-device-access-design.md` §6.8 (T1–T7).
+
+> **IT-only.** Every step below is done on routers, ZeroTier Central or the VPS by the network
+> administrator, never from the app. Work in Safe Mode (Ctrl+X) and leave it with Ctrl+X after
+> each block, as in 5.2. Take `/export file=before-n1-split-dns` first. Replace every
+> `<PLACEHOLDER>` from the T1 table; never guess an address.
+
+**T1 — inventory (IT-only, no commands).** Fill one row per site before touching any router:
+
+| Site | Router (model) | Staff LAN(s) | Guest Wi-Fi subnet (stays OUT) | Link to HQ (SSTP RC0x / ZeroTier / IPsec) | Staff VPN pools counted internal |
+|---|---|---|---|---|---|
+| HQ Bab El Haded | MikroTik RouterOS 7 | `<HQ_LAN>` | `<GUEST_LAN>` | — | vpn_pool 10.10.10.0/24; wg-mobile 10.30.30/24, wg0 10.20.20/24, wg-Mohsen 10.60.60/24, back-to-home 10.250.250/24 only if you decide so |
+| `<SITE>` | `<MODEL>` | `<BRANCH_LAN>` | `<GUEST_LAN>` | `<RC0x / ZT / IPsec>` | `<VPN_POOL or none>` |
+
+Decide per VPN pool whether it counts as internal; only the listed ones go into the address list below.
+
+**T2 — HQ MikroTik: forward + no-NAT (IT-only)**
+
+```routeros
+/ip firewall address-list
+add list=elrezeiky-internal-clients address=<HQ_LAN>       comment="HQ staff LAN"
+add list=elrezeiky-internal-clients address=<BRANCH_LAN>   comment="<SITE> staff LAN"
+add list=elrezeiky-internal-clients address=10.10.10.0/24  comment="staff VPN pool vpn_pool"
+# one line per site / chosen VPN pool from T1. NEVER add a guest Wi-Fi subnet.
+add list=elrezeiky-app-addresses address=10.50.50.77       comment="app, ZeroTier"
+add list=elrezeiky-app-addresses address=10.0.0.77         comment="app, SSTP backup"
+
+/ip firewall filter
+add chain=forward src-address-list=elrezeiky-internal-clients dst-address-list=elrezeiky-app-addresses \
+    protocol=tcp dst-port=80,443 action=accept place-before=[find where comment~"^VPS: "] comment="N1: staff -> app (80 redirect, 443)"
+
+/ip firewall nat
+add chain=srcnat src-address-list=elrezeiky-internal-clients dst-address-list=elrezeiky-app-addresses \
+    action=accept place-before=[find where chain=srcnat action=masquerade] comment="N1: staff -> app WITHOUT NAT"
+```
+Why the NAT rule is an `accept` placed **above** masquerade: an `accept` in the `srcnat` chain stops
+RouterOS from evaluating any later NAT rule for that packet, so the source address is left
+untouched. If the packet reached the masquerade rule it would leave with the router's own address
+(`10.50.50.1` / `10.0.0.1`), nginx would see every device as "the router", and the app could no
+longer tell the Ain Shams PC from the HQ PC (the trusted-network match by site would fail).
+The filter rule must sit above the first forward `drop`; the existing `VPS:` rules stay unchanged.
+Check the order with `/ip firewall nat print` and `/ip firewall filter print`.
+
+**T3 — each branch router: split DNS, route, DNS-bypass block (IT-only)**
+
+```routeros
+# 1. staff LAN uses the router as DNS, and the router answers this one name locally
+/ip dns set allow-remote-requests=yes
+/ip dns static add name=elrezeikyapp.dawalvry.com address=10.50.50.77 comment="N1 split DNS"
+/ip dhcp-server network set [find where address=<BRANCH_LAN>] dns-server=<BRANCH_ROUTER>
+
+# 2. the app addresses go through the tunnel to HQ (the same tunnel the branch uses today)
+/ip route add dst-address=10.50.50.77/32 gateway=<HQ_TUNNEL_IFACE> comment="N1 app via HQ"
+/ip route add dst-address=10.0.0.77/32   gateway=<HQ_TUNNEL_IFACE> distance=5 comment="N1 app via HQ (backup address)"
+
+# 3. the staff LAN may not use any other resolver, otherwise the entry can be bypassed
+/ip firewall address-list add list=staff-lan address=<BRANCH_LAN>
+/ip firewall filter
+add chain=forward src-address-list=staff-lan protocol=udp dst-port=53 dst-address=!<BRANCH_ROUTER> action=drop comment="N1: no outside DNS (udp 53)"
+add chain=forward src-address-list=staff-lan protocol=tcp dst-port=53,853 dst-address=!<BRANCH_ROUTER> action=drop comment="N1: no outside DNS / DoT (tcp 53, 853)"
+```
+Move the two `drop` rules above any general `accept` for the LAN. A PC with a hard-coded 8.8.8.8
+stops resolving until it uses the router; that is intended. (DNS-over-HTTPS inside a browser is
+not visible on port 53; switch it off in the browser policy.)
+
+**Guest Wi-Fi must never get the DNS entry or the route.** Keep the guest network on its own DHCP
+server whose `dns-server` is a public resolver (or the router without the static entry), keep
+`<GUEST_LAN>` out of `elrezeiky-internal-clients`, and add a forward drop from `<GUEST_LAN>` to
+`elrezeiky-app-addresses`. Guest devices then reach only the public address and are `external`.
+
+**T4 — HQ router (IT-only):** the same static entry for the HQ LAN (no route needed, ZeroTier is local):
+```routeros
+/ip dns static add name=elrezeikyapp.dawalvry.com address=10.50.50.77 comment="N1 split DNS"
+```
+plus the same DNS-bypass block with `<BRANCH_LAN>` = `<HQ_LAN>` and `<BRANCH_ROUTER>` = `192.168.1.201`.
+
+**T5 — ZeroTier laptops (IT-only, ZeroTier Central)**
+1. my.zerotier.com -> network `8d1c312afae365aa` -> **DNS**: Search Domain `dawalvry.com`, Server
+   Address = a resolver that answers `elrezeikyapp.dawalvry.com` -> `10.50.50.77`. Use the HQ router's
+   DNS `10.50.50.1` (the static entry from T4 answers it).
+2. On each laptop open the ZeroTier client and tick **Allow DNS** for the network; without it the
+   push is ignored.
+3. Name every member and de-authorise leavers. Off ZeroTier a laptop uses the public address and
+   is correctly `external`.
+
+**T6 — VPS return routes (IT-only, on the server)**
+Packets come back to the device's real address, so the VPS needs a route for every internal range
+from T1. They live in the tunnel watcher `/usr/local/sbin/elrezeiky-tunnel-watch`: the list of
+office ranges `192.168.1 / 3 / 4 / 30 / 70` that it re-applies every 20 s via `10.50.50.1` or
+`dev sstp-hq`. Add each new staff LAN and counted VPN pool from T1 to that list:
+```bash
+sudo nano /usr/local/sbin/elrezeiky-tunnel-watch
+sudo systemctl restart elrezeiky-tunnel-watch
+ip route | grep -E '<BRANCH_LAN>|10.10.10.0'      # via 10.50.50.1 (or dev sstp-hq when failed over)
+```
+The nginx `map $server_addr $elr_network` from «Batch N1 on the live server» already labels by the
+address a request arrived on; ufw 443 stays open on all three addresses.
+
+**T7 — tests (every site).** Use `https://elrezeikyapp.dawalvry.com/api/access/whoami/`
+(returns `zone`, `ip`, `label`, `site`):
+
+| From | Expect |
+|---|---|
+| Branch PC: `nslookup elrezeikyapp.dawalvry.com` | `10.50.50.77` |
+| Branch PC: open `/api/access/whoami/` | `zone: internal`, `ip` = the PC's own LAN address, `label`/`site` = that branch (after registering it, below) |
+| Branch PC with DNS forced to 8.8.8.8 | no resolution (bypass block works) |
+| Guest Wi-Fi device: `nslookup` and `whoami` | public address; `zone: external` |
+| Mobile data | `zone: external`; a forged `X-ElR-Network: internal` header is ignored |
+| ZeroTier laptop with Allow DNS | `nslookup` = `10.50.50.77`, `zone: internal` |
+| Stop ZeroTier (VPS side or router link) | within about a minute the watcher moves to SSTP; the same PC is still `internal` |
+
+**Last step:** register each site so it shows a name instead of a bare range: open «الشبكات
+الموثوقة» (`/access/networks`, admin) and add the staff LAN / pool of every site, or run on the
+VPS (dry-run first, then `--apply`):
+```bash
+cd /opt/elrezeiky/app
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks --apply
+```
+In N1 nothing is refused because of the network (log only); blocking starts in batch N3.
+
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
 
 The config references certificates that don't exist yet, so Nginx won't start. Get them

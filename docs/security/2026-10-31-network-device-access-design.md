@@ -216,7 +216,7 @@ Behaviour notes:
 | Batch | Content | Touches SOFTECH writes? |
 |---|---|---|
 | N0 | Fix H1–H9 (personal exempt, rider bugs, open probe, proxy-headers, lockout, MFA token, admin) | No |
-| N1 | nginx internal block + `X-ElR-Network`; `AccessContextMiddleware` + contextvar; network/zone logging only; telemetry by user/zone | No |
+| N1 | **Built 2026-10-31** (`968e668c` nginx label, `37b1b0b1` `apps/access`, `1f42a0cc` access context + login log + SOFTECH load by network, `28219d77` badge + `/access/networks`; IT steps in the VPS runbook «Company network through the tunnel»). nginx internal block + `X-ElR-Network`; `AccessContextMiddleware` + contextvar; network/zone logging only; telemetry by user/zone. Log only: nothing is refused until N3 | No |
 | N2 | Device registry + enrollment + «الأجهزة» screen + login alerts; replaces remember-device | No |
 | N3 | Zone policy model + matrix column + login/refresh/middleware enforcement (`log` → `enforce`) | No |
 | N4 | SOFTECH gate in `config/sybase.py` (log → enforce), thread context propagation, audit IP/device | **Yes — gate only (stop-and-ask: POS push path)** |
