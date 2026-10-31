@@ -8,6 +8,8 @@ from decimal import Decimal, ROUND_DOWN
 from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.shortcuts import get_object_or_404
+
+from core import branch_scope
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -84,7 +86,7 @@ def preview_cheque_plan(request):
 
 # ── Plans CRUD ────────────────────────────────────────────────────────────────
 
-class PlanListCreateView(generics.ListCreateAPIView):
+class PlanListCreateView(branch_scope.BranchScopedMixin, generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'cheques'
 
@@ -92,9 +94,9 @@ class PlanListCreateView(generics.ListCreateAPIView):
         return ChequePlanCreateSerializer if self.request.method == 'POST' else ChequePlanListSerializer
 
     def get_queryset(self):
-        qs = ChequePlan.objects.select_related(
+        qs = branch_scope.scope(ChequePlan.objects.select_related(
             'created_by__user', 'branch',
-        ).prefetch_related('instalments')
+        ).prefetch_related('instalments'), self.request.user)
 
         status_param = self.request.query_params.get('status')
         if status_param:
@@ -116,12 +118,13 @@ class PlanListCreateView(generics.ListCreateAPIView):
 
     @transaction.atomic
     def perform_create(self, serializer):
+        self.check_branch_value(serializer)
         staff = _get_staff(self.request)
         plan  = serializer.save(status='draft', created_by=staff)
         _generate_instalments(plan)
 
 
-class PlanDetailView(generics.RetrieveUpdateDestroyAPIView):
+class PlanDetailView(branch_scope.BranchScopedMixin, generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'cheques'
     rbac_delete = ('edit', 'delete')     # only draft / cancelled plans can be deleted
@@ -132,9 +135,9 @@ class PlanDetailView(generics.RetrieveUpdateDestroyAPIView):
         return ChequePlanDetailSerializer
 
     def get_queryset(self):
-        return ChequePlan.objects.select_related(
+        return branch_scope.scope(ChequePlan.objects.select_related(
             'created_by__user', 'branch',
-        ).prefetch_related('instalments')
+        ).prefetch_related('instalments'), self.request.user)
 
     def update(self, request, *args, **kwargs):
         plan = self.get_object()
@@ -170,13 +173,13 @@ def activate_plan(request, pk):
     denied = deny_unless(request, 'cheques', 'approve')
     if denied:
         return denied
-    plan = get_object_or_404(ChequePlan, pk=pk)
+    plan = branch_scope.get_or_404(ChequePlan, request.user, pk=pk)
     if plan.status != 'draft':
         return Response({'detail': 'الخطة ليست في حالة مسودة.'}, status=400)
     plan.status = 'active'
     plan.save(update_fields=['status', 'updated_at'])
     return Response(ChequePlanDetailSerializer(
-        ChequePlan.objects.prefetch_related('instalments').get(pk=pk)
+        branch_scope.scope(ChequePlan.objects.prefetch_related('instalments'), request.user).get(pk=pk)
     ).data)
 
 
@@ -187,7 +190,7 @@ def cancel_plan(request, pk):
     denied = deny_unless(request, 'cheques', 'approve')
     if denied:
         return denied
-    plan = get_object_or_404(ChequePlan, pk=pk)
+    plan = branch_scope.get_or_404(ChequePlan, request.user, pk=pk)
     if plan.instalments.filter(status='cleared').exists():
         return Response(
             {'detail': 'لا يمكن إلغاء خطة تحتوي على شيكات صُرفت.'},
@@ -209,7 +212,7 @@ def update_instalment(request, plan_pk, inst_pk):
     denied = deny_unless(request, 'cheques', 'finalize' if money else 'edit')
     if denied:
         return denied
-    inst = get_object_or_404(ChequeInstalment, pk=inst_pk, plan_id=plan_pk)
+    inst = branch_scope.get_or_404(ChequeInstalment, request.user, 'plan__branch', pk=inst_pk, plan_id=plan_pk)
     # Batch 4, Z-10a: only an active plan's cheques change, and a cleared or cancelled cheque is
     # final (a PATCH with `edit` put a cleared cheque back to pending); moving a bounced cheque on
     # is money too → finalize.
@@ -250,21 +253,22 @@ def treasury_dashboard(request):
     today = date.today()
     in_30 = today + timedelta(days=30)
 
-    active_plans = ChequePlan.objects.filter(status='active')
+    active_plans = branch_scope.scope(ChequePlan.objects.filter(status='active'), request.user)
+    my_inst = branch_scope.scope(ChequeInstalment.objects.all(), request.user, 'plan__branch')
 
-    total_outstanding = ChequeInstalment.objects.filter(
+    total_outstanding = my_inst.filter(
         plan__status='active',
         status__in=['pending', 'issued'],
     ).aggregate(t=Sum('amount'))['t'] or Decimal('0')
 
-    upcoming = ChequeInstalment.objects.filter(
+    upcoming = my_inst.filter(
         plan__status='active',
         status__in=['pending', 'issued'],
         due_date__gte=today,
         due_date__lte=in_30,
     ).select_related('plan').order_by('due_date')
 
-    overdue = ChequeInstalment.objects.filter(
+    overdue = my_inst.filter(
         plan__status='active',
         status__in=['pending', 'issued'],
         due_date__lt=today,

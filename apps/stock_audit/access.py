@@ -28,12 +28,11 @@ def active_grant(profile):
 
 
 def own_branch_codes(profile):
-    """softech_branch_id of the branches a branch manager may see (home branch + extra grants)."""
+    """softech_branch_id of the branches a branch manager may see (core.branch_scope: home +
+    allowed branches, never a restricted one)."""
     from apps.branches.models import Branch
-    ids = set(profile.extra_branches.values_list('branch_id', flat=True))
-    if profile.branch_id:
-        ids.add(profile.branch_id)
-    return set(Branch.objects.filter(id__in=ids).values_list('softech_branch_id', flat=True))
+    from core.branch_scope import scope
+    return set(scope(Branch.objects.all(), profile, 'id').values_list('softech_branch_id', flat=True))
 
 
 class Access:

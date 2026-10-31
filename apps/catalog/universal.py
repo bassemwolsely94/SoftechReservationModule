@@ -23,7 +23,7 @@ DEFAULT_LIMIT = 8
 TYPES = ('items', 'customers', 'orders', 'reservations')
 
 
-def universal_search(query, *, branch_id=None, limit=DEFAULT_LIMIT, types=None):
+def universal_search(query, *, branch_id=None, limit=DEFAULT_LIMIT, types=None, user=None):
     """Return grouped results: {'items': [...], 'customers': [...], ...}."""
     raw = (query or '').strip()
     types = tuple(types) if types else TYPES
@@ -34,11 +34,11 @@ def universal_search(query, *, branch_id=None, limit=DEFAULT_LIMIT, types=None):
     if 'items' in types:
         out['items'] = _search_items(raw, branch_id=branch_id, limit=limit)
     if 'customers' in types:
-        out['customers'] = _search_customers(raw, limit=limit)
+        out['customers'] = _search_customers(raw, limit=limit, user=user)
     if 'orders' in types:
-        out['orders'] = _search_orders(raw, branch_id=branch_id, limit=limit)
+        out['orders'] = _search_orders(raw, branch_id=branch_id, limit=limit, user=user)
     if 'reservations' in types:
-        out['reservations'] = _search_reservations(raw, branch_id=branch_id, limit=limit)
+        out['reservations'] = _search_reservations(raw, branch_id=branch_id, limit=limit, user=user)
     return out
 
 
@@ -106,7 +106,8 @@ def _branch_stock(item_ids, branch_id):
 
 
 # ── customers ─────────────────────────────────────────────────────────────────────
-def _search_customers(raw, *, limit):
+def _search_customers(raw, *, limit, user=None):
+    from apps.customers import access
     from apps.customers.models import Customer
     digits = raw.replace(' ', '')
     q = (
@@ -115,10 +116,14 @@ def _search_customers(raw, *, limit):
         | Q(whatsapp_phone__icontains=digits)
         | Q(softech_pic__iexact=raw) | Q(softech_id__iexact=raw)
     )
-    rows = Customer.objects.filter(q).only(
-        'id', 'name', 'phone', 'whatsapp_phone', 'softech_pic', 'segment'
+    qs = Customer.objects.filter(q)
+    if user is not None and (limit_q := access.findable_q(user, raw)) is not None:
+        qs = qs.filter(limit_q)          # B-2: other branches only on a full phone
+    rows = qs.only(
+        'id', 'name', 'phone', 'whatsapp_phone', 'softech_pic', 'segment',
+        'preferred_branch_id', 'created_by_id',
     )[:limit]
-    return [{
+    out = [{
         'type': 'customer',
         'id': c.id,
         'name': c.name,
@@ -127,15 +132,19 @@ def _search_customers(raw, *, limit):
         'softech_pic': c.softech_pic,
         'segment': c.segment,
     } for c in rows]
+    return [access.mask_dict(user, c, d) for c, d in zip(rows, out)] if user is not None else out
 
 
 # ── orders (indirect-POS) ──────────────────────────────────────────────────────────
-def _search_orders(raw, *, branch_id, limit):
+def _search_orders(raw, *, branch_id, limit, user=None):
     from apps.pos_orders.models import SoftechSalesOrder
+    from core import branch_scope
     q = wq(raw, 'customer_name') | Q(softech_pic__iexact=raw)
     if raw.isdigit():
         q |= Q(pk=int(raw)) | Q(softech_docnumber=raw)
     qs = SoftechSalesOrder.objects.filter(q)
+    if user is not None:
+        qs = branch_scope.scope(qs, user)   # Batch 5: orders stay within the user's branches
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     qs = qs.select_related('branch').order_by('-id')[:limit]
@@ -150,8 +159,9 @@ def _search_orders(raw, *, branch_id, limit):
 
 
 # ── reservations ───────────────────────────────────────────────────────────────────
-def _search_reservations(raw, *, branch_id, limit):
+def _search_reservations(raw, *, branch_id, limit, user=None):
     from apps.reservations.models import Reservation
+    from core import branch_scope
     digits = raw.replace(' ', '')
     q = (
         wq(raw, 'contact_name') | Q(contact_phone__icontains=digits)
@@ -160,6 +170,8 @@ def _search_reservations(raw, *, branch_id, limit):
     if raw.isdigit():
         q |= Q(pk=int(raw))
     qs = Reservation.objects.filter(q)
+    if user is not None:
+        qs = branch_scope.scope(qs, user)   # Batch 5: reservations stay within the user's branches
     if branch_id:
         qs = qs.filter(branch_id=branch_id)
     qs = qs.select_related('item').order_by('-id')[:limit]

@@ -375,7 +375,9 @@ SCREENS = [
                      'Revenue (sales − returns) → cost of goods (purchases − returns) → gross profit → operating expenses (salaries, rent, utilities, other) → operating and net profit, consolidated or per branch.'),
         'audience': T('الإدارة والمالية.', 'Management and finance.'),
         'tips': [
-            T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC],
+            T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC,
+            T('أرقام الشركة كلها وأرباح كل الفروع للإدارة ومدير الجودة والمركز الرئيسي. موظف الفرع بيشوف أرقام فرعه بس.',
+              'Company-wide figures and the P&L of every branch are for management, the quality manager and HQ. A branch user sees the figures of their own branch only.')],
         'tour': [
             {'target': 'finance-freshness', 'label': T('عمر البيانات المالية', 'Finance data age'),
              'text': T('إمتى اتحدّثت الأرباح والمصروفات والقيود آخر مرة.', 'When P&L, expenses and the journal were last refreshed.'),
@@ -1064,7 +1066,7 @@ SCREENS = [
         'title': T('سداد فواتير الموردين (المطابقة)', 'Supplier invoice payments (reconciliation)'),
         'summary': T('ربط سندات الصرف للموردين بالفواتير التي تسددها: النظام يقترح الربط بدرجة ثقة، والمسؤول يعتمد أو يرفض. الاعتماد يُكتب في المرآة لدينا فقط؛ الكتابة في SOFTECH خطوة منفصلة («🖊 كتابة في SOFTECH») للمدير فقط وتعمل فقط حين يُفعَّل مفتاح الكتابة. «المتبقي» حقل محسوب (قيمة الفاتورة − المسدد في SOFTECH − المعتمد بانتظار الكتابة).',
                      'Link supplier payment vouchers to the invoices they pay: the system proposes links with a confidence level, and the responsible person approves or rejects. Approval is written only to our mirror; writing to SOFTECH is a separate admin-only step ("🖊 Write to SOFTECH") that works only when the write switch is on. "Remaining" is computed (invoice value − paid in SOFTECH − approved awaiting write).'),
-        'audience': T('المالية والمشتريات.', 'Finance and purchasing.'),
+        'audience': T('المالية والمشتريات (الإدارة فقط — تسوية الموردين بيانات على مستوى الشركة).', 'Finance and purchasing (management only — supplier reconciliation is company-level data).'),
         'tabs': [
             {'key': 'candidates', 'title': T('المقترحات', 'Proposals'), 'body': T('مقترحات الربط (ثقة عالية/متوسطة/منخفضة/تعارض) مع الفاتورة وتاريخها وقيمتها والسند ومبلغه والمتبقي. افتح الصف لترى أصناف الفاتورة والمرتجعات المرتبطة، ثم اعتمد أو ارفض.', 'Link proposals (high/medium/low confidence/conflict) with the invoice, date, value, voucher, amount and remaining. Open a row to see the invoice items and linked returns, then approve or reject.')},
             {'key': 'exceptions', 'title': T('الاستثناءات', 'Exceptions'), 'body': T('حالات تحتاج مراجعة: سند مكرر محتمل، سند يسمي فاتورة أخرى، مقبوضات تحتاج تحديد (استرداد أم خصم)، وغيرها.', 'Cases needing review: possible duplicate voucher, voucher naming another invoice, receipts needing a decision (refund or deduction), and others.')},

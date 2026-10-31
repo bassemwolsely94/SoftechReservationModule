@@ -1030,8 +1030,8 @@ class TrainingDigestTests(TestCase):
         from apps.users.models import RoleModuleAccess
         from .factories import make_branch2
         self.b1, self.b2 = make_branch(), make_branch2()
-        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
-        _, self.sup, _ = make_user('dg_sup', role='supervisor', branch=self.b1)
+        RoleModuleAccess.objects.create(role='salesperson', module='help', action='edit')
+        _, self.sup, _ = make_user('dg_sup', role='salesperson', branch=self.b1)
         u, self.ph, _ = make_user('dg_ph', role='pharmacist', branch=self.b1)
         _, self.other, _ = make_user('dg_other', role='pharmacist', branch=self.b2)
         self.c = APIClient()
@@ -1049,8 +1049,14 @@ class TrainingDigestTests(TestCase):
         names = {r['id'] for r in digest.summary_for(self.sup)['stuck']} | \
             {r['id'] for r in digest.summary_for(self.sup)['failed']}
         s = digest.summary_for(self.sup)
-        self.assertEqual(s['team'], 1)                 # only branch 1, not the supervisor themself
+        self.assertEqual(s['team'], 1)                 # only branch 1, not the trainer themself
         self.assertNotIn(self.other.id, names)
+
+    def test_supervisor_digest_covers_every_branch(self):
+        """Owner decision B-3: a supervisor is an all-branch role."""
+        from apps.help import digest
+        _, sup, _ = make_user('dg_allsup', role='supervisor', branch=self.b1)
+        self.assertEqual(digest.summary_for(sup)['team'], 3)   # trainer + both pharmacists
 
     def test_stuck_failed_and_text(self):
         from apps.help import digest
@@ -1108,8 +1114,8 @@ class RemindTests(TestCase):
         from .factories import make_branch2
         from django.utils import timezone
         self.b1, self.b2 = make_branch(), make_branch2()
-        RoleModuleAccess.objects.create(role='supervisor', module='help', action='edit')
-        su, self.sup, _ = make_user('rm_sup', role='supervisor', branch=self.b1)
+        RoleModuleAccess.objects.create(role='salesperson', module='help', action='edit')
+        su, self.sup, _ = make_user('rm_sup', role='salesperson', branch=self.b1)
         _, self.ph, _ = make_user('rm_ph', role='pharmacist', branch=self.b1)
         _, self.other, _ = make_user('rm_other', role='pharmacist', branch=self.b2)
         for p in (self.ph, self.other):

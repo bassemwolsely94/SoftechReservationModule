@@ -263,15 +263,19 @@ SCREENS = [
         'key': 'customers.list',
         'routes': ['/customers'],
         'title': T('العملاء', 'Customers'),
-        'summary': T('البحث في كل العملاء المسجّلين وترتيبهم حسب خطر الانقطاع أو القيمة (LTV) أو الغياب أو آخر زيارة.',
-                     'Search all registered customers and sort them by churn risk, value (LTV), absence or last visit.'),
+        'summary': T('البحث في عملاء فرعك وترتيبهم حسب خطر الانقطاع أو القيمة (LTV) أو الغياب أو آخر زيارة — وعميل أي فرع تاني برقم موبايله كامل.',
+                     'Search your branch\'s customers and sort them by churn risk, value (LTV), absence or last visit — and find any other branch\'s customer by their full phone number.'),
         'audience': T('كل من يتعامل مع العملاء.', 'Everyone who deals with customers.'),
         'steps': [
             T('ابحث بالاسم أو رقم الهاتف أو كود SOFTECH.', 'Search by name, phone or SOFTECH code.'),
+            T('عميل مسجّل في فرع تاني؟ اكتب رقم موبايله كامل (١٠ أرقام أو أكتر) — هيظهر وتقدر تبيعله، بس رقمه بيظهر مخفي (آخر ٣ أرقام).',
+              'A customer registered at another branch? Type their full phone number (10+ digits) — they appear and you can serve them, but their number shows masked (last 3 digits).'),
             T('صفِّ بخطر الانقطاع (حرج / مرتفع / متوسط / مستقر) لاستهداف من يحتاج تواصلاً.', 'Filter by churn risk (critical / high / medium / stable) to target who needs contact.'),
             T('اضغط العميل لفتح ملفه الكامل.', 'Click a customer to open their full profile.'),
         ],
         'tips': [T('«خطر الانقطاع» يُحسب يومياً من انتظام مشتريات العميل؛ «حرج» = غاب أطول بكثير من عادته.', '"Churn risk" is calculated daily from the customer\'s buying pattern; "critical" = absent much longer than usual.'),
+                 T('القائمة وبحث الاسم بيعرضوا عملاء فرعك بس. تعديل بيانات عميل فرع تاني لفرعه أو لمركز الاتصال — والأرقام بتظهر مخفية عشان بيانات العملاء ما تتسرّبش.',
+                   'The list and name search show your branch\'s customers only. Another branch\'s customer is edited by their branch or the call center — and their numbers show masked so customer data cannot leak.'),
                  T('مشتريات العميل = الفواتير اللي عليها الـPIC بتاعه. فواتير من غير PIC بتتسجّل على «حساب البيع» (زي Walk-In أو التعاقد) — '
                    'الحسابات دي مش أشخاص فمش بتظهر في القائمة ولا في التقسيم أو الحملات أو متابعة المزمنين.',
                    'A customer\'s purchases = invoices carrying their PIC. Invoices with no PIC are filed under the "sales account" '
@@ -336,7 +340,7 @@ SCREENS = [
                        'Click any row in the table and the tour carries on on their profile page, explaining its parts.')},
         ],
         'tour_continue': 'customers.detail',
-        'updated': '2026-10-28',
+        'updated': '2026-10-30',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
