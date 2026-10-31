@@ -224,7 +224,7 @@ export default function SalesDashboard() {
     if (fp.date_to)   p.date_to   = fp.date_to
     return p
   })()
-  const { data: contribData, isLoading: contribLoading } = useQuery({
+  const { data: contribData, isLoading: contribLoading, error: contribError } = useQuery({
     queryKey: ['analytics-branch-contribution', contribParams],
     queryFn:  () => analyticsApi.branchContribution(contribParams).then(r => r.data),
     staleTime: 120_000,
@@ -417,6 +417,11 @@ export default function SalesDashboard() {
                   {contribLoading && (
                     <div className="flex justify-center h-32 items-center">
                       <div className="text-brand-600 animate-pulse">جارٍ احتساب هامش المساهمة…</div>
+                    </div>
+                  )}
+                  {contribError?.response?.status === 403 && (
+                    <div className="bg-surface border border-line rounded-xl p-6 text-center text-sm text-muted">
+                      مقارنة أرباح كل الفروع متاحة للإدارة ومدير الجودة والمركز الرئيسي.
                     </div>
                   )}
                   {contribData && (

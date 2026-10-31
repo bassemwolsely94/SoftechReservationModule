@@ -250,10 +250,7 @@ def treasury_dashboard(request):
     if denied:
         return denied
     today = date.today()
-    in_30 = today.replace(day=today.day) if False else \
-        (today.replace(month=today.month + 1) if today.month < 12
-         else today.replace(year=today.year + 1, month=1))
-    # Simpler: just use timedelta
+    # (a "same day next month" replace() used to run first and crashed on the 29th–31st)
     from datetime import timedelta
     in_30 = today + timedelta(days=30)
 

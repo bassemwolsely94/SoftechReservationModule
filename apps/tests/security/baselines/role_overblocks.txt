@@ -508,3 +508,11 @@ pharmacist GET /api/finance/reconciliation/runs/
 pharmacist GET /api/finance/reconciliation/supplier-options/
 pharmacist GET /api/finance/reconciliation/unpaid/
 pharmacist GET /api/finance/reconciliation/workbench/
+
+# reason: Batch 5 part 2, owner decision B-1 — the branch-contribution (every branch's revenue, COGS,
+#   expenses, contribution margin) and inventory-investment (every branch's capital) boards compare
+#   all branches, so they are for the all-branch roles; branch roles keep their own-branch analytics.
+pharmacist GET /api/analytics/branch-contribution/
+pharmacist GET /api/analytics/inventory-investment/
+viewer GET /api/analytics/branch-contribution/
+viewer GET /api/analytics/inventory-investment/

@@ -145,7 +145,8 @@ SCREENS = [
              'body': T('سجل قرارات الإتلاف أو المرتجع للأصناف المنتهية: مسودة ← اعتماد (مدير/جودة) ← «تم التنفيذ» بعد تطبيقها يدوياً في SOFTECH. النظام لا يخصم المخزون تلقائياً.',
                        'The log of disposal or return decisions for expired items: draft → approval (manager/quality) → "Done" after applying it manually in SOFTECH. The system never deducts stock automatically.')},
         ],
-        'tips': [
+        'tips': [T('التشغيلات وتنبيهات قرب الانتهاء وتقارير الصلاحية وقرارات الإتلاف والمرتجع بتظهر لموظف الفرع لفرعه بس. اقتراحات إعادة التوزيع بتفضل تشوف كل الفروع علشان تعرف تبعت لمين.', 'Batches, near-expiry alerts, expiry reports and disposal / return decisions show a branch user their own branch only. Rebalance suggestions still look at every branch so you know where to send stock.'),
+                 
             T('اقتراحات الإنقاذ تحتاج تشغيل محرك الطلب لحساب معدلات البيع.', 'Rescue suggestions need the demand engine to have run to compute sales rates.'),
             T('«عزل دفعة» يضع التشغيلة في الحجر مع سبب إلزامي (مثلاً تلف أو سحب من السوق).', '"Quarantine batch" puts a batch in quarantine with a required reason (e.g. damage or a market recall).'),
         ],
@@ -235,7 +236,7 @@ SCREENS = [
                  'اضغط عنوان أي عمود للترتيب (مثلاً «قيمة معرّضة» أو «أقرب صلاحية»)، والصف الأحمر صنف منتهي.\n• «🗑️ إتلاف/مرتجع» بيفتح نافذة: القرار (إتلاف، مرتجع للمورد، عزل، مراجعة) والكمية والسبب، ثم «تسجيل القرار».\n• القرار بيتسجّل مسودة في تبويب «إتلاف/مرتجع» ومش بيخصم من SOFTECH.',
                  'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
-        'updated': '2026-10-29',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

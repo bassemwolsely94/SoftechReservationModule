@@ -38,6 +38,48 @@ from . import cases as case_svc
 from . import execution as exe
 from .permissions import CanOperateSupply
 from core.errors import public_error
+from core import branch_scope
+from django.db.models import Q as _Q
+
+
+def _scope_cases(qs, user, field='branch'):
+    """Batch 5 part 2: a branch user (the read-only viewer role) sees their branches' cases /
+    decisions plus the network-level ones (branch = NULL — shared, not one branch's)."""
+    ids = branch_scope.branch_ids(user)
+    if ids is None:
+        return qs
+    return qs.filter(_Q(**{f'{field}_id__in': ids}) | _Q(**{f'{field}__isnull': True}))
+
+
+def _analysis_branch_ids(request):
+    """?branches= for the availability analysis / export, narrowed to the user's branches. None
+    (= the batch's own scope) stays None only for all-branch users."""
+    raw = request.query_params.get('branches')
+    ids = [int(b) for b in raw.split(',') if b.strip().isdigit()] if raw is not None else None
+    mine = branch_scope.branch_ids(request.user)
+    if mine is None:
+        return ids
+    narrowed = sorted(mine if not ids else set(ids) & mine)
+    if not narrowed:
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied('لا يمكنك عرض فروع خارج فروعك.')
+    return narrowed
+
+
+def _scoped_branch_param(request):
+    """?branch= for queue / summary: must be one of the user's; a single-branch user defaults to
+    theirs. None = no branch filter (all-branch users only)."""
+    branch = request.query_params.get('branch') or None
+    if branch:
+        branch_scope.require(request.user, branch)
+        return branch
+    ids = branch_scope.branch_ids(request.user)
+    if ids is None:
+        return None
+    if len(ids) == 1:
+        return next(iter(ids))
+    from rest_framework.exceptions import ValidationError
+    raise ValidationError({'branch': 'اختر الفرع.'})
 
 logger = logging.getLogger('elrezeiky.supply')
 
@@ -293,16 +335,14 @@ class AvailabilityBatchViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def analysis(self, request, pk=None):
         """Per-line need / stock / internal cover / residual / effective cost / flags."""
-        raw = request.query_params.get('branches')
-        ids = [int(b) for b in raw.split(',') if b.strip().isdigit()] if raw is not None else None
+        ids = _analysis_branch_ids(request)
         return Response(av.analyze_batch(self.get_object(), branch_ids=ids))
 
     @action(detail=True, methods=['get'], url_path='export')
     def export(self, request, pk=None):
         """The review grid as Excel (same branch scope as analysis) + «بيانات الصنف». Read-only."""
         from .tab_exports import availability_excel, xlsx_response
-        raw = request.query_params.get('branches')
-        ids = [int(b) for b in raw.split(',') if b.strip().isdigit()] if raw is not None else None
+        ids = _analysis_branch_ids(request)
         batch = self.get_object()
         return xlsx_response(availability_excel(batch, av.analyze_batch(batch, branch_ids=ids)),
                              f'availability_{batch.pk}.xlsx')
@@ -551,9 +591,12 @@ class SupplyCaseViewSet(viewsets.ReadOnlyModelViewSet):
             branch = self.request.query_params.get('branch') or None
             if self.request.query_params.get('include_closed') == '1':
                 qs = SupplyCase.objects.select_related('item', 'branch', 'assigned_to__user')
-                return qs.filter(branch_id=branch) if branch else qs
-            return case_svc.open_queue(bucket=bucket, branch_id=branch)
-        return SupplyCase.objects.select_related('item', 'branch', 'assigned_to__user')
+                qs = qs.filter(branch_id=branch) if branch else qs
+            else:
+                qs = case_svc.open_queue(bucket=bucket, branch_id=branch)
+            return _scope_cases(qs, self.request.user)
+        return _scope_cases(SupplyCase.objects.select_related('item', 'branch', 'assigned_to__user'),
+                            self.request.user)
 
     def list(self, request, *args, **kwargs):
         try:
@@ -563,8 +606,7 @@ class SupplyCaseViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        branch = request.query_params.get('branch') or None
-        return Response(case_svc.queue_summary(branch_id=branch))
+        return Response(case_svc.queue_summary(branch_id=_scoped_branch_param(request)))
 
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):
@@ -714,7 +756,8 @@ class SupplyDecisionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SupplyDecisionSerializer
 
     def get_queryset(self):
-        qs = SupplyDecision.objects.select_related('item', 'created_by__user')
+        qs = _scope_cases(SupplyDecision.objects.select_related('item', 'created_by__user'),
+                          self.request.user)
         p = self.request.query_params
         if p.get('case'):
             qs = qs.filter(case_id=p['case'])

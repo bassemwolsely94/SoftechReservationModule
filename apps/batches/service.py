@@ -253,7 +253,7 @@ class BatchService:
     # ── Near-expiry dashboard data ────────────────────────────────────────────
 
     @classmethod
-    def near_expiry_summary(cls, branch_id=None, days=180):
+    def near_expiry_summary(cls, branch_id=None, days=180, branch_ids=None):
         """
         Return aggregated near-expiry data for dashboard KPI widgets.
         Used by apps/batches/views.py NearExpiryView.
@@ -270,6 +270,8 @@ class BatchService:
         )
         if branch_id:
             qs = qs.filter(branch_id=branch_id)
+        if branch_ids is not None:          # the caller's branch scope (None = every branch)
+            qs = qs.filter(branch_id__in=branch_ids)
 
         def band(d_from, d_to):
             band_qs = qs.filter(

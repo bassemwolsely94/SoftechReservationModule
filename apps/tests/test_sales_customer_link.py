@@ -170,5 +170,7 @@ class AnalyticsAccountFilterTests(TestCase):
                                        invoice_date=when, softech_invoice_id='a', softech_personcode='1510')
         hit = PurchaseHistory.objects.create(customer=decoy, branch=b, doc_code='115', docnumber='2',
                                              invoice_date=when, softech_invoice_id='b', softech_personcode='5007')
-        qs = _purchase_qs_filtered({'person_main_codes': '5007'})
+        from django.contrib.auth import get_user_model
+        admin = get_user_model()(username='acct_su', is_superuser=True)   # profile-less = all branches
+        qs = _purchase_qs_filtered({'person_main_codes': '5007'}, admin)
         self.assertEqual(list(qs.values_list('id', flat=True)), [hit.id])

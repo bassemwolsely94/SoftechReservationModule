@@ -23,7 +23,7 @@ LETTER = {'view': 'V', 'create': 'C', 'edit': 'E', 'delete': 'D', 'approve': 'A'
 
 # What the API does with a branch-scoped user (not in ALL_BRANCH_ROLES, no access_all_branches).
 # own  = own branches only (home + allowed − restricted), enforced in list, detail, actions and
-#        create (core.branch_scope) — covered by test_branch_isolation.py
+#        create (core.branch_scope) — covered by test_branch_isolation.py / _part2.py
 # role = the module's own hard-coded role rule (older code, fail-closed), not yet on branch_scope
 # all  = chain-wide by design (owner decision 3: stock and transfer screens) or no branch field
 # open = NOT branch-scoped today; listed with the pending decision or later batch that owns it
@@ -38,18 +38,18 @@ BRANCH_SCOPE = {
     'chronic':      'all — catalogue data',
     'campaigns':    'all — HQ module',
     'vouchers':     'all — chain-wide redemption',
-    'catalog':      'all — stock is readable network-wide (decision 3)',
-    'stockcount':   'open — Batch 5 follow-up (branch_code char field)',
-    'shortage':     'open — Batch 5 follow-up',
-    'purchasing':   'all — HQ module',
+    'catalog':      'all — stock is readable network-wide (decision 3); batches, expiry alerts, expiry reports, disposals and expiry count sessions own (part 2); rebalance suggestions all',
+    'stockcount':   'own — sessions by SOFTECH branch code (scope_code); create / spawn own only',
+    'shortage':     'own — lists, items, exports, aggregate; stock-check shows other branches (transfers)',
+    'purchasing':   'all — HQ module; supply cases / decisions own + network (viewer role)',
     'invoices':     'open — HQ module; branch roles have no grant',
-    'incentives':   'open — later batch',
+    'incentives':   'open — all-branch roles only hold it; sales targets (analytics view) own branch',
     'cheques':      'own — plans, instalments, treasury dashboard',
     'finance':      'own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own',
     'callcenter':   'role — HQ roles incl. supervisor / quality_manager see all (matches B-3)',
     'hr':           'role — own records; managers see all',
     'approvals':    'n/a — scoped by requester / approver',
-    'analytics':    'open — later batch',
+    'analytics':    'own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2',
     'dashboard':    'own — reservation + sales KPIs (?branch only narrows)',
     'audit':        'all — HQ module',
     'sync':         'all — HQ module',
@@ -57,12 +57,13 @@ BRANCH_SCOPE = {
     'users':        'all — HQ module',
     'admin':        'all — HQ module',
     'commerce':     'all — no branch field (feature-flag gated)',
-    'offers':       'open — offer branches are targeting, usage not scoped (later batch)',
+    'offers':       'all — offers are chain config; apply-to-order and evaluate own (part 2)',
     'insurance':    'open — softech branch code only; HQ claims module (later batch)',
     'replacement':  'own — scoped_cases + authz.require (accessible_branch_ids = branch_scope)',
     'stock_audit':  'own — named branch managers see their branches (branch_scope); management all',
     'gamification': 'n/a — own data; rankings are network-wide by design',
     'help':         'n/a — no branch data',
+    'tasks':        'own + «جميع الفروع» + created / assigned to me; all-branch schedules read-only for branch roles',
 }
 
 

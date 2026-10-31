@@ -24,13 +24,13 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `chronic` | all | VE | VE | V | V | — | V | VE | VX | all — catalogue data |
 | `campaigns` | all | VCE | V | — | VCEAX | — | — | VCEAX | V | all — HQ module |
 | `vouchers` | all | VA | VAF | VA | VCEXS | — | V | VCEAXS | VX | all — chain-wide redemption |
-| `catalog` | all | V | VEX | V | VEAX | V | V | V | V | all — stock is readable network-wide (decision 3) |
-| `stockcount` | all | — | VCEXF | — | VX | — | V | VCE | VX | open — Batch 5 follow-up (branch_code char field) |
-| `shortage` | all | VCE | VCEAX | VCE | VCEAX | — | V | VCEAX | VX | open — Batch 5 follow-up |
-| `offers` | all | — | — | — | VCED | — | — | VCED | — | open — offer branches are targeting, usage not scoped (later batch) |
-| `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | all — HQ module |
+| `catalog` | all | V | VEX | V | VEAX | V | V | V | V | all — stock is readable network-wide (decision 3); batches, expiry alerts, expiry reports, disposals and expiry count sessions own (part 2); rebalance suggestions all |
+| `stockcount` | all | — | VCEXF | — | VX | — | V | VCE | VX | own — sessions by SOFTECH branch code (scope_code); create / spawn own only |
+| `shortage` | all | VCE | VCEAX | VCE | VCEAX | — | V | VCEAX | VX | own — lists, items, exports, aggregate; stock-check shows other branches (transfers) |
+| `offers` | all | — | — | — | VCED | — | — | VCED | — | all — offers are chain config; apply-to-order and evaluate own (part 2) |
+| `purchasing` | all | — | — | — | VCEAXF | — | V | — | — | all — HQ module; supply cases / decisions own + network (viewer role) |
 | `invoices` | all | — | — | — | VCEAXF | — | — | — | — | open — HQ module; branch roles have no grant |
-| `incentives` | all | — | — | — | VCEAXF | — | — | — | VX | open — later batch |
+| `incentives` | all | — | — | — | VCEAXF | — | — | — | VX | open — all-branch roles only hold it; sales targets (analytics view) own branch |
 | `cheques` | all | — | V | — | VCEAXF | — | — | — | — | own — plans, instalments, treasury dashboard |
 | `finance` | all | — | V | — | VCEAXF | — | — | — | V | own branch rows only; consolidated + supplier A/P = all-branch roles (B-1); payments own |
 | `insurance` | all | — | — | — | VCEDAXF | — | — | — | — | open — softech branch code only; HQ claims module (later batch) |
@@ -39,7 +39,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager �
 | `callcenter` | all | VCEXS | — | — | — | — | V | VCEDAXSF | VX | role — HQ roles incl. supervisor / quality_manager see all (matches B-3) |
 | `hr` | all | VC | VC | VC | VC | VC | V | VCAX | VX | role — own records; managers see all |
 | `approvals` | all | — | VA | — | VA | — | V | VA | VA | n/a — scoped by requester / approver |
-| `analytics` | all | V | V | — | VX | — | V | VX | VX | open — later batch |
+| `analytics` | all | V | V | — | VX | — | V | VX | VX | own — sales, performance, customers, churn, inventory; cross-branch P&L / capital boards all-branch roles (B-1); customer search B-2 |
 | `dashboard` | all | V | V | V | V | V | V | V | V | own — reservation + sales KPIs (?branch only narrows) |
 | `audit` | all | — | — | — | — | — | — | VX | VX | all — HQ module |
 | `sync` | all | — | — | — | — | — | — | — | — | all — HQ module |
