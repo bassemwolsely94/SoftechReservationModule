@@ -122,7 +122,9 @@ check for the owner. Spec files:
   digest to `purchasing`, /supply «استلام بدون طلب»; migrations purchasing 0041, procurement 0012/0013, notifications
   0037, audit 0016). **PAUSED the same day after the first office run**: 1,087 / 1,368 lines flagged — buyers order beyond
   the pivot's 1-month Total gap (median 2× on «over»; «unordered» items had 2.4 months' cover). Sheets still recorded;
-  needs the buyers' real ordering rule (see spec)
+  needs the buyers' real ordering rule (see spec). **Rebuilt the same day on the owner's «Use 6 months»**: flag only purchases of items with
+  ≥ 6 months of network cover (or stock with no sales) on the newest sheet — «شراء رغم تغطية عالية», a review list;
+  measured ~25 lines a week (39 lines, EGP 14,164 over 19–29 Oct)
 - [P-33](06_SPEC_P-33_supply_quick_fixes.md) — **(a), (c), (d), (e) BUILT 2026-10-31** (owner: "P-33 without retry";
   yes to the `IsrPush` field + constraint). (a) shortage stock check «تحليل التحويل» / «إنشاء مقترحات التحويل» →
   the WhatsApp path's linked ISR legs (`IsrPush.origin_shortage_list`, `purchasing/0040`; a list made from a WhatsApp

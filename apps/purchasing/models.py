@@ -1348,6 +1348,9 @@ class PivotSheetSnapshot(models.Model):
     calc_date   = models.DateField(null=True, blank=True)
     params      = models.JSONField(default=dict, blank=True)
     lines       = models.JSONField(default=list, blank=True)     # [{item_code, total_gap, supplier_code}]
+    # network months of cover on this sheet for items already well covered: {item_code: months} for ≥ 3, and -1 for
+    # stock with no sales at all (P-31 6-month rule; kept from 3 so the threshold can move without re-importing)
+    covers      = models.JSONField(default=dict, blank=True)
     line_count  = models.PositiveIntegerField(default=0)
     lines_hash  = models.CharField(max_length=64, blank=True, db_index=True)
     file_name   = models.CharField(max_length=200, blank=True)

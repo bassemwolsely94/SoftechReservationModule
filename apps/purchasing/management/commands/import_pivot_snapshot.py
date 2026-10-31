@@ -46,10 +46,15 @@ class Command(BaseCommand):
             raise CommandError(f'No header row with «{P.CODE_HEADER}» and «{P.GAP_HEADER}» in the first rows.')
         c_code, c_gap = header.index(P.CODE_HEADER), header.index(P.GAP_HEADER)
         c_sup = header.index(P.SUPPLIER_HEADER) if P.SUPPLIER_HEADER in header else None
-        lines = []
+        cov_cols = [header.index(h) if h in header else None for h in (P.COVER_HEADER, P.RATE_HEADER, P.STOCK_HEADER)]
+        lines, covers = [], {}
         for row in rows:
-            if row is None or len(row) <= max(c_code, c_gap):
+            if row is None or len(row) <= max(c_code, c_gap) or row[c_code] is None:
                 continue
+            if None not in cov_cols:
+                cv = P.cover_entry(*(row[c] if isinstance(row[c], (int, float)) else None for c in cov_cols))
+                if cv is not None:
+                    covers[str(row[c_code]).strip()] = cv
             gap = row[c_gap]
             if not isinstance(gap, (int, float)):
                 continue
@@ -57,8 +62,11 @@ class Command(BaseCommand):
                           'supplier_code': row[c_sup] if c_sup is not None and row[c_sup] is not None else ''})
         when = timezone.make_aware(datetime.datetime.combine(day, datetime.time(12, 0)))
         s = P.record_snapshot(lines, staff=None, run=None, params={'imported_from': str(path)}, source='import',
-                              exported_at=when, file_name=str(path).replace('\\', '/').rsplit('/', 1)[-1])
+                              exported_at=when, file_name=str(path).replace('\\', '/').rsplit('/', 1)[-1],
+                              covers=covers)
         if s is None:
-            self.stdout.write('Already imported for that day — nothing stored.')
+            self.stdout.write(f'Already imported for that day — kept; {len(covers)} well-covered items on file '
+                              f'(filled in when the stored copy had none).')
         else:
-            self.stdout.write(f'Stored sheet #{s.pk}: {s.line_count} items with a positive Total gap, dated {day}.')
+            self.stdout.write(f'Stored sheet #{s.pk}: {s.line_count} items with a positive Total gap, '
+                              f'{len(s.covers)} already well covered, dated {day}.')

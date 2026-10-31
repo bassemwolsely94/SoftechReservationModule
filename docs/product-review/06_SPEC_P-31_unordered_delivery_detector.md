@@ -29,6 +29,13 @@ a median Total gap of −5 on that day's sheet: buyers buy beyond one month of c
 pivot's Total gap is not the order. Flags paused (`receipt_check_suppliers = []`); the trial rows were removed;
 sheets keep being recorded on every download. Needs an owner rule for what a buyer actually orders before it resumes.
 
+**Rule changed 2026-10-31 (owner: «Use 6 months»).** Measured first on the two pivots (19–29 Oct, 1,368 paid lines
+of 565 + 30): network cover ≥ 3 months → 150 lines, ≥ 4 → 89, ≥ 6 → 39 (EGP 14,164, ~25 a week); plus 4 lines of stock
+with no sales. Built: each sheet also keeps `covers` (items at ≥ 3 months, −1 = stock with no sales); the only flag is
+`overstocked` «شراء رغم تغطية عالية» when the newest sheet in the 14-day window shows ≥ `receipt_check_cover_months`
+(6) months or no sales. **A review list, not a return list** (reasons: عرض بونص / طلب هاتفي / توزيع على الفروع / بديل
+متفق عليه). The `unordered` / `over` rules in §2.2 below are superseded. Saved pivots are re-imported to fill `covers`.
+
 ## 1. Problem (measured)
 
 - **Nothing records what was sent to a supplier.** The pivot is a plain download (`purchasing/views.py::

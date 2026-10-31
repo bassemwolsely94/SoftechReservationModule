@@ -1,8 +1,9 @@
 """
 apps/supply/receipt_views.py
 
-P-31: /supply «استلام بدون طلب» — received purchase lines that were on no sent need sheet (or above its gap),
-from procurement.ReceiptCheck. Actions: «مرتجع مطلوب» or «مقبول» (reason required); every decision is audited.
+P-31: /supply «شراء رغم تغطية عالية» — purchases of items the network already held ≥ 6 months of (or stock with no
+sales) on the newest sent need sheet, from procurement.ReceiptCheck. A review list. Actions: «مرتجع مطلوب» or
+«مقبول» (reason required); every decision is audited.
 Supply view / edit rights are checked server-side (CanOperateSupply). Nothing here writes to SOFTECH — the
 return itself is a doc 120 entered in SOFTECH, which then closes the row on the next check.
 
@@ -17,7 +18,7 @@ from rest_framework.response import Response
 
 from .permissions import CanOperateSupply
 
-ACCEPT_REASONS = ('طلب هاتفي', 'بديل متفق عليه')
+ACCEPT_REASONS = ('عرض بونص', 'طلب هاتفي', 'توزيع على الفروع', 'بديل متفق عليه')
 
 
 def _names(rows):
@@ -39,6 +40,7 @@ def _row(r, items, sups, today):
         'sheet_date': r.sheet.exported_at.date().isoformat() if r.sheet_id else None,
         'sheet_gap': float(r.sheet_gap) if r.sheet_gap is not None else None,
         'received_in_window': float(r.received_in_window) if r.received_in_window is not None else None,
+        'sheet_cover': float(r.sheet_cover) if r.sheet_cover is not None else None,
         'sheet_supplier_code': r.sheet_supplier_code,
         'sheet_supplier_name': sups.get(r.sheet_supplier_code, '') if r.sheet_supplier_code else '',
         'status': r.status, 'status_label': r.get_status_display(), 'decision_reason': r.decision_reason,
@@ -58,9 +60,10 @@ def receipt_checks(request):
     rows = list(qs.order_by('-doc_date', 'item_code')[:2000])
     items, sups = _names(rows)
     today = timezone.localdate()
-    from apps.procurement.receipt_check import pilot_suppliers, window_days
+    from apps.procurement.receipt_check import cover_months, pilot_suppliers, window_days
     return Response({'rows': [_row(r, items, sups, today) for r in rows],
                      'pilot_suppliers': pilot_suppliers(), 'window_days': window_days(),
+                     'cover_months': cover_months(),
                      'accept_reasons': list(ACCEPT_REASONS)})
 
 

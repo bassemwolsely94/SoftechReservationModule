@@ -1,24 +1,24 @@
 """
 apps/procurement/receipt_check.py
 
-P-31 (docs/product-review/06_SPEC_P-31_unordered_delivery_detector.md): was this delivery asked for?
+P-31 (docs/product-review/06_SPEC_P-31_unordered_delivery_detector.md): purchases of items the network already held
+plenty of.
 
-The order record is the demand pivot buyers send (purchasing.PivotSheetSnapshot — the positive
-`Total.الفرق-مطلوب/راكد` rows of each download). For every paid doc-10 line of the pilot suppliers in the last
-30 days:
-  • `unordered` — the item was on no sheet sent in the N days before the delivery («بدون طلب — ارجعه»);
-  • `over`      — the item's doc-10 quantity received since the newest such sheet exceeds that sheet's Total gap
-                  by at least one whole pack («زيادة عن الفرق المطلوب»).
-The supplier on the sheet is the item's SOFTECH supplier, not necessarily the one ordered from — shown, never
-flagged. No bonus, short-delivery or price checks (no deterministic source; owner: no price check).
+Every demand-pivot download is kept as a sent need sheet (purchasing.PivotSheetSnapshot) — its positive
+`Total.الفرق-مطلوب/راكد` rows and, in `covers`, the network months of cover of the items already well covered
+(and -1 for stock with no sales at all). The first office run (2026-10-31) showed buyers order well beyond the
+pivot's 1-month gap, so «not on the sheet» flagged 80 % of deliveries. Owner rule («Use 6 months»): a paid doc-10
+line of a pilot supplier is flagged `overstocked` («شراء رغم تغطية عالية») when the newest sheet sent in the N days
+before it shows the item at ≥ `receipt_check_cover_months` (default 6) months of network cover, or stock with no
+sales. A review list, not a return list. The sheet's gap and supplier are shown, never flagged. No bonus, short or
+price checks.
 
 Rows are keyed on the PurchaseLine natural key; re-runs update the numbers, never a person's decision. A later
 doc 120 for the same supplier + item closes a «مرتجع مطلوب» row; each return line is used once.
-PostgreSQL only — runs after each procurement refresh and daily.
+PostgreSQL only — runs after each procurement refresh and daily. `receipt_check_suppliers = []` pauses it.
 """
 import datetime as dt
 import logging
-from collections import defaultdict
 from decimal import Decimal
 
 from django.db import transaction
@@ -27,8 +27,9 @@ from django.utils import timezone
 logger = logging.getLogger('elrezeiky.procurement')
 
 LOOKBACK_DAYS = 30
-OVER_MIN_PACKS = Decimal('1')
 DEFAULT_SUPPLIERS = ['565', '30']        # pilot: Pharma Overseas, Ramco (owner 2026-10-31)
+DEFAULT_COVER_MONTHS = 6                 # owner 2026-10-31
+NO_SALES = -1
 
 
 def _setting(key, default):
@@ -51,23 +52,30 @@ def window_days():
         return 14
 
 
+def cover_months():
+    try:
+        return max(1.0, float(_setting('receipt_check_cover_months', DEFAULT_COVER_MONTHS)))
+    except (TypeError, ValueError):
+        return float(DEFAULT_COVER_MONTHS)
+
+
 def _line_key(pl):
     return f'{pl.branch_code}|{pl.supplier_code}|{pl.doc_number}|{pl.doc_date.isoformat()}|{pl.item_code}|{pl.doccode}'
 
 
 def _sheets(since):
-    """[(date, snapshot, {item_code: (gap, supplier)})] newest first, sent on/after `since`."""
+    """[(date, snapshot, {item_code: (gap, supplier)}, covers)] newest first, sent on/after `since`."""
     from apps.purchasing.models import PivotSheetSnapshot
     out = []
     for s in PivotSheetSnapshot.objects.filter(exported_at__date__gte=since).order_by('-exported_at', '-pk'):
         items = {l['item_code']: (Decimal(str(l['total_gap'])), l.get('supplier_code', ''))
                  for l in (s.lines or [])}
-        out.append((timezone.localtime(s.exported_at).date(), s, items))
+        out.append((timezone.localtime(s.exported_at).date(), s, items, s.covers or {}))
     return out
 
 
 def _check_lines(today):
-    """{natural key: (PurchaseLine, flag, sheet, gap, sheet_supplier, received)} for the lines to flag."""
+    """{natural key: (PurchaseLine, flag, sheet, gap, sheet_supplier, received, cover)} for the lines to flag."""
     from apps.procurement.models import PurchaseLine
     from apps.purchasing.models import PivotSheetSnapshot
     first = PivotSheetSnapshot.objects.order_by('exported_at').values_list('exported_at', flat=True).first()
@@ -76,30 +84,22 @@ def _check_lines(today):
     first_day = timezone.localtime(first).date()
     since = today - dt.timedelta(days=LOOKBACK_DAYS)
     win = dt.timedelta(days=window_days())
+    limit = cover_months()
     sheets = _sheets(since - win)
-    lines = list(PurchaseLine.objects.filter(doccode='10', is_foc=False, doc_date__gte=max(since, first_day),
-                                             doc_date__lte=today, supplier_code__in=pilot_suppliers())
-                 .order_by('doc_date', 'doc_number', 'pk'))
-    # every paid doc-10 receipt of those items (any supplier), for the "received since the sheet" total
-    received = defaultdict(list)
-    for pl in (PurchaseLine.objects.filter(doccode='10', is_foc=False, item_code__in={l.item_code for l in lines},
-                                           doc_date__gte=since - win, doc_date__lte=today)
-               .order_by('doc_date', 'doc_number', 'pk')):
-        received[pl.item_code].append(pl)
+    lines = (PurchaseLine.objects.filter(doccode='10', is_foc=False, doc_date__gte=max(since, first_day),
+                                         doc_date__lte=today, supplier_code__in=pilot_suppliers())
+             .order_by('doc_date', 'doc_number', 'pk'))
     out = {}
     for pl in lines:
-        ref = next(((d, s, it[pl.item_code]) for d, s, it in sheets
-                    if pl.item_code in it and pl.doc_date - win <= d <= pl.doc_date), None)
+        ref = next(((d, s, it, cv) for d, s, it, cv in sheets if pl.doc_date - win <= d <= pl.doc_date), None)
         if ref is None:
-            out[_line_key(pl)] = (pl, 'unordered', None, None, '', None)
             continue
-        sheet_day, sheet, (gap, sheet_sup) = ref
-        got = Decimal('0')
-        for r in received[pl.item_code]:          # this line and every earlier one since the sheet
-            if sheet_day <= r.doc_date and (r.doc_date, r.doc_number, r.pk) <= (pl.doc_date, pl.doc_number, pl.pk):
-                got += r.net_qty or 0
-        if got - gap >= OVER_MIN_PACKS:
-            out[_line_key(pl)] = (pl, 'over', sheet, gap, sheet_sup, got)
+        _, sheet, items, covers = ref
+        cover = covers.get(pl.item_code)
+        if cover is None or not (cover == NO_SALES or float(cover) >= limit):
+            continue
+        gap, sheet_sup = items.get(pl.item_code, (None, ''))
+        out[_line_key(pl)] = (pl, 'overstocked', sheet, gap, sheet_sup, None, Decimal(str(cover)))
     return out, first_day
 
 
@@ -140,11 +140,11 @@ def run_check(today=None):
         existing = {(r.branch_code, r.supplier_code, r.doc_number, r.doc_date, r.item_code): r
                     for r in ReceiptCheck.objects.filter(doc_date__gte=today - dt.timedelta(days=LOOKBACK_DAYS))}
         seen = set()
-        for pl, flag, sheet, gap, sheet_sup, got in found.values():
+        for pl, flag, sheet, gap, sheet_sup, got, cover in found.values():
             k = (pl.branch_code, pl.supplier_code, pl.doc_number, pl.doc_date, pl.item_code)
             seen.add(k)
             vals = dict(qty=pl.net_qty or 0, value=pl.raw_value or 0, flag=flag, sheet=sheet, sheet_gap=gap,
-                        sheet_supplier_code=sheet_sup or '', received_in_window=got)
+                        sheet_supplier_code=sheet_sup or '', received_in_window=got, sheet_cover=cover)
             row = existing.get(k)
             if row is None:
                 ReceiptCheck.objects.create(branch_code=pl.branch_code, supplier_code=pl.supplier_code,
@@ -182,16 +182,15 @@ def send_digest(today=None):
     from apps.notifications.models import Notification
     from apps.procurement.models import ReceiptCheck
     today = today or timezone.localdate()
-    agg = ReceiptCheck.objects.filter(status='open', flag='unordered').aggregate(
+    agg = ReceiptCheck.objects.filter(status='open').aggregate(
         n=Count('id'), value=Sum('value'), oldest=Min('doc_date'))
     if not agg['n']:
         return 0
-    over = ReceiptCheck.objects.filter(status='open', flag='over').count()
     age = (today - agg['oldest']).days
-    title = f"📦 استلام بدون طلب — {agg['n']} سطر"
-    body = (f"{agg['n']} سطر وصل بدون أن يكون في شيت الاحتياج المُرسَل (قيمة {round(agg['value'] or 0):,} ج، "
-            f"أقدمها منذ {age} يوم)" + (f"، و{over} سطر زيادة عن الفرق المطلوب" if over else '')
-            + ".\nافتح «التوريد» ← «استلام بدون طلب».")
+    title = f"📦 شراء رغم تغطية عالية — {agg['n']} سطر"
+    body = (f"{agg['n']} سطر شراء لأصناف كانت تغطيتها في الشبكة {cover_months():g} شهور أو أكثر (أو بلا مبيعات) "
+            f"في آخر شيت احتياج — قيمة {round(agg['value'] or 0):,} ج، أقدمها منذ {age} يوم."
+            "\nافتح «التوريد» ← «شراء رغم تغطية عالية» للمراجعة.")
     sent = 0
     for staff in digest_recipients():
         n = Notification.send_to_user(staff, 'receipt_check_digest', title, body,

@@ -1434,7 +1434,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
     CHEAPER_FILL = _f('DCFCE7')   # light green — a cheaper supplier exists
     FOC_FILL     = _f('FEF9C3')   # light yellow — bonus bought beyond 6 months of sales
 
+    from . import pivot_sheets as _pivot_sheets
     sheet_lines = []                      # P-31: what this file asks for (positive Total gap)
+    sheet_covers = {}                     # P-31: items already well covered on this sheet
     for iid in item_order:
         item        = item_obj[iid]
         branch_data = pivot[iid]          # {branch_id: metric}
@@ -1473,6 +1475,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
             sheet_lines.append({'item_code': item.softech_id, 'total_gap': total_gap,
                                 'supplier_code': item.supplier_code or ''})
         total_coverage = (total_stock / total_rate) if total_rate > 0 else None
+        _cv = _pivot_sheets.cover_entry(total_coverage, total_rate, total_stock)
+        if _cv is not None:
+            sheet_covers[item.softech_id] = _cv
         # معامل أولوية الطلب at NETWORK level = (1 − coverage) × gap. Priority always
         # uses the UNROUNDED effective demand, so pure rounding never shifts it and
         # the 1-month sheet stays byte-identical when no coverage override is passed.
@@ -1693,9 +1698,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
     logger.info('[PIVOT-V2] exported %d items, 138 cols', len(item_order))
     # P-31: keep the sheet as sent — buyers order from its Total gap. Never breaks the download.
     try:
-        from . import pivot_sheets
-        pivot_sheets.record_snapshot(sheet_lines, staff=getattr(request.user, 'staff_profile', None), run=run,
-                                     params={k: request.GET.get(k) for k in request.GET}, file_name=filename)
+        _pivot_sheets.record_snapshot(sheet_lines, staff=getattr(request.user, 'staff_profile', None), run=run,
+                                      params={k: request.GET.get(k) for k in request.GET}, file_name=filename,
+                                      covers=sheet_covers)
     except Exception:
         logger.exception('[PIVOT-V2] need-sheet snapshot not recorded')
     return resp
