@@ -374,7 +374,7 @@ def reconcile_three_way(invoice) -> dict:
                 try:
                     row = _q1(conn, "SELECT docvalue FROM stktransm WHERE cust_branch_code=? "
                                     "AND doccode=? AND docnumber2=?",
-                              [invoice.vendor.softech_personcode, invoice.softech_doccode, dn2])
+                              [invoice.vendor.softech_personcode, invoice.softech_doccode, Decimal(dn2)])
                     checked_softech = True
                     if row and row[0] is not None:
                         softech_total = round(float(row[0]), 3)
@@ -969,7 +969,10 @@ def push_final(invoice: SupplierInvoice, *, dry_run=True, force=False, usercode=
         dn2 = _docnumber2(invoice)
         if dn2 and invoice.doc_kind == 'purchase':
             dup = _q1(conn, "SELECT docnumber FROM stktransm WHERE cust_branch_code=? AND doccode=? "
-                            "AND docnumber2=?", [invoice.vendor.softech_personcode, invoice.softech_doccode, dn2])
+                            "AND docnumber2=?",
+                      # Decimal, not int: supplier numbers above 2^31 (PharmaOverseas
+                      # 8823747203) overflow a Java int bind — the push failed here.
+                      [invoice.vendor.softech_personcode, invoice.softech_doccode, Decimal(dn2)])
             if dup:
                 invoice.softech_docnumber = int(dup[0]); invoice.status = 'finalized'
                 invoice.save(update_fields=['softech_docnumber', 'status', 'updated_at'])

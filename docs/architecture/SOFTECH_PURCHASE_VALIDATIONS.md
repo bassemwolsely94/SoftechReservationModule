@@ -60,7 +60,7 @@ every push (errors block; warnings are surfaced/overridable).
 | W2 | `price_spike` | cost > `items.itemcostprice × (1 + INVOICE_MAX_COST_INCREASE_PCT/100)` (default 25%) | items + setting |
 | W3 | `price_drop` | cost < `items.itemcostprice × (1 − INVOICE_MAX_COST_DECREASE_PCT/100)` (default 40%) — suspicious | items + setting |
 | W4 | `supplier_not_listed` | no `itemssuppliers` row for (itemcode, suppcode) — buying from an unlisted supplier | itemssuppliers |
-| W5 | `tax_mismatch` | line `vat_pct` ≠ `items.itemsalestaxp` | items |
+| W5 | `tax_mismatch` | the VAT rate we post (`grid.effective_tax`) differs by > 0.5 pp from the item's real rate `itemsaleprice / itemsaleprice_tax − 1` (`itemsalestaxp` is 0 on most taxed items, so it is only the fallback). Changed 2026-10-31 | items |
 | W6 | `discount_high` | effective `pharmacydiscp` > 50% (unusually large) | PG |
 | W7 | `total_mismatch` | Σ line totals ≠ OCR `declared_total` (>2%) | PG (already in anomalies.py) |
 

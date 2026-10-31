@@ -123,13 +123,14 @@ def validate_invoice(invoice, *, live=True):
         ph = ','.join('?' for _ in codes)
         cur = conn.cursor()
         cur.execute(f"SELECT itemcode, itemnomoreuse, itemarchive, itemexpiry, itemcostprice, "
-                    f"itemsaleprice, itemsalestaxp, itemtrans3, itempartno FROM items WHERE itemcode IN ({ph})", codes)
+                    f"itemsaleprice, itemsalestaxp, itemtrans3, itempartno, itemsaleprice_tax "
+                    f"FROM items WHERE itemcode IN ({ph})", codes)
         for r in cur.fetchall():
             items[str(r[0]).strip()] = {
                 'nomoreuse': str(r[1] or '').strip(), 'archive': int(_f(r[2])),
                 'expiry': str(r[3] or '').strip(), 'cost': _f(r[4]),
                 'public': _f(r[5]), 'taxp': _f(r[6]), 'trans3': int(_f(r[7])),
-                'partno': int(_f(r[8]))}
+                'partno': int(_f(r[8])), 'base': _f(r[9])}
         srow = writer._q1(conn, "SELECT personcredit, personmaxbal FROM personsdata WHERE personcode=?",
                           [personcode])
         if srow:
@@ -201,9 +202,16 @@ def validate_invoice(invoice, *, live=True):
         if it['cost'] > 0 and net < it['cost'] * (1 - dec / 100):
             warn('price_drop',
                  f'انخفاض حاد في سعر الشراء ({net:.2f} مقابل {it["cost"]:.2f}): {l.item.name}', l.id)
-        if abs(_f(l.vat_pct) - it['taxp']) > 0.01:
+        # The item's real VAT rate is itemsaleprice / itemsaleprice_tax: SOFTECH leaves
+        # itemsalestaxp at 0 on most taxed items, so comparing to it warned on every
+        # taxed line. Compare the rate we will POST (grid.effective_tax) to that ratio.
+        from .grid import effective_tax
+        posted_rate = effective_tax(l)[2]
+        item_rate = ((it['public'] / it['base'] - 1) * 100
+                     if it['public'] > 0 and it['base'] > 0 else it['taxp'])
+        if abs(posted_rate - item_rate) > 0.5:
             warn('tax_mismatch',
-                 f'نسبة ضريبة مختلفة عن الصنف ({_f(l.vat_pct):g}% مقابل {it["taxp"]:g}%): {l.item.name}', l.id)
+                 f'نسبة ضريبة مختلفة عن الصنف ({posted_rate:g}% مقابل {item_rate:.0f}%): {l.item.name}', l.id)
         if _f(l.discount_pct) > hi_disc:
             warn('discount_high', f'خصم مرتفع ({_f(l.discount_pct):g}%): {l.item.name}', l.id)
         if not is_return and code not in linked:

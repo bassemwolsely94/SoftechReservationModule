@@ -66,3 +66,33 @@ class BatchRequiredValidationTests(SimpleTestCase):
 
     def test_returns_not_checked(self):
         self.assertNotIn('batch_required', self._codes(_vinvoice('return', _vline(1, '', True))))
+
+
+class BigSupplierNumberTests(SimpleTestCase):
+    """PharmaOverseas prints 10-digit invoice numbers (8823747203 > 2^31). The push
+    duplicate guard bound it as an int → «Cannot convert value to Java int» and the
+    push failed (invoice 224, 2026-10-31). It must bind as Decimal."""
+    def test_push_duplicate_guard_binds_decimal(self):
+        from decimal import Decimal
+        from unittest import mock
+        inv = NS(pk=224, softech_docnumber=None, status='review', doc_kind='purchase',
+                 invoice_number='8823747203', softech_doccode='10', softech_branchcode='100',
+                 store_code='100', client_token='t', vendor=NS(softech_personcode='565'),
+                 branch=NS(db_port=5000, db_name='SOFTECHDB9'), save=lambda **k: None)
+        seen = []
+
+        def q1(conn, sql, params):
+            seen.append(params)
+            return (70001,)                         # pretend SofTech already has it
+        with mock.patch.object(IW, 'build_plan', return_value={}), \
+             mock.patch.object(IW, 'writer_enabled', return_value=True), \
+             mock.patch('apps.invoices.validations.validate_invoice',
+                        return_value={'errors': [], 'warnings': []}), \
+             mock.patch.object(IW, 'branch_host', return_value='h'), \
+             mock.patch.object(IW, 'compute', return_value=([], {})), \
+             mock.patch('config.sybase.get_branch_connection', return_value=mock.Mock()), \
+             mock.patch.object(IW, '_q1', side_effect=q1):
+            res = IW.push_final(inv, dry_run=False)
+        self.assertEqual(res['mode'], 'idempotent')
+        self.assertIsInstance(seen[0][2], Decimal)
+        self.assertEqual(seen[0][2], Decimal('8823747203'))
