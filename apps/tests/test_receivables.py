@@ -112,6 +112,20 @@ class EngineTests(TestCase):
         self.assertEqual(s['overdue'], Decimal('2000'))
         self.assertEqual(s['buckets']['61-90'], Decimal('2000'))
 
+    def test_a_receipt_reversed_the_same_day_is_not_on_account(self):
+        """4227 had 680,943 and 763,160 receipts each cancelled the same day by an equal type-20 voucher."""
+        from apps.finance.receivables import contract_summary, measured_days
+        _pay(self.p, 60, D(2026, 10, 5), '5000')
+        _pay(self.p, 61, D(2026, 10, 5), '5000', cheqtype='20')
+        s = contract_summary('4227', as_of=AS_OF)
+        self.assertEqual(s['on_account'], Decimal('300'))            # unchanged by the reversed pair
+        self.assertEqual(measured_days('4227', as_of=AS_OF)['days'], Decimal('43.7'))   # FIFO ignores it too
+
+    def test_a_plain_refund_reduces_on_account(self):
+        from apps.finance.receivables import contract_summary
+        _pay(self.p, 62, D(2026, 10, 6), '100', cheqtype='20')
+        self.assertEqual(contract_summary('4227', as_of=AS_OF)['on_account'], Decimal('200'))
+
     def test_no_agreed_days_falls_back_to_measured_and_says_so(self):
         from apps.finance.receivables import open_invoices
         self.terms.agreed_days = None

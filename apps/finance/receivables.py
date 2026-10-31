@@ -12,7 +12,8 @@ P-41 (docs/product-review/06_SPEC_P-41_contract_receivables.md): who owes us on 
     measured days   = value-weighted (receipt date − invoice date) over SOFTECH's links, when they cover ≥ 70 % of the
                       contract's sales in the year; otherwise an estimate paying the oldest invoices first with each
                       receipt («تقدير — أقدم فاتورة أولاً», owner 2026-10-31)
-    on account      = receipts not linked to any invoice («على الحساب»); open returns (30) are a credit
+    on account      = receipts not linked to any invoice («على الحساب») less unlinked refunds (type 20); a receipt
+                      cancelled the same day by an equal type-20 voucher is dropped with it; open returns (30) are a credit
     difference      = (Σ open − on account − open returns) − SOFTECH's receivable  — shown, never hidden
 
 Nothing here writes to SOFTECH; recon_writer refuses customer allocations.
@@ -76,6 +77,28 @@ def _terms(personcode):
     return ContractReceivableTerms.objects.filter(personcode=personcode).first()
 
 
+def _vouchers(personcode, as_of, since=None):
+    """(receipts, refunds): the contract's type-10 receipts and type-20 vouchers up to `as_of`, without the pairs
+    where a receipt was cancelled by an equal type-20 voucher on the same day (4227: 680,943 on 2026-03-26 and
+    763,160 on 2026-07-30 — entered, then reversed)."""
+    from apps.finance.models import Payment
+    qs = Payment.objects.filter(party__softech_personcode=personcode, party_type='customer', voucher_date__lte=as_of,
+                                cheqtype__in=('10', '20'))
+    if since is not None:
+        qs = qs.filter(voucher_date__gt=since)
+    receipts, refunds = [], []
+    for v in qs.order_by('voucher_date', 'cheqsno'):
+        (receipts if v.cheqtype == '10' else refunds).append(v)
+    kept_refunds = []
+    for r in refunds:
+        twin = next((x for x in receipts if x.voucher_date == r.voucher_date and x.amount == r.amount), None)
+        if twin is not None:
+            receipts.remove(twin)
+        else:
+            kept_refunds.append(r)
+    return receipts, kept_refunds
+
+
 def measured_days(personcode, as_of, window_days=WINDOW_DAYS):
     """{'days', 'max_days', 'coverage_pct', 'method': linked | fifo | none, 'sample'} over the year to `as_of`."""
     from apps.finance.models import Allocation, Payment
@@ -93,9 +116,7 @@ def measured_days(personcode, as_of, window_days=WINDOW_DAYS):
     if not pairs or coverage < RELIABLE_COVERAGE_PCT:
         method, pairs = 'fifo', []
         queue = [[i.docdate, i.doc_value] for i in sales]
-        receipts = (Payment.objects.filter(party__softech_personcode=personcode, party_type='customer', cheqtype='10',
-                                           direction='in', voucher_date__gt=since, voucher_date__lte=as_of)
-                    .order_by('voucher_date', 'cheqsno'))
+        receipts, _ = _vouchers(personcode, as_of, since=since)
         for r in receipts:
             left = r.amount
             while left > 0 and queue:
@@ -151,11 +172,11 @@ def contract_summary(personcode, as_of):
     buckets = {label: ZERO for label, _ in BUCKETS}
     for r in rows:
         buckets[r['bucket']] += r['open']
-    receipts = Payment.objects.filter(party__softech_personcode=personcode, party_type='customer', cheqtype='10',
-                                      direction='in', voucher_date__lte=as_of)
-    linked = dict(Allocation.objects.filter(payment__in=receipts, origin__in=NATIVE)
+    receipts, refunds = _vouchers(personcode, as_of)
+    linked = dict(Allocation.objects.filter(payment__in=receipts + refunds, origin__in=NATIVE)
                   .values('payment_id').annotate(s=Sum('amount')).values_list('payment_id', 's'))
-    on_account = sum((max(ZERO, p.amount - linked.get(p.pk, ZERO)) for p in receipts), ZERO)
+    unlinked = lambda vs: sum((max(ZERO, v.amount - linked.get(v.pk, ZERO)) for v in vs), ZERO)   # noqa: E731
+    on_account = max(ZERO, unlinked(receipts) - unlinked(refunds))     # a refund (type 20) gives money back
     returns = _invoices(personcode).filter(doccode='30', docdate__lte=as_of)
     open_returns = sum((max(ZERO, r.doc_value - (r.doc_value_pay or ZERO)) for r in returns), ZERO)
     open_total = sum((r['open'] for r in rows), ZERO)
