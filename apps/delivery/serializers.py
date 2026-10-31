@@ -236,6 +236,7 @@ class DeliveryOrderSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'delivery_address', 'delivery_area', 'delivery_district',
             'delivery_governorate', 'delivery_landmark',
             'delivery_lat', 'delivery_lng', 'google_maps_url',
+            'rider_lat', 'rider_lng', 'rider_location_at',
             'items_count', 'total_value', 'delivery_fees', 'total_with_fees',
             'payment_method', 'payment_label', 'collected_amount',
             'status', 'status_label',
@@ -251,7 +252,8 @@ class DeliveryOrderSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'delivery_distance_km', 'suggested_driver_fee', 'pod_backfilled',
             'route', 'route_sequence',
         ]
-        read_only_fields = ['order_number', 'created_at', 'updated_at']
+        read_only_fields = ['order_number', 'created_at', 'updated_at',
+                            'rider_lat', 'rider_lng', 'rider_location_at']
 
     def get_driver_name(self, obj):
         if obj.assigned_driver:

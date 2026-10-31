@@ -38,6 +38,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
+import datetime as _dt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import DeliveryModulePermission, driver_of, guard
@@ -1333,14 +1334,18 @@ def driver_app_update_location(request, pk):
     order = get_object_or_404(_orders(request), pk=pk)
     if order.assigned_driver_id != driver.pk:
         return Response({'detail': 'هذا الطلب غير مسند إليك.'}, status=status.HTTP_403_FORBIDDEN)
-    lat = request.data.get('lat')
-    lng = request.data.get('lng')
-    if not lat or not lng:
-        return Response({'detail': 'الإحداثيات مطلوبة.'}, status=status.HTTP_400_BAD_REQUEST)
-    # Store latest driver location on the order (can be extended to a tracking table later)
-    order.delivery_lat = lat
-    order.delivery_lng = lng
-    order.save(update_fields=['delivery_lat', 'delivery_lng', 'updated_at'])
+    try:
+        lat = float(request.data.get('lat'))
+        lng = float(request.data.get('lng'))
+    except (TypeError, ValueError):
+        lat = lng = float('nan')
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):    # NaN fails both comparisons
+        return Response({'detail': 'الإحداثيات غير صحيحة.'}, status=status.HTTP_400_BAD_REQUEST)
+    # The rider's own position only — delivery_lat/lng is the drop-off target (N0/H2).
+    order.rider_lat = lat
+    order.rider_lng = lng
+    order.rider_location_at = timezone.now()
+    order.save(update_fields=['rider_lat', 'rider_lng', 'rider_location_at', 'updated_at'])
     return Response({'status': 'ok', 'lat': lat, 'lng': lng})
 
 
@@ -1396,8 +1401,11 @@ def delivery_public_track(request, token):
     out    = order.status == DeliveryOrder.STATUS_OUT
     driver = order.assigned_driver
     loc = None
-    if out and order.delivery_lat and order.delivery_lng:
-        loc = {'lat': float(order.delivery_lat), 'lng': float(order.delivery_lng)}
+    # Only a fresh rider ping is shown; never the customer's drop-off address.
+    fresh = (order.rider_location_at is not None
+             and timezone.now() - order.rider_location_at <= _dt.timedelta(minutes=30))
+    if out and fresh and order.rider_lat is not None and order.rider_lng is not None:
+        loc = {'lat': float(order.rider_lat), 'lng': float(order.rider_lng)}
 
     return Response({
         'order_number':   order.order_number,

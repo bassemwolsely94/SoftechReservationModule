@@ -298,6 +298,8 @@ SCREENS = [
               'After delivery: "Cash collection" and enter the collected amount — the system shows any shortage or excess vs (items + delivery fee).'),
         ],
         'tips': [
+            T('إلغاء الطلب وإغلاقه من صلاحيات المشرف/مسؤول التوزيع — السائق لا يستطيع ذلك حتى على طلبه.',
+              'Cancelling and closing belong to the supervisor/dispatcher — a driver cannot, even on their own order.'),
             T('لو السائق لم يسجل حالة من تطبيقه يمكنك تسجيلها يدوياً من هنا، وتظهر «إدخال يدوي» في السجل.',
               'If the driver did not record a status in their app, you can record it here; it shows as "manual entry".'),
             T('كل زر بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول التوصيل): «تكليف سائق» يحتاج «إسناد»، «إلغاء» يحتاج «اعتماد»، و«إغلاق» و«تحصيل نقدي» يحتاجوا «إنهاء» أو «اعتماد». لو ظهرت رسالة «ليس لديك صلاحية» اطلبها من المدير.',
@@ -386,8 +388,8 @@ SCREENS = [
                  'اختار فرع عشان تشوف طلباته بس، أو «كل الفروع» للصورة الكاملة.\n• مفيد للصيدلي اللي بيجهّز طلبات فرعه ولمسؤول التوزيع اللي ماسك كذا فرع.',
                  'Choose a branch to see only its orders, or "All branches" for the full picture.\n• Useful for the pharmacist preparing their branch\'s orders and for the dispatcher covering several branches.')},
         ],
-        'updated': '2026-10-28',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('السائق لم يعد يلغي أو يغلق الطلبات — دور المشرف/مسؤول التوزيع', 'Drivers can no longer cancel or close orders — that is the supervisor/dispatcher job'),
     },
     {
         'key': 'delivery.dispatch',
@@ -466,7 +468,8 @@ SCREENS = [
             T('عند العميل: «تم التسليم» ← اسم المستلم، المبلغ المحصَّل، صورة اختيارية وملاحظة (مثال: سُلّم للبواب) ← «تأكيد التسليم». موقعك يُسجَّل تلقائياً كإثبات.',
               'At the customer: "Delivered" → recipient name, amount collected, optional photo and note (e.g. left with the doorman) → "Confirm". Your location is recorded automatically as proof.'),
         ],
-        'tips': [T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
+        'tips': [T('السائق لا يلغي الطلب ولا يغلقه — الإلغاء والإغلاق من مسؤول التوزيع أو المشرف. لو الطلب لازم يتلغي كلّم المسؤول. موقعك بيتبعت للتتبع بس ولا يغيّر عنوان العميل المسجَّل.', 'A driver cannot cancel or close an order — cancelling and closing are done by the dispatcher or supervisor. If an order must be cancelled, tell them. Your location is only sent for tracking and never changes the customer recorded address.'),
+                 T('«متوقّع نقدي» أعلى الشاشة = إجمالي النقد الذي يجب أن تحصّله في مسار اليوم.', '"Expected cash" at the top = the total cash you should collect on today\'s route.'),
                  T('تقدر تسجّل حالة أو نقدية على الطلبات المكلَّف بيها إنت بس — طلب سائق تاني بيترفض برسالة «هذا الطلب غير مسند إليك».',
                    'You can record a status or cash only on orders assigned to you — another rider\'s order is refused with "this order is not assigned to you".')],
         'tour': [
@@ -527,8 +530,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('السائق لم يعد يلغي أو يغلق الطلبات — دور المشرف/مسؤول التوزيع', 'Drivers can no longer cancel or close orders — that is the supervisor/dispatcher job'),
     },
     {
         'key': 'delivery.analytics',
