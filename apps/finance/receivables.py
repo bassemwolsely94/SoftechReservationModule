@@ -163,12 +163,14 @@ def open_invoices(personcode, as_of, measured=None):
     return out
 
 
-def contract_summary(personcode, as_of):
+def contract_summary(personcode, as_of, measured=None, rows=None):
     from django.db.models import Sum
     from apps.finance.models import Allocation, Payment, ReconParty
     terms = _terms(personcode)
-    measured = measured_days(personcode, as_of)
-    rows = open_invoices(personcode, as_of, measured=measured)
+    if measured is None:
+        measured = measured_days(personcode, as_of)
+    if rows is None:
+        rows = open_invoices(personcode, as_of, measured=measured)
     buckets = {label: ZERO for label, _ in BUCKETS}
     for r in rows:
         buckets[r['bucket']] += r['open']
@@ -221,6 +223,36 @@ def summary(as_of):
     w = sum((c['open'] for c in all_c), ZERO)
     totals['measured_days'] = _q1(sum((c['open'] * c['measured_days'] for c in all_c), ZERO) / w) if w else None
     return {'as_of': as_of, 'groups': out, 'totals': totals}
+
+
+def expected_contract_inflows(as_of):
+    """P-40: each tracked contract's open invoices as expected collections. Receipts on account and open returns are
+    taken off the oldest invoices first (that money is already in or not owed). `base_date` = the expected date
+    (agreed days from month end, else measured days), overdue → `as_of`; `low_date` = the late placement (invoice date
+    + the longest observed collection), never earlier than base. No expected date → `base_date` None."""
+    from apps.finance.models import ContractReceivableTerms
+    rows = []
+    for t in ContractReceivableTerms.objects.filter(is_tracked=True).order_by('personcode'):
+        measured = measured_days(t.personcode, as_of)
+        invoices = open_invoices(t.personcode, as_of, measured=measured)
+        s = contract_summary(t.personcode, as_of, measured=measured, rows=invoices)
+        credit = s['on_account'] + s['open_returns']
+        for r in invoices:
+            amount = r['open']
+            take = min(credit, amount)
+            credit -= take
+            amount -= take
+            if amount <= CENT:
+                continue
+            base = max(r['expected_date'], as_of) if r['expected_date'] else None
+            low = base
+            if base and measured['max_days'] is not None:
+                low = max(base, r['docdate'] + dt.timedelta(days=measured['max_days']))
+            rows.append({'personcode': t.personcode, 'name': s['name'], 'group_name': s['group_name'],
+                         'invoice_id': r['id'], 'branchcode': r['branchcode'], 'docnumber': r['docnumber'],
+                         'docdate': r['docdate'], 'amount': amount, 'base_date': base, 'low_date': low,
+                         'basis': r['expected_basis'], 'overdue': r['overdue']})
+    return rows
 
 
 def seed_terms():

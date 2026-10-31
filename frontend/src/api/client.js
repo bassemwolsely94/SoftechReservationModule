@@ -1974,6 +1974,15 @@ export const financeApi = {
   receivablesTerms:    (body)   => api.patch('/finance/receivables/terms/', body),
   receivablesExport:   ()       => api.get('/finance/receivables/export/', { responseType: 'blob' }),
   receivablesRefresh:  ()       => api.post('/finance/receivables/refresh/'),
+  // P-40 13-week cash view («النقدية ١٣ أسبوع»)
+  cashView:          (params)       => api.get('/finance/cash-view/', { params }),
+  cashViewLine:      (key, params)  => api.get(`/finance/cash-view/lines/${key}/`, { params }),
+  cashOpening:       ()             => api.get('/finance/cash-view/opening-balance/'),
+  cashOpeningAdd:    (body)         => api.post('/finance/cash-view/opening-balance/', body),
+  cashFixed:         ()             => api.get('/finance/cash-view/fixed-outflows/'),
+  cashFixedAdd:      (body)         => api.post('/finance/cash-view/fixed-outflows/', body),
+  cashFixedUpdate:   (body)         => api.patch('/finance/cash-view/fixed-outflows/', body),
+  cashViewExport:    (params)       => api.get('/finance/cash-view/export/', { params, responseType: 'blob' }),
   // P-42 supplier terms («شروط الموردين»)
   supplierTerms:          ()       => api.get('/finance/supplier-terms/'),
   supplierTermCreate:     (body)   => api.post('/finance/supplier-terms/', body),

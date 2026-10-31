@@ -5,7 +5,7 @@
  * Tabs:
  *   Dashboard   /finance/dashboard
  *   P&L         /finance/pnl
- *   Cash Flow   /finance/cashflow   (retired from the tabs — P-43; the URL shows a note)
+ *   Cash view   /finance/cash       (P-40; /finance/cashflow redirects here)
  *   Expenses    /finance/expenses
  *   COA         /finance/coa
  *   Schema      /finance/schema   (admin only)
@@ -23,6 +23,7 @@ const TABS = [
   { to: '/finance/dashboard', label: 'لوحة القيادة',     icon: '💹' },
   { to: '/finance/pnl',       label: 'الأرباح والخسائر', icon: '📊' },
   { to: '/finance/expenses',  label: 'المصروفات',        icon: '💸' },
+  { to: '/finance/cash',      label: 'النقدية ١٣ أسبوع', icon: '💵' },
   { to: '/finance/receivables', label: 'مستحقات التعاقدات', icon: '🧾' },
   { to: '/finance/supplier-terms', label: 'شروط الموردين', icon: '📅' },
   { to: '/finance/coa',       label: 'دليل الحسابات',    icon: '🗂️' },

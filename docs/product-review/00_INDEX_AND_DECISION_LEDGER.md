@@ -63,7 +63,7 @@ staff-development goals. It started on 2026-10-30.
 | P-38 Offers & vouchers + go-live gate | **Approved for specification** (2026-10-30) | Promotions planned; gate required before the first promotion | **P-01(b) class exclusion (now a hard dependency)**; P-35; P-39 | — | — | No |
 | P-39 POS go-live: 100% SOFTECH parity | **Approved for specification** (2026-10-30) | Parity suite across sale shapes; performance fixes; phased pilot | Cutover; stop-and-ask on every posting step | Pilot branch | — | No |
 
-| P-40 13-week cash view | **Approved for specification** (2026-10-30) | Audience: all finance users + admins; measured contract settlement; supplier terms by category; early-pay foregone line | P-41, P-42 for completeness; P-34 budget | Fixed outflows input | — | No |
+| P-40 13-week cash view | **Built** (2026-10-31) | Audience: all finance users + admins; measured contract settlement; supplier terms by category; early-pay foregone line | P-41, P-42 for completeness; P-34 budget | Fixed outflows input | — | No |
 | P-41 Contract receivables tracker | **Built** (2026-10-31) | Reuse the customer side of the A/P–A/R engine; 4227 ≈44d, 4288 ≈42d measured | Agreed days per contract (finance entry) | Wider read-only check across all 38 contracts | — | No |
 | P-42 Supplier terms by item category + early-pay opportunities | **Built** (2026-10-31) | Terms per supplier × category (local / imported; non-discounted dropped); paid on time | — | Terms entry | — | No |
 | P-43 Finance hub hygiene | **Approved for specification** (2026-10-30) | Keep and freshen the GP and expense pages; cash flow → P-40 | — | — | — | No |
@@ -147,8 +147,14 @@ check for the owner. Spec files:
   `early_pay_by_week`); nightly recompute after the supplier sync + `recompute_supplier_terms`;
   `/finance/supplier-terms`. Internal accounts: setting `finance_internal_supplier_codes` (default 1268, 3068,
   4469–4472). Local run: 8,160 slices; since June 2025, 7.0M of 8.9M open real payables classified.
-- [P-40](06_SPEC_P-40_13_week_cash_view.md) — `/finance/cash` from P-41 + P-42 + cheques + fixed outflows; low/base/high;
-  `/finance/cashflow` redirects there
+- [P-40](06_SPEC_P-40_13_week_cash_view.md) — **BUILT 2026-10-31**: `finance/cash_view.py` (Saturday weeks, banking-day
+  shift; cash + delivery sales 8-week mean/min/max; P-41 `expected_contract_inflows` net of on-account + open returns;
+  post-dated supplier bank cheques = financialdoccode 20 dated after as_of; P-42 payables net of the same supplier's
+  unallocated cheques; new purchases at each supplier's terms; fixed outflows; pending instalments of active cheque
+  plans; memo internal / early pay / no terms), `CashOpeningBalance` + `FixedOutflow` + `CashViewSnapshot`
+  (finance/0019; inputs audited in ReconAuditEvent `cash_input_changed`, not AuditLog — same finance trail as P-41/42,
+  no audit migration), Saturday 06:00 snapshot job, `/finance/cash` (`/finance/cashflow` redirects). Not built: the
+  separate off-hours forward read of post-dated cheques (stop-and-ask: a new SOFTECH read job); card lag (open).
 - **Owner decisions 2026-10-31** (written into each spec):
   - P-26: store 110 is excluded from everything; the alert and the clean-up export are dropped.
   - P-29: returns are owned by the HQ purchasing and replenishment specialists (`purchasing` role).

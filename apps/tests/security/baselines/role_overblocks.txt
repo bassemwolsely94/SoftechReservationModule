@@ -509,7 +509,7 @@ pharmacist GET /api/finance/reconciliation/supplier-options/
 pharmacist GET /api/finance/reconciliation/unpaid/
 pharmacist GET /api/finance/reconciliation/workbench/
 
-# reason: owner decision B-1 (2026-10-30) — P-41 contract receivables and P-42 supplier terms are company-level
+# reason: owner decision B-1 (2026-10-30) — P-40 cash view, P-41 contract receivables and P-42 supplier terms are company-level
 #   finance (recon_views._company_only): all-branch roles only; finance exports need the finance export grant (Z-3).
 pharmacist GET /api/finance/receivables/export/
 pharmacist GET /api/finance/receivables/summary/
@@ -524,3 +524,9 @@ pharmacist GET /api/finance/supplier-terms/recompute/
 pharmacist GET /api/finance/supplier-terms/residue/
 quality_manager GET /api/finance/receivables/export/
 quality_manager GET /api/finance/supplier-terms/export/
+pharmacist GET /api/finance/cash-view/
+pharmacist GET /api/finance/cash-view/export/
+pharmacist GET /api/finance/cash-view/fixed-outflows/
+pharmacist GET /api/finance/cash-view/lines/x/
+pharmacist GET /api/finance/cash-view/opening-balance/
+quality_manager GET /api/finance/cash-view/export/

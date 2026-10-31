@@ -138,7 +138,7 @@ import FinanceHubPage from './pages/FinanceHubPage'
 import FinanceDashboardPage from './pages/FinanceDashboardPage'
 import ChartOfAccountsPage from './pages/ChartOfAccountsPage'
 import ProfitLossPage from './pages/ProfitLossPage'
-import CashFlowRetired from './pages/CashFlowRetired'   // P-43 — CashFlowPage.jsx kept, not routed
+import CashViewPage from './pages/CashViewPage'   // P-40 — replaces the retired cash-flow page (P-43)
 import ExpenseAnalyticsPage from './pages/ExpenseAnalyticsPage'
 import FinanceSchemaPage from './pages/FinanceSchemaPage'
 import ContractReceivablesPage from './pages/ContractReceivablesPage'   // P-41
@@ -488,8 +488,9 @@ export default function App() {
               <Route path="dashboard" element={<FinanceDashboardPage />} />
               <Route path="coa"       element={<ChartOfAccountsPage />} />
               <Route path="pnl"       element={<ProfitLossPage />} />
-              {/* P-43: cash flow retired (unused; replaced by the planned 13-week cash view). */}
-              <Route path="cashflow"  element={<CashFlowRetired />} />
+              {/* P-40: the 13-week cash view replaces the retired cash-flow page; the old URL redirects. */}
+              <Route path="cash"      element={<CashViewPage />} />
+              <Route path="cashflow"  element={<Navigate to="/finance/cash" replace />} />
               <Route path="expenses"  element={<ExpenseAnalyticsPage />} />
               <Route path="receivables" element={<ContractReceivablesPage />} />
               <Route path="supplier-terms" element={<SupplierTermsPage />} />

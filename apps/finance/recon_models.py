@@ -796,3 +796,71 @@ class APInvoiceSlice(models.Model):
 
     def __str__(self):
         return f'{self.invoice_id} {self.category} {self.open_amount} due {self.due_date or "—"}'
+
+
+# ── P-40 13-week cash view: finance inputs + weekly snapshot ─────────────────────
+
+class CashOpeningBalance(models.Model):
+    """P-40: cash in boxes and banks on a date — a weekly finance entry. The latest one on or before the view date is
+    the opening point; the next one is the "actual" a snapshot is measured against. Audited ('cash_input_changed')."""
+    as_of      = models.DateField(db_index=True, verbose_name='التاريخ')
+    amount     = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='الرصيد')
+    note       = models.CharField(max_length=300, blank=True, default='', verbose_name='الخزائن والبنوك')
+    entered_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    entered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['-as_of', '-entered_at']
+        verbose_name        = 'رصيد نقدية افتتاحي'
+        verbose_name_plural = 'أرصدة النقدية الافتتاحية'
+
+    def __str__(self):
+        return f'{self.as_of} {self.amount}'
+
+
+class FixedOutflow(models.Model):
+    """P-40: a recurring or one-off payment finance knows about (salaries, rent …) — the HQ expenses are not in the
+    SOFTECH expense mirror. Audited ('cash_input_changed')."""
+    CATEGORY_CHOICES = [
+        ('salaries', 'مرتبات'), ('rent', 'إيجار'), ('utilities', 'مرافق'), ('taxes', 'ضرائب'),
+        ('loans', 'قروض'), ('other', 'أخرى'),
+    ]
+    FREQUENCY_CHOICES = [('weekly', 'أسبوعي'), ('monthly', 'شهري'), ('one_off', 'مرة واحدة')]
+
+    label        = models.CharField(max_length=200, verbose_name='البيان')
+    category     = models.CharField(max_length=12, choices=CATEGORY_CHOICES, default='other')
+    amount       = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='المبلغ')
+    frequency    = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default='monthly')
+    day_of_month = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='يوم الشهر')
+    date         = models.DateField(null=True, blank=True, verbose_name='التاريخ (مرة واحدة)')
+    start        = models.DateField(null=True, blank=True, verbose_name='من')
+    end          = models.DateField(null=True, blank=True, verbose_name='حتى')
+    is_active    = models.BooleanField(default=True)
+    entered_by   = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['category', 'label']
+        verbose_name        = 'مصروف ثابت'
+        verbose_name_plural = 'مصروفات ثابتة'
+
+    def __str__(self):
+        return f'{self.label} {self.amount} ({self.frequency})'
+
+
+class CashViewSnapshot(models.Model):
+    """P-40: the cash view as built on one Saturday morning, kept for forecast-vs-actual. One per date."""
+    as_of       = models.DateField(unique=True)
+    weeks       = models.JSONField(default=dict)
+    inputs_hash = models.CharField(max_length=64, blank=True, default='')
+    created_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['-as_of']
+        verbose_name        = 'لقطة النقدية الأسبوعية'
+        verbose_name_plural = 'لقطات النقدية الأسبوعية'
+
+    def __str__(self):
+        return f'cash view {self.as_of}'

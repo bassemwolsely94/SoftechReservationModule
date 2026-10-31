@@ -49,10 +49,10 @@ MODULE = {
             {'screen': 'finance.expenses', 'target': 'finance-expenses-table', 'perm': 'finance',
              'label': T('تفاصيل المصروفات', 'Expense details'),
              'text': T('كل مصروف بتاريخه وبيانه ومركز التكلفة والفرع.', 'Each expense with its date, description, cost center and branch.')},
-            {'screen': 'finance.cashflow', 'target': 'finance-cashflow-kpis', 'perm': 'finance',
-             'label': T('الداخل والخارج والصافي', 'In, out and net'),
-             'text': T('اختم بالتدفق النقدي: هل الصافي موجب؟', 'Finish with cash flow: is the net positive?'),
-             'when': T('اختر نفس الشهر أعلى الشاشة أولاً.', 'Pick the same month at the top first.')},
+            {'screen': 'finance.cash', 'target': 'finance-cash-kpis', 'perm': 'finance',
+             'label': T('أقل رصيد متوقع', 'Lowest projected balance'),
+             'text': T('اختم بالنقدية لـ 13 أسبوع: هل فيه أسبوع الرصيد فيه تحت الصفر؟', 'Finish with the 13-week cash view: does any week go below zero?'),
+             'when': T('أدخل رصيد النقدية الافتتاحي الأسبوعي أولاً.', 'Enter the weekly opening cash balance first.')},
          ]},
         {'key': 'cheque_plan', 'shell': 'desktop', 'roles': ['admin', 'purchasing', 'pharmacist'],
          'title': T('خطة شيكات: من الإنشاء إلى الصرف', 'Cheque plan: from creation to clearing'),
@@ -188,13 +188,13 @@ MODULE = {
                            '• الأرقام بين قوسين خصم (مرتجعات أو مصروفات).',
                            'The statement is ordered like any income statement: revenue → cost of goods → gross profit → expenses → operating and net profit.\n'
                            '• Figures in brackets are deductions (returns or expenses).')},
-                {'target': 'finance-cashflow-kpis', 'route': '/finance/cashflow',
-                 'text': T('«التدفق النقدي»: الداخل والخارج والصافي للشهر.',
-                           '"Cash flow": inflow, outflow and net for the month.'),
-                 'more': T('تحت الأرقام دي توزيع الداخل والخارج بطريقة الدفع (نقدي، شيك، تحويل، بطاقة، آجل).\n'
-                           '• الصافي بالأزرق لو موجب وبالبرتقالي لو سالب.',
-                           'Below these figures is the inflow and outflow split by payment method (cash, cheque, transfer, card, credit).\n'
-                           '• Net is blue when positive and orange when negative.')},
+                {'target': 'finance-cash-kpis', 'route': '/finance/cash',
+                 'text': T('«النقدية 13 أسبوع»: الداخل والخارج المتوقع كل أسبوع والرصيد.',
+                           '"13-week cash": expected money in and out each week, and the balance.'),
+                 'more': T('الداخل: مبيعات نقدي وتوصيل وتحصيل التعاقدات. الخارج: شيكات الموردين المؤجلة ومستحقاتهم ومشتريات جديدة ومصروفات ثابتة.\n'
+                           '• الرصيد بثلاث حالات: متشائم وأساسي ومتفائل.',
+                           'In: cash and delivery sales and contract collections. Out: post-dated supplier cheques, supplier payables, new purchases and fixed outflows.\n'
+                           '• The balance in three cases: low, base and high.')},
                 {'target': 'finance-expenses-mode', 'route': '/finance/expenses',
                  'text': T('«المصروفات»: بالشهر أو بنطاق تاريخ، وتقدر تدوس على أي فئة.',
                            '"Expenses": by month or by date range, and you can click any category.'),
@@ -289,7 +289,7 @@ SCREENS = [
         'audience': T('الإدارة والمالية والمشتريات والجودة.', 'Management, finance, purchasing and quality.'),
         'tips': [
             T('الشريط فوق تبويبات المالية بيقول البيانات اتحدّثت إمتى: الأرباح والخسائر مع كل مزامنة، والقيود والمصروفات كل ليلة ٢:١٥ لآخر ٣ شهور. لو أصفر يبقى قديمة — المدير يقدر يضغط «🔄 تحديث الآن» يحدّث الشهر الحالي.', 'The bar above the finance tabs says when the data was refreshed: P&L with every sync, journal and expenses every night at 02:15 for the last 3 months. Amber means old — an admin can press "🔄 Refresh now" to update the current month.'),_SYNC, T('«بيانات غير مكتملة» تعني أن بعض المصادر لم تُزامن بعد لهذه الفترة.', '"Incomplete data" means some sources are not synced yet for this period.')],
-        'related': ['finance.pnl', 'finance.cashflow'],
+        'related': ['finance.pnl', 'finance.cash'],
         'tour': [
             {'target': 'finance-freshness', 'label': T('عمر البيانات المالية', 'Finance data age'),
              'text': T('إمتى اتحدّثت الأرباح والمصروفات والقيود آخر مرة.', 'When P&L, expenses and the journal were last refreshed.'),
@@ -429,58 +429,6 @@ SCREENS = [
         'updated': '2026-10-30',
     
         'change_note': T('شريط عمر البيانات + مزامنة مالية ليلية', 'Data-age bar + nightly finance sync'),
-    },
-    {
-        'key': 'finance.cashflow',
-        'routes': ['/finance/cashflow'],
-        'title': T('التدفقات النقدية', 'Cash flows'),
-        'summary': T('الصفحة دي اتشالت من تبويبات المالية (مكانتش مستخدمة وبياناتها قديمة) وهتتبدّل بعرض النقدية لـ ١٣ أسبوع. الرابط القديم بيعرض ملاحظة بس.', 'This page was removed from the finance tabs (it was unused and its data was old) and will be replaced by the 13-week cash view. The old link shows a note only.'),
-        'audience': T('الإدارة والمالية.', 'Management and finance.'),
-        'tips': [_SYNC],
-        'tour': [
-            {'target': 'finance-cashflow-retired', 'label': T('صفحة التدفق النقدي اتشالت', 'Cash-flow page retired'),
-             'text': T('استخدم الأرباح والخسائر والمصروفات لحد ما عرض الـ ١٣ أسبوع يجهز.', 'Use P&L and expenses until the 13-week view is ready.')},
-            {'target': 'finance-cashflow-period',
-             'label': T('السنة والشهر', 'Year and month'),
-             'text': T('اختر شهر حركات الخزينة.', 'Pick the month of treasury movements.'),
-             'more': T('الأرقام بتتحمّل لوحدها مع تغيير الشهر.\n'
-                       '• لو ظهر «لا توجد بيانات حركات الخزينة» يبقى الشهر ما اتزامنش.',
-                       'Figures load by themselves when you change the month.\n'
-                       '• If "No treasury movement data" shows, the month was not synced.'),
-         },
-            {'target': 'finance-cashflow-kpis',
-             'label': T('الداخل والخارج والصافي', 'In, out and net'),
-             'text': T('إجمالي التدفق الداخل والخارج وصافي التدفق.', 'Total inflow, total outflow and the net flow.'),
-             'when': T('الصافي البرتقالي = خرج أكثر مما دخل.', 'An orange net = more went out than came in.'),
-             'more': T('محسوبة في المزامنة من حركات الخزينة في SOFTECH.\n'
-                       '• الصافي = الداخل − الخارج؛ بالأزرق لو موجب وبالبرتقالي لو سالب.\n'
-                       '• صافي سالب معناه إن الخارج أكتر من الداخل في الشهر ده.',
-                       'Computed by the sync from SOFTECH treasury movements.\n'
-                       '• Net = inflow − outflow; blue when positive and orange when negative.\n'
-                       '• A negative net means more went out than came in that month.'),
-         },
-            {'target': 'finance-cashflow-inflow',
-             'label': T('التدفق الداخل — بطريقة الدفع', 'Inflow — by payment method'),
-             'text': T('نصيب كل طريقة (نقدي، شيك، تحويل، بطاقة، آجل) من الداخل.', 'Each method\'s share (cash, cheque, transfer, card, credit) of the inflow.'),
-             'open_hint': T('يظهر لما تكون جداول الخزينة مكتشفة.', 'Shown once the treasury tables are discovered.'),
-             'more': T('شريط لكل طريقة دفع بالمبلغ.\n'
-                       '• لو ظهرت رسالة إن جداول الخزينة ما اتكتشفتش، المدير لازم يشغّل «اكتشاف المخطط» ويفعّل جداول الدفع الأول.',
-                       'One bar per payment method with its amount.\n'
-                       '• If a message says the treasury tables were not discovered, the admin must run "Schema discovery" and enable the payment tables first.'),
-         },
-            {'target': 'finance-cashflow-outflow',
-             'label': T('التدفق الخارج — بطريقة الدفع', 'Outflow — by payment method'),
-             'text': T('نفس التوزيع للمدفوعات الخارجة.', 'The same breakdown for money going out.'),
-             'open_hint': T('يظهر لما تكون جداول الخزينة مكتشفة.', 'Shown once the treasury tables are discovered.'),
-             'more': T('بيوضح الفلوس خرجت إزاي: نقدي، شيكات، تحويلات…\n'
-                       '• قارنه بتخطيط الشيكات عشان تتوقع ضغط السيولة في الشهور الجاية.',
-                       'Shows how money went out: cash, cheques, transfers…\n'
-                       '• Compare it with cheque planning to anticipate cash pressure in the coming months.'),
-         },
-        ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('الصفحة اتشالت — هتتبدّل بعرض ١٣ أسبوع', 'Page retired — to be replaced by the 13-week view'),
     },
     {
         'key': 'finance.expenses',
@@ -637,6 +585,44 @@ SCREENS = [
         ],
         'updated': '2026-10-31',
         'change_note': T('شاشة جديدة: شروط الموردين', 'New screen: supplier terms'),
+    },
+    {
+        'key': 'finance.cash',
+        'routes': ['/finance/cash'],
+        'title': T('النقدية ١٣ أسبوع', '13-week cash view'),
+        'summary': T('الفلوس الداخلة والخارجة المتوقعة كل أسبوع لـ 13 أسبوع (الأسبوع يبدأ السبت) والرصيد المتوقع. الداخل: مبيعات نقدي وتوصيل وتحصيل التعاقدات. الخارج: شيكات الموردين المؤجلة، ومستحقات الموردين حسب الشروط، ومشتريات جديدة، ومصروفات ثابتة، وشيكات مخططة. للاسترشاد — المالية تقرر.',
+                     'Money expected in and out each week for 13 weeks (weeks start Saturday) and the projected balance. In: cash and delivery sales and contract collections. Out: post-dated supplier cheques, supplier payables by terms, new purchases, fixed outflows and planned cheques. Advisory — finance decides.'),
+        'audience': T('المالية والإدارة (الإدارة فقط — بيانات على مستوى الشركة).', 'Finance and management (management only — company-level data).'),
+        'tabs': [
+            {'key': 'view', 'title': T('العرض', 'View'),
+             'body': T('كل بند في صف وكل أسبوع في عمود. اضغط أي رقم تشوف الفواتير أو الشيكات أو البنود اللي وراه. الرصيد بثلاث حالات: متشائم (التحصيل متأخر + المستحقات بدون شروط في أول أسبوع)، أساسي، متفائل (أعلى أسبوع مبيعات). خانة «لو اشترينا أسبوعيًا» بتجرّب ميزانية مشتريات ومش بتتحفظ.',
+                       'Each line is a row and each week a column. Click any figure to see the invoices, cheques or items behind it. The balance has three cases: low (late collections + payables without terms in week 1), base, and high (best sales week). The «if we buy weekly» box tries a purchase budget and is not saved.')},
+            {'key': 'inputs', 'title': T('المدخلات', 'Inputs'),
+             'body': T('رصيد النقدية الافتتاحي (الخزائن والبنوك) كل أسبوع، والمصروفات الثابتة: مرتبات، إيجار، مرافق، ضرائب، قروض — أسبوعي أو شهري أو مرة واحدة. كل تعديل يتسجل باسمك.',
+                       'The opening cash balance (boxes and banks) each week, and the fixed outflows: salaries, rent, utilities, taxes, loans — weekly, monthly or one-off. Every change is logged under your name.')},
+        ],
+        'tips': [
+            T('من غير رصيد افتتاحي الشاشة بتعرض صافي كل أسبوع بس، من غير رصيد.', 'Without an opening balance the screen shows each week\'s net only, with no balance.'),
+            T('شيك المورد المؤجل اللي مش مربوط بفاتورة بيتخصم من مستحقات نفس المورد (الأقدم استحقاقًا أولاً)، عشان المبلغ مايتحسبش مرتين.',
+              'A post-dated supplier cheque not linked to an invoice is taken off that supplier\'s payables (earliest due first), so the amount is not counted twice.'),
+            T('الحسابات الداخلية (كوبونات، شراء من مرضى، بدل) وخصم الدفع المبكر والمستحقات بدون شروط «للعلم» ومش داخلة في الرصيد الأساسي.',
+              'Internal accounts (coupons, patient buy-back, replacements), early-pay discounts and payables without terms are «for information» and not in the base balance.'),
+            T('مفيش أي كتابة في SOFTECH. لقطة من العرض بتتحفظ كل سبت الساعة 6 الصبح عشان نقارن التوقع بالفعلي.',
+              'Nothing is written to SOFTECH. A snapshot is kept every Saturday at 6 am to compare the forecast with the actual.'),
+        ],
+        'tour': [
+            {'target': 'finance-cash-freshness', 'label': T('عمر البيانات', 'Data age'),
+             'text': T('آخر تحديث لحسابات الموردين والتعاقدات والمبيعات والمشتريات.', 'When supplier and contract accounts, sales and purchases were last updated.')},
+            {'target': 'finance-cash-kpis', 'label': T('أقل رصيد متوقع', 'Lowest projected balance'),
+             'text': T('أقل أسبوع في الحالة الأساسية والمتشائمة، وعدد الأسابيع تحت الصفر، وتغطية المدخلات.', 'The lowest week in the base and low cases, weeks below zero, and input coverage.')},
+            {'target': 'finance-cash-table', 'label': T('البنود × الأسابيع', 'Lines × weeks'),
+             'text': T('اضغط أي رقم تشوف اللي وراه في اللوحة الجانبية.', 'Click any figure to see what is behind it in the side panel.'),
+             'when': T('الرصيد بالبرتقالي = تحت الصفر.', 'An orange balance = below zero.')},
+            {'target': 'finance-cash-export', 'label': T('⬇️ تصدير Excel', '⬇️ Export Excel'),
+             'text': T('ملف بالبنود والأسابيع والرصيد.', 'A file with the lines, weeks and balance.')},
+        ],
+        'updated': '2026-10-31',
+        'change_note': T('شاشة جديدة: النقدية ١٣ أسبوع (بدل صفحة التدفق النقدي)', 'New screen: 13-week cash view (replaces the cash-flow page)'),
     },
     {
         'key': 'finance.coa',
@@ -836,6 +822,8 @@ SCREENS = [
                        '• The amount itself is computed from the plan and is not edited here.')},
         ],
         'tips': [
+            T('الشيكات اللي لسه «لم يُصدَر» في خطة نشطة بتظهر في «النقدية ١٣ أسبوع» في أسبوع استحقاقها؛ الصادر منها بيظهر من SOFTECH.',
+              'Cheques still «not issued» in an active plan show in the «13-week cash view» in their due week; issued ones come from SOFTECH.'),
             T('كل إجراء بيتحقق من صلاحيتك على السيرفر (مصفوفة الصلاحيات، موديول الشيكات): التفعيل والإلغاء يحتاجوا «اعتماد»، وتسجيل شيك «تمّ الصرف» أو «ارتدّ» يحتاج «إنهاء».',
               'Every action is checked on the server (Permissions Matrix, cheques module): activating and cancelling need "approve", and marking a cheque "cleared" or "bounced" needs "finalize".'),
             T('الشيك «تمّ الصرف» أو «ملغي» نهائي، وشيكات الخطة لا تتعدل إلا والخطة «نشطة».',
@@ -897,9 +885,8 @@ SCREENS = [
              'warn': T('«تمّ الصرف» نهائي، ويحتاج هو و«ارتدّ» صلاحية «إنهاء».', '"Cleared" is final; it and "bounced" need "finalize" permission.'),
              'open_hint': T('اضغط «تعديل» على شيك.', 'Press "Edit" on a cheque.')},
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('الشيكات المخططة بتظهر في النقدية ١٣ أسبوع', 'Planned cheques now show in the 13-week cash view'),
     },
     {
         'key': 'finance.payments',
