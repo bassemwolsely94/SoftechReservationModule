@@ -46,6 +46,7 @@ every push (errors block; warnings are surfaced/overridable).
 | E4 | `qty_invalid` | `transqty <= 0` | PG | all |
 | E5 | `price_invalid` | net cost `transprice <= 0` (or public price 0) | PG/items | all |
 | E6 | `expiry_required` | `items.itemexpiry='1'` and the line has no (valid) expiry date | items + PG | all |
+| E6b | `batch_required` | `items.itempartno=1` («رقم القطعة أو الباتش» mandatory — e.g. Entresto, Kisqali; 9 items) and the line has no batch. The batch posts to `stktrans.item_partno`. Checked from the catalog mirror (`Item.batch_required`) offline and the live flag online. Added 2026-10-31 (owner) | items + PG | purchase |
 | E7 | `supplier_unlinked` | `VendorProfile.softech_personcode` empty (supplier not resolved) | PG | all |
 | E8 | `credit_limit_exceeded` | `personcredit + doc_value > personmaxbal` (only when `personmaxbal` is a real limit, i.e. < the unlimited sentinel) | personsdata | purchase |
 | E9 | `duplicate_invoice` | supplier already has a purchase with this `docnumber2` (SofTech dup-guard) | stktransm | purchase |

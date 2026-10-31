@@ -204,10 +204,10 @@ MODULE = {
                            '• If the invoice is wrong or a duplicate, do not confirm it.')},
                 {'target': 'invoices-main-actions', 'route': '/invoices',
                  'text': T('بعد التأكيد: «🛡 فحص التحقق» و«⇪ ترحيل إلى ERP».', 'After confirming: "🛡 Validation check" and "⇪ Post to ERP".'),
-                 'more': T('«فحص التحقق» بيشغّل قواعد الحفظ بتاعة SOFTECH (حد الائتمان، الأصناف المسموحة، حدود السعر، الصلاحية…) من غير ما يكتب حاجة.\n'
+                 'more': T('«فحص التحقق» بيشغّل قواعد الحفظ بتاعة SOFTECH (حد الائتمان، الأصناف المسموحة، حدود السعر، الصلاحية، رقم الباتش للأصناف التي تشترطه مثل إنتريستو…) من غير ما يكتب حاجة.\n'
                            '• «ترحيل إلى ERP» بيفتح معاينة للمستند: صحّح كل الأخطاء، وعلّم «راجعت التحذيرات وأريد المتابعة»، ثم «⇪ تأكيد الترحيل».\n'
                            '• الترحيل للمدير والمشتريات والمشرف. لو الترحيل مش مفعّل بيشتغل «وضع المعاينة» بس، ولو الفاتورة مرحّلة قبل كده مش بتتكتب تاني.',
-                           '"Validation check" runs SOFTECH\'s saving rules (credit limit, allowed items, price limits, expiry…) without writing anything.\n'
+                           '"Validation check" runs SOFTECH\'s saving rules (credit limit, allowed items, price limits, expiry, the batch number for items that require it such as Entresto…) without writing anything.\n'
                            '• "Post to ERP" opens a preview of the document: fix every error, tick "I reviewed the warnings and want to continue", then "⇪ Confirm posting".\n'
                            '• Posting is for admin, purchasing and supervisors. If posting is not enabled it works in "preview mode" only, and an invoice already posted is never written twice.')},
                 {'target': 'invoices-main-actions', 'route': '/invoices',
@@ -247,6 +247,14 @@ SCREENS = [
               'The "pharmacist margin" and "distributor margin" columns are display-only. The line cost stays net (as SofTech stores it) and the line total is unchanged; the distributor margin is added on top of the invoice total (and usually equals the pharmacist margin).'),
             T('«الصلاحية» و«الباتش» قابلان للتعديل مباشرةً في الجدول (يُحفظان عند الخروج من الخانة). أما الكمية والأسعار والخصومات فتُحسب فوراً.',
               'The "expiry" and "batch" cells are directly editable in the grid (saved on blur). Quantity, prices and discounts recompute live.'),
+            T('سعر الصيدلي لأصناف الهامش يُحسب كما يطبعه الموزّع: (سعر الجمهور − هامش الصيدلي − هامش الموزع) × (١ − الخصم). يُستخدم إن لم تُقرأ التكلفة، وإن قُرئت تكلفة لا تطابقه يظهر تنبيه «الصافي لا يطابق الهوامش والخصم». وإن جاءت أرقام السطر مُزاحة في القراءة (مثلاً الإجمالي في خانة الخصم) يُعاد ترتيبها تلقائياً مع تنبيه للمراجعة. وإن بَعُد سعر الجمهور كثيراً عن الكتالوج يظهر تنبيه «قد تكون أرقام سطر آخر».',
+              'The pharmacist price of margin items is computed the way the distributor prints it: (public price − pharmacist margin − distributor margin) × (1 − discount). It is used when the cost was not read; when a read cost disagrees, the line is flagged "net does not match margins and discount". When a line\'s numbers were read shifted (e.g. the total in the discount cell) they are put back automatically and flagged for review. A public price far from the catalog is flagged "may be another row\'s numbers".'),
+            T('الخصم الأساسي وتكلفة الوحدة الصافية مرتبطان دائماً: تعديل أحدهما يغيّر الآخر فوراً. تعديل «خصم إضافي» أو «خصم خاص» يُبقي التكلفة الصافية كما هي (المقروءة من الفاتورة) ويمتصّ «الخصم الأساسي» الفرق. الخصم الإضافي لا يتغيّر تلقائياً أبداً — فقط إذا كتبته أو قُرئ من الفاتورة.',
+              'The basic discount and the net unit cost are always linked: changing one updates the other immediately. Changing the "extra" or "special" discount keeps the net cost (as read from the invoice) and the basic discount absorbs the difference. The extra discount is never changed automatically — only when you type it or it is read from the invoice.'),
+            T('الصلاحية تُكتب يوم/شهر/سنة كما في SofTech، والفاصل نقطة أو شَرطة أو / (مثل 5-5-28 أو 09.09.2029)، والسنة رقمان أو أربعة. إن كانت الفاتورة تذكر الشهر والسنة فقط يصبح اليوم = الشهر (09.2029 ← 09/09/2029) منعاً للالتباس. التاريخ غير المفهوم تُحدَّد خانته بالأحمر ولا يُحفظ.',
+              'Expiry is typed day/month/year like SofTech, with a dot, dash or / as separator (e.g. 5-5-28 or 09.09.2029) and a 2- or 4-digit year. When the invoice gives only month and year, the day is set equal to the month (09.2029 → 09/09/2029) to avoid confusion. A date that cannot be read is outlined red and not saved.'),
+            T('التنقل بلوحة المفاتيح كما في SofTech: داخل أي خانة، السهمان ↑↓ ينقلانك لنفس العمود في السطر السابق/التالي، وTab للخانة التالية في السطر ثم أول خانة في السطر التالي، وShift+Tab للخلف حتى بداية السطر ثم السطر السابق. عند الدخول للخانة تُحدَّد قيمتها فتكتب فوقها مباشرة.',
+              'SofTech-style keyboard: inside any cell, ↑↓ move to the same column on the previous/next line, Tab goes to the next cell on the line then the first cell of the next line, and Shift+Tab goes back to the start of the line then the previous line. Entering a cell selects its value so you can type over it.'),
             T('الضريبة: يُؤخذ معدّل ض.ق.م من الفاتورة نفسها أولاً، فإن خالف بيانات الكتالوج (التي قد تكون غير محدَّثة) يُستخدم معدّل الفاتورة ويظهر تنبيه «ضريبة الصنف من الفاتورة تخالف الكتالوج — راجعها» لتتأكد. النظام يتبع الطريقة المعتمدة (الضريبة خارج التكلفة): تكلفة الوحدة صافية بدون ضريبة، وتُضاف الضريبة في الإجماليات بالأسفل.',
               'VAT: the invoice\'s own VAT rate is taken first; if it disagrees with the catalog (which can be stale) the invoice rate is used and the line is flagged "item VAT from invoice differs from catalog — review it" so you confirm. The system follows the house method (VAT outside cost): the unit cost is net of VAT, and VAT is added in the bottom totals.'),
             T('أسفل الجدول إجماليات مطابقة لشاشة SofTech: «الإجمالي بدون ضريبة» و«قيمة هامش الموزع» (لموردي الهامش) و«خارج التكلفة (ض.ق.م)» و«الإجمالي النهائي»، مع مقارنة بإجمالي فاتورة الورق (✓ مطابق أو الفرق) لتتحقق قبل الترحيل.',
@@ -393,7 +401,7 @@ SCREENS = [
                  'كل سطر: الصنف اللي النظام طابقه، الكمية، سعر الوحدة والخصم، ودرجة ثقة القراءة.\n• السطور منخفضة الثقة أو اللي الاسم العربي والعلمي فيها أشاروا لصنفين مختلفين محتاجة انتباهك.\n• بالكيبورد: ↑↓ للتنقل، Enter يأكّد الصنف المقترح وينقلك للسطر اللي بعده، M يعرض اقتراحات المطابقة.',
                  'Each line: the item the system matched, quantity, unit price and discount, and the reading confidence.\n• Lines with low confidence, or where the Arabic and scientific names point to different items, need your attention.\n• Keyboard: ↑↓ to move, Enter confirms the suggested item and moves to the next line, M shows match suggestions.')},
         ],
-        'updated': '2026-10-29',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('الصلاحية بأي فاصل، التنقل كما في SofTech، ربط الخصم بالصافي، وتصحيح قراءة الهوامش والأعمدة', 'Expiry with any separator, SofTech-style movement, discount⟷net link, and margin/column-shift reading fixes'),
     },
 ]

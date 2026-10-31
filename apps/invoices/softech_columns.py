@@ -83,8 +83,14 @@ def recompute(cells: dict, changed: str | None = None) -> dict:
       • Pb/P are catalog; derive the missing one via the VAT rate; editing base_price
         re-derives public_price.
       • unit_cost C = Pb·∏(1−Di/100) over the THREE discounts (compound).
-      • editing unit_cost / cost_total / unit_cost_incl_tax back-solves the MAIN
-        discount d1 (keeping d2, d3) so the row stays consistent.
+      • editing unit_cost / net_cost / cost_total / unit_cost_incl_tax back-solves the
+        MAIN discount d1 (keeping d2, d3) so the row stays consistent.
+      • editing d2 or d3 keeps the unit cost (when there is one) and d1 absorbs the
+        change — owner rule 2026-10-31 (Option B): the net read off the invoice is the
+        truth, and d2/d3 are never changed automatically.
+      • editing d1 recomputes the cost (d1 ⟷ net are always linked).
+      • margin_in_cost (the distributor margin folded into the posted cost for
+        PharmaOverseas-style vendors): net_cost = unit_cost − margin_in_cost.
       • tax base = C (الضريبة من التكلفة) or Pb; vat_amount ⟷ vat_pct are bidirectional
         (edit either → the other recomputes). unit_cost_incl_tax = C + vat_amount.
       • cost_total = C·Q ;  cost_total_incl_tax = unit_cost_incl_tax·Q.
@@ -102,6 +108,7 @@ def recompute(cells: dict, changed: str | None = None) -> dict:
     CT   = _f(cells.get('cost_total'))
     TaxA = _f(cells.get('vat_amount'))
     B    = _f(cells.get('bonus_qty'))
+    M    = _f(cells.get('margin_in_cost'))
     tax_type = (cells.get('tax_type') or '%')
     tax_from_cost = bool(cells.get('tax_from_cost', True))
 
@@ -117,8 +124,12 @@ def recompute(cells: dict, changed: str | None = None) -> dict:
     P  = round(P, 4)
 
     # 2. cost ⟷ discounts (3-discount compound chain)
-    if changed in ('unit_cost', 'cost_total', 'unit_cost_incl_tax'):
-        if changed == 'cost_total':
+    # d2/d3 edit keeps an existing cost; with no cost yet, derive it from the discounts
+    keep_cost = changed in ('extra_disc_pct', 'special_disc_pct') and C > 0
+    if changed in ('unit_cost', 'net_cost', 'cost_total', 'unit_cost_incl_tax') or keep_cost:
+        if changed == 'net_cost':
+            C = _f(cells.get('net_cost')) + M
+        elif changed == 'cost_total':
             C = CT / Q if Q else 0.0
         elif changed == 'unit_cost_incl_tax':
             # strip tax back off the incl-tax cost the operator typed
@@ -130,7 +141,13 @@ def recompute(cells: dict, changed: str | None = None) -> dict:
                 C = Cin
         # keep d2, d3; back-solve the main discount d1 so Pb·(1−d1)(1−d2)(1−d3)=C
         denom = Pb * (1 - D2 / 100.0) * (1 - D3 / 100.0)
-        D1 = (1 - C / denom) * 100.0 if denom > 0 else 0.0
+        D1_new = (1 - C / denom) * 100.0 if denom > 0 else 0.0
+        if keep_cost and D1_new < 0:
+            # d2/d3 bigger than the whole discount already in the cost: d1 can't go
+            # below zero, so d1 stays and the cost follows the discounts instead.
+            C = Pb * (1 - D1 / 100.0) * (1 - D2 / 100.0) * (1 - D3 / 100.0)
+        else:
+            D1 = D1_new
     else:
         C = Pb * (1 - D1 / 100.0) * (1 - D2 / 100.0) * (1 - D3 / 100.0)
 
@@ -165,6 +182,8 @@ def recompute(cells: dict, changed: str | None = None) -> dict:
         'tax_type':            tax_type,
         'tax_from_cost':       tax_from_cost,
         'unit_cost':           C,
+        'net_cost':            round(C - M, 4),      # تكلفة الوحدة (صافي) before the folded margin
+        'margin_in_cost':      round(M, 4),
         'unit_cost_incl_tax':  Cin,
         'cost_total':          CT,
         'cost_total_incl_tax': CTin,

@@ -97,6 +97,7 @@ def line_cells(line, fold_margin: bool = False) -> dict:
         'special_disc_pct': _f(getattr(line, 'special_discount_pct', 0)),
         'tax_from_cost':    bool(getattr(line, 'tax_from_cost', True)),
         'unit_cost':        net + margin,             # = التكلفة للترحيل (what SofTech stores)
+        'margin_in_cost':   margin,                   # lets the engine split net ⟷ cost to post
         'bonus_qty':        _f(line.bonus_qty),
         '_net_cost':        net,                      # تكلفة الوحدة (OCR net, pre-margin)
         '_distributor_margin': margin,                # هامش الموزع folded in (0 if not folding)
@@ -136,6 +137,11 @@ def invoice_folds_margin(invoice, lines=None) -> bool:
             and abs(declared - with_m) <= max(1.0, 0.01 * declared))
 
 
+# public price vs catalog beyond this fraction → likely another row's numbers
+# (real price rises are smaller and show as the «سعر جديد؟» chip instead)
+ROW_SHIFT_PRICE_GAP = 0.35
+
+
 def _needs_review(line, cells) -> tuple[bool, list]:
     """Which lines the operator must actually check — so a near-perfect extraction
     needs only a QUICK review of the few uncertain lines, not the whole invoice.
@@ -149,8 +155,20 @@ def _needs_review(line, cells) -> tuple[bool, list]:
         reasons.append('مطابقة غير مؤكدة')
     if line.item_id and (getattr(line, 'match_score', None) or 1) < 0.75:
         reasons.append('نسبة تطابق منخفضة')
-    if 'مُصحّحة' in (getattr(line, 'notes', '') or ''):
+    notes = getattr(line, 'notes', '') or ''
+    if 'مُصحّحة' in notes:
         reasons.append('الكمية مُصحّحة آلياً')
+    from .reconcile import COLUMN_SHIFT_NOTE, MARGIN_MISMATCH_NOTE
+    if COLUMN_SHIFT_NOTE in notes:
+        reasons.append('أعمدة الأرقام كانت مُزاحة — راجع الخصم والتكلفة')
+    if MARGIN_MISMATCH_NOTE in notes:
+        reasons.append('الصافي لا يطابق الهوامش والخصم')
+    # A public price far from the catalog's usually means OCR attached ANOTHER row's
+    # numbers to this item (seen on invoice 224: «جولدن فير» got 192 instead of 34).
+    cat_public = _f(line.item.pack_price) if line.item_id else 0.0
+    ocr_public = _f(line.public_price)
+    if cat_public > 0 and ocr_public > 0 and abs(ocr_public / cat_public - 1) > ROW_SHIFT_PRICE_GAP:
+        reasons.append('سعر الجمهور بعيد عن الكتالوج — قد تكون أرقام سطر آخر')
     if (getattr(line, 'ocr_confidence', None) or 1) < 0.5:
         reasons.append('ثقة قراءة منخفضة')
     if _f(cells.get('unit_cost')) <= 0 and _f(cells.get('public_price')) <= 0:
@@ -215,7 +233,7 @@ def grid_row(line, stock_map: dict | None = None, fold_margin: bool = False) -> 
         'pharmacist_margin_amt':   _f(getattr(line, 'pharmacist_margin_amt', 0)),   # هامش ثابت للصيدلى
         'distributor_margin_amt':  _f(getattr(line, 'distributor_margin_amt', 0)),  # هامش ثابت للموزع
         'fold_margin':  fold_margin,
-        'net_cost':     cells.get('_net_cost'),        # تكلفة الوحدة (OCR net, pre-margin)
+        'net_cost':     _f(row.get('net_cost')),       # تكلفة الوحدة (net, pre-margin)
         'cost_to_post': _f(row.get('unit_cost')),      # التكلفة للترحيل = net + margin → SofTech
         # ── review / match flags ──
         'match_score': line.match_score,

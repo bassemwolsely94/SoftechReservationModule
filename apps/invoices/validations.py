@@ -80,6 +80,17 @@ def validate_invoice(invoice, *, live=True):
     if not matched:
         err('item_unmatched', 'لا توجد أصناف مطابقة لترحيلها')
     zero_ok = zero_cost_items()
+    batch_flagged = set()          # line ids already reported batch_required
+
+    def need_batch(l):
+        # SOFTECH items.itempartno («رقم القطعة أو الباتش») = 1 → the batch must be
+        # entered (e.g. Entresto, Kisqali). It posts to stktrans.item_partno. Purchases
+        # only — the native return value is not verified.
+        if is_return or (l.batch_number or '').strip() or l.id in batch_flagged:
+            return
+        batch_flagged.add(l.id)
+        err('batch_required', f'رقم الباتش مطلوب للصنف: {l.item.name}', l.id)
+
     for l in lines:
         if not l.item_id:
             err('item_unmatched', f'صنف غير مطابق: {l.manual_name or l.raw_text or "—"}', l.id)
@@ -88,6 +99,8 @@ def validate_invoice(invoice, *, live=True):
             err('qty_invalid', f'كمية غير صحيحة (≤0): {l.item.name}', l.id)
         if _net(l) <= 0 and str(l.item.softech_id).strip() not in zero_ok:
             err('price_invalid', f'سعر شراء غير صحيح (≤0): {l.item.name}', l.id)
+        if getattr(l.item, 'batch_required', False):      # catalog mirror (works offline)
+            need_batch(l)
 
     if not live or not matched:
         return {'ok': not errors, 'errors': errors, 'warnings': warnings}
@@ -110,12 +123,13 @@ def validate_invoice(invoice, *, live=True):
         ph = ','.join('?' for _ in codes)
         cur = conn.cursor()
         cur.execute(f"SELECT itemcode, itemnomoreuse, itemarchive, itemexpiry, itemcostprice, "
-                    f"itemsaleprice, itemsalestaxp, itemtrans3 FROM items WHERE itemcode IN ({ph})", codes)
+                    f"itemsaleprice, itemsalestaxp, itemtrans3, itempartno FROM items WHERE itemcode IN ({ph})", codes)
         for r in cur.fetchall():
             items[str(r[0]).strip()] = {
                 'nomoreuse': str(r[1] or '').strip(), 'archive': int(_f(r[2])),
                 'expiry': str(r[3] or '').strip(), 'cost': _f(r[4]),
-                'public': _f(r[5]), 'taxp': _f(r[6]), 'trans3': int(_f(r[7]))}
+                'public': _f(r[5]), 'taxp': _f(r[6]), 'trans3': int(_f(r[7])),
+                'partno': int(_f(r[8]))}
         srow = writer._q1(conn, "SELECT personcredit, personmaxbal FROM personsdata WHERE personcode=?",
                           [personcode])
         if srow:
@@ -172,6 +186,8 @@ def validate_invoice(invoice, *, live=True):
             err('item_return_blocked', f'الصنف غير مسموح بإرجاعه للموردين ({reason}): {l.item.name}', l.id)
         if it['expiry'] == '1' and not writer._parse_expiry(l.expiry_date):
             err('expiry_required', f'تاريخ صلاحية مطلوب للصنف: {l.item.name}', l.id)
+        if it['partno'] == 1:                              # live SOFTECH flag (catalog may lag)
+            need_batch(l)
         if is_return and code in orig_qty and _f(l.quantity) > orig_qty[code] + 0.0001:
             err('return_exceeds_received',
                 f'كمية المرتجع ({_f(l.quantity):g}) أكبر من المستلَم ({orig_qty[code]:g}): {l.item.name}', l.id)

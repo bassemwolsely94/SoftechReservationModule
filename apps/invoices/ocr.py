@@ -494,9 +494,10 @@ def normalize_expiry(raw: str) -> str:
     Normalize a printed expiry to ISO ``YYYY-MM-DD``.
 
     Egyptian pharma invoices print expiries many ways: ``08.2027``, ``08/2027``,
-    ``2027-08``, ``08-27``, ``Aug 2027``, ``31/08/2027``. SOFTECH stores a real
-    datetime (the captured purchase line used the **1st of the month** for a
-    month/year expiry, e.g. ``2028-02-01``), so a month/year input → ``YYYY-MM-01``.
+    ``2027-08``, ``08-27``, ``Aug 2027``, ``31/08/2027``, ``5-5-28``. Like the SofTech
+    screen, ``.`` ``-`` ``/`` are all separators and a full date is DAY first
+    (dd mm yyyy or dd mm yy). A month/year expiry gets day = month (owner rule
+    2026-10-31: ``09.2029`` → 09/09/2029, so day and month can't be confused).
     Returns ``''`` when nothing parseable is found (caller keeps the raw text).
     """
     if not raw:
@@ -509,7 +510,7 @@ def normalize_expiry(raw: str) -> str:
         if name in low:
             m = re.search(r'(20\d{2}|\d{2})', low)
             if m:
-                return _iso(_yy(m.group(1)), mo, 1)
+                return _iso(_yy(m.group(1)), mo, mo)
 
     nums = re.findall(r'\d+', s)
     if not nums:
@@ -523,13 +524,16 @@ def normalize_expiry(raw: str) -> str:
             return _iso(_yy(c), _clamp_month(b), _clamp_day(a))
         if len(a) == 4:                                 # yyyy mm dd
             return _iso(_yy(a), _clamp_month(b), _clamp_day(c))
+        return _iso(_yy(c), _clamp_month(b), _clamp_day(a))   # dd mm yy (SofTech order)
 
-    # Month/year (2 numeric parts)
+    # Month/year (2 numeric parts) → day = month
     if len(nums) == 2:
         a, b = nums[0], nums[1]
         if len(a) == 4 or (int(a) > 12 and len(b) <= 2):   # yyyy mm
-            return _iso(_yy(a), _clamp_month(b), 1)
-        return _iso(_yy(b), _clamp_month(a), 1)             # mm yyyy / mm yy
+            mo = _clamp_month(b)
+            return _iso(_yy(a), mo, mo)
+        mo = _clamp_month(a)
+        return _iso(_yy(b), mo, mo)                         # mm yyyy / mm yy
 
     return ''
 
@@ -551,8 +555,10 @@ def _clamp_day(d) -> int:
 
 def _iso(year: int, month: int, day: int) -> str:
     try:
+        import calendar
         import datetime
-        return datetime.date(year, month, min(day, 28) if month == 2 else day).isoformat()
+        last = calendar.monthrange(year, month)[1]
+        return datetime.date(year, month, min(day, last)).isoformat()
     except Exception:
         return f'{year:04d}-{month:02d}-01'
 
@@ -1340,19 +1346,37 @@ def parse_structured(data: dict):
         extra    = _num(ln.get('extra_discount_pct'))
         special  = _num(ln.get('special_discount_pct'))
         net      = _num(ln.get('pharmacist_price'))
+        vat      = _num(ln.get('vat_pct'))
+        pm       = _num(ln.get('pharmacist_margin_amt'))
+        dm       = _num(ln.get('distributor_margin_amt'))
+        qty      = _num(ln.get('quantity')) or 1.0
+        line_total = _num(ln.get('line_total'))
+        # ── the money columns can come back slid one/two places (discount ← total
+        # or net); put them back before anything derives from them ──
+        shifted, shift_notes = reconcile.repair_column_shift({
+            'public_price': public, 'disc_pct': disc, 'extra_disc_pct': extra,
+            'net': net, 'quantity': qty, 'vat_pct': vat,
+            'pharmacist_margin': pm, 'distributor_margin': dm,
+        })
+        if shift_notes:
+            disc, extra = shifted['disc_pct'], shifted['extra_disc_pct']
+            net, vat = shifted['net'], shifted['vat_pct']
+            line_total = line_total or shifted['line_total']
         if net == 0 and public > 0:
-            net = round(public * (1 - disc / 100) * (1 - extra / 100) * (1 - special / 100), 4)
+            # سعر صيدلي as the distributor prints it: (public − margins) × discounts
+            net = reconcile.paper_net(public, (disc, extra, special), pm, dm, vat)
         if _is_junk_line(name, code, public, net):
             continue
         # ── deterministic arithmetic self-repair: fix a garbled net/qty from the
-        # line's own redundant numbers (public×discounts, total÷qty). Pure math;
+        # line's own redundant numbers (paper formula, total÷qty). Pure math;
         # repairs flagged in notes for the operator to glance at. ──
-        qty = _num(ln.get('quantity')) or 1.0
         fixed, rec_notes = reconcile.reconcile_numbers({
             'public_price': public, 'disc_pct': disc, 'extra_disc_pct': extra,
             'special_disc_pct': special, 'net': net, 'quantity': qty,
-            'line_total': _num(ln.get('line_total')),
+            'line_total': line_total, 'vat_pct': vat,
+            'pharmacist_margin': pm, 'distributor_margin': dm,
         })
+        rec_notes = shift_notes + rec_notes
         net, qty = _num(fixed.get('net')), _num(fixed.get('quantity')) or qty
         raw_exp  = str(ln.get('expiry_date') or '').strip()
         base_notes = '، '.join(rec_notes)
@@ -1371,9 +1395,9 @@ def parse_structured(data: dict):
             'extra_discount_pct':     extra,
             'special_discount_pct':   special,
             'unit_price':             net,
-            'vat_pct':                _num(ln.get('vat_pct')),
-            'distributor_margin_amt': _num(ln.get('distributor_margin_amt')),
-            'pharmacist_margin_amt':  _num(ln.get('pharmacist_margin_amt')),
+            'vat_pct':                vat,
+            'distributor_margin_amt': dm,
+            'pharmacist_margin_amt':  pm,
             'ocr_confidence':         _conf(ln.get('confidence')),
             'notes':                  base_notes,
             '_reconciled':            bool(rec_notes),

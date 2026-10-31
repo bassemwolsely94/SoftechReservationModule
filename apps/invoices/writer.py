@@ -463,7 +463,9 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
             'itemsaleprice': c['itemsaleprice'], 'itemsalestax': c['itemsalestax'],
             'itemsaleprice_tax': c['itemsaleprice_tax'], 'pharmacydiscp': c['pharmacydiscp'],
             'additionaldiscp': c['additionaldiscp'], 'transprice_total': c['transprice_total'],
-            'origintaxp': c['origintaxp'], 'custdiscp': 0, 'specialdiscp': 0,
+            'origintaxp': c['origintaxp'],
+            'custdiscp': (0 if invoice.doc_kind == 'return' else NATIVE_PURCHASE_CUSTDISCP),
+            'specialdiscp': c.get('specialdiscp', 0),
             'bonusqty': 0, 'dblitemflag': idx, 'storecode2': '0', 'suppliercode': personcode,
             'personcode': personcode, 'usercode': usercode or _default_usercode(invoice),
             'retqty': 0, 'promtype': 1,
@@ -631,6 +633,13 @@ def _header_row(invoice, header, docnumber, ptclassifcode, usercode):
     }
 
 
+# The native «مشتريات من الموردين» screen sends custdiscp = 1.0 on purchase lines (862 of 871
+# lines on branch 130 in 60 days; 0.0 only on other entry paths). A rollback probe on 2026-10-26
+# showed no trigger sets it, so we send it ourselves to match hand-entered purchases.
+# Returns keep 0.0 (native return value not verified).
+NATIVE_PURCHASE_CUSTDISCP = 1.0
+
+
 def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcostprice=None, r_docdate=None):
     """Exact native line. PURCHASE = 28 cols, `newcostprice` OMITTED (the trigger computes
     weighted-avg cost). RETURN = 32 cols, INCLUDES `newcostprice` (from the original
@@ -668,7 +677,7 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
         'pharmacydiscp': float(c['pharmacydiscp']), 'additionaldiscp': float(c['additionaldiscp']),
         'itemexpirydate': exp_lit,
         'transprice': float(c['transprice']), 'transprice_total': float(c['transprice_total']),
-        'origintaxp': float(c['origintaxp']), 'custdiscp': 0.0,
+        'origintaxp': float(c['origintaxp']), 'custdiscp': NATIVE_PURCHASE_CUSTDISCP,
         'specialdiscp': float(c.get('specialdiscp', 0.0)),
         'saleprice_extrap': 0.0, 'usercode': usercode, 'bonusqty': 0.0, 'dblitemflag': int(dblitemflag),
         'storecode2': '0', 'transqty': float(c.get('qty', ln.quantity)), 'newqty': float(newqty),
