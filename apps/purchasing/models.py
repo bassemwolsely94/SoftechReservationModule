@@ -1328,3 +1328,31 @@ class SeasonalityRun(models.Model):
     class Meta:
         ordering = ['-started_at']
         verbose_name = 'تشغيل حساب الموسمية'
+
+
+class PivotSheetSnapshot(models.Model):
+    """
+    P-31: one demand-pivot download (`/purchasing` export view=pivot) — the sheet buyers send to suppliers
+    (owner 2026-10-31: they order from the `Total.الفرق-مطلوب/راكد` column). `lines` holds the items whose
+    Total gap was positive in THAT file, with the item's SOFTECH supplier. procurement.receipt_check compares
+    deliveries with these sheets. Imported saved pivots carry source='import'.
+    """
+    SOURCE_CHOICES = [('download', 'تنزيل من النظام'), ('import', 'ملف مستورد')]
+
+    source      = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='download')
+    exported_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    exported_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    run         = models.ForeignKey(DemandCalculationRun, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    calc_date   = models.DateField(null=True, blank=True)
+    params      = models.JSONField(default=dict, blank=True)
+    lines       = models.JSONField(default=list, blank=True)     # [{item_code, total_gap, supplier_code}]
+    line_count  = models.PositiveIntegerField(default=0)
+    lines_hash  = models.CharField(max_length=64, blank=True, db_index=True)
+    file_name   = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['-exported_at']
+        verbose_name = 'شيت احتياج مُرسَل (Pivot)'
+        verbose_name_plural = 'شيتات الاحتياج المُرسَلة'

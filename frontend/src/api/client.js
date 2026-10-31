@@ -828,6 +828,9 @@ export const supplyApi = {
   purchasePricesExcel: (params = {}) => api.get('/supply/purchase-prices/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   purchasePriceItem:   (code)        => api.get(`/supply/purchase-prices/item/${code}/`),
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
+  // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
+  receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
   supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
   supplierCodeReportExcel: (days) => api.get('/supply/reports/supplier-codes/',

@@ -120,6 +120,9 @@ class AuditLog(models.Model):
         ('return_answered',              'مرتجع — تسجيل رد المورد'),
         ('return_closed_by_ledger',      'مرتجع — إغلاق من مستند مرتجع SOFTECH'),
 
+        # Received-without-order check (P-31)
+        ('receipt_check_decided',        'استلام بدون طلب — قرار'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

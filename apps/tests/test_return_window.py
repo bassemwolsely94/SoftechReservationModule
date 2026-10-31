@@ -54,6 +54,13 @@ def _entry(item, supplier, exp, doc='1'):
                                               entered_expiry=exp, qty=Decimal('100'))
 
 
+def _seed_policies():
+    """Run the procurement 0011 seed (565 + 260) — idempotent (get_or_create)."""
+    import importlib
+    from django.apps import apps as django_apps
+    importlib.import_module('apps.procurement.migrations.0011_supplierreturnpolicy').seed(django_apps, None)
+
+
 class Base(TestCase):
 
     def setUp(self):
@@ -64,6 +71,7 @@ class Base(TestCase):
         self.b140 = make_branch('فرع 140', '140')
         for code in ('A', 'B', 'C', 'D', 'E', 'F'):
             Item.objects.create(softech_id=code, name=f'Item {code}', cost_price=Decimal('10'))
+        _seed_policies()      # the migration's rows can be flushed by a TransactionTestCase earlier in the run
 
     def cal(self, **kw):
         from apps.batches.return_calendar import calendar

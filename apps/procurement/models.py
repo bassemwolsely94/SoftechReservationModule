@@ -652,3 +652,46 @@ class SupplierClassificationRule(models.Model):
     def __str__(self):
         cl = self.ptclassifcode or '*'
         return f'pt{self.ptcode}/{cl} → {self.category.code}'
+
+
+class ReceiptCheck(models.Model):
+    """
+    P-31: a received purchase line (doc 10) that does not match a sent need sheet
+    (purchasing.PivotSheetSnapshot): `unordered` (the item was on no sheet in the window) or `over` (more than
+    the sheet's Total gap). One row per PurchaseLine natural key; re-runs update the numbers, never a person's
+    decision. A later doc 120 for the same supplier + item closes a «مرتجع مطلوب» row (each line used once).
+    PostgreSQL only — written by procurement/receipt_check.py.
+    """
+    FLAG_CHOICES = [('unordered', 'بدون طلب — ارجعه'), ('over', 'زيادة عن الفرق المطلوب')]
+    STATUS_CHOICES = [('open', 'مفتوح'), ('return_requested', 'مرتجع مطلوب'), ('accepted', 'مقبول'),
+                      ('returned', 'تم الإرجاع')]
+
+    branch_code   = models.CharField(max_length=10)
+    supplier_code = models.CharField(max_length=10, db_index=True)
+    doc_number    = models.CharField(max_length=20)
+    doc_date      = models.DateField(db_index=True)
+    item_code     = models.CharField(max_length=6, db_index=True)
+    qty           = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    value         = models.DecimalField(max_digits=16, decimal_places=3, default=0)
+    flag          = models.CharField(max_length=10, choices=FLAG_CHOICES)
+    sheet         = models.ForeignKey('purchasing.PivotSheetSnapshot', on_delete=models.SET_NULL, null=True,
+                                      blank=True, related_name='+')
+    sheet_gap     = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    sheet_supplier_code = models.CharField(max_length=10, blank=True, default='')
+    received_in_window = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+
+    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open', db_index=True)
+    decision_reason = models.CharField(max_length=200, blank=True, default='')
+    decided_by      = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='+')
+    decided_at      = models.DateTimeField(null=True, blank=True)
+    returned_refs   = models.JSONField(default=list, blank=True)
+    returned_value  = models.DecimalField(max_digits=16, decimal_places=3, default=0)
+    created_at      = models.DateTimeField(auto_now_add=True)
+    checked_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('branch_code', 'supplier_code', 'doc_number', 'doc_date', 'item_code')
+        ordering = ['-doc_date', 'item_code']
+        verbose_name = 'فحص استلام بدون طلب'
+        verbose_name_plural = 'فحوص الاستلام بدون طلب'

@@ -114,9 +114,13 @@ check for the owner. Spec files:
   purchase-expiry mirror). Lines = branch shelves + HQ live + 105; 102/103 not shown. Lead time 14 days
   (`return_window_branch_lead_days`). Still open: supplier entry-screen samples (`entry_layout`), other suppliers'
   windows, units check on doc 120 vs `stkbalexpiry`
-- [P-31](06_SPEC_P-31_unordered_delivery_detector.md) — order record = `SupplyDecision(kind='purchase')` written by the
-  order Excel exports; `ReceiptCheck` per doc-10 line; no price check. Note: `PurchaseLine` refreshes daily (20 h rule),
-  not every 30 min
+- [P-31](06_SPEC_P-31_unordered_delivery_detector.md) — **revised 2026-10-31**: the order file is the demand pivot
+  (`Total.الفرق-مطلوب/راكد`). Each pivot download is kept as a need sheet (`PivotSheetSnapshot`); doc-10 lines of the
+  pilot suppliers are flagged `unordered` (on no sheet in 14 days) or `over` (above the sheet's gap); no bonus /
+  short / price checks; no change to `SupplyDecision` or the supply engine. **BUILT 2026-10-31** (snapshot on every
+  pivot download, `import_pivot_snapshot` for saved files, check after each purchases refresh + daily 09:10 with a
+  digest to `purchasing`, /supply «استلام بدون طلب»; migrations purchasing 0041, procurement 0012/0013, notifications
+  0037, audit 0016)
 - [P-33](06_SPEC_P-33_supply_quick_fixes.md) — **(a), (c), (d), (e) BUILT 2026-10-31** (owner: "P-33 without retry";
   yes to the `IsrPush` field + constraint). (a) shortage stock check «تحليل التحويل» / «إنشاء مقترحات التحويل» →
   the WhatsApp path's linked ISR legs (`IsrPush.origin_shortage_list`, `purchasing/0040`; a list made from a WhatsApp
@@ -133,7 +137,7 @@ check for the owner. Spec files:
 - **Owner decisions 2026-10-31** (written into each spec):
   - P-26: store 110 is excluded from everything; the alert and the clean-up export are dropped.
   - P-29: returns are owned by the HQ purchasing and replenishment specialists (`purchasing` role).
-  - P-31: the buyers are named, but which Excel they send is still open (0 recorded orders; exports are not logged).
+  - P-31: buyers send the demand pivot (`/purchasing` export, column `Total.الفرق-مطلوب/راكد`).
   - P-41: agreed days count from the month end.
   - P-42: "non-discounted" has no criteria, so it is dropped; terms are local / imported only.
   - P-40: weeks start Saturday. Cheque due date = `cheqdate` for `financialdoccode='20'` (read-only probe; `cheqcashdate` is empty on bank cheques).

@@ -2336,6 +2336,16 @@ def _run_return_window_digest():
         logger.error('[APScheduler] return-window digest failed: %s', exc)
 
 
+def _run_receipt_check_daily():
+    """P-31: re-check received purchase lines against the sent need sheets (local DB only) and send the
+    daily «استلام بدون طلب» digest to purchasing. The refresh also runs the check after every pull."""
+    try:
+        from apps.procurement.receipt_check import run_check, send_digest
+        logger.info('[APScheduler] receipt check: %s, digest sent=%s', run_check(), send_digest())
+    except Exception as exc:
+        logger.error('[APScheduler] receipt check failed: %s', exc)
+
+
 def _run_markdown_revert_reminders():
     """Weekly reminder to review reverting stale near-expiry markdowns."""
     try:
@@ -3510,6 +3520,11 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    # Received-without-order check (P-31): daily catch-up + digest after the morning purchases refresh.
+    _scheduler.add_job(
+        _run_receipt_check_daily, 'cron', hour=9, minute=10, id='receipt_check_daily',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
     # Weekly reminder to revert stale near-expiry markdowns (Sunday 08:30).

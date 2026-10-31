@@ -72,6 +72,7 @@ class Notification(models.Model):
         ('system',                    '⚙️ نظام'),
         ('branch_connectivity',       '🔌 اتصال فرع'),
         ('sync_failure',              '🔴 فشل مزامنة متكرر'),
+        ('receipt_check_digest',      '📦 استلام بدون طلب'),
         ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
         # ── Personal ──────────────────────────────────────────────────────────
         ('personal_reminder',         '⏰ تذكير شخصي'),
@@ -184,6 +185,7 @@ class Notification(models.Model):
         'monthly_report':       CATEGORY_REPORTS,
         'coupon_digest':        CATEGORY_REPORTS,
         'return_window_digest': CATEGORY_REPORTS,
+        'receipt_check_digest': CATEGORY_REPORTS,
         'customer_status_drift': CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
