@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'stock_audit', 'group': 'inventory', 'icon': '🔎',
+    'brief': T('فحوص تلقائية على كل حركة مخزون في SOFTECH تطلّع الحركات اللي محتاجة مراجعة.',
+               'Automatic checks on every SOFTECH stock movement that bring up the ones needing review.'),
     'title': T('تدقيق حركات المخزون', 'Stock transactions audit'),
     'summary': T(
         'فحوص ثابتة تعمل تلقائياً على كل حركات المخزون في SOFTECH (بيع، مرتجع، شراء، تحويل، تسوية) لكل الفروع، '

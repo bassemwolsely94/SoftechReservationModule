@@ -665,11 +665,19 @@ def create_donor_returns(snap, months, *, only_isr=None, created_by=None, fill=N
     return {'created': created, 'skipped': skipped}
 
 
-def transfers_for(req):
-    """The two-leg transfer proposals already made for a WhatsApp request, per donor."""
+def _origin(req=None, shortage_list=None):
+    """The IsrPush origin a two-leg transfer is tied to: a WhatsApp request, or (P-33 (a)) a
+    shortage list that did not come from one."""
+    if (req is None) == (shortage_list is None):
+        raise ValueError('exactly one of req / shortage_list')
+    return {'origin_request': req} if req is not None else {'origin_shortage_list': shortage_list}
+
+
+def transfers_for(req=None, *, shortage_list=None):
+    """The two-leg transfer proposals already made for a WhatsApp request (or a shortage list), per donor."""
     from apps.purchasing.models import IsrPush
     out = {}
-    for p in IsrPush.objects.filter(origin_request=req).order_by('created_at'):
+    for p in IsrPush.objects.filter(**_origin(req, shortage_list)).order_by('created_at'):
         d = out.setdefault(p.origin_donor, {'donor': p.origin_donor, 'legs': []})
         d['legs'].append({'id': p.id, 'kind': p.kind, 'kind_label': p.get_kind_display(),
                           'status': p.status, 'status_label': p.get_status_display(),
@@ -678,14 +686,16 @@ def transfers_for(req):
     return list(out.values())
 
 
-def create_request_transfers(snap, months, req, *, created_by=None, fill=None, basis='requested'):
+def create_request_transfers(snap, months, req=None, *, shortage_list=None, created_by=None, fill=None,
+                             basis='requested'):
     """«طلبات واتساب» → for each donor the plan draws from, TWO linked PROPOSED IsrPush:
          leg 1  donor → 100            (branch_to_hq)  — the donor sends its excess to HQ
          leg 2  100 → requesting branch (hq_to_branch) — HQ forwards it
     Unlike a SOFTECH ISR (create_donor_returns) there is no branch request in SOFTECH for
     HQ to fill, so leg 2 is its own ISR. PG only; SOFTECH is written later by the usual
     approve → push in the ISR tab. A donor that already has a live leg for this request is
-    skipped (DB constraint backs this up). Returns {'created': [...], 'skipped': [...]}."""
+    skipped (DB constraint backs this up). P-33 (a): the same for a shortage list
+    (shortage_list=…, origin_shortage_list). Returns {'created': [...], 'skipped': [...]}."""
     from django.db import IntegrityError, transaction
     from apps.purchasing import isr_writer
     from apps.purchasing.models import DemandCalculationRun, IsrPush
@@ -700,8 +710,10 @@ def create_request_transfers(snap, months, req, *, created_by=None, fill=None, b
         for d in ln['donors']:
             if d['give'] > 0:
                 by_donor.setdefault(d['branch'], []).append((ln['code'], d['give']))
+    origin_kw = _origin(req, shortage_list)
+    source_label = f'طلب واتساب WA-{req.pk}' if req is not None else f'قائمة نواقص SL-{shortage_list.pk}'
     live = set(IsrPush.objects.filter(
-        origin_request=req,
+        **origin_kw,
         status__in=[IsrPush.STATUS_PROPOSED, IsrPush.STATUS_APPROVED, IsrPush.STATUS_PUSHED],
     ).values_list('origin_donor', flat=True))
     created, skipped = [], []
@@ -718,13 +730,13 @@ def create_request_transfers(snap, months, req, *, created_by=None, fill=None, b
             skipped.append({'donor': donor, 'reason': 'no_lines'})
             continue
         copy_at = (snap.get('fallback') or {}).get(donor)
-        note = (f'طلب واتساب WA-{req.pk} (فرع {requester}): فائض فرع {donor} ← الرئيسي ← فرع {requester}. '
+        note = (f'{source_label} (فرع {requester}): فائض فرع {donor} ← الرئيسي ← فرع {requester}. '
                 f'التغطية {months:g} شهر، الأرصدة {snap["taken_at"]}.'
                 + (f' تنبيه: سيرفر فرع {donor} كان غير متاح — الفائض محسوب من نسخة الرئيسي '
                    f'(آخر حركة {copy_at}); راجع الرصيد قبل الاعتماد.' if copy_at is not None else ''))
         try:
             with transaction.atomic():
-                origin = dict(origin_request=req, origin_donor=donor, notes=note)
+                origin = dict(origin_kw, origin_donor=donor, notes=note)
                 leg1 = isr_writer._persist_proposal(
                     source=donor, dest=HQ, kind=IsrPush.KIND_BRANCH_TO_HQ, lines=leg1_lines,
                     run_id=run_id, created_by=created_by, coverage_months=months, **origin)

@@ -28,7 +28,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from apps.sync.tasks import start_scheduler, stop_scheduler
+        from config.writers import run_startup_checks
 
+        run_startup_checks()     # P-54: duplicated .env key / writer + read-only → refuse to start
         start_scheduler()
         self.stdout.write(self.style.SUCCESS(
             '✓ Scheduler running in dedicated process. Press Ctrl+C to stop.'

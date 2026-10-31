@@ -36,6 +36,7 @@ import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from apps.purchasing.rate_writer import (
@@ -56,7 +57,7 @@ MAXQTY_TOL        = 0.05    # readback / "already correct" tolerance for maxnowq
 
 
 def coverage_writer_enabled() -> bool:
-    return bool(getattr(settings, 'COVERAGE_WRITER_ENABLED', False))
+    return writer_allowed('COVERAGE_WRITER_ENABLED')
 
 
 def _write_maxqty_too() -> bool:
@@ -445,7 +446,7 @@ MAX_TOPUP_TRIES_PER_RUN = 3     # a run left 'partial' (e.g. a branch offline) i
 
 def topup_settings() -> dict:
     return {
-        'enabled': bool(getattr(settings, 'COVERAGE_AUTO_TOPUP_ENABLED', False)),
+        'enabled': writer_allowed('COVERAGE_AUTO_TOPUP_ENABLED'),
         'months': float(getattr(settings, 'COVERAGE_AUTO_TOPUP_MONTHS', 1.5)),
         'target': str(getattr(settings, 'COVERAGE_AUTO_TOPUP_TARGET', TARGET_NODE)).lower(),
     }

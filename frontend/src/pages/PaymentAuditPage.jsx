@@ -282,7 +282,8 @@ export default function PaymentAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       {s.status === 'pending' && (
-                        <button data-tour="finance-payment-audit-match"
+                        <button
+                          data-tour="finance-payment-audit-run-matching"
                           onClick={() => runMatch.mutate(s.id)}
                           disabled={runMatch.isPending}
                           className="text-xs text-brand-600 hover:underline disabled:opacity-50"

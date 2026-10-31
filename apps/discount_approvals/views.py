@@ -11,6 +11,7 @@ from .services import execute_price_change, compute_derived_preview
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 from core.errors import public_error
 from core.permissions import matrix_permission
 
@@ -119,7 +120,7 @@ def approve_request(request, pk):
 
     # Refuse BEFORE approving, so a switched-off write never leaves an
     # approved-but-unexecuted request behind (it stays pending for later).
-    if not getattr(settings, 'PRICING_SOFTECH_WRITE_ENABLED', True):
+    if not writer_allowed('PRICING_SOFTECH_WRITE_ENABLED'):
         return Response({'detail': 'اعتماد الأسعار معطّل حالياً من إعدادات النظام',
                          'error_code': 'pricing_writes_disabled'}, status=503)
 
@@ -285,7 +286,7 @@ def request_force_replication(request, pk):
         obj = ItemPriceChangeRequest.objects.select_related('item').get(pk=pk)
     except ItemPriceChangeRequest.DoesNotExist:
         return Response({'detail': 'غير موجود'}, status=404)
-    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+    if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
         return Response({'detail': 'إصلاح النسخ معطّل حالياً من إعدادات النظام',
                          'error_code': 'replication_repair_disabled'}, status=503)
     # Repair preserves the item's original editor — no approver usercode needed.
@@ -552,7 +553,7 @@ def repair_gaps(request):
     """
     from .models import ReplicationGap
     from .replication import force_replication, check_item
-    if not getattr(settings, 'REPLICATION_REPAIR_ENABLED', True):
+    if not writer_allowed('REPLICATION_REPAIR_ENABLED'):
         return Response({'detail': 'إصلاح النسخ معطّل حالياً من إعدادات النظام',
                          'error_code': 'replication_repair_disabled'}, status=503)
     # Repair preserves each item's original editor — no approver usercode needed.

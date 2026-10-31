@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'followups', 'group': 'operations', 'icon': '💊',
+    'brief': T('النظام بيحسب امتى دوا المريض المزمن هيخلص، ويديك مهمة تكلمه قبلها.',
+               'The system works out when a chronic patient\'s medicine runs out and gives you a task to call before then.'),
     'title': T('متابعة المرضى المزمنين', 'Chronic patient follow-up'),
     'summary': T(
         'النظام يحسب لكل مريض مزمن موعد نفاد دوائه من تاريخ آخر صرف ومعدل الاستخدام، ويُنشئ «مهمة متابعة» قبل الموعد '
@@ -57,9 +59,10 @@ MODULE = {
             {'screen': 'followups.tasks', 'target': 'followups-tasks-status', 'perm': 'followups',
              'label': T('معلق', 'Pending'),
              'text': T('اختار «معلق»: دول اللي محدش كلمهم لسه.', 'Choose "Pending": nobody has contacted them yet.')},
-            {'screen': 'followups.tasks', 'target': 'followups-tasks-groups', 'perm': 'followups',
+            {'screen': 'followups.tasks', 'target': 'followups-tasks-groups', 'label': T('كارت العميل', 'Customer card'), 'perm': 'followups',
              'text': T('افتح كارت العميل وشوف كل أدويته المستحقة. اتصل بيه مرة واحدة لكلها.',
                        'Open the customer card and see all their due medicines. Call once for all of them.'),
+             'when': T('لما العميل عنده أكتر من دواء مستحق — مكالمة واحدة بدل كذا مكالمة.', 'When a customer has several medicines due — one call instead of several.'),
              'open_hint': T('اختار عرض «👥 مجمّع بالعميل».', 'Choose the "👥 Grouped by customer" view.')},
             {'screen': 'followups.tasks', 'target': 'followups-tasks-group-whatsapp', 'perm': 'followups',
              'label': T('💬 اختر', '💬 Choose'),
@@ -211,7 +214,7 @@ SCREENS = [
         ],
         'related': ['followups.reminders', 'customers.detail', 'chronic.classifier'],
         'tour': [
-            {'target': 'followups-tasks-kpis',
+            {'target': 'followups-tasks-kpis', 'label': T('معلق · اتصلت · مستحق اليوم · متأخر', 'Pending · Called · Due today · Overdue'),
              'text': T('ملخص اليوم: المعلق، اللي اتصلت بيهم، المستحق النهارده، المتأخر، الفائت، المكتمل، واللي اتقفل آلياً.',
                        'Today at a glance: pending, called, due today, overdue, missed, done and auto-closed.'),
              'when': T('ابدأ يومك من هنا. لو «فائت» بيكبر يبقى المتابعة متأخرة.', 'Start your day here. If "Missed" keeps growing, follow-up is falling behind.'),
@@ -239,15 +242,17 @@ SCREENS = [
              'when': T('اشتغل على «معلق» الأول، وبعدين «اتصلت» اللي محتاجة محاولة تانية.', 'Work "Pending" first, then "Called" tasks that need another try.'),
              'more': T(
                  'كل شريحة حالة وجنبها العدد: معلق، اتصلت، مكتمل، فائت، آلي. «فائت» بتنوّر أحمر لو فيها مهام.\n• الشريحة بتشتغل مع التبويب الشخصي اللي فوقها، يعني «معينة لي» + «معلق» = اللي عليك ولسه ما اتصلتش.',
-                 'Each chip is a status with its count: pending, called, done, missed, auto. "Missed" turns red when it has tasks.\n• The chip works together with the personal tab above it, so "Assigned to me" + "Pending" = yours and not called yet.')},
-            {'target': 'followups-tasks-filters',
+                 'Each chip is a status with its count: pending, called, done, missed, auto. "Missed" turns red when it has tasks.\n• The chip works together with the personal tab above it, so "Assigned to me" + "Pending" = yours and not called yet.'),
+         },
+            {'target': 'followups-tasks-filters', 'label': T('🔍 فلاتر متقدمة', '🔍 Advanced filters'),
              'text': T('فلاتر متقدمة: القناة، الفرع، موعد الاستحقاق، المتأخر بس، الشريحة، خطر الانقطاع، اسم الصنف أو العميل.',
                        'Advanced filters: channel, branch, due date, overdue only, segment, churn risk, item or customer name.'),
              'when': T('اضغط الشريط عشان يفتح. مفيد لما تتابع فرع واحد أو صنف واحد.', 'Click the bar to open it. Useful when following one branch or one item.'),
              'more': T(
                  'اضغط «🔍 فلاتر متقدمة» عشان تفتحها: قناة البيع، بحث صنف أو عميل، التشخيص، نوع الدواء، شريحة العميل، خطر الانقطاع، الفرع، ومدى تاريخ الاستحقاق.\n• «المتأخرة فقط» و«ترتيب حسب الأولوية» اختصارات سريعة.\n• «مسح كل الفلاتر» يرجّع الكل.',
-                 'Press "🔍 Advanced filters" to open them: sales channel, item or customer search, diagnosis, medicine type, customer segment, churn risk, branch and due-date range.\n• "Overdue only" and "Sort by priority" are quick shortcuts.\n• "Clear all filters" resets everything.')},
-            {'target': 'followups-tasks-groups',
+                 'Press "🔍 Advanced filters" to open them: sales channel, item or customer search, diagnosis, medicine type, customer segment, churn risk, branch and due-date range.\n• "Overdue only" and "Sort by priority" are quick shortcuts.\n• "Clear all filters" resets everything.'),
+         },
+            {'target': 'followups-tasks-groups', 'label': T('كارت العميل', 'Customer card'),
              'text': T('كارت لكل عميل: عدد أدويته، المعلق والمتأخر منها. اضغط الكارت عشان تفتح قائمة أدويته.',
                        'One card per customer: number of medicines, pending and overdue. Click the card to open the medicine list.'),
              'when': T('من القائمة المفتوحة: «📞 اتصلت بالكل» أو «✅ الكل اشترى» أو «تسجيل» لدواء واحد.',
@@ -259,7 +264,7 @@ SCREENS = [
              'warn': T('تجهيز الرسالة بيحوّل المهام لـ«تم الاتصال» فوراً — جهّزها لما تكون فعلاً هتبعت.',
                        'Preparing the message marks the tasks "Called" at once — prepare it only when you will really send.'),
              'open_hint': T('يظهر في العرض المجمّع لعميل له رقم ظاهر لك ومهام مفتوحة.', 'Shows in grouped view for a customer whose phone you may see and who has open tasks.')},
-            {'target': 'followups-tasks-list',
+            {'target': 'followups-tasks-list', 'label': T('كروت المهام', 'Task cards'),
              'text': T('كروت المهام: العميل، الدواء، آخر صرف، الاستحقاق ورقم مستند SOFTECH. اضغط الكارت يفتح التفاصيل، و📌 يثبّتها لك.',
                        'Task cards: customer, medicine, last dispense, due date and SOFTECH document number. Click a card for details; 📌 pins it for you.'),
              'when': T('«تسجيل النتيجة» على الكارت أسرع طريق بعد المكالمة.', '"Record outcome" on the card is the quickest way after a call.'),
@@ -336,8 +341,9 @@ SCREENS = [
                        'When on, messages really reach customers — check "Next run" before any manual run.'),
              'more': T(
                  '• «الإرسال مفعّل» (أخضر): التذكيرات بتتبعت فعلاً للعملاء كل يوم.\n• «الإرسال متوقف (معاينة فقط)»: الشاشة بتوريك إيه اللي كان هيتبعت من غير ما يتبعت حاجة.\nالتشغيل والإيقاف من إعدادات النظام، مش من هنا.',
-                 '• "Sending is on" (green): reminders are really sent to customers every day.\n• "Sending is off (preview only)": the screen shows what would be sent without sending anything.\nTurning it on or off is done in system settings, not here.')},
-            {'target': 'followups-reminders-kpis',
+                 '• "Sending is on" (green): reminders are really sent to customers every day.\n• "Sending is off (preview only)": the screen shows what would be sent without sending anything.\nTurning it on or off is done in system settings, not here.'),
+         },
+            {'target': 'followups-reminders-kpis', 'label': T('أُرسل (30 يوم) · نسبة الرد · …', 'Sent (30 days) · Reply rate · …'),
              'text': T('آخر 30 يوم: المرسل، نسبة الرد، تجهيز في الفرع، توصيل، حجوزات اتعملت، فشل، واللي أوقفوا التذكيرات.',
                        'Last 30 days: sent, reply rate, branch pickup, delivery, reservations created, failed, and opted out.'),
              'when': T('لو «فشل الإرسال» زاد راجع الأرقام في السجل.', 'If "Failed" rises, check the numbers in the log.'),

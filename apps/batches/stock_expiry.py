@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger('elrezeiky.batches')
 
-_QUARANTINE_STORES = {'102', '103', '105'}
+from .store_roles import CLOSED, LIVE, QUARANTINE_ROLES, ROLE_LABELS
 
 # All on-hand expiry rows on a node (near-future AND already-expired backlog).
 _SQL = (
@@ -71,6 +71,9 @@ def sync_stock_expiry_all(run=None, only_branch=None, timeout=180):
     from apps.branches.models import Branch
     from .models import StockExpiryBalance
 
+    from .store_roles import resolver
+    role_of = resolver()
+
     qs = Branch.objects.filter(is_operational=True)
     if only_branch:
         qs = qs.filter(softech_branch_id=str(only_branch))
@@ -103,11 +106,12 @@ def sync_stock_expiry_all(run=None, only_branch=None, timeout=180):
             if not ic or exp is None:
                 continue
             store = _s(r[3])
+            role = role_of(bc, store)
             objs.append(StockExpiryBalance(
                 branch_code=bc, store_code=store[:10], item_code=ic[:6],
                 item_name=_s(r[5])[:255], batch_no=_s(r[4])[:50],
                 expiry_date=exp, qty=_to_dec(r[2]),
-                is_quarantine=store in _QUARANTINE_STORES,
+                is_quarantine=role in QUARANTINE_ROLES, store_role=role,
             ))
         with transaction.atomic():
             StockExpiryBalance.objects.filter(branch_code=bc).delete()
@@ -145,10 +149,20 @@ def _expiry_tier(days):
     return 'ok'
 
 
+def _roles(include_quarantine=False, roles=None):
+    """The store roles a read covers. Default live; include_quarantine adds 102/103/105; an explicit
+    roles list wins. Closed stores are never returned (owner, 2026-10-31)."""
+    if roles:
+        picked = [r for r in roles if r in ROLE_LABELS]
+    else:
+        picked = [LIVE] + (list(QUARANTINE_ROLES) if include_quarantine else [])
+    return [r for r in picked if r != CLOSED]
+
+
 def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
                         store_codes=None, exp_from=None, exp_to=None,
                         include_quarantine=False, imported_only=False,
-                        fridge_only=False, medicine_type=None, sort=None, limit=3000):
+                        fridge_only=False, medicine_type=None, sort=None, limit=3000, roles=None):
     """
     Per-item near-expiry / expired report over the StockExpiryBalance mirror,
     enriched with economics + attributes (reuses the audit's item map).
@@ -157,6 +171,7 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
            'range' (expiry between exp_from … exp_to — the active on-hand batch
            expiry) | 'all'.
     store_codes : optional list of storecodes (HQ/branch warehouses) to include.
+    roles : store roles (P-26) — default live; include_quarantine adds 102/103/105; never closed.
     Rows are the per-batch mirror rows filtered by expiry, then aggregated per item
     (so total_qty / batch_count / earliest-latest reflect only the matching batches).
     """
@@ -166,9 +181,7 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
     from .expiry_audit import _item_attr_map
 
     today = _d.date.today()
-    qs = StockExpiryBalance.objects.all()
-    if not include_quarantine:
-        qs = qs.filter(is_quarantine=False)
+    qs = StockExpiryBalance.objects.filter(store_role__in=_roles(include_quarantine, roles))
     if branch_codes:
         qs = qs.filter(branch_code__in=list(branch_codes))
     if store_codes:
@@ -248,36 +261,52 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
 
 def stock_expiry_stores(branch_codes=None):
     """Distinct (branch_code, store_code) present in the mirror — powers the store
-    filter dropdown. Returns [{branch_code, store_code, is_quarantine}]."""
+    filter dropdown. Returns [{branch_code, store_code, is_quarantine, role, role_label}];
+    closed stores are not offered."""
     from .models import StockExpiryBalance
-    qs = StockExpiryBalance.objects.all()
+    qs = StockExpiryBalance.objects.exclude(store_role=CLOSED)
     if branch_codes:
         qs = qs.filter(branch_code__in=list(branch_codes))
     seen = {}
-    for bc, sc, quar in qs.values_list('branch_code', 'store_code', 'is_quarantine').distinct():
-        seen[(bc, sc)] = quar
+    for bc, sc, role in qs.values_list('branch_code', 'store_code', 'store_role').distinct():
+        seen[(bc, sc)] = role or LIVE
     return sorted(
-        [{'branch_code': bc, 'store_code': sc, 'is_quarantine': bool(seen[(bc, sc)])}
+        [{'branch_code': bc, 'store_code': sc, 'is_quarantine': seen[(bc, sc)] in QUARANTINE_ROLES,
+          'role': seen[(bc, sc)], 'role_label': ROLE_LABELS.get(seen[(bc, sc)], '')}
          for (bc, sc) in seen],
         key=lambda x: (x['branch_code'], x['store_code']),
     )
 
 
 def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine=False):
-    """KPI cards for the FEFO tabs, from the mirror: value-at-risk + counts by band."""
+    """KPI cards for the FEFO tabs, from the mirror: value-at-risk + counts by band.
+
+    The top-level keys cover live stock (plus 102/103/105 with include_quarantine). `buckets` gives
+    one entry per store role (P-26) so the screens can show shelf risk apart from book residue.
+    Closed stores are never counted anywhere."""
     import datetime as _d
     from django.db.models import Sum, Count
     from .models import StockExpiryBalance
     from .expiry_audit import _item_attr_map
 
     today = _d.date.today()
-    base = StockExpiryBalance.objects.all()
-    if not include_quarantine:
-        base = base.filter(is_quarantine=False)
+    scope = StockExpiryBalance.objects.exclude(store_role=CLOSED)
     if branch_codes:
-        base = base.filter(branch_code__in=list(branch_codes))
+        scope = scope.filter(branch_code__in=list(branch_codes))
     if store_codes:
-        base = base.filter(store_code__in=list(store_codes))
+        scope = scope.filter(store_code__in=list(store_codes))
+    base = scope.filter(store_role__in=_roles(include_quarantine))
+
+    def _value(q):
+        attrs = _item_attr_map(list(q.values_list('item_code', flat=True).distinct()))
+        val = 0.0
+        for row in q.values('item_code').annotate(qq=Sum('qty')):
+            val += float(row['qq'] or 0) * (attrs.get(row['item_code'], {}).get('unit_cost') or 0)
+        return round(val, 2)
+
+    def _bucket(q):
+        agg = q.aggregate(qty=Sum('qty'), items=Count('item_code', distinct=True))
+        return {'items': agg['items'] or 0, 'qty': float(agg['qty'] or 0), 'value': _value(q)}
 
     def band(d_from, d_to):
         q = base.filter(expiry_date__gte=today + _d.timedelta(days=d_from),
@@ -302,7 +331,15 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
         exp_val += float(row['qq'] or 0) * uc
 
     b30, b90, b180 = band(0, 30), band(30, 90), band(90, 180)
+    live = scope.filter(store_role=LIVE)
+    live_expired = live.filter(expiry_date__lt=today)
+    buckets = {LIVE: dict(_bucket(live), expired=_bucket(live_expired))}
+    for role in QUARANTINE_ROLES:
+        buckets[role] = _bucket(scope.filter(store_role=role))
+    for role, b in buckets.items():
+        b['label'] = ROLE_LABELS[role]
     return {
+        'buckets': buckets,
         'lt_30':  b30,
         'lt_90':  b90,
         'lt_180': b180,
@@ -311,3 +348,68 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
                     'value': round(exp_val, 2)},
         'total_at_risk_value': round(b30['value'] + b90['value'] + b180['value'], 2),
     }
+
+
+# ── P-26: one at-risk definition (insights + forecasting read this) ──────────
+
+def fefo_at_risk(batches, daily_rate, today, within_days=180):
+    """Units that will expire before they sell. batches: [(expiry_date, qty)] for ONE item at ONE
+    location; sales consume the earliest expiry first (FEFO), at `daily_rate` units/day — the same
+    rule as rebalance.plan. Expired batches and those beyond `within_days` are not counted."""
+    sold, wasted = 0.0, 0.0
+    for expiry, qty in sorted(batches, key=lambda b: b[0]):
+        d = (expiry - today).days
+        if d < 0 or d > within_days:
+            continue
+        sells = max(0.0, min(float(qty), daily_rate * d - sold))
+        sold += sells
+        wasted += float(qty) - sells
+    return round(wasted, 3)
+
+
+def _daily_rates(pairs):
+    """{(item_code, branch_code): units/day} from the latest demand run — qty_90d / 90, as rebalance."""
+    from django.db.models import Max
+    from apps.purchasing.models import ItemDemandMetrics
+    latest = ItemDemandMetrics.objects.aggregate(m=Max('calc_date'))['m']
+    if not latest or not pairs:
+        return {}
+    items = {i for i, _ in pairs}
+    out = {}
+    for ic, bc, q90 in (ItemDemandMetrics.objects.filter(calc_date=latest, item__softech_id__in=items)
+                        .values_list('item__softech_id', 'branch__softech_branch_id', 'qty_90d')):
+        out[(str(ic), str(bc))] = float(q90 or 0) / 90.0
+    return out
+
+
+def at_risk_by_branch(within_days=180, today=None, branch_codes=None, item_codes=None):
+    """{branch_code: {'value': EGP, 'items': [(item_code, EGP), …] by value desc}} — live stock only,
+    value at catalog unit cost (the same basis as the KPI cards)."""
+    import datetime as _d
+    from collections import defaultdict
+    from .models import StockExpiryBalance
+    from .expiry_audit import _item_attr_map
+
+    today = today or _d.date.today()
+    qs = StockExpiryBalance.objects.filter(store_role=LIVE, qty__gt=0, expiry_date__gte=today,
+                                           expiry_date__lte=today + _d.timedelta(days=within_days))
+    if branch_codes:
+        qs = qs.filter(branch_code__in=list(branch_codes))
+    if item_codes:
+        qs = qs.filter(item_code__in=list(item_codes))
+    grouped = defaultdict(list)
+    for ic, bc, exp, q in qs.values_list('item_code', 'branch_code', 'expiry_date', 'qty'):
+        grouped[(ic, bc)].append((exp, float(q)))
+    rates = _daily_rates(set(grouped))
+    costs = _item_attr_map(list({ic for ic, _ in grouped}))
+    out = defaultdict(lambda: {'value': 0.0, 'items': []})
+    for (ic, bc), batches in grouped.items():
+        units = fefo_at_risk(batches, rates.get((ic, bc), 0.0), today, within_days)
+        value = round(units * (costs.get(ic, {}).get('unit_cost') or 0), 2)
+        if value <= 0:
+            continue
+        out[bc]['items'].append((ic, value))
+        out[bc]['value'] = round(out[bc]['value'] + value, 2)
+    for b in out.values():
+        b['items'].sort(key=lambda x: (-x[1], x[0]))
+    return dict(out)

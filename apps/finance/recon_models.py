@@ -681,3 +681,186 @@ class ReconAuditEvent(models.Model):
 
     def __str__(self):
         return f'{self.action} | {self.performed_at:%Y-%m-%d %H:%M}'
+
+
+class ContractReceivableTerms(models.Model):
+    """
+    P-41: one contract account tracked as a receivable (the customer side of this mirror), with the payment days
+    agreed in writing — a finance entry. Agreed days count from the END of the invoice month (owner 2026-10-31).
+    `group_name` puts the insurance companies' co-pay accounts (D M S 10% / 20% / …) under one company.
+    Changes are audited in ReconAuditEvent ('contract_terms_changed').
+    """
+    personcode  = models.CharField(max_length=12, unique=True, verbose_name='كود الحساب')
+    party       = models.ForeignKey(ReconParty, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='contract_terms')
+    name        = models.CharField(max_length=300, blank=True, verbose_name='الاسم')
+    group_name  = models.CharField(max_length=300, blank=True, db_index=True, verbose_name='الجهة')
+    agreed_days = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='أيام السداد المتفق عليها')
+    is_tracked  = models.BooleanField(default=True, db_index=True, verbose_name='متابَع')
+    source_note = models.CharField(max_length=300, blank=True, verbose_name='مرجع الاتفاق')
+    entered_by  = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['group_name', 'personcode']
+        verbose_name        = 'شروط سداد تعاقد'
+        verbose_name_plural = 'شروط سداد التعاقدات'
+
+    def __str__(self):
+        return f'{self.personcode} {self.name} ({self.agreed_days or "—"} يوم)'
+
+
+class SupplierTerm(models.Model):
+    """
+    P-42: a supplier's credit terms for one item category, effective-dated — a finance entry. `any` is the
+    supplier-wide default used when no category term applies (the owner dropped "non-discounted" 2026-10-31).
+    Credit days count from the invoice date unless `days_from='month_end'`. Read-only toward SOFTECH: nothing
+    here writes `docpaydue`. Changes are audited in ReconAuditEvent ('supplier_terms_changed').
+    """
+    CATEGORY_ANY      = 'any'
+    CATEGORY_LOCAL    = 'local'
+    CATEGORY_IMPORTED = 'imported'
+    CATEGORY_CHOICES = [
+        (CATEGORY_ANY,      'كل الأصناف'),
+        (CATEGORY_LOCAL,    'محلي'),
+        (CATEGORY_IMPORTED, 'مستورد'),
+    ]
+    FROM_INVOICE   = 'invoice'
+    FROM_MONTH_END = 'month_end'
+    DAYS_FROM_CHOICES = [
+        (FROM_INVOICE,   'من تاريخ الفاتورة'),
+        (FROM_MONTH_END, 'من نهاية الشهر'),
+    ]
+
+    party        = models.ForeignKey(ReconParty, on_delete=models.CASCADE, related_name='supplier_terms')
+    category     = models.CharField(max_length=10, choices=CATEGORY_CHOICES, default=CATEGORY_ANY)
+    credit_days  = models.PositiveSmallIntegerField(verbose_name='أيام الائتمان')
+    days_from    = models.CharField(max_length=10, choices=DAYS_FROM_CHOICES, default=FROM_INVOICE)
+    early_pay_days         = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='أيام الدفع المبكر')
+    early_pay_discount_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+                                                 verbose_name='خصم الدفع المبكر %')
+    early_pay_bonus_note   = models.TextField(blank=True, default='', verbose_name='بونص الدفع المبكر')
+    effective_from = models.DateField(verbose_name='ساري من')
+    effective_to   = models.DateField(null=True, blank=True, verbose_name='ساري حتى')
+    source_note    = models.CharField(max_length=300, blank=True, default='', verbose_name='مرجع الاتفاق')
+    entered_by   = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['party__softech_personcode', 'category', '-effective_from']
+        verbose_name        = 'شروط مورد'
+        verbose_name_plural = 'شروط الموردين'
+        constraints = [
+            models.UniqueConstraint(fields=['party', 'category', 'effective_from'], name='uq_supplier_term'),
+        ]
+
+    def __str__(self):
+        return f'{self.party.softech_personcode} {self.category} {self.credit_days}d from {self.effective_from}'
+
+
+class APInvoiceSlice(models.Model):
+    """
+    P-42: one open supplier invoice split by item category (local / imported / unclassified) in proportion to its
+    purchase lines. Σ open_amount of an invoice's slices = its open amount exactly. Rebuilt by
+    supplier_terms.recompute(); never edited by hand.
+    """
+    CATEGORY_LOCAL        = 'local'
+    CATEGORY_IMPORTED     = 'imported'
+    CATEGORY_UNCLASSIFIED = 'unclassified'
+    CATEGORY_CHOICES = [
+        (CATEGORY_LOCAL,        'محلي'),
+        (CATEGORY_IMPORTED,     'مستورد'),
+        (CATEGORY_UNCLASSIFIED, 'غير مصنف'),
+    ]
+
+    invoice     = models.ForeignKey(APInvoice, on_delete=models.CASCADE, related_name='slices')
+    category    = models.CharField(max_length=12, choices=CATEGORY_CHOICES)
+    line_value  = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    share       = models.DecimalField(max_digits=9, decimal_places=6, default=0)
+    open_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    due_date    = models.DateField(null=True, blank=True, db_index=True)
+    term        = models.ForeignKey(SupplierTerm, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='slices')
+    rules_version = models.CharField(max_length=20, blank=True, default='')
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['invoice_id', 'category']
+        verbose_name        = 'شريحة فاتورة مورد'
+        verbose_name_plural = 'شرائح فواتير الموردين'
+        constraints = [
+            models.UniqueConstraint(fields=['invoice', 'category'], name='uq_apinvoice_slice'),
+        ]
+
+    def __str__(self):
+        return f'{self.invoice_id} {self.category} {self.open_amount} due {self.due_date or "—"}'
+
+
+# ── P-40 13-week cash view: finance inputs + weekly snapshot ─────────────────────
+
+class CashOpeningBalance(models.Model):
+    """P-40: cash in boxes and banks on a date — a weekly finance entry. The latest one on or before the view date is
+    the opening point; the next one is the "actual" a snapshot is measured against. Audited ('cash_input_changed')."""
+    as_of      = models.DateField(db_index=True, verbose_name='التاريخ')
+    amount     = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='الرصيد')
+    note       = models.CharField(max_length=300, blank=True, default='', verbose_name='الخزائن والبنوك')
+    entered_by = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    entered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['-as_of', '-entered_at']
+        verbose_name        = 'رصيد نقدية افتتاحي'
+        verbose_name_plural = 'أرصدة النقدية الافتتاحية'
+
+    def __str__(self):
+        return f'{self.as_of} {self.amount}'
+
+
+class FixedOutflow(models.Model):
+    """P-40: a recurring or one-off payment finance knows about (salaries, rent …) — the HQ expenses are not in the
+    SOFTECH expense mirror. Audited ('cash_input_changed')."""
+    CATEGORY_CHOICES = [
+        ('salaries', 'مرتبات'), ('rent', 'إيجار'), ('utilities', 'مرافق'), ('taxes', 'ضرائب'),
+        ('loans', 'قروض'), ('other', 'أخرى'),
+    ]
+    FREQUENCY_CHOICES = [('weekly', 'أسبوعي'), ('monthly', 'شهري'), ('one_off', 'مرة واحدة')]
+
+    label        = models.CharField(max_length=200, verbose_name='البيان')
+    category     = models.CharField(max_length=12, choices=CATEGORY_CHOICES, default='other')
+    amount       = models.DecimalField(max_digits=18, decimal_places=2, verbose_name='المبلغ')
+    frequency    = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default='monthly')
+    day_of_month = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='يوم الشهر')
+    date         = models.DateField(null=True, blank=True, verbose_name='التاريخ (مرة واحدة)')
+    start        = models.DateField(null=True, blank=True, verbose_name='من')
+    end          = models.DateField(null=True, blank=True, verbose_name='حتى')
+    is_active    = models.BooleanField(default=True)
+    entered_by   = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['category', 'label']
+        verbose_name        = 'مصروف ثابت'
+        verbose_name_plural = 'مصروفات ثابتة'
+
+    def __str__(self):
+        return f'{self.label} {self.amount} ({self.frequency})'
+
+
+class CashViewSnapshot(models.Model):
+    """P-40: the cash view as built on one Saturday morning, kept for forecast-vs-actual. One per date."""
+    as_of       = models.DateField(unique=True)
+    weeks       = models.JSONField(default=dict)
+    inputs_hash = models.CharField(max_length=64, blank=True, default='')
+    created_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering            = ['-as_of']
+        verbose_name        = 'لقطة النقدية الأسبوعية'
+        verbose_name_plural = 'لقطات النقدية الأسبوعية'
+
+    def __str__(self):
+        return f'cash view {self.as_of}'

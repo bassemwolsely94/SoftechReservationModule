@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'incentives', 'group': 'analytics', 'icon': '💰',
+    'brief': T('برامج حوافز البيع على الأصناف، وحافزك إنت.',
+               'Item-based sales incentive programs, and your own incentive.'),
     'title': T('الحوافز', 'Sales incentives'),
     'summary': T(
         'محرك حوافز البيع على الأصناف: «برنامج» لفترة (أسبوعي/شهري/مخصص، ويمكن أن يرعاه مورد) فيه «قواعد» تحدد الأصناف المستهدفة وطريقة الحافز '
@@ -291,24 +293,32 @@ SCREENS = [
              'text': T('يفتح إيصال المندوب بالمستحق وتفاصيله، وفيه زر «🖨 طباعة» للتوقيع.', 'Opens the salesperson receipt with the payout and its detail, with "🖨 Print" for signing.'),
              'open_hint': T('على أي تسوية في تبويب «✅ التسويات النهائية».', 'On any settlement in the "✅ Final settlements" tab.')},
             {'target': 'incentives-programs-list',  # from the GitHub-side tour
+             'label': T('قائمة البرامج', 'Programs list'),
+             'when': T('اختار برنامج لتشتغل على قواعده.', 'Pick a program to work on its rules.'),
              'text': T('البرامج بفترتها وعدد قواعدها وحالتها؛ الضغط على برنامج يختاره وينقلك لتبويب «القواعد».',
                        'Programs with their period, rule count and status; clicking one selects it and moves you to «القواعد» (Rules).'),
              'more': T(
                  'كل بطاقة برنامج: الاسم والوصف والفترة وعدد القواعد، وشارة «نشط» أو «موقف».\n• البرنامج المختار بيتلوّن، وكل التبويبات التانية بتشتغل عليه.\n• الأحدث إنشاءً فوق.',
                  'Each program card: name, description, period, rule count, and an "Active" or "Stopped" badge.\n• The selected program is highlighted, and every other tab works on it.\n• The newest programs are on top.')},
             {'target': 'incentives-programs-clone',  # from the GitHub-side tour
+             'label': T('نسخ', 'Clone'),
+             'when': T('لما برنامج جديد يشبه برنامج قديم، بدل ما تبني القواعد من الأول.', 'When a new program resembles an old one, instead of rebuilding rules.'),
              'text': T('«نسخ» ينشئ برنامجاً جديداً من هذا البرنامج بقواعده.',
                        '«نسخ» (Copy) creates a new program from this one with its rules.'),
              'more': T(
                  'أسرع طريقة تعمل بيها برنامج الشهر الجاي بنفس الأصناف والشروط.\n• بيسألك عن اسم جديد (اختياري) وتاريخ البداية والنهاية — افتراضياً الشهر الجاي.\n• البرنامج القديم ومستحقاته مبيتغيروش؛ النسخة الجديدة بتتختار على طول.',
                  "The quickest way to build next month's program with the same items and conditions.\n• It asks for a new name (optional) and start and end dates — next month by default.\n• The old program and its earnings are not touched; the new copy is selected at once.")},
             {'target': 'incentives-programs-selected',  # from the GitHub-side tour
+             'label': T('البرنامج: …', 'Program: …'),
+             'when': T('اتأكد إنك على البرنامج الصح قبل تعديل القواعد أو الحساب.', 'Make sure the right program is selected before editing rules or calculating.'),
              'text': T('البرنامج المختار حالياً؛ «✕» يلغي الاختيار — يظهر بعد اختيار برنامج.',
                        'The currently selected program; «✕» clears it — shown after a program is selected.'),
              'more': T(
                  'اسم البرنامج هنا بيأكدلك انت شغال على أنهي برنامج قبل ما تحتسب أو تعتمد.\n• راجعه دايماً قبل «تشغيل الاحتساب» أو «اعتماد التسويات نهائياً» عشان متشتغلش على برنامج غلط.\n• «✕» بيلغي الاختيار بس، مش بيمسح البرنامج.',
                  'The program name here confirms which program you are working on before you calculate or finalize.\n• Always check it before "Run calculation" or "Finalize settlements" so you do not work on the wrong program.\n• "✕" only clears the selection; it does not delete the program.')},
             {'target': 'incentives-programs-content',  # from the GitHub-side tour
+             'label': T('محتوى التبويب', 'Tab content'),
+             'when': T('بعد اختيار تبويب فوق: هنا بتشتغل على البرنامج المختار.', 'After picking a tab above: you work on the selected program here.'),
              'text': T('محتوى التبويب المفتوح للبرنامج المختار.',
                        'The open tab\'s content for the selected program.'),
              'more': T(
@@ -363,12 +373,16 @@ SCREENS = [
                  'بيحسب تقدمك من جديد من مبيعاتك في SOFTECH لحد النهارده — الحساب ده للعرض بس ومش بيتحفظ.\n• لو ظهرت رسالة إن كود المندوب في SOFTECH مش محدد، كلّم المسؤول يربط كودك بحسابك.\n• اسمك وتاريخ «حتى» مكتوبين جنب العنوان.',
                  'Recalculates your progress from your SOFTECH sales up to today — this is for display only and is not saved.\n• If you see a message that your SOFTECH salesperson code is not set, ask the admin to link your code to your account.\n• Your name and the "as of" date are shown beside the title.')},
             {'target': 'incentives-mine-projection',  # from the GitHub-side tour
+             'label': T('المتوقع نهاية الشهر ج.م', 'Expected at month end EGP'),
+             'when': T('لمعرفة إنت ماشي في طريق حافزك ولا لأ.', 'To see whether you are on track for your incentive.'),
              'text': T('المتوقع نهاية الشهر وعدد الأيام المتبقية.',
                        'The month-end projection and the days remaining.'),
              'more': T(
                  '«المتوقع نهاية الشهر» = متوسطك اليومي لحد النهارده × أيام الفترة كلها.\n• «يوم متبقٍ» بيقولك لسه قدامك قد إيه.\n• لو المتوقع أقل من اللي عايزه، لسه في وقت تحسّن.',
                  '"Projected by month end" = your daily average so far × all the days of the period.\n• "Days remaining" tells you how much time is left.\n• If the projection is below what you want, there is still time to improve.')},
             {'target': 'incentives-mine-note',  # from the GitHub-side tour
+             'label': T('* التوقعات تعتمد على متوسط يومي خطي', '* Projections use a linear daily average'),
+             'when': T('افتكرها قبل ما تعتمد على الرقم المتوقع.', 'Keep it in mind before relying on the projected number.'),
              'text': T('التوقعات تعتمد على متوسط يومي خطي وقد تختلف عن النتيجة الفعلية.',
                        'Projections use a linear daily average and may differ from the actual result.'),
              'more': T(

@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'analytics', 'group': 'analytics', 'icon': '📈',
+    'brief': T('تقارير المبيعات والأداء والتارجت والتحقيق لكل فرع.',
+               'Reports on sales, performance, targets and achievement per branch.'),
     'title': T('التحليلات والأهداف', 'Analytics & targets'),
     'summary': T(
         'تقارير المبيعات وأداء الموظفين والحجوزات والتحويلات من فواتير SOFTECH، والأهداف البيعية ومتابعة تحقيقها لكل فرع (لوحة «تارجت/تحقيق»)، '
@@ -18,8 +20,14 @@ MODULE = {
              'label': T('7 أيام', '7 days'),
              'text': T('ابدأ بآخر 7 أيام لكل الفروع.', 'Start with the last 7 days for all branches.')},
             {'screen': 'analytics.sales', 'target': 'analytics-sales-kpis', 'perm': 'analytics',
+             'label': T('صافي الإيرادات · صافي الربح', 'Net revenue · Net profit'),
+             'when': T('أول حاجة في المراجعة الأسبوعية، بعد ما تتأكد إن البيانات مكتملة.',
+                       'First thing in the weekly review, after confirming the data is complete.'),
              'text': T('اقرا صافي الإيراد والربح والهامش.', 'Read net revenue, profit and margin.')},
             {'screen': 'analytics.sales', 'target': 'analytics-sales-returns', 'perm': 'analytics',
+             'label': T('معدل الإرجاع', 'Return rate'),
+             'when': T('بعد الإيراد والربح؛ الكارت بيبقى أحمر لو المعدل فوق 5٪.',
+                       'After revenue and profit; the card turns red when the rate is above 5%.'),
              'text': T('لو معدل الإرجاع أحمر، دوّر مين صاحب المردودات.', 'If the return rate is red, find who made the returns.')},
             {'screen': 'analytics.sales', 'target': 'analytics-sales-tabs', 'perm': 'analytics',
              'label': T('🏪 الفروع', '🏪 Branches'),
@@ -28,6 +36,9 @@ MODULE = {
              'label': T('👤 الموظفون', '👤 Employees'),
              'text': T('شوف مين فوق ومين تحت في نفس الفترة والفرع.', 'See who is on top and who is behind for the same period and branch.')},
             {'screen': 'analytics.kpi_board', 'target': 'analytics-kpi-board-table', 'perm': 'analytics',
+             'label': T('جدول الفروع', 'Branches table'),
+             'when': T('في آخر المراجعة، عشان تعرف أنهي فرع متأخر عن هدفه.',
+                       'At the end of the review, to see which branch is behind its target.'),
              'text': T('قارن المحقق بالهدف حتى تاريخه لكل فرع.', 'Compare achieved with the to-date target for each branch.')},
             {'screen': 'analytics.kpi_board', 'target': 'analytics-kpi-board-pct', 'perm': 'analytics',
              'label': T('% التحقيق', 'Achievement %'),
@@ -79,6 +90,9 @@ MODULE = {
              'text': T('عدّل هدف فرع بعينه لو الإدارة طلبت استثناء.', 'Edit a single branch target if management asks for an exception.'),
              'warn': T('بيتحفظ أول ما تسيب الخانة وبيتسجل باسمك.', 'Saves as soon as you leave the cell and is audited under your name.')},
             {'screen': 'analytics.targets', 'target': 'analytics-targets-card', 'perm': 'analytics',
+             'label': T('كارت الهدف', 'Target card'),
+             'when': T('بعد اعتماد الأهداف، كل يوم طول الشهر.',
+                       'After the targets are approved, daily through the month.'),
              'text': T('تابع التحقيق لحظياً، والخط الرمادي = المتوقع لحد النهارده.', 'Follow achievement live; the grey line = expected by today.')},
          ]},
     ],
@@ -249,6 +263,7 @@ SCREENS = [
                  'الأرقام بتتحدّث لوحدها أول ما تغيّر أي فلتر، فـ«تحديث» مفيد لو الصفحة مفتوحة من بدري وعايز آخر فواتير اتسحبت من SOFTECH.\n• الفترة الافتراضية آخر 30 يوم.\n• الأرقام محسوبة في السيرفر — الصفحة بتعرضها بس ومفيش حاجة هنا بتتعدّل.',
                  'The figures update by themselves as soon as you change a filter, so "Refresh" is useful when the page has been open a while and you want the latest invoices pulled from SOFTECH.\n• The default period is the last 30 days.\n• The figures are computed on the server — the page only shows them and nothing here is edited.')},
             {'target': 'analytics-sales-freshness',
+             'label': T('شريط حداثة البيانات', 'Data freshness bar'),
              'text': T('يوضح بيانات المبيعات مكتملة لحد إمتى.', 'Shows up to which day the sales data is complete.'),
              'when': T('لو الشريط بيقول إن البيانات متأخرة، أرقام الأيام الأخيرة ناقصة — ماتحكمش عليها.',
                        'If the bar says the data is behind, the latest days are incomplete — do not judge them yet.')},
@@ -346,6 +361,8 @@ SCREENS = [
                        'Per branch: revenue, profit, margin, invoices and staff count; "Share %" = the branch share of the total.'),
              'open_hint': T('افتح تبويب «🏪 الفروع».', 'Open the "🏪 Branches" tab.')},
             {'target': 'analytics-performance-header',  # from the GitHub-side tour
+             'label': T('لوحة الأداء', 'Performance dashboard'),
+             'when': T('بعد تغيير الفلاتر اضغط «تحديث» لتحميل الأرقام.', 'After changing filters, press "Refresh" to reload the numbers.'),
              'text': T('لوحة أداء الموظفين؛ زر «تحديث» يعيد تحميل الأرقام بالفلاتر الحالية.',
                        'The staff performance board; «تحديث» (Refresh) reloads the figures with the current filters.'),
              'more': T(
@@ -520,6 +537,8 @@ SCREENS = [
                        'The server computes per item and this button sends no item — if the table does not change, tell support.'),
              'open_hint': T('في تبويب «📅 مؤشرات الموسمية».', 'On the "📅 Seasonality" tab.')},
             {'target': 'analytics-forecasting-seasonality-recalc',  # from the GitHub-side tour
+             'label': T('↺ إعادة حساب الموسمية', '↺ Recalculate seasonality'),
+             'when': T('لما المؤشرات تبان قديمة أو بعد سحب مبيعات جديدة.', 'When the indices look stale or after new sales are pulled.'),
              'text': T('في تبويب «مؤشرات الموسمية»: «↺ إعادة حساب الموسمية» يعيد حساب المؤشرات.',
                        'On the «مؤشرات الموسمية» (Seasonality) tab: «↺ إعادة حساب الموسمية» (Recalculate seasonality) recomputes the indices.'),
              'more': T(
@@ -562,10 +581,14 @@ SCREENS = [
              'warn': T('الهدف بيظهر للإدارة فوراً — راجع القيمة والفترة قبل الحفظ.', 'Management sees the target at once — check the value and period before saving.'),
              'open_hint': T('في نموذج «+ هدف جديد».', 'In the "+ New target" form.')},
             {'target': 'analytics-targets-card',
+             'label': T('كارت الهدف', 'Target card'),
              'text': T('كل كارت: الاسم، النطاق، المؤشر، الفترة والأيام الباقية. الرقم الكبير = المحقق، و«من» = الهدف ونسبة التحقيق من الهدف كله.',
                        'Each card: name, scope, metric, period and days left. The big figure = achieved; "of" = the target and % of the full target.'),
              'when': T('المحقق محسوب لحظياً من فواتير SOFTECH المُزامنة.', 'Achieved is computed live from the synced SOFTECH invoices.')},
             {'target': 'analytics-targets-progress',
+             'label': T('شريط التحقيق', 'Achievement bar'),
+             'when': T('للمتابعة اليومية: لو الشريط ورا الخط الرمادي، الهدف متأخر ومحتاج تحرّك.',
+                       'For daily follow-up: if the bar is behind the grey line, the target is behind pace and needs action.'),
              'text': T('الشريط = نسبة التحقيق، والخط الرمادي = المتوقع حتى اليوم (الهدف موزّع بالتساوي على أيام الفترة).',
                        'The bar = achievement; the grey line = expected by today (the target spread evenly over the days).'),
              'more': T(
@@ -583,12 +606,16 @@ SCREENS = [
                        'Deletion is immediate with no confirmation. It is audited but cannot be undone from the screen.'),
              'open_hint': T('يظهر على الكارت للأدمن والمشرف والمشتريات.', 'Shows on the card for admin, supervisor and purchasing.')},
             {'target': 'analytics-targets-header',  # from the GitHub-side tour
+             'label': T('🎯 الأهداف البيعية', '🎯 Sales targets'),
+             'when': T('لمتابعة كل هدف لحظياً مقابل المبيعات الفعلية.', 'To follow each target live against actual sales.'),
              'text': T('الأهداف البيعية: المحقق لحظياً مقابل الهدف لكل هدف.',
                        'Sales targets: live achievement versus target for each goal.'),
              'more': T(
                  'المحقق بيتحسب في السيرفر كل ما تفتح الصفحة من فواتير SOFTECH المسحوبة: صافي المبيعات = مبيعات − مرتجعات، أو عدد فواتير البيع.\n• محدش بيكتب المحقق بإيده — اللي بيتكتب هو الهدف بس.\n• الأهداف اللي بتيجي من اعتماد سيناريو بتظهر هنا كمان.',
                  'Achievement is computed on the server each time you open the page, from the pulled SOFTECH invoices: net sales = sales − returns, or the count of sales invoices.\n• Nobody types the achievement — only the target is entered.\n• Targets that come from committing a scenario also show here.')},
             {'target': 'analytics-targets-list',  # from the GitHub-side tour
+             'label': T('بطاقات الأهداف', 'Target cards'),
+             'when': T('راجع الأيام الباقية والمحقق لتعرف الهدف اللي محتاج دفعة.', 'Check days left and attainment to spot the target that needs a push.'),
              'text': T('بطاقة لكل هدف: النطاق والمؤشر والفترة والأيام الباقية — تظهر عند وجود أهداف.',
                        'A card per target: scope, metric, period and days left — shown once targets exist.'),
              'more': T(
@@ -664,6 +691,9 @@ SCREENS = [
              'warn': T('التارجت في الملف محسوب من النموذج المختار، مش من التعديلات اليدوية على اللوحة.',
                        'Targets in the file are computed from the chosen model, not from manual edits on the board.')},
             {'target': 'analytics-kpi-board-legend',
+             'label': T('القيم المالية بالجنيه', 'Money values in EGP'),
+             'when': T('لو مش متأكد الرقم معناه إيه، أو عايز تعدّل الأهداف بالتفصيل.',
+                       'When unsure what a number means, or to edit targets in detail.'),
              'text': T('القيم المالية بالجنيه، والأهداف بتتدار برضه من شاشة «الأهداف البيعية».',
                        'Money is in pounds; targets can also be managed from the "Sales targets" screen.'),
              'more': T(
@@ -711,6 +741,9 @@ SCREENS = [
              'warn': T('بيأثر فوراً على الربحية، وعلى اللوحة بعد إعادة بناء المجاميع. مش بيأثر على المبيعات.',
                        'It changes profit at once, and the board after the next rebuild. Sales are not affected.')},
             {'target': 'analytics-scenarios-list',
+             'label': T('قائمة السيناريوهات', 'Scenarios list'),
+             'when': T('لما ترجع لسيناريو قديم أو تقارن قبل ما تعتمد واحد.',
+                       'When returning to an earlier scenario or comparing before approving one.'),
              'text': T('كل سيناريو: الاسم والحالة (مسودة/محسوب/معتمد) والشهر والنطاق والنموذج. اضغطه يفتح التفاصيل.',
                        'Each scenario: name, status (draft/calculated/committed), month, scope and model. Click to open it.'),
              'more': T(
@@ -756,6 +789,8 @@ SCREENS = [
                        'Deletion is final. Targets already committed from it stay as they are.'),
              'open_hint': T('افتح سيناريو. للأدمن والمشرف والمشتريات.', 'Open a scenario. Admin, supervisor and purchasing.')},
             {'target': 'analytics-scenarios-actions',  # from the GitHub-side tour
+             'label': T('⚙️ حفظ واحسب التنبؤ · ✅ اعتماد الأهداف', '⚙️ Save & calculate · ✅ Approve targets'),
+             'when': T('بعد ضبط العوامل: احسب الأول، وبعدها اعتمد.', 'After setting the factors: calculate first, then approve.'),
              'text': T('«⚙️ احسب التنبؤ» ثم «✅ اعتماد الأهداف» بعد الحساب — حسب الصلاحية.',
                        '«⚙️ احسب التنبؤ» (Calculate forecast), then «✅ اعتماد الأهداف» (Commit targets) after calculating — permission-dependent.'),
              'more': T(
@@ -789,6 +824,7 @@ SCREENS = [
                  'التواريخ لحد إمبارح بس. الأسبوعي لازم 7 أيام بالظبط، و«حتى تاريخه» بيبدأ من أول الشهر، والشهري لحد 31 يوم.\n• تحت الشريط هتلاقي حالة البيانات: أخضر لو مكتملة، وأصفر لو فيه أيام ناقصة (الأرقام ساعتها أقل من الواقع).',
                  'Dates go up to yesterday only. Weekly must be exactly 7 days, month-to-date starts on the 1st, and monthly is up to 31 days.\n• Below the bar is the data status: green when complete, yellow when days are missing (the figures are then lower than reality).')},
             {'target': 'analytics-insights-freshness',
+             'label': T('🕒 بيانات المبيعات مكتملة حتى', '🕒 Sales data complete until'),
              'text': T('أخضر = البيانات مكتملة بلا فجوات. أصفر = أيام ناقصة أو فجوات داخل الفترة.',
                        'Green = data complete with no gaps. Amber = missing days or gaps inside the period.'),
              'when': T('ولّد التقرير بعد ما الشريط يبقى أخضر، وإلا الأرقام أقل من الواقع.', 'Generate once the bar is green, or the figures will be too low.')},
@@ -807,6 +843,9 @@ SCREENS = [
                  'السيرفر بيكتب التقرير من الأرقام المتزامنة والحدود المضبوطة، وبيفتحه لوحده بعد التوليد.\n• متاح للمدير والمشرف والمشتريات والجودة.\n• لو البيانات ناقصة استنى المزامنة أو اطلب تعبئة الأيام الناقصة قبل ما تولّد.',
                  'The server writes the report from the synced figures and the set thresholds, and opens it by itself once generated.\n• Available to admin, supervisor, purchasing and quality.\n• If data is missing, wait for the sync or ask for the missing days to be filled before generating.')},
             {'target': 'analytics-insights-list',
+             'label': T('التقارير المحفوظة', 'Saved reports'),
+             'when': T('لما تحتاج تقرير اتعمل قبل كده بدل ما تولّد واحد جديد.',
+                       'When you need a report made earlier instead of generating a new one.'),
              'text': T('التقارير المحفوظة لنفس النوع: الفترة وعدد الملاحظات، و«أُرسل ✓» لو اتبعت. اضغط واحد يفتحه.',
                        'Saved reports of this type: period and number of findings, and "Sent ✓" if sent. Click one to open it.'),
              'more': T(
@@ -836,6 +875,8 @@ SCREENS = [
              'warn': T('القاعدة مشتركة — بتغيّر التنبيهات في كل التقارير الجديدة للكل.', 'Rules are shared — they change the alerts in every new report for everyone.'),
              'open_hint': T('تبويب «⚙️ القواعد والحدود» — للأدمن والمشرف.', 'The "⚙️ Rules & thresholds" view — admin and supervisor.')},
             {'target': 'analytics-insights-report',  # from the GitHub-side tour
+             'label': T('نص التقرير', 'Report text'),
+             'when': T('بعد اختيار تقرير: انسخه لو هتبعته على واتساب.', 'After picking a report: copy it if you will send it on WhatsApp.'),
              'text': T('بعد اختيار تقرير: النص بالعربي أو English، و«📋 نسخ (واتساب)» لنسخه.',
                        'After picking a report: the text in Arabic or English, and «📋 نسخ (واتساب)» (Copy for WhatsApp) to copy it.'),
              'more': T(

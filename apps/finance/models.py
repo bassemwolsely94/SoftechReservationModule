@@ -27,6 +27,7 @@ from django.utils import timezone
 from .recon_models import (  # noqa: E402,F401  (re-exported for the app registry)
     ReconParty, APInvoice, Payment, Allocation, ReconciliationRun,
     MatchCandidate, MatchEvidence, ReconException, ReconAuditEvent, ReturnLink,
+    ContractReceivableTerms, SupplierTerm, APInvoiceSlice, CashOpeningBalance, FixedOutflow, CashViewSnapshot,
 )
 
 

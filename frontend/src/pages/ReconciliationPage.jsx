@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reconciliationApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
+import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1455,7 +1456,7 @@ export default function ReconciliationPage() {
     <div className="p-5 space-y-4" dir="rtl">
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-[#022871]">سداد فواتير الموردين — التسوية</h1>
-        <div data-tour="finance-reconciliation-party" className="flex gap-1 text-sm">
+        <div className="flex gap-1 text-sm" data-tour="finance-reconciliation-party-type">
           {['supplier', 'customer'].map(t => (
             <button key={t} onClick={() => setPartyType(t)} className={`px-3 py-1 rounded-lg border ${partyType === t ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>
               {t === 'supplier' ? 'موردون' : 'عملاء'}
@@ -1463,6 +1464,10 @@ export default function ReconciliationPage() {
           ))}
         </div>
         <span className="text-xs text-gray-400 mr-auto">الاعتماد يُنشئ ربطًا داخليًا — الكتابة في SOFTECH (سداد من الرئيسي) خطوة منفصلة قابلة للعكس</span>
+      </div>
+
+      <div data-tour="finance-reconciliation-freshness">
+        <DataFreshnessBar domains={['ap_reconciliation']} />
       </div>
 
       <FilterBar key={partyType} partyType={partyType} filters={filters}

@@ -16,12 +16,13 @@ writes to SOFTECH.
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 from .targeting import resolve_offer_items
 
 
 def write_enabled():
-    return bool(getattr(settings, 'POS_OFFERS_POSDISCP_WRITE_ENABLED', False))
+    return writer_allowed('POS_OFFERS_POSDISCP_WRITE_ENABLED')
 
 
 def is_channel_a_eligible(offer):

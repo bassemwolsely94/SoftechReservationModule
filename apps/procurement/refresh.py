@@ -71,7 +71,14 @@ def run_now(triggered_by: str, days: int | None = None):
             return None
         days = days or catchup_days()
         logger.info('[procurement refresh] %s — pulling the last %s days', triggered_by, days)
-        return run_procurement_engine(lookback_days=days, triggered_by=triggered_by[:50])
+        run = run_procurement_engine(lookback_days=days, triggered_by=triggered_by[:50])
+        if getattr(run, 'status', '') == 'success':
+            try:                                    # P-31: check the new receipts against the sent need sheets
+                from .receipt_check import run_check
+                run_check()
+            except Exception:
+                logger.exception('[procurement refresh] receipt check failed')
+        return run
     finally:
         _lock.release()
 

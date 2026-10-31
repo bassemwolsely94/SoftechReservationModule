@@ -71,6 +71,9 @@ class Notification(models.Model):
         # ── System ────────────────────────────────────────────────────────────
         ('system',                    '⚙️ نظام'),
         ('branch_connectivity',       '🔌 اتصال فرع'),
+        ('sync_failure',              '🔴 فشل مزامنة متكرر'),
+        ('receipt_check_digest',      '📦 استلام بدون طلب'),
+        ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
         # ── Personal ──────────────────────────────────────────────────────────
         ('personal_reminder',         '⏰ تذكير شخصي'),
         ('gamification_level_up',     '🏆 ترقية مستوى'),
@@ -176,10 +179,13 @@ class Notification(models.Model):
         # ── Settings / system → cog feed ──────────────────────────────────────
         'system':               CATEGORY_SETTINGS,
         'branch_connectivity':  CATEGORY_SETTINGS,
+        'sync_failure':         CATEGORY_SETTINGS,
         # ── Periodic digests → 📊 reports feed (quiet) ────────────────────────
         'weekly_summary':       CATEGORY_REPORTS,
         'monthly_report':       CATEGORY_REPORTS,
         'coupon_digest':        CATEGORY_REPORTS,
+        'return_window_digest': CATEGORY_REPORTS,
+        'receipt_check_digest': CATEGORY_REPORTS,
         'customer_status_drift': CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
@@ -328,6 +334,29 @@ class Notification(models.Model):
 
     # ── Branch notifications gate ─────────────────────────────────────────────
 
+    ROUTING_SETTING = 'notification_routing'
+
+    @classmethod
+    def _routing_allows(cls, notification_type, staff) -> bool:
+        """P-55 Part B routing table — SystemSetting `notification_routing` (JSON):
+        {type: {'mode': 'instant' | 'digest' | 'off', 'roles': [...]}}.
+        'off' suppresses the type; 'roles' (optional) limits it to those roles. A type
+        not listed — or 'instant' / 'digest' — keeps today's behaviour; 'digest' is
+        documentation for types whose job already batches them (transit alerts)."""
+        try:
+            from apps.config.models import SystemSetting
+            rule = (SystemSetting.get(cls.ROUTING_SETTING) or {}).get(notification_type)
+        except Exception:
+            return True
+        if not isinstance(rule, dict):
+            return True
+        if rule.get('mode') == 'off':
+            return False
+        roles = rule.get('roles')
+        if roles and getattr(staff, 'role', None) not in roles:
+            return False
+        return True
+
     @staticmethod
     def _branch_allows(staff) -> bool:
         try:
@@ -358,6 +387,8 @@ class Notification(models.Model):
         window. Use for scheduled alerts that re-scan on a short interval.
         """
         if not getattr(staff, 'enable_notifications', True):
+            return None
+        if not cls._routing_allows(notification_type, staff):
             return None
         if not cls._branch_allows(staff):
             return None

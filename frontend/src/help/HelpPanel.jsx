@@ -31,7 +31,7 @@ export function useHelpShortcuts() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); window.dispatchEvent(new Event('help:show-me')); return }
-      if (e.key === 'F1' && e.ctrlKey) { e.preventDefault(); toggleHints(); return }
+      if (e.key === 'F1' && e.altKey) { e.preventDefault(); toggleHints(); return }
       if (e.key === 'F1') { e.preventDefault(); toggle() }
     }
     const onOpen = (e) => open(e?.detail?.key || null, e?.detail?.tab || null)
@@ -167,8 +167,7 @@ function PanelBody() {
               </div>
             )}
             {data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
-                      data-tour="general-help-center-panel-show-me"
+              <button type="button" data-tour="general-help-center-panel-show-me" onClick={() => startTour(data.key, data.tour_flow?.length ? data.tour_flow : data.tour, data.routes, data.title)}
                       className="w-full mb-4 flex items-center gap-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 text-start">
                 <span className="text-2xl">👆</span>
                 <span className="flex-1">
@@ -204,7 +203,7 @@ function PanelBody() {
               </button>
             ))}
             {data && !term && data.tour?.length > 0 && data.key === screen?.key && (
-              <button type="button" onClick={() => { toggleHints(); close() }} title="Ctrl+F1" data-tour="general-help-center-panel-hints"
+              <button type="button" onClick={() => { toggleHints(); close() }} title="Alt+F1" data-tour="general-help-center-panel-hints"
                       className={`text-xs rounded-lg px-3 py-1.5 border ${hints
                         ? 'bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
                         : 'border-line text-content hover:bg-surface-2'}`}>

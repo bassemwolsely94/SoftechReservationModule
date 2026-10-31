@@ -129,7 +129,7 @@ export default function InsurancePrintProfilesPage() {
             </div>
 
             {/* Header sections */}
-            <div data-tour="insurance-print-profiles-header-footer">
+            <div data-tour="insurance-print-profiles-header">
               <p className="text-sm font-semibold text-gray-700 mb-2">الترويسة (Header)</p>
               <div className="grid grid-cols-3 gap-3">
                 {[['يمين', 'header_right'], ['وسط', 'header_center'], ['يسار', 'header_left']].map(([t, k]) => (

@@ -140,6 +140,64 @@ def path_modules(keys, qz):
     return out
 
 
+PRODUCT_SHELLS = ('desktop', 'mobile')
+_HELP_BUTTON = {'desktop': 'general-help-center-open-help', 'mobile': 'general-help-center-open-help-mobile'}
+
+
+def _short(title):
+    """A module title short enough for a step label: cut at «(» / «—» / «&» when long."""
+    for sep in (' (', ' — ', ' & '):
+        if len(title) > 36 and sep in title:
+            title = title.split(sep, 1)[0]
+    return title[:38]
+
+
+def _screens_ar(n):
+    return {1: 'شاشة واحدة', 2: 'شاشتين'}.get(n) or (f'{n} شاشات' if n <= 10 else f'{n} شاشة')
+
+
+def product_tour(role, shell='desktop', keys=None):
+    """«🗺️ جولة في موديولات دورك»: a journey built from the role's training path (trainer edits
+    included) — a welcome, then one stop per module in path order (its first screen on this
+    shell that has a tour and a route without parameters; highlights that screen's first
+    tour step and shows the module's one-line `brief`), then where help is. None when no
+    module of the path has such a screen on this shell. Same shape as registry journeys."""
+    modules, screens = registry.load()
+    keys = path(role) if keys is None else keys
+    mobile = shell == 'mobile'
+    stops, seen = [], set()
+    for k in keys:
+        s = screens.get(k)
+        if not s or s['module'] in ('general', *seen) or not s.get('tour'):
+            continue
+        if not any(r.startswith('/m/') == mobile and ':' not in r for r in s['routes']):
+            continue
+        m = modules[s['module']]
+        seen.add(s['module'])
+        n = sum(1 for x in keys if x.split('.', 1)[0] == s['module'])
+        stops.append({
+            'screen': k, 'target': s['tour'][0]['target'],
+            'label': {lang: f"{m.get('icon', '')} {_short(m['title'][lang])}".strip() for lang in ('ar', 'en')},
+            'text': m['brief'],
+            'when': {'ar': f'في مسارك التدريبي {_screens_ar(n)} من الموديول ده — هتتعلمها بالترتيب.',
+                     'en': f"Your training path has {n} screen{'s' if n > 1 else ''} here — you will learn them in order."},
+        })
+    if not stops:
+        return None
+    pt = onboarding.PRODUCT_TOUR
+    help_target = _HELP_BUTTON[shell]
+    if mobile:
+        welcome = {'screen': stops[0]['screen'], 'target': help_target, **pt['welcome']}
+    else:
+        welcome = {'screen': 'general.dashboard', 'target': 'general-dashboard-greeting', **pt['welcome']}
+    finish = {'screen': stops[-1]['screen'], 'target': help_target, **pt['finish']}
+    return {
+        'id': f'product.{role}.{shell}', 'key': f'{role}.{shell}', 'module': 'general', 'shell': shell,
+        'title': pt['title'], 'summary': pt['summary'], 'product': True,
+        'steps': [welcome, *stops, finish],
+    }
+
+
 def validate_path(data):
     _, screens = registry.load()
     keys = data.get('screens') if isinstance(data, dict) else None

@@ -46,6 +46,7 @@ every push (errors block; warnings are surfaced/overridable).
 | E4 | `qty_invalid` | `transqty <= 0` | PG | all |
 | E5 | `price_invalid` | net cost `transprice <= 0` (or public price 0) | PG/items | all |
 | E6 | `expiry_required` | `items.itemexpiry='1'` and the line has no (valid) expiry date | items + PG | all |
+| E6b | `batch_required` | `items.itempartno=1` («رقم القطعة أو الباتش» mandatory — e.g. Entresto, Kisqali; 9 items) and the line has no batch. The batch posts to `stktrans.item_partno`. Checked from the catalog mirror (`Item.batch_required`) offline and the live flag online. Added 2026-10-31 (owner) | items + PG | purchase |
 | E7 | `supplier_unlinked` | `VendorProfile.softech_personcode` empty (supplier not resolved) | PG | all |
 | E8 | `credit_limit_exceeded` | `personcredit + doc_value > personmaxbal` (only when `personmaxbal` is a real limit, i.e. < the unlimited sentinel) | personsdata | purchase |
 | E9 | `duplicate_invoice` | supplier already has a purchase with this `docnumber2` (SofTech dup-guard) | stktransm | purchase |
@@ -59,7 +60,7 @@ every push (errors block; warnings are surfaced/overridable).
 | W2 | `price_spike` | cost > `items.itemcostprice × (1 + INVOICE_MAX_COST_INCREASE_PCT/100)` (default 25%) | items + setting |
 | W3 | `price_drop` | cost < `items.itemcostprice × (1 − INVOICE_MAX_COST_DECREASE_PCT/100)` (default 40%) — suspicious | items + setting |
 | W4 | `supplier_not_listed` | no `itemssuppliers` row for (itemcode, suppcode) — buying from an unlisted supplier | itemssuppliers |
-| W5 | `tax_mismatch` | line `vat_pct` ≠ `items.itemsalestaxp` | items |
+| W5 | `tax_mismatch` | the VAT rate we post (`grid.effective_tax`) differs by > 0.5 pp from the item's real rate `itemsaleprice / itemsaleprice_tax − 1` (`itemsalestaxp` is 0 on most taxed items, so it is only the fallback). Changed 2026-10-31 | items |
 | W6 | `discount_high` | effective `pharmacydiscp` > 50% (unusually large) | PG |
 | W7 | `total_mismatch` | Σ line totals ≠ OCR `declared_total` (>2%) | PG (already in anomalies.py) |
 

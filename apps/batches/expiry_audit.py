@@ -176,6 +176,24 @@ def resolve_main_suppliers(categories=None):
     return out
 
 
+def ingest_suppliers(categories=None):
+    """Suppliers the purchase-expiry mirror pulls: the main suppliers PLUS every supplier with an
+    active return policy (P-29 attribution needs their entries). The audit reports keep filtering by
+    the main categories, so their meaning is unchanged."""
+    from apps.procurement.models import SupplierReturnPolicy, SupplierSegmentation
+    out = resolve_main_suppliers(categories)
+    extra = [c for c in SupplierReturnPolicy.objects.filter(accepts_expiry_returns=True)
+             .values_list('supplier_code', flat=True) if c not in out]
+    seg = {s.supplier_code: s for s in SupplierSegmentation.objects.filter(supplier_code__in=extra)}
+    names = dict(SupplierReturnPolicy.objects.filter(supplier_code__in=extra)
+                 .values_list('supplier_code', 'supplier_name'))
+    for code in extra:
+        s = seg.get(code)
+        out[code] = {'name': (s.supplier_name if s else '') or names.get(code, ''),
+                     'category': s.supplier_category if s else ''}
+    return out
+
+
 # ── Backfill (SOFTECH → PurchaseExpiryEntry) ─────────────────────────────────
 
 def run_backfill(run, window_from, window_to, branch=None, categories=None,
@@ -205,7 +223,7 @@ def run_backfill(run, window_from, window_to, branch=None, categories=None,
         logger.warning('[PurchaseExpiry] --branch=%s ignored — always mirroring ALL '
                        'branches so every branch report stays complete.', branch)
 
-    suppliers = resolve_main_suppliers(categories)
+    suppliers = ingest_suppliers(categories)
     if not suppliers:
         raise ValueError(
             'لا يوجد موردون مصنّفون كموزّعين رئيسيين/مصانع. '
@@ -1101,15 +1119,22 @@ def generate_branch_worklists(back_days=30, ahead_days=90, top_n=25,
             summary['errors'] += 1
             continue
         summary['branches_scanned'] += 1
-        if not rows:
+        # P-29: shelf lines inside a supplier return window → "send to HQ for return by <date>".
+        try:
+            from .return_calendar import branch_send_lines
+            send_lines = branch_send_lines(bc, today=today)
+        except Exception:
+            logger.exception('[PurchaseExpiry] return-window lines failed for branch %s', bc)
+            send_lines = []
+        if not rows and not send_lines:
             continue
         summary['branches_with_items'] += 1
         if notify:
-            summary['notified'] += _notify_branch_worklist(b, rows, top_n, today)
+            summary['notified'] += _notify_branch_worklist(b, rows, top_n, today, send_lines)
     return summary
 
 
-def _notify_branch_worklist(branch, rows, top_n, today):
+def _notify_branch_worklist(branch, rows, top_n, today, send_lines=None):
     try:
         from apps.notifications.models import Notification
         from apps.users.models import StaffProfile
@@ -1127,6 +1152,13 @@ def _notify_branch_worklist(branch, rows, top_n, today):
             + ":\n\n" + "\n".join(lines))
     if len(rows) > 15:
         body += f"\n… و{len(rows) - 15} أخرى — افتح «تدقيق صلاحيات الشراء»."
+    if not rows:
+        body = ''
+    if send_lines:
+        body += ("\n\n" if body else '') + (f"📆 أصناف لمرتجع المورد ({len(send_lines)}):\n"
+                                            + "\n".join(send_lines[:15]))
+        if len(send_lines) > 15:
+            body += f"\n… و{len(send_lines) - 15} أخرى — افتح «📆 تقويم المرتجع»."
 
     iso = today.isocalendar()
     dedup = f"expiry_worklist_{branch.softech_branch_id}_{iso[0]}W{iso[1]}"
@@ -1137,7 +1169,7 @@ def _notify_branch_worklist(branch, rows, top_n, today):
         try:
             Notification.objects.create(
                 recipient=r, notification_type='system',
-                title=f"🗓️ قائمة صلاحيات الأسبوع — {bname} ({len(rows)})",
+                title=f"🗓️ قائمة صلاحيات الأسبوع — {bname} ({len(rows) + len(send_lines or [])})",
                 body=body, dedup_key=dedup)
             n += 1
         except Exception:

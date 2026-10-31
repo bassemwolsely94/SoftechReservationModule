@@ -750,6 +750,65 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         result = check_stock_for_list(sl)
         return Response(result)
 
+    # ─── P-33 (a): «إنشاء مقترحات التحويل» — the WhatsApp path's two-leg ISR proposals ──
+
+    def _transfer_source(self, sl, *, confirmed_only):
+        """(pseudo ISR, origin kwargs). A list that came from a WhatsApp request moves through that
+        request, so the same need is never transferred twice from the two screens."""
+        from apps.supply.branch_requests import pseudo_isr, pseudo_isr_from_list
+        req = sl.branch_requests.exclude(status='cancelled').order_by('-created_at').first()
+        if req is not None:
+            return pseudo_isr(req, confirmed_only=confirmed_only), {'req': req}
+        return pseudo_isr_from_list(sl), {'shortage_list': sl}
+
+    @action(detail=True, methods=['get'], url_path='transfer-plan')
+    def transfer_plan(self, request, pk=None):
+        """GET ?coverage=&fill=&basis= — the transfer plan (donor excess after cover, HQ first when
+        its whole packs cover the request) and the proposals already made. Read only."""
+        from apps.purchasing import isr_fulfillment as F
+        from apps.purchasing.access import can_supply_write
+        sl = self.get_object()
+        try:
+            cov = F.plan_settings(request.query_params)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        pi, origin = self._transfer_source(sl, confirmed_only=True)
+        if not pi['lines']:
+            return Response({'detail': 'أكِّد الأصناف أولاً — التحويلات تُنشأ من الأصناف المؤكَّدة فقط.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        plan = F.compute(F.collect_requests([pi]), **cov)
+        plan.update(transfers=F.transfers_for(**origin), can_transfer=can_supply_write(request.user),
+                    via_request=('req' in origin))
+        return Response(plan)
+
+    @action(detail=True, methods=['post'], url_path='transfers')
+    def transfers(self, request, pk=None):
+        """POST {coverage, fill?, basis?} → two linked PROPOSED transfer ISRs per donor (donor → 100 →
+        branch), confirmed items only, stock always re-read. Purchasing / supply staff only
+        (server-side, as the WhatsApp path). SOFTECH is written later by approve → push in the ISR tab."""
+        from apps.purchasing import isr_fulfillment as F
+        from apps.purchasing.access import can_supply_write
+        if not can_supply_write(request.user):
+            return Response({'detail': 'غير مصرح لك بإنشاء مقترحات التحويل.'}, status=status.HTTP_403_FORBIDDEN)
+        sl = self.get_object()
+        try:
+            cov = F.plan_settings(request.data)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        pi, origin = self._transfer_source(sl, confirmed_only=True)
+        if not pi['lines']:
+            return Response({'detail': 'أكِّد الأصناف أولاً — التحويلات تُنشأ من الأصناف المؤكَّدة فقط.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        snap = F.collect_requests([pi])                     # fresh read, never a cached snapshot
+        result = F.create_request_transfers(snap, cov['months'], created_by=request.user,
+                                            fill=cov['fill'], basis=cov['basis'], **origin)
+        logger.info('shortage list %s transfers by %s: created=%s skipped=%s', sl.pk, request.user,
+                    [(c['leg1_id'], c['leg2_id']) for c in result['created']], result['skipped'])
+        plan = F.compute(snap, **cov)
+        plan.update(transfers=F.transfers_for(**origin), can_transfer=True, via_request=('req' in origin))
+        return Response({**result, 'plan': plan},
+                        status=status.HTTP_201_CREATED if result['created'] else status.HTTP_200_OK)
+
     # ─── CSV export ───────────────────────────────────────────────────────────
 
     @action(detail=True, methods=['get'])

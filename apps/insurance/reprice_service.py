@@ -19,6 +19,7 @@ See docs/architecture/21_SOFTECH_INSURANCE_REPRICE_WRITEBACK.md.
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.db import transaction
 from django.utils import timezone
 
@@ -51,7 +52,7 @@ def _run_lock(run):
 
 
 def write_enabled() -> bool:
-    return bool(getattr(settings, 'INSURANCE_SOFTECH_WRITE_ENABLED', False))
+    return writer_allowed('INSURANCE_SOFTECH_WRITE_ENABLED')
 
 
 def _hq_conn(charset=None):

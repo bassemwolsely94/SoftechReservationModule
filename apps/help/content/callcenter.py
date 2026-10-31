@@ -4,6 +4,8 @@ CHANGE_NOTE = T('شرح أوضح لكل زر في جولة «اعرض لي»', '
 
 MODULE = {
     'key': 'callcenter', 'group': 'callcenter', 'icon': '📞',
+    'brief': T('شغل الكول سنتر: رقم المتصل يفتح ملف العميل، والحالات تتسجّل وتتابع.',
+               'Call-center work: the caller\'s number opens the customer file, and cases are logged and followed.'),
     'title': T('مركز الاتصال والحالات', 'Call center & cases'),
     'summary': T(
         'عمل الكول سنتر اليومي: البحث برقم المتصل يفتح ملف العميل كاملاً (الشريحة، القيمة، الحالات والطلبات المفتوحة)، تسجيل المكالمة وغرضها ونتيجتها، '
@@ -363,7 +365,7 @@ SCREENS = [
              'open_hint': T('بيظهر بعد «💾 حفظ المكالمة».', 'Appears after "💾 Save call".')},
             {'target': 'callcenter-operator-callbacks', 'label': T('🔄 المعاودة', '🔄 Callbacks'),
              'text': T('يفتح طابور المعاودة. الرقم الأحمر عدد المعاودات المتأخرة.', 'Opens the callback queue. The red number is the count of overdue callbacks.')},
-            {'target': 'callcenter-operator-search',  # from the GitHub-side tour
+            {'target': 'callcenter-operator-search', 'label': T('🔍 بحث', '🔍 Search'), 'when': T('بعد ما تكتب رقم المتصل.', 'After typing the caller\'s number.'),  # from the GitHub-side tour
              'text': T('«🔍 بحث» يجيب ملف العميل.',
                        '"🔍 Search" brings up the customer\'s profile.'),
              'more': T(
@@ -439,13 +441,13 @@ SCREENS = [
              'text': T('يقفل الحالة نهائياً. مايشتغلش غير على حالة محلولة.', 'Closes the case for good. Works only on a resolved case.'),
              'warn': T('مافيش زرار إعادة فتح هنا. سجّل التقييم وأي ملاحظة قبل الإغلاق.', 'There is no reopen button here. Record the rating and any note before closing.'),
              'open_hint': T('افتح حالة «محلولة».', 'Open a "Resolved" case.')},
-            {'target': 'callcenter-cases-list',  # from the GitHub-side tour
+            {'target': 'callcenter-cases-list', 'label': T('🗂️ إدارة الحالات', '🗂️ Case management'), 'when': T('لما تحب تختار حالة تشتغل عليها.', 'When you want to pick a case to work on.'),  # from the GitHub-side tour
              'text': T('الحالات.',
                        'The cases.'),
              'more': T(
                  'كل كارت: رقم الحالة والعنوان والحالة والأولوية والعميل.\n• «⏰ SLA!» بالأحمر = الحالة عدّت وقتها المسموح.\n• تحت فيه «السابق» و«التالي» للصفحات.',
                  'Each card: case number, title, status, priority and customer.\n• "⏰ SLA!" in red = the case is past its allowed time.\n• At the bottom are "Previous" and "Next" for pages.')},
-            {'target': 'callcenter-cases-actions',  # from the GitHub-side tour
+            {'target': 'callcenter-cases-actions', 'label': T('⚙️ بدء المعالجة', '⚙️ Start working'), 'when': T('بعد ما تفتح الحالة.', 'After opening the case.'),  # from the GitHub-side tour
              'text': T('«بدء المعالجة» ← «حل الحالة» ← «إغلاق».',
                        '"Start handling" → "Resolve" → "Close".'),
              'more': T(
@@ -509,19 +511,19 @@ SCREENS = [
             {'target': 'callcenter-analytics-agents', 'label': T('أداء المندوبين — آخر 30 يوم', 'Agent performance — last 30 days'),
              'text': T('ترتيب الموظفين بعدد المكالمات وجودتها في آخر 30 يوم.', 'Agents ranked by call count and quality over the last 30 days.'),
              'open_hint': T('تبويب «👤 أداء المندوبين».', 'The "👤 Agent performance" tab.')},
-            {'target': 'callcenter-analytics-header',  # from the GitHub-side tour
+            {'target': 'callcenter-analytics-header', 'label': T('لوحة مركز الاتصال', 'Call center dashboard'), 'when': T('لما تحب تراجع أداء الكول سنتر.', 'When you want to review call center performance.'),  # from the GitHub-side tour
              'text': T('لوحة مركز الاتصال: مراقبة جودة المكالمات والحالات وأداء المندوبين.',
                        'The call center board: call quality, cases and agent performance.'),
              'more': T(
                  'دي شاشة المتابعة والتقييم، مش شاشة الرد على المكالمات.\n• منها المشرف يعرف فين المشكلة: نسبة رد قليلة، معاودات متأخرة، أو موظف محتاج تدريب.',
                  'This is the monitoring and scoring screen, not the call-answering screen.\n• From it the supervisor sees where the problem is: low answer rate, overdue callbacks, or an agent needing training.')},
-            {'target': 'callcenter-analytics-calls-search',  # from the GitHub-side tour
+            {'target': 'callcenter-analytics-calls-search', 'label': T('بحث باسم / هاتف / ملاحظات…', 'Search by name / phone / notes…'), 'when': T('لما تدوّر على مكالمة معيّنة.', 'When looking for a specific call.'),  # from the GitHub-side tour
              'text': T('في تبويب «سجل المكالمات»: ابحث بالاسم أو الهاتف أو الملاحظات.',
                        'In the "Call log" tab: search by name, phone or notes.'),
              'more': T(
                  'مفيد لما عميل يشتكي من مكالمة معيّنة وعايز تلاقيها بسرعة.\n• البحث بيدوّر كمان في الملاحظات المكتوبة.',
                  'Useful when a customer complains about a particular call and you want to find it fast.\n• The search also looks in the written notes.')},
-            {'target': 'callcenter-analytics-calls-filters',  # from the GitHub-side tour
+            {'target': 'callcenter-analytics-calls-filters', 'label': T('كل الأغراض', 'All purposes'), 'when': T('لما تحب تشوف نوع مكالمات واحد.', 'When you want to see one kind of call.'),  # from the GitHub-side tour
              'text': T('في نفس التبويب: صفِّ المكالمات حسب الغرض، وبجانبه فلاتر الحالة والاتجاه.',
                        'In the same tab: filter calls by purpose, next to the status and direction filters.'),
              'more': T(
@@ -659,7 +661,7 @@ SCREENS = [
                        'Nightly transcription: ⏸ pause, ▶ resume, window, model and cores. "Compare and correct" teaches it the right words.'),
              'warn': T('«⏹ إيقاف التشغيل الحالي» بيوقف التفريغ الشغّال، والباقي بيكمل الليلة الجاية.', '"⏹ Stop current run" halts the running job; the rest continues the next night.'),
              'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
-            {'target': 'callcenter-pbx-header',  # from the GitHub-side tour
+            {'target': 'callcenter-pbx-header', 'label': T('لوحة المكالمات الحية', 'Live calls board'), 'when': T('لما تحب تتابع المكالمات وهي شغالة.', 'When you want to watch calls as they happen.'),  # from the GitHub-side tour
              'text': T('لوحة المكالمات الحية: تتحدث لحظياً من السنترال.',
                        'The live calls board: updated in real time from the PBX.'),
              'more': T(

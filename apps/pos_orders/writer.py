@@ -21,6 +21,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from . import pricing
@@ -80,7 +81,7 @@ class WriterDisabled(RuntimeError):
 
 
 def writer_enabled():
-    return bool(getattr(settings, 'POS_WRITER_ENABLED', False))
+    return writer_allowed('POS_WRITER_ENABLED')
 
 
 def _write_charset():

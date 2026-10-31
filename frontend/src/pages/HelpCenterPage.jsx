@@ -19,7 +19,7 @@ import { FlowList } from '../help/HelpPanel'
 import { pick, label } from '../help/text'
 import AskBox from '../help/AskBox'
 import TrainingEditor from '../help/TrainingEditor'
-import Journeys from '../help/Journeys'
+import Journeys, { ProductTourButton } from '../help/Journeys'
 import HelpUsage from '../help/HelpUsage'
 import NotesLog from '../help/NotesLog'
 import Glossary from '../help/Glossary'
@@ -63,6 +63,7 @@ export default function HelpCenterPage() {
           </p>
         </div>
         <SystemTourButton lang={lang} />
+        <ProductTourButton lang={lang} className="text-sm px-4 py-2" />
         <div className="flex items-center border border-line rounded-lg overflow-hidden text-sm" data-tour="general-help-center-lang">
           {['ar', 'en'].map((l) => (
             <button key={l} type="button" onClick={() => setHelpLang(l)}

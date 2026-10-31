@@ -104,7 +104,7 @@ export default function MobileAttendancePage() {
         <div className="text-center text-xs text-gray-400">تم تسجيل حضورك وانصرافك اليوم</div>
       )}
 
-      <p data-tour="hr-attendance-geofence-note" className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
+      <p data-tour="hr-attendance-range" className="text-center text-[11px] text-gray-400">يتم التحقق من موقعك مقابل موقع فرعك (ضمن ٢٠٠ متر)</p>
     </div>
   )
 }

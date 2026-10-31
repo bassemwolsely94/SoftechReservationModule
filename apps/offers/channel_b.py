@@ -20,6 +20,7 @@ Channel A. Nothing writes to SOFTECH until all gates pass.
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from config.writers import writer_allowed
 
 from .targeting import resolve_offer_items
 
@@ -35,7 +36,7 @@ LOCK_KEY = 7_301_010      # pg advisory lock: one promo write at a time (MAX(off
 
 
 def promo_write_enabled():
-    return bool(getattr(settings, 'POS_OFFERS_PROMO_WRITE_ENABLED', False))
+    return writer_allowed('POS_OFFERS_PROMO_WRITE_ENABLED')
 
 
 def is_channel_b_eligible(offer):

@@ -34,7 +34,7 @@ Content format (one file per module, see content/reservations.py for a full exam
         'workflows': ['order'],               # optional — show only these module workflows
                                               # (default: all of the module's)
         'tour':   [{'target': 'reservations-board-new',   # «اعرض لي»: data-tour anchor
-                    'label': T(..),           # optional: the button text exactly as on screen
+                    'label': T(..),           # required (test): the element's name exactly as on screen
                     'text': T(..),            # what it does (required)
                     'when': T(..),            # optional: when to use it / what happens next
                     'warn': T(..),            # optional ⚠: the costly mistake (required for

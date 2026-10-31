@@ -43,6 +43,7 @@ import datetime
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from .models import Allocation
@@ -62,7 +63,7 @@ class ReconWriteIntegrityError(ReconWriteError):
 # ── settings gates ────────────────────────────────────────────────────────────
 
 def writer_enabled() -> bool:
-    return bool(getattr(settings, 'AP_RECONCILE_WRITER_ENABLED', False))
+    return writer_allowed('AP_RECONCILE_WRITER_ENABLED')
 
 
 def _update_patientdata() -> bool:
@@ -129,6 +130,9 @@ def build_plan(allocation: Allocation) -> dict:
     """
     payment = allocation.payment
     invoice = allocation.invoice
+    if 'customer' in (invoice.party_type, payment.party_type):
+        # P-41: the customer side is read-only — contract receivables never write to SOFTECH.
+        raise ReconWriteError('customer (contract) allocations are never written to SOFTECH')
     amount = _dec(allocation.amount)
     if amount <= 0:
         raise ReconWriteError('amount must be > 0')
@@ -204,6 +208,8 @@ def push_allocation(allocation: Allocation, *, dry_run: bool = True,
     Live path (flag on + dry_run False): idempotency guard → re-validate live →
     INSERT chequestrans → UPDATE stktransm → verify-readback → mark 'written'.
     """
+    if 'customer' in (allocation.invoice.party_type, allocation.payment.party_type):
+        raise ReconWriteError('customer (contract) allocations are never written to SOFTECH')
     if allocation.origin not in (Allocation.ORIGIN_APPROVED,):
         raise ReconWriteError(
             f"only approved allocations are writable (got '{allocation.origin}')")

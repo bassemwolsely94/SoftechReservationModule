@@ -87,6 +87,8 @@ AL_MORE_TIER = T(
 
 MODULE = {
     'key': 'pricing', 'group': 'purchasing', 'icon': '🏷️',
+    'brief': T('أي تغيير سعر أو خصم بيمر بطلب واعتماد قبل ما يتنفّذ في SOFTECH.',
+               'Any price or discount change goes through a request and approval before it runs in SOFTECH.'),
     'title': T('الأسعار والخصومات', 'Prices & discounts'),
     'summary': T(
         'أي تعديل في سعر صنف أو خصوماته يمر بطلب واعتماد: الموظف يطلب، والمدير يعتمد فيُنفَّذ مباشرة في SOFTECH باسم مستخدم SOFTECH الخاص بالمعتمد وينتشر لكل الفروع تلقائياً. '
@@ -324,24 +326,32 @@ SCREENS = [
                        'Writes to SOFTECH HQ for every item in the scan; make sure the HQ values are the right ones.'),
              'open_hint': T('للمدير: تبويب «تدقيق النسخ المتماثل»، ثم اختر فحصاً.', 'Admins: the "Replication audit" tab, then pick a scan.')},
             {'target': 'pricing-approvals-tabs',  # from the GitHub-side tour
+             'label': T('الطلبات / متابعة المعلّقة (SLA)', 'Requests / Pending follow-up (SLA)'),
+             'when': T('«متابعة المعلّقة» لمعرفة الطلبات اللي اتأخرت.', 'Use "Pending follow-up" to see requests that are running late.'),
              'text': T('«الطلبات» و«متابعة المعلّقة (SLA)»؛ التدقيق ولوحات المعلومات تظهر للمدير فقط.',
                        '"Requests" and "Pending follow-up (SLA)"; the audit and insights tabs show to admins only.'),
              'more': T(
                  '• «الطلبات»: كل الطلبات وحالتها — ده الشغل اليومي.\n• «متابعة المعلّقة (SLA)»: الطلبات اللي اعتمادها اتأخر، عشان محدش يفضل مستني.\n• «تدقيق النسخ المتماثل» و«لوحات المعلومات» بيظهروا للمدير بس: هل التعديل المنفّذ وصل لكل الفروع، وإحصاءات الطلبات وزمن الاعتماد.',
                  '• "Requests": every request and its status — the daily work.\n• "Pending follow-up (SLA)": requests whose approval is late, so nobody is left waiting.\n• "Replication audit" and "Insights" show to admins only: whether an executed change reached every branch, and request statistics and approval time.')},
             {'target': 'pricing-approvals-status',  # from the GitHub-side tour
+             'label': T('في الانتظار / منفذ / مرفوض / فشل', 'Pending / Executed / Rejected / Failed'),
+             'when': T('اختار «فشل» لمعرفة الطلبات اللي محتاجة إعادة محاولة.', 'Pick "Failed" to find requests that need another try.'),
              'text': T('في «الطلبات»: صفِّ بالحالة: في الانتظار، منفذ، مرفوض، فشل.',
                        'In "Requests": filter by status: pending, executed, rejected, failed.'),
              'more': T(
                  'اختار الحالة اللي عايز تشوفها:\n• «في الانتظار»: لسه محدش راجعه.\n• «منفذ»: اتطبّق في SOFTECH.\n• «مرفوض» بملاحظة المدير، و«فشل»: اتعتمد بس التنفيذ في SOFTECH ما كملش — اقرأ الخطأ.',
                  'Choose which status to show:\n• "Pending": nobody has reviewed it yet.\n• "Executed": applied in SOFTECH.\n• "Rejected" with the manager\'s note, and "Failed": approved but execution in SOFTECH did not complete — read the error.')},
             {'target': 'pricing-approvals-table',  # from the GitHub-side tour
+             'label': T('جدول الطلبات', 'Requests table'),
+             'when': T('لمراجعة كل طلب قبل الاعتماد أو الرفض.', 'To check each request before approving or rejecting it.'),
              'text': T('الطلبات مع الصنف والتعديلات المطلوبة ومن طلبها وحالتها.',
                        'Requests with the item, requested changes, requester and status.'),
              'more': T(
                  'كل صف طلب: الصنف وكوده، القيم القديمة والجديدة لكل حقل اتطلب تعديله، مين طلبه، التاريخ والحالة.\n• لو مش مدير هتلاقي طلباتك هنا — المدير بيراجعها ويعتمدها.\n• بعد التنفيذ بيظهر كمان القيم اللي اتطبقت فعلاً.',
                  'Each row is a request: the item and its code, old and new values for each field asked to change, who asked, the date and the status.\n• If you are not a manager, your own requests show here — the manager reviews and approves them.\n• After execution the values actually applied are shown too.')},
             {'target': 'pricing-approvals-review',  # from the GitHub-side tour
+             'label': T('اعتماد / رفض', 'Approve / Reject'),
+             'when': T('للطلبات «في الانتظار» أو «فشل» بعد مراجعة التعديل.', 'For "Pending" or "Failed" requests, after checking the change.'),
              'text': T('للمدير فقط: «اعتماد» و«رفض» و«↩ تراجع» حسب الحالة؛ تحتاج صلاحية وكل إجراء مُسجَّل.',
                        'Admins only: "Approve", "Reject" and "↩ Rollback" by status; they need permission and every action is recorded.'),
              'more': T(
@@ -425,18 +435,24 @@ SCREENS = [
                        'A permanent SOFTECH row that cannot be removed from here — check name and code in the preview. Admins only.'),
              'open_hint': T('بعد «👁 معاينة» داخل نافذة التصنيف الجديد.', 'After "👁 Preview" inside the new-class window.')},
             {'target': 'pricing-alignment-filters',  # from the GitHub-side tour
+             'label': T('🔍 ابحث باسم الصنف...', '🔍 Search by item name...'),
+             'when': T('لتضييق القائمة على صنف أو نوع تنبيه قبل التعديل.', 'To narrow the list to an item or alert type before editing.'),
              'text': T('ابحث باسم الصنف، اختر نوع التنبيه، و«غير المتوافقة فقط» أو «تضمين الموقوفة».',
                        'Search by item name, pick a flag type, and "incompatible only" or "include inactive".'),
              'more': T(
                  '• ابحث باسم الصنف، واختار نوع التنبيه (الخصم ≠ نسبة المنشأ، ≠ نسبة التعاقد، المنشأ ≠ التعاقد، ≠ السياسة الرئيسية).\n• «غير المتوافقة فقط» يخفي الأصناف السليمة، و«تضمين الموقوفة» يضيف الأصناف الموقوفة.\nالفلاتر بتغيّر العرض بس — مفيش كتابة.',
                  '• Search by item name and pick a flag type (discount ≠ origin rate, ≠ contract rate, origin ≠ contract, ≠ master policy).\n• "Incompatible only" hides the correct items, and "Include inactive" adds stopped items.\nFilters only change the view — nothing is written.')},
             {'target': 'pricing-alignment-table',  # from the GitHub-side tour
+             'label': T('جدول الأصناف', 'Items table'),
+             'when': T('حدد الأصناف اللي عايز تعدّل خصمها.', 'Tick the items whose discount you want to change.'),
              'text': T('الأصناف مع المنشأ والخصم الأساسي والنسب المقارنة؛ حدد الأصناف بمربع الاختيار.',
                        'Items with origin, basic discount and compared rates; select items with the checkbox.'),
              'more': T(
                  'كل صف: الصنف والمورد، المنشأ الحالي، الخصم الأساسي، نسبة المنشأ ونسبة التعاقد، والهدف المقترح.\n• الخصم الفعلي هو المرجع: المطلوب إن التسميات (المنشأ وتصنيف الخصم) تتعدّل عشان تطابقه — مش العكس.\n• علّم مربع الاختيار للأصناف اللي عايز تصلّحها، فيظهر شريط الإجراءات.',
                  'Each row: item and supplier, current origin, basic discount, origin rate and contract rate, and the suggested target.\n• The actual discount is the reference: the labels (origin and discount class) are changed to match it — not the other way round.\n• Tick the items you want to fix and the action bar appears.')},
             {'target': 'pricing-alignment-bulk',  # from the GitHub-side tour
+             'label': T('✎ N صنف محدد', '✎ N items selected'),
+             'when': T('بعد تحديد الأصناف ومراجعة المقترح لكل صنف.', 'After selecting items and checking each item\'s suggestion.'),
              'text': T('يظهر بعد تحديد أصناف: «تطبيق المقترح لكل صنف» أو تعيين موحّد؛ يكتب على SOFTECH ويحتاج صلاحية ويُسجَّل.',
                        'Appears after selecting items: "Apply each item\'s suggestion" or a uniform assignment; writes to SOFTECH, needs permission and is recorded.'),
              'more': T(

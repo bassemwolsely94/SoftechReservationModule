@@ -6,6 +6,7 @@ from datetime import timedelta
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
+from config.writers import writer_allowed
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -152,7 +153,7 @@ class AdjustPointsView(APIView):
             })
 
         # ── Lane B: purchase points — must go through SOFTECH ─────────────────
-        if not settings.LOYALTY_SOFTECH_WRITE_ENABLED:
+        if not writer_allowed('LOYALTY_SOFTECH_WRITE_ENABLED'):
             return Response({'detail': 'تعديل نقاط الشراء في SOFTECH معطّل حالياً من إعدادات النظام',
                              'error_code': 'loyalty_softech_writes_disabled'}, status=503)
         if not reason:
