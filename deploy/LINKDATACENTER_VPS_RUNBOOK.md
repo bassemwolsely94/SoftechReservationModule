@@ -1505,7 +1505,10 @@ $U git fetch origin && $U git checkout main && $U git pull --ff-only
 NEW=$($U git rev-parse HEAD)
 if [[ $OLD == "$NEW" ]]; then echo "Nothing new on main."; exit 0; fi
 $U git log --oneline $OLD..$NEW
-echo "== python deps (app)";  $U /opt/elrezeiky/venv/bin/pip install -q -r requirements.txt
+# torch from the CPU index first: requirements.txt has a torch security floor, and if pip had to
+# satisfy it from PyPI it would pull the ~3 GB CUDA build. No-op when the installed torch is new enough.
+echo "== python deps (app)";  $U /opt/elrezeiky/venv/bin/pip install -q "torch>=2.13.0" --index-url https://download.pytorch.org/whl/cpu
+$U /opt/elrezeiky/venv/bin/pip install -q -r requirements.txt
 if ! $U git diff --quiet $OLD $NEW -- ocr_sidecar/requirements.txt; then
   echo "== python deps (OCR sidecar)"; $U /opt/elrezeiky/ocr-venv/bin/pip install -q -r ocr_sidecar/requirements.txt
 fi
