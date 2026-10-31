@@ -223,8 +223,8 @@ def _actor_from_request(request, purposes=('enroll',)):
 
 def _log(action, profile, request, note=''):
     from .views import _log_auth
-    from .middleware import get_current_ip
-    ip = get_current_ip() or request.META.get('REMOTE_ADDR')
+    from core.client_ip import client_ip
+    ip = client_ip(request)
     _log_auth(action, profile, ip, note=note)
 
 

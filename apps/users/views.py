@@ -32,7 +32,7 @@ from .serializers import (
     UserActivityLogSerializer,
     ERPUserSerializer,
 )
-from .middleware import get_current_ip
+from core.client_ip import client_ip
 from .passwords import password_problem
 from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
@@ -128,7 +128,7 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
 def login_view(request):
     identifier = request.data.get('username', '').strip()
     password   = request.data.get('password', '')
-    ip         = get_current_ip() or request.META.get('REMOTE_ADDR')
+    ip         = client_ip(request)
 
     if not identifier or not password:
         return Response({'error': 'يرجى إدخال اسم المستخدم وكلمة المرور'}, status=status.HTTP_400_BAD_REQUEST)
@@ -295,7 +295,7 @@ def change_password_view(request):
     end_sessions(user)
 
     profile = getattr(user, 'staff_profile', None)
-    ip      = get_current_ip() or request.META.get('REMOTE_ADDR')
+    ip      = client_ip(request)
     _log_auth('password_changed', profile, ip)
 
     return Response({'detail': 'تم تغيير كلمة المرور بنجاح'})
@@ -357,7 +357,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = serializer.save()
         actor   = getattr(self.request.user, 'staff_profile', None)
-        ip      = get_current_ip() or self.request.META.get('REMOTE_ADDR')
+        ip      = client_ip(self.request)
         try:
             UserActivityLog.objects.create(
                 target_user=profile,
@@ -383,7 +383,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         end_sessions(profile.user)
 
         actor = getattr(request.user, 'staff_profile', None)
-        ip    = get_current_ip() or request.META.get('REMOTE_ADDR')
+        ip    = client_ip(request)
         UserActivityLog.objects.create(
             target_user=profile,
             changed_by=actor,
@@ -403,7 +403,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
             end_sessions(profile.user)
 
         actor  = getattr(request.user, 'staff_profile', None)
-        ip     = get_current_ip() or request.META.get('REMOTE_ADDR')
+        ip     = client_ip(request)
         action_name = 'activated' if profile.is_active else 'deactivated'
         UserActivityLog.objects.create(
             target_user=profile,
@@ -562,7 +562,7 @@ class PermissionsMatrixView(viewsets.ViewSet):
                     changed_by=actor,
                     action='permissions_changed',
                     new_value={'changes': changed},
-                    ip_address=get_current_ip() or request.META.get('REMOTE_ADDR'),
+                    ip_address=client_ip(request),
                 )
             except Exception:
                 pass

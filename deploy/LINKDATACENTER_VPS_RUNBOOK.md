@@ -1014,6 +1014,7 @@ WireGuard is dormant and disabled — section 5.0.)
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
 ```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # overwrites X-Forwarded-For
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/elrezeiky
 sudo sed -i 's#YOUR_DOMAIN_OR_IP#elrezeikyapp.dawalvry.com#g; s#YOUR_DOMAIN#elrezeikyapp.dawalvry.com#g; s#/opt/elrezeiky/#/opt/elrezeiky/app/#g; s#root /opt/elrezeiky;#root /opt/elrezeiky/app;#' \
      /etc/nginx/sites-available/elrezeiky
