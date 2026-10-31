@@ -32,34 +32,49 @@ def _logs():
     return UserActivityLog.objects
 
 
-def _since(profile, now):
-    """Failures older than this no longer count."""
-    since = now - WINDOW
+def lock_end(times):
+    """THE lock rule, shared by real accounts (UserActivityLog) and unknown identifiers (cache),
+    so the two answer identically at every moment.
+
+    `times` = the failure times since the last reset. FAIL_LIMIT failures inside WINDOW lock
+    from that moment: the lock runs to the last such failure + LOCK_FOR, and it stays in force
+    even after the failures themselves age out of WINDOW. Returns that end time or None.
+    """
+    times = sorted(times)
+    end = None
+    for i in range(FAIL_LIMIT - 1, len(times)):
+        if times[i] - times[i - FAIL_LIMIT + 1] <= WINDOW:
+            end = times[i] + LOCK_FOR
+    return end
+
+
+def _failure_times(profile, now):
+    """Failures that can still matter: after the last completed login / unlock, and recent
+    enough that a lock they caused could still be running."""
+    horizon = now - WINDOW - LOCK_FOR
     last_reset = (_logs().filter(target_user=profile, action__in=_RESET_ACTIONS)
                   .order_by('-created_at').values_list('created_at', flat=True).first())
-    return max(since, last_reset) if last_reset else since
+    if last_reset and last_reset > horizon:
+        horizon = last_reset
+    return list(_logs().filter(target_user=profile, action__in=_FAIL_ACTIONS,
+                               created_at__gt=horizon).values_list('created_at', flat=True))
 
 
 def locked_until(profile):
     """When the account's lock ends, or None when it is not locked."""
     now = timezone.now()
-    fails = list(_logs().filter(target_user=profile, action__in=_FAIL_ACTIONS,
-                                created_at__gt=_since(profile, now))
-                 .order_by('-created_at').values_list('created_at', flat=True)[:FAIL_LIMIT])
-    if len(fails) < FAIL_LIMIT:
-        return None
-    until = fails[0] + LOCK_FOR
-    return until if until > now else None
+    end = lock_end(_failure_times(profile, now))
+    return end if end and end > now else None
 
 
 def register_lock(profile, ip):
     """Record the lock once and tell the admins. Safe to call after every failure."""
-    now = timezone.now()
-    if _logs().filter(target_user=profile, action='login_locked',
-                      created_at__gt=_since(profile, now)).exists():
-        return
     until = locked_until(profile)
     if not until:
+        return
+    began = until - LOCK_FOR
+    if _logs().filter(target_user=profile, action='login_locked',
+                      created_at__gt=began - LOCK_FOR).exists():
         return
     _logs().create(target_user=profile, changed_by=None, action='login_locked', ip_address=ip,
                    new_value={'locked_until': until.isoformat()},
@@ -87,15 +102,19 @@ def _unknown_key(identifier):
     return 'login-unknown:' + hashlib.sha256(identifier.strip().lower().encode()).hexdigest()[:32]
 
 
+def _unknown_times(identifier, now):
+    horizon = now - WINDOW - LOCK_FOR
+    return [t for t in (cache.get(_unknown_key(identifier)) or []) if t > horizon]
+
+
 def unknown_identifier_locked(identifier: str) -> bool:
-    return (cache.get(_unknown_key(identifier)) or 0) >= FAIL_LIMIT
+    now = timezone.now()
+    end = lock_end(_unknown_times(identifier, now))
+    return bool(end and end > now)
 
 
 def note_unknown_failure(identifier: str) -> None:
-    key = _unknown_key(identifier)
-    ttl = int(LOCK_FOR.total_seconds())
-    cache.add(key, 0, ttl)
-    try:
-        cache.incr(key)
-    except ValueError:
-        cache.set(key, 1, ttl)
+    now = timezone.now()
+    times = _unknown_times(identifier, now) + [now]
+    cache.set(_unknown_key(identifier), times[-4 * FAIL_LIMIT:],
+              int((WINDOW + LOCK_FOR).total_seconds()))

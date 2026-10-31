@@ -142,3 +142,29 @@ class LoginLockoutTests(TestCase):
         n = Notification.objects.filter(dedup_key=f'login-lock:{self.profile.id}')
         self.assertEqual(n.count(), 1)
         self.assertEqual(n.get().recipient, self.admin_profile)
+
+    # ── the lock must run to last miss + 15 min, for real and unknown accounts alike ──
+
+    def _spread(self, username):
+        """Misses at t=0,1,2,3,14 min; then the status at t=16 (wrong pw) and t=30."""
+        base = timezone.now()
+        out = {}
+        for minute in (0, 1, 2, 3, 14):
+            with mock.patch('django.utils.timezone.now', return_value=base + timedelta(minutes=minute)):
+                self.assertEqual(self._login(username, 'wrong-pw').status_code, 401)
+        for minute in (16, 30):
+            with mock.patch('django.utils.timezone.now', return_value=base + timedelta(minutes=minute)):
+                out[minute] = self._login(username, 'wrong-pw')
+        return out
+
+    def test_spread_misses_real_account(self):
+        out = self._spread('h8_user')
+        self.assertEqual(out[16].status_code, 429)
+        self.assertEqual(out[16].data['error'], LOCKED)
+        self.assertEqual(out[30].status_code, 401)
+
+    def test_spread_misses_unknown_identifier_matches_real(self):
+        out = self._spread('no-such-user')
+        self.assertEqual(out[16].status_code, 429)
+        self.assertEqual(out[16].data['error'], LOCKED)
+        self.assertEqual(out[30].status_code, 401)
