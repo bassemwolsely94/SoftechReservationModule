@@ -120,7 +120,9 @@ check for the owner. Spec files:
   short / price checks; no change to `SupplyDecision` or the supply engine. **BUILT 2026-10-31** (snapshot on every
   pivot download, `import_pivot_snapshot` for saved files, check after each purchases refresh + daily 09:10 with a
   digest to `purchasing`, /supply «استلام بدون طلب»; migrations purchasing 0041, procurement 0012/0013, notifications
-  0037, audit 0016)
+  0037, audit 0016). **PAUSED the same day after the first office run**: 1,087 / 1,368 lines flagged — buyers order beyond
+  the pivot's 1-month Total gap (median 2× on «over»; «unordered» items had 2.4 months' cover). Sheets still recorded;
+  needs the buyers' real ordering rule (see spec)
 - [P-33](06_SPEC_P-33_supply_quick_fixes.md) — **(a), (c), (d), (e) BUILT 2026-10-31** (owner: "P-33 without retry";
   yes to the `IsrPush` field + constraint). (a) shortage stock check «تحليل التحويل» / «إنشاء مقترحات التحويل» →
   the WhatsApp path's linked ISR legs (`IsrPush.origin_shortage_list`, `purchasing/0040`; a list made from a WhatsApp

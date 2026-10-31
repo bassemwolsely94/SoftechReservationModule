@@ -22,6 +22,13 @@ Built as `purchasing.PivotSheetSnapshot`, `procurement.ReceiptCheck`, `procureme
 - So the /supply order Excel and the shortage-list supplier PO are **not** the order record, and nothing in this card
   touches `SupplyDecision` or the supply engine's "pending incoming". The former stop-and-ask on that is gone.
 
+**First run on office data, 2026-10-31 — PAUSED.** With the 19-10 and 26-10 pivots imported, 1,087 of 1,368 paid
+pilot lines (19–29 Oct) were flagged: 520 `unordered` (only 10 of those items were on any sheet) and 567 `over`
+(median received 2× the sheet's gap). The «unordered» items since 26-10 had a median network cover of 2.4 months and
+a median Total gap of −5 on that day's sheet: buyers buy beyond one month of cover and buy covered items, so the
+pivot's Total gap is not the order. Flags paused (`receipt_check_suppliers = []`); the trial rows were removed;
+sheets keep being recorded on every download. Needs an owner rule for what a buyer actually orders before it resumes.
+
 ## 1. Problem (measured)
 
 - **Nothing records what was sent to a supplier.** The pivot is a plain download (`purchasing/views.py::
