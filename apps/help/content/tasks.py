@@ -285,9 +285,10 @@ SCREENS = [
                  'اضغط على مهمة تفتح صفحتها: التفاصيل، قائمة الأعمال، التعليقات والمرفقات.\n• فوق الشاشة عدد المهام والنشطة والمتأخرة والعاجلة.\n• لو القائمة فاضية فيه زر سريع لإنشاء مهمة.',
                  'Click a task to open its page: details, checklist, comments and attachments.\n• The top of the screen shows the total, active, overdue and urgent counts.\n• If the list is empty there is a quick button to create a task.')},
         ],
-        'tips': [T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
+        'tips': [T('بتشوف مهام فرعك ومهام «جميع الفروع» وأي مهمة إنت عاملها أو متكلّف بيها حتى لو في فرع تاني.', 'You see your branch\'s tasks, "all branches" tasks, and any task you created or are assigned to, even in another branch.'),
+                 T('يعدّل المهمة أو يلغيها منشئها والمكلَّفون بها والمشرف والمدير فقط.',
                    'Only the task creator, its assignees, supervisors and admins can change or cancel a task.')],
-        'updated': '2026-10-28',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -384,6 +385,7 @@ SCREENS = [
         'summary': T('نظرة عامة: إجمالي المهام، النشطة، المتأخرة، معدل الإتمام خلال 30 يوماً، توزيع الحالات، حسب النوع والفرع، المستحقة قريباً، آخر النشاطات، والجداول التلقائية النشطة.',
                      'Overview: total, active and overdue tasks, 30-day completion rate, status distribution, by type and branch, due soon, latest activity and active schedules.'),
         'audience': T('المديرون والمشرفون.', 'Managers and supervisors.'),
+        'tips': [T('الأرقام هنا للمهام اللي تقدر تشوفها بس — موظف الفرع بيشوف فرعه.', 'The figures cover only the tasks you can see — a branch user sees their branch.')],
         'steps': [T('اختر الفرع، وركّز على «متأخرة» و«المستحقة قريباً».', 'Pick the branch and focus on "Overdue" and "Due soon".')],
         'related': ['tasks.list', 'tasks.schedules'],
         'tour': [
@@ -434,7 +436,7 @@ SCREENS = [
                  'تلات مربعات: «توزيع الحالات»، «حسب النوع»، و«حسب الفرع».\n• منها تعرف فين الضغط: فرع عليه مهام كتير مفتوحة، أو نوع شغل دايماً بيتأخر.',
                  'Three boxes: "Status distribution", "By type" and "By branch".\n• They show where the pressure is: a branch with many open tasks, or a kind of work that is always late.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -444,6 +446,7 @@ SCREENS = [
         'summary': T('إعداد مهام تتكرر تلقائياً (مثل: جرد يومي لفرع، تدقيق أسبوعي): النظام يُنشئ المهمة في موعدها بالقالب المحدد.',
                      'Set up tasks that repeat automatically (e.g. a daily branch count, a weekly audit): the system creates the task on time from the template.'),
         'audience': T('المديرون والمشرفون.', 'Managers and supervisors.'),
+        'tips': [T('موظف الفرع بيعدّل ويشغّل جداول فرعه بس؛ جداول «جميع الفروع» بيشوفها من غير تعديل.', 'A branch user edits and runs their own branch\'s schedules only; "all branches" schedules are view-only for them.')],
         'steps': [
             T('«جدول جديد»: اسم الجدول، قالب عنوان المهمة، النوع، الأولوية، الفرع، تعيين إلى (اختياري).', '"New schedule": name, task title template, type, priority, branch, assignee (optional).'),
             T('التكرار (يومي/أسبوعي/شهري) مع يوم الأسبوع أو الشهر، وكم يوماً مسبقاً للاستحقاق، والساعات المقدّرة.', 'Frequency (daily/weekly/monthly) with the weekday or month day, days ahead of due date, and estimated hours.'),
@@ -517,7 +520,7 @@ SCREENS = [
                  '• «تشغيل» بيعمل مهمة حقيقية في القائمة — امسحها أو اقفلها لو كانت تجربة.\n• «تعديل» بيفتح نفس النموذج بالبيانات الحالية.\n• «حذف» بيطلب تأكيد، ولو عايز توقفه بس استخدم علامة «نشط» بدل الحذف.',
                  '• "Run" creates a real task in the list — close it if it was only a test.\n• "Edit" opens the same form with the current data.\n• "Delete" asks for confirmation; to just pause it, untick "Active" instead of deleting.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

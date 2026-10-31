@@ -546,7 +546,8 @@ SCREENS = [
             T('حدد عدة طلبات ثم «تعيين إلى…» لموظف أو «إرسال للمشتريات».', 'Select several requests, then "Assign to…" an employee or "Send to purchasing".'),
             T('اضغط أي طلب لفتح تفاصيله ومتابعته.', 'Click a request to open and follow it.'),
         ],
-        'tips': [
+        'tips': [T('موظف الفرع بيشوف طلبات فرعه (وأي فرع إضافي متاح له) بس، ومينفعش يسجّل طلب على فرع تاني. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's requests (and any extra branch they are given) only, and cannot record a request for another branch. Supervisors and the quality manager see every branch."),
+                 
             T('علامة «تجاوز» تعني أن الطلب تخطى زمن SLA — عالجه فوراً.', 'The "breached" mark means the request passed its SLA time — handle it now.'),
             T('سجّل الطلب حتى لو العميل سيمشي؛ الطلب المسجّل باسم عميل حقيقي هو «خسارة مؤكدة» وهي أقوى إشارة للمشتريات.',
               'Record the request even if the customer is leaving; a request under a real customer is a "confirmed loss", the strongest signal for purchasing.'),
@@ -629,7 +630,7 @@ SCREENS = [
              'more': DM_MORE_OPEN},
         ],
         'tour_continue': 'demand.detail',
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

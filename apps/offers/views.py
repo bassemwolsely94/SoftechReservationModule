@@ -15,6 +15,7 @@ from .models import Offer
 from .serializers import OfferSerializer
 from .permissions import CanManageOffers
 from apps.pos_orders.permissions import CanOperatePosOrders
+from core import branch_scope
 from core.permissions import matrix_permission
 
 # Managing offers = matrix module `offers` (CanManageOffers on the viewset); the checkout's
@@ -167,6 +168,8 @@ def evaluate(request):
 
     branch_id = data.get('branch')
     branch_id = int(branch_id) if branch_id and str(branch_id).isdigit() else None
+    if branch_id is not None:
+        branch_scope.require(request.user, branch_id)
 
     from .models import MarginConfig
     margin_cfg = MarginConfig.get_solo()
@@ -301,7 +304,9 @@ def apply_to_order(request):
     from apps.pos_orders.models import SoftechSalesOrder
     from .order_attach import apply_offers_to_order
     oid = request.data.get('order')
-    order = SoftechSalesOrder.objects.filter(pk=oid).first()
+    # Batch 5 part 2: the same branch scope as the POS views — another branch's order is "missing".
+    order = branch_scope.scope(SoftechSalesOrder.objects.all(), request.user).filter(
+        pk=oid if str(oid or '').isdigit() else None).first()
     if not order:
         return Response({'detail': 'أمر غير موجود'}, status=status.HTTP_404_NOT_FOUND)
     if order.is_locked:

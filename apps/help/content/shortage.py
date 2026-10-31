@@ -260,7 +260,8 @@ SCREENS = [
             {'text': T('المشتريات: «مصفوفة الموردين» (كود كل مورد رئيسي + آخر شراء وأقل سعر) أو «أمر شراء لمورد» بأكواد مورد محدد.', 'Purchasing: "Supplier matrix" (each main supplier\'s code + last purchase and lowest price) or "Purchase order for a supplier" with that supplier\'s codes.'),
              'roles': ['admin', 'purchasing']},
         ],
-        'tips': [T('لا تؤكد مطابقة لست متأكداً منها — اختيار صنف خطأ يعني طلب صنف خطأ.', 'Never confirm a match you are unsure of — a wrong item means ordering the wrong item.')],
+        'tips': [T('موظف الفرع بيشوف قوائم نواقص فرعه بس، والعرض المجمّع بيجمع فروعه هو. «فحص المخزون» لسه بيوريك رصيد الفروع التانية علشان التحويل.', 'A branch user sees their own branch\'s shortage lists only, and the aggregated view adds up their branches only. "Check stock" still shows other branches\' stock so you can transfer.'),
+                 T('لا تؤكد مطابقة لست متأكداً منها — اختيار صنف خطأ يعني طلب صنف خطأ.', 'Never confirm a match you are unsure of — a wrong item means ordering the wrong item.')],
         'related': ['shortage.market', 'transfers.new', 'demand.list'],
         'tour': [
             {'target': 'shortage-list-new', 'label': T('+ قائمة جديدة', '+ New list'),
@@ -339,7 +340,7 @@ SCREENS = [
                  'كل كارت: العنوان أو اسم الفرع، والتاريخ، والحالة، وعدد الأصناف، و✓ المؤكد، و✕ غير المطابق.\n• شريط «تأكيد» بيوضح كام في المية من الأصناف اتأكدت مطابقتها.\n• لو مفيش قوائم بيظهر زر «+ قائمة جديدة» في النص.',
                  'Each card: title or branch name, date, status, item count, ✓ confirmed and ✕ unmatched.\n• The "Confirmed" bar shows what percentage of items have a confirmed match.\n• If there are no lists, a "+ New list" button shows in the middle.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -511,6 +512,7 @@ SCREENS = [
         'summary': T('تسجيل النواقص من بين الأرفف: افتح قائمة (أو أنشئ واحدة بعنوان اختياري)، أضف الصنف الناقص بسرعة، أو الصق قائمة، أو بالصوت، أو بصورة، ثم «إرسال القائمة». يعمل بدون إنترنت مؤقتاً.',
                      'Record shortages in the aisle: open a list (or create one with an optional title), add missing items quickly, or paste a list, use voice or a photo, then "Submit list". Works briefly offline.'),
         'audience': T('العاملون في الفروع.', 'Branch staff.'),
+        'tips': [T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
         'steps': [
             T('«قائمة نواقص جديدة» ← «إنشاء وبدء التسجيل».', '"New shortage list" → "Create and start".'),
             T('اكتب اسم الصنف الناقص ← «إضافة» (يبقى المؤشر في الخانة للإضافة السريعة).', 'Type the missing item name → "Add" (the cursor stays for quick entry).'),
@@ -580,7 +582,7 @@ SCREENS = [
                  'لو القوايم كتير، «تحميل المزيد» تحت بيجيب الباقي.\n• اضغط القائمة المفتوحة عشان تكمّل إضافة فيها.',
                  'If there are many lists, "Load more" at the bottom brings the rest.\n• Tap an open list to keep adding to it.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

@@ -92,6 +92,41 @@ class BranchScopeHelperTests(TestCase):
         p.save()
         self.assertFalse(branch_scope.scope(Branch.objects.all(), p.user, field='id').exists())
 
+    def test_code_scope_and_allows_code(self):
+        """Batch 5 part 2: stock count / expiry rows carry the SOFTECH code, not a Branch FK."""
+        _, p, _ = make_user('bs_code', role='pharmacist', branch=self.a)
+        qs = branch_scope.scope_code(Branch.objects.all(), p.user, field='softech_branch_id')
+        self.assertEqual(set(qs.values_list('id', flat=True)), {self.a.id})
+        self.assertTrue(branch_scope.allows_code(p.user, 'SA1'))
+        self.assertFalse(branch_scope.allows_code(p.user, 'SB1'))
+        self.assertFalse(branch_scope.allows_code(p.user, ''))
+        self.assertFalse(branch_scope.allows_code(p.user, None))
+        self.assertEqual(branch_scope.branch_codes(p.user), {'SA1'})
+        _, sup, _ = make_user('bs_code_sup', role='supervisor', branch=self.a)
+        self.assertIsNone(branch_scope.branch_codes(sup.user))
+        self.assertTrue(branch_scope.allows_code(sup.user, 'SB1'))
+        self.assertTrue(branch_scope.allows_code(sup.user, 'UNKNOWN'))
+        all_qs = branch_scope.scope_code(Branch.objects.all(), sup.user, field='softech_branch_id')
+        self.assertEqual(all_qs.count(), Branch.objects.count())
+
+    def test_narrow_client_filters(self):
+        """A client ?branch= filter can only narrow, never widen."""
+        _, p, _ = make_user('bs_narrow', role='pharmacist', branch=self.a)
+        self.assertEqual(branch_scope.narrow_ids(p.user, None), {self.a.id})
+        self.assertEqual(branch_scope.narrow_ids(p.user, [self.b.id]), set())
+        self.assertEqual(branch_scope.narrow_ids(p.user, [self.a.id, self.b.id, 'x']), {self.a.id})
+        self.assertEqual(branch_scope.narrow_codes(p.user, ['SB1']), set())
+        self.assertEqual(branch_scope.narrow_codes(p.user, []), {'SA1'})
+        _, sup, _ = make_user('bs_narrow_sup', role='supervisor', branch=self.a)
+        self.assertIsNone(branch_scope.narrow_ids(sup.user, None))
+        self.assertEqual(branch_scope.narrow_ids(sup.user, [str(self.b.id)]), {self.b.id})
+        from rest_framework.exceptions import PermissionDenied
+        with self.assertRaises(PermissionDenied):
+            branch_scope.require_code(p.user, 'SB1')
+        with self.assertRaises(PermissionDenied):
+            branch_scope.require(p.user, self.b.id)
+        branch_scope.require(p.user, str(self.a.id))
+
     def test_allows(self):
         _, p, _ = make_user('bs_allow', role='pharmacist', branch=self.a)
         self.assertTrue(branch_scope.allows(p.user, self.a.id))

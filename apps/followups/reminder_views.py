@@ -39,7 +39,10 @@ class CanViewReminders(BasePermission):
 @permission_classes([CanViewReminders])
 def overview(request):
     from .models import RefillReminder
-    rows = (RefillReminder.objects.select_related('customer', 'branch', 'task__item')
+    from core import branch_scope
+    # Batch 5 canary sweep: a branch user sees their branches' reminders only
+    rows = (branch_scope.scope(RefillReminder.objects.all(), request.user)
+            .select_related('customer', 'branch', 'task__item')
             .order_by('-created_at')[:200])
     p = _profile(request)
     return Response({

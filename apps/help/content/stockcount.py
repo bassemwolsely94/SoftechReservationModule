@@ -398,7 +398,8 @@ SCREENS = [
             T('في «العد» حمّل الورقة، عُدّ، وارفع النتائج — أو عُدّ من الموبايل.', 'In "Count" download the sheet, count and upload — or count on the phone.'),
             T('في «الفروق» راجع، أعد عدّ الأصناف ذات الفروق الكبيرة، صدّر للتسوية، ثم أغلق.', 'In "Variance" review, recount big differences, export for adjustment, then close.'),
         ],
-        'tips': [
+        'tips': [T('موظف الفرع بيشوف ويفتح جلسات جرد فرعه بس — مينفعش يفتح جرد لفرع تاني.', 'A branch user sees and opens count sessions for their own branch only — not for another branch.'),
+                 
             T('الجلسة تتقفل بعد تسجيل العد — سواء برفع ملف العد أو بالعد المباشر من الموبايل. قبل كده زر «🔒 إغلاق الجلسة» مش بيظهر والسيرفر بيرفض.',
               'A session can be closed once counts are recorded — by uploading the count file or by counting live on mobile. Before that the "🔒 Close session" button is hidden and the server refuses.'),
             T('مخازن الحجر (102، 103، 105) لا تدخل في أرصدة الجرد التشغيلي.', 'Quarantine stores (102, 103, 105) are excluded from operational count balances.'),
@@ -477,7 +478,7 @@ SCREENS = [
                  'اعرض الجلسات اللي في مرحلة معيّنة: مسودة، تم اللقطة، تم التصدير، تم الرفع، الفروق جاهزة، مغلق.\n• مثلاً «تم اللقطة» عشان تشوف الجلسات اللي مستنية عد.',
                  'Show the sessions at one stage: draft, snapshot taken, exported, uploaded, variance ready, closed.\n• For example "Snapshot taken" to see sessions waiting to be counted.')},
         ],
-        'updated': '2026-10-29',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -489,6 +490,7 @@ SCREENS = [
                      'The list of count sessions, and inside a session live counting in the aisle: scan or search the item, type the counted quantity, and the difference vs the snapshot shows at once. '
                      'Works briefly offline — it is saved when the connection returns.'),
         'audience': T('العادّون في الفرع.', 'Counters at the branch.'),
+        'tips': [T('بتشوف جلسات جرد فرعك بس.', "You see your own branch's count sessions only.")],
         'steps': [
             T('افتح الجلسة (يجب أن تكون اللقطة مأخوذة من الكمبيوتر).', 'Open the session (the snapshot must already be taken on the desktop).'),
             T('«جرد صنف (مسح/بحث)» ← اكتب الكمية المعدودة ← «تسجيل».', '"Count an item (scan/search)" → type the counted quantity → "Save".'),
@@ -534,7 +536,7 @@ SCREENS = [
                  'أحدث جلسات الجرد، وكل كارت فيه اسم الجلسة والفرع والحالة.\n• العد من الموبايل بيشتغل بعد ما اللقطة تتاخد من شاشة الكمبيوتر، ولحد ما الجلسة تتقفل.',
                  'The latest count sessions; each card shows the session name, branch and status.\n• Counting on the phone works after the snapshot is taken on the desktop screen, and until the session is closed.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

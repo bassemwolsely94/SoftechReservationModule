@@ -1588,7 +1588,7 @@ def _build_phcode_channel_map(all_phcodes: list) -> dict:
     return phcode_channel
 
 
-def get_dashboard_stats(branch=None, days=30):
+def get_dashboard_stats(branch=None, days=30, branch_ids=None):
     from django.db.models import Count
     from datetime import date, timedelta
 
@@ -1597,6 +1597,8 @@ def get_dashboard_stats(branch=None, days=30):
     qs     = FollowUpTask.objects.filter(created_at__date__gte=cutoff)
     if branch:
         qs = qs.filter(branch=branch)
+    if branch_ids is not None:              # the caller's branch scope (None = every branch)
+        qs = qs.filter(branch_id__in=branch_ids)
 
     return {
         'pending':        qs.filter(status='pending').count(),

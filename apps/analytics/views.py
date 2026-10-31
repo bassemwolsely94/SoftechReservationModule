@@ -55,6 +55,16 @@ logger = logging.getLogger('elrezeiky.analytics')
 #  HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+from core import branch_scope                                     # noqa: E402
+from apps.customers import access as customer_access            # noqa: E402
+from rest_framework.exceptions import PermissionDenied            # noqa: E402
+
+
+def _all_branch_only(request):
+    """Cross-branch boards (every branch's P&L / capital) — owner decision B-1: all-branch roles."""
+    if not branch_scope.sees_everything(request.user):
+        raise PermissionDenied('هذه اللوحة تقارن كل الفروع — متاحة للإدارة فقط.')
+
 def _parse_date(s):
     if not s:
         return None
@@ -132,7 +142,7 @@ def _user_name(user_map, code):
     return entry or code
 
 
-def _purchase_qs_filtered(params):
+def _purchase_qs_filtered(params, user):
     """
     Build a fully-filtered PurchaseHistory queryset from request query params dict.
 
@@ -142,6 +152,8 @@ def _purchase_qs_filtered(params):
     """
     # doccode 80 is permanently excluded — never a real sale or return.
     qs = PurchaseHistory.objects.exclude(doc_code='80')
+    # Batch 5 part 2: a branch user's numbers are their branches only; ?branches= narrows.
+    qs = branch_scope.scope(qs, user)
 
     # ── Date ─────────────────────────────────────────────────────────────────
     date_exact = _parse_date(params.get('date_exact'))
@@ -489,13 +501,15 @@ def filter_options(request):
     # Branches
     branches = [
         {'id': str(b.id), 'name': b.name_ar or b.name}
-        for b in Branch.objects.filter(is_active=True).order_by('name_ar', 'name')
+        for b in branch_scope.scope(Branch.objects.filter(is_active=True), request.user, 'id')
+        .order_by('name_ar', 'name')
     ]
+    own_ph = branch_scope.scope(PurchaseHistory.objects.all(), request.user)
 
     # Users/cashiers — show usercode + ERP userid + full name
     user_map = _build_user_map()   # {usercode: {'name': ..., 'user_id': ...}}
     active_codes = set(
-        PurchaseHistory.objects
+        own_ph
         .exclude(softech_user='')
         .values_list('softech_user', flat=True)
         .distinct()
@@ -649,7 +663,7 @@ def filter_options(request):
     # Store codes — distinct storecode values from PurchaseHistory
     # These are warehouse/store identifiers within branches (e.g. '01', '02').
     raw_store_codes = (
-        PurchaseHistory.objects
+        own_ph
         .exclude(store_code='')
         .values_list('store_code', flat=True)
         .distinct()
@@ -670,7 +684,7 @@ def filter_options(request):
     from django.db.models import Count as _Count
     from apps.customers.account_link import PLACEHOLDER_PREFIX
     persons_qs = (
-        PurchaseHistory.objects
+        own_ph
         .exclude(softech_personcode__in=['', '1500', '1510'])
         .values('softech_personcode')
         .annotate(_cnt=_Count('id'))
@@ -719,7 +733,7 @@ def sales_overview(request):
     Net revenue = SUM(115) − SUM(30).  doccode 80 always excluded.
     """
     p = request.query_params
-    qs      = _purchase_qs_filtered(p)
+    qs      = _purchase_qs_filtered(p, request.user)
     line_qs = _line_qs_for(qs, p)
     user_map = _build_user_map()
 
@@ -1115,13 +1129,16 @@ def sales_overview(request):
 def customer_analytics(request):
     """GET /api/analytics/customers/"""
     p  = request.query_params
-    qs = _purchase_qs_filtered(p)
+    qs = _purchase_qs_filtered(p, request.user)
 
     now_date = timezone.localdate()
     d30  = now_date - datetime.timedelta(days=30)
     d90  = now_date - datetime.timedelta(days=90)
 
     people     = Customer.objects.filter(is_account_placeholder=False)
+    _own = customer_access.own_q(request.user)
+    if _own is not None:
+        people = people.filter(_own)
     total_customers = people.count()
     active_30d = people.filter(purchases__invoice_date__date__gte=d30).distinct().count()
     active_90d = people.filter(purchases__invoice_date__date__gte=d90).distinct().count()
@@ -1196,7 +1213,7 @@ def customer_analytics(request):
         })
 
     # Segmentation (last 90 days, unfiltered)
-    last90 = PurchaseHistory.objects.exclude(doc_code='80').filter(
+    last90 = branch_scope.scope(PurchaseHistory.objects.exclude(doc_code='80'), request.user).filter(
         invoice_date__date__gte=d90
     )
     seg = {'vip': 0, 'frequent': 0, 'regular': 0, 'inactive': total_customers - active_90d}
@@ -1233,7 +1250,7 @@ def customer_analytics(request):
 def performance_analytics(request):
     """GET /api/analytics/performance/"""
     p        = request.query_params
-    qs       = _purchase_qs_filtered(p)
+    qs       = _purchase_qs_filtered(p, request.user)
     line_qs  = _line_qs_for(qs, p)
     user_map = _build_user_map()
 
@@ -1452,7 +1469,7 @@ def inventory_analytics(request):
 
         # Base queryset — do NOT select_related here to avoid loading a huge
         # join for the entire metrics table when we only need aggregates.
-        mqs = ItemDemandMetrics.objects.filter(run=latest_run)
+        mqs = branch_scope.scope(ItemDemandMetrics.objects.filter(run=latest_run), request.user)
 
         # ── Filters ─────────────────────────────────────────────────────────
         branches  = _parse_list(p.get('branches'))
@@ -1654,8 +1671,12 @@ def customer_search(request):
     if not q or len(q) < 2:
         return Response([])
 
+    base = Customer.objects.all()
+    _find = customer_access.findable_q(request.user, q)
+    if _find is not None:
+        base = base.filter(_find)
     qs = (
-        Customer.objects
+        base
         .filter(
             wq(q, 'name')
             | Q(phone__icontains=q)
@@ -1666,6 +1687,7 @@ def customer_search(request):
         .only(
             'id', 'name', 'phone', 'softech_pic',
             'softech_ptclassifcode', 'person_classif_label',
+            'preferred_branch_id', 'created_by_id',
         )
         .order_by('name')[:limit]
     )
@@ -1675,7 +1697,8 @@ def customer_search(request):
         results.append({
             'id':            c.id,
             'name':          c.name,
-            'phone':         c.phone,
+            'phone':         c.phone if customer_access.phones_visible(request.user, c)
+                             else customer_access.mask(c.phone),
             'softech_pic':   c.softech_pic or '',
             'channel_label': (
                 c.person_classif_label
@@ -1711,10 +1734,11 @@ def customer_churn(request):
     from django.db.models import Max, Subquery, OuterRef
 
     # Build base customer queryset for last-purchase annotation
-    ph_base = (
+    ph_base = branch_scope.scope(
         PurchaseHistory.objects
         .filter(doc_code='115')
-        .exclude(doc_code='80')
+        .exclude(doc_code='80'),
+        request.user,
     )
 
     # Optional branch / channel filters
@@ -1823,6 +1847,7 @@ def branch_contribution(request):
 
     Params: date_from, date_to (default: last 30 days)
     """
+    _all_branch_only(request)
     try:
         from apps.finance.models import ExpenseRecord
     except ImportError:
@@ -1965,6 +1990,7 @@ def inventory_investment(request):
         coverage_threshold  — months above which item is a liquidation candidate (default: 6)
         abc_class           — filter to specific ABC class(es)
     """
+    _all_branch_only(request)
     try:
         from apps.purchasing.models import ItemDemandMetrics, DemandCalculationRun
     except ImportError:
@@ -1993,7 +2019,7 @@ def inventory_investment(request):
     coverage_threshold = max(1, _safe_int(p.get('coverage_threshold'), 6))
     abc_filter         = _parse_list(p.get('abc_class'))
 
-    mqs = ItemDemandMetrics.objects.filter(demand_run=latest_run)
+    mqs = ItemDemandMetrics.objects.filter(run=latest_run)
     if abc_filter:
         mqs = mqs.filter(abc_class__in=abc_filter)
 

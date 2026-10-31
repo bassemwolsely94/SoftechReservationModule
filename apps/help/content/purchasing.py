@@ -493,7 +493,8 @@ SCREENS = [
             {'key': 'dist', 'title': T('التوزيعة', 'Distribution'),
              'body': T('توزيع استباقي: أصناف جديدة بلا معدل، أصناف غير مُدرجة بفرع، متكدسة بفرع، أو راكدة بالرئيسي — مع اقتراح توزيعها. علامات الأنواع تُصفّي القائمة فوراً (والعدد بجانب كل نوع)، وخانة البحث بالصنف أو الكود، واضغط عنوان أي عمود للترتيب. كل نقلة تعرض الفرع الحائز (رصيده ومعدل بيعه الشهري وحده الأقصى في SOFTECH) وكل فرع مستهدف (الكمية ورصيده ومعدل بيعه) — الرصيد لحظي من سيرفر الفرع حيث يوجد حد أقصى، وإلا من تشغيل المحرك (معلَّم *). «⬇ Excel» يصدّر الصفوف الظاهرة بنفس الفلاتر. الأسهم تتبع اتجاه القراءة: ← بالعربية و → بالإنجليزية.', 'Proactive distribution: new items with no rate, items never stocked at a branch, piled up at a branch, or dormant at HQ — with a suggested distribution. The type boxes filter the list instantly (the count is beside each), search by item or code, and click any column header to sort. Each move shows the holding branch (stock, monthly sales, SOFTECH maximum) and each designated branch (quantity, stock, monthly sales) — stock live from the branch server where SOFTECH holds a maximum, otherwise from the engine run (marked *). «⬇ Excel» exports the rows shown with the same filters. Arrows follow the reading direction: ← in Arabic, → in English.')},
         ],
-        'tips': [T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),
+        'tips': [T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
+                 T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),
                  T('كل ملفات Excel في هذه الشاشة فيها «بيانات الصنف» بعد الكود والاسم مباشرة: التصنيف العام، الشكل الصيدلي، الشكل والوحدة، تصنيف الخصم، موقوف التوريد، المورد الرئيسي، الشركة المنتجة، العائلة، سعر الجمهور وسعر التكلفة — من جدول الأصناف لحظة التصدير، فأي تحديث للصنف يظهر في التصدير التالي. «⬇ Excel» موجود كمان في «صندوق الإتاحة» (القائمة المفتوحة)، «متابعة النواقص» (الفئة المختارة كلها)، و«معدلات البيع» (الدفعة المفتوحة). '
                    'في «تلبية طلبات الفروع» و«طلبات واتساب» السعران بجانب البيانات هما أسعار الخطة نفسها. ملف الطلب اللي بيتبعت للمورد يفضل بالكود والاسم والكمية بس — من غير أسعارنا.',
                    'Every Excel file on this screen carries the item data right after the code and name: general class, dosage form, shape and unit, discount class, supply stopped, main supplier, manufacturer, family, public price and cost price — read from the items table at export time, so any item update shows in the next export. «⬇ Excel» is also on «Availability inbox» (the open list), «Shortage follow-up» (the whole chosen bucket) and «Sales rates» (the open batch). '
@@ -586,7 +587,7 @@ SCREENS = [
                  '«المورد (كما في الرسالة)» والمصدر (واتساب، نص، بريد، يدوي)، وبعدين ارفع صورة أو Excel/CSV.\n• الملف بيتقري ويعمل قائمة جديدة فوراً.\n• لو شكل ملف Excel جديد بيطلب تحديد الأعمدة مرة، وبيفتكرها للمورد ده.',
                  '"Supplier (as in the message)" and the source (WhatsApp, text, email, manual), then upload an image or Excel/CSV.\n• The file is read and a new list is created at once.\n• A new Excel layout asks you to map the columns once and remembers them for that supplier.')},
         ],
-        'updated': '2026-10-28',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

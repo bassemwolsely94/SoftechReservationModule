@@ -231,7 +231,8 @@ SCREENS = [
             {'key': 'contribution', 'title': T('🏦 مساهمة الفروع', '🏦 Branch contribution'), 'body': T('هامش المساهمة لكل فرع = إجمالي الربح − مصروفات الفرع.', 'Each branch\'s contribution margin = gross profit − branch expenses.')},
             {'key': 'churn', 'title': T('👻 العملاء الغائبون', '👻 Lapsed customers'), 'body': T('عملاء انقطعوا عن الشراء مع الخسارة السنوية المقدّرة — قائمة للتواصل.', 'Customers who stopped buying with the estimated annual loss — a contact list.')},
         ],
-        'tips': [_FILTERS,
+        'tips': [T('موظف الفرع بيشوف مبيعات فروعه بس، حتى لو اختار فرع تاني في الفلتر. تبويب «مساهمة الفروع» (أرباح كل الفروع) للإدارة ومدير الجودة والمركز الرئيسي. البحث عن عميل بالاسم بيلاقي عملاء فرعك؛ برقم الموبايل كامل بيلاقي أي عميل والرقم مخفي.', 'A branch user sees their own branches\' sales only, even if they pick another branch in the filter. The "branch contribution" tab (every branch\'s profit) is for management, the quality manager and HQ. Searching a customer by name finds your branch\'s customers; by full mobile number it finds anyone, with the number hidden.'),
+                 _FILTERS,
                  T('فلتر «العميل» = حساب البيع في SOFTECH (تعاقد، نقابة…). الفاتورة بتتنسب للعميل صاحب الـPIC؛ '
                    'الفاتورة اللي من غير PIC (نقدي، أغلب التعاقدات) بتتسجّل على سجل الحساب نفسه — وده مش شخص، '
                    'فمش بيظهر في «أفضل العملاء» ولا «العملاء الغائبون».',
@@ -294,7 +295,7 @@ SCREENS = [
              'warn': T('المساهمة بتتبع التاريخ بس، والغائبون مش بيتبعوا أي فلتر — ماتقارنهمش مباشرة بباقي التبويبات.',
                        'Contribution follows the dates only and lapsed customers ignore all filters — do not compare them directly with other tabs.')},
         ],
-        'updated': '2026-10-28',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -309,7 +310,8 @@ SCREENS = [
             {'key': 'branches', 'title': T('🏪 الفروع', '🏪 Branches'), 'body': T('عدد الموظفين وتوزيع الإيراد عليهم لكل فرع.', 'Number of employees and revenue distribution per branch.')},
             {'key': 'time', 'title': T('🕐 التوزيع الزمني', '🕐 Time distribution'), 'body': T('الإيراد بالساعة ويوم الأسبوع.', 'Revenue by hour and weekday.')},
         ],
-        'tips': [_FILTERS],
+        'tips': [T('موظف الفرع بيشوف أداء فروعه بس.', "A branch user sees their own branches' performance only."),
+                 _FILTERS],
         'related': ['incentives.programs', 'analytics.targets'],
         'tour': [
             {'target': 'analytics-performance-refresh', 'label': T('تحديث', 'Refresh'),
@@ -352,7 +354,7 @@ SCREENS = [
                  'الأداء هنا متقسم بكود مستخدم SOFTECH اللي عمل الفاتورة، والفترة الافتراضية آخر 30 يوم.\n• الفلاتر تحت العنوان زي لوحة المبيعات، والأرقام بتتحدّث لوحدها مع أي تغيير.\n• استخدمها في متابعة المندوبين وقبل حساب الحوافز.',
                  'Performance here is split by the SOFTECH user code that issued the invoice, and the default period is the last 30 days.\n• The filters under the title work like the sales dashboard, and the figures update by themselves on any change.\n• Use it to follow up salespeople and before working out incentives.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -536,6 +538,7 @@ SCREENS = [
         'summary': T('تحديد هدف (للشبكة أو فرع أو مندوب بكوده في SOFTECH) بقيمة صافي المبيعات أو عدد الفواتير، ومتابعة التحقيق لحظياً: المحقق، الباقي، المتوقع حتى اليوم، وهل الأداء متقدّم أم متأخّر.',
                      'Set a target (for the network, a branch or a salesperson by SOFTECH code) as net sales or invoice count, and follow attainment live: achieved, remaining, expected by today, and whether performance is ahead or behind.'),
         'audience': T('الإدارة والمشرفون والمشتريات والصيادلة.', 'Management, supervisors, purchasing and pharmacists.'),
+        'tips': [T('موظف الفرع بيشوف أهداف فرعه بس؛ أهداف السلسلة والفئات والمندوبين للإدارة.', "A branch user sees their own branch's targets only; chain, category and salesperson targets are for management.")],
         'related': ['analytics.kpi_board', 'analytics.scenarios'],
         'tour': [
             {'target': 'analytics-targets-new', 'label': T('+ هدف جديد', '+ New target'),
@@ -595,7 +598,7 @@ SCREENS = [
                  'كل بطاقة فيها المحقق «من» الهدف والنسبة، والمتوقع حتى اليوم.\n• ✕ في ركن البطاقة بيحذف الهدف على طول من غير سؤال تأكيد — اتأكد قبل ما تضغط.\n• الحذف متاح للمدير والمشرف والمشتريات بس.',
                  'Each card shows the achieved value "of" the target, the percentage, and the expected-to-date value.\n• The ✕ in the card corner deletes the target straight away without a confirmation — be sure before pressing.\n• Deleting is for admin, supervisor and purchasing only.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-10-31',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

@@ -96,7 +96,7 @@ export default function InventoryDashboard() {
   })
 
   // Inventory Investment — lazy-loaded only when the tab is active
-  const { data: investData, isLoading: investLoading } = useQuery({
+  const { data: investData, isLoading: investLoading, error: investError } = useQuery({
     queryKey: ['analytics-inventory-investment'],
     queryFn:  () => analyticsApi.inventoryInvestment().then(r => r.data),
     staleTime: 300_000,
@@ -367,6 +367,11 @@ export default function InventoryDashboard() {
                   {investLoading && (
                     <div className="flex justify-center h-32 items-center">
                       <div className="text-brand-600 animate-pulse">جارٍ تحليل رأس المال…</div>
+                    </div>
+                  )}
+                  {investError?.response?.status === 403 && (
+                    <div className="bg-surface border border-line rounded-xl p-6 text-center text-sm text-muted">
+                      رأس المال المحبوس في مخزون كل الفروع متاح للإدارة ومدير الجودة والمركز الرئيسي.
                     </div>
                   )}
                   {investData?.error === 'no_run' && (

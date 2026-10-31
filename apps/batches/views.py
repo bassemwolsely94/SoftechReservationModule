@@ -7,6 +7,7 @@ from rest_framework import viewsets, mixins, status, generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import BasePermission, IsAuthenticated
 
+from core import branch_scope
 from core.permissions import matrix_allows, matrix_permission
 
 # Expiry batches = the catalog module (Batch 4, Z-9b — was any logged-in user): reads and the
@@ -82,6 +83,18 @@ def _branch_list(data):
     return [str(b).strip() for b in raw if str(b).strip()]
 
 
+_NO_BRANCH = ['-']   # matches no SOFTECH code: "you may see none of the branches you asked for"
+
+
+def _scoped_branches(request, data):
+    """The client's branch-code filter narrowed to the user's branches (Batch 5 part 2).
+    None = every branch (an all-branch user who asked for no filter)."""
+    codes = branch_scope.narrow_codes(request.user, _branch_list(data))
+    if codes is None:
+        return None
+    return sorted(codes) or _NO_BRANCH
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, BATCH_READ])
 def purchase_expiry_candidates(request):
@@ -110,7 +123,7 @@ def purchase_expiry_candidates(request):
         return Response({'detail': 'تاريخ البداية بعد تاريخ النهاية.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    branches   = _branch_list(request.data) or None
+    branches   = _scoped_branches(request, request.data)
     if any(not re.fullmatch(r'[0-9A-Za-z\-]{1,20}', b) for b in (branches or [])):
         return Response({'detail': 'أكواد الفروع يجب أن تكون أرقاماً أو حروفاً فقط'},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -514,6 +527,8 @@ def spawn_expiry_count_session(request):
     from apps.stockcount.engine import generate_snapshot
 
     branch = (request.data.get('branch') or '').strip()
+    if branch:
+        branch_scope.require_code(request.user, branch)
     date_from = _parse_date(request.data.get('from'))
     date_to   = _parse_date(request.data.get('to'))
     if not branch:
@@ -608,7 +623,7 @@ def _store_list(params):
 def stock_expiry_summary_view(request):
     """KPI cards for the FEFO tabs from the StockExpiryBalance mirror (all nodes)."""
     from .stock_expiry import stock_expiry_summary
-    branches = _branch_list(request.query_params) or None
+    branches = _scoped_branches(request, request.query_params)
     stores = _store_list(request.query_params) or None
     inc_q = str(request.query_params.get('include_quarantine', '')).lower() == 'true'
     return Response(stock_expiry_summary(branch_codes=branches, store_codes=stores,
@@ -620,7 +635,7 @@ def stock_expiry_summary_view(request):
 def stock_expiry_stores_view(request):
     """Distinct stores (HQ/branch warehouses) in the mirror — powers the store filter."""
     from .stock_expiry import stock_expiry_stores
-    branches = _branch_list(request.query_params) or None
+    branches = _scoped_branches(request, request.query_params)
     return Response({'stores': stock_expiry_stores(branch_codes=branches)})
 
 
@@ -635,7 +650,7 @@ def stock_expiry_report_view(request):
     """
     from .stock_expiry import stock_expiry_report
     p = request.query_params
-    branches = _branch_list(p) or None
+    branches = _scoped_branches(request, p)
     stores = _store_list(p) or None
 
     def _b(name):
@@ -780,6 +795,7 @@ def spawn_stock_expiry_count(request):
     codes = [str(c).strip() for c in raw if str(c).strip()] if isinstance(raw, (list, tuple)) else []
     if not branch:
         return Response({'detail': 'كود الفرع مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    branch_scope.require_code(request.user, branch)
     if not codes:
         return Response({'detail': 'لا توجد أصناف محددة.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -849,6 +865,7 @@ def expiry_disposal(request):
 
     if request.method == 'GET':
         qs = ExpiryDisposalRecord.objects.select_related('created_by', 'decided_by')
+        qs = branch_scope.scope_code(qs, request.user)      # Batch 5 part 2
         p = request.query_params
         if p.get('status'):
             qs = qs.filter(status=p['status'])
@@ -870,6 +887,7 @@ def expiry_disposal(request):
         return Response({'detail': 'كود الصنف والفرع مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
     if decision not in valid:
         return Response({'detail': 'قرار غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+    branch_scope.require_code(request.user, branch)
     from decimal import Decimal, InvalidOperation
     try:
         qty = Decimal(str(d.get('qty')))
@@ -893,14 +911,14 @@ def expiry_disposal(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, BATCH_READ])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL])   # was BATCH_READ: a viewer could cancel
 def expiry_disposal_status(request, pk):
     """Transition a disposal record: approve / done / cancel. approve+done are
     gated to admin / quality_manager / supervisor. No SOFTECH write."""
     from django.utils import timezone
     from .models import ExpiryDisposalRecord
     try:
-        rec = ExpiryDisposalRecord.objects.get(pk=pk)
+        rec = branch_scope.scope_code(ExpiryDisposalRecord.objects.all(), request.user).get(pk=pk)
     except ExpiryDisposalRecord.DoesNotExist:
         return Response({'detail': 'غير موجود'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -980,6 +998,8 @@ class StockBatchViewSet(
 
     def get_queryset(self):
         qs = StockBatch.objects.select_related('item', 'branch', 'vendor', 'received_by')
+        # Batch 5 part 2: only the user's branches — list, retrieve and quarantine inherit it.
+        qs = branch_scope.scope(qs, self.request.user)
         p  = self.request.query_params
 
         if p.get('item'):
@@ -1012,6 +1032,7 @@ class StockBatchViewSet(
         branch_id = request.query_params.get('branch')
         if not item_id or not branch_id:
             return Response({'detail': 'item و branch مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
+        branch_scope.require(request.user, branch_id)
 
         batches = BatchService.fefo_batches(int(item_id), int(branch_id))
         serializer = FEFORecommendationSerializer(batches, many=True)
@@ -1025,6 +1046,7 @@ class StockBatchViewSet(
         data      = BatchService.near_expiry_summary(
             branch_id=int(branch_id) if branch_id else None,
             days=days,
+            branch_ids=branch_scope.branch_ids(request.user),
         )
         return Response(data)
 
@@ -1034,6 +1056,7 @@ class StockBatchViewSet(
         qs = NearExpiryAlert.objects.filter(
             resolved_at__isnull=True
         ).select_related('batch', 'batch__item', 'batch__branch', 'batch__vendor')
+        qs = branch_scope.scope(qs, request.user, 'batch__branch')
 
         if request.query_params.get('branch'):
             qs = qs.filter(batch__branch_id=request.query_params['branch'])

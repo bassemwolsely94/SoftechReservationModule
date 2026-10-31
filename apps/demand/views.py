@@ -35,6 +35,7 @@ from .serializers import (
     DisqualifySerializer, OptOutSerializer, FromReservationSerializer,
 )
 from . import service
+from core import branch_scope
 from core.errors import public_error
 from core.permissions import deny_unless
 
@@ -104,19 +105,9 @@ class DemandViewSet(viewsets.ModelViewSet):
             'branch', 'customer', 'assigned_to__user', 'created_by__user',
         ).prefetch_related('items__item')
 
-        profile = _profile(self.request)
-        if not profile:
-            return qs.none()
-
-        # HQ roles see all
-        if profile.role in ('admin', 'call_center', 'purchasing'):
-            return qs
-
-        # Branch staff see their branch only
-        if profile.branch:
-            return qs.filter(branch=profile.branch)
-
-        return qs.none()
+        # Batch 5: the one branch helper — all-branch roles (incl. supervisor / quality manager,
+        # owner decision B-3) see every branch; branch staff home + allowed − restricted; fail-closed.
+        return branch_scope.scope(qs, self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -128,6 +119,7 @@ class DemandViewSet(viewsets.ModelViewSet):
         return DemandDetailSerializer
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         profile = _profile(self.request)
         data = serializer.validated_data
         items_data = data.pop('items', [])

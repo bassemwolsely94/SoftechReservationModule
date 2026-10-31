@@ -83,6 +83,73 @@ def scope(qs, user_or_profile, field: str = 'branch'):
     return qs.filter(**{f'{lookup}__in': ids})
 
 
+def branch_codes(user_or_profile):
+    """Like branch_ids() but as SOFTECH codes (Branch.softech_branch_id) — for rows that carry the
+    code string instead of a Branch FK (stock count sessions, expiry balances, disposals)."""
+    ids = branch_ids(user_or_profile)
+    if ids is None:
+        return None
+    from apps.branches.models import Branch
+    return set(Branch.objects.filter(id__in=ids).values_list('softech_branch_id', flat=True))
+
+
+def allows_code(user_or_profile, code) -> bool:
+    codes = branch_codes(user_or_profile)
+    if codes is None:
+        return True
+    return bool(code) and str(code) in codes
+
+
+def scope_code(qs, user_or_profile, field: str = 'branch_code'):
+    """Filter `qs` to the user's branches through a SOFTECH branch-code field."""
+    codes = branch_codes(user_or_profile)
+    if codes is None:
+        return qs
+    return qs.filter(**{f'{field}__in': codes})
+
+
+def require_code(user_or_profile, code):
+    """A client-supplied branch code (create / spawn / filter) must be one of the user's."""
+    from rest_framework.exceptions import PermissionDenied
+    if not allows_code(user_or_profile, code):
+        raise PermissionDenied('لا يمكنك التسجيل على فرع خارج فروعك.')
+
+
+def require(user_or_profile, branch_id):
+    """Same for a client-supplied Branch pk."""
+    from rest_framework.exceptions import PermissionDenied
+    try:
+        branch_id = int(branch_id) if branch_id not in (None, '') else None
+    except (TypeError, ValueError):
+        branch_id = -1
+    if not allows(user_or_profile, branch_id):
+        raise PermissionDenied('لا يمكنك التسجيل على فرع خارج فروعك.')
+
+
+def narrow_ids(user_or_profile, requested):
+    """A client branch filter (list of pks) intersected with what the user may see. None in →
+    the user's own set (None = every branch). Unknown / foreign ids simply drop out."""
+    ids = branch_ids(user_or_profile)
+    if not requested:
+        return ids
+    req = set()
+    for r in requested:
+        try:
+            req.add(int(r))
+        except (TypeError, ValueError):
+            pass
+    return req if ids is None else req & ids
+
+
+def narrow_codes(user_or_profile, requested):
+    """narrow_ids() for SOFTECH codes."""
+    codes = branch_codes(user_or_profile)
+    if not requested:
+        return codes
+    req = {str(r).strip() for r in requested if str(r).strip()}
+    return req if codes is None else req & codes
+
+
 def get_or_404(model_or_qs, user_or_profile, field: str = 'branch', **lookup):
     """The record if it exists AND is in the user's branches — otherwise Http404, so another
     branch's record is indistinguishable from a missing one."""
