@@ -59,18 +59,18 @@ The hard part is not the gate. It is **knowing reliably where a request came fro
 
 ## 5. Bugs / holes found during the audit (independent of the new design)
 
-| # | Finding | Risk |
-|---|---|---|
-| H1 | `/api/personal/` is RBAC-exempt yet `persons/search/`, identities and `widgets/<pk>/data/` run **live HQ queries** for any logged-in user | Leakage (person data) to e.g. a rider |
-| H2 | Rider location endpoint writes the driver's GPS into `order.delivery_lat/lng` — the same field the drop-off geofence checks (`delivery/views.py:1336` vs `:479`) | Geofence defeated |
-| H3 | Delivery role holds `approve`+`finalize` → a rider can cancel/close own orders | Fraud |
-| H4 | `/rider` has no role guard; the delivery role can open every `/` and `/m` route, limited only by the matrix (which is in `log` mode) | Leakage |
-| H5 | `GET /api/sync/branch-health/?probe=1` is an open read that fans out to 6 SOFTECH nodes | Load / DoS on SOFTECH from any login |
-| H6 | Daphne runs `--proxy-headers`; it may take the **leftmost** (client-forgeable) X-Forwarded-For into `REMOTE_ADDR`, and several login/MFA paths fall back to `REMOTE_ADDR` | Spoofed IPs in logs; would break any IP rule — verify before relying on IP |
-| H7 | MFA remember-device = 30-day bearer token in localStorage | Stolen token skips 2FA from anywhere |
-| H8 | No per-account lockout | Password spraying from many IPs |
-| H9 | nginx `/admin/` allows whole 10/8 = every ZeroTier member; Django admin has no 2FA | Intrusion |
-| H10 | HR attendance geofence uses client coordinates and never blocks | Attendance fraud (not security-critical) |
+| # | Finding | Risk | Status |
+|---|---|---|---|
+| H1 | `/api/personal/` is RBAC-exempt yet `persons/search/`, identities and `widgets/<pk>/data/` run **live HQ queries** for any logged-in user | Leakage (person data) to e.g. a rider | **Fixed in N0** (`d2eb797f`) |
+| H2 | Rider location endpoint writes the driver's GPS into `order.delivery_lat/lng` — the same field the drop-off geofence checks (`delivery/views.py:1336` vs `:479`) | Geofence defeated | **Fixed in N0** (`091989e0`) |
+| H3 | Delivery role holds `approve`+`finalize` → a rider can cancel/close own orders | Fraud | **Fixed in N0** (`091989e0`) |
+| H4 | `/rider` has no role guard; the delivery role can open every `/` and `/m` route, limited only by the matrix (which is in `log` mode) | Leakage | **Deferred to N3** (needs the zone/matrix enforcement) |
+| H5 | `GET /api/sync/branch-health/?probe=1` is an open read that fans out to 6 SOFTECH nodes | Load / DoS on SOFTECH from any login | **Fixed in N0** (`768eee28`) |
+| H6 | Daphne runs `--proxy-headers`; it may take the **leftmost** (client-forgeable) X-Forwarded-For into `REMOTE_ADDR`, and several login/MFA paths fall back to `REMOTE_ADDR` | Spoofed IPs in logs; would break any IP rule — verify before relying on IP | **Fixed in N0** (`b65a2605`) |
+| H7 | MFA remember-device = 30-day bearer token in localStorage | Stolen token skips 2FA from anywhere | **Fixed in N0** (`2f0977b4`) |
+| H8 | No per-account lockout | Password spraying from many IPs | **Fixed in N0** (`deca2965, b191ff77`) |
+| H9 | nginx `/admin/` allows whole 10/8 = every ZeroTier member; Django admin has no 2FA | Intrusion | **Fixed in N0** (`b856136d`) |
+| H10 | HR attendance geofence uses client coordinates and never blocks | Attendance fraud (not security-critical) | **Owner decision** (not security-critical) |
 
 ## 6. Proposed design
 
