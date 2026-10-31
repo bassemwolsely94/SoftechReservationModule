@@ -910,7 +910,7 @@ function ClaimIdentityModal({ onClose, onClaimed }) {
   const [searching, setSearching] = useState(false)
 
   const doSearch = async () => {
-    if (q.trim().length < 2) return
+    if (q.trim().length < 3) return
     setSearching(true)
     try {
       const { data } = await personalApi.searchPersons(q.trim(), kind)

@@ -44,6 +44,9 @@ SECRET_KEY = config('SECRET_KEY', default='')
 
 DEBUG = config('DEBUG', default=False, cast=bool)
 
+# Django admin has no 2FA (N0/H9): off in production, on in dev. Turn on for a maintenance window only.
+DJANGO_ADMIN_ENABLED = config('DJANGO_ADMIN_ENABLED', default=DEBUG, cast=bool)
+
 # Signing key for JWTs, portal sessions, delivery-tracking / PBX-recording links and
 # (when OMNI_CREDENTIALS_KEY is unset) the encryption of stored channel credentials.
 # A missing or placeholder key would make all of those forgeable, so a non-DEBUG
@@ -301,6 +304,7 @@ REST_FRAMEWORK = {
     'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',   # max 10 login attempts per IP per minute
+        'personal_person_search': '30/hour',   # live SOFTECH personsdata search (N0/H1)
         # Customer portal (external) magic-link request + token exchange
         'portal_request_link': config('PORTAL_REQUEST_LINK_RATE', default='5/min'),
         'portal_auth':         config('PORTAL_AUTH_RATE',         default='10/min'),

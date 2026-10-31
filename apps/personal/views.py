@@ -23,15 +23,17 @@ from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from .models import SoftechIdentityClaim, PersonalWidget, DocumentCommentEdit, DocumentRevision
 from .serializers import IdentityClaimSerializer, PersonalWidgetSerializer
 from .providers import WIDGET_REGISTRY, catalog
 from . import queries
 from core.errors import public_error
+from apps.audit.models import AuditLog
 
 
 def _can_edit_comments(profile):
@@ -123,18 +125,32 @@ def resolve_person_key(widget: PersonalWidget, profile) -> str:
 # PERSON SEARCH
 # ══════════════════════════════════════════════════════════════════════════════
 
+class PersonSearchThrottle(UserRateThrottle):
+    """30 live personsdata searches per user per hour (N0/H1)."""
+    scope = 'personal_person_search'
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([PersonSearchThrottle])
 def persons_search(request):
-    q    = request.query_params.get('q', '')
+    """Live HQ personsdata LIKE — claim-an-identity helper, so it is gated, throttled and audited."""
+    profile = _profile(request)
+    if not profile or not profile.is_active or profile.role == 'delivery':
+        return Response({'detail': 'غير مصرّح'}, status=403)
+    q    = (request.query_params.get('q', '') or '').strip()
     kind = request.query_params.get('kind') or None
     if kind and kind not in ('supplier', 'customer'):
         kind = None
-    if len((q or '').strip()) < 2:
+    if len(q) < 3:
         return Response({'results': []})
     results = queries.search_persons(q, kind=kind, limit=25)
-    if results and results[0].get('_error'):
-        return Response({'detail': 'تعذّر البحث في SOFTECH', 'error': results[0]['_error']}, status=502)
+    failed = bool(results) and bool(results[0].get('_error'))
+    AuditLog.log('personal_person_search', user=profile, request=request,
+                 extra={'q': q[:100], 'kind': kind, 'count': 0 if failed else len(results)})
+    if failed:
+        return Response({'detail': 'تعذّر البحث في SOFTECH',
+                         'error': public_error(request, RuntimeError(results[0]['_error']))}, status=502)
     return Response({'results': results})
 
 

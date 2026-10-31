@@ -11,6 +11,28 @@ import { authApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import TwoFactorSetup from '../components/TwoFactorSetup'
 
+function ForgetDevices() {
+  const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+  async function forget() {
+    setBusy(true)
+    try {
+      await authApi.forgetDevices()
+      useAuthStore.getState().clearDeviceToken()
+      setDone(true)
+    } finally { setBusy(false) }
+  }
+  return (
+    <div className="space-y-2 mt-4" dir="rtl">
+      <p className="text-sm text-gray-500">لو فقدت جهازاً سبق أن اخترت «تذكّر هذا الجهاز» عليه، ألغِ كل الأجهزة المحفوظة؛ سيُطلب الرمز في الدخول التالي على كل جهاز.</p>
+      <button data-tour="general-security-forget-devices" onClick={forget} disabled={busy}
+        className="border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50">
+        {done ? '✓ تم إلغاء الأجهزة المحفوظة' : 'إلغاء كل الأجهزة المحفوظة'}
+      </button>
+    </div>
+  )
+}
+
 function DisableForm({ onDone }) {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -76,6 +98,8 @@ export default function SecurityPage() {
             </div>
             <hr className="border-gray-100" />
             <DisableForm onDone={refresh} />
+            <hr className="border-gray-100" />
+            <ForgetDevices />
           </div>
         ) : (
           <div className="space-y-4">

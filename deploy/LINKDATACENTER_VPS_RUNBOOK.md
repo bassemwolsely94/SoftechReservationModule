@@ -839,6 +839,7 @@ You flip them to the office values only at cutover (section 11). Fill in:
 
 ```env
 DEBUG=False
+DJANGO_ADMIN_ENABLED=False        # Django admin has no 2FA; set True only for a maintenance window, then back to False
 SECRET_KEY=<python3 -c "import secrets; print(secrets.token_urlsafe(50))">
 ALLOWED_HOSTS=elrezeikyapp.dawalvry.com,localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://elrezeikyapp.dawalvry.com
@@ -1014,16 +1015,39 @@ WireGuard is dormant and disabled — section 5.0.)
 ### 9.2 Nginx (from `deploy/nginx.conf`)
 
 ```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # overwrites X-Forwarded-For
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the owner's ZeroTier IP(s)
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/elrezeiky
 sudo sed -i 's#YOUR_DOMAIN_OR_IP#elrezeikyapp.dawalvry.com#g; s#YOUR_DOMAIN#elrezeikyapp.dawalvry.com#g; s#/opt/elrezeiky/#/opt/elrezeiky/app/#g; s#root /opt/elrezeiky;#root /opt/elrezeiky/app;#' \
      /etc/nginx/sites-available/elrezeiky
 sudo ln -s /etc/nginx/sites-available/elrezeiky /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
-`/admin/` is limited to private ranges. Through the public name your request arrives from a
-public address and is refused; over ZeroTier your laptop (a 10.50.50.x member, section 13.3) is
-inside 10/8, so open Django admin at `https://10.50.50.77/admin/` (accept the name warning) —
-admin works only via the VPN. Good.
+`/admin/` is limited to the addresses in `/etc/nginx/elrezeiky-admin-allow.conf` (127.0.0.1 plus the
+owner's ZeroTier IP(s) you add — not the whole 10/8 range), and Django only mounts it when
+`DJANGO_ADMIN_ENABLED=True` (off in production; otherwise `/admin/` is a 404). For a maintenance
+window: set it True in `.env`, restart the app, open `https://10.50.50.77/admin/` (accept the name
+warning) from an allowed address, then set it back to False and restart.
+
+#### Applying security batch N0 to the live server
+
+The live site file was hand-edited (certbot, `listen` lines) and still uses `proxy_params` and the
+10/8 admin allows, so do **not** re-copy the template over it. Edit the live file in place:
+
+```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the admin IPs
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - replace EVERY `include /etc/nginx/proxy_params;` with `include /etc/nginx/elrezeiky-proxy-headers.conf;`
+#  - add that same include inside `location /ws/ { ... }`
+#  - in `location /admin/` replace the private-range allow/deny lines with `include /etc/nginx/elrezeiky-admin-allow.conf;`
+sudo nginx -t && sudo systemctl reload nginx
+# .env: DJANGO_ADMIN_ENABLED=False, then: sudo systemctl restart elrezeiky-web
+```
+Verify the forged header no longer reaches the app: make one failed login with
+`curl -s -H 'X-Forwarded-For: 6.6.6.6' -H 'Content-Type: application/json' -d '{"username":"nobody","password":"x"}' https://elrezeikyapp.dawalvry.com/api/auth/login/`
+then check the activity log / `journalctl -u elrezeiky-web` — the logged IP must be your real
+address, not `6.6.6.6`.
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
@@ -1550,6 +1574,7 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 | Out of memory / swapping | `htop`: stop workbench Vite/tests; keep EasyOCR/Whisper off; `journalctl -u elrezeiky-ocr` (sidecar hitting its 2 GB cap?); ask LDC for 16 GB |
 | OCR slow / screens slow during OCR | expected on 4 vCPU during big bundles; check `OMP_THREAD_LIMIT=1`, sidecar `CPUQuota`; run big bundles after hours; 16 GB / 8 vCPU plan |
 | `paddleocr` engine unavailable | `systemctl status elrezeiky-ocr` · `curl 127.0.0.1:8077/health` · `PADDLE_OCR_URL` in `.env` |
+| Every admin is login-locked (5 wrong tries) | On the server: `cd /opt/elrezeiky/app && sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py unlock_login <username>` — lifts the lock and logs it |
 | Cert expired | `sudo certbot renew` · `systemctl list-timers | grep certbot` |
 
 ---

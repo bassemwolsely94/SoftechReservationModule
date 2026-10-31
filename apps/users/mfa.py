@@ -93,11 +93,13 @@ def read_preauth_token(token: str, purpose: str):
 
 
 def _device_fingerprint(user) -> str:
-    """Changes whenever the password or the 2FA secret does, so a password change, an admin
-    reset or a 2FA reset cancels every "remember this device" (Batch 3, A-3; owner 2026-10-27)."""
+    """Changes whenever the password, the 2FA secret or the device epoch does, so a password
+    change, an admin reset, a 2FA reset or "forget saved devices" cancels every "remember this
+    device" (Batch 3, A-3; owner 2026-10-27; N0/H7)."""
     from django.utils.crypto import salted_hmac
     profile = getattr(user, 'staff_profile', None)
-    material = f'{user.password}|{getattr(profile, "mfa_secret", "") or ""}'
+    material = (f'{user.password}|{getattr(profile, "mfa_secret", "") or ""}'
+                f'|{getattr(profile, "mfa_device_epoch", 0) or 0}')
     return salted_hmac('mfa-device-fingerprint', material).hexdigest()[:24]
 
 
@@ -113,6 +115,18 @@ def valid_device_token(token: str, user) -> bool:
     except signing.BadSignature:
         return False
     return data.get('uid') == user.id and data.get('fp') == _device_fingerprint(user)
+
+
+def forget_devices(profile, by_profile, ip) -> int:
+    """Cancel every "remember this device" token of `profile`; returns the new epoch (N0/H7)."""
+    from django.db.models import F
+    from .models import UserActivityLog
+    StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
+    profile.refresh_from_db(fields=['mfa_device_epoch'])
+    UserActivityLog.objects.create(target_user=profile, changed_by=by_profile,
+                                   action='mfa_devices_forgotten', ip_address=ip,
+                                   note='إلغاء الأجهزة المحفوظة')
+    return profile.mfa_device_epoch
 
 
 # ── TOTP + backup codes ──────────────────────────────────────────────────────────
@@ -223,8 +237,8 @@ def _actor_from_request(request, purposes=('enroll',)):
 
 def _log(action, profile, request, note=''):
     from .views import _log_auth
-    from .middleware import get_current_ip
-    ip = get_current_ip() or request.META.get('REMOTE_ADDR')
+    from core.client_ip import client_ip
+    ip = client_ip(request)
     _log_auth(action, profile, ip, note=note)
 
 
@@ -244,6 +258,10 @@ def verify_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     code = request.data.get('code', '')
 
+    from . import lockout          # H8: a locked account takes no more codes
+    if profile and lockout.locked_until(profile):
+        return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     if not (profile and profile.mfa_enabled):
         return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -251,6 +269,9 @@ def verify_2fa_view(request):
         cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
         tries = cache.incr(tries_key)
         _log('mfa_failed', profile, request, note=f'try {tries}/{MAX_CODE_TRIES}')
+        if lockout.locked_until(profile):
+            from core.client_ip import client_ip
+            lockout.register_lock(profile, client_ip(request))
         if tries >= MAX_CODE_TRIES:
             return Response({'error': 'محاولات كثيرة خاطئة — سجّل الدخول من جديد'},
                             status=status.HTTP_401_UNAUTHORIZED)
@@ -316,6 +337,7 @@ def enable_2fa_view(request):
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
         resp.update(build_login_response(user))
+        _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية')
     return session_response(resp)
 
 
@@ -342,6 +364,18 @@ def disable_2fa_view(request):
     profile.save(update_fields=['mfa_enabled', 'mfa_secret', 'mfa_backup_codes', 'mfa_confirmed_at'])
     _log('mfa_disabled', profile, request)
     return Response({'detail': 'تم إيقاف المصادقة الثنائية'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def forget_devices_view(request):
+    """The signed-in user cancels every saved "remember this device" (N0/H7)."""
+    from core.client_ip import client_ip
+    profile = getattr(request.user, 'staff_profile', None)
+    if not profile:
+        return Response({'error': 'لا يوجد ملف موظف'}, status=status.HTTP_400_BAD_REQUEST)
+    forget_devices(profile, profile, client_ip(request))
+    return Response({'detail': 'تم إلغاء كل الأجهزة المحفوظة'})
 
 
 @api_view(['GET'])

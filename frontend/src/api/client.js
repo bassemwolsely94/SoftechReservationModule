@@ -74,6 +74,7 @@ export const authApi = {
     api.post('/auth/2fa/enable/', { code, ...(mfaToken ? { mfa_token: mfaToken } : {}) }),
   disable2fa:(password, code) => api.post('/auth/2fa/disable/', { password, code }),
   status2fa: () => api.get('/auth/2fa/status/'),
+  forgetDevices: () => api.post('/auth/2fa/forget-devices/'),
 }
 
 // ── Reservations ──────────────────────────────────────────────────────────────
@@ -1299,6 +1300,8 @@ export const usersApi = {
   resetPassword: (id, newPassword) =>
     api.post(`/users/staff/${id}/reset-password/`, { new_password: newPassword }),
   toggleActive:  (id) => api.post(`/users/staff/${id}/toggle-active/`),
+  unlockLogin:   (id) => api.post(`/users/${id}/unlock-login/`),
+  forgetDevices: (id) => api.post(`/users/${id}/forget-devices/`),
   activityLog:   (id) => api.get(`/users/staff/${id}/activity-log/`),
 
   // Self-service

@@ -166,19 +166,30 @@ def branch_health(request):
     (softech_branch_id '100'). Each node is enriched with its Arabic name and an
     is_hq flag so the UI can render the HQ node distinctly and show "N/N" honestly.
 
-    Pass ?probe=1 to run a fresh live sweep before returning (used by a manual
-    "test connections" button); otherwise the last persisted snapshot is returned.
+    Pass ?probe=1 to run a fresh live sweep before returning (admin only, once a
+    minute; the `probe` field says ran/refused/cooldown); otherwise the last persisted snapshot is returned.
     """
     from apps.delivery.branch_watchdog import get_health_snapshot, CHRONIC_THRESHOLD
     from apps.sync.network_health import HQ_BRANCH_ID
     from apps.branches.models import Branch
 
+    probe_state = None
     if request.query_params.get('probe') in ('1', 'true', 'yes'):
-        try:
-            from apps.sync.network_health import probe_all_nodes
-            probe_all_nodes(record=True)
-        except Exception as exc:
-            logger.warning('[branch_health] live probe failed: %s', exc)
+        # N0/H5: a live login to every SOFTECH node is admin-only, and at most once a minute
+        # across all users — everyone else just gets the stored snapshot (still HTTP 200).
+        from django.core.cache import cache
+        from apps.users.permissions import IsAdminRole
+        if not IsAdminRole().has_permission(request, None):
+            probe_state = 'refused'
+        elif not cache.add('sync:branch-health:probe', 1, 60):
+            probe_state = 'cooldown'
+        else:
+            probe_state = 'ran'
+            try:
+                from apps.sync.network_health import probe_all_nodes
+                probe_all_nodes(record=True)
+            except Exception as exc:
+                logger.warning('[branch_health] live probe failed: %s', exc)
 
     snapshot = get_health_snapshot()   # { host: {branch_id, consecutive_failures, ...} }
 
@@ -217,13 +228,16 @@ def branch_health(request):
     order = {'chronic': 0, 'down': 1, 'ok': 2}
     nodes.sort(key=lambda b: (0 if b['is_hq'] else 1, order[b['state']], -b['consecutive_failures']))
 
-    return Response({
+    payload = {
         'summary':  {'total': len(nodes), 'ok': ok, 'down': down, 'chronic': chronic},
         # 'branches' key kept for backward-compat with the existing frontend.
         'branches': nodes,
         'nodes':    nodes,
         'chronic_threshold': CHRONIC_THRESHOLD,
-    })
+    }
+    if probe_state:
+        payload['probe'] = probe_state      # ran | refused | cooldown
+    return Response(payload)
 
 
 @api_view(['GET'])
