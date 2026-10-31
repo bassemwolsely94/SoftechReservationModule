@@ -198,6 +198,35 @@ def _score_candidate(cand, our_total, our_codes, our_count, our_date, our_dn2):
     return min(1.0, round(score, 3)), factors
 
 
+def find_posted_document(invoice):
+    """READ-ONLY: the SOFTECH docnumber this invoice was already posted as, or None.
+    Purchase: supplier + doccode 10 + printed number (the native dup guard). Return: a
+    return of the same original by the same supplier dated on/after this invoice's last
+    change. Raises when SOFTECH can't be reached (the caller must not guess)."""
+    from config.sybase import get_branch_connection
+    host = branch_host(invoice)
+    if not host:
+        raise ValueError('No branch db_host and no SYBASE_HOST fallback configured.')
+    conn = get_branch_connection(host, invoice.branch.db_port or 5000, invoice.branch.db_name or 'SOFTECHDB9',
+                                 charset=_write_charset())
+    try:
+        supp = invoice.vendor.softech_personcode
+        if invoice.doc_kind == 'return':
+            row = _q1(conn, "SELECT max(docnumber) FROM stktransm WHERE branchcode=? AND doccode='120' "
+                            "AND patientpayment=? AND cust_branch_code=? AND docdate >= ?",
+                      [invoice.softech_branchcode, Decimal(int(invoice.return_of_docnumber or 0)), supp,
+                       invoice.updated_at.date().isoformat()])
+        else:
+            dn2 = _docnumber2(invoice)
+            if not dn2:
+                return None
+            row = _q1(conn, "SELECT docnumber FROM stktransm WHERE cust_branch_code=? AND doccode=? "
+                            "AND docnumber2=?", [supp, invoice.softech_doccode, Decimal(dn2)])
+        return int(row[0]) if row and row[0] is not None else None
+    finally:
+        conn.close()
+
+
 def same_kind(invoice) -> dict:
     """A return shares its purchase's supplier invoice number, so duplicates are only
     looked for among the same kind of document — and, for a return, the same original."""

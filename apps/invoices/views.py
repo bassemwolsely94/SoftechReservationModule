@@ -111,7 +111,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         'learn_mapping': ('edit',), 'update_header': ('edit',), 'reconcile': ('edit',),
         'delete_line': ('edit', 'delete'),
         # decisions — confirm is the only precondition of the SOFTECH push
-        'confirm': ('approve',), 'confirm_green': ('approve',), 'reject': ('approve',),
+        'confirm': ('approve',), 'confirm_green': ('approve',), 'reject': ('approve',), 'reopen': ('approve',),
         'create_return': ('approve',),
         # the SOFTECH write itself (also keeps its own _PUSH_ROLES check)
         'push': ('finalize',), 'push_batch': ('finalize',),
@@ -246,7 +246,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             if structured and structured.get('lines'):
                 header, candidates = parse_structured(structured)
                 invoice.raw_ocr_text = json.dumps(structured, ensure_ascii=False)[:20000]
-                self._apply_ocr_header(invoice, header)
+                self._apply_ocr_header(invoice, header, invoice.source_image.path)
             else:
                 raw_text   = extract_text(invoice.source_image.path)
                 invoice.raw_ocr_text = raw_text
@@ -276,11 +276,11 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             invoice.save(update_fields=['status', 'notes'])
 
     @staticmethod
-    def _apply_ocr_header(invoice, header):
+    def _apply_ocr_header(invoice, header, image_path=None):
         """Fill blank invoice header fields from the OCR'd header (never overwrite
         what a user already entered). Delegates to the shared pipeline."""
         from . import pipeline
-        pipeline.apply_ocr_header(invoice, header)
+        pipeline.apply_ocr_header(invoice, header, image_path)
 
     # ── Re-run OCR ────────────────────────────────────────────────────────────
 
@@ -640,6 +640,42 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.warning('auto-learn on confirm failed for invoice %s: %s', invoice.pk, e)
         return Response({'detail': 'تم تأكيد الفاتورة', 'learned_mappings': learned})
+
+    # ── Back to editing ───────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'])
+    def reopen(self, request, pk=None):
+        """«↩ رجوع للتعديل»: take a confirmed / push-failed / queued invoice — or one stuck
+        in 'pushing' — back to review so its grid and header can be corrected. Nothing is
+        ever posted here. A 'pushing' invoice is first looked up in SOFTECH: if the document
+        is there it is recorded as posted instead (never reopened → never posted twice)."""
+        from . import writer
+        invoice = self.get_object()
+        was = invoice.status
+        if was in ('finalized',) or invoice.softech_docnumber:
+            return Response({'detail': 'الفاتورة مُرحّلة إلى SOFTECH — التصحيح يكون بمرتجع'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if was not in ('confirmed', 'push_failed', 'queued', 'pushing'):
+            return Response({'detail': 'الفاتورة قابلة للتعديل بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
+        if was == 'pushing':
+            try:
+                posted = writer.find_posted_document(invoice)
+            except Exception as e:
+                return Response({'detail': f'تعذّر التأكد من SOFTECH — لا يمكن الرجوع الآن: {public_error(request, e)}'},
+                                status=status.HTTP_502_BAD_GATEWAY)
+            if posted:
+                SupplierInvoice.objects.filter(pk=invoice.pk, status='pushing').update(
+                    status='finalized', softech_docnumber=posted)
+                return Response({'detail': f'المستند موجود بالفعل في SOFTECH برقم {posted} — سُجّلت الفاتورة كمُرحّلة',
+                                 'status': 'finalized', 'softech_docnumber': posted})
+        if not SupplierInvoice.objects.filter(pk=invoice.pk, status=was).update(status='review'):
+            return Response({'detail': 'تغيّرت حالة الفاتورة أثناء الطلب — حدّث الصفحة'},
+                            status=status.HTTP_409_CONFLICT)
+        from apps.audit.models import AuditLog
+        AuditLog.log('invoice_reopened', user=getattr(request.user, 'staff_profile', None), obj=invoice,
+                     changes={'status': [was, 'review']}, extra={'action': 'reopen'},
+                     note='رجوع للتعديل قبل الترحيل')
+        return Response({'detail': 'رجعت الفاتورة للمراجعة — عدّل ثم أكّد من جديد', 'status': 'review'})
 
     # ── Reject invoice ────────────────────────────────────────────────────────
 

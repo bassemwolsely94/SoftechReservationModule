@@ -104,9 +104,11 @@ def learn_invoice_mappings(invoice, profile=None) -> int:
     return n
 
 
-def apply_ocr_header(invoice, header):
+def apply_ocr_header(invoice, header, image_path=None):
     """Fill blank invoice header fields from the OCR'd header (never overwrite
-    what a user already entered)."""
+    what a user already entered). When the OCR returned no invoice date, read it from
+    the page's header band with the free local OCR (``image_path``) — SofTech stores it
+    as «تاريخ مستند المورد» (docwritedate)."""
     from datetime import datetime
     if header.get('supplier_name') and not invoice.supplier_name:
         invoice.supplier_name = header['supplier_name'][:200]
@@ -119,6 +121,13 @@ def apply_ocr_header(invoice, header):
             invoice.invoice_date = datetime.strptime(header['invoice_date'][:10], '%Y-%m-%d').date()
         except (ValueError, TypeError):
             pass
+    if not invoice.invoice_date and image_path:
+        from .ocr import header_date_local
+        found = header_date_local(image_path)
+        if found:
+            invoice.invoice_date = datetime.strptime(found, '%Y-%m-%d').date()
+            note = f'تاريخ الفاتورة {found} مقروء من رأس الصفحة — راجعه'
+            invoice.notes = f'{invoice.notes}\n{note}' if invoice.notes else note
     if header.get('declared_total'):
         invoice.declared_total = header['declared_total']
 

@@ -62,10 +62,15 @@ def _net(line):
 
 
 def validate_invoice(invoice, *, live=True):
-    errors, warnings = [], []
+    errors, warnings, notices = [], [], []
 
     def err(code, msg, line_id=None):
         errors.append({'code': code, 'severity': 'error', 'line_id': line_id, 'message': msg})
+
+    def notice(code, msg, line_id=None):
+        # Owner decision 2026-10-31: shown loudly, never blocks posting and needs no
+        # «راجعت التحذيرات» tick (the module's behaviour is right; SofTech's master is off).
+        notices.append({'code': code, 'severity': 'notice', 'line_id': line_id, 'message': msg})
 
     def warn(code, msg, line_id=None):
         warnings.append({'code': code, 'severity': 'warning', 'line_id': line_id, 'message': msg})
@@ -76,6 +81,13 @@ def validate_invoice(invoice, *, live=True):
     # ── PG-side checks (no SOFTECH) ──────────────────────────────────────────
     if not invoice.vendor or not invoice.vendor.softech_personcode:
         err('supplier_unlinked', 'المورد غير مربوط بكود SOFTECH (VendorProfile.softech_personcode)')
+    # Only a scanned supplier paper carries a printed number/date to read; generated documents
+    # (gift-coupon stocking, buy-back legs) get theirs assigned at posting.
+    from_paper = bool(getattr(invoice, 'source_image', None))
+    if not is_return and from_paper and not (invoice.invoice_number or '').strip():
+        err('invoice_number_missing', 'رقم فاتورة المورد غير موجود — أدخله في بيانات الرأس')
+    if not is_return and from_paper and not invoice.invoice_date:
+        warn('invoice_date_missing', 'تاريخ فاتورة المورد غير موجود — سيُحفظ «تاريخ مستند المورد» بتاريخ اليوم')
     matched = [l for l in lines if l.item_id]
     if not matched:
         err('item_unmatched', 'لا توجد أصناف مطابقة لترحيلها')
@@ -103,7 +115,7 @@ def validate_invoice(invoice, *, live=True):
             need_batch(l)
 
     if not live or not matched:
-        return {'ok': not errors, 'errors': errors, 'warnings': warnings}
+        return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices}
 
     # ── live SOFTECH master-data reads (one connection) ──────────────────────
     from config.sybase import get_branch_connection
@@ -111,7 +123,7 @@ def validate_invoice(invoice, *, live=True):
     host = writer.branch_host(invoice)
     if not host:
         warn('offline', 'تعذّر التحقق الحي من بيانات SOFTECH (لا يوجد اتصال بالفرع)')
-        return {'ok': not errors, 'errors': errors, 'warnings': warnings}
+        return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices}
 
     personcode = invoice.vendor.softech_personcode
     branch = invoice.softech_branchcode
@@ -210,12 +222,12 @@ def validate_invoice(invoice, *, live=True):
         item_rate = ((it['public'] / it['base'] - 1) * 100
                      if it['public'] > 0 and it['base'] > 0 else it['taxp'])
         if abs(posted_rate - item_rate) > 0.5:
-            warn('tax_mismatch',
+            notice('tax_mismatch',
                  f'نسبة ضريبة مختلفة عن الصنف ({posted_rate:g}% مقابل {item_rate:.0f}%): {l.item.name}', l.id)
         if _f(l.discount_pct) > hi_disc:
             warn('discount_high', f'خصم مرتفع ({_f(l.discount_pct):g}%): {l.item.name}', l.id)
         if not is_return and code not in linked:
-            warn('supplier_not_listed', f'الصنف غير مُدرج لدى هذا المورد في SOFTECH: {l.item.name}', l.id)
+            notice('supplier_not_listed', f'الصنف غير مُدرج لدى هذا المورد في SOFTECH — سيُضاف الربط عند الترحيل: {l.item.name}', l.id)
 
     # ── credit limit (purchase only) ─────────────────────────────────────────
     if (not is_return and _cfg('INVOICE_ENFORCE_CREDIT_LIMIT', True)
@@ -224,4 +236,4 @@ def validate_invoice(invoice, *, live=True):
             f'تجاوز حد ائتمان المورد: الرصيد الحالي {credit:,.0f} + قيمة الفاتورة {doc_value:,.0f} '
             f'يتجاوز الحد {maxbal:,.0f}')
 
-    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'doc_value': round(doc_value, 2)}
+    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'notices': notices, 'doc_value': round(doc_value, 2)}

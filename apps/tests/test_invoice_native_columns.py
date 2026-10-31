@@ -39,7 +39,8 @@ class _Lines(list):
 
 
 def _vinvoice(kind, *lines):
-    return NS(doc_kind=kind, vendor=NS(softech_personcode='565'), lines=_Lines(lines))
+    return NS(doc_kind=kind, vendor=NS(softech_personcode='565'), lines=_Lines(lines),
+              invoice_number='8823747321', invoice_date='2026-10-29')
 
 
 def _vline(lid, batch, required):

@@ -963,6 +963,7 @@ export const invoicesApi = {
   // Status transitions
   confirm:       (id)           => api.post(`/invoices/invoices/${id}/confirm/`),
   reject:        (id)           => api.post(`/invoices/invoices/${id}/reject/`),
+  reopen:        (id)           => api.post(`/invoices/invoices/${id}/reopen/`),
 
   // SOFTECH writeback (final purchase doc, doccode 10/120)
   pushPreview:   (id)           => api.post(`/invoices/invoices/${id}/push-preview/`),

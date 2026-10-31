@@ -573,7 +573,9 @@ _OCR_JSON_PROMPT = (
     '                                  // (e.g. "ibnsina pharma", "PharmaOverseas"). NOT a warehouse,\n'
     '                                  // branch, storage location, salesperson, or the buyer pharmacy.\n'
     '  "invoice_number": string,       // رقم الفاتورة / رقم مستند المورد\n'
-    '  "invoice_date": string,         // YYYY-MM-DD if visible, else ""\n'
+    '  "invoice_date": string,         // YYYY-MM-DD — the document date in the HEADER; it may be printed\n'
+    '                                  // without a label (e.g. 2026-10-29 beside the order number). Never an\n'
+    '                                  // expiry or a line date. "" only if no header date exists\n'
     '  "currency": string,             // default "EGP"\n'
     '  "declared_total": number,       // الإجمالي printed on the invoice, else 0\n'
     '  "lines": [{\n'
@@ -828,6 +830,7 @@ def _parse_page_signals(text: str) -> dict:
     has_totals = any(k in t or k in low for k in _TOTALS_KW)
     has_header = bool(doc_number) or bool(doc_type)
     return {
+        'date': find_invoice_date(t),
         'doc_number': doc_number,
         'doc_type': doc_type,
         'page_index': page_index,
@@ -835,6 +838,54 @@ def _parse_page_signals(text: str) -> dict:
         'has_totals': has_totals,
         'has_header': has_header,
     }
+
+
+_DATE_LABEL = re.compile(r'(?:تاريخ\s*(?:الفاتورة|الفاتوره|المستند|الامر|الأمر)?|التاريخ|date)\s*[:：]?\s*$', re.I)
+_DATE_YMD = re.compile(r'(?<!\d)(20\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?!\d)')
+_DATE_DMY = re.compile(r'(?<!\d)(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d{2}|\d{2})(?!\d)')
+
+
+def find_invoice_date(text: str, today=None) -> str:
+    """The invoice date printed in a header band, as YYYY-MM-DD, or ''.
+
+    Accepts 2026-10-29 / 29/10/2026 / 29-10-26 (day first, as SofTech). Only a plausible
+    invoice date counts — within ~13 months before today and a week after — so an expiry
+    or an old order date in the same band is never taken. A date right after a label
+    (تاريخ / التاريخ / Date) wins over an unlabelled one. PharmaOverseas prints it
+    unlabelled in the header (2026-10-29 on invoices 224/225), which the main OCR missed."""
+    import datetime as _dt
+    today = today or _dt.date.today()
+    t = (text or '').translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+    found = []
+    for rx, order in ((_DATE_YMD, 'ymd'), (_DATE_DMY, 'dmy')):
+        for m in rx.finditer(t):
+            a, b, c = m.groups()
+            y, mo, d = (int(a), int(b), int(c)) if order == 'ymd' else (_yy(c), int(b), int(a))
+            try:
+                when = _dt.date(y, mo, d)
+            except ValueError:
+                continue
+            if not (today - _dt.timedelta(days=400) <= when <= today + _dt.timedelta(days=7)):
+                continue
+            labelled = bool(_DATE_LABEL.search(t[max(0, m.start() - 25):m.start()]))
+            found.append((not labelled, m.start(), when))
+    return min(found)[2].isoformat() if found else ''
+
+
+def header_date_local(image_path: str) -> str:
+    """Read the invoice date from the page's top band with the free local OCR
+    (RapidOCR, then the Arabic chain). '' when nothing plausible is found."""
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            top, _ = _crop_bands(img.convert('RGB'))
+            for read in (_ocr_text_rapidocr, _ocr_text_free):
+                d = find_invoice_date(read(top))
+                if d:
+                    return d
+    except Exception as e:
+        logger.info('header date probe skipped for %s: %s', image_path, e)
+    return ''
 
 
 def _crop_bands(img):

@@ -199,7 +199,7 @@ def _build_segment_invoice(batch, seg_no, group, seg, page_paths, hints):
         if structured and structured.get('lines'):
             header, candidates = ocr.parse_structured(structured)
             invoice.raw_ocr_text = json.dumps(structured, ensure_ascii=False)[:20000]
-            pipeline.apply_ocr_header(invoice, header)
+            pipeline.apply_ocr_header(invoice, header, seg_paths[0] if seg_paths else None)
         else:
             # text fallback on the first page of the segment
             raw = ocr.extract_text(seg_paths[0]) if seg_paths else ''
