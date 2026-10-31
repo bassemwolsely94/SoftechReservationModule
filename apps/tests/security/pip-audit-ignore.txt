@@ -1,19 +1,11 @@
 # Known Python dependency advisories (pip-audit -r requirements.txt), 2026-10-26.
-# Owner: Batch 6 — upgrade Django (4.2.13 is past end of support; several fixes only in 5.2+), DRF, simplejwt, twisted, and the transitive packages below.
+# Owner: Batch 6 — upgrade Django (4.2.13 is past end of support; several fixes only in 5.2+), DRF, simplejwt, and the transitive packages below.
 # CI fails on any advisory NOT listed here. Remove a line when the upgrade lands.
 
 ---------------  # ----------------------------- -------
-CVE-2026-106454  # twisted 26.4.0
 CVE-2026-114136  # djangorestframework 3.15.1
 CVE-2026-114137  # djangorestframework 3.15.1
 CVE-2026-114138  # djangorestframework 3.15.1
-CVE-2026-115774  # twisted 26.4.0
-CVE-2026-115775  # twisted 26.4.0
-CVE-2026-115776  # twisted 26.4.0
-CVE-2026-115778  # twisted 26.4.0
-CVE-2026-115877  # twisted 26.4.0
-CVE-2026-83813  # twisted 26.4.0 — published 2026-10-27; only fix is 26.10.0rc1 (pre-release), take the stable 26.10 in Batch 6
-GHSA-vpp8-g58w-m8mp  # twisted 26.4.0 — reported 2026-10-30; only fix is 26.10.0rc1 (pre-release), take the stable 26.10 in Batch 6
 PYSEC-2024-102  # django 4.2.13
 PYSEC-2024-156  # django 4.2.13
 PYSEC-2024-157  # django 4.2.13

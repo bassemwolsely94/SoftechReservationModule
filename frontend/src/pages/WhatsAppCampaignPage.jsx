@@ -564,6 +564,14 @@ function WorkflowBar({ campaign, onAction }) {
 
   if (!campaign) return null
   const { status } = campaign
+  // Approve / reject / send / cancel need campaigns/approve — the API enforces it;
+  // this only hides buttons the user would get a 403 from.
+  const canApprove = !!campaign.my_can_approve
+  const approverNote = (tour, text) => (
+    <span data-tour={tour} className="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-3 py-2">
+      🔒 {text}
+    </span>
+  )
 
   return (
     <div data-tour="omni-campaigns-workflow" className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex flex-wrap items-center gap-2" dir="rtl">
@@ -577,7 +585,10 @@ function WorkflowBar({ campaign, onAction }) {
         </button>
       )}
 
-      {status === 'pending_approval' && (
+      {status === 'pending_approval' && !canApprove &&
+        approverNote('omni-campaigns-approve', 'بانتظار اعتماد مشرف — الاعتماد والرفض لمن لديه صلاحية اعتماد الحملات')}
+
+      {status === 'pending_approval' && canApprove && (
         <>
           <button
             data-tour="omni-campaigns-approve"
@@ -620,7 +631,10 @@ function WorkflowBar({ campaign, onAction }) {
         </>
       )}
 
-      {status === 'approved' && campaign.can_queue && (
+      {status === 'approved' && campaign.can_queue && !canApprove &&
+        approverNote('omni-campaigns-send', 'معتمدة — الإرسال لمن لديه صلاحية اعتماد الحملات')}
+
+      {status === 'approved' && campaign.can_queue && canApprove && (
         <div className="flex items-center gap-2" data-tour="omni-campaigns-send">
           <input
             type="datetime-local"
@@ -637,7 +651,7 @@ function WorkflowBar({ campaign, onAction }) {
         </div>
       )}
 
-      {campaign.can_cancel && (
+      {campaign.can_cancel && campaign.my_can_cancel && (
         <button
           data-tour="omni-campaigns-cancel"
           onClick={() => onAction('cancel')}
