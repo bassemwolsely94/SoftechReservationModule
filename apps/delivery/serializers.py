@@ -14,6 +14,8 @@ from .models import (
 )
 
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class DeliveryDriverSerializer(serializers.ModelSerializer):
     branch_name       = serializers.CharField(source='branch.name', read_only=True)
     vehicle_label     = serializers.CharField(source='get_vehicle_type_display', read_only=True)
@@ -40,7 +42,8 @@ class DeliveryDriverSerializer(serializers.ModelSerializer):
         ).count()
 
 
-class CustomerLocationSerializer(serializers.ModelSerializer):
+class CustomerLocationSerializer(CustomerPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('delivery_phone',)
     label_display    = serializers.CharField(source='get_label_display', read_only=True)
     accuracy_display = serializers.CharField(source='get_location_accuracy_display', read_only=True)
     full_address     = serializers.CharField(read_only=True)
@@ -165,8 +168,9 @@ class DeliveryOrderCreateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class DeliveryOrderListSerializer(serializers.ModelSerializer):
+class DeliveryOrderListSerializer(RecordPhoneMask, serializers.ModelSerializer):
     """Lightweight read serializer for list views."""
+    phone_mask_fields = ('customer_phone',)
     branch_name     = serializers.CharField(source='branch.name', read_only=True)
     status_label    = serializers.CharField(source='get_status_display', read_only=True)
     source_label    = serializers.CharField(source='get_source_type_display', read_only=True)
@@ -199,8 +203,9 @@ class DeliveryOrderListSerializer(serializers.ModelSerializer):
         return None
 
 
-class DeliveryOrderSerializer(serializers.ModelSerializer):
+class DeliveryOrderSerializer(RecordPhoneMask, serializers.ModelSerializer):
     """Full read serializer with all nested data."""
+    phone_mask_fields = ('customer_phone', 'customer_phone_alt')
     branch_name        = serializers.CharField(source='branch.name', read_only=True)
     status_label       = serializers.CharField(source='get_status_display', read_only=True)
     source_label       = serializers.CharField(source='get_source_type_display', read_only=True)

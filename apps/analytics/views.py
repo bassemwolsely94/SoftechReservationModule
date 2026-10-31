@@ -60,6 +60,14 @@ from apps.customers import access as customer_access            # noqa: E402
 from rest_framework.exceptions import PermissionDenied            # noqa: E402
 
 
+def _row_phone(request, row):
+    """Batch 5b (B-2): a customer row's number — full for the user's own customers, else masked."""
+    from types import SimpleNamespace
+    c = SimpleNamespace(preferred_branch_id=row.get('customer__preferred_branch_id'),
+                        created_by_id=row.get('customer__created_by_id'))
+    return customer_access.customer_phone(request.user, c, row.get('customer__phone') or '')
+
+
 def _all_branch_only(request):
     """Cross-branch boards (every branch's P&L / capital) — owner decision B-1: all-branch roles."""
     if not branch_scope.sees_everything(request.user):
@@ -1192,6 +1200,7 @@ def customer_analytics(request):
     for row in (
         qs.filter(customer__is_account_placeholder=False)
           .values('customer__id', 'customer__name', 'customer__phone',
+                  'customer__preferred_branch_id', 'customer__created_by_id',
                   'customer__softech_pic', 'sales_channel')
           .annotate(
               sales_amount   = Sum('total_amount', filter=Q(doc_code='115')),
@@ -1205,7 +1214,7 @@ def customer_analytics(request):
         r_rev = float(row['returns_amount'] or 0)
         top_customers.append({
             'name':         row['customer__name'],
-            'phone':        row['customer__phone'],
+            'phone':        _row_phone(request, row),
             'softech_pic':  row['customer__softech_pic'] or '',
             'channel':      _channel_label(code),
             'revenue':      s_rev - r_rev,
@@ -1760,6 +1769,7 @@ def customer_churn(request):
         ph_base
         .filter(customer__is_account_placeholder=False)
         .values('customer_id', 'customer__name', 'customer__phone',
+                'customer__preferred_branch_id', 'customer__created_by_id',
                 'customer__softech_pic', 'sales_channel')
         .annotate(
             last_purchase   = Max('invoice_date__date'),
@@ -1796,7 +1806,7 @@ def customer_churn(request):
         all_silent.append({
             'customer_id':       row['customer_id'],
             'name':              row['customer__name'],
-            'phone':             row['customer__phone'] or '',
+            'phone':             _row_phone(request, row),
             'softech_pic':       row['customer__softech_pic'] or '',
             'channel':           _channel_label(row['sales_channel'] or ''),
             'last_purchase':     lp.isoformat(),

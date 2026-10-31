@@ -4,6 +4,8 @@ from .models import Reservation, ReservationStatusLog, ReservationActivity, Rese
 
 # ── Reservation Images ────────────────────────────────────────────────────────
 
+from apps.customers.phone_mask import RecordPhoneMask, CustomerPhoneMask  # Batch 5b
+
 class ReservationImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
@@ -193,7 +195,8 @@ class ReservationLineCreateSerializer(serializers.ModelSerializer):
 
 # ── Reservation List ──────────────────────────────────────────────────────────
 
-class ReservationListSerializer(serializers.ModelSerializer):
+class ReservationListSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone', 'contact_phone')
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     item_name = serializers.SerializerMethodField()
@@ -314,7 +317,8 @@ class ReservationListSerializer(serializers.ModelSerializer):
 
 # ── Reservation Detail ────────────────────────────────────────────────────────
 
-class ReservationDetailSerializer(serializers.ModelSerializer):
+class ReservationDetailSerializer(RecordPhoneMask, serializers.ModelSerializer):
+    phone_mask_fields = ('customer_phone', 'contact_phone')
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     customer_id = serializers.SerializerMethodField()
