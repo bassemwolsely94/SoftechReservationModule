@@ -638,7 +638,7 @@ SCREENS = [
                      'Network connection status (HQ + every branch: connected, disconnected, persistently down) and sync status: last sync and duration, whether the scheduler runs, and a log of every run. Refreshes every 5 minutes.'),
         'audience': T('المدير فقط.', 'Admins only.'),
         'steps': [
-            T('«فحص الآن» لاختبار اتصال الشبكة بكل النقاط — للمدير فقط ومرة كل دقيقة (لو ضغطه غيرك أو قبل دقيقة بتشوف آخر حالة محفوظة). «مزامنة الآن» لمزامنة فورية، و«مزامنة كاملة (90 يوم)» لإعادة بناء أوسع.', '"Check now" tests a node\'s connection. "Sync now" runs an immediate sync, "Full sync (90 days)" a wider rebuild.'),
+            T('«فحص الآن» لاختبار اتصال الشبكة بكل النقاط — للمدير فقط ومرة كل دقيقة (لو ضغطه غيرك أو قبل دقيقة بتشوف آخر حالة محفوظة). «مزامنة الآن» لمزامنة فورية، و«مزامنة كاملة (90 يوم)» لإعادة بناء أوسع.', '"Check now" tests the connection to every node — admins only, once a minute (otherwise you see the last saved status). "Sync now" runs an immediate sync, "Full sync (90 days)" a wider rebuild.'),
             T('لو ظهر «المجدول متوقف — المهام لا تعمل» فالمهام التلقائية (المتابعات، التنبيهات، المزامنة الدورية) متوقفة — أعد تشغيل خدمة السيرفر.', 'If "scheduler stopped — jobs not running" appears, automatic jobs (follow-ups, alerts, periodic sync) are stopped — restart the server service.'),
         ],
         'tips': [T('النقطة «منقطعة باستمرار» بعد عدة محاولات فاشلة متتالية — تحقق من اتصال الفرع.', 'A node is "persistently down" after several consecutive failures — check the branch connection.'),
