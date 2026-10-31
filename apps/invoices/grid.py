@@ -330,7 +330,10 @@ def computed_entries(line, fold_margin: bool = False) -> list[dict]:
         free_row = sc.recompute({**cells, 'unit_cost': 0.0, 'disc_pct': 100.0,
                                  'extra_disc_pct': 0.0, 'quantity': bonus},
                                 changed='unit_cost')
-        out.append({**sc.row_to_write(free_row), 'qty': bonus, 'is_bonus': True})
+        # native free line: bonusqty = value of the free goods = paid unit cost × free qty
+        # (doc 100/10/66173: 1 free × 56.2 → bonusqty 56.2; header docvalue1 = Σ bonusqty)
+        out.append({**sc.row_to_write(free_row), 'qty': bonus, 'is_bonus': True,
+                    'bonus_value': round(_f(paid['transprice']) * bonus, 4)})
     return out
 
 

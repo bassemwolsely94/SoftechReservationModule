@@ -96,3 +96,76 @@ class BigSupplierNumberTests(SimpleTestCase):
         self.assertEqual(res['mode'], 'idempotent')
         self.assertIsInstance(seen[0][2], Decimal)
         self.assertEqual(seen[0][2], Decimal('8823747203'))
+
+
+class NativeTaxAndBonusTotalsTests(SimpleTestCase):
+    """Decoded 2026-10-31 from hand-entered PharmaOverseas docs 66176 / 66173 (box
+    «الضريبة من التكلفة» unticked): taxed line saleprice_extrap = VAT %, header
+    docvalue3 = Σ tax, docvalue = Σ line totals + tax, docvalue1 = Σ bonusqty."""
+    def test_header_totals_match_doc_66176(self):
+        rows = [
+            {'transprice_total': 266.68, 'itemsalestax': 9.3338, 'transqty': 4},
+            {'transprice_total': 399.999, 'itemsalestax': 18.6666, 'transqty': 3},
+            {'transprice_total': 626.50, 'itemsalestax': 0, 'transqty': 1},
+        ]
+        t = IW._native_purchase_totals(rows)
+        self.assertEqual(t['docvalue3'], 93.33)
+        self.assertEqual(t['docvalue'], round(266.68 + 399.999 + 626.50 + 93.3352, 2))
+        self.assertEqual(t['docvaluebc'], t['docvalue'])
+        self.assertEqual(t['docvalue1'], 0)
+
+    def test_bonus_value_goes_to_docvalue1_not_docvalue(self):
+        rows = [{'transprice_total': 562.0, 'itemsalestax': 0, 'transqty': 10, 'bonusqty': 0},
+                {'transprice_total': 0.0, 'itemsalestax': 0, 'transqty': 1, 'bonusqty': 56.2}]
+        t = IW._native_purchase_totals(rows)
+        self.assertEqual((t['docvalue'], t['docvalue1']), (562.0, 56.2))
+
+    def _row(self, P, net, qty=2, Pb=None, tax=0.0):
+        return {'itemsaleprice': P, 'itemsaleprice_tax': Pb or P, 'transprice': net, 'transqty': qty,
+                'additionaldiscp': 0.0, 'specialdiscp': 0.0, 'itemsalestax': tax, 'storecode2': '0'}
+
+    def test_taxed_line_matches_hand_entry_66178(self):
+        # SWEETAL: our engine row → the exact values SofTech stored for the hand entry
+        row = IW._finish_purchase_line(self._row(130.0, 91.23, Pb=114.035, tax=12.7723),
+                                       {'vat_pct': 14.0001}, {})
+        self.assertEqual(row['itemsaleprice_tax'], 114.0351)
+        self.assertEqual(row['pharmacydiscp'], 19.9983)
+        self.assertEqual(row['itemsalestax'], 12.7722)
+        self.assertEqual(row['transprice'], 104.0022)          # VAT inside the cost (box ticked)
+        self.assertEqual(row['transprice_total'], 208.0044)
+        self.assertEqual((row['storecode2'], row['saleprice_extrap']), ('1', 14.0))
+
+    def test_taxed_line_dozova_rounding(self):
+        row = IW._finish_purchase_line(self._row(149.0, 104.561, Pb=130.702, tax=14.6385),
+                                       {'vat_pct': 14}, {})
+        self.assertEqual((row['transprice'], row['transprice_total']), (119.1996, 238.3992))
+
+    def test_untaxed_margin_line_matches_66178(self):
+        # ACTRAPID: cost to post 273.96 → SofTech derives it from the 4-place discount
+        row = IW._finish_purchase_line(self._row(338.0, 273.96), {'vat_pct': 0}, {})
+        self.assertEqual(row['pharmacydiscp'], 18.9467)
+        self.assertEqual((row['transprice'], row['transprice_total']), (273.9602, 547.9204))
+        self.assertEqual((row['storecode2'], row['saleprice_extrap'], row['itemsalestax']), ('0', 0.0, 0.0))
+
+    def test_override_owns_money_columns(self):
+        # replacement buy-back zeroes VAT through line_extra → nothing re-derived, no VAT %
+        row = self._row(130.0, 91.23, tax=0.0)
+        out = IW._finish_purchase_line(dict(row), {'vat_pct': 14},
+                                       {'itemsalestax': 0.0, 'itemsaleprice_tax': 130.0, 'pharmacydiscp': 29.8})
+        self.assertEqual((out['transprice'], out['saleprice_extrap']), (91.23, 0.0))
+
+    def test_vat_in_cost_not_counted_twice_in_header(self):
+        rows = [{'transprice_total': 208.0044, 'itemsalestax': 12.7722, 'transqty': 2, 'storecode2': '1'},
+                {'transprice_total': 547.9204, 'itemsalestax': 0, 'transqty': 2, 'storecode2': '0'}]
+        t = IW._native_purchase_totals(rows)
+        self.assertEqual((t['docvalue'], t['docvalue3']), (755.92, 0.0))
+
+    def test_free_line_carries_bonus_value(self):
+        from apps.invoices import grid
+        line = NS(item_id=1, item=NS(softech_id='3502', pack_price=71, pack_price_tax=0, sale_tax_pct=0),
+                  public_price=71, unit_price=56.2, quantity=10, bonus_qty=1, vat_pct=0,
+                  discount_pct=20.8451, extra_discount_pct=0, special_discount_pct=0, tax_from_cost=True,
+                  distributor_margin_amt=0)
+        paid, free = grid.computed_entries(line)
+        self.assertAlmostEqual(free['bonus_value'], 56.2)
+        self.assertNotIn('bonus_value', paid)

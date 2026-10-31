@@ -213,3 +213,54 @@ decoding the `doctext` blob; or (b) ship Track-A OCR + export to speed manual en
 4. Allocate `docnumber = read({counter}) + 1`; insert header+lines; then a separate
    `UPDATE lastdocnumbers SET {counter}=docnumber WHERE branchcode=<branch>`.
 5. Re-verify with the rollback probe — expect it to LAND now (no 2732).
+
+## Tax, total and free-goods columns (decoded 2026-10-31)
+
+Read-only comparison of hand-entered PharmaOverseas purchases (branch 100: 66176, 66175, 66173,
+65966) with our doc 66177, which had posted VAT-less totals. With «الضريبة من التكلفة» UNticked
+(the house standard — VAT outside the unit cost):
+
+| Where | Column | Value |
+|---|---|---|
+| taxed line | `saleprice_extrap` | the line VAT % (14). `origintaxp` stays 0. Untaxed lines 0. |
+| header | `docvalue3` | Σ `itemsalestax × transqty` («خارج التكلفة») |
+| header | `docvalue` / `docvaluebc` | Σ `transprice_total` + `docvalue3` (what the supplier is owed) |
+| free line | `bonusqty` | value of the free goods = paid unit cost × free qty (e.g. 56.2) |
+| header | `docvalue1` | Σ `bonusqty` (NOT added to `docvalue`) |
+| line | `custdiscp` | 1.0 on purchase lines |
+
+With the box TICKED (doc 65708): VAT is inside `transprice`, `saleprice_extrap` = 0, `docvalue3` = 0,
+`docvalue` = Σ line totals.
+
+The writer (`writer._finish_purchase_line`, `writer._native_purchase_totals`) sets these from the
+FINAL line rows, after per-line overrides (replacement buy-backs zero VAT → no VAT %). Rollback probe of
+invoice 224: docvalue 4234.68, docvalue3 325.16, extrap 14 on the 5 taxed lines, zero residue.
+Still unknown: where «نوع الضريبة = قيمة» (VAT entered as an amount) is stored — needs a hand-entered sample.
+
+### Golden comparison with the hand entry of the same invoice (66178 vs our 66177), 2026-10-31
+
+The owner entered invoice 224 by hand (doc 100/10/66178, user 1509) with «الضريبة من التكلفة»
+TICKED on the taxed lines. Owner decision: the module posts this way (`writer.VAT_IN_COST`).
+
+| Column | Native (66178) | Rule now in the writer |
+|---|---|---|
+| `stktransm.docwritedate` | 2026-10-29 | «تاريخ مستند المورد» = the supplier invoice date (`invoice_date`); `docdate` = receipt day |
+| `usercode`, `cashiercode` | 1509 / 1509 | the SofTech code of the staff member who posts (`StaffProfile.softech_user_id`); posting refuses without one |
+| `docvalue`, `docvaluebc` | 4234.68 | Σ `transprice_total` + `docvalue3` |
+| `docvalue3` | 0 | Σ VAT only on lines with VAT outside the cost (`storecode2 ≠ '1'`) |
+| line `storecode2` | '1' on taxed lines | the «الضريبة من التكلفة» box |
+| line `transprice` | 104.0022 (= 91.23 × 1.14) | Pb·(1−d1)(1−d2)(1−d3)·(1+rate), rounded once to 4 places |
+| line `pharmacydiscp` | 19.9983 | back-solved from the net and rounded to 4 places; the cost is then derived FROM it |
+| line `itemsaleprice_tax` | 114.0351 | public / (1+rate), 4 places |
+| line `itemsalestax` | 12.7722 | unrounded net × rate, 4 places |
+| line `saleprice_extrap` | 14 | VAT % on taxed lines |
+| line `itemexpirydate` | 2028-05-05 | month/year expiry → day = month |
+
+Other tables: the native save also writes one `temp_r_stk` row per document (199 characters: a 20-byte
+opaque value + padding, apparently a checksum by the client); we cannot reproduce it and SofTech opens our
+documents without it. `stkbal` (`nowqty`, `nowcostprice`, `usercode`), `stkbalexpiry` (one bucket per
+expiry date, `batchno` = `item_partno`) and `personsdata` (`personcredit`, `personfdate`) are updated by the
+SofTech triggers for both. `items` and `itemssuppliers` are not touched by either.
+
+Rollback probe of invoice 224 after the fix, as user 1509: every header and line money column equal to
+66178; the only differences are line data (4 OCR'd batches, 2 hand-typed expiries).

@@ -61,3 +61,22 @@ class GridSaveRoundingTests(SimpleTestCase):
     def test_garbage_still_rejected(self):
         s = InvoiceLineWriteSerializer(data={'discount_pct': 'abc'}, partial=True)
         self.assertFalse(s.is_valid())
+
+
+class RenormalizeStoredExpiryTests(SimpleTestCase):
+    """renormalize_invoice_expiry: only month/year printings still stored as the old
+    1st-of-month form change; hand-typed dates stay."""
+    def _line(self, printed, stored):
+        import json
+        from types import SimpleNamespace as NS
+        return NS(raw_text=json.dumps({'expiry_date': printed}), expiry_date=stored)
+
+    def test_month_year_first_of_month_becomes_day_equals_month(self):
+        from apps.invoices.management.commands.renormalize_invoice_expiry import new_expiry
+        self.assertEqual(new_expiry(self._line('05.2028', '2028-05-01')), '2028-05-05')
+
+    def test_hand_typed_or_full_dates_left_alone(self):
+        from apps.invoices.management.commands.renormalize_invoice_expiry import new_expiry
+        self.assertIsNone(new_expiry(self._line('05.2028', '2028-05-17')))   # typed by hand
+        self.assertIsNone(new_expiry(self._line('01/09/2029', '2029-09-01')))  # full printed date
+        self.assertIsNone(new_expiry(self._line('05.2028', '2029-01-01')))   # changed month by hand

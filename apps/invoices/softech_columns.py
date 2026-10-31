@@ -207,6 +207,7 @@ def row_to_write(r: dict) -> dict:
         'additionaldiscp':    r['extra_disc_pct'],    # خصم إضافى (d2)
         'specialdiscp':       r.get('special_disc_pct', 0.0),  # خصم خاص (d3) — VERIFIED col
         'origintaxp':         0.0,   # line origintaxp is 0 on captured purchases; VAT lives in itemsalestax
+        'vat_pct':            r.get('vat_pct', 0.0),   # → saleprice_extrap on taxed lines (writer)
     }
 
 

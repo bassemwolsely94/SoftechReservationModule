@@ -23,7 +23,7 @@ ROLLBACK) to rehearse with zero residue and observe the counter/trigger behaviou
 import logging
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from config.writers import writer_allowed
@@ -437,7 +437,9 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
     # NO trans_time/vf2/newcostprice; docvalue1/2/3=0; ptclassif resolved live at push.
     hdr = {
         'branchcode': branch, 'doccode': doccode, 'docnumber': '<next>',
-        'docdate': '<today>', 'docwritedate': '<today>', 'storecode': store, 'supp_main_code': '00',
+        'docdate': '<today>', 'storecode': store, 'supp_main_code': '00',
+        'docwritedate': (str(invoice.invoice_date) if invoice.invoice_date else '<today>'),
+        'cashiercode': usercode or _default_usercode(invoice),
         'docnumber2': _docnumber2(invoice), 'docvalue': header['doc_value'],
         'cust_branch_code': personcode, 'supplier_name': supplier_name, 'cust_branch_store': store,
         'origintaxp': 0, 'custdiscp': 0, 'specialdiscp': 0,
@@ -457,7 +459,7 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
             'branchcode': branch, 'doccode': doccode, 'docnumber': '<next>',
             'docdate': '<today>', 'storecode': store,
             'itemcode': ln.item.softech_id, 'item_name': (ln.item.name if ln.item else ''),
-            'transqty': float(ln.quantity), 'transprice': c['transprice'],
+            'transqty': float(c.get('qty', ln.quantity)), 'transprice': c['transprice'],
             'newqty': '<computed live at push>',   # trigger validates; = stkbal ± qty (cumulative)
             'itemexpirydate': (str(_parse_expiry(ln.expiry_date)) if _parse_expiry(ln.expiry_date) else None),
             'itemsaleprice': c['itemsaleprice'], 'itemsalestax': c['itemsalestax'],
@@ -465,8 +467,9 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
             'additionaldiscp': c['additionaldiscp'], 'transprice_total': c['transprice_total'],
             'origintaxp': c['origintaxp'],
             'custdiscp': (0 if invoice.doc_kind == 'return' else NATIVE_PURCHASE_CUSTDISCP),
-            'specialdiscp': c.get('specialdiscp', 0),
-            'bonusqty': 0, 'dblitemflag': idx, 'storecode2': '0', 'suppliercode': personcode,
+            'specialdiscp': c.get('specialdiscp', 0), 'saleprice_extrap': 0.0,
+            'bonusqty': (0 if invoice.doc_kind == 'return' else float(c.get('bonus_value') or 0)),
+            'dblitemflag': idx, 'storecode2': '0', 'suppliercode': personcode,
             'personcode': personcode, 'usercode': usercode or _default_usercode(invoice),
             'retqty': 0, 'promtype': 1,
         }
@@ -475,8 +478,14 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
             row['r_doccode']   = '10'
         elif (ln.batch_number or '').strip():
             row['item_partno'] = ln.batch_number.strip()
-        row.update(_line_extra_for(line_extra, c))
+        extra = _line_extra_for(line_extra, c)
+        row.update(extra)
+        if invoice.doc_kind != 'return':
+            _finish_purchase_line(row, c, extra)
         lines.append(row)
+    if invoice.doc_kind != 'return':
+        hdr.update(_native_purchase_totals(lines))
+        hdr.update(header_extra or {})        # a document type's own header values still win
 
     counter = invoice.softech_counter_column
     notes = [
@@ -485,7 +494,7 @@ def build_plan(invoice: SupplierInvoice, *, usercode=None, header_extra=None, li
         ('نوع المستند: شراء من مورد (doccode 10).' if doccode == '10'
          else 'نوع المستند: مرتجع إلى مورد (doccode 120).'),
     ]
-    return {'header': hdr, 'lines': lines, 'notes': notes, 'doc_value': header['doc_value'],
+    return {'header': hdr, 'lines': lines, 'notes': notes, 'doc_value': hdr.get('docvalue', header['doc_value']),
             'doc_kind': invoice.doc_kind, 'doccode': doccode, 'counter': counter,
             'branchcode': branch, 'supplier_name': supplier_name,
             'supplier_code': personcode, 'invoice_number': invoice.invoice_number or ''}
@@ -597,6 +606,16 @@ def _return_reason_code():
         return 4
 
 
+def _supplier_doc_date(invoice):
+    """stktransm.docwritedate = «تاريخ مستند المورد», the date PRINTED on the supplier
+    invoice (hand entry 66178: 2026-10-29 while docdate = receipt day 2026-10-31).
+    Falls back to today when the invoice date wasn't read."""
+    d = invoice.invoice_date
+    if isinstance(d, str):
+        d = _parse_expiry(d)
+    return _Raw(f"convert(datetime, '{d:%Y-%m-%d} 00:00:00')") if d else _TODAY_MIDNIGHT
+
+
 def _header_row(invoice, header, docnumber, ptclassifcode, usercode):
     """Exact native header. PURCHASE = 32 cols (sets docwritedate). RETURN (doccode 120) =
     31 cols (NO docwritedate; patientpayment = original purchase docnumber; docnumber2 =
@@ -623,7 +642,8 @@ def _header_row(invoice, header, docnumber, ptclassifcode, usercode):
         'branchcode': branch, 'doccode': invoice.softech_doccode, 'docnumber': _docnum(docnumber),
         'docdate': _TODAY_MIDNIGHT, 'specialdiscp': 0.0, 'origintaxp': 0.0, 'storecode': store,
         'fatstatuscode': '10', 'ptcode': '20', 'ptclassifcode': ptclassifcode,
-        'fatcurrentstatus': '15', 'docwritedate': _TODAY_MIDNIGHT, 'custdiscp': 0.0,
+        'fatcurrentstatus': '15', 'docwritedate': _supplier_doc_date(invoice), 'custdiscp': 0.0,
+        'cashiercode': usercode,                       # «مسئول الشراء» = the posting user (66178)
         'usercode': usercode, 'cust_branch_store': store, 'cust_professional': '0',
         'saleprice_extrap': 0.0, 'docvalue': dv, 'docvaluepay': 0.0, 'docvaluereturn': 0.0,
         'patientpayment': 0.0, 'docvalue1': 0.0, 'docvalue2': 0.0, 'docvalue3': 0.0,
@@ -638,6 +658,80 @@ def _header_row(invoice, header, docnumber, ptclassifcode, usercode):
 # showed no trigger sets it, so we send it ourselves to match hand-entered purchases.
 # Returns keep 0.0 (native return value not verified).
 NATIVE_PURCHASE_CUSTDISCP = 1.0
+
+
+# «الضريبة من التكلفة» on taxed purchase lines — owner decision 2026-10-31: VAT is part of
+# the item cost (box ticked), as in the hand entry of invoice 224 (doc 100/10/66178).
+VAT_IN_COST = True
+# per-line overrides that already fix the money columns (coupons, replacement buy-backs):
+# the native re-rounding below must not touch such a line
+_PRICED_BY_EXTRA = {'itemsalestax', 'itemsaleprice_tax', 'pharmacydiscp', 'transprice', 'transprice_total'}
+
+
+def _r4(v) -> float:
+    return float(Decimal(str(v)).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+
+
+def _finish_purchase_line(row: dict, c: dict, extra: dict) -> dict:
+    """Settle a PURCHASE line the way the native «مشتريات من الموردين» screen stores it,
+    AFTER any per-line override. Decoded 2026-10-31 by diffing our doc 66177 against the
+    hand entry of the same invoice (66178) and docs 66176/66175/66173/65966:
+
+      • the screen rounds خصم أساسي to 4 places and derives the cost FROM it:
+          Pb = public / (1 + rate)                         (4 places)
+          d1 = 1 − net / (Pb·(1−d2)(1−d3))                 (4 places)
+          net' = Pb·(1−d1)(1−d2)(1−d3)                     (4 places)
+          itemsalestax = net' × rate                       (4 places)
+      • taxed line, box ticked (VAT_IN_COST): transprice = net' × (1 + rate),
+        storecode2 = '1' (the box), saleprice_extrap = rate %; total = transprice × qty.
+      • untaxed / box unticked: transprice = net', storecode2 = '0'.
+    e.g. SWEETAL: Pb 114.0351, d1 19.9983, net 91.2300 → transprice 104.0022, tax 12.7722.
+    """
+    if extra.keys() & _PRICED_BY_EXTRA:
+        # the override owns the money columns; only the VAT % follows its tax
+        if 'saleprice_extrap' not in extra:
+            row['saleprice_extrap'] = (round(float(c.get('vat_pct') or 0), 2)
+                                       if float(row.get('itemsalestax') or 0) > 0 else 0.0)
+        return row
+    P = float(row.get('itemsaleprice') or 0)
+    rate = round(float(c.get('vat_pct') or 0), 2) if float(row.get('itemsalestax') or 0) > 0 else 0.0
+    d2 = float(row.get('additionaldiscp') or 0)
+    d3 = float(row.get('specialdiscp') or 0)
+    qty = float(row.get('transqty') or 0)
+    net = float(row.get('transprice') or 0)
+    Pb = _r4(P / (1 + rate / 100.0)) if rate else float(row.get('itemsaleprice_tax') or P)
+    denom = Pb * (1 - d2 / 100.0) * (1 - d3 / 100.0)
+    if denom > 0 and net > 0:
+        d1 = _r4((1 - net / denom) * 100.0)
+        net = denom * (1 - d1 / 100.0)          # unrounded: SofTech rounds only the stored values
+        row['pharmacydiscp'] = d1
+    row['itemsaleprice_tax'] = Pb
+    tax = _r4(net * rate / 100.0) if rate else 0.0
+    in_cost = bool(rate) and VAT_IN_COST
+    row['itemsalestax'] = tax
+    row['transprice'] = _r4(net * (1 + rate / 100.0)) if in_cost else _r4(net)
+    row['transprice_total'] = _r4(row['transprice'] * qty)
+    if 'storecode2' not in extra:                # an override's own value wins
+        row['storecode2'] = '1' if in_cost else '0'
+    if 'saleprice_extrap' not in extra:
+        row['saleprice_extrap'] = rate
+    return row
+
+
+def _native_purchase_totals(line_rows: list) -> dict:
+    """Header money columns of a native purchase, from the FINAL line rows:
+      docvalue3 = Σ itemsalestax × transqty over lines whose VAT is OUTSIDE the cost
+                  (storecode2 ≠ '1')                  («خارج التكلفة»)
+      docvalue  = Σ transprice_total + docvalue3      (what the supplier is owed)
+      docvalue1 = Σ bonusqty                          (value of free goods; not in docvalue)
+    Verified: 66178 (VAT in cost) → 4234.68, docvalue3 0; 66176 (outside) → 1293.18 + 93.34
+    = 1386.51; 66173 → 10830.92 + 693.74 = 11524.66, docvalue1 56.2."""
+    lines = sum(float(r.get('transprice_total') or 0) for r in line_rows)
+    tax = sum(float(r.get('itemsalestax') or 0) * float(r.get('transqty') or 0)
+              for r in line_rows if str(r.get('storecode2', '0')).strip() != '1')
+    bonus = sum(float(r.get('bonusqty') or 0) for r in line_rows)
+    dv = round(lines + tax, 2)
+    return {'docvalue': dv, 'docvaluebc': dv, 'docvalue3': round(tax, 2), 'docvalue1': round(bonus, 2)}
 
 
 def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcostprice=None, r_docdate=None):
@@ -679,7 +773,8 @@ def _line_row(invoice, c, docnumber, usercode, newqty, dblitemflag=1, *, newcost
         'transprice': float(c['transprice']), 'transprice_total': float(c['transprice_total']),
         'origintaxp': float(c['origintaxp']), 'custdiscp': NATIVE_PURCHASE_CUSTDISCP,
         'specialdiscp': float(c.get('specialdiscp', 0.0)),
-        'saleprice_extrap': 0.0, 'usercode': usercode, 'bonusqty': 0.0, 'dblitemflag': int(dblitemflag),
+        'saleprice_extrap': 0.0, 'usercode': usercode,
+        'bonusqty': float(c.get('bonus_value') or 0.0), 'dblitemflag': int(dblitemflag),
         'storecode2': '0', 'transqty': float(c.get('qty', ln.quantity)), 'newqty': float(newqty),
         'retqty': 0.0, 'suppliercode': personcode, 'personcode': personcode,
         'itemsaleprice': float(c['itemsaleprice']), 'promtype': 1,
@@ -829,9 +924,7 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
             return {'ok': False, 'err': -1, 'docnumber': None, 'lines_found': 0,
                     'lines_expected': n, 'error': f'الفاتورة الأصلية {invoice.return_of_docnumber} غير موجودة في SOFTECH'}
 
-    hdr_row = _header_row(invoice, header, _Raw('@dn'), ptclassifcode, usercode)
-    hdr_row.update(header_extra or {})
-    stmts = [_insert_sql('stktransm', hdr_row)]
+    line_stmts, line_rows = [], []
     newqtys = {}
     running = dict(nowqty)   # per-item running balance, accumulates across lines
     for idx, c in enumerate(computed, start=1):
@@ -843,9 +936,18 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
         # dblitemflag = 1-based line number (unique-index component for repeated items)
         line_row = _line_row(invoice, c, _Raw('@dn'), usercode, nq, idx,
                              newcostprice=orig_cost.get(code), r_docdate=r_docdate)
-        line_row.update(_line_extra_for(line_extra, c))
-        stmts.append(_insert_sql('stktrans', line_row))
-    inserts = '\n'.join(stmts)
+        extra = _line_extra_for(line_extra, c)
+        line_row.update(extra)
+        if not is_return:
+            _finish_purchase_line(line_row, c, extra)
+        line_rows.append(line_row)
+        line_stmts.append(_insert_sql('stktrans', line_row))
+    # header totals come from the FINAL line rows (after per-line overrides)
+    hdr_row = _header_row(invoice, header, _Raw('@dn'), ptclassifcode, usercode)
+    if not is_return:
+        hdr_row.update(_native_purchase_totals(line_rows))
+    hdr_row.update(header_extra or {})
+    inserts = '\n'.join([_insert_sql('stktransm', hdr_row)] + line_stmts)
     final = 'commit tran' if do_commit else 'rollback tran'
     capture_sql = ''
     if capture:
