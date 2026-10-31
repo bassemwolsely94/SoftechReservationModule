@@ -77,7 +77,9 @@ class Command(BaseCommand):
         label = (branch.name_ar or branch.name) if branch else r['branch']
         doc = lambda dc: f'{dc} {_DOC_AR.get(dc, "")}'.strip()          # noqa: E731
         f = lambda v: float(v) if isinstance(v, Decimal) else v          # noqa: E731
-        t = lambda v: v.replace(tzinfo=None) if isinstance(v, dt.datetime) else v   # noqa: E731
+        from django.utils import timezone
+        # local (Cairo) time, as the SOFTECH item card shows it
+        t = lambda v: timezone.localtime(v).replace(tzinfo=None) if isinstance(v, dt.datetime) else v   # noqa: E731
         wb = openpyxl.Workbook()
         head_fill = PatternFill('solid', fgColor='022871')
 

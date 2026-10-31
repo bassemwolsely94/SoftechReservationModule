@@ -133,6 +133,8 @@ class CommandTests(Base):
             self.assertIn('عينة للتحقق', wb.sheetnames)
             ws = wb['عينة للتحقق']
             head = [c.value for c in ws[1]]
+            times = [ws.cell(row=r, column=head.index('الوقت') + 1).value for r in range(2, ws.max_row + 1)]
+            self.assertTrue(all(x.hour == 10 for x in times))          # local time, as the item card shows it
             seen_col = head.index('الرصيد في كارت الصنف') + 1
             new_col = head.index('الرصيد بعد السطر (المرآة)') + 1
             for r in range(2, ws.max_row + 1):          # the specialist copies what SOFTECH shows
