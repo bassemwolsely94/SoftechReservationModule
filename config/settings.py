@@ -99,6 +99,15 @@ if BEHIND_HTTPS_PROXY:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+# Network label (security N1, log only). nginx writes X-ElR-Network (internal|external) from the
+# address the request arrived on; Django believes it only behind our nginx, and a missing value
+# there means external. Without nginx (dev, tests) NETWORK_UNTRUSTED_ZONE stands in.
+NETWORK_HEADER_TRUSTED = config('NETWORK_HEADER_TRUSTED', default=BEHIND_HTTPS_PROXY, cast=bool)
+NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
+# off | log only in N1 — no request is refused because of its network.
+NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# Seconds the trusted-network list is cached per process; 0 under tests.
+ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
 # The client address is the NUM_PROXIES-th entry from the right; with 0 the header is ignored.
 # Used by core.client_ip (audit IPs) and DRF's throttles (Batch 3, A-6; owner 2026-10-27: 1 on
@@ -195,6 +204,7 @@ INSTALLED_APPS = [
     'apps.personal',       # Personal dashboard — per-user SOFTECH identity claims + configurable widgets
     'apps.gamification',   # Gamification — points, levels/titles, badges, streaks, rankings (recognition only)
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
+    'apps.access',         # Trusted networks + request network label (security N1, log only)
 ]
 
 MIDDLEWARE = [
