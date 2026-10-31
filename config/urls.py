@@ -65,6 +65,7 @@ urlpatterns = [
     path('api/personal/',   include('apps.personal.urls')),
     path('api/help/',       include('apps.help.urls')),     # in-app help; edits gated by help/edit
     path('api/gamification/', include('apps.gamification.urls')),  # own data open; reports/config gated by gamification/*
+    path('api/access/', include('apps.access.urls')),                # security N1 — network badge + trusted networks
     path('api/stock-audit/', include('apps.stock_audit.urls')),     # doc 32 — gated in apps/stock_audit/access.py
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)
     path('api/portal/',     include('apps.portal.urls')),

@@ -25,6 +25,7 @@ import ReservationDetailPage from './pages/ReservationDetailPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
 import SyncPage from './pages/SyncPage'
+import TrustedNetworksPage from './pages/TrustedNetworksPage'
 import TransfersPage from './pages/TransfersPage'
 import TransitsPage from './pages/TransitsPage'
 import NewTransferPage from './pages/NewTransferPage'
@@ -512,6 +513,9 @@ export default function App() {
             {/* sync: admin only */}
             <Route path="sync"
               element={<RequireRole roles={['admin']}><SyncPage /></RequireRole>} />
+            {/* trusted networks (security N1): admin only */}
+            <Route path="access/networks"
+              element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />

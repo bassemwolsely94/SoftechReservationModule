@@ -38,8 +38,17 @@ class TrustedNetwork(models.Model):
     def __str__(self):
         return f'{self.name} ({self.cidr})'
 
-    def clean(self):
+    def normalise_cidr(self):
+        """Store the network address (192.168.3.7/24 -> 192.168.3.0/24); ValidationError if not a CIDR."""
         try:
             self.cidr = str(ipaddress.ip_network((self.cidr or '').strip(), strict=False))
         except ValueError:
             raise ValidationError({'cidr': 'نطاق الشبكة غير صحيح (مثال: 192.168.3.0/24)'})
+
+    def clean(self):
+        self.normalise_cidr()
+
+    def save(self, *args, **kwargs):
+        # the API, the seed command and the shell all store the same normalised form
+        self.normalise_cidr()
+        super().save(*args, **kwargs)

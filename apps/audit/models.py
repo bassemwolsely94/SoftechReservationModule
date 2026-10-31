@@ -117,6 +117,9 @@ class AuditLog(models.Model):
         # Personal dashboard live person search (N0/H1)
         ('personal_person_search',       'لوحة شخصية — بحث عن شخص في SOFTECH'),
 
+        # Security N1
+        ('trusted_network_changed',      'شبكة موثوقة — إضافة / تعديل / حذف'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

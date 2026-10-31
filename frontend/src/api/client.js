@@ -341,6 +341,16 @@ export const syncApi = {
   triggerLane:  (lane) => api.post('/sync/trigger/', { lane }),
 }
 
+// ── Access (network badge + trusted networks, security N1) ───────────────────
+
+export const accessApi = {
+  whoami:        () => api.get('/access/whoami/'),
+  networks:      () => api.get('/access/networks/'),
+  createNetwork: (data) => api.post('/access/networks/', data),
+  updateNetwork: (id, data) => api.patch(`/access/networks/${id}/`, data),
+  deleteNetwork: (id) => api.delete(`/access/networks/${id}/`),
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export const dashboardApi = {

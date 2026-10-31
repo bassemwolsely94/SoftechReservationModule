@@ -66,6 +66,7 @@ MODULE_BY_PREFIX = {
     'audit': 'audit',
     'sync': 'sync',
     'users': 'users',
+    'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
 }
 
 # Prefixes every staff screen reads (pickers, lookups, theme); only their
@@ -89,6 +90,7 @@ OPEN_READ_PATHS = ('/api/users/my-permissions/', '/api/sync/freshness/', '/api/s
 # Exact paths, not prefixes: the staff picker list every screen loads (tasks, demand, HR forms,
 # follow-ups, incentives) — slim fields for roles without users view; a record needs users (Z-4).
 OPEN_READ_EXACT = ('/api/users/staff/',
+                   '/api/access/whoami/',              # the header badge «من أين أتصل؟» (N1)
                    '/api/incentives/my-progress/')     # the caller's own incentive progress (Z-9a)
 
 # Never checked: own session/profile, notifications, personal dashboard, global

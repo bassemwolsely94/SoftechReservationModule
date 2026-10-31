@@ -8,6 +8,7 @@ import { syncApi } from '../api/client'
 import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import NotificationBell from './NotificationBell'
+import NetworkBadge from './NetworkBadge'
 import ModuleNotificationBell from './ModuleNotificationBell'
 import ThemeToggle from './ThemeToggle'
 import CommandPalette from './CommandPalette'
@@ -226,6 +227,7 @@ const NAV_GROUPS = [
       { to: '/erp-permissions',  icon: '🧩', label: 'صلاحيات Softech',   roles: ['admin'] },
       { to: '/settings',         icon: '⚙️', label: 'الإعدادات',         roles: ['admin','pharmacist'] },
       { to: '/sync',             icon: '⟳', label: 'المزامنة',            roles: ['admin'] },
+      { to: '/access/networks',  icon: '🌐', label: 'الشبكات الموثوقة',   roles: ['admin'] },
     ],
   },
 ]
@@ -497,6 +499,7 @@ export default function Layout() {
               <span>بحث…</span>
               <kbd className="text-[10px] border border-line rounded px-1 py-0.5">Ctrl K</kbd>
             </button>
+            <NetworkBadge />
             <HelpButton />
             <ThemeToggle />
             <NotificationBell />
