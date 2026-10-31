@@ -894,6 +894,8 @@ MIDDLEWARE += [
     'core.middleware.db_cleanup.CloseConnectionsMiddleware',
     # Stores current StaffProfile in thread-local for serializer audit helpers
     'apps.users.middleware.CurrentUserMiddleware',
+    # N1: request.access (network zone/site + role); files SOFTECH load by network (log only)
+    'apps.access.middleware.AccessContextMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
 ]

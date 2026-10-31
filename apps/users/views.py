@@ -109,7 +109,24 @@ def _resolve_user(identifier: str):
     return None
 
 
-def _log_auth(action: str, profile, ip: str, note: str = ''):
+def _request_network_fields(request):
+    """The network label and browser of a request, for the activity log (blank without one)."""
+    if request is None:
+        return {}
+    try:
+        from apps.access.network import request_network
+        acc = getattr(request, 'access', None)
+        net = acc.network if acc else request_network(request)
+        return {
+            'network': net.zone,
+            'network_site': net.site.name if net.site else '',
+            'user_agent': (request.META.get('HTTP_USER_AGENT') or '')[:300],
+        }
+    except Exception:
+        return {}
+
+
+def _log_auth(action: str, profile, ip: str, note: str = '', request=None):
     try:
         UserActivityLog.objects.create(
             target_user=profile,
@@ -117,6 +134,7 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
             action=action,
             ip_address=ip,
             note=note,
+            **_request_network_fields(request),
         )
     except Exception:
         pass
@@ -167,10 +185,10 @@ def login_view(request):
     if not user:
         # Log failed attempt if profile found
         profile = getattr(resolved_user, 'staff_profile', None) if resolved_user else None
-        _log_auth('login_failed', profile, ip, note=f'identifier={identifier}')
+        _log_auth('login_failed', profile, ip, note=f'identifier={identifier}', request=request)
         if profile:
             if lockout.locked_until(profile):
-                lockout.register_lock(profile, ip)
+                lockout.register_lock(profile, ip, request=request)
         else:
             lockout.note_unknown_failure(identifier)
         return Response({'error': 'بيانات الدخول غير صحيحة'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -190,16 +208,16 @@ def login_view(request):
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
         if not _mfa.valid_device_token(device_token, user):
-            _log_auth('mfa_challenge', profile, ip)
+            _log_auth('mfa_challenge', profile, ip, request=request)
             return Response({'mfa_required': True,
                              'mfa_token': _mfa.make_preauth_token(user, 'login')})
     elif _mfa.mfa_required_for(profile):
         # Enforcement on + required role + not yet enrolled → force enrollment now.
-        _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required')
+        _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
-    _log_auth('login_success', profile, ip)
+    _log_auth('login_success', profile, ip, request=request)
 
     refresh = RefreshToken.for_user(user)
     resp = Response({
@@ -223,7 +241,7 @@ def unlock_login_view(request, pk):
     profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
     if not profile:
         return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
-    lockout.unlock(profile, getattr(request.user, 'staff_profile', None), client_ip(request))
+    lockout.unlock(profile, getattr(request.user, 'staff_profile', None), client_ip(request), request=request)
     return Response({'detail': f'تم رفع إيقاف الدخول عن {profile.full_name or profile.user.username}'})
 
 
@@ -336,7 +354,7 @@ def change_password_view(request):
 
     profile = getattr(user, 'staff_profile', None)
     ip      = client_ip(request)
-    _log_auth('password_changed', profile, ip)
+    _log_auth('password_changed', profile, ip, request=request)
 
     return Response({'detail': 'تم تغيير كلمة المرور بنجاح'})
 

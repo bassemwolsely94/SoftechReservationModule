@@ -521,7 +521,18 @@ function ActivityLogModal({ user, onClose }) {
                         {JSON.stringify(log.old_value)} {fa()} {JSON.stringify(log.new_value)}
                       </p>
                     )}
-                    {log.ip_address && <p className="text-xs text-gray-400">{log.ip_address}</p>}
+                    {(log.ip_address || log.network) && (
+                      <p className="text-xs text-gray-400" title={log.user_agent || undefined}>
+                        {log.ip_address}
+                        {log.network && (
+                          <span className={`mr-2 px-1.5 py-0.5 rounded ${log.network === 'internal' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {log.network === 'internal'
+                              ? (log.network_site ? `داخل الشبكة — ${log.network_site}` : 'داخل الشبكة')
+                              : 'خارج الشبكة'}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">
                     {new Date(log.created_at).toLocaleString('en-US')}
