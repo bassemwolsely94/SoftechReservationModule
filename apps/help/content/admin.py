@@ -235,6 +235,8 @@ SCREENS = [
         'tips': [T('ربط المستخدم بمستخدم SOFTECH ضروري للاعتمادات التي تُنفَّذ في SOFTECH باسمه.', 'Linking the user to a SOFTECH user is required for approvals executed in SOFTECH under their name.'),
                  T('بعد 5 محاولات دخول خاطئة (كلمة مرور أو رمز تحقق) خلال 15 دقيقة يُوقف دخول الحساب 15 دقيقة تلقائياً ويصل المديرين إشعار؛ يظهر «🔒 دخول موقوف مؤقتاً» وزر «رفع الإيقاف».',
                    'After 5 wrong login tries (password or verification code) within 15 minutes the account is paused for 15 minutes and admins are notified; "🔒 Login paused" and a "Lift the lock" button appear.'),
+                 T('إعادة تعيين كلمة المرور لا ترفع إيقاف الدخول — استخدم «رفع الإيقاف». وإن كان كل المديرين موقوفين فيُنفَّذ الأمر unlock_login من السيرفر.',
+                   'Resetting a password does not lift a login pause — use "Lift the lock". If every admin is paused, run the unlock_login command on the server.'),
                  T('كلمة المرور 10 أحرف على الأقل، وتُرفض إن كانت شائعة (مثل password123) أو أرقاماً فقط أو قريبة من اسم المستخدم — عند الإنشاء وإعادة التعيين وتغيير كلمة المرور.',
                    'Passwords need at least 10 characters and are refused if common (like password123), digits only, or close to the username — on create, reset and password change.')],
         'related': ['admin.permissions', 'admin.erp_permissions'],

@@ -510,7 +510,7 @@ function ActivityLogModal({ user, onClose }) {
                   <span className="text-xl w-7 text-center mt-0.5">{ACTION_ICON[log.action] || '•'}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-800">{ACTION_LABELS[log.action] || log.action}</span>
+                      <span className="font-medium text-gray-800">{ACTION_LABELS[log.action] || log.action_label || log.action}</span>
                       {log.changed_by_name && (
                         <span className="text-gray-400 text-xs">بواسطة {log.changed_by_name}</span>
                       )}

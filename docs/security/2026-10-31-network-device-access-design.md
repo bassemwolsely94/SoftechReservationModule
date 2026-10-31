@@ -66,10 +66,10 @@ The hard part is not the gate. It is **knowing reliably where a request came fro
 | H3 | Delivery role holds `approve`+`finalize` → a rider can cancel/close own orders | Fraud | **Fixed in N0** (`091989e0`) |
 | H4 | `/rider` has no role guard; the delivery role can open every `/` and `/m` route, limited only by the matrix (which is in `log` mode) | Leakage | **Deferred to N3** (needs the zone/matrix enforcement) |
 | H5 | `GET /api/sync/branch-health/?probe=1` is an open read that fans out to 6 SOFTECH nodes | Load / DoS on SOFTECH from any login | **Fixed in N0** (`768eee28`) |
-| H6 | Daphne runs `--proxy-headers`; it may take the **leftmost** (client-forgeable) X-Forwarded-For into `REMOTE_ADDR`, and several login/MFA paths fall back to `REMOTE_ADDR` | Spoofed IPs in logs; would break any IP rule — verify before relying on IP | **Fixed in N0** (`b65a2605`) |
+| H6 | Daphne runs `--proxy-headers`; it may take the **leftmost** (client-forgeable) X-Forwarded-For into `REMOTE_ADDR`, and several login/MFA paths fall back to `REMOTE_ADDR` | Spoofed IPs in logs; would break any IP rule — verify before relying on IP | **Fixed in code (N0, `b65a2605`); live nginx needs the runbook step "Applying security batch N0 to the live server"** |
 | H7 | MFA remember-device = 30-day bearer token in localStorage | Stolen token skips 2FA from anywhere | **Fixed in N0** (`2f0977b4`) |
 | H8 | No per-account lockout | Password spraying from many IPs | **Fixed in N0** (`deca2965, b191ff77`) |
-| H9 | nginx `/admin/` allows whole 10/8 = every ZeroTier member; Django admin has no 2FA | Intrusion | **Fixed in N0** (`b856136d`) |
+| H9 | nginx `/admin/` allows whole 10/8 = every ZeroTier member; Django admin has no 2FA | Intrusion | **Fixed in code (N0, `b856136d`); live nginx needs the runbook step "Applying security batch N0 to the live server"** |
 | H10 | HR attendance geofence uses client coordinates and never blocks | Attendance fraud (not security-critical) | **Owner decision** (not security-critical) |
 
 ## 6. Proposed design

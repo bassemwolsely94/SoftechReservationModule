@@ -1029,6 +1029,26 @@ owner's ZeroTier IP(s) you add — not the whole 10/8 range), and Django only mo
 window: set it True in `.env`, restart the app, open `https://10.50.50.77/admin/` (accept the name
 warning) from an allowed address, then set it back to False and restart.
 
+#### Applying security batch N0 to the live server
+
+The live site file was hand-edited (certbot, `listen` lines) and still uses `proxy_params` and the
+10/8 admin allows, so do **not** re-copy the template over it. Edit the live file in place:
+
+```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
+sudo cp deploy/nginx-admin-allow.conf.example /etc/nginx/elrezeiky-admin-allow.conf   # then add the admin IPs
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - replace EVERY `include /etc/nginx/proxy_params;` with `include /etc/nginx/elrezeiky-proxy-headers.conf;`
+#  - add that same include inside `location /ws/ { ... }`
+#  - in `location /admin/` replace the private-range allow/deny lines with `include /etc/nginx/elrezeiky-admin-allow.conf;`
+sudo nginx -t && sudo systemctl reload nginx
+# .env: DJANGO_ADMIN_ENABLED=False, then: sudo systemctl restart elrezeiky-web
+```
+Verify the forged header no longer reaches the app: make one failed login with
+`curl -s -H 'X-Forwarded-For: 6.6.6.6' -H 'Content-Type: application/json' -d '{"username":"nobody","password":"x"}' https://elrezeikyapp.dawalvry.com/api/auth/login/`
+then check the activity log / `journalctl -u elrezeiky-web` — the logged IP must be your real
+address, not `6.6.6.6`.
+
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
@@ -1554,6 +1574,7 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 | Out of memory / swapping | `htop`: stop workbench Vite/tests; keep EasyOCR/Whisper off; `journalctl -u elrezeiky-ocr` (sidecar hitting its 2 GB cap?); ask LDC for 16 GB |
 | OCR slow / screens slow during OCR | expected on 4 vCPU during big bundles; check `OMP_THREAD_LIMIT=1`, sidecar `CPUQuota`; run big bundles after hours; 16 GB / 8 vCPU plan |
 | `paddleocr` engine unavailable | `systemctl status elrezeiky-ocr` · `curl 127.0.0.1:8077/health` · `PADDLE_OCR_URL` in `.env` |
+| Every admin is login-locked (5 wrong tries) | On the server: `cd /opt/elrezeiky/app && venv/bin/python manage.py unlock_login <username>` — lifts the lock and logs it |
 | Cert expired | `sudo certbot renew` · `systemctl list-timers | grep certbot` |
 
 ---

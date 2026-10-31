@@ -99,7 +99,7 @@ def unlock(profile, by_profile, ip):
 # ── Identifiers that match no account ────────────────────────────────────────
 
 def _unknown_key(identifier):
-    return 'login-unknown:' + hashlib.sha256(identifier.strip().lower().encode()).hexdigest()[:32]
+    return 'login-unknown:' + hashlib.sha256(identifier.strip().encode()).hexdigest()[:32]
 
 
 def _unknown_times(identifier, now):

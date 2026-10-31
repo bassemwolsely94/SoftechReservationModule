@@ -41,7 +41,7 @@ from apps.catalog.wildcard import WildcardSearchFilter
 import datetime as _dt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .permissions import DeliveryModulePermission, driver_of, guard
+from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
 from core import branch_scope
 from rest_framework.response import Response
 
@@ -334,6 +334,11 @@ class DeliveryOrderDetailView(generics.RetrieveUpdateAPIView):
                     'total_value', 'delivery_fees', 'payment_method', 'items')
 
     def update(self, request, *args, **kwargs):
+        # A rider changes an order only through the /app/ endpoints: the generic PATCH would let
+        # them move the drop-off point (geofence target), address, phone, notes or fees.
+        profile = getattr(request.user, 'staff_profile', None)
+        if driver_of(profile) is not None and profile.role != 'admin':
+            return Response({'detail': DENIED}, status=status.HTTP_403_FORBIDDEN)
         order = self.get_object()
         if order.is_terminal or (order.status not in self.PRE_DISPATCH
                                  and any(f in request.data for f in self.VALUE_FIELDS)):

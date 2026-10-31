@@ -337,6 +337,7 @@ def enable_2fa_view(request):
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
         resp.update(build_login_response(user))
+        _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية')
     return session_response(resp)
 
 

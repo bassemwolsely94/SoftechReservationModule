@@ -50,8 +50,10 @@ class SecondFactorAttemptTests(TestCase):
 
     def test_a_new_login_starts_fresh(self):
         token = self._token()
-        for _ in range(4):          # 5 would also lock the account (N0/H8) — see test_auth_lockout
-            self._verify(token, self._wrong())
+        for _ in range(5):          # the token is used up — and the 5th miss also locks the account (N0/H8)
+            self.assertEqual(self._verify(token, self._wrong()).status_code, 401)
+        from apps.users import lockout
+        lockout.unlock(self.profile, None, None)
         self.assertEqual(self._verify(self._token(), self.totp.now()).status_code, 200)
 
     def test_an_accepted_code_cannot_be_used_again(self):

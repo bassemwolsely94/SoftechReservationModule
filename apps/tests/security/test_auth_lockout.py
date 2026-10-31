@@ -168,3 +168,39 @@ class LoginLockoutTests(TestCase):
         self.assertEqual(out[16].status_code, 429)
         self.assertEqual(out[16].data['error'], LOCKED)
         self.assertEqual(out[30].status_code, 401)
+
+    # ── fix wave: exact-case unknown identifiers, enrolment reset, unlock_login command ──
+
+    def test_unknown_identifier_not_distinguishable_by_case(self):
+        self._bad(5, 'REALNAME')                         # neither exists as an account
+        a = self._login('realname', 'wrong-pw')
+        self._bad(5, 'FAKENAME')
+        b = self._login('fakename', 'wrong-pw')
+        self.assertEqual((a.status_code, a.data), (b.status_code, b.data))
+        self.assertEqual(a.status_code, 401)
+
+    def test_forced_enrolment_login_resets_streak(self):
+        from apps.users import mfa
+        self._bad(3)
+        self.me.post('/api/auth/2fa/setup/', {}, format='json')
+        self.profile.refresh_from_db()
+        token = mfa.make_preauth_token(self.user, 'enroll')
+        r = APIClient().post('/api/auth/2fa/enable/',
+                             {'mfa_token': token, 'code': pyotp.TOTP(self.profile.mfa_secret).now()},
+                             format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(self._actions('login_success').count(), 1)
+
+    def test_unlock_login_command(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        self._bad(5)
+        self.assertEqual(self._login().status_code, 429)
+        out = StringIO()
+        call_command('unlock_login', 'h8_user', stdout=out)
+        self.assertIn('lifted', out.getvalue())
+        self.assertEqual(self._actions('login_unlocked').count(), 1)
+        self.assertEqual(self._login().status_code, 200)
+        with self.assertRaises(CommandError):
+            call_command('unlock_login', 'nobody-here')

@@ -106,3 +106,13 @@ class RiderPowersTests(TestCase):
         DeliveryOrder.objects.filter(pk=self.order.pk).update(
             rider_location_at=timezone.now() - timedelta(minutes=31))
         self.assertIsNone(anon.get(f'/api/delivery/track/{token}/').json()['location'])
+
+    def test_rider_cannot_patch_order_but_supervisor_can(self):
+        for body in ({'delivery_lat': '35.0'}, {'delivery_address': 'x'}, {'notes': 'x'}):
+            r = self.rider.patch(f'/api/delivery/{self.order.pk}/', body, format='json')
+            self.assertEqual(r.status_code, 403, body)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.delivery_lat, DROP[0])
+        sup = make_user('h23_sup_patch', role='supervisor', branch=self.branch)[2]
+        r = sup.patch(f'/api/delivery/{self.order.pk}/', {'notes': 'ok'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)

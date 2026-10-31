@@ -28,10 +28,8 @@ class SyncProbeGateTests(TestCase):
         with mock.patch(PROBE) as probe:
             resp = client.get(URL, {'probe': 1})
         probe.assert_not_called()
-        if resp.status_code == 200:                    # RBAC may refuse the module outright
-            self.assertEqual(resp.data['probe'], 'refused')
-        else:
-            self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)        # path is OPEN_READ; RBAC is off in tests
+        self.assertEqual(resp.data['probe'], 'refused')
 
     def test_admin_probe_runs_once_per_minute(self):
         _, _, client = make_admin('n0_h5_admin')
