@@ -76,9 +76,7 @@ TOUR_WARN_WORDS = {'push', 'post', 'approve', 'reject', 'discount', 'send', 'can
                    'close', 'settle', 'writeback', 'softech', 'flush'}
 # modules whose tours are not rewritten to the rich format yet (limits / ⚠ / full
 # coverage not enforced for them); each batch removes the modules it finishes
-TOUR_PENDING = {
-    'general', 'gamification', 'finance', 'insurance', 'commerce', 'hr', 'admin',
-}
+TOUR_PENDING = set()  # every module finished (batch 6, 2026-10-30); a new module starts rich
 
 GROUPS = [
     ('home',       'الرئيسية',      'Home'),

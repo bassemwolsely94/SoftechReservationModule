@@ -46,7 +46,7 @@ export function LearnedButton({ screenKey, lang }) {
     ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
     : state === 'changed' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-line text-content hover:bg-brand-50'
   return (
-    <button type="button" disabled={busy} onClick={toggle}
+    <button type="button" disabled={busy} onClick={toggle} data-tour="general-help-center-learned"
             className={`text-xs border rounded-lg px-3 py-1.5 ${cls}`}>
       {state === 'done'
         ? (en(lang) ? '✓ Understood' : '✓ فهمت الشاشة')
@@ -85,12 +85,12 @@ export function MyPath({ lang, go, canPreview }) {
               {data.roles.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           )}
-          <a href={`/help/manual?role=${data.role}&lang=${lang}`} target="_blank" rel="noreferrer"
+          <a href={`/help/manual?role=${data.role}&lang=${lang}`} target="_blank" rel="noreferrer" data-tour="general-help-center-print-path"
              className="text-xs border border-line rounded-lg px-3 py-1.5 text-brand-600 hover:bg-brand-50">
             🖨️ {en(lang) ? 'Print my manual' : 'طباعة دليلي'}
           </a>
           <ShowFirstDayAgain lang={lang} />
-          <span className="text-2xl font-bold text-brand-600 tabnum">{p.percent}%</span>
+          <span data-tour="general-help-center-path-progress" className="text-2xl font-bold text-brand-600 tabnum">{p.percent}%</span>
         </div>
         <Bar percent={p.percent} />
         <div className="text-xs text-muted">
@@ -104,7 +104,7 @@ export function MyPath({ lang, go, canPreview }) {
             : 'اقرأ شرح كل شاشة بالترتيب، وجرّبها على الشاشة الحقيقية، وبعدين اضغط «فهمت هذه الشاشة ✓». بعد ما تخلص شاشات الموديول ادخل الاختبار القصير بتاعه. لو شرح شاشة اتغيّر هتلاقيها متعلّمة «راجعه».'}
         </p>
         {next && (
-          <button type="button" onClick={() => go({ tab: 'browse', screen: next.key })}
+          <button type="button" onClick={() => go({ tab: 'browse', screen: next.key })} data-tour="general-help-center-path-continue"
                   className="text-sm bg-brand-600 text-white rounded-lg px-4 py-2 hover:bg-brand-700">
             {en(lang) ? 'Continue: ' : 'كمّل: '}{pick(next.title, lang)} ←
           </button>
@@ -112,7 +112,7 @@ export function MyPath({ lang, go, canPreview }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-line bg-surface divide-y divide-line">
+        <div data-tour="general-help-center-path-list" className="lg:col-span-2 rounded-xl border border-line bg-surface divide-y divide-line">
           {data.path.map((i, n) => {
             const [icon, cls, txt] = STATE[i.state]
             return (
@@ -129,7 +129,7 @@ export function MyPath({ lang, go, canPreview }) {
             )
           })}
         </div>
-        <div className="rounded-xl border border-line bg-surface p-4 space-y-2 self-start">
+        <div data-tour="general-help-center-quizzes" className="rounded-xl border border-line bg-surface p-4 space-y-2 self-start">
           <h3 className="text-sm font-bold text-content">{en(lang) ? 'Module quizzes' : 'اختبارات الموديولات'}</h3>
           {data.quizzes.map((q) => (
             <button key={q.module} type="button" onClick={() => go({ tab: 'path', quiz: q.module })}

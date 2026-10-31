@@ -351,7 +351,7 @@ export default function ExpenseAnalyticsPage() {
 
         {/* Active filter chips */}
         {activeFilters.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100" data-tour="finance-expenses-chips">
             <span className="text-xs text-gray-400 self-center">مرشحات نشطة:</span>
             {activeFilters.map((f, i) => (
               <Chip key={i} label={f.label} color={f.color} onRemove={f.clear} />
@@ -402,7 +402,7 @@ export default function ExpenseAnalyticsPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-4">
               التوزيع بالفئة الرئيسية
             </h3>
-            <div className="space-y-1">
+            <div className="space-y-1" data-tour="finance-expenses-categories">
               {catRows.map((r, i) => (
                 <CategoryRow
                   key={r.category}
@@ -441,7 +441,7 @@ export default function ExpenseAnalyticsPage() {
                 <div className="w-24 text-right">المبلغ</div>
               </div>
 
-              <div className="space-y-0.5 max-h-80 overflow-y-auto">
+              <div className="space-y-0.5 max-h-80 overflow-y-auto" data-tour="finance-expenses-subcategories">
                 {subRowsVisible.map(r => (
                   <SubCategoryRow
                     key={r.sub_category}

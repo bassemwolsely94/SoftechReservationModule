@@ -23,6 +23,7 @@ from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
+from core import branch_scope
 from core.errors import public_error
 from core.permissions import matrix_permission
 
@@ -86,7 +87,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [CanOperatePosOrders]
 
     def get_queryset(self):
-        qs = SoftechSalesOrder.objects.all().prefetch_related('lines', 'payments')
+        qs = branch_scope.scope(SoftechSalesOrder.objects.all().prefetch_related('lines', 'payments'),
+                                self.request.user)
         st = self.request.query_params.get('status')
         br = self.request.query_params.get('branch')
         if st:
@@ -106,6 +108,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if token:
             existing = SoftechSalesOrder.objects.filter(client_token=token).first()
             if existing:
+                if not branch_scope.allows(request.user, existing.branch_id):
+                    return Response({'detail': 'client_token مستخدم.'}, status=status.HTTP_409_CONFLICT)
                 return Response(OrderSerializer(existing).data, status=status.HTTP_200_OK)
         # ── POS channel RBAC (server-authoritative) — a member may only create orders on
         # the sales channels they're allowed. Managers get all; empty allow-list = all.
@@ -121,7 +125,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
             self.perform_create(serializer)
         except IntegrityError:
             existing = SoftechSalesOrder.objects.filter(client_token=token).first()
-            if existing:
+            if existing and branch_scope.allows(request.user, existing.branch_id):
                 return Response(OrderSerializer(existing).data, status=status.HTTP_200_OK)
             raise
         return Response(serializer.data, status=status.HTTP_201_CREATED,
@@ -135,6 +139,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         chosen = (self.request.data.get('seller_usercode') or '').strip()
         seller = chosen if (chosen and _can_change_seller(sp)) else own
         token = _valid_uuid(self.request.data.get('client_token')) or uuid.uuid4()
+        branch_scope.check_branch_value(self.request.user, serializer)
         order = serializer.save(created_by=sp, seller_usercode=seller, client_token=token)
         # RETURN (مرتجع): the backend is authoritative — mirror the ORIGINAL finalized sale's lines +
         # refund tenders from SOFTECH (source_raw never round-trips through the client). A bad invoice or
@@ -150,7 +155,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 raise ValidationError({'return_of_invoice': str(e)})
 
 
-class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
+class OrderDetailView(branch_scope.BranchScopedMixin, generics.RetrieveUpdateDestroyAPIView):
     queryset           = SoftechSalesOrder.objects.all().prefetch_related('lines', 'payments')
     serializer_class   = OrderSerializer
     permission_classes = [CanOperatePosOrders]   # PATCH = pos edit, DELETE = pos delete (Z-5b)
@@ -177,6 +182,8 @@ def return_lookup(request):
     invoice = (request.query_params.get('invoice') or '').strip()
     if not branch:
         return Response({'detail': 'الفرع مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not branch_scope.allows(request.user, branch.pk):
+        return Response({'detail': 'الفرع خارج فروعك.'}, status=status.HTTP_404_NOT_FOUND)
     if not invoice.isdigit():
         return Response({'detail': 'رقم فاتورة غير صحيح.'}, status=status.HTTP_400_BAD_REQUEST)
     try:
@@ -229,7 +236,7 @@ def return_lookup(request):
 @permission_classes([CanOperatePosOrders])
 def ready_order(request, pk):
     """Validate + compute money fields (pricing.py); optionally accept explicit tenders."""
-    order = SoftechSalesOrder.objects.get(pk=pk)
+    order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     tenders = request.data.get('tenders')   # [{pay_type, amount}, ...] or None
     live = bool(request.data.get('live', settings.POS_LIVE_PRICING))
     try:
@@ -276,7 +283,7 @@ def push_order(request, pk):
         dry_run=false AND confirm=true, and the order passes the strict push checks
         (balance + claim data). Without confirm we return 409 with requires_confirm.
     """
-    order = SoftechSalesOrder.objects.get(pk=pk)
+    order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     want_live = (request.data.get('dry_run') is False)
     dry = (not writer.writer_enabled()) or (not want_live)
 
@@ -352,7 +359,7 @@ def push_order(request, pk):
 @api_view(['POST'])
 @permission_classes([CanPushPosOrders])
 def cancel_order(request, pk):
-    order = SoftechSalesOrder.objects.get(pk=pk)
+    order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     before = order.status
     try:
         writer.cancel_order(order)
@@ -436,7 +443,8 @@ def share_whatsapp(request, pk):
     saved order (+ the customer's phone when available). The frontend opens wa.me/<phone>?text=… ;
     the actual send is the operator's explicit action. Read-only: no SOFTECH write, no status change."""
     try:
-        order = SoftechSalesOrder.objects.select_related('branch', 'customer').prefetch_related('lines').get(pk=pk)
+        order = branch_scope.scope(SoftechSalesOrder.objects.select_related('branch', 'customer')
+                                   .prefetch_related('lines'), request.user).get(pk=pk)
     except SoftechSalesOrder.DoesNotExist:
         return Response({'detail': 'الأمر غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
     phone = ''
@@ -462,8 +470,10 @@ def lost_sales_view(request):
         return Response({'detail': 'برجاء تحديد الفرع.'}, status=status.HTTP_400_BAD_REQUEST)
     try:
         branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
+    except (Branch.DoesNotExist, ValueError):
         return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    if not branch_scope.allows(request.user, branch.pk):
+        return Response({'detail': 'الفرع خارج فروعك.'}, status=status.HTTP_404_NOT_FOUND)
     try:
         days = max(1, min(90, int(request.query_params.get('days', 14))))
     except (TypeError, ValueError):
@@ -588,6 +598,8 @@ def selection_events_ingest(request):
         branch = None
     if not branch:
         return Response({'detail': 'الفرع مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not branch_scope.allows(request.user, branch.pk):
+        return Response({'detail': 'الفرع خارج فروعك.'}, status=status.HTTP_404_NOT_FOUND)
     token = _valid_uuid(request.data.get('cart_token'))
     events = request.data.get('events') or []
     if not isinstance(events, list):
@@ -636,7 +648,7 @@ def upload_prescription(request, pk):
     pass reads. Field name: `prescription_image` (or `file`).
     """
     try:
-        order = SoftechSalesOrder.objects.get(pk=pk)
+        order = branch_scope.scope(SoftechSalesOrder.objects.all(), request.user).get(pk=pk)
     except SoftechSalesOrder.DoesNotExist:
         return Response({'detail': 'أمر غير موجود'}, status=status.HTTP_404_NOT_FOUND)
     if order.is_locked:
@@ -856,7 +868,7 @@ def referral_stats(request):
     (doc_date), branch. PG-only report.
     """
     from django.db.models import Count, Sum, Max
-    qs = (SoftechSalesOrder.objects
+    qs = (branch_scope.scope(SoftechSalesOrder.objects.all(), request.user)
           .filter(status__in=_REFERRAL_STATUSES)
           .exclude(referral_doctor_name='', referral_doctor_code=''))
     frm, to, br = (request.query_params.get(k) for k in ('from', 'to', 'branch'))
@@ -1076,9 +1088,9 @@ def branch_stores_view(request):
 def queue_status(request):
     """Counts of orders waiting on connectivity — for the POS 'في الطابور' indicator."""
     from django.db.models import Count
-    qs = SoftechSalesOrder.objects.filter(status__in=[
+    qs = branch_scope.scope(SoftechSalesOrder.objects.filter(status__in=[
         SoftechSalesOrder.STATUS_QUEUED, SoftechSalesOrder.STATUS_PUSH_FAILED,
-        SoftechSalesOrder.STATUS_PUSHING])
+        SoftechSalesOrder.STATUS_PUSHING]), request.user)
     branch = request.query_params.get('branch')
     if branch:
         qs = qs.filter(branch_id=branch)
@@ -1177,7 +1189,7 @@ def exceptions_view(request):
     pushing_stale = _mins('pushing_stale_min', 5)
     pushed_stale  = _mins('pushed_stale_min', 120)
 
-    qs = SoftechSalesOrder.objects.select_related('branch')
+    qs = branch_scope.scope(SoftechSalesOrder.objects.select_related('branch'), request.user)
     branch = request.query_params.get('branch')
     if branch:
         qs = qs.filter(branch_id=branch)
@@ -1206,7 +1218,7 @@ def flush_now(request):
     statuses = [SoftechSalesOrder.STATUS_QUEUED]
     if request.data.get('include_failed'):
         statuses.append(SoftechSalesOrder.STATUS_PUSH_FAILED)
-    qs = (SoftechSalesOrder.objects.filter(status__in=statuses)
+    qs = (branch_scope.scope(SoftechSalesOrder.objects.filter(status__in=statuses), request.user)
           .select_related('branch').order_by('created_at')[:50])
     pushed = queued = failed = 0
     results = []

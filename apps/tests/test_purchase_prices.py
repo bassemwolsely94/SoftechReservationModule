@@ -125,6 +125,13 @@ class RefreshTests(TestCase):
         return r
 
     def test_catch_up_window_and_due(self):
+        # a fixed Cairo noon: near midnight (and across the October clock change) "144 hours
+        # ago" can land on a date 5 days back, so the real clock made this test flaky
+        noon = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        with mock.patch('django.utils.timezone.now', return_value=noon):
+            self._catch_up_window_and_due()
+
+    def _catch_up_window_and_due(self):
         from apps.procurement import refresh
         self.assertEqual(refresh.catchup_days(), refresh.FIRST_DAYS)
         self.assertTrue(refresh.is_due())

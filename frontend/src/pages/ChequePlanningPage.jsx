@@ -140,6 +140,7 @@ function PlanList({ selectedId, onSelect, onNew }) {
         {plans.map(p => (
           <button
             key={p.id}
+            data-tour="finance-cheques-plan"
             onClick={() => onSelect(p.id)}
             className={`w-full text-right px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
               selectedId === p.id ? 'bg-indigo-50 border-r-4 border-r-indigo-500' : ''
@@ -326,7 +327,7 @@ function PlanForm({ onSave, onCancel }) {
 
       {/* Section: Schedule */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-600 border-b pb-1">جدول السداد</h3>
+        <h3 className="text-sm font-semibold text-gray-600 border-b pb-1" data-tour="finance-cheques-form-schedule">جدول السداد</h3>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">إجمالي المبلغ (ج.م) *</label>
           <input type="number" min="1" step="any" value={form.total_amount}
@@ -369,6 +370,7 @@ function PlanForm({ onSave, onCancel }) {
         {/* Preview button */}
         <button
           type="button"
+          data-tour="finance-cheques-preview"
           onClick={handlePreview}
           disabled={!canPreview || previewLoading}
           className="w-full py-2 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg text-sm font-medium hover:bg-yellow-100 disabled:opacity-50"
@@ -392,6 +394,7 @@ function PlanForm({ onSave, onCancel }) {
 
       <div className="flex gap-3 pt-2">
         <button
+          data-tour="finance-cheques-create"
           onClick={handleSubmit}
           disabled={!form.title || !form.payee_name || !form.total_amount || !form.first_due_date || createMutation.isPending}
           className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 disabled:opacity-50"
@@ -457,6 +460,7 @@ function InstalmentRow({ inst, planId, planStatus }) {
         <td className="px-3 py-2">
           {planStatus === 'active' && !['cleared', 'cancelled'].includes(inst.status) && (
             <button
+              data-tour="finance-cheques-edit-cheque"
               onClick={() => setEditing(!editing)}
               className="text-xs text-indigo-600 hover:underline"
             >
@@ -498,6 +502,7 @@ function InstalmentRow({ inst, planId, planStatus }) {
                 />
               </div>
               <button
+                data-tour="finance-cheques-save-cheque"
                 onClick={() => patchMutation.mutate(form)}
                 disabled={patchMutation.isPending}
                 className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-50"
@@ -562,6 +567,7 @@ function PlanDetail({ planId, onClose }) {
           <div className="flex items-center gap-2">
             {plan.status === 'draft' && (
               <button
+                data-tour="finance-cheques-activate"
                 onClick={() => activateMutation.mutate()}
                 disabled={activateMutation.isPending}
                 className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
@@ -571,6 +577,7 @@ function PlanDetail({ planId, onClose }) {
             )}
             {['draft', 'active'].includes(plan.status) && (
               <button
+                data-tour="finance-cheques-cancel-plan"
                 onClick={() => { if (window.confirm('هل تريد إلغاء هذه الخطة؟')) cancelMutation.mutate() }}
                 className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-sm rounded-lg hover:bg-red-100"
               >
@@ -584,7 +591,7 @@ function PlanDetail({ planId, onClose }) {
 
       <div className="p-6 space-y-6">
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-tour="finance-cheques-plan-kpis">
           <div className="bg-indigo-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-indigo-700">{fmt(plan.total_amount)}</p>
             <p className="text-xs text-indigo-500 mt-0.5">إجمالي ج.م</p>
@@ -650,7 +657,7 @@ function PlanDetail({ planId, onClose }) {
         )}
 
         {/* Instalments table */}
-        <div>
+        <div data-tour="finance-cheques-schedule">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">جدول الشيكات</h3>
           <div data-tour="finance-cheques-schedule" className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-sm" dir="rtl">

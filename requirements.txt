@@ -28,6 +28,7 @@ rapidfuzz>=3.6.0
 # ── WebSocket / real-time ─────────────────────────────────────────────────────
 channels>=4.0.0               # Django Channels — WebSocket support
 daphne>=4.2.3                 # ASGI server (required when channels is in INSTALLED_APPS)
+twisted[tls]>=26.10.0              # stable 26.10 (owner 2026-10-31 pinned rc1 "until the stable 26.10 ships"): fixes every 26.4.0 advisory incl. GHSA-vpp8-g58w-m8mp (HTTP/2 rapid reset)
 channels-redis>=4.2.0         # shared channel layer when REDIS_URL is set (web + scheduler are separate processes)
 PyJWT>=2.15.1                  # JWT decode in WS middleware (already pulled by simplejwt)
 imagehash>=4.3.0
@@ -40,7 +41,6 @@ JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a 
 
 # ── Security floors for transitive packages (pip-audit, Batch 6 — 2026-10-31) ──
 # Not imported directly; listed so the resolver can't pick a version with a known advisory.
-Twisted>=26.10.0              # daphne
 cryptography>=50.0.2          # pyjwt / pywebpush
 sqlparse>=0.6.0               # Django
 urllib3>=2.8.0

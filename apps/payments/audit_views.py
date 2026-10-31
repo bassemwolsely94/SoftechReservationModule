@@ -14,6 +14,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from django.db.models import Q
+
+from core import branch_scope
 from core.permissions import MatrixPermission
 
 from .audit_serializers import (
@@ -51,16 +54,16 @@ class BankStatementImportViewSet(viewsets.ModelViewSet):
     rbac_delete         = ('delete', 'approve')
 
     def get_queryset(self):
-        sp  = _staff(self.request)
-        qs  = BankStatementImport.objects.select_related('branch', 'imported_by').order_by('-imported_at')
-        if sp and sp.role not in ('admin', 'supervisor'):
-            qs = qs.filter(branch=sp.branch)
+        qs  = branch_scope.scope(
+            BankStatementImport.objects.select_related('branch', 'imported_by').order_by('-imported_at'),
+            self.request.user)
         branch = self.request.query_params.get('branch')
         if branch:
             qs = qs.filter(branch_id=branch)
         return qs
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         serializer.save(imported_by=_staff(self.request))
 
     @action(detail=True, methods=['post'], url_path='run-matching')
@@ -88,9 +91,9 @@ class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
     rbac_actions       = {'manual_match': ('edit',)}
 
     def get_queryset(self):
-        qs = BankStatementLine.objects.select_related(
+        qs = branch_scope.scope(BankStatementLine.objects.select_related(
             'statement_import', 'matched_payment', 'matched_by'
-        )
+        ), self.request.user, 'statement_import__branch')
         import_id    = self.request.query_params.get('import')
         match_method = self.request.query_params.get('match_method')
         if import_id:
@@ -109,7 +112,7 @@ class BankStatementLineViewSet(viewsets.ReadOnlyModelViewSet):
         ser  = ManualMatchSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
-        payment = get_object_or_404(ExternalPayment, pk=ser.validated_data['payment_id'])
+        payment = branch_scope.get_or_404(ExternalPayment, request.user, pk=ser.validated_data['payment_id'])
         try:
             updated = PaymentAuditService.manual_match(
                 line       = line,
@@ -136,6 +139,10 @@ class PaymentExceptionViewSet(viewsets.ReadOnlyModelViewSet):
         qs = PaymentException.objects.select_related(
             'payment', 'statement_line', 'assigned_to', 'resolved_by'
         ).order_by('-created_at')
+        ids = branch_scope.branch_ids(self.request.user)
+        if ids is not None:
+            qs = qs.filter(Q(payment__branch_id__in=ids)
+                           | Q(payment__isnull=True, statement_line__statement_import__branch_id__in=ids))
 
         exc_type = self.request.query_params.get('type')
         sev      = self.request.query_params.get('severity')

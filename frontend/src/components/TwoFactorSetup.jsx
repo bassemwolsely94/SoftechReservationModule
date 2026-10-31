@@ -54,7 +54,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
           <h3 className="font-bold text-gray-800">تم تفعيل المصادقة الثنائية</h3>
           <p className="text-sm text-gray-500 mt-1">احفظ رموز الاسترجاع في مكان آمن — كل رمز يُستخدم مرة واحدة.</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div data-tour="general-security-backup-codes" className="grid grid-cols-2 gap-2 bg-gray-50 border border-gray-200 rounded-xl p-4">
           {backupCodes.map(c => (
             <div key={c} className="font-mono text-sm text-gray-800 text-center bg-white border border-gray-200 rounded py-1.5" dir="ltr">{c}</div>
           ))}
@@ -85,7 +85,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
         <>
           {qr && (
             <div className="flex justify-center">
-              <img src={qr} alt="QR" className="w-44 h-44 border border-gray-200 rounded-xl" />
+              <img data-tour="general-security-qr" src={qr} alt="QR" className="w-44 h-44 border border-gray-200 rounded-xl" />
             </div>
           )}
           {secret && (
@@ -104,6 +104,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
               onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
               onKeyDown={e => { if (e.key === 'Enter') confirm() }}
               placeholder="000000"
+              data-tour="general-security-code"
               className="input-field w-full text-center text-2xl tracking-[0.4em] font-mono"
               dir="ltr"
               autoFocus
@@ -114,7 +115,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
             {onCancel && (
               <button onClick={onCancel} disabled={submitting} className="btn-secondary flex-1">إلغاء</button>
             )}
-            <button onClick={confirm} disabled={submitting} className="btn-primary flex-1 disabled:opacity-50">
+            <button data-tour="general-security-confirm" onClick={confirm} disabled={submitting} className="btn-primary flex-1 disabled:opacity-50">
               {submitting ? 'جارٍ التأكيد...' : 'تأكيد وتفعيل'}
             </button>
           </div>

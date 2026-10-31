@@ -91,19 +91,19 @@ export default function ErpPermissionsPage() {
               </div>
               <input value={newMap.note} onChange={e => setNewMap(s => ({ ...s, note: e.target.value }))}
                 placeholder="ملاحظة" className="border border-gray-300 rounded px-2 py-1.5 text-sm flex-1 min-w-[120px]" />
-              <button onClick={() => newMap.system && addMap.mutate({ system: newMap.system, module: newMap.module, note: newMap.note })}
+              <button data-tour="admin-erp-permissions-map-add" onClick={() => newMap.system && addMap.mutate({ system: newMap.system, module: newMap.module, note: newMap.note })}
                 className="bg-emerald-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-emerald-700">إضافة ربط</button>
             </div>
 
             <div data-tour="admin-erp-permissions-map" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {Object.entries(byModule).map(([module, rows]) => (
-                <div key={module} className="bg-white rounded-xl border border-gray-200 p-3">
+                <div key={module} data-tour="admin-erp-permissions-map-card" className="bg-white rounded-xl border border-gray-200 p-3">
                   <div className="font-bold text-gray-800 text-sm mb-2">{module}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {rows.map(r => (
                       <span key={r.id} className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 rounded px-2 py-0.5 text-xs">
                         <span className="font-mono">{r.system}</span>
-                        <button onClick={() => delMap.mutate(r.id)} className="text-red-400 hover:text-red-600">✕</button>
+                        <button data-tour="admin-erp-permissions-map-delete" onClick={() => delMap.mutate(r.id)} className="text-red-400 hover:text-red-600">✕</button>
                       </span>
                     ))}
                   </div>
@@ -154,7 +154,7 @@ export default function ErpPermissionsPage() {
 
         {/* ── SOFTECH systems reference ───────────────────────────────────── */}
         {tab === 'systems' && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div data-tour="admin-erp-permissions-systems" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b text-right">
                 <th className="px-3 py-2">النظام</th><th className="px-3 py-2">عدد الشاشات</th><th className="px-3 py-2">مثال</th>

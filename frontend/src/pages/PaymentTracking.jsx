@@ -96,7 +96,7 @@ function NewPaymentModal({ branches, onClose, onDone }) {
         {/* Method selector */}
         <div className="mb-4">
           <label className="block text-xs text-gray-500 mb-2">طريقة الدفع *</label>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" data-tour="finance-payments-new-method">
             {Object.entries(METHOD_CONFIG).map(([k, c]) => (
               <button key={k}
                 onClick={() => set('method', k)}
@@ -165,7 +165,7 @@ function NewPaymentModal({ branches, onClose, onDone }) {
           </div>
 
           {/* Partial payment toggle */}
-          <div className="col-span-2 flex items-center gap-3 py-1">
+          <div className="col-span-2 flex items-center gap-3 py-1" data-tour="finance-payments-new-partial">
             <label className="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" checked={form.is_partial}
                 onChange={e => set('is_partial', e.target.checked)} className="sr-only peer" />
@@ -185,7 +185,7 @@ function NewPaymentModal({ branches, onClose, onDone }) {
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 mb-1">إيصال / لقطة شاشة</label>
               <div className="flex items-center gap-2">
-                <button onClick={() => fileRef.current?.click()}
+                <button data-tour="finance-payments-new-receipt" onClick={() => fileRef.current?.click()}
                   className="px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-brand-400 transition-colors">
                   📎 اختر صورة
                 </button>
@@ -209,6 +209,7 @@ function NewPaymentModal({ branches, onClose, onDone }) {
             إلغاء
           </button>
           <button
+            data-tour="finance-payments-new-save"
             disabled={!form.amount || !form.branch || mut.isLoading}
             onClick={() => mut.mutate()}
             className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors">
@@ -263,11 +264,11 @@ function PaymentRow({ payment, onConfirm, onDispute }) {
         <div data-tour="finance-payments-actions" className="flex items-center gap-2 shrink-0">
           {payment.status === 'pending' && (
             <>
-              <button onClick={() => onConfirm(payment)}
+              <button data-tour="finance-payments-confirm" onClick={() => onConfirm(payment)}
                 className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                 تأكيد ✓
               </button>
-              <button onClick={() => onDispute(payment)}
+              <button data-tour="finance-payments-dispute" onClick={() => onDispute(payment)}
                 className="px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
                 اعتراض
               </button>
@@ -402,7 +403,7 @@ export default function PaymentTracking() {
       {/* Filters */}
       <div data-tour="finance-payments-filters" className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         {/* Row 1: main filters */}
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap gap-3 items-end" data-tour="finance-payments-filters">
           <div>
             <label className="block text-xs text-gray-500 mb-1">من</label>
             <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDateExact('') }}
@@ -443,7 +444,7 @@ export default function PaymentTracking() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">بحث</label>
-            <input value={search} onChange={e => setSearch(e.target.value)}
+            <input data-tour="finance-payments-search" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="اسم / هاتف / مرجع..."
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-400 focus:outline-none min-w-36" />
           </div>
@@ -503,7 +504,7 @@ export default function PaymentTracking() {
       <div data-tour="finance-payments-list" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-600">{payments.length} دفعة</span>
-          <RefreshButton loading={isFetching} onClick={invalidate} variant="ghost" size="sm">
+          <RefreshButton loading={isFetching} onClick={invalidate} variant="ghost" size="sm" data-tour="finance-payments-refresh">
             تحديث
           </RefreshButton>
         </div>
@@ -517,7 +518,7 @@ export default function PaymentTracking() {
           </div>
         )}
 
-        <div className="divide-y divide-gray-50">
+        <div className="divide-y divide-gray-50" data-tour="finance-payments-list">
           {payments.map(p => (
             <PaymentRow
               key={p.id}
@@ -548,6 +549,7 @@ export default function PaymentTracking() {
                 إلغاء
               </button>
               <button
+                data-tour="finance-payments-dispute-confirm"
                 disabled={!disputeReason.trim() || disputeMut.isLoading}
                 onClick={() => {
                   disputeMut.mutate({ id: disputeTarget.id, reason: disputeReason },

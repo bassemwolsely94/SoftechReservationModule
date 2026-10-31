@@ -75,7 +75,7 @@ export default function GamificationCard({ className = '' }) {
   const recent = title && (Date.now() - new Date(title.month).getTime()) < 62 * 864e5
   const br = data.rank?.branch
   return (
-    <div className={`card ${className}`} dir={lang === 'en' ? 'ltr' : 'rtl'}>
+    <div data-tour="general-dashboard-gamification" className={`card ${className}`} dir={lang === 'en' ? 'ltr' : 'rtl'}>
       <div className="flex flex-wrap items-center gap-4 justify-between">
         <div className="flex-1 min-w-[220px]">
           <LevelBar level={data.level} xp={data.xp} t={t} lang={lang} />
@@ -96,7 +96,7 @@ export default function GamificationCard({ className = '' }) {
         </div>
         <div className="flex items-center gap-2">
           {recent && (
-            <button onClick={() => navigate('/gamification?tab=champions')}
+            <button data-tour="general-dashboard-champion-chip" onClick={() => navigate('/gamification?tab=champions')}
                     className="text-xs rounded-lg px-3 py-2 font-bold border border-amber-300 bg-amber-100 text-amber-900">
               {title.kind === 'network' ? ({ 1: '🥇', 2: '🥈', 3: '🥉' }[title.rank]) : '👑'}{' '}
               {title.kind === 'network'
@@ -105,6 +105,7 @@ export default function GamificationCard({ className = '' }) {
             </button>
           )}
           <button
+            data-tour="general-dashboard-items-waiting"
             onClick={() => navigate('/gamification?tab=me')}
             className={`text-xs rounded-lg px-3 py-2 font-bold border ${left
               ? 'border-amber-300 bg-amber-50 text-amber-800'
@@ -113,7 +114,7 @@ export default function GamificationCard({ className = '' }) {
               ? t(`⚠️ ${left} بند ينتظرك`, `⚠️ ${left} items waiting`)
               : t('✅ لا شيء خلفك', '✅ Nothing left behind')}
           </button>
-          <button onClick={() => navigate('/gamification')} className="btn-secondary text-xs">
+          <button data-tour="general-dashboard-open-gamification" onClick={() => navigate('/gamification')} className="btn-secondary text-xs">
             🏆 {t('التحفيز', 'Gamification')}
           </button>
         </div>

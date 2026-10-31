@@ -47,7 +47,7 @@ function RevokeButton({ c, t, onRevoke, busy }) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   if (c.revoked) return <span className="text-[11px] text-red-600">{t('لقب مسحوب', 'Revoked')}</span>
-  if (!open) return <button className="text-[11px] text-gray-400 underline" onClick={() => setOpen(true)}>{t('سحب اللقب', 'Revoke')}</button>
+  if (!open) return <button data-tour="gamification-main-revoke" className="text-[11px] text-gray-400 underline" onClick={() => setOpen(true)}>{t('سحب اللقب', 'Revoke')}</button>
   return (
     <span className="flex gap-1">
       <input className="input-field text-xs w-44" value={reason} onChange={e => setReason(e.target.value)}
@@ -92,7 +92,7 @@ export default function ChampionsTab({ t, lang }) {
     <div className="space-y-4">
       {msg && <div className={`rounded-lg text-sm px-3 py-2 ${msg.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>{msg.text}</div>}
 
-      <div className="card bg-gradient-to-l from-amber-50 to-white">
+      <div data-tour="gamification-main-race" className="card bg-gradient-to-l from-amber-50 to-white">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="font-black text-gray-900">{t('🏁 سباق هذا الشهر', '🏁 This month\'s race')}</div>
@@ -114,7 +114,7 @@ export default function ChampionsTab({ t, lang }) {
 
       <div className="card space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="font-black text-gray-900">
+          <div data-tour="gamification-main-hall-of-fame" className="font-black text-gray-900">
             {t('👑 لوحة الأبطال', '👑 Hall of fame')}{label ? ` — ${label}` : ''}
           </div>
           <div className="flex items-center gap-2">
@@ -125,7 +125,7 @@ export default function ChampionsTab({ t, lang }) {
               </select>
             )}
             {data.can_edit && (
-              <button className="btn-secondary text-xs" disabled={crown.isPending} onClick={() => crown.mutate()}>
+              <button data-tour="gamification-main-crown" className="btn-secondary text-xs" disabled={crown.isPending} onClick={() => crown.mutate()}>
                 👑 {t('تتويج الشهر الماضي الآن', 'Crown last month now')}
               </button>
             )}

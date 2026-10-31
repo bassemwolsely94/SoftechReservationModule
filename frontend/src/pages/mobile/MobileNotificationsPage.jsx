@@ -73,6 +73,7 @@ function PushToggle() {
         </div>
       </div>
       <button
+        data-tour="general-notifications-mobile-push"
         onClick={isOn ? turnOff : turnOn}
         disabled={busy || status === 'denied'}
         className={`shrink-0 text-xs font-medium rounded-lg px-3 py-1.5 disabled:opacity-50 ${
@@ -120,7 +121,7 @@ export default function MobileNotificationsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-base font-bold text-gray-900">الإشعارات</h1>
         {unread > 0 && (
-          <button onClick={markAll} className="text-xs text-brand-600 font-medium">
+          <button data-tour="general-notifications-mobile-mark-all" onClick={markAll} className="text-xs text-brand-600 font-medium">
             تعليم الكل كمقروء
           </button>
         )}
@@ -139,6 +140,7 @@ export default function MobileNotificationsPage() {
           {rows.map(n => (
             <button
               key={n.id}
+              data-tour="general-notifications-mobile-row"
               onClick={() => open(n)}
               className={`w-full text-right rounded-2xl border p-4 transition-colors active:bg-gray-50 ${
                 n.is_read ? 'bg-white border-gray-200' : 'bg-brand-50/60 border-brand-200'

@@ -37,15 +37,12 @@ def reservation_activity(request, reservation_id):
     """GET activity log for a reservation. POST to add a new entry."""
     staff = getattr(request.user, 'staff_profile', None)
 
+    # Branch access (core.branch_scope): another branch's reservation reads as missing
+    from core import branch_scope
     try:
-        reservation = Reservation.objects.get(pk=reservation_id)
+        reservation = branch_scope.scope(Reservation.objects.all(), request.user).get(pk=reservation_id)
     except Reservation.DoesNotExist:
         return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    # Branch access check
-    if staff and not staff.can_see_all_branches:
-        if reservation.branch != staff.branch:
-            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
         logs = ActivityLog.objects.filter(

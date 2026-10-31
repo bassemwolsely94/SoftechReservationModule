@@ -21,6 +21,7 @@ openpyxl>=3.1.0
 rapidfuzz>=3.6.0
 channels>=4.0.0
 daphne>=4.2.3
+twisted[tls]>=26.10.0
 PyJWT>=2.15.1
 pywebpush>=2.0.0
 python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
@@ -28,7 +29,6 @@ JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a 
 
 # ── Security floors for transitive packages (pip-audit, Batch 6 — 2026-10-31) ──
 # Not imported directly; listed so the resolver can't pick a version with a known advisory.
-Twisted>=26.10.0              # daphne
 cryptography>=50.0.2          # pyjwt / pywebpush
 sqlparse>=0.6.0               # Django
 urllib3>=2.8.0

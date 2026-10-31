@@ -229,7 +229,7 @@ export default function InsurancePrintPage() {
                     <p className="text-sm text-gray-600 mt-1">{t.desc}</p>
                   </div>
                 </div>
-                <button
+                <button data-tour="insurance-print-template-excel"
                   onClick={() => exportExcel(t.id)}
                   disabled={!!exporting}
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
@@ -256,7 +256,7 @@ export default function InsurancePrintPage() {
                     </button>
                   </div>
                   {(layout === 'flat' || layout === 'flat_paged') && (
-                    <div className="flex items-center gap-2 flex-wrap text-sm">
+                    <div className="flex items-center gap-2 flex-wrap text-sm" data-tour="insurance-print-sort">
                       <span className="text-gray-500">فرز حسب:</span>
                       <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                         className="border border-gray-300 rounded px-2 py-1 text-xs">

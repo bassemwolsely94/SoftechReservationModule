@@ -153,7 +153,9 @@ class RedemptionTests(TW._Base):
         self.assertEqual([(r['id'], r['total'], r['funded_by']) for r in rows], [(o.pk, '300.00', [])])
         r = self.sup_api.post('/api/replacement/cases/fund-order/', {'order': o.pk, 'cases': [a.pk]}, format='json')
         self.assertEqual((r.status_code, r.data['funded'][0]['amount']), (200, '300.00'))
-        _, _, other_api = make_user('sup140b', role='supervisor', branch=self.other)
+        # supervisor is an all-branch role (B-3) — a restricted branch still shuts it out
+        _, other_p, other_api = make_user('sup140b', role='supervisor', branch=self.other)
+        other_p.restricted_branches.add(self.branch)
         self.assertEqual(other_api.post('/api/replacement/cases/unfund-order/', {'order': o.pk, 'reason': 'x'},
                                         format='json').status_code, 404)
         r = self.sup_api.post('/api/replacement/cases/unfund-order/', {'order': o.pk, 'reason': 'x'}, format='json')

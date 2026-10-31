@@ -12,6 +12,8 @@ from django.utils import timezone
 from django.db.models import Count, Q, Sum, Avg, F
 from datetime import date, timedelta
 
+from core import branch_scope
+
 from .models import Reservation, ReservationStatusLog, ReservationActivity, ReservationDownpayment, ReservationImage, ReservationLine
 from .serializers import (
     ReservationListSerializer,
@@ -126,12 +128,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 'images__uploaded_by',
             )
 
-        profile = get_profile(self.request)
-
-        # Branch-scoped access: branch staff only see their branch
-        if profile and profile.role not in ('admin', 'call_center', 'purchasing'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        # Branch-scoped access (core.branch_scope): home + allowed branches, never a
+        # restricted one; a branch role with no branch sees nothing (Batch 5)
+        qs = branch_scope.scope(qs, self.request.user)
 
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
@@ -158,6 +157,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         return ReservationDetailSerializer
 
     def perform_update(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         staff = get_profile(self.request)
         old_branch = serializer.instance.branch
         reservation = serializer.save()
@@ -205,6 +205,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
             return Response({'detail': acct['message'], 'account_state': acct['code']},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        branch_scope.check_branch_value(request.user, serializer)   # before duplicates are read
+
         # Duplicate detection — skip if force=true
         force = request.query_params.get('force', '').lower() in ('1', 'true', 'yes')
         if not force:
@@ -247,6 +249,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
         staff = get_profile(self.request)
 
         # ── Walk-in guest customer ────────────────────────────────────────────
@@ -941,10 +944,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
         # Lightweight queryset — no prefetches, just the base access-scoping
         qs = Reservation.objects.all()
-        profile = get_profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'purchasing'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         branch_id = request.query_params.get('branch')
         if branch_id:
@@ -1103,7 +1103,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'target_id مطلوب'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            target = Reservation.objects.get(pk=target_id)
+            target = branch_scope.scope(Reservation.objects.all(), request.user).get(pk=target_id)
         except Reservation.DoesNotExist:
             return Response({'detail': 'الحجز المستهدف غير موجود'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1367,10 +1367,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         Params: date_from, date_to, branch
         """
         qs = Reservation.objects.all()
-        profile = get_profile(request)
-        if profile and profile.role not in ('admin', 'call_center', 'purchasing'):
-            if profile.branch:
-                qs = qs.filter(branch=profile.branch)
+        qs = branch_scope.scope(qs, request.user)
 
         # Filters
         date_from = request.query_params.get('date_from')

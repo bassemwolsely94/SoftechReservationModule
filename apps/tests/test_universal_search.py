@@ -30,6 +30,8 @@ class UniversalSearchTests(TestCase):
         self.panadol = _item('بانادول اكسترا', 'P1001', barcode='6221048001')
         self.zinc = _item('Zinc Syrup', 'Z2002')
         self.cust = make_customer(name='محمد علي', phone='01099887766')
+        self.cust.preferred_branch = self.branch      # the searcher's own branch (B-2: others masked)
+        self.cust.save()
 
     # ── auth ──
     def test_anonymous_denied(self):

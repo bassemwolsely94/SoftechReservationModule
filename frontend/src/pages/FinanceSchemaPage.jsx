@@ -107,19 +107,20 @@ export default function FinanceSchemaPage() {
         </div>
         <div data-tour="finance-schema-filters" className="flex gap-2 mr-auto flex-wrap">
           <input
+            data-tour="finance-schema-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="بحث باسم الجدول…"
             className="border rounded-lg px-3 py-1.5 text-sm w-44 focus:ring-2 focus:ring-green-500"
           />
-          <select value={category} onChange={e => setCategory(e.target.value)}
+          <select data-tour="finance-schema-category" value={category} onChange={e => setCategory(e.target.value)}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="">كل الفئات</option>
             {categories.map(c => (
               <option key={c} value={c}>{CATEGORY_AR[c] || c}</option>
             ))}
           </select>
-          <select value={filterCon} onChange={e => setFilterCon(e.target.value)}
+          <select data-tour="finance-schema-confirmed-filter" value={filterCon} onChange={e => setFilterCon(e.target.value)}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="">الكل</option>
             <option value="confirmed">مؤكد ✓</option>
@@ -165,6 +166,7 @@ export default function FinanceSchemaPage() {
           {/* Row header */}
           <div data-tour="finance-schema-row"
             className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
+            data-tour="finance-schema-row"
             onClick={() => setExpanded(expanded === t.id ? null : t.id)}
           >
             <span className="text-gray-400">{expanded === t.id ? '▾' : '▸'}</span>

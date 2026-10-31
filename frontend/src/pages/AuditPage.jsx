@@ -175,7 +175,7 @@ function AuditLogsTab() {
           <div>لا توجد سجلات</div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div data-tour="admin-audit-log-table" className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -255,7 +255,7 @@ function ReviewModal({ flag, onClose, onSaved }) {
         {/* Review form */}
         <div>
           <label className="label text-xs">القرار</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div data-tour="admin-audit-decision" className="grid grid-cols-3 gap-2">
             {[
               { v: 'reviewed',  label: '✓ راجعت',       cls: 'border-green-300 bg-green-50 text-green-700' },
               { v: 'dismissed', label: '— تجاهل',        cls: 'border-gray-300 bg-gray-50 text-gray-600' },
@@ -328,7 +328,7 @@ function AbuseFlagsTab() {
     <div>
       {/* Summary KPIs */}
       {summary && summary.open_flags?.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div data-tour="admin-audit-summary" className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           {[
             { label: 'إلغاءات متكررة',   type: 'frequent_cancellations',  color: '#ef4444' },
             { label: 'تعديلات متكررة',   type: 'frequent_edits',           color: '#f59e0b' },
