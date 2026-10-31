@@ -215,11 +215,11 @@ MODULE = {
                            'After posting: the document number, "🔄 Verify" and "↩ Create return".'),
                  'more': T('الفاتورة المرحّلة بيظهر عليها «✓ مُرحّلة — مستند #…» برقم مستند SOFTECH.\n'
                            '• «🔄 تحقق» بيتأكد إن المستند موجود فعلاً في SOFTECH.\n'
-                           '• «↩ إنشاء مرتجع» (لفواتير الشراء) بيعمل مسودة مرتجع مورد مربوطة بنفس المستند، تعدّل كمياتها وبعدين تأكدها وترحّلها بنفس الطريقة.\n'
+                           '• «↩ إنشاء مرتجع» (لفواتير الشراء) بيعمل مسودة مرتجع مورد مربوطة بنفس المستند، تعدّل كمياتها وبعدين تأكدها وترحّلها بنفس الطريقة. عند الترحيل كل سطر في المرتجع ينسخ سطر الشراء الأصلي كما هو في SOFTECH (التكلفة والصلاحية والباتش والضريبة) — زي «Select From Original Purchases» — والكمية بس هي اللي بتكتبها.\n'
                            '• لو ظهر «فشل الترحيل» اقرأ السبب واضغط «↻ إعادة الترحيل».',
                            'A posted invoice shows "✓ Posted — document #…" with the SOFTECH document number.\n'
                            '• "🔄 Verify" checks the document really exists in SOFTECH.\n'
-                           '• "↩ Create return" (purchase invoices) makes a supplier-return draft linked to the same document; trim its quantities, then confirm and post it the same way.\n'
+                           '• "↩ Create return" (purchase invoices) makes a supplier-return draft linked to the same document; trim its quantities, then confirm and post it the same way. At posting every return line copies the original purchase line exactly as SOFTECH holds it (cost, expiry, batch, VAT) — like «Select From Original Purchases» — only the quantity is yours.\n'
                            '• If "Posting failed" shows, read the reason and press "↻ Retry posting".')},
             ],
         },

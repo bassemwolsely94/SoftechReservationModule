@@ -759,6 +759,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             if (SupplierInvoice.objects
                     .filter(vendor_id=invoice.vendor_id, invoice_number=invoice.invoice_number)
                     .exclude(pk=invoice.pk)
+                    .filter(**writer.same_kind(invoice))
                     .filter(status__in=['queued', 'pushing', 'finalized']).exists()):
                 return Response({'detail': 'فاتورة بنفس المورد ورقم الفاتورة مُرحَّلة بالفعل من هذا النظام — أكِّد للمتابعة.',
                                  'duplicate': True}, status=status.HTTP_409_CONFLICT)
@@ -849,8 +850,14 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                 vendor_item_code=l.vendor_item_code, batch_number=l.batch_number, expiry_date=l.expiry_date,
                 quantity=l.quantity, public_price=l.public_price, unit_price=l.unit_price,
                 discount_pct=l.discount_pct, extra_discount_pct=l.extra_discount_pct, vat_pct=l.vat_pct,
+                special_discount_pct=l.special_discount_pct, tax_from_cost=l.tax_from_cost,
+                distributor_margin_amt=l.distributor_margin_amt, pharmacist_margin_amt=l.pharmacist_margin_amt,
+                bonus_qty=l.bonus_qty,
                 match_score=1.0, is_confirmed=True, order=l.order,
             )
+        # At posting, every return line copies the ORIGINAL SofTech purchase line (cost,
+        # expiry, batch, VAT columns) — writer._mirror_original — so edits made to the
+        # purchase lines after it was posted can never leak into the return.
         return Response({'id': ret.id, 'detail': 'تم إنشاء مسودة مرتجع — عدّل الكميات ثم أكّد ورحّل'},
                         status=status.HTTP_201_CREATED)
 

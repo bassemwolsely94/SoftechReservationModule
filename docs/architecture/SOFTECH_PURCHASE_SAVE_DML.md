@@ -264,3 +264,45 @@ SofTech triggers for both. `items` and `itemssuppliers` are not touched by eithe
 
 Rollback probe of invoice 224 after the fix, as user 1509: every header and line money column equal to
 66178; the only differences are line data (4 OCR'd batches, 2 hand-typed expiries).
+
+## Returns (doccode 120) mirror the original purchase — decoded 2026-10-31
+
+Hand-entered HQ returns 11319–11323 («Select From Original Purchases»): every return line copies
+the original purchase line — `transprice`, discounts, `itemsalestax`, `itemsaleprice(_tax)`,
+`storecode2`, `saleprice_extrap`, `custdiscp`, `bonusqty`, `itemexpirydate`, `item_partno` — plus
+`r_docnumber` / `r_docdate`; only `transqty` (and so `transprice_total`) is the returned quantity.
+`newcostprice` is set by the SofTech trigger to the item's CURRENT average cost (rollback probe).
+The writer now does the same (`writer._mirror_original`), reading the original lines from SofTech
+at posting; the return header counts VAT outside the cost only when the original header did.
+
+Triggers (rollback probes): UPDATEs on `stktrans`/`stktransm` fire NO side effects (stock, expiry
+buckets, cost and supplier balance unchanged); header inserts don't move `personsdata` either.
+The supplier balance (`personsdata.personcredit`/`persondebit`/`personfdate`) is changed by the
+native client on save — documents posted by the module have never updated it (open item).
+
+Return 11324 (module, 2026-10-31) was corrected in place by owner exception: 13 lines + header
+mirrored to 66177, 7 `stkbalexpiry` rows moved to the hand entry 66178's dates/batches, 5 `stkbal`
+average costs set to 66178's VAT-inclusive cost; 27/27 rows, audited (AuditLog #66370).
+
+## Native save, captured (purchase 66179, return 11325 — 2026-10-31)
+
+MDA capture of the owner's own saves (excerpt: `softech_native_save_sql_66179_11325.txt`). After the
+document rows, the native client itself (no trigger does this — rollback probes of full inserts left
+`personsdata` untouched) runs, in the same transaction:
+
+| Document | Statement |
+|---|---|
+| purchase | `update personsdata set personcredit = personcredit + docvalue where personcode = supplier` |
+| purchase | per item: `select count(*) from itemssuppliers …` and, when 0, `insert into itemssuppliers` (d1, d2, d3, public price, pre-tax cost, VAT per unit, VAT %) |
+| return | `update personsdata set personcredit = personcredit − docvalue …` |
+| return | original header `docvaluereturn += ` the return's value; original line `retqty += qty` (by `dblitemflag`) |
+| both | `insert into temp_r_stk` (20-byte opaque value — not reproduced) |
+| both | separate transaction: `update lastdocnumbers set lastdocnumberin_supp = max(10), lastdocnumberout_supp = max(120)` |
+
+The writer now runs the same statements (`writer._native_after_save`) inside the document's
+transaction and commits only when each hit its rows. Rollback probes: purchase 224 → balance
++4234.68; return 231 → −3909.52 and 66177 marked returned; zero residue.
+
+The 18 documents the module had posted before were corrected the same way by owner decision
+(AuditLog #66372): supplier 1268 +400,000.00, supplier 30 +570.00, PharmaOverseas net 0; purchases
+63670, 65912 and 66177 marked returned (quantities and value). Return 11324 itself: AuditLog #66370.

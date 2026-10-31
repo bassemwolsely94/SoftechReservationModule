@@ -198,6 +198,14 @@ def _score_candidate(cand, our_total, our_codes, our_count, our_date, our_dn2):
     return min(1.0, round(score, 3)), factors
 
 
+def same_kind(invoice) -> dict:
+    """A return shares its purchase's supplier invoice number, so duplicates are only
+    looked for among the same kind of document — and, for a return, the same original."""
+    if invoice.doc_kind == 'return':
+        return {'doc_kind': 'return', 'return_of_docnumber': invoice.return_of_docnumber}
+    return {'doc_kind': invoice.doc_kind}
+
+
 def check_duplicates(invoice) -> dict:
     """THOROUGH pre-save duplicate check surfaced on the post / «فحص التكرار» button:
     has this supplier invoice already been entered — in OUR module (another
@@ -220,6 +228,7 @@ def check_duplicates(invoice) -> dict:
               .filter(vendor_id=invoice.vendor_id, invoice_number=invoice.invoice_number)
               .exclude(pk=invoice.pk)
               .filter(status__in=['confirmed', 'queued', 'pushing', 'finalized'])
+              .filter(**same_kind(invoice))
               .order_by('-created_at'))
         for d in qs[:5]:
             out['pg_duplicates'].append({
@@ -806,6 +815,114 @@ def _read_original_purchase(conn, branch, docnumber):
     return costs, rdd, (docdate is not None)
 
 
+# A native return («Select From Original Purchases») copies these columns of the original
+# purchase line verbatim — verified on 5 hand-entered HQ returns (11319–11323, 2026-10-31);
+# only the quantity (and so the line total) is the returned one.
+RETURN_COPY = ('transprice', 'pharmacydiscp', 'additionaldiscp', 'specialdiscp', 'itemsalestax',
+               'itemsaleprice', 'itemsaleprice_tax', 'origintaxp', 'storecode2', 'saleprice_extrap',
+               'custdiscp', 'newcostprice', 'bonusqty')
+
+
+def _read_original_lines(conn, branch, docnumber) -> dict:
+    """{itemcode: [original stktrans rows in line order]} of the purchase being returned."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM stktrans WHERE branchcode=? AND doccode='10' AND docnumber=? "
+                    "ORDER BY dblitemflag", [branch, int(docnumber)])
+        cols = [d[0] for d in cur.description]
+        out = {}
+        for r in cur.fetchall():
+            row = dict(zip(cols, r))
+            out.setdefault(str(row['itemcode']).strip(), []).append(row)
+        return out
+    finally:
+        cur.close()
+
+
+def _take_original(orig_lines: dict, code: str, is_bonus: bool):
+    """The original line a return entry reverses: the free (cost 0) line for a bonus entry,
+    else the first paid line of that item not used yet. None when the item isn't there."""
+    rows = orig_lines.get(code) or []
+    for i, r in enumerate(rows):
+        free = float(r.get('transprice') or 0) == 0
+        if free == bool(is_bonus):
+            return rows.pop(i)
+    return None
+
+
+def _mirror_original(row: dict, orig: dict, qty: float) -> dict:
+    """Return line = the original purchase line, with the returned quantity."""
+    for k in RETURN_COPY:
+        if k in orig and orig[k] is not None:
+            row[k] = float(orig[k]) if isinstance(orig[k], (int, float, Decimal)) else str(orig[k]).strip()
+    exp = orig.get('itemexpirydate')
+    row['itemexpirydate'] = _Raw(f"convert(datetime, '{exp:%Y-%m-%d} 00:00:00')") if exp else None
+    if (orig.get('item_partno') or '').strip():
+        row['item_partno'] = str(orig['item_partno']).strip()
+    else:
+        row.pop('item_partno', None)
+    row['transprice_total'] = _r4(float(row['transprice']) * qty)
+    return row
+
+
+def _native_after_save(invoice, hdr_row: dict, line_rows: list, ret_marks: list, branch) -> tuple:
+    """What the native «مشتريات من الموردين» / «مرتجعات إلى الموردين» screens do right after
+    inserting the document, in the same transaction — captured from purchase 66179 and return
+    11325 (docs/architecture/softech_native_save_sql_66179_11325.txt, 2026-10-31):
+
+      purchase: personsdata.personcredit += docvalue;
+                itemssuppliers row inserted for every item not yet linked to the supplier
+                (discounts, public price, pre-tax cost, VAT per unit and %)
+      return:   personcredit -= docvalue;
+                original header docvaluereturn += the return's docvalue (11325: 264.00 → 263.999);
+                original line retqty += returned qty (matched by dblitemflag)
+
+    Returns (sql, expected): each counted statement adds its @@rowcount to @after, so the
+    batch commits only when every one hit exactly the rows it should."""
+    supp = _sql_literal(invoice.vendor.softech_personcode)
+    dv = float(hdr_row.get('docvalue') or 0)
+    stmts, expected = [], 0
+
+    def add(sql, rows=1):
+        nonlocal expected
+        stmts.append(f"{sql}\nselect @after = @after + @@rowcount")
+        expected += rows
+
+    if invoice.doc_kind == 'return':
+        add(f"update personsdata set personcredit = personcredit - {dv} where personcode = {supp}")
+        orig = int(invoice.return_of_docnumber or 0)
+        if orig:
+            # = the return's own total, so a return of a header without VAT outside the cost
+            # (e.g. 66177) never marks more returned than the purchase is worth
+            add(f"update stktransm set docvaluereturn = docvaluereturn + {dv} where branchcode = "
+                f"{_sql_literal(branch)} and doccode = '10' and docnumber = {orig} and cust_branch_code = {supp}")
+            for dbl, code, qty in ret_marks:
+                add(f"update stktrans set retqty = retqty + {qty} where branchcode = {_sql_literal(branch)} "
+                    f"and doccode = '10' and docnumber = {orig} and itemcode = {_sql_literal(code)} "
+                    f"and dblitemflag = {dbl}")
+        return '\n'.join(stmts), expected
+
+    add(f"update personsdata set personcredit = personcredit + {dv} where personcode = {supp}")
+    seen = set()
+    for r in line_rows:
+        code = str(r.get('itemcode') or '').strip()
+        if not code or code in seen or float(r.get('transprice') or 0) <= 0:
+            continue                                  # one link per item, from a paid line
+        seen.add(code)
+        rate = float(r.get('saleprice_extrap') or 0)
+        cost = float(r['transprice'])
+        if str(r.get('storecode2', '0')).strip() == '1' and rate:
+            cost = _r4(cost / (1 + rate / 100.0))     # the link keeps the pre-tax cost
+        stmts.append(
+            f"if not exists (select 1 from itemssuppliers where itemcode = {_sql_literal(code)} and suppcode = {supp})\n"
+            f"  insert into itemssuppliers (itemcode, suppcode, suppitemcode, itemsort, main_supp, modif_lastupdate,"
+            f" pharmacydiscp, additionaldiscp, specialdiscp, itemsaleprice, itemcostprice, itemsalestax, itemsalestaxp)"
+            f" values ({_sql_literal(code)}, {supp}, '', 0, '0', getdate(), {float(r.get('pharmacydiscp') or 0)},"
+            f" {float(r.get('additionaldiscp') or 0)}, {float(r.get('specialdiscp') or 0)},"
+            f" {float(r.get('itemsaleprice') or 0)}, {cost}, {float(r.get('itemsalestax') or 0)}, {rate})")
+    return '\n'.join(stmts), expected
+
+
 def read_stock_for_invoice(invoice) -> dict:
     """Best-effort live stock (stkbal.nowqty) for every matched item on the invoice,
     at the branch/store the invoice will be saved to — for the grid's رصيد حالي
@@ -917,14 +1034,19 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
     bc = _sql_literal(branch)
 
     # RETURN: link to the original purchase — pull its per-item cost + docdate (r_docdate).
-    orig_cost, r_docdate = {}, None
+    orig_cost, r_docdate, orig_lines, orig_vat_outside = {}, None, {}, 0.0
     if is_return and invoice.return_of_docnumber:
         orig_cost, r_docdate, orig_found = _read_original_purchase(conn, branch, invoice.return_of_docnumber)
         if not orig_found:
             return {'ok': False, 'err': -1, 'docnumber': None, 'lines_found': 0,
                     'lines_expected': n, 'error': f'الفاتورة الأصلية {invoice.return_of_docnumber} غير موجودة في SOFTECH'}
+        orig_lines = _read_original_lines(conn, branch, invoice.return_of_docnumber)
+        ohdr = _q1(conn, "SELECT docvalue3 FROM stktransm WHERE branchcode=? AND doccode='10' AND docnumber=?",
+                   [branch, int(invoice.return_of_docnumber)])
+        orig_vat_outside = float(ohdr[0] or 0) if ohdr else 0.0
 
     line_stmts, line_rows = [], []
+    ret_marks = []           # (original dblitemflag, itemcode, qty) — the original lines a return reverses
     newqtys = {}
     running = dict(nowqty)   # per-item running balance, accumulates across lines
     for idx, c in enumerate(computed, start=1):
@@ -936,6 +1058,13 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
         # dblitemflag = 1-based line number (unique-index component for repeated items)
         line_row = _line_row(invoice, c, _Raw('@dn'), usercode, nq, idx,
                              newcostprice=orig_cost.get(code), r_docdate=r_docdate)
+        if is_return and invoice.return_of_docnumber:
+            orig = _take_original(orig_lines, code, c.get('is_bonus'))
+            if orig is None:
+                return {'ok': False, 'err': -1, 'docnumber': None, 'lines_found': 0, 'lines_expected': n,
+                        'error': f'الصنف {code} غير موجود في الفاتورة الأصلية {invoice.return_of_docnumber}'}
+            _mirror_original(line_row, orig, qty)
+            ret_marks.append((int(orig['dblitemflag']), code, qty))
         extra = _line_extra_for(line_extra, c)
         line_row.update(extra)
         if not is_return:
@@ -944,38 +1073,50 @@ def _run_write_batch(conn, invoice, computed, header, ptclassifcode, usercode, n
         line_stmts.append(_insert_sql('stktrans', line_row))
     # header totals come from the FINAL line rows (after per-line overrides)
     hdr_row = _header_row(invoice, header, _Raw('@dn'), ptclassifcode, usercode)
-    if not is_return:
-        hdr_row.update(_native_purchase_totals(line_rows))
+    totals = _native_purchase_totals(line_rows)
+    if is_return and invoice.return_of_docnumber and not orig_vat_outside and totals['docvalue3']:
+        # the original's header counts no VAT outside the cost (VAT in cost, or posted
+        # before 2026-10-31 without it — e.g. 66177): the return mirrors that header
+        dv = round(totals['docvalue'] - totals['docvalue3'], 2)
+        totals.update({'docvalue': dv, 'docvaluebc': dv, 'docvalue3': 0.0})
+    hdr_row.update(totals)
     hdr_row.update(header_extra or {})
     inserts = '\n'.join([_insert_sql('stktransm', hdr_row)] + line_stmts)
+    after_sql, after_expected = _native_after_save(invoice, hdr_row, line_rows, ret_marks, branch)
     final = 'commit tran' if do_commit else 'rollback tran'
     capture_sql = ''
     if capture:
-        capture_sql = (f"select * from stktransm where branchcode={bc} and doccode='{doccode}' and docnumber=@dn\n"
+        capture_sql = (f"select personcredit, persondebit from personsdata where personcode="
+                       f"{_sql_literal(invoice.vendor.softech_personcode)}\n"
+                       f"select * from stktransm where branchcode={bc} and doccode='{doccode}' and docnumber=@dn\n"
                        f"select * from stktrans where branchcode={bc} and doccode='{doccode}' and docnumber=@dn "
                        f"order by dblitemflag\n")
 
     batch = f"""
 set chained off
-declare @dn numeric(9,0), @lines int, @hdr int, @err int
+declare @dn numeric(9,0), @lines int, @hdr int, @err int, @after int
 begin tran
 select @dn = {counter} + 1 from lastdocnumbers holdlock where branchcode = {bc}
 {inserts}
 select @err = @@error
+select @after = 0
+{after_sql}
 update lastdocnumbers set {counter} = @dn where branchcode = {bc}
 select @hdr = count(*) from stktransm where branchcode={bc} and doccode='{doccode}' and docnumber=@dn
 select @lines = count(*) from stktrans where branchcode={bc} and doccode='{doccode}' and docnumber=@dn
-{capture_sql}if @hdr = 1 and @lines = {n} {final}
+{capture_sql}if @hdr = 1 and @lines = {n} and @after = {after_expected} {final}
 else rollback tran
 select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
-       case when @hdr=1 and @lines={n} then 1 else 0 end as verified
+       case when @hdr=1 and @lines={n} and @after={after_expected} then 1 else 0 end as verified
 """
     jst = conn._conn.createStatement()
-    full_header, full_lines = None, []
+    full_header, full_lines, full_balance = None, [], None
     try:
         if capture:
             sets = _run_batch_sets(jst, batch)
             row = sets[-1]['rows'][0] if sets and sets[-1]['rows'] else None
+            if len(sets) >= 4 and sets[-4]['rows']:
+                full_balance = dict(zip(sets[-4]['cols'], sets[-4]['rows'][0]))
             if len(sets) >= 3:
                 h, ls = sets[-3], sets[-2]
                 full_header = dict(zip(h['cols'], h['rows'][0])) if h['rows'] else None
@@ -1005,6 +1146,7 @@ select @dn as docnumber, @hdr as hdr, @lines as lines, isnull(@err,0) as err,
     if capture:
         res['full_header'] = full_header
         res['full_lines'] = full_lines
+        res['supplier_balance_in_tran'] = full_balance
     return res
 
 

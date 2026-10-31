@@ -10,7 +10,11 @@ form are changed — a date someone typed by hand is left alone.
 
     manage.py renormalize_invoice_expiry                 # dry run, unposted invoices
     manage.py renormalize_invoice_expiry --commit
-    manage.py renormalize_invoice_expiry --invoice 224 --commit   # one invoice, any status
+    manage.py renormalize_invoice_expiry --invoice 230 --commit   # one unposted invoice
+
+Posted invoices are NEVER changed: their lines must stay what SofTech holds, or a later
+return (built from the lines) takes stock out of the wrong expiry buckets — invoice 224's
+return 11324 did exactly that after its expiries were re-normalized post-posting.
 """
 import json
 import re
@@ -48,12 +52,14 @@ class Command(BaseCommand):
     help = 'Re-normalize month/year expiries to day = month (dry run unless --commit).'
 
     def add_arguments(self, parser):
-        parser.add_argument('--invoice', type=int, help='only this invoice (any status)')
+        parser.add_argument('--invoice', type=int, help='only this invoice (never a posted one)')
         parser.add_argument('--commit', action='store_true')
 
     def handle(self, *args, invoice=None, commit=False, **opts):
         qs = InvoiceLine.objects.select_related('invoice')
-        qs = qs.filter(invoice_id=invoice) if invoice else qs.exclude(invoice__status__in=_POSTED)
+        if invoice:
+            qs = qs.filter(invoice_id=invoice)
+        qs = qs.exclude(invoice__status__in=_POSTED).exclude(invoice__softech_docnumber__isnull=False)
         changed = 0
         for ln in qs.iterator():
             target = new_expiry(ln)

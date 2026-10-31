@@ -169,3 +169,71 @@ class NativeTaxAndBonusTotalsTests(SimpleTestCase):
         paid, free = grid.computed_entries(line)
         self.assertAlmostEqual(free['bonus_value'], 56.2)
         self.assertNotIn('bonus_value', paid)
+
+
+class ReturnMirrorsOriginalTests(SimpleTestCase):
+    """A return copies the ORIGINAL SofTech purchase line (native «Select From Original
+    Purchases», verified on hand-entered returns 11319–11323) — never the module's own
+    lines, which can change after posting (return 11324 took the wrong expiry buckets and
+    returned margin lines 30 EGP short because it didn't)."""
+    from datetime import datetime as _dt
+    ORIG = {'itemcode': '1213', 'transprice': 51.75, 'pharmacydiscp': 26.0714, 'additionaldiscp': 0.0,
+            'specialdiscp': 0.0, 'itemsalestax': 0.0, 'itemsaleprice': 70.0, 'itemsaleprice_tax': 70.0,
+            'origintaxp': 0.0, 'storecode2': '0', 'saleprice_extrap': 0.0, 'custdiscp': 1.0,
+            'newcostprice': 51.75, 'bonusqty': 0.0, 'itemexpirydate': _dt(2029, 6, 1), 'item_partno': '610626'}
+
+    def test_line_copies_original_with_returned_qty(self):
+        row = {'transprice': 50.25, 'transprice_total': 100.5, 'itemexpirydate': None}
+        IW._mirror_original(row, dict(self.ORIG), 1)
+        self.assertEqual((row['transprice'], row['transprice_total']), (51.75, 51.75))
+        self.assertEqual(row['item_partno'], '610626')
+        self.assertIn('2029-06-01', row['itemexpirydate'].sql)
+        self.assertEqual((row['newcostprice'], row['custdiscp'], row['storecode2']), (51.75, 1.0, '0'))
+
+    def test_bonus_entry_reverses_the_free_line(self):
+        paid = dict(self.ORIG); free = dict(self.ORIG, transprice=0.0, bonusqty=51.75)
+        lines = {'1213': [paid, free]}
+        self.assertIs(IW._take_original(lines, '1213', True), free)
+        self.assertIs(IW._take_original(lines, '1213', False), paid)
+        self.assertIsNone(IW._take_original(lines, '1213', False))      # each line used once
+        self.assertIsNone(IW._take_original(lines, '9999', False))
+
+    def test_duplicates_only_among_same_kind(self):
+        self.assertEqual(IW.same_kind(NS(doc_kind='purchase')), {'doc_kind': 'purchase'})
+        self.assertEqual(IW.same_kind(NS(doc_kind='return', return_of_docnumber=66177)),
+                         {'doc_kind': 'return', 'return_of_docnumber': 66177})
+
+
+class NativeAfterSaveTests(SimpleTestCase):
+    """The native screen's own statements after a save (captured purchase 66179 / return
+    11325): supplier balance ± docvalue, item↔supplier link, original marked returned."""
+    def _inv(self, kind, orig=0):
+        return NS(doc_kind=kind, return_of_docnumber=orig, vendor=NS(softech_personcode='565'))
+
+    def test_purchase_moves_balance_and_links_items(self):
+        rows = [{'itemcode': '113523', 'transprice': 231.5789, 'pharmacydiscp': 20.0, 'additionaldiscp': 0,
+                 'specialdiscp': 0, 'itemsaleprice': 330.0, 'itemsalestax': 32.4211, 'saleprice_extrap': 14.0,
+                 'storecode2': '0'},
+                {'itemcode': '113523', 'transprice': 0.0}]                      # free line: no 2nd link
+        sql, expected = IW._native_after_save(self._inv('purchase'), {'docvalue': 4172.02}, rows, [], '100')
+        self.assertIn("personcredit = personcredit + 4172.02 where personcode = '565'", sql)
+        self.assertEqual(sql.count('insert into itemssuppliers'), 1)
+        self.assertIn("if not exists (select 1 from itemssuppliers where itemcode = '113523'", sql)
+        self.assertIn('231.5789, 32.4211, 14.0)', sql)
+        self.assertEqual(expected, 1)                   # only the balance update is row-counted
+
+    def test_vat_in_cost_link_keeps_pre_tax_cost(self):
+        rows = [{'itemcode': '114479', 'transprice': 104.0022, 'saleprice_extrap': 14.0, 'storecode2': '1',
+                 'itemsaleprice': 130.0, 'itemsalestax': 12.7722, 'pharmacydiscp': 19.9983}]
+        sql, _ = IW._native_after_save(self._inv('purchase'), {'docvalue': 208.0}, rows, [], '100')
+        self.assertIn(', 91.23, 12.7722, 14.0)', sql)
+
+    def test_return_reverses_balance_and_marks_original(self):
+        sql, expected = IW._native_after_save(self._inv('return', 66179), {'docvalue': 264.0},
+                                              [{'transprice_total': 231.578, 'itemsalestax': 16.2105, 'transqty': 2}],
+                                              [(4, '129591', 2.0)], '100')
+        self.assertIn('personcredit = personcredit - 264.0', sql)
+        self.assertIn('docvaluereturn = docvaluereturn + 264.0', sql)
+        self.assertIn("retqty = retqty + 2.0 where branchcode = '100' and doccode = '10' and docnumber = 66179 "
+                      "and itemcode = '129591' and dblitemflag = 4", sql)
+        self.assertEqual(expected, 3)
