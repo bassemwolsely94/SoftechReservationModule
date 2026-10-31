@@ -1049,6 +1049,26 @@ Verify the forged header no longer reaches the app: make one failed login with
 then check the activity log / `journalctl -u elrezeiky-web` — the logged IP must be your real
 address, not `6.6.6.6`.
 
+#### Batch N1 on the live server
+
+N1 only labels each request `internal` / `external` (log only, nothing is refused). Edit the live
+site file in place again:
+
+```bash
+sudo cp deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf   # adds X-ElR-Network
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - next to the `limit_req_zone` lines (http level, OUTSIDE every server block) add:
+#      map $server_addr $elr_network {
+#          10.50.50.77 internal;   # ZeroTier
+#          10.0.0.77   internal;   # SSTP backup
+#          default     external;
+#      }
+sudo nginx -t && sudo systemctl reload nginx
+```
+Check (the forged header must lose):
+- from mobile data: `curl -H 'X-ElR-Network: internal' https://elrezeikyapp.dawalvry.com/api/access/whoami/` -> `external`
+- from a ZeroTier laptop, browse `https://10.50.50.77` with `Host: elrezeikyapp.dawalvry.com` -> `internal`
+
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
