@@ -926,7 +926,7 @@ def _native_after_save(invoice, hdr_row: dict, line_rows: list, ret_marks: list,
             add(f"update stktransm set docvaluereturn = docvaluereturn + {dv} where branchcode = "
                 f"{_sql_literal(branch)} and doccode = '10' and docnumber = {orig} and cust_branch_code = {supp}")
             for dbl, code, qty in ret_marks:
-                add(f"update stktrans set retqty = retqty + {qty} where branchcode = {_sql_literal(branch)} "
+                add(f"update stktrans set retqty = retqty + {float(qty)} where branchcode = {_sql_literal(branch)} "
                     f"and doccode = '10' and docnumber = {orig} and itemcode = {_sql_literal(code)} "
                     f"and dblitemflag = {dbl}")
         return '\n'.join(stmts), expected

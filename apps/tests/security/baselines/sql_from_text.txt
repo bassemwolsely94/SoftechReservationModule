@@ -12,6 +12,9 @@ apps/pos_orders/writer.py::_execute_write
 apps/invoices/supplier_items.py::inject_mapping
 #   softech_branchcode / store user-editable; escaped (_sql_literal)
 apps/invoices/writer.py::_run_write_batch
+#   native after-save steps (personcredit / itemssuppliers / return marks): codes escaped (_sql_literal),
+#   every amount and qty float()/int(); runs inside _run_write_batch's rowcount-checked transaction
+apps/invoices/writer.py::_native_after_save
 #   order branch/doccode; escaped; int(docnumber)
 apps/pos_orders/writer.py::_delete_pending_from_softech
 

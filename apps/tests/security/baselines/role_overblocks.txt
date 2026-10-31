@@ -508,3 +508,10 @@ pharmacist GET /api/finance/reconciliation/runs/
 pharmacist GET /api/finance/reconciliation/supplier-options/
 pharmacist GET /api/finance/reconciliation/unpaid/
 pharmacist GET /api/finance/reconciliation/workbench/
+# P-41 contract receivables (2026-10-31) — same company-level rule as A/P reconciliation (B-1);
+#   its export also needs finance export (Z-3: quality_manager has finance view only).
+pharmacist GET /api/finance/receivables/export/
+pharmacist GET /api/finance/receivables/summary/
+pharmacist GET /api/finance/receivables/terms/
+pharmacist GET /api/finance/receivables/x/invoices/
+quality_manager GET /api/finance/receivables/export/
