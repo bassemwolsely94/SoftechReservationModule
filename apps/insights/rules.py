@@ -2202,27 +2202,24 @@ def rule_predictive_reorder(ctx, threshold):
 
 
 def rule_near_expiry(ctx, threshold):
-    """Near-expiry markdown candidates: items carrying expected expiry-risk value (from the
-    demand engine) → push/discount before they're written off. Per branch: total + top items."""
-    from collections import defaultdict
-    from apps.purchasing.models import ItemDemandMetrics
+    """Near-expiry markdown candidates: live stock that will expire before it sells (FEFO at the
+    branch's own rate, P-26 — apps/batches/stock_expiry.at_risk_by_branch) → push/discount before
+    it's written off. Per branch: total + top items at or above the threshold."""
+    from apps.batches.stock_expiry import at_risk_by_branch
+    from apps.catalog.models import Item
     thr = Decimal(str(threshold if threshold is not None else 1000))
-    run = _latest_demand_run()
-    if not run:
-        return []
-    qs = (ItemDemandMetrics.objects.filter(run_id=run, branch__in=ctx.branches, expected_expiry_risk_value__gte=thr)
-          .select_related('item', 'branch'))
-    by_branch = defaultdict(list)
-    for m in qs:
-        by_branch[m.branch_id].append(m)
+    codes = {b.softech_branch_id: b for b in ctx.branches if b.softech_branch_id}
+    risk = at_risk_by_branch(branch_codes=list(codes))
+    names = dict(Item.objects.filter(softech_id__in={ic for r in risk.values() for ic, _ in r['items']})
+                 .values_list('softech_id', 'name'))
     out = []
-    for bid, ms in by_branch.items():
-        b = next((x for x in ctx.branches if x.id == bid), None)
-        if not b:
+    for bc, r in risk.items():
+        b = codes.get(bc)
+        ms = [(ic, Decimal(str(v))) for ic, v in r['items'] if Decimal(str(v)) >= thr]
+        if not b or not ms:
             continue
-        ms.sort(key=lambda m: -(float(m.expected_expiry_risk_value or 0)))
-        total = sum(Decimal(str(x.expected_expiry_risk_value or 0)) for x in ms)
-        top = ' · '.join(f'«{(x.item.name if x.item_id else x.item_id)}» {_fmt(x.expected_expiry_risk_value)}' for x in ms[:3])
+        total = sum(v for _, v in ms).quantize(Decimal('0.01'))
+        top = ' · '.join(f'«{names.get(ic, ic)}» {_fmt(v)}' for ic, v in ms[:3])
         out.append(dict(rule_code='near_expiry', category='volume', severity='warning',
             scope_type='branch', scope_key=b.code, scope_label=ctx.bn(b, 'ar'), value=total, baseline=None, threshold=thr,
             message_ar=f'⏳ {ctx.bn(b,"ar")}: مخاطر انتهاء صلاحية ~{_fmt(total)} ج.م على {len(ms)} صنف — تصريف/عرض قبل الخسارة. أبرزها: {top}.',

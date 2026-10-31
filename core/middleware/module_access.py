@@ -220,8 +220,11 @@ def required(path, method):
     if not safe and prefix == 'batches':
         tail = '/'.join(parts[3:-1])
         if tail in ('purchase-expiry/candidates', 'purchase-expiry/rebalance-suggest', 'purchase-expiry/export',
-                    'stock-expiry/export', 'stock-expiry/disposal/export'):
+                    'stock-expiry/export', 'stock-expiry/disposal/export', 'return-window/export'):
             return 'catalog', ('view',)
+        # P-29: supplier return policies belong to purchasing (owner 2026-10-31), not catalog editors
+        if tail == 'return-window/policies':
+            return 'purchasing', ('edit',)
         if parts[4:5] == ['quarantine']:
             return 'approvals', ('approve',)
         if tail == 'purchase-expiry/request-markdown':

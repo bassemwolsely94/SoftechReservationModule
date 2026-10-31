@@ -97,13 +97,23 @@ staff-development goals. It started on 2026-10-30.
 - [P-43](06_SPEC_P-43_finance_freshness.md) — **BUILT 2026-10-30** (nightly 02:15 finance sync, 4 freshness domains, cash flow retired, /payments hidden)
 - [P-58](06_SPEC_P-58_track_and_trace_foundation.md) — **BUILT dormant 2026-10-30** (`apps/catalog/gs1.py`, `apps/trace`, `/api/trace/parse|scan/`; `TRACK_TRACE_ENABLED=False`; no scan field on screens yet)
 
-**Wave-1 specification status (2026-10-31):** written; build **not** authorised. Repo-only (no SOFTECH or database
-queries); every unverified fact is an open question or a read-only check for the owner. Spec files:
-- [P-26](06_SPEC_P-26_one_expiry_number.md) — store-role map (live / 105 return / 102 write-off / 103 cosmetics / 110
-  closed). Found: the `/batches` "expired still in stock" card still counts store 110 (`stock_expiry._QUARANTINE_STORES`
-  omits it); `forecasting._expiry_risk` reads the empty `StockBatch` table, so expiry risk is always 0
-- [P-29](06_SPEC_P-29_return_window_calendar.md) — `return_window.window_for` (P-28 reuses it), `SupplierReturnPolicy`
-  seeded for 565 + 260 only, auto-close from doc 120 lines, `/batches` «📆 تقويم المرتجع»
+**Wave-1 specification status (2026-10-31):** written. Build authorised for **P-26 + P-29 only** (owner 2026-10-31);
+the rest wait. Repo-only (no SOFTECH or database queries); every unverified fact is an open question or a read-only
+check for the owner. Spec files:
+- [P-26](06_SPEC_P-26_one_expiry_number.md) — **BUILT 2026-10-31** (`apps/batches/store_roles.py`,
+  `StockExpiryBalance.store_role` + backfill `batches/0006`, live-only KPIs + `buckets`, second KPI row, dashboard tile
+  «⏳ الصلاحية», `at_risk_by_branch` feeding `rule_near_expiry` and `forecasting._expiry_risk`, `near_expiry_scan`
+  unscheduled, `QuarantineModal` removed). Store 110 excluded everywhere; no alert or clean-up export (owner decision).
+  Found: the `/batches` "expired still in stock" card counted store 110; `forecasting._expiry_risk` read the empty
+  `StockBatch` table, so expiry risk was always 0
+- [P-29](06_SPEC_P-29_return_window_calendar.md) — **BUILT 2026-10-31** (`return_window.window_for`, `return_calendar.py`,
+  `procurement.SupplierReturnPolicy` seeded 565 + 260 (`procurement/0011`), `ExpiryDisposalRecord` answer/ledger fields +
+  `ReturnWindowMonthly` (`batches/0007`), `/api/batches/return-window/…`, `/batches` «📆 تقويم المرتجع», hourly
+  `return_window_reconcile` from doc 120, 1st-of-month `return_window_digest` to the `purchasing` role, branch
+  "send to HQ by" lines in the weekly worklist, `purchase_expiry` freshness domain, policy suppliers added to the
+  purchase-expiry mirror). Lines = branch shelves + HQ live + 105; 102/103 not shown. Lead time 14 days
+  (`return_window_branch_lead_days`). Still open: supplier entry-screen samples (`entry_layout`), other suppliers'
+  windows, units check on doc 120 vs `stkbalexpiry`
 - [P-31](06_SPEC_P-31_unordered_delivery_detector.md) — order record = `SupplyDecision(kind='purchase')` written by the
   order Excel exports; `ReceiptCheck` per doc-10 line; no price check. Note: `PurchaseLine` refreshes daily (20 h rule),
   not every 30 min

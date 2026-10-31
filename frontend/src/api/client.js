@@ -2574,6 +2574,14 @@ export const batchesApi = {
   purchaseExpirySync:       (body) => api.post('/batches/purchase-expiry/sync/', body || {}),
   // Spawn a physical count session: body { branch, from, to, item_codes?, categories?, name? }
   purchaseExpirySpawnCount: (body) => api.post('/batches/purchase-expiry/spawn-count/', body),
+  // Return-window calendar (P-29): params { month?, supplier?, location?, state?, branch? }
+  returnWindow:          (params) => api.get('/batches/return-window/', { params }),
+  returnWindowRequest:   (lines)  => api.post('/batches/return-window/request/', { lines }),
+  returnWindowAnswer:    (id, body) => api.post(`/batches/return-window/${id}/answer/`, body),
+  returnWindowPolicies:  ()       => api.get('/batches/return-window/policies/'),
+  returnWindowSavePolicy: (body)  => api.post('/batches/return-window/policies/', body),
+  returnWindowExport:    (body)   => api.post('/batches/return-window/export/', body, { responseType: 'blob' }),
+  returnWindowReconcile: ()       => api.post('/batches/return-window/reconcile/'),
 }
 
 // ── HR Workflow ───────────────────────────────────────────────────────────────

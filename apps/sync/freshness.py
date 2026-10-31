@@ -41,6 +41,7 @@ DOMAINS = {
     # Custom-source domains — their own run-log model, separate from the main sync.
     'expiry':    {'label_ar': 'صلاحية المخزون',   'source': 'expiry',    'cadence_min': 1440, 'kind': 'snapshot'},
     'purchases': {'label_ar': 'المشتريات والوارد', 'source': 'purchases', 'cadence_min': 1440, 'kind': 'snapshot'},
+    'purchase_expiry': {'label_ar': 'صلاحيات الشراء', 'source': 'purchase_expiry', 'cadence_min': 1440, 'kind': 'snapshot'},
     'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
     # Finance mirror (P-43): P&L snapshots refresh with the slow lane; journal and
     # expenses come from the 02:15 nightly sync_finance (last 3 months).
@@ -83,6 +84,19 @@ def _source_purchases():
     from apps.procurement.models import ProcurementEngineRun
     ok = ProcurementEngineRun.objects.filter(status='success').order_by('-started_at').first()
     last = ProcurementEngineRun.objects.order_by('-started_at').first()
+    return {
+        'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
+        'last_attempt_at': (last.finished_at or last.started_at) if last else None,
+        'last_run_failed': bool(last and last.status == 'failed'),
+    }
+
+
+def _source_purchase_expiry():
+    """Purchase-expiry mirror (the supplier attribution of the return calendar, P-29) —
+    batches.PurchaseExpiryAuditRun."""
+    from apps.batches.models import PurchaseExpiryAuditRun
+    ok = PurchaseExpiryAuditRun.objects.filter(status='success').order_by('-started_at').first()
+    last = PurchaseExpiryAuditRun.objects.order_by('-started_at').first()
     return {
         'last_success_at': (ok.finished_at or ok.started_at) if ok else None,
         'last_attempt_at': (last.finished_at or last.started_at) if last else None,
@@ -140,7 +154,7 @@ def _source_ap_reconciliation():
 
 
 _SOURCES = {'expiry': _source_expiry, 'ap_reconciliation': _source_ap_reconciliation, 'purchases': _source_purchases,
-            'stock_audit': _source_stock_audit,
+            'stock_audit': _source_stock_audit, 'purchase_expiry': _source_purchase_expiry,
             'finance_pl': _source_finance_pl,
             'finance_expenses': lambda: _finance_run_source('expense_records'),
             'finance_journal': lambda: _finance_run_source('journal_entries')}

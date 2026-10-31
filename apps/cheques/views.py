@@ -246,12 +246,8 @@ def treasury_dashboard(request):
     denied = deny_unless(request, 'cheques', 'view')
     if denied:
         return denied
-    today = date.today()
-    in_30 = today.replace(day=today.day) if False else \
-        (today.replace(month=today.month + 1) if today.month < 12
-         else today.replace(year=today.year + 1, month=1))
-    # Simpler: just use timedelta
     from datetime import timedelta
+    today = date.today()
     in_30 = today + timedelta(days=30)
 
     active_plans = ChequePlan.objects.filter(status='active')

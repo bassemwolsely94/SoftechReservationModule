@@ -23,6 +23,34 @@ from django.utils import timezone
 
 # ── PurchaseLine ──────────────────────────────────────────────────────────────
 
+class SupplierReturnPolicy(models.Model):
+    """
+    P-29: does this supplier take expiry returns, and in which window around the expiry month.
+    One row per SOFTECH supplier code. Seeded for 565 (Pharma Overseas) and 260 (Ibn Sina) only —
+    owner-stated facts; purchasing enters the others. Edits are audited (AuditLog
+    'return_policy_changed'). Read by apps/batches/return_calendar.py.
+    """
+    supplier_code = models.CharField(max_length=10, unique=True, verbose_name='كود المورد')
+    supplier_name = models.CharField(max_length=255, blank=True, verbose_name='اسم المورد')
+    accepts_expiry_returns = models.BooleanField(default=True, verbose_name='يقبل مرتجع الصلاحية')
+    open_offset  = models.SmallIntegerField(default=-2, verbose_name='تفتح (شهور قبل الانتهاء)')
+    close_offset = models.SmallIntegerField(default=1, verbose_name='تُغلق (شهور بعد الانتهاء)')
+    self_entry   = models.BooleanField(default=False, verbose_name='إدخال المرتجع في نظام المورد')
+    entry_layout = models.JSONField(default=list, blank=True, verbose_name='ترتيب أعمدة ملف المورد')
+    notes        = models.TextField(blank=True, verbose_name='ملاحظات')
+    updated_by   = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+', verbose_name='آخر تعديل بواسطة')
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'سياسة مرتجع مورد'
+        verbose_name_plural = 'سياسات مرتجع الموردين'
+        ordering = ['supplier_code']
+
+    def __str__(self):
+        return f'{self.supplier_code} {self.supplier_name} ({self.open_offset:+d}/{self.close_offset:+d})'
+
+
 class PurchaseLine(models.Model):
     """
     Cached purchase transaction line from SOFTECH stktrans.

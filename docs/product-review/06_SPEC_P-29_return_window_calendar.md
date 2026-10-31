@@ -1,7 +1,7 @@
 # 06 · SPEC P-29 — Return-window calendar
 
-**Status:** specification (approved for spec 2026-10-30; **top of Batch 2**). **Build:** not yet authorised. The
-owner's rule is "build after all discussions". P-28 (near-expiry worklist) reuses this card's window rule, and P-31
+**Status:** **BUILT 2026-10-31** (owner go-ahead; **top of Batch 2**). Lines cover branch shelves, HQ live stores and
+store 105 (102 / 103 not shown); branch lead time 14 days. P-28 (near-expiry worklist) reuses this card's window rule, and P-31
 depends on fast returns.
 
 **Owner input** (ledger row P-29, backlog "Owner input 2026-10-30" and P-29 "Revision after owner input")

@@ -116,3 +116,20 @@ class PaymentAuditPermissionTests(_Base):
         RoleModuleAccess.objects.all().delete()
         module_access.clear_cache()
         self.assertEqual(self._client('pharmacist').get('/api/payments/audit/exceptions/').status_code, 200)
+
+
+class TreasuryMonthEndTests(_Base):
+    """The treasury view crashed on the 31st (and 29–30 January): it built "same day next month"
+    with date.replace, which fails when next month is shorter."""
+
+    def test_month_end_days_do_not_crash(self):
+        from unittest import mock
+        import apps.cheques.views as views
+        client = self._client('purchasing')
+        for day in (date(2026, 10, 31), date(2027, 1, 30), date(2026, 12, 31)):
+            class _Day(date):
+                @classmethod
+                def today(cls, _d=day):
+                    return _d
+            with self.subTest(day=day), mock.patch.object(views, 'date', _Day):
+                self.assertEqual(client.get('/api/cheques/treasury/').status_code, 200)

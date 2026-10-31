@@ -652,6 +652,7 @@ def stock_expiry_report_view(request):
         include_quarantine=_b('include_quarantine'), imported_only=_b('imported_only'),
         fridge_only=_b('fridge_only'), medicine_type=(p.get('medicine_type') or None),
         sort=(p.get('sort') or None),
+        roles=[r for r in str(p.get('roles') or '').split(',') if r.strip()] or None,
     )
     return Response({'count': len(rows), 'items': rows})
 
@@ -803,7 +804,7 @@ def spawn_stock_expiry_count(request):
 
     # Hint = earliest on-hand expiry for this item at this branch (from the mirror).
     hints = {r['item_code']: r['h'] for r in StockExpiryBalance.objects
-             .filter(branch_code=branch, item_code__in=codes)
+             .filter(branch_code=branch, item_code__in=codes).exclude(store_role='closed')
              .values('item_code').annotate(h=Min('expiry_date'))}
     to_update = []
     for snap in StockCountSnapshot.objects.filter(session=session):
@@ -1089,3 +1090,226 @@ def stock_expiry_rebalance(request):
                     item=(request.query_params.get('item') or '').strip() or None)
     data['can_create'] = CanCreateTransfer().has_permission(request, None)
     return Response(data)
+
+
+# ── P-29 return-window calendar («📆 تقويم المرتجع») — advisory, no SOFTECH write ──
+
+def _return_scope(request):
+    """Branch codes the caller may see: None = all (HQ roles), else their own branch only."""
+    from .return_calendar import ALL_BRANCH_ROLES
+    profile = getattr(request.user, 'staff_profile', None)
+    if profile is None:
+        return []
+    if profile.role in ALL_BRANCH_ROLES or request.user.is_superuser:
+        return None
+    code = getattr(getattr(profile, 'branch', None), 'softech_branch_id', '')
+    return [code] if code else []
+
+
+def _can_edit_return_policy(request):
+    profile = getattr(request.user, 'staff_profile', None)
+    return bool(profile and (profile.role == 'admin' or matrix_allows(profile, 'purchasing', 'edit')))
+
+
+def _month_param(value):
+    return _parse_date(f'{value}-01') if value else None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, BATCH_READ])
+def return_window_calendar(request):
+    """GET — the calendar: lines, per-supplier summary, «موردون بدون سياسة مرتجع».
+    Query: month=YYYY-MM, supplier, location=shelf|hq|105, state, branch."""
+    from .return_calendar import calendar, LOCATIONS
+    p = request.query_params
+    scope = _return_scope(request)
+    branches = scope
+    if p.get('branch'):
+        branches = [b for b in _branch_list(p) if scope is None or b in scope]
+    location = p.get('location') if p.get('location') in LOCATIONS else None
+    data = calendar(month=_month_param(p.get('month')), supplier=(p.get('supplier') or None),
+                    location=location, branch_codes=branches, state=(p.get('state') or None))
+    data['can_request'] = matrix_allows(getattr(request.user, 'staff_profile', None), 'catalog', 'edit', 'approve')
+    data['can_edit_policy'] = _can_edit_return_policy(request)
+    data['branch_only'] = scope is not None
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
+def return_window_request(request):
+    """POST {lines: [{branch_code, store_code, item_code, batch_no, expiry_date, supplier_code}]} →
+    draft return records (idempotent). Quantities come from the mirror, not the request."""
+    from .return_calendar import request_returns
+    lines = request.data.get('lines') or []
+    if not isinstance(lines, list):
+        return Response({'detail': 'lines must be a list.'}, status=status.HTTP_400_BAD_REQUEST)
+    created = request_returns(lines, getattr(request.user, 'staff_profile', None),
+                              branch_scope=_return_scope(request))
+    return Response({'created': created, 'detail': f'تم إنشاء {created} طلب مرتجع.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
+def return_window_answer(request, pk):
+    """POST {answer: accepted|partial|rejected, accepted_qty?, allowed_expiry?} — the supplier's answer."""
+    from .models import ExpiryDisposalRecord
+    from .return_calendar import record_answer
+    rec = ExpiryDisposalRecord.objects.filter(pk=pk, decision='return_supplier').first()
+    scope = _return_scope(request)
+    if rec is None or (scope is not None and rec.branch_code not in scope):
+        return Response({'detail': 'غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        record_answer(rec, str(request.data.get('answer') or ''), getattr(request.user, 'staff_profile', None),
+                      accepted_qty=request.data.get('accepted_qty'),
+                      allowed_expiry=request.data.get('allowed_expiry'))
+    except ValueError as e:
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_disposal_dict(rec))
+
+
+_POLICY_FIELDS = ('supplier_name', 'accepts_expiry_returns', 'open_offset', 'close_offset', 'self_entry',
+                  'entry_layout', 'notes')
+
+
+def _policy_dict(p):
+    return {'supplier_code': p.supplier_code, 'supplier_name': p.supplier_name,
+            'accepts_expiry_returns': p.accepts_expiry_returns, 'open_offset': p.open_offset,
+            'close_offset': p.close_offset, 'self_entry': p.self_entry, 'entry_layout': p.entry_layout,
+            'notes': p.notes, 'updated_by': p.updated_by.full_name if p.updated_by else None,
+            'updated_at': p.updated_at}
+
+
+def _as_bool(v):
+    return v if isinstance(v, bool) else str(v).lower() in ('true', '1', 'yes')
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, BATCH_READ])
+def return_window_policies(request):
+    """GET — supplier return policies. POST — create / update one (admin or purchasing edit; audited)."""
+    from apps.audit.models import AuditLog
+    from apps.procurement.models import SupplierReturnPolicy
+    if request.method == 'GET':
+        return Response({'policies': [_policy_dict(p) for p in
+                                      SupplierReturnPolicy.objects.select_related('updated_by')],
+                         'can_edit': _can_edit_return_policy(request)})
+    if not _can_edit_return_policy(request):
+        return Response({'detail': 'تعديل سياسات المرتجع لقسم المشتريات.'}, status=status.HTTP_403_FORBIDDEN)
+    d = request.data
+    code = str(d.get('supplier_code') or '').strip()
+    if not code or len(code) > 10:
+        return Response({'detail': 'كود المورد مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+    vals = {f: d[f] for f in _POLICY_FIELDS if f in d}
+    try:
+        for f in ('open_offset', 'close_offset'):
+            if f in vals:
+                vals[f] = int(vals[f])
+    except (TypeError, ValueError):
+        return Response({'detail': 'عدد الشهور غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not (-12 <= vals.get('open_offset', -2) <= 0) or not (0 <= vals.get('close_offset', 1) <= 12):
+        return Response({'detail': 'النافذة تفتح قبل الانتهاء (0 إلى −12) وتُغلق بعده (0 إلى 12).'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if 'entry_layout' in vals and not isinstance(vals['entry_layout'], list):
+        return Response({'detail': 'entry_layout must be a list.'}, status=status.HTTP_400_BAD_REQUEST)
+    for f in ('accepts_expiry_returns', 'self_entry'):
+        if f in vals:
+            vals[f] = _as_bool(vals[f])
+    p = SupplierReturnPolicy.objects.filter(supplier_code=code).first()
+    before = {k: _policy_dict(p)[k] for k in _POLICY_FIELDS} if p else None
+    if p is None:
+        p = SupplierReturnPolicy(supplier_code=code)
+    for f, v in vals.items():
+        setattr(p, f, v)
+    p.updated_by = getattr(request.user, 'staff_profile', None)
+    p.save()
+    after = _policy_dict(p)
+    AuditLog.log('return_policy_changed', user=p.updated_by, obj=p, old_data=before,
+                 new_data={k: after[k] for k in _POLICY_FIELDS})
+    return Response(after)
+
+
+_SUPPLIER_SHEET_COLUMNS = [('كود المورد للصنف', 'vendor_code', 16), ('الصنف', 'item_name', 38),
+                           ('كودنا', 'item_code', 10), ('الكمية', 'qty', 10), ('الصلاحية', 'expiry_date', 12),
+                           ('التشغيلة', 'batch_no', 14)]
+_GRID_COLUMNS = [('الصنف', 'item_name', 38), ('كود', 'item_code', 10), ('الموقع', 'branch', 22),
+                 ('المخزن', 'store_code', 8), ('التشغيلة', 'batch_no', 14), ('الصلاحية', 'expiry_date', 12),
+                 ('الكمية', 'qty', 10), ('القيمة', 'value', 12), ('تُغلق', 'closes', 12),
+                 ('الحالة', 'state_label', 16), ('المورد', 'supplier_name', 22), ('الثقة', 'confidence_label', 14),
+                 ('أرسل للرئيسي قبل', 'send_by', 14), ('سابقاً', 'history', 16)]
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, BATCH_READ])
+def return_window_export(request):
+    """POST {kind: supplier|grid, supplier_code, month?, location?} → xlsx. kind=supplier is the
+    sheet the buyer enters in the supplier's own system (columns in the policy's entry_layout when set)."""
+    from io import BytesIO
+    import openpyxl
+    from django.http import HttpResponse
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from apps.branches.models import Branch
+    from apps.invoices.models import VendorItemMapping
+    from apps.procurement.models import SupplierReturnPolicy
+    from .return_calendar import IN_WINDOW, LOCATIONS, calendar
+
+    d = request.data
+    kind = d.get('kind') or 'supplier'
+    sup = str(d.get('supplier_code') or '').strip()
+    location = d.get('location') if d.get('location') in LOCATIONS else None
+    data = calendar(month=_month_param(d.get('month')), supplier=sup or None, location=location,
+                    branch_codes=_return_scope(request))
+    lines = data['lines']
+    if kind == 'supplier':
+        if not sup:
+            return Response({'detail': 'اختر المورد.'}, status=status.HTTP_400_BAD_REQUEST)
+        lines = [l for l in lines if l['supplier_code'] == sup and l['state'] in IN_WINDOW]
+        vendor_codes = dict(VendorItemMapping.objects
+                            .filter(vendor__softech_personcode=sup, item__softech_id__in={l['item_code'] for l in lines})
+                            .exclude(vendor_item_code='').values_list('item__softech_id', 'vendor_item_code'))
+        pol = SupplierReturnPolicy.objects.filter(supplier_code=sup).first()
+        known = {c[1]: c for c in _SUPPLIER_SHEET_COLUMNS}
+        cols = [known[k] for k in (pol.entry_layout if pol else []) if k in known] or _SUPPLIER_SHEET_COLUMNS
+        title = f"مرتجع صلاحية — {(pol.supplier_name if pol else '') or sup}"
+        for l in lines:
+            l['vendor_code'] = vendor_codes.get(l['item_code'], '')
+    else:
+        names = {b.softech_branch_id: (b.name_ar or b.name or '') for b in Branch.objects.all()}
+        cols, title = _GRID_COLUMNS, 'تقويم مرتجع الموردين'
+        for l in lines:
+            code = l['branch_code']
+            l['branch'] = f'{code} · {names[code]}' if names.get(code) else code
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'مرتجع'
+    ws.sheet_view.rightToLeft = True
+    ws.append([title])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
+    ws['A1'].font = Font(bold=True, size=13)
+    ws.append([])
+    ws.append([c[0] for c in cols])
+    fill = PatternFill('solid', fgColor='022871')
+    for i, c in enumerate(cols, start=1):
+        cell = ws.cell(row=3, column=i)
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal='center')
+        ws.column_dimensions[cell.column_letter].width = c[2]
+    for l in lines:
+        ws.append([l.get(c[1]) if l.get(c[1]) is not None else '' for c in cols])
+    ws.freeze_panes = 'A4'
+    buf = BytesIO()
+    wb.save(buf)
+    resp = HttpResponse(buf.getvalue(),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="return_window_{sup or "all"}.xlsx"'
+    return resp
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
+def return_window_reconcile(request):
+    """POST — close return records from doc 120 lines already mirrored (the tab's refresh button)."""
+    from .return_calendar import reconcile_returns
+    return Response(reconcile_returns())

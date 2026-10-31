@@ -66,10 +66,12 @@ MODULE = {
                 {'target': 'batches-main-kpis', 'route': '/batches',
                  'text': T('ابدأ من الأرقام: اللي بينتهي خلال 30 و90 و180 يوم، والمنتهي بالمخزون.',
                            'Start with the figures: what expires within 30, 90 and 180 days, and what has expired in stock.'),
-                 'more': T('الأرقام دي على كل الفروع مع قيمتها بالجنيه. لو «منتهية ولا تزال بالمخزون» فيها رقم، ده شغل النهارده: تتشال من الرف وياخد قرار.\n'
-                           '• «خلال 30 يوم» = لسه فيه وقت للتصريف أو النقل.',
-                           'These figures cover all branches with their value in EGP. If "Expired but still in stock" has a number, that is today\'s job: take it off the shelf and decide.\n'
-                           '• "Within 30 days" = there is still time to sell or move it.')},
+                 'more': T('الأرقام دي للمخزون القابل للبيع في كل الفروع مع قيمتها بالجنيه. لو «منتهية على الرف» فيها رقم، ده شغل النهارده: تتشال من الرف وياخد قرار.\n'
+                           '• «خلال 30 يوم» = لسه فيه وقت للتصريف أو النقل.\n'
+                           '• الصف التاني: مرشح للمرتجع (105)، إتلاف/شطب (102)، تجميل منتهي (103) — رصيد دفتري مش على الرف. الفرع المغلق (110) مش محسوب في أي رقم.',
+                           'These figures cover sellable stock in all branches with their value in EGP. If "Expired on the shelf" has a number, that is today\'s job: take it off the shelf and decide.\n'
+                           '• "Within 30 days" = there is still time to sell or move it.\n'
+                           '• The second row: return candidates (105), write-off (102), expired cosmetics (103) — book stock, not on a shelf. The closed branch (110) is not counted in any figure.')},
                 {'target': 'batches-main-tabs', 'route': '/batches',
                  'text': T('التبويبات ماشية بترتيب الشغل: رصد ← تدقيق ← تحليل الشراء ← إنقاذ ← قرار.',
                            'The tabs follow the work order: monitor → audit → purchase analysis → rescue → decision.'),
@@ -126,7 +128,7 @@ SCREENS = [
         'key': 'batches.main',
         'routes': ['/batches'],
         'title': T('الدفعات والانتهاء', 'Batches & expiry'),
-        'summary': T('سبعة تبويبات لإدارة الصلاحية من الرصد حتى القرار.', 'Seven tabs to manage expiry from monitoring to decision.'),
+        'summary': T('ثمانية تبويبات لإدارة الصلاحية من الرصد حتى القرار، منها تقويم مرتجع الموردين.', 'Eight tabs to manage expiry from monitoring to decision, including the supplier return calendar.'),
         'audience': T('الصيادلة والجودة والمشتريات والمشرفون.', 'Pharmacists, quality, purchasing and supervisors.'),
         'tabs': [
             {'key': 'alerts', 'title': T('🚨 قرب الانتهاء', '🚨 Near expiry'),
@@ -146,16 +148,30 @@ SCREENS = [
             {'key': 'disposal', 'title': T('🗑️ إتلاف/مرتجع', '🗑️ Disposal/return'),
              'body': T('سجل قرارات الإتلاف أو المرتجع للأصناف المنتهية: مسودة ← اعتماد (مدير/جودة) ← «تم التنفيذ» بعد تطبيقها يدوياً في SOFTECH. النظام لا يخصم المخزون تلقائياً.',
                        'The log of disposal or return decisions for expired items: draft → approval (manager/quality) → "Done" after applying it manually in SOFTECH. The system never deducts stock automatically.')},
+            {'key': 'return_window', 'title': T('📆 تقويم المرتجع', '📆 Return calendar'),
+             'body': T('أي مورد يأخذ أي تشغيلة مرتجع، وقبل أي تاريخ. النافذة من شهرين قبل شهر الانتهاء حتى شهر بعده (حسب سياسة المورد)، والحالات: «تفتح الشهر القادم»، «داخل النافذة»، «تُغلق هذا الشهر»، «فاتت النافذة». '
+                       'السطور: رفوف الفروع ومخازن الرئيسي ومخزن 105 (لا 102 ولا 103 ولا الفرع المغلق). المورد مستنتج من فواتير الشراء بنفس الصنف وشهر الصلاحية، وبجانبه «الثقة»: مطابق، نفس الشهر، أكثر من مورد (اختر واحداً)، أو مورد غير معروف. '
+                       '«طلب مرتجع» يُنشئ مسودة في «إتلاف/مرتجع» (مرة واحدة لكل سطر)، و«⬇️ تصدير للمورد» يُخرج ملفاً لإدخاله في نظام المورد، ثم تُسجّل رد المورد في السطر (مقبول / جزئي / مرفوض). عمود «سابقاً» يلخّص ردوده السابقة على نفس الصنف. '
+                       'عند إدخال مستند المرتجع (120) في SOFTECH يُغلق السطر تلقائياً بالمورد والصنف — مستند المرتجع لا يحمل تاريخ صلاحية، فالمطابقة لا تفرّق بين التشغيلات. سطور الفرع تقول «أرسل للرئيسي قبل…» (قبل إغلاق النافذة بـ 14 يوماً افتراضياً)، والنقل تحويل عادي في SOFTECH. '
+                       'سياسات الموردين في أسفل التبويب يعدّلها قسم المشتريات، ويُسجَّل كل تعديل.',
+                       'Which supplier takes back which batch, and by when. The window runs from two months before the expiry month to one month after (per supplier policy); the states are "opens next month", "in window", "closes this month" and "window missed". '
+                       'Lines are branch shelves, HQ stores and store 105 (not 102, 103 or the closed branch). The supplier is inferred from purchase invoices with the same item and expiry month, shown with a "confidence": exact, same month, several suppliers (pick one), or unknown supplier. '
+                       '"Request return" creates a draft in "Disposal/return" (once per line), "⬇️ Export for supplier" produces a sheet to enter in the supplier\'s own system, then you record the supplier\'s answer on the line (accepted / partial / rejected). The "Before" column summarises past answers for the same item. '
+                       'When the return document (120) is entered in SOFTECH, the line closes by itself on supplier and item — the return document carries no expiry date, so the match cannot tell batches apart. Branch lines say "send to HQ before…" (14 days before the window closes by default); the move is a normal SOFTECH transfer. '
+                       'Supplier policies at the bottom of the tab are edited by purchasing, and every change is logged.')},
         ],
         'tips': [
             T('اقتراحات الإنقاذ تحتاج تشغيل محرك الطلب لحساب معدلات البيع.', 'Rescue suggestions need the demand engine to have run to compute sales rates.'),
-            T('«عزل دفعة» يضع التشغيلة في الحجر مع سبب إلزامي (مثلاً تلف أو سحب من السوق).', '"Quarantine batch" puts a batch in quarantine with a required reason (e.g. damage or a market recall).'),
+            T('أرقام الصلاحية مقسومة حسب المخزن: المخزون القابل للبيع، مرشح المرتجع (105)، الإتلاف (102)، التجميل المنتهي (103). مخزن الفرع المغلق (110) مستبعد من كل الأرقام والقوائم.',
+              'Expiry figures are split by store: sellable stock, return candidates (105), write-off (102) and expired cosmetics (103). The closed branch\'s store (110) is excluded from every figure and list.'),
+            T('تقويم المرتجع لا يكتب شيئاً في SOFTECH: المرتجع (120) والتحويل للرئيسي يُدخلان في SOFTECH كالمعتاد.',
+              'The return calendar writes nothing to SOFTECH: the return (120) and the transfer to HQ are entered in SOFTECH as usual.'),
         ],
         'related': ['stockcount.sessions', 'transfers.new', 'catalog.inventory'],
         'tour': [
             {'target': 'batches-main-tabs', 'label': T('🚨 قرب الانتهاء · 📦 أرصدة الصلاحية · …', '🚨 Near expiry · 📦 Expiry balances · …'),
-             'text': T('سبع تبويبات من الرصد للقرار: قرب الانتهاء، الأرصدة، تدقيق الشراء، الموردين، مراجعة الشراء، الإنقاذ، والإتلاف/المرتجع.',
-                       'Seven tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, rescue, and disposal/return.'),
+             'text': T('ثماني تبويبات من الرصد للقرار: قرب الانتهاء، الأرصدة، تدقيق الشراء، الموردين، مراجعة الشراء، الإنقاذ، الإتلاف/المرتجع، وتقويم المرتجع.',
+                       'Eight tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, rescue, disposal/return, and the return calendar.'),
              'more': T(
                  '• «قرب الانتهاء» و«أرصدة الصلاحية»: الرصد اليومي.\n• «تدقيق صلاحيات الشراء» و«أداء الموردين» و«مراجعة الشراء»: هل بنشتري قصير الأجل ومن مين.\n• «إنقاذ قبل الانتهاء»: ينشئ مسودة طلب تحويل لفرع بيبيع أسرع.\n• «إتلاف/مرتجع»: اعتماد وتنفيذ القرارات.',
                  '• "Near expiry" and "Expiry balances": daily monitoring.\n• "Purchase-expiry audit", "Supplier expiry performance" and "Purchase review": are we buying short-dated, and from whom.\n• "Rescue before expiry": creates a draft transfer request to a branch that sells faster.\n• "Disposal/return": approving and completing decisions.')},
@@ -222,8 +238,36 @@ SCREENS = [
              'text': T('أصناف تنتهي خلال 30 و90 و180 يوماً، القيمة المعرّضة للخطر، والمنتهية بالمخزون.',
                        'Items expiring within 30, 90 and 180 days, value at risk, and expired items still in stock.'),
              'more': T(
-                 'كل كارت فيه عدد الأصناف وقيمتها بالجنيه، محسوبة على كل الفروع.\n• «خلال 30 يوم» بالأحمر هو الأهم — دي اللي محتاجة تصرّف أو نقل فوراً.\n• «منتهية ولا تزال بالمخزون» لازم تتشال من الرف وياخد قرار إتلاف/مرتجع.',
-                 'Each card shows the number of items and their value in EGP, across all branches.\n• "Within 30 days" in red matters most — these need selling or moving right away.\n• "Expired but still in stock" must come off the shelf and get a disposal/return decision.')},
+                 'كل كارت فيه عدد الأصناف وقيمتها بالجنيه، محسوبة على المخزون القابل للبيع في كل الفروع.\n• «خلال 30 يوم» بالأحمر هو الأهم — دي اللي محتاجة تصرّف أو نقل فوراً.\n• «منتهية على الرف» لازم تتشال من الرف وياخد قرار إتلاف/مرتجع.',
+                 'Each card shows the number of items and their value in EGP, for sellable stock across all branches.\n• "Within 30 days" in red matters most — these need selling or moving right away.\n• "Expired on the shelf" must come off the shelf and get a disposal/return decision.')},
+            {'target': 'batches-main-buckets', 'label': T('مرتجع 105 · إتلاف 102 · تجميل 103', 'Return 105 · Write-off 102 · Cosm. 103'),
+             'text': T('الرصيد الدفتري بعيداً عن الرف: مرشح المرتجع، والإتلاف، والتجميل المنتهي — بقيمة كل منها.',
+                       'Book stock kept apart from the shelf: return candidates, write-off and expired cosmetics — each with its value.'),
+             'more': T('• 105 = انتهى حديثاً وقد يُرتجع — تابعه في «📆 تقويم المرتجع».\n• 102 = لا يُرتجع: إتلاف أو شطب.\n• الفرع المغلق (110) لا يظهر هنا ولا في أي رقم.',
+                       '• 105 = recently expired and may still be returned — follow it in "📆 Return calendar".\n• 102 = not returnable: destroy or write off.\n• The closed branch (110) does not appear here or in any figure.')},
+            {'target': 'batches-main-return-summary', 'label': T('داخل النافذة · تُغلق هذا الشهر', 'In window · Closes this month'),
+             'text': T('لكل مورد: قيمة ما تفتح نافذته الشهر القادم، وما داخل النافذة، وما تُغلق نافذته هذا الشهر، وما فاتت نافذته. اضغط أي رقم لتصفية الجدول.',
+                       'For each supplier: the value whose window opens next month, is in the window, closes this month, or was missed. Click any value to filter the grid.'),
+             'open_hint': T('تبويب «📆 تقويم المرتجع».', '"📆 Return calendar" tab.')},
+            {'target': 'batches-main-return-grid', 'label': T('سطور المرتجع', 'Return lines'),
+             'text': T('كل تشغيلة بموقعها وكميتها وتاريخ إغلاق النافذة والمورد ودرجة الثقة. سجّل رد المورد في آخر عمود.',
+                       'Each batch with its location, quantity, window close date, supplier and confidence. Record the supplier\'s answer in the last column.'),
+             'when': T('↑↓ للتنقل، مسافة للتحديد، Enter = «مقبول» على سطر له طلب.', '↑↓ to move, Space to tick, Enter = "accepted" on a line with a request.'),
+             'open_hint': T('تبويب «📆 تقويم المرتجع».', '"📆 Return calendar" tab.')},
+            {'target': 'batches-main-return-request', 'label': T('طلب مرتجع', 'Request return'),
+             'text': T('ينشئ مسودة مرتجع للسطور المحددة في «🗑️ إتلاف/مرتجع». الكمية من رصيد SOFTECH، والضغط مرتين لا يكرر الطلب.',
+                       'Creates a return draft for the ticked lines in "🗑️ Disposal/return". The quantity comes from the SOFTECH balance, and pressing twice does not duplicate it.'),
+             'open_hint': T('حدد سطوراً لها مورد بسياسة مرتجع. سطر «أكثر من مورد» يحتاج اختيار المورد.', 'Tick lines whose supplier has a return policy. A "several suppliers" line needs a supplier picked.')},
+            {'target': 'batches-main-return-export', 'label': T('⬇️ تصدير للمورد', '⬇️ Export for supplier'),
+             'text': T('ملف Excel بسطور المورد داخل النافذة لإدخالها في نظام المورد (فارما أوفرسيز وابن سينا).',
+                       'An Excel file of the supplier\'s in-window lines to enter in the supplier\'s own system (Pharma Overseas and Ibn Sina).'),
+             'open_hint': T('اختر المورد من القائمة أولاً.', 'Pick the supplier from the list first.')},
+            {'target': 'batches-main-return-nopolicy', 'label': T('موردون بدون سياسة مرتجع', 'Suppliers without a return policy'),
+             'text': T('قيمة المخزون داخل النافذة لموردين ليست لهم سياسة مرتجع بعد — يقول للمشتريات أي سياسة تُدخل بعدها.',
+                       'In-window stock value for suppliers with no return policy yet — tells purchasing which policy to enter next.')},
+            {'target': 'batches-main-return-policies', 'label': T('سياسات مرتجع الموردين', 'Supplier return policies'),
+             'text': T('هل المورد يقبل مرتجع الصلاحية، ومتى تفتح النافذة وتُغلق، وهل نُدخل المرتجع في نظامه. التعديل لقسم المشتريات، ويُسجَّل.',
+                       'Does the supplier take expiry returns, when the window opens and closes, do we enter returns in its system. Purchasing edits it; changes are logged.')},
             {'target': 'batches-main-actions', 'label': T('⬇️ تصدير Excel · ▶️ بدء جرد مادي', '⬇️ Export Excel · ▶️ Start a count'), 'when': T('بعد ما تفلتر القائمة أو تختار فرع.', 'After filtering the list or picking a branch.'),  # from the GitHub-side tour
              'text': T('«تصدير Excel» للقائمة، و«بدء جرد مادي» بعد اختيار فرع.',
                        '«Export Excel» for the list, and «Start physical count» once a branch is chosen.'),
@@ -237,7 +281,8 @@ SCREENS = [
                  'اضغط عنوان أي عمود للترتيب (مثلاً «قيمة معرّضة» أو «أقرب صلاحية»)، والصف الأحمر صنف منتهي.\n• «🗑️ إتلاف/مرتجع» بيفتح نافذة: القرار (إتلاف، مرتجع للمورد، عزل، مراجعة) والكمية والسبب، ثم «تسجيل القرار».\n• القرار بيتسجّل مسودة في تبويب «إتلاف/مرتجع» ومش بيخصم من SOFTECH.',
                  'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
-        'updated': '2026-10-29',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('أرقام الصلاحية حسب المخزن (الفرع المغلق مستبعد) وتبويب «📆 تقويم المرتجع»',
+                         'Expiry figures by store (the closed branch excluded) and the "📆 Return calendar" tab'),
     },
 ]

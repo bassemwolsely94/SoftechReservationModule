@@ -231,6 +231,8 @@ SCREENS = [
               'If the sync shows "failed" or the last update is old, stock figures may be out of date — tell the system admin.'),
             T('شريط «التحفيز» أعلى الصفحة يعرض مستواك ونقاط اليوم وسلسلة الأيام النظيفة وترتيبك في الفرع، وزر «بند ينتظرك» يفتح ما تبقّى عليك.',
               'The "Gamification" strip at the top shows your level, today\'s points, clean-day streak and branch rank; the "items waiting" button opens what is still on you.'),
+            T('سطر «⏳ الصلاحية» (لمن يرى الأصناف): المنتهي على الرف والمعرّض خلال 180 يوماً، وبعده مرشح المرتجع (105) والإتلاف (102) والتجميل المنتهي (103). الفرع المغلق لا يُحسب. اضغطه لفتح «الدفعات والصلاحية».',
+              'The "⏳ Expiry" line (for users who see the catalog): expired on the shelf and at risk within 180 days, then return candidates (105), write-off (102) and expired cosmetics (103). The closed branch is not counted. Click it to open "Batches & expiry".'),
         ],
         'related': ['general.me', 'general.notifications', 'gamification.main'],
         'tour': [
@@ -296,6 +298,11 @@ SCREENS = [
                        'Clear them before the end of the day. When it says "✅ Nothing left behind" you earn a "clean day".'),
              'warn': T('البنود الحمراء اللي تفضل مفتوحة بعد نص الليل بتخصم نقاط من ترتيبك.',
                        'Red items still open after midnight deduct points from your ranking.')},
+            {'target': 'general-dashboard-expiry', 'label': T('⏳ الصلاحية', '⏳ Expiry'),
+             'text': T('صورة الصلاحية في سطر: المنتهي على الرف والمعرّض خلال 180 يوماً، ثم مرشح المرتجع (105) والإتلاف (102) والتجميل المنتهي (103).',
+                       'The expiry picture in one line: expired on the shelf and at risk within 180 days, then return candidates (105), write-off (102) and expired cosmetics (103).'),
+             'when': T('اضغطه لفتح «الدفعات والصلاحية».', 'Click it to open "Batches & expiry".'),
+             'open_hint': T('يظهر لمن يرى الأصناف.', 'Shown to users who see the catalog.')},
             {'target': 'general-dashboard-kpis', 'label': T('نشط الآن · المخزون متاح · عاجل نشط', 'Active · Stock available · Urgent'),
              'text': T('أرقام الحجوزات: النشطة، اللي وصل مخزونها وتنتظر اتصال، متابعة اليوم، العاجلة، والمسلّمة هذا الأسبوع.',
                        'Reservation numbers: active, stock arrived and waiting for a call, follow-ups today, urgent, and delivered this week.'),
@@ -355,9 +362,8 @@ SCREENS = [
                        'Green dot = the last sync succeeded, orange = running now, red = failed.\n• If it failed or the last update is old, the stock you see may be out of date — tell the system admin.'),
          },
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-10-31',
+        'change_note': T('سطر «⏳ الصلاحية» على لوحة التحكم', 'The "⏳ Expiry" line on the dashboard'),
     },
     {
         'key': 'general.me',

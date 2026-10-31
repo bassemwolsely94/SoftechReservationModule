@@ -114,6 +114,12 @@ class AuditLog(models.Model):
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
 
+        # Return-window calendar (P-29)
+        ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
+        ('return_requested',             'مرتجع — طلب مرتجع لمورد'),
+        ('return_answered',              'مرتجع — تسجيل رد المورد'),
+        ('return_closed_by_ledger',      'مرتجع — إغلاق من مستند مرتجع SOFTECH'),
+
     ]
 
     # ── Who ───────────────────────────────────────────────────────────────────

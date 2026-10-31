@@ -25,6 +25,7 @@ import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import GamificationCard from '../components/GamificationCard'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import ExpiryBucketsTile from '../components/ExpiryBucketsTile'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 
@@ -741,6 +742,9 @@ export default function DashboardPage() {
 
         {/* Data freshness — dashboard mixes live sales + stock */}
         <DataFreshnessBar domains={['sales', 'stock']} canEdit={user?.is_staff || user?.role === 'admin'} />
+
+        {/* Expiry picture (P-26): shelf risk apart from book residue */}
+        <ExpiryBucketsTile />
 
         {/* ── 1b. Gamification — my level, points, streak, what is waiting ── */}
         <GamificationCard />

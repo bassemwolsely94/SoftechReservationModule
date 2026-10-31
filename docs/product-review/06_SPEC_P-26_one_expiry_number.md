@@ -1,7 +1,7 @@
 # 06 · SPEC P-26 — One honest expiry number
 
-**Status:** specification (approved for spec 2026-10-30). **Build:** not yet authorised. The owner's rule is "build
-after all discussions".
+**Status:** **BUILT 2026-10-31** (owner go-ahead). The owner decisions below override the original scope: store 110 is
+excluded everywhere, so the 110 card, alert and clean-up export were not built.
 
 **Owner input** (ledger row P-26, backlog P-26 "Revision after owner input")
 - Store **110** is a **closed branch**. It must hold **zero** stock.

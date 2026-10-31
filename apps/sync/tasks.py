@@ -2315,6 +2315,27 @@ def _run_expiry_worklists():
         logger.error('[APScheduler] expiry worklists failed: %s', exc)
 
 
+def _run_return_window_reconcile():
+    """P-29: close return-window records from doc 120 lines already in procurement.PurchaseLine.
+    Local DB only (the procurement refresh brings the lines); hourly so it follows that refresh."""
+    try:
+        from apps.batches.return_calendar import reconcile_returns
+        out = reconcile_returns()
+        if out['lines_used']:
+            logger.info('[APScheduler] return-window reconcile: %s', out)
+    except Exception as exc:
+        logger.error('[APScheduler] return-window reconcile failed: %s', exc)
+
+
+def _run_return_window_digest():
+    """P-29: 1st of the month — supplier window snapshot + one digest to the returns owners."""
+    try:
+        from apps.batches.return_calendar import monthly_digest
+        logger.info('[APScheduler] return-window digest: %s', monthly_digest())
+    except Exception as exc:
+        logger.error('[APScheduler] return-window digest failed: %s', exc)
+
+
 def _run_markdown_revert_reminders():
     """Weekly reminder to review reverting stale near-expiry markdowns."""
     try:
@@ -3366,16 +3387,8 @@ def start_scheduler():
         misfire_grace_time=300,
     )
 
-    # Near-expiry batch scan — daily at 06:00 Cairo
-    _scheduler.add_job(
-        _near_expiry_scan,
-        'cron',
-        hour=6, minute=0,
-        id='near_expiry_scan',
-        replace_existing=True,
-        max_instances=1,
-        misfire_grace_time=600,
-    )
+    # near_expiry_scan is retired (P-26): it scanned the empty StockBatch table. Expiry numbers come
+    # from the StockExpiryBalance mirror (stock_expiry_sync, 05:30).
 
     # Approval escalation — every hour (SLA overdue steps)
     _scheduler.add_job(
@@ -3488,6 +3501,16 @@ def start_scheduler():
         _run_expiry_worklists, 'cron', day_of_week='sun', hour=8, minute=0,
         id='expiry_worklists', replace_existing=True, max_instances=1,
         misfire_grace_time=3600,
+    )
+    # Return-window calendar (P-29): auto-close from doc 120 lines (hourly, local DB only) and the
+    # monthly supplier digest + KPI snapshot on the 1st.
+    _scheduler.add_job(
+        _run_return_window_reconcile, 'interval', hours=1, id='return_window_reconcile',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
     # Weekly reminder to revert stale near-expiry markdowns (Sunday 08:30).
     _scheduler.add_job(
@@ -3619,7 +3642,6 @@ def start_scheduler():
     logger.info("Delivery CSAT sender — runs every 30 minutes")
     logger.info("Transfer SLA check scheduled — runs every hour")
     logger.info("Transit transfers sync scheduled — runs every 15 minutes")
-    logger.info("Near-expiry batch scan — runs daily at 06:00 Cairo")
     logger.info("Approval escalation — runs every hour")
     logger.info("Sales forecast engine — runs daily at 02:30 Cairo")
     logger.info("WhatsApp campaign queue drain — runs every 2 minutes")
