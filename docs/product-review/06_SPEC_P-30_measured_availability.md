@@ -95,6 +95,20 @@ database writes):
 **Pass rule (proposed; owner confirms):** at least 19 of 20 samples match, and checks 2–3 are at least 95%
 consistent on branch 160. A fail → stop and report. No step 1 build on an unverified field.
 
+**Step 0 — first run, 2026-10-31** (`verify_ledger_newqty --branch 160`, 2 Aug – 31 Oct, PostgreSQL mirror only;
+built in `apps/stock_audit/newqty_check.py`):
+- 82,374 lines, **all at store 160** (the selling store). One store per branch, so spells run per branch here.
+- **Chain consistent 75,279 / 75,794 = 99.3 %.** Of the 515 breaks, 376 sit between two lines on the same day and 28
+  share the same entry time, so the likely cause is line order, not a wrong balance.
+- **End state equal 6,115 / 6,345 = 96.4 %** (last `newqty` vs `ItemStock` where no line came after the stock sync).
+- **Units:** 27,594 lines have a fractional balance (strip sales), so `newqty` is in packs with strip fractions. **No
+  negative balances.** 7,963 lines end at zero.
+- **Direction per document, as inferred from the data (owner to confirm):** in — 10 purchase, 25 receipt from a branch,
+  30 customer return, 50 count surplus, 20, 80, 81; out — 115 sale, 120 return to supplier, 125 issue to a branch,
+  150 count shortage, 180, 181.
+- **Verdict: checks 2 and 3 pass (≥ 95 %); waiting for the 20-case sheet** («عينة للتحقق» in the report), to be
+  checked by a store specialist on the SOFTECH item card, then scored with `--score <file>`.
+
 ### Step 1 — measured stock-out spells + availability (PG only, nightly)
 New module `apps/stock_audit/availability.py`.
 - **Scope of items.** Per branch, item × selling store where:
