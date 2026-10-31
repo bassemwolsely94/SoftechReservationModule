@@ -136,6 +136,17 @@ def login_view(request):
     # Resolve the identifier to a Django User object
     resolved_user = _resolve_user(identifier)
 
+    # H8: a locked account answers 429 before the password is even checked (the right password
+    # included); an identifier that matches no account answers the same way after the same
+    # number of misses, so the two cannot be told apart.
+    from . import lockout
+    lock_profile = getattr(resolved_user, 'staff_profile', None) if resolved_user else None
+    if lock_profile:
+        if lockout.locked_until(lock_profile):
+            return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    elif lockout.unknown_identifier_locked(identifier):
+        return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     if resolved_user:
         user = authenticate(username=resolved_user.username, password=password)
     else:
@@ -145,6 +156,11 @@ def login_view(request):
         # Log failed attempt if profile found
         profile = getattr(resolved_user, 'staff_profile', None) if resolved_user else None
         _log_auth('login_failed', profile, ip, note=f'identifier={identifier}')
+        if profile:
+            if lockout.locked_until(profile):
+                lockout.register_lock(profile, ip)
+        else:
+            lockout.note_unknown_failure(identifier)
         return Response({'error': 'بيانات الدخول غير صحيحة'}, status=status.HTTP_401_UNAUTHORIZED)
 
     if not user.is_active:
@@ -162,12 +178,12 @@ def login_view(request):
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
         if not _mfa.valid_device_token(device_token, user):
-            _log_auth('login_success', profile, ip, note='mfa_challenge')
+            _log_auth('mfa_challenge', profile, ip)
             return Response({'mfa_required': True,
                              'mfa_token': _mfa.make_preauth_token(user, 'login')})
     elif _mfa.mfa_required_for(profile):
         # Enforcement on + required role + not yet enrolled → force enrollment now.
-        _log_auth('login_success', profile, ip, note='mfa_setup_required')
+        _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required')
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
@@ -185,6 +201,18 @@ def login_view(request):
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
     return set_auth_cookies(resp, refresh.access_token, refresh)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def unlock_login_view(request, pk):
+    """Admin lifts a login lock (H8) before it runs out."""
+    from . import lockout
+    profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
+    if not profile:
+        return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    lockout.unlock(profile, getattr(request.user, 'staff_profile', None), client_ip(request))
+    return Response({'detail': f'تم رفع إيقاف الدخول عن {profile.full_name or profile.user.username}'})
 
 
 @api_view(['POST'])

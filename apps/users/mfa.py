@@ -244,6 +244,10 @@ def verify_2fa_view(request):
     profile = getattr(user, 'staff_profile', None)
     code = request.data.get('code', '')
 
+    from . import lockout          # H8: a locked account takes no more codes
+    if profile and lockout.locked_until(profile):
+        return Response({'error': lockout.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     if not (profile and profile.mfa_enabled):
         return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -251,6 +255,9 @@ def verify_2fa_view(request):
         cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
         tries = cache.incr(tries_key)
         _log('mfa_failed', profile, request, note=f'try {tries}/{MAX_CODE_TRIES}')
+        if lockout.locked_until(profile):
+            from core.client_ip import client_ip
+            lockout.register_lock(profile, client_ip(request))
         if tries >= MAX_CODE_TRIES:
             return Response({'error': 'محاولات كثيرة خاطئة — سجّل الدخول من جديد'},
                             status=status.HTTP_401_UNAUTHORIZED)

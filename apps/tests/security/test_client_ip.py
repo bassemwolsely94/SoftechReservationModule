@@ -31,8 +31,8 @@ class LoginThrottleTests(TestCase):
         cache.clear()
         make_user('a6_user', role='pharmacist', password='A6-Strong-pw-26')
 
-    def _try(self, forwarded, remote=NGINX):
-        return APIClient().post(LOGIN, {'username': 'a6_user', 'password': 'wrong-password'},
+    def _try(self, forwarded, remote=NGINX, username='a6_user'):
+        return APIClient().post(LOGIN, {'username': username, 'password': 'wrong-password'},
                                 format='json', REMOTE_ADDR=remote, HTTP_X_FORWARDED_FOR=forwarded)
 
     def test_made_up_forwarded_for_does_not_dodge_the_limit(self):
@@ -51,7 +51,8 @@ class LoginThrottleTests(TestCase):
         with _behind_proxy():
             for i in range(10):
                 self._try(f'10.66.{i}.1, {REAL}')
-            self.assertNotEqual(self._try('198.51.100.20').status_code, 429)
+            # another account: ten misses on a6_user now lock THAT account too (N0/H8)
+            self.assertNotEqual(self._try('198.51.100.20', username='a6_other').status_code, 429)
 
 
 class AuditAddressTests(TestCase):

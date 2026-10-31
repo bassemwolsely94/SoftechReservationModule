@@ -3,7 +3,7 @@ from rest_framework.routers import SimpleRouter
 from .views import (
     login_view, refresh_view, me_view, change_password_view,
     StaffProfileViewSet, ERPUserViewSet, PermissionsMatrixView,
-    my_permissions_view,
+    my_permissions_view, unlock_login_view,
 )
 
 # ── Auth endpoints (mounted at /api/auth/) ─────────────────────────────────────
@@ -24,6 +24,7 @@ from . import erp_views
 
 management_urlpatterns = router.urls + [
     path('my-permissions/', my_permissions_view, name='my-permissions'),
+    path('<int:pk>/unlock-login/', unlock_login_view, name='unlock-login'),
 
     # ── SOFTECH permission inheritance ────────────────────────────────────────
     path('erp-permissions/me/',            erp_views.my_erp_permissions,  name='erp-perms-me'),

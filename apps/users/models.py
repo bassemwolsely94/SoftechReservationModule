@@ -87,6 +87,9 @@ USER_ACTIVITY_ACTION_CHOICES = [
     ('mfa_disabled',        'إيقاف المصادقة الثنائية'),
     ('mfa_verified',        'اجتياز المصادقة الثنائية'),
     ('mfa_failed',          'فشل المصادقة الثنائية'),
+    ('login_locked',        'إيقاف الدخول مؤقتاً'),
+    ('login_unlocked',      'رفع إيقاف الدخول'),
+    ('mfa_challenge',       'طلب رمز التحقق'),
 ]
 
 # Roles that must pass 2FA at login once enforcement is switched on

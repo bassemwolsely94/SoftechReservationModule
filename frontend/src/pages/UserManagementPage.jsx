@@ -574,6 +574,11 @@ export default function UserManagementPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
 
+  const unlockLoginMutation = useMutation({
+    mutationFn: (id) => usersApi.unlockLogin(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  })
+
   const openCreate = () => { setEditUser(null); setDrawerOpen(true) }
   const openEdit   = (u)  => { setEditUser(u);  setDrawerOpen(true) }
 
@@ -688,7 +693,25 @@ export default function UserManagementPage() {
                 <td className="px-4 py-3 text-gray-500 font-mono text-xs">{u.softech_username || '—'}</td>
 
                 {/* Status */}
-                <td className="px-4 py-3"><StatusBadge isActive={u.is_active} /></td>
+                <td className="px-4 py-3">
+                  <StatusBadge isActive={u.is_active} />
+                  {u.login_locked_until && (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                        title={`حتى ${new Date(u.login_locked_until).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`}>
+                        🔒 دخول موقوف مؤقتاً
+                      </span>
+                      {isAdmin && (
+                        <button data-tour="admin-users-unlock-login"
+                          onClick={() => unlockLoginMutation.mutate(u.id)}
+                          disabled={unlockLoginMutation.isPending}
+                          className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50">
+                          رفع الإيقاف
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
 
                 {/* Actions */}
                 {isAdmin && (
