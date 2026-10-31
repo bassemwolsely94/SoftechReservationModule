@@ -497,3 +497,80 @@ class LocalReceiptAlertTests(TestCase):
         self.assertEqual(r.status_code, 200)
         rows = r.json()['results'] if isinstance(r.json(), dict) else r.json()
         self.assertEqual([x['erp_doc_number'] for x in rows], ['902200'])
+
+
+class TransitLinkTests(TestCase):
+    """P-33 (c): a 125 links to a transfer only when the docnumber AND both branches match (and the
+    ERP-matched date is within 3 days when known). Docnumbers repeat per (branch, doctype), so the
+    docnumber alone linked transits to other branches' transfers."""
+
+    def setUp(self):
+        from .factories import make_user
+        self.hq = make_branch('HQ', '100')
+        self.giza = make_branch2('Giza', '140')
+        self.b150 = make_branch('B150', '150')
+        _, self.staff, _ = make_user('tr_link', role='admin')
+        self.cmd = Command()
+
+    def _tr(self, ref, supply, recv, **kw):
+        from apps.transfers.models import TransferRequest
+        return TransferRequest.objects.create(requesting_branch=recv, supplying_branch=supply, created_by=self.staff,
+                                              status='sent_to_erp', erp_reference=ref, **kw)
+
+    def _sync(self, *headers):
+        conn = FakeConn()
+        conn.headers = list(headers)
+        for h in headers:
+            conn.lines[(h[0], h[2], '125')] = [_line('IT001', 1, 10)]
+        self.cmd._sync(conn, 30, '')
+
+    def test_same_reference_from_two_branches_links_each_to_its_own(self):
+        a = self._tr('777', self.hq, self.giza)
+        b = self._tr('777', self.b150, self.giza)
+        self._sync(_hdr(777, '100', '140'), _hdr(777, '150', '140'))
+        got = dict(InTransitTransfer.objects.values_list('erp_supplying_branch_code', 'linked_request_id'))
+        self.assertEqual(got, {'100': a.pk, '150': b.pk})
+
+    def test_receiving_branch_mismatch_does_not_link(self):
+        self._tr('778', self.hq, self.b150)                            # the request was for 150
+        self._sync(_hdr(778, '100', '140'))                             # the 125 goes to 140
+        self.assertIsNone(InTransitTransfer.objects.get().linked_request_id)
+
+    def test_erp_match_date_far_away_does_not_link(self):
+        self._tr('779', self.hq, self.giza, erp_match_doc_date=TODAY - datetime.timedelta(days=20),
+                 erp_match_doc_code='125')
+        self._sync(_hdr(779, '100', '140'))
+        self.assertIsNone(InTransitTransfer.objects.get().linked_request_id)
+
+    def test_two_candidates_link_nothing_and_are_logged(self):
+        from apps.transits.models import InTransitAuditEvent
+        self._tr('780', self.hq, self.giza)
+        self._tr('780', self.hq, self.giza)
+        self._sync(_hdr(780, '100', '140'))
+        t = InTransitTransfer.objects.get()
+        self.assertIsNone(t.linked_request_id)
+        self.assertTrue(InTransitAuditEvent.objects.filter(transfer=t, action='ambiguous_link').exists())
+
+    def test_repair_command_reports_then_unlinks(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.transits.models import InTransitAuditEvent
+        wrong = self._tr('781', self.b150, self.giza)
+        good = self._tr('782', self.hq, self.giza)
+        bad_t = InTransitTransfer.objects.create(erp_doc_number='781', erp_supplying_branch_code='100',
+                                                 erp_receiving_branch_code='140', issue_date=TODAY,
+                                                 linked_request=wrong)
+        ok_t = InTransitTransfer.objects.create(erp_doc_number='782', erp_supplying_branch_code='100',
+                                                erp_receiving_branch_code='140', issue_date=TODAY,
+                                                linked_request=good)
+        out = StringIO()
+        call_command('audit_transit_links', stdout=out)
+        self.assertIn('781', out.getvalue())
+        bad_t.refresh_from_db()
+        self.assertEqual(bad_t.linked_request_id, wrong.pk)             # report only
+        call_command('audit_transit_links', '--commit', stdout=StringIO())
+        bad_t.refresh_from_db(); ok_t.refresh_from_db()
+        self.assertIsNone(bad_t.linked_request_id)
+        self.assertEqual(ok_t.linked_request_id, good.pk)
+        self.assertTrue(InTransitAuditEvent.objects.filter(transfer=bad_t, action='unlinked').exists())
+        self.assertTrue(wrong.messages.filter(message_type='system').exists())

@@ -242,14 +242,14 @@ class Command(BaseCommand):
             for b in Branch.objects.filter(is_active=True)
         }
 
-        # ── Build erp_reference → TransferRequest lookup ──────────────────────
-        # Only 'sent_to_erp' and 'completed' transfers have a valid erp_reference
-        tr_map: dict[str, 'TransferRequest'] = {}
-        for tr in TransferRequest.objects.filter(
+        # ── (erp_reference, supplying branch) → TransferRequest lookup ────────
+        # Only 'sent_to_erp' and 'completed' transfers have a valid erp_reference. Docnumbers
+        # repeat per (branch, doctype), so a link also needs both branches (P-33 (c), linking.py).
+        from apps.transits import linking
+        tr_index = linking.build_index(TransferRequest.objects.filter(
             status__in=('sent_to_erp', 'completed'),
             erp_reference__gt='',
-        ).only('id', 'erp_reference'):
-            tr_map[str(tr.erp_reference).strip()] = tr
+        ).select_related('supplying_branch', 'requesting_branch'))
 
         # ── Fetch SOFTECH headers ─────────────────────────────────────────────
         since = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
@@ -484,7 +484,8 @@ class Command(BaseCommand):
                         recv_branch   = branch_map.get(recv_code) if recv_code else None
 
                         # Try to link to existing TransferRequest
-                        linked_tr = tr_map.get(doc_num)
+                        linked_tr, link_reason = linking.match(tr_index, doc_num, supply_code,
+                                                               recv_code, issue_date)
 
                         tt = InTransitTransfer(
                             erp_doc_number             = doc_num,
@@ -518,6 +519,10 @@ class Command(BaseCommand):
                             f'من الفرع {supply_code}',
                         )
                         InTransitAuditEvent.log(tt, 'synced', detail='First discovered in ERP sync')
+                        if link_reason == 'ambiguous':
+                            InTransitAuditEvent.log(tt, 'ambiguous_link', detail=(
+                                f'More than one transfer request has reference {doc_num} from branch '
+                                f'{supply_code} to {recv_code or "?"} — not linked'))
 
                         if linked_tr:
                             InTransitAuditEvent.log(

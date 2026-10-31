@@ -1,6 +1,6 @@
 # 06 · SPEC P-33 — Supply-flow quick fixes
 
-**Status:** specification (approved for spec 2026-10-30). **Build:** not yet authorised.
+**Status:** **(a), (c), (d), (e) BUILT 2026-10-31** (owner: "P-33 without retry"; IsrPush field + constraint approved, linked ISR legs). **(b) not built** (scheduled SOFTECH write deferred).
 Items (a)–(d) are independent and can ship one at a time. Item (e) waits for the VPS cutover.
 
 **Owner input** (ledger P-33, backlog revision)

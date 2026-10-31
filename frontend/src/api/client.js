@@ -1088,6 +1088,9 @@ export const shortageApi = {
 
   // Internal stock check — returns transfer suggestions per confirmed item
   stockCheck:   (id)           => api.get(`/shortage/lists/${id}/stock-check/`),
+  // P-33 (a): the WhatsApp path's two-leg transfer proposals — plan (read only) and create
+  transferPlan: (id, params)   => api.get(`/shortage/lists/${id}/transfer-plan/`, { params }),
+  transfers:    (id, body)     => api.post(`/shortage/lists/${id}/transfers/`, body),
 
   // State transitions
   submit:       (id)           => api.post(`/shortage/lists/${id}/submit/`),

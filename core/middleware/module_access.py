@@ -203,6 +203,11 @@ def required(path, method):
         if parts[3] == 'spike':
             return 'purchasing', _POST_ACTIONS
         return 'shortage', ('approve',)       # flag / dismiss / phantom review: approve, as the views
+    # P-33 (a): creating transfer proposals from a shortage list is the WhatsApp path's purchasing
+    # write (its view checks can_supply_write), not a shortage-list edit
+    if (not safe and prefix == 'shortage' and parts[3:4] == ['lists'] and len(parts) > 6
+            and parts[5] == 'transfers'):
+        return 'purchasing', _POST_ACTIONS
     # Vouchers (Z-9d): each write needs exactly the grant its view asks — issue create, assign
     # assign, cancel / edit edit, redeem (OTP send / verify) and finishing a redemption document
     # approve or finalize, the eligibility check view

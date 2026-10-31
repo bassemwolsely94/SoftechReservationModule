@@ -23,6 +23,7 @@ import useGridKeyboard from '../hooks/useGridKeyboard'
 import { createWorker } from 'tesseract.js'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import ShortageTransfersSection from '../components/ShortageTransfersSection'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ function StockCheckPanel({ listId, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" dir="rtl">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col" dir="rtl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <div>
@@ -328,7 +329,11 @@ function StockCheckPanel({ listId, onClose }) {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Summary */}
+            {/* P-33 (a): real transfer proposals from the donors' excess (same as «طلبات واتساب») */}
+            <ShortageTransfersSection listId={listId} />
+
+            {/* Summary — raw on-hand stock at other branches, before each donor keeps its own cover */}
+            <div className="text-xs text-gray-500 mb-2">الأرقام التالية رصيد متاح (قبل حساب التغطية) — للاطلاع السريع فقط؛ الكميات الفعلية من «تحليل التحويل».</div>
             <div className="grid grid-cols-3 gap-3 mb-4">
               {[
                 { label: 'يمكن تحويله', count: transferable.length, color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
@@ -347,7 +352,7 @@ function StockCheckPanel({ listId, onClose }) {
               <div className="mb-4">
                 <div className="text-xs font-bold text-emerald-700 mb-2 flex items-center gap-1">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
-                  متاح للتحويل ({transferable.length})
+                  رصيد متاح (قبل حساب التغطية) ({transferable.length})
                 </div>
                 <div className="space-y-2">
                   {transferable.map(item => (

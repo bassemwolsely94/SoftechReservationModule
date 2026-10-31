@@ -1172,6 +1172,12 @@ with `SOFTECH_READ_ONLY=True` confirm a writer dry-run is refused. Then in the V
 app on phones — `/m` mobile pages). Old LAN addresses no longer work. Remove the old office
 bookmarks.
 
+**11.8b First 7 mornings (P-33 e).** The procurement refresh stalled at 18-10 because the office
+scheduler PC slept; the always-on VPS removes the cause. Each morning for 7 days after cutover check
+`/supply` (or `/sync`) freshness: «المشتريات والوارد» (`purchases`) is green and the purchase data
+runs through yesterday (`procurement.refresh.freshness()` → `data_through` ≥ yesterday). Record
+date + initials in the switch table; any miss → check the scheduler log before anything else.
+
 **11.9 Keep the office copy as a cold fallback** for 2 weeks: data intact, `SOFTECH_READ_ONLY=True`,
 services disabled. Rollback = reverse 11.3–11.6 (stop VPS scheduler+writers first, then start the office).
 

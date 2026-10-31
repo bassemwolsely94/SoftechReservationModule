@@ -117,8 +117,14 @@ check for the owner. Spec files:
 - [P-31](06_SPEC_P-31_unordered_delivery_detector.md) — order record = `SupplyDecision(kind='purchase')` written by the
   order Excel exports; `ReceiptCheck` per doc-10 line; no price check. Note: `PurchaseLine` refreshes daily (20 h rule),
   not every 30 min
-- [P-33](06_SPEC_P-33_supply_quick_fixes.md) — "create transfer" on the shortage panel (WhatsApp path already has it),
-  hourly shortage-flag retry (stop-and-ask: scheduled SOFTECH write), transit link key, exports from mirrors
+- [P-33](06_SPEC_P-33_supply_quick_fixes.md) — **(a), (c), (d), (e) BUILT 2026-10-31** (owner: "P-33 without retry";
+  yes to the `IsrPush` field + constraint). (a) shortage stock check «تحليل التحويل» / «إنشاء مقترحات التحويل» →
+  the WhatsApp path's linked ISR legs (`IsrPush.origin_shortage_list`, `purchasing/0040`; a list made from a WhatsApp
+  request moves through that request; shortage drafts never supersede the daily route draft). (c) `apps/transits/
+  linking.py` — link needs docnumber + both branches (+ match date ±3 d); ambiguous → no link + audit;
+  `audit_transit_links [--commit]` repair command (owner runs once). (d) shortage supplier exports read
+  `ItemSupplierLink` + `PurchaseLine`; live SOFTECH only when a mirror is stale; the file names the source.
+  (e) runbook §11.8b 7-morning purchases check. **(b) hourly shortage-flag retry NOT built** (owner deferred)
 - [P-41](06_SPEC_P-41_contract_receivables.md) — customer side limited to listed contracts (today's customer query would
   read all retail sales); SOFTECH's own allocations, no matching; `ar_contracts` freshness domain
 - [P-42](06_SPEC_P-42_supplier_terms.md) — `SupplierTerm` per supplier × category, invoice slices, early-pay list

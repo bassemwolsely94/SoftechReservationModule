@@ -1194,6 +1194,10 @@ class IsrPush(models.Model):
     origin_request = models.ForeignKey('supply.BranchRequest', on_delete=models.SET_NULL,
                                        null=True, blank=True, related_name='isr_pushes')
     origin_donor   = models.CharField(max_length=10, blank=True, default='')
+    # P-33 (a): the shortage list (/shortage) this two-leg transfer serves — the same legs as a
+    # WhatsApp request, for lists that did not come from one.
+    origin_shortage_list = models.ForeignKey('shortage.ShortageList', on_delete=models.SET_NULL,
+                                             null=True, blank=True, related_name='isr_pushes')
 
     class Meta:
         ordering = ['-created_at']
@@ -1213,12 +1217,19 @@ class IsrPush(models.Model):
                 condition=models.Q(origin_request__isnull=False,
                                    status__in=['proposed', 'approved', 'pushed']),
                 name='isrpush_one_live_leg_per_request_donor'),
+            # one live leg of each kind per (shortage list, donor) — P-33 (a)
+            models.UniqueConstraint(
+                fields=['origin_shortage_list', 'origin_donor', 'kind'],
+                condition=models.Q(origin_shortage_list__isnull=False,
+                                   status__in=['proposed', 'approved', 'pushed']),
+                name='isrpush_one_live_leg_per_list_donor'),
             # one live GENERAL draft per route (doc 30 phase A, 2026-10-24): #30 / #32 were
             # copies of the already-pushed #29. A new draft supersedes an older proposed one
             # (isr_guards); this stops two parallel clicks from both getting through.
             models.UniqueConstraint(
                 fields=['kind', 'branchcode', 'dest_branchcode'],
                 condition=models.Q(origin_isr__isnull=True, origin_request__isnull=True,
+                                   origin_shortage_list__isnull=True,
                                    status__in=['proposed', 'approved']),
                 name='isrpush_one_live_draft_per_route'),
         ]

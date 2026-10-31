@@ -438,7 +438,7 @@ def build_items_plan(node_branch, items):
 # ── create a proposal (PG only) + optional auto-approve+push ────────────────────
 def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None, linked=None,
                       coverage_months=None, params=None, origin_isr=None, origin_request=None,
-                      origin_donor='', notes=''):
+                      origin_shortage_list=None, origin_donor='', notes=''):
     """Save one PROPOSED draft. Guards (isr_guards, doc 30 phase A): the route must be valid
     (never HQ → HQ); a GENERAL draft (no origin request) supersedes an older proposed draft
     on the same route and is refused while an approved one waits there. Drafts tied to a
@@ -452,7 +452,7 @@ def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None
     isr_guards.validate_route(kind, source, dest)
     docvalue = sum(float(l['itemqty']) * float(l['itemcostprice']) for l in lines)
     branch = Branch.objects.filter(softech_branch_id=str(source)).first()
-    general = origin_isr is None and origin_request is None
+    general = origin_isr is None and origin_request is None and origin_shortage_list is None
     with transaction.atomic():
         older = isr_guards.check_route_free(kind, source, dest) if general else []
         isr_guards.retire(older, user=created_by)        # one live draft per route, always
@@ -461,7 +461,8 @@ def _persist_proposal(*, source, dest, kind, lines, run_id=None, created_by=None
             run_id=run_id, status=IsrPush.STATUS_PROPOSED, line_count=len(lines),
             docvalue=round(docvalue, 3), lines_snapshot=lines, created_by=created_by, linked_push=linked,
             coverage_months=coverage_months, params=params or {}, origin_isr=origin_isr,
-            origin_request=origin_request, origin_donor=origin_donor or '', notes=notes or '')
+            origin_request=origin_request, origin_shortage_list=origin_shortage_list,
+            origin_donor=origin_donor or '', notes=notes or '')
         isr_guards.link_superseded(older, p)
     return p
 

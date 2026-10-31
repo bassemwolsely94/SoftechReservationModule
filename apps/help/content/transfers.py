@@ -870,6 +870,7 @@ SCREENS = [
               '"Record receipt" on arrival, or "Force close" with a written reason (at least 10 characters) for exceptional cases.'),
         ],
         'tips': [
+            T('الشحنة تُربط بطلب التحويل فقط لو رقم المستند والفرع المرسل والفرع المستلم متطابقين (وتاريخ مطابقة SOFTECH في حدود 3 أيام لو موجود). أرقام مستندات SOFTECH تتكرر بين الفروع، فلو فيه أكثر من طلب بنفس الرقم لا يُربط ويظهر «❔ أكثر من طلب بنفس الرقم» في السجل.', 'A shipment links to a transfer request only when the document number, the sending branch and the receiving branch all match (and the SOFTECH match date is within 3 days when known). SOFTECH document numbers repeat across branches, so when several requests share the number nothing is linked and the log shows "❔ several requests with the same number".'),
             T('تنبيهات التأخير بقت ملخص واحد في اليوم لكل فرع مستلم: «N تحويل في انتظار الاستلام — أقدمها من X يوم» — بيوصل لصيدلي/مشرف الفرع ولمنسّق التحويلات في الرئيسي (الإعداد transit_digest_recipients، والافتراضي المديرين). مفيش إشعار لكل تحويل لكل شخص تاني.', 'Delay alerts are now one summary a day per receiving branch: "N transfers awaiting receipt — oldest X days" — sent to the branch pharmacist/supervisor and the HQ transfers coordinator (setting transit_digest_recipients; default: admins). No more one notification per transfer per person.'),
             T('لو الاتصال بـ SOFTECH وقع أثناء المزامنة، التحويل بيفضل زي ما هو (مش بيرجع «قيد النقل») ومفيش تنبيه عنه — بيتراجع في المزامنة الجاية.', 'If the SOFTECH connection drops during the sync, the transfer stays as it was (it is not flipped back to "in transit") and is not alerted — it is re-checked on the next sync.'),
             T('لو تحويل اتسجّل استلامه هنا ومستند الاستلام (25) ما ظهرش في SOFTECH بعد عدد الأيام المحدد في الإعدادات (افتراضي 3)، بيوصل تنبيه يومي للفرع المستلم والإدارة. زر «⏳ بانتظار تأكيد SOFTECH» يعرضهم كلهم.',
@@ -953,8 +954,8 @@ SCREENS = [
                  'بيعرض الشحنات اللي اتسجّل استلامها هنا ولسه مستند الاستلام (25) ما ظهرش في SOFTECH.\n• دي اللي لازم الفرع المستلم يسجّل استلامها في SOFTECH.\n• لو فضلت كده أكتر من عدد الأيام في الإعدادات (افتراضي 3) بيوصل تنبيه يومي. اضغطه تاني عشان ترجع للعرض العادي.',
                  'Shows shipments received here whose receipt document (25) has not appeared in SOFTECH yet.\n• These are the ones the receiving branch must still receive in SOFTECH.\n• If they stay like that longer than the days set in settings (default 3), a daily alert is sent. Press it again to return to the normal view.')},
         ],
-        'updated': '2026-10-30',
-        'change_note': T('ملخص يومي لكل فرع بدل إشعار لكل تحويل، وإصلاح مزامنة الاستلام', 'One daily summary per branch instead of one alert per transfer, and the receipt-sync fix'),
+        'updated': '2026-10-31',
+        'change_note': T('ربط الشحنة بطلب التحويل يحتاج تطابق الفرعين وليس رقم المستند وحده', 'Linking a shipment to a transfer request needs both branches to match, not the document number alone'),
     },
     {
         'key': 'transfers.pick_zones',
