@@ -10,9 +10,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name='staffprofile',
+            name='mfa_device_epoch',
+            field=models.PositiveIntegerField(default=0, verbose_name='رقم إصدار الأجهزة المحفوظة'),
+        ),
         migrations.AlterField(
             model_name='useractivitylog',
             name='action',
-            field=models.CharField(choices=[('login_success', 'دخول ناجح'), ('login_failed', 'محاولة دخول فاشلة'), ('password_changed', 'تغيير كلمة المرور'), ('password_reset', 'إعادة تعيين كلمة المرور بواسطة المدير'), ('role_changed', 'تغيير الدور'), ('branch_changed', 'تغيير الفرع'), ('activated', 'تفعيل الحساب'), ('deactivated', 'تعطيل الحساب'), ('permissions_changed', 'تغيير الصلاحيات'), ('created', 'إنشاء المستخدم'), ('mfa_enabled', 'تفعيل المصادقة الثنائية'), ('mfa_disabled', 'إيقاف المصادقة الثنائية'), ('mfa_verified', 'اجتياز المصادقة الثنائية'), ('mfa_failed', 'فشل المصادقة الثنائية'), ('login_locked', 'إيقاف الدخول مؤقتاً'), ('login_unlocked', 'رفع إيقاف الدخول'), ('mfa_challenge', 'طلب رمز التحقق')], max_length=30, verbose_name='الإجراء'),
+            field=models.CharField(choices=[('login_success', 'دخول ناجح'), ('login_failed', 'محاولة دخول فاشلة'), ('password_changed', 'تغيير كلمة المرور'), ('password_reset', 'إعادة تعيين كلمة المرور بواسطة المدير'), ('role_changed', 'تغيير الدور'), ('branch_changed', 'تغيير الفرع'), ('activated', 'تفعيل الحساب'), ('deactivated', 'تعطيل الحساب'), ('permissions_changed', 'تغيير الصلاحيات'), ('created', 'إنشاء المستخدم'), ('mfa_enabled', 'تفعيل المصادقة الثنائية'), ('mfa_disabled', 'إيقاف المصادقة الثنائية'), ('mfa_verified', 'اجتياز المصادقة الثنائية'), ('mfa_failed', 'فشل المصادقة الثنائية'), ('login_locked', 'إيقاف الدخول مؤقتاً'), ('login_unlocked', 'رفع إيقاف الدخول'), ('mfa_challenge', 'طلب رمز التحقق'), ('mfa_devices_forgotten', 'إلغاء الأجهزة المحفوظة')], max_length=30, verbose_name='الإجراء'),
         ),
     ]

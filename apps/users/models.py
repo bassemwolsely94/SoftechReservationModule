@@ -90,6 +90,7 @@ USER_ACTIVITY_ACTION_CHOICES = [
     ('login_locked',        'إيقاف الدخول مؤقتاً'),
     ('login_unlocked',      'رفع إيقاف الدخول'),
     ('mfa_challenge',       'طلب رمز التحقق'),
+    ('mfa_devices_forgotten', 'إلغاء الأجهزة المحفوظة'),
 ]
 
 # Roles that must pass 2FA at login once enforcement is switched on
@@ -222,6 +223,8 @@ class StaffProfile(models.Model):
     mfa_secret       = models.CharField(max_length=64, blank=True, default='', verbose_name='سر TOTP')
     mfa_backup_codes = models.JSONField(default=list, blank=True, verbose_name='رموز الاسترجاع (مجزّأة)')
     mfa_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ تفعيل المصادقة الثنائية')
+    # Bumped by "forget saved devices"; part of the device-token fingerprint (N0/H7).
+    mfa_device_epoch = models.PositiveIntegerField(default=0, verbose_name='رقم إصدار الأجهزة المحفوظة')
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, null=True, verbose_name='تاريخ الإنشاء')

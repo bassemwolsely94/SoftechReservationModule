@@ -123,6 +123,18 @@ def _log_auth(action: str, profile, ip: str, note: str = ''):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def forget_devices_admin_view(request, pk):
+    """Admin cancels another user's saved "remember this device" tokens (N0/H7)."""
+    from . import mfa
+    profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
+    if not profile:
+        return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    mfa.forget_devices(profile, getattr(request.user, 'staff_profile', None), client_ip(request))
+    return Response({'detail': f'تم إلغاء الأجهزة المحفوظة لـ {profile.full_name or profile.user.username}'})
+
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([LoginRateThrottle])
 def login_view(request):

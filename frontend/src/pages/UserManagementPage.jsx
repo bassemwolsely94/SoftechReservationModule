@@ -468,6 +468,7 @@ const ACTION_LABELS = {
   deactivated:         'تعطيل الحساب',
   permissions_changed: 'تغيير الصلاحيات',
   created:             'إنشاء المستخدم',
+  mfa_devices_forgotten: 'إلغاء الأجهزة المحفوظة',
 }
 
 const ACTION_ICON = {
@@ -481,6 +482,7 @@ const ACTION_ICON = {
   deactivated:      '🚫',
   permissions_changed: '🔒',
   created:          '👤',
+  mfa_devices_forgotten: '📵',
 }
 
 function ActivityLogModal({ user, onClose }) {
@@ -576,6 +578,11 @@ export default function UserManagementPage() {
 
   const unlockLoginMutation = useMutation({
     mutationFn: (id) => usersApi.unlockLogin(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  })
+
+  const forgetDevicesMutation = useMutation({
+    mutationFn: (id) => usersApi.forgetDevices(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
 
@@ -758,6 +765,16 @@ export default function UserManagementPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         }
+                      </button>
+
+                      {/* Forget saved devices (2FA "remember this device") */}
+                      <button data-tour="admin-users-forget-devices"
+                        onClick={() => forgetDevicesMutation.mutate(u.id)}
+                        disabled={forgetDevicesMutation.isPending}
+                        title="إلغاء الأجهزة المحفوظة (يطلب رمز التحقق عند الدخول التالي)"
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {forgetDevicesMutation.isSuccess && forgetDevicesMutation.variables === u.id ? '✓' : '📵'}
                       </button>
 
                       {/* Activity log */}
