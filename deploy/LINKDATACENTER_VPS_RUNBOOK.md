@@ -1574,7 +1574,7 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 | Out of memory / swapping | `htop`: stop workbench Vite/tests; keep EasyOCR/Whisper off; `journalctl -u elrezeiky-ocr` (sidecar hitting its 2 GB cap?); ask LDC for 16 GB |
 | OCR slow / screens slow during OCR | expected on 4 vCPU during big bundles; check `OMP_THREAD_LIMIT=1`, sidecar `CPUQuota`; run big bundles after hours; 16 GB / 8 vCPU plan |
 | `paddleocr` engine unavailable | `systemctl status elrezeiky-ocr` · `curl 127.0.0.1:8077/health` · `PADDLE_OCR_URL` in `.env` |
-| Every admin is login-locked (5 wrong tries) | On the server: `cd /opt/elrezeiky/app && venv/bin/python manage.py unlock_login <username>` — lifts the lock and logs it |
+| Every admin is login-locked (5 wrong tries) | On the server: `cd /opt/elrezeiky/app && sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py unlock_login <username>` — lifts the lock and logs it |
 | Cert expired | `sudo certbot renew` · `systemctl list-timers | grep certbot` |
 
 ---
