@@ -193,7 +193,7 @@ export default function PurchasePricesTab() {
           <input type="checkbox" checked={all} onChange={e => setAll(e.target.checked)} />
           اعرض الأصناف ذات المورد الواحد
         </label>
-        <button type="button" className={btnGhost} disabled={xlsM.isPending || !d} onClick={() => xlsM.mutate()}>
+        <button data-tour="purchasing-supply-prices-export" type="button" className={btnGhost} disabled={xlsM.isPending || !d} onClick={() => xlsM.mutate()}>
           {xlsM.isPending ? '…' : '⬇ Excel'}
         </button>
         <div className="flex gap-1 ms-auto">
@@ -208,9 +208,9 @@ export default function PurchasePricesTab() {
       {bq.isError && <div className="text-sm text-rose-600">{errText(bq.error)}</div>}
       {t && (
         <div className="flex flex-wrap gap-2 text-xs">
-          <button type="button" onClick={() => setState('')}><Chip tone={state ? 'gray' : 'blue'}>كل الأصناف {t.items}</Chip></button>
-          <button type="button" onClick={() => setState('cheaper')}><Chip tone={state === 'cheaper' ? 'amber' : 'gray'}>يوجد أرخص {t.cheaper}</Chip></button>
-          <button type="button" onClick={() => setState('best')}><Chip tone={state === 'best' ? 'emerald' : 'gray'}>نشتري من الأفضل {t.best}</Chip></button>
+          <button data-tour="purchasing-supply-prices-state" type="button" onClick={() => setState('')}><Chip tone={state ? 'gray' : 'blue'}>كل الأصناف {t.items}</Chip></button>
+          <button data-tour="purchasing-supply-prices-state" type="button" onClick={() => setState('cheaper')}><Chip tone={state === 'cheaper' ? 'amber' : 'gray'}>يوجد أرخص {t.cheaper}</Chip></button>
+          <button data-tour="purchasing-supply-prices-state" type="button" onClick={() => setState('best')}><Chip tone={state === 'best' ? 'emerald' : 'gray'}>نشتري من الأفضل {t.best}</Chip></button>
           <Chip tone="amber" title="الفرق × سعر الجمهور الحالي × معدل البيع الشهري للشبكة">توفير محتمل/شهر {money(Math.round(t.saving_month))} ج</Chip>
           <span className="text-content/50">من {money(t.lines)} سطر شراء · {d.since} {fa()} {d.today}</span>
         </div>

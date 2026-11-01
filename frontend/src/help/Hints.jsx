@@ -2,13 +2,13 @@
  * Button emphasis outside a tour — both read the same «اعرض لي» text the tours use
  * (the screen's `tour` + its module's journey steps on this screen); no text of their own.
  *
- *   HintsLayer — «💡 تلميحات الأزرار» (Ctrl+F1 or the help panel): every explained
+ *   HintsLayer — «💡 تلميحات الأزرار» (Alt+F1 or the help panel): every explained
  *                element gets a dashed outline (amber when the step has a ⚠), and hovering
  *                or focusing it shows a small card: «label», what it does, «متى؟», ⚠.
  *                The card never takes clicks; the button works as usual.
  *   TourOffer  — a small «جديد هنا؟ 👆 اعرض لي» chip, once per screen version, for a
- *                screen whose help the user has not read yet. No modal; ✕ or leaving
- *                the screen hides it.
+ *                screen whose help the user has not read yet (not on the home page, which
+ *                has «👋 ابدأ من هنا»). No modal; ✕ or leaving the screen hides it.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -16,6 +16,7 @@ import { helpApi } from '../api/client'
 import useLangStore from '../store/langStore'
 import useHelpStore from './helpStore'
 import { useCurrentHelp } from './useHelpIndex'
+import { startScreenTour } from './Tour'
 import { pick } from './text'
 
 const BRAND = 'var(--c-brand-400)'
@@ -31,13 +32,14 @@ function useScreenHelp(key, enabled) {
   })
 }
 
-/** target → step: the screen's own tour wins over a journey step on the same anchor. */
+/** target → step: the screen's own tour wins over its hints, hints over a journey step. */
 export function hintSteps(data) {
   const map = new Map()
   if (!data) return map
   for (const j of data.module?.journeys || []) {
     for (const st of j.steps || []) if (st.screen === data.key && !map.has(st.target)) map.set(st.target, st)
   }
+  for (const st of data.hints || []) map.set(st.target, st)
   for (const st of data.tour || []) map.set(st.target, st)
   return map
 }
@@ -69,10 +71,14 @@ function HintsBody({ steps }) {
   const [active, setActive] = useState(null)        // { step, rect }
 
   useEffect(() => {
+    // nearest anchor that this screen explains — a shared component's own anchor that the
+    // screen has no step for must not hide the screen's wrapper (e.g. search inside pos-order-search)
     const find = (node) => {
-      const el = node?.closest?.('[data-tour]')
-      const step = el && steps.get(el.getAttribute('data-tour'))
-      return step ? { el, step } : null
+      for (let el = node?.closest?.('[data-tour]'); el; el = el.parentElement?.closest('[data-tour]')) {
+        const step = steps.get(el.getAttribute('data-tour'))
+        if (step) return { el, step }
+      }
+      return null
     }
     const show = (e) => {
       const hit = find(e.target)
@@ -149,7 +155,7 @@ function HintsBody({ steps }) {
         <span>💡 {steps.size
           ? tr(`تلميحات الأزرار شغالة — ${steps.size} عنصر مشروح هنا`, `Button hints on — ${steps.size} explained here`)
           : tr('تلميحات الأزرار شغالة — مفيش شرح أزرار للشاشة دي', 'Button hints on — none for this screen')}</span>
-        <span className="hidden sm:inline opacity-75">Ctrl+F1</span>
+        <span className="hidden sm:inline opacity-75">Alt+F1</span>
         <button type="button" onClick={toggleHints} data-tour="general-help-center-hints-off"
                 className="rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5">
           {tr('إيقاف ✕', 'Off ✕')}
@@ -161,11 +167,13 @@ function HintsBody({ steps }) {
 
 export function TourOffer() {
   const { screen } = useCurrentHelp()
-  const { tour, isOpen, hints, seen, offered, markOffered, startTour } = useHelpStore()
+  const { tour, isOpen, hints, seen, offered, markOffered } = useHelpStore()
   const lang = useLang()
   const en = lang === 'en'
   const key = screen?.key
-  const fresh = !!(screen?.has_tour && screen.updated && seen[key] !== screen.updated && offered[key] !== screen.updated)
+  // the home page has «👋 ابدأ من هنا» (FirstDay) for first visits — no chip there
+  const fresh = key !== 'general.dashboard'
+    && !!(screen?.has_tour && screen.updated && seen[key] !== screen.updated && offered[key] !== screen.updated)
   const [shown, setShown] = useState(null)          // the screen key the chip is showing for
 
   // wait a moment after arriving (no flash while passing through), then offer once
@@ -176,16 +184,14 @@ export function TourOffer() {
   }, [key, fresh, tour, isOpen, hints]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const visible = shown && shown === key && !tour && !isOpen && !hints   // the hints bar sits in the same corner
-  const { data } = useScreenHelp(key, !!visible)
   if (!visible) return null
 
   return (
     <div dir={en ? 'ltr' : 'rtl'} data-tour="general-help-center-offer"
          className="no-print fixed bottom-24 sm:bottom-4 start-4 z-[94] flex items-center gap-2 rounded-xl bg-surface border border-brand-300 shadow-lg ps-3 pe-1.5 py-1.5 text-xs animate-fade-in">
       <span className="text-content">{en ? 'New here?' : 'جديد هنا؟'}</span>
-      <button type="button" disabled={!data?.tour?.length}
-              onClick={() => { setShown(null); startTour(data.key, data.tour) }}
-              className="bg-brand-600 text-white rounded-lg px-3 py-1 hover:bg-brand-700 disabled:opacity-50">
+      <button type="button" onClick={() => { setShown(null); startScreenTour(key).catch(() => {}) }}
+              className="bg-brand-600 text-white rounded-lg px-3 py-1 hover:bg-brand-700">
         👆 {en ? 'Show me this screen' : 'اعرض لي الشاشة دي'}
       </button>
       <button type="button" onClick={() => setShown(null)} aria-label={en ? 'Not now' : 'مش دلوقتي'}

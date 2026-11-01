@@ -66,7 +66,7 @@ function Row({ r, me, onAct, busy }) {
             <span className="flex items-center gap-2">
               <input autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="السبب"
                 className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-48" />
-              <button disabled={busy || !reason.trim()} onClick={() => onAct(r.id, 'reject', { reason })}
+              <button data-tour="customers-merge-reject-confirm" disabled={busy || !reason.trim()} onClick={() => onAct(r.id, 'reject', { reason })}
                 className="px-3 py-1 rounded-lg bg-red-600 text-white disabled:opacity-40">رفض</button>
               <button onClick={() => setRejecting(false)} className="text-gray-500">إلغاء</button>
             </span>

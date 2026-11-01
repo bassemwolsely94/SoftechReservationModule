@@ -25,6 +25,7 @@ Safety:
 import logging
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 from .models import PosSelectionEvent, SoftechSalesOrder
@@ -38,7 +39,7 @@ _REACHED_SOFTECH = {SoftechSalesOrder.STATUS_PUSHING,
 
 
 def write_enabled():
-    return bool(getattr(settings, 'POS_CANCEL_WRITE_ENABLED', False))
+    return writer_allowed('POS_CANCEL_WRITE_ENABLED')
 
 
 def _sold_codes_by_cart(tokens):

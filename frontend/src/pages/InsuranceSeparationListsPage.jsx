@@ -94,7 +94,7 @@ export default function InsuranceSeparationListsPage() {
                   <div className="flex gap-1 items-center">
                     <input className={inp} value={editLabel} onChange={e => setEditLabel(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && saveListEdit(l)} autoFocus />
-                    <button onClick={() => saveListEdit(l)} className="text-blue-600 text-xs px-1">حفظ</button>
+                    <button data-tour="insurance-separation-lists-rename-save" onClick={() => saveListEdit(l)} className="text-blue-600 text-xs px-1">حفظ</button>
                     <button onClick={() => setEditListId(null)} className="text-gray-400 text-xs px-1">إلغاء</button>
                   </div>
                 ) : (
@@ -104,7 +104,7 @@ export default function InsuranceSeparationListsPage() {
                       <div className="text-xs text-gray-400">{l.name_count} اسم {l.is_active ? '' : '· موقوفة'}</div>
                     </div>
                     <div data-tour="insurance-separation-lists-list-actions" className="flex items-center gap-2 text-xs">
-                      <button onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
+                      <button data-tour="insurance-separation-lists-rename" onClick={() => { setEditListId(l.id); setEditLabel(l.label) }} title="تعديل الاسم" className="text-gray-400 hover:text-blue-600">✏️</button>
                       <button onClick={() => toggleListActive(l)} data-tour="insurance-separation-lists-toggle-active" title={l.is_active ? 'إيقاف' : 'تفعيل'}
                         className={l.is_active ? 'text-green-600' : 'text-gray-400'}>{l.is_active ? 'مُفعَّلة' : 'موقوفة'}</button>
                       <button onClick={() => delList(l)} data-tour="insurance-separation-lists-delete" className="text-red-500 hover:text-red-700">حذف</button>
@@ -150,13 +150,13 @@ export default function InsuranceSeparationListsPage() {
                         <td className="px-2 py-1.5 text-left whitespace-nowrap">
                           {editNameId === n.id ? (
                             <>
-                              <button onClick={() => saveNameEdit(n)} className="text-blue-600 text-xs px-1">حفظ</button>
+                              <button data-tour="insurance-separation-lists-edit-name-save" onClick={() => saveNameEdit(n)} className="text-blue-600 text-xs px-1">حفظ</button>
                               <button onClick={() => setEditNameId(null)} className="text-gray-400 text-xs px-1">إلغاء</button>
                             </>
                           ) : (
                             <>
-                              <button onClick={() => { setEditNameId(n.id); setEditNameVal(n.name) }} className="text-gray-400 hover:text-blue-600 text-xs px-1">✏️</button>
-                              <button onClick={() => delName(n)} className="text-red-500 hover:text-red-700 text-xs px-1">حذف</button>
+                              <button data-tour="insurance-separation-lists-edit-name" onClick={() => { setEditNameId(n.id); setEditNameVal(n.name) }} className="text-gray-400 hover:text-blue-600 text-xs px-1">✏️</button>
+                              <button data-tour="insurance-separation-lists-delete-name" onClick={() => delName(n)} className="text-red-500 hover:text-red-700 text-xs px-1">حذف</button>
                             </>
                           )}
                         </td>

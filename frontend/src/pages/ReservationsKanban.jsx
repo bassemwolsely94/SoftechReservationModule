@@ -8,6 +8,7 @@ import CanDo from '../components/CanDo'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
+import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -55,6 +56,7 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin, pen
   const pri = PRIORITY_BADGE[reservation.priority] || PRIORITY_BADGE.normal
   const transitions = STATUS_TRANSITIONS[reservation.status] || []
   const isBusy = !!pendingStatus  // mutation in flight for this card
+  const [cancel, setCancel] = useState(null)   // { reason, text } while asking why
 
   return (
     <div
@@ -131,7 +133,7 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin, pen
               <button
                 key={s}
                 disabled={isBusy}
-                onClick={() => !isBusy && onStatusChange(reservation.id, s)}
+                onClick={() => !isBusy && (s === 'cancelled' ? setCancel(EMPTY_CANCEL) : onStatusChange(reservation.id, s))}
                 style={{ borderColor: tc?.dot, color: tc?.color }}
                 className={`text-xs border rounded px-2 py-0.5 transition-opacity bg-white
                   ${isBusy ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80'}`}
@@ -140,6 +142,17 @@ function ReservationCard({ reservation, onStatusChange, onOpen, isCCOrAdmin, pen
               </button>
             )
           })}
+        </div>
+      )}
+      {cancel && (
+        <div className="mt-2 space-y-1.5" onClick={e => e.stopPropagation()}>
+          <CancelReasonPicker value={cancel} onChange={setCancel} autoFocus compact />
+          <div className="flex gap-1">
+            <button data-tour="reservations-board-cancel-confirm" disabled={isBusy || !cancelNote(cancel)}
+              onClick={() => { onStatusChange(reservation.id, 'cancelled', cancelNote(cancel)); setCancel(null) }}
+              className="text-xs px-2 py-0.5 rounded bg-red-600 text-white disabled:opacity-40">تأكيد الإلغاء</button>
+            <button onClick={() => setCancel(null)} className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-500">رجوع</button>
+          </div>
         </div>
       )}
     </div>
@@ -381,13 +394,14 @@ export default function ReservationsKanban() {
       )
       return { previous }
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
       // Roll back on error
       if (context?.previous !== undefined) {
         qc.setQueryData(['reservations-kanban',
           filterBranch, filterPriority, filterStatus, search, dateFrom, dateTo],
           context.previous)
       }
+      alert(err?.response?.data?.detail || 'تعذّر تغيير الحالة')
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['reservations-kanban'] }),
   })
@@ -539,7 +553,7 @@ export default function ReservationsKanban() {
               onChange={e => setDateTo(e.target.value)}
             />
             {(dateFrom || dateTo) && (
-              <button
+              <button data-tour="reservations-board-dates-clear"
                 onClick={() => { setDateFrom(''); setDateTo('') }}
                 className="text-gray-400 hover:text-gray-600 transition-colors text-base leading-none"
                 title="مسح التواريخ"
@@ -557,7 +571,7 @@ export default function ReservationsKanban() {
       ) : reservationsError ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm">
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">حدث خطأ أثناء تحميل الحجوزات.</div>
-          <button className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" onClick={() => reservationsQuery.refetch()}>
+          <button data-tour="reservations-board-retry" className="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" onClick={() => reservationsQuery.refetch()}>
             إعادة المحاولة
           </button>
         </div>

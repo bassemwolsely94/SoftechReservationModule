@@ -24,6 +24,7 @@ until validated on the TEST host with the demo item.
 """
 import logging
 from django.conf import settings
+from config.writers import writer_allowed
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ SUSPEND_REASONS   = ('on_request', 'obsolete')
 
 
 def _enabled():
-    return bool(getattr(settings, 'SHORTAGE_SOFTECH_WRITE_ENABLED', False))
+    return writer_allowed('SHORTAGE_SOFTECH_WRITE_ENABLED')
 
 
 def _usercode():

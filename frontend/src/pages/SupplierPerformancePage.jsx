@@ -244,7 +244,7 @@ export default function SupplierPerformancePage() {
         >
           {cols.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
         </select>
-        <RefreshButton loading={loading} onClick={load}>
+        <RefreshButton data-tour="purchasing-suppliers-refresh" loading={loading} onClick={load}>
           🔄 تحديث
         </RefreshButton>
       </div>

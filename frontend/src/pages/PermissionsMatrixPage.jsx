@@ -452,7 +452,7 @@ export default function PermissionsMatrixPage() {
                   </tbody>
                 </table>
                 {isAdmin && (
-                  <div className="px-5 py-3 border-t bg-gray-50 flex gap-3 justify-end">
+                  <div data-tour="admin-permissions-notifiers-all" className="px-5 py-3 border-t bg-gray-50 flex gap-3 justify-end">
                     <button
                       onClick={() => notifiers.forEach(n => setNotifierMode(activeRole, n.value, 'show'))}
                       className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">إظهار الكل</button>

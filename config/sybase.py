@@ -12,6 +12,10 @@ import logging
 
 logger = logging.getLogger('elrezeiky.sync')
 
+# P-54: the single-writer gate lives in config/writers.py (no jpype import there); re-exported
+# here so `from config.sybase import writer_allowed` works as the spec names it.
+from config.writers import writer_allowed, writer_instance  # noqa: E402,F401
+
 JDBC_DRIVER = 'com.sybase.jdbc3.jdbc.SybDriver'
 
 # ── JAR discovery (VPS-safe) ─────────────────────────────────────────────────

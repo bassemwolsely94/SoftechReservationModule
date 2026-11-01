@@ -15,6 +15,7 @@ Guardrails:
 from decimal import Decimal
 
 from django.conf import settings
+from config.writers import writer_allowed
 from django.db import transaction
 
 from apps.pos_orders import pricing
@@ -25,7 +26,7 @@ OFFER_WORKFLOW_CODE = 'offer_override'
 
 
 def execution_enabled():
-    return bool(getattr(settings, 'POS_OFFERS_EXECUTION_ENABLED', False))
+    return writer_allowed('POS_OFFERS_EXECUTION_ENABLED')
 
 
 def resolve_order_customer(order):

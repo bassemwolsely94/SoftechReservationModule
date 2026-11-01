@@ -52,7 +52,7 @@ function RevokeButton({ c, t, onRevoke, busy }) {
     <span className="flex gap-1">
       <input className="input-field text-xs w-44" value={reason} onChange={e => setReason(e.target.value)}
              placeholder={t('السبب (إلزامي)', 'Reason (required)')} />
-      <button className="btn-primary text-xs" disabled={busy || reason.trim().length < 5}
+      <button data-tour="gamification-main-revoke-confirm" className="btn-primary text-xs" disabled={busy || reason.trim().length < 5}
               onClick={() => onRevoke(c.id, reason, () => setOpen(false))}>{t('تأكيد', 'Confirm')}</button>
       <button className="btn-secondary text-xs" onClick={() => setOpen(false)}>{t('تراجع', 'Back')}</button>
     </span>

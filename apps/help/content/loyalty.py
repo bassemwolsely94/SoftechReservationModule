@@ -2,6 +2,8 @@ from . import T
 
 MODULE = {
     'key': 'loyalty', 'group': 'customers', 'icon': '🏆',
+    'brief': T('نقاط العملاء وبرنامج الولاء والإحالات، ونقاط كل فرع.',
+               'Customer points, the loyalty program and referrals, and each branch\'s points.'),
     'title': T('النقاط والولاء والإحالات', 'Points, loyalty & referrals'),
     'summary': T(
         'رصيد نقاط العميل الأساسي يُحفظ في SOFTECH ويكتسبه من مشتريات قنوات النقدي والتوصيل (التعاقد والتأمين لا يكتسبان نقاطاً). '
@@ -31,6 +33,9 @@ MODULE = {
                       'Share the code, invite the referred person, validate them, then see the referrer points on their account.'),
          'steps': [
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-mycode', 'perm': 'customers',
+             'label': T('شارك هذا الكود مع أصدقائك', 'Share this code with your friends'),
+             'when': T('لما عميل راضي يقول إنه هيرشّح الصيدلية لحد يعرفه.',
+                       'When a happy customer says they will recommend the pharmacy to someone.'),
              'text': T('شارك الكود أو الـ QR مع العميل اللي هيحيل أصحابه.', 'Share the code or QR with the customer who will refer friends.'),
              'open_hint': T('تبويب «كودي».', 'The "My code" tab.')},
             {'screen': 'loyalty.referral', 'target': 'loyalty-referral-invite', 'perm': 'customers',
@@ -184,6 +189,7 @@ SCREENS = [
         'related': ['loyalty.branch', 'customers.detail'],
         'tour': [
             {'target': 'loyalty-program-customer',
+             'label': T('ابحث عن عميل باسم أو رقم هاتف…', 'Search a customer by name or phone…'),
              'text': T('ابحث عن العميل بالاسم أو الهاتف أو كود PIC، فيظهر حسابه وسجلاته.', 'Search the customer by name, phone or PIC to show their account and logs.'),
              'when': T('لما عميل يتصل يسأل على نقاطه أو يشتكي من رصيده.', 'When a customer calls about their points or complains about their balance.'),
              'more': T(
@@ -232,13 +238,29 @@ SCREENS = [
             {'target': 'loyalty-program-tiers', 'label': T('درجات الولاء', 'Loyalty tiers'),
              'text': T('الدرجات والحد الأدنى للنقاط لكل درجة ومضاعف الاكتساب.', 'The tiers, the minimum points for each and the earn multiplier.')},
             {'target': 'loyalty-program-header',  # from the GitHub-side tour
+             'label': T('نظام النقاط والولاء', 'Points & loyalty system'),
+             'when': T('نقطة البداية: ابحث عن العميل تحتها لتشوف نقاطه.', 'Starting point: search for the customer below to see their points.'),
              'text': T('نظام النقاط والولاء.',
                        'The points and loyalty program.'),
              'more': T(
                  'هنا بتشوف رصيد أي عميل وتعدّله، وتراجع المكافآت ودرجات الولاء.\n• الرصيد الأساسي محفوظ في SOFTECH؛ أي تعديل من هنا بيتكتب هناك ويتسجّل باسمك.',
                  "Here you see and adjust any customer's balance, and review rewards and loyalty tiers.\n• The main balance lives in SOFTECH; any adjustment here is written there and logged under your name.")},
         ],
-        'updated': '2026-10-26',
+        'hints': [
+            {'target': 'customer-search-change',
+             'label': T('✕ تغيير', '✕ Change'),
+             'text': T('يلغي العميل المختار ويرجّع البحث عشان تختار عميل تاني.', 'Clears the chosen customer and brings the search back to pick another.'),
+             'when': T('لو اخترت عميل غلط — اتأكد من الاسم والرقم قبل ما تكمّل.', 'When you picked the wrong customer — check the name and number before going on.')},
+            {'target': 'customer-search-manual',
+             'label': T('أدخل هاتف يدوياً', 'Enter phone manually'),
+             'text': T('يفتح خانة تكتب فيها رقم تليفون عميل مش متسجّل عندنا.', 'Opens a box to type the phone of a customer we do not have on file.'),
+             'when': T('لو البحث مالقاش العميل. دوّر بالرقم كامل الأول عشان ماتعملش عميل مكرر.', 'When search finds no one. Search the full number first so you do not create a duplicate.')},
+            {'target': 'customer-search-manual-confirm',
+             'label': T('تأكيد الرقم', 'Confirm number'),
+             'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
+             'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -287,7 +309,21 @@ SCREENS = [
                  '«← بحث عن عميل آخر» بيمسح العميل الحالي ويرجّعك للبحث للعميل اللي بعده.',
                  '"← Search another customer" clears the current customer and returns you to the search for the next one.')},
         ],
-        'updated': '2026-10-26',
+        'hints': [
+            {'target': 'customer-search-change',
+             'label': T('✕ تغيير', '✕ Change'),
+             'text': T('يلغي العميل المختار ويرجّع البحث عشان تختار عميل تاني.', 'Clears the chosen customer and brings the search back to pick another.'),
+             'when': T('لو اخترت عميل غلط — اتأكد من الاسم والرقم قبل ما تكمّل.', 'When you picked the wrong customer — check the name and number before going on.')},
+            {'target': 'customer-search-manual',
+             'label': T('أدخل هاتف يدوياً', 'Enter phone manually'),
+             'text': T('يفتح خانة تكتب فيها رقم تليفون عميل مش متسجّل عندنا.', 'Opens a box to type the phone of a customer we do not have on file.'),
+             'when': T('لو البحث مالقاش العميل. دوّر بالرقم كامل الأول عشان ماتعملش عميل مكرر.', 'When search finds no one. Search the full number first so you do not create a duplicate.')},
+            {'target': 'customer-search-manual-confirm',
+             'label': T('تأكيد الرقم', 'Confirm number'),
+             'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
+             'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -338,12 +374,16 @@ SCREENS = [
              'text': T('كودك مع QR ورابط للمشاركة، وإجمالي إحالاتك والتحويلات الناجحة والنقاط المكتسبة.', 'Your code with a QR and a share link, and your total referrals, conversions and points earned.'),
              'open_hint': T('تبويب «كودي».', 'The "My code" tab.')},
             {'target': 'loyalty-referral-header',  # from the GitHub-side tour
+             'label': T('نظام الإحالات', 'Referral system'),
+             'when': T('لمتابعة العملاء اللي جم بإحالة أو لمعرفة كود الإحالة بتاعك.', 'To follow referred customers or find your own referral code.'),
              'text': T('«نظام الإحالات»: متابعة العملاء المُحالين وكود الإحالة الخاص بك.',
                        '«Referrals»: follow up referred customers and your own referral code.'),
              'more': T(
                  'الإحالة بتمشي: دعوة ← تسجيل ← تحقق ← مكافأة المُحيل بنقاط إضافية.\n• فيه حماية من الاحتيال (أرقام وهمية أو مكررة)، فراجع قبل ما تتحقق.',
                  'A referral moves: invite → register → validate → the referrer is rewarded with extra points.\n• There is fraud protection (fake or repeated numbers), so review before validating.')},
             {'target': 'loyalty-referral-row-actions',  # from the GitHub-side tour
+             'label': T('دعوة · تحقق · الأحداث', 'Invite · Verify · Events'),
+             'when': T('على صف الإحالة: الزر الظاهر بيتغيّر حسب حالتها.', 'On a referral row: the button shown depends on its status.'),
              'text': T('«دعوة» يظهر للإحالة المنتظرة لإرسال دعوة واتساب، «تحقق» للمسجَّلة، و«الأحداث» لسجل الإحالة.',
                        '«Invite» shows for pending referrals to send a WhatsApp invite, «Validate» for registered ones, and «Events» for the referral log.'),
              'more': T(

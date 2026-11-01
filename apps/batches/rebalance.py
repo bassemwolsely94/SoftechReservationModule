@@ -10,7 +10,7 @@ Complements the per-item A4 dialog (expiry_audit.rebalance_suggest, live stkbal)
 whole-network sweep, batch-level and FEFO-aware, from the daily StockExpiryBalance mirror.
 
 Deterministic rules
-  * stock  = StockExpiryBalance, quarantine stores excluded, qty > 0 (all branch nodes, daily mirror)
+  * stock  = StockExpiryBalance, live stores only (P-26 store roles), qty > 0 (all branch nodes, daily mirror)
   * rate   = ItemDemandMetrics.qty_90d / 90 per (item, branch), latest engine run
   * source, per item, batches in expiry order (FEFO): a batch expiring in d days sells
             min(qty, rate·d − already-sold); the rest is AT RISK
@@ -104,7 +104,7 @@ def _load(today, horizon):
     from apps.purchasing.models import ItemDemandMetrics
     from django.db.models import Max
 
-    live = (StockExpiryBalance.objects.filter(is_quarantine=False, qty__gt=0)
+    live = (StockExpiryBalance.objects.filter(store_role='live', qty__gt=0)
             .values('item_code', 'branch_code', 'batch_no', 'expiry_date')
             .annotate(q=Sum('qty')))
     batches, target_stock, items = [], defaultdict(list), set()

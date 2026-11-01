@@ -6,10 +6,31 @@ from django.urls import path
 
 from . import views
 from . import recon_views
+from . import receivables_views   # P-41
+from . import supplier_terms_views as stv   # P-42
+from . import cash_views                     # P-40
 
 urlpatterns = [
 
     # ── A/P–A/R Reconciliation (سداد فواتير) — doc 23 ─────────────────────────
+    path('receivables/summary/', receivables_views.receivables_summary, name='receivables-summary'),
+    path('receivables/terms/', receivables_views.receivables_terms, name='receivables-terms'),
+    path('receivables/export/', receivables_views.receivables_export, name='receivables-export'),
+    path('receivables/refresh/', receivables_views.receivables_refresh, name='receivables-refresh'),
+    path('receivables/<str:personcode>/invoices/', receivables_views.receivables_invoices,
+         name='receivables-invoices'),
+    path('cash-view/', cash_views.cash_view, name='cash-view'),
+    path('cash-view/lines/<str:key>/', cash_views.cash_view_line, name='cash-view-line'),
+    path('cash-view/opening-balance/', cash_views.cash_opening_balance, name='cash-view-opening'),
+    path('cash-view/fixed-outflows/', cash_views.cash_fixed_outflows, name='cash-view-fixed'),
+    path('cash-view/export/', cash_views.cash_view_export, name='cash-view-export'),
+    path('supplier-terms/', stv.supplier_terms, name='supplier-terms'),
+    path('supplier-terms/calendar/', stv.supplier_terms_calendar, name='supplier-terms-calendar'),
+    path('supplier-terms/on-time/', stv.supplier_terms_on_time, name='supplier-terms-on-time'),
+    path('supplier-terms/early-pay/', stv.supplier_terms_early_pay, name='supplier-terms-early-pay'),
+    path('supplier-terms/residue/', stv.supplier_terms_residue, name='supplier-terms-residue'),
+    path('supplier-terms/export/', stv.supplier_terms_export, name='supplier-terms-export'),
+    path('supplier-terms/recompute/', stv.supplier_terms_recompute, name='supplier-terms-recompute'),
     path('reconciliation/dashboard/',   recon_views.reconciliation_dashboard,  name='recon-dashboard'),
     path('reconciliation/parties/',     recon_views.ReconPartyListView.as_view(),   name='recon-parties'),
     path('reconciliation/supplier-options/', recon_views.supplier_options, name='recon-supplier-options'),

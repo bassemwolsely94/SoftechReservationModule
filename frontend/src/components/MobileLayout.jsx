@@ -13,6 +13,7 @@
  */
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import useScreenUsage from '../hooks/useScreenUsage'
 import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../store/authStore'
 import ErrorBoundary from './ErrorBoundary'
@@ -39,6 +40,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
+  useScreenUsage()
   const online = useOnline()
   const { pending, toasts } = useOfflineQueue()
   const [moreOpen, setMoreOpen] = useState(false)
@@ -125,7 +127,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
               </span>
             )}
           </button>
-          <button
+          <button data-tour="mshell-logout"
             onClick={() => { logout(); navigate('/login') }}
             className="text-xs bg-white/15 hover:bg-white/25 active:bg-white/30 rounded-lg px-3 py-1.5 font-medium"
           >

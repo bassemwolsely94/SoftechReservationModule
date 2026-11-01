@@ -89,7 +89,7 @@ function VariantGroupsTab() {
               placeholder="الاسم (عربي)"
               className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none" />
             <div className="flex gap-2">
-              <button
+              <button data-tour="catalog-intelligence-variant-create"
                 onClick={() => createMutation.mutate({ name: newGroupName, name_ar: newGroupNameAr })}
                 disabled={!newGroupName || createMutation.isPending}
                 className="flex-1 py-1.5 bg-blue-600 text-white text-xs rounded disabled:opacity-50"
@@ -179,7 +179,7 @@ function VariantGroupsTab() {
                         </span>
                       )}
                     </div>
-                    <button
+                    <button data-tour="catalog-intelligence-variant-remove-item"
                       onClick={() => removeMemberMutation.mutate({ groupId: selectedGroup.id, memberId: m.id })}
                       className="text-gray-300 hover:text-red-400 text-sm"
                     >✕</button>
@@ -275,7 +275,7 @@ function BundlesTab() {
                 className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm" />
             )}
             <div className="flex gap-2">
-              <button
+              <button data-tour="catalog-intelligence-bundle-create"
                 onClick={() => createMutation.mutate({
                   ...newBundle,
                   discount_value: newBundle.discount_value || '0',
@@ -361,7 +361,7 @@ function BundlesTab() {
             )}
 
             {/* Add item */}
-            <div className="mb-4">
+            <div className="mb-4" data-tour="catalog-intelligence-bundle-add-item">
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للباقة</label>
               <ItemSearchWidget
                 selected={null}
@@ -390,7 +390,7 @@ function BundlesTab() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">×{fmt(bi.quantity)}</span>
-                      <button
+                      <button data-tour="catalog-intelligence-bundle-remove-item"
                         onClick={() => removeItemMutation.mutate({ bundleId: selectedBundle.id, biId: bi.id })}
                         className="text-gray-300 hover:text-red-400 text-sm"
                       >✕</button>
@@ -719,7 +719,7 @@ function EnrichmentManagementTab() {
         <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-gray-800 text-sm">📊 تقرير جودة الكتالوج</h3>
-            <button
+            <button data-tour="catalog-intelligence-report-refresh"
               onClick={() => refetchReport()}
               disabled={reportLoading}
               className="text-xs text-blue-600 hover:underline disabled:opacity-40"
@@ -755,7 +755,7 @@ function EnrichmentManagementTab() {
             </div>
           )}
 
-          <button
+          <button data-tour="catalog-intelligence-recompute"
             onClick={() => recompute.mutate()}
             disabled={recompute.isPending}
             className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"
@@ -905,7 +905,7 @@ function EnrichmentManagementTab() {
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-56"
             />
             {[['', 'الكل'], ['empty', 'فارغة'], ['partial', 'ناقصة'], ['complete', 'مكتملة']].map(([v, l]) => (
-              <button
+              <button data-tour="catalog-intelligence-queue-filter"
                 key={v}
                 onClick={() => { setQScore(v); setQPage(1) }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${

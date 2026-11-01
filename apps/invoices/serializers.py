@@ -1,3 +1,6 @@
+import decimal
+
+from django.db import models as dj_models
 from rest_framework import serializers
 from .models import (SupplierInvoice, InvoiceLine, VendorProfile, VendorItemMapping,
                      InvoiceBatch, PurchaseOrder, PurchaseOrderLine)
@@ -77,7 +80,32 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
         read_only_fields = ['line_total']
 
 
+class RoundedDecimalField(serializers.DecimalField):
+    """Rounds (half-up) to the column's decimal places instead of rejecting.
+
+    The SofTech grid engine back-solves discounts to 4 places (e.g. خصم أساسي
+    18.9467 on a margin line) while the column keeps 3; strict validation refused
+    the whole save with a 400, so the operator's edit was silently lost. The
+    writer re-derives the discount from the saved net at push time, so storing it
+    to 3 places changes nothing that reaches SOFTECH."""
+
+    def to_internal_value(self, data):
+        try:
+            value = decimal.Decimal(str(data).strip())
+        except (decimal.DecimalException, TypeError, ValueError):
+            return super().to_internal_value(data)
+        if value.is_finite() and self.decimal_places is not None:
+            value = value.quantize(decimal.Decimal(1).scaleb(-self.decimal_places),
+                                   rounding=decimal.ROUND_HALF_UP)
+        return super().to_internal_value(value)
+
+
 class InvoiceLineWriteSerializer(serializers.ModelSerializer):
+    serializer_field_mapping = {
+        **serializers.ModelSerializer.serializer_field_mapping,
+        dj_models.DecimalField: RoundedDecimalField,
+    }
+
     class Meta:
         model  = InvoiceLine
         fields = [
@@ -88,6 +116,17 @@ class InvoiceLineWriteSerializer(serializers.ModelSerializer):
             'vat_pct', 'distributor_margin_amt', 'pharmacist_margin_amt',
             'notes', 'is_confirmed', 'price_action', 'order',
         ]
+
+    def validate_expiry_date(self, value):
+        """A typed expiry is stored normalized (YYYY-MM-DD), accepting what SofTech
+        accepts: . - / separators, day first, 2- or 4-digit year."""
+        if not (value or '').strip():
+            return value
+        from .ocr import normalize_expiry
+        iso = normalize_expiry(value)
+        if not iso:
+            raise serializers.ValidationError('تاريخ صلاحية غير مفهوم — اكتبه يوم/شهر/سنة')
+        return iso
 
 
 class SupplierInvoiceListSerializer(serializers.ModelSerializer):

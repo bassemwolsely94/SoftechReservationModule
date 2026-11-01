@@ -199,7 +199,7 @@ export default function ProcurementDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <RefreshButton loading={loading} onClick={load}>
+          <RefreshButton data-tour="purchasing-overview-refresh" loading={loading} onClick={load}>
             🔄 تحديث
           </RefreshButton>
           <button data-tour="purchasing-overview-run-engine"

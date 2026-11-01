@@ -57,7 +57,7 @@ export default function ImportModal({ onClose }) {
             <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm text-gray-600 hover:bg-gray-50">
               {result && !result.error ? 'إغلاق' : 'إلغاء'}
             </button>
-            <button onClick={() => upload.mutate()} disabled={!file || upload.isPending}
+            <button data-tour="pricing-approvals-import-upload" onClick={() => upload.mutate()} disabled={!file || upload.isPending}
               className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
               {upload.isPending ? 'جاري الرفع…' : 'رفع وإنشاء الطلبات'}
             </button>

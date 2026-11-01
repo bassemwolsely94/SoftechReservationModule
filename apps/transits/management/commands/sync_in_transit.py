@@ -40,6 +40,38 @@ from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.transits')
 
+# After this many receipt checks in a row fail even after a reconnect, SOFTECH is
+# treated as down for the rest of the run: no further reconnect attempts (each one
+# can cost ~22s on a dead network), every remaining check counts as failed.
+RECEIPT_FAILURE_BREAKER = 3
+
+
+class ReceiptCheckError(Exception):
+    """The receipt (doc 25) query could not run. Means "unknown" — NEVER "not received"."""
+
+
+class _ReconnectingConnection:
+    """Wraps the jConnect connection so a dropped session can be reopened mid-run
+    (2026-10-30: one drop used to fail every remaining check → 13,320 false
+    'in transit' results in 10 days)."""
+
+    def __init__(self, factory):
+        self._factory = factory
+        self._conn = factory()
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def reconnect(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = self._factory()
+
+    def close(self):
+        self._conn.close()
+
 
 # ── SOFTECH query constants ───────────────────────────────────────────────────
 # doccode '125' = صرف تبادل بين الفروع (inter-branch issue from supplying branch)
@@ -149,7 +181,7 @@ class Command(BaseCommand):
         logger.info('[sync_in_transit] Starting sync (lookback=%dd)', days)
 
         try:
-            conn = self._get_connection()
+            conn = _ReconnectingConnection(self._get_connection)
         except Exception as exc:
             logger.error('[sync_in_transit] Cannot connect to SOFTECH: %s', exc)
             self.stderr.write(f'SOFTECH connection failed: {exc}')
@@ -173,6 +205,7 @@ class Command(BaseCommand):
             f'[sync_in_transit] Done in {elapsed:.1f}s — '
             f'created={stats["created"]}, updated={stats["updated"]}, '
             f'skipped={stats["skipped"]}, errors={stats["errors"]}, '
+            f'receipt_check_failed={stats.get("receipt_check_failed", 0)}, '
             f'final_not_reread={stats.get("final_cached", 0)}'
             + (' (full pass)' if full else '')
         )
@@ -197,7 +230,11 @@ class Command(BaseCommand):
         )
         from apps.transfers.models import TransferRequest
 
-        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'final_cached': 0}
+        stats = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0, 'final_cached': 0,
+                 'receipt_check_failed': 0}
+        # Alerts only go out for transfers whose receipt status was verified this run.
+        run_started = timezone.now()
+        self._receipt_failures_in_a_row = 0
 
         # ── Build branch lookup: softech_branch_id → Branch ──────────────────
         branch_map = {
@@ -205,14 +242,14 @@ class Command(BaseCommand):
             for b in Branch.objects.filter(is_active=True)
         }
 
-        # ── Build erp_reference → TransferRequest lookup ──────────────────────
-        # Only 'sent_to_erp' and 'completed' transfers have a valid erp_reference
-        tr_map: dict[str, 'TransferRequest'] = {}
-        for tr in TransferRequest.objects.filter(
+        # ── (erp_reference, supplying branch) → TransferRequest lookup ────────
+        # Only 'sent_to_erp' and 'completed' transfers have a valid erp_reference. Docnumbers
+        # repeat per (branch, doctype), so a link also needs both branches (P-33 (c), linking.py).
+        from apps.transits import linking
+        tr_index = linking.build_index(TransferRequest.objects.filter(
             status__in=('sent_to_erp', 'completed'),
             erp_reference__gt='',
-        ).only('id', 'erp_reference'):
-            tr_map[str(tr.erp_reference).strip()] = tr
+        ).select_related('supplying_branch', 'requesting_branch'))
 
         # ── Fetch SOFTECH headers ─────────────────────────────────────────────
         since = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
@@ -317,9 +354,14 @@ class Command(BaseCommand):
                 if t_status is None:
                     # ── Detect receipt: the 25-doc at the destination whose
                     #    docnumber2 points back at this 125 ─────────────────────
-                    received_date, receipt_doc = self._detect_receipt(
-                        conn, doc_num, supply_code, recv_code, issue_date
-                    )
+                    try:
+                        received_date, receipt_doc = self._detect_receipt(
+                            conn, doc_num, supply_code, recv_code, issue_date
+                        )
+                    except ReceiptCheckError:
+                        # Unknown — leave the stored record exactly as it is.
+                        stats['receipt_check_failed'] += 1
+                        continue
 
                     # ── Get line items (issued / 125 side) ────────────────────
                     items_data, item_count, total_qty = self._fetch_items(
@@ -442,7 +484,8 @@ class Command(BaseCommand):
                         recv_branch   = branch_map.get(recv_code) if recv_code else None
 
                         # Try to link to existing TransferRequest
-                        linked_tr = tr_map.get(doc_num)
+                        linked_tr, link_reason = linking.match(tr_index, doc_num, supply_code,
+                                                               recv_code, issue_date)
 
                         tt = InTransitTransfer(
                             erp_doc_number             = doc_num,
@@ -476,6 +519,10 @@ class Command(BaseCommand):
                             f'من الفرع {supply_code}',
                         )
                         InTransitAuditEvent.log(tt, 'synced', detail='First discovered in ERP sync')
+                        if link_reason == 'ambiguous':
+                            InTransitAuditEvent.log(tt, 'ambiguous_link', detail=(
+                                f'More than one transfer request has reference {doc_num} from branch '
+                                f'{supply_code} to {recv_code or "?"} — not linked'))
 
                         if linked_tr:
                             InTransitAuditEvent.log(
@@ -503,8 +550,12 @@ class Command(BaseCommand):
         if not single_doc:
             self._recheck_open_transfers(conn, branch_map, processed_keys, stats)
 
+        if stats['receipt_check_failed']:
+            logger.error('[sync_in_transit] %d receipt checks failed — those transfers '
+                         'were left unchanged and not alerted', stats['receipt_check_failed'])
+
         # ── Fire alerts for overdue in-transit transfers ──────────────────────
-        self._fire_alerts()
+        self._fire_alerts(verified_since=run_started)
         self._fire_local_receipt_alerts()
 
         return stats
@@ -541,12 +592,19 @@ class Command(BaseCommand):
                 continue   # already handled by the header-window loop
             rechecked += 1
             try:
-                received_date, receipt_doc = self._detect_receipt(
-                    conn, tt.erp_doc_number, tt.erp_supplying_branch_code,
-                    tt.erp_receiving_branch_code, tt.issue_date,
-                )
+                try:
+                    received_date, receipt_doc = self._detect_receipt(
+                        conn, tt.erp_doc_number, tt.erp_supplying_branch_code,
+                        tt.erp_receiving_branch_code, tt.issue_date,
+                    )
+                except ReceiptCheckError:
+                    stats['receipt_check_failed'] += 1
+                    continue   # unknown — unchanged, and not verified for alerts
                 if not (received_date and receipt_doc):
-                    continue   # still genuinely un-received (or orphan doc)
+                    # Verified still un-received (or orphan doc) → eligible for alerts.
+                    InTransitTransfer.objects.filter(pk=tt.pk).update(
+                        last_synced_at=timezone.now())
+                    continue
 
                 received_items, _, _ = self._fetch_items(
                     conn, receipt_doc, tt.erp_receiving_branch_code,
@@ -591,7 +649,10 @@ class Command(BaseCommand):
         whose docnumber2 points back at this 125's docnumber (and whose
         cust_branch_code is the sender). The receipt has its OWN docnumber.
 
-        Returns (received_date, receipt_doc_number) or (None, '').
+        Returns (received_date, receipt_doc_number), or (None, '') when the query
+        ran and found no receipt. Raises ReceiptCheckError when the query could
+        not run (after one reconnect + retry) — the caller must treat that as
+        "unknown", never as "not received".
 
         NOTE the old heuristic (any stktrans row sharing the docnumber at
         another branch) was WRONG — docnumbers collide across doc types and
@@ -602,23 +663,30 @@ class Command(BaseCommand):
         if not recv_code:
             return None, ''
         try:
-            try:
-                doc_param = int(doc_num)
-            except (ValueError, TypeError):
-                doc_param = doc_num
+            doc_param = int(doc_num)
+        except (ValueError, TypeError):
+            doc_param = doc_num
+        params = [recv_code, supply_code, doc_param, issue_date.isoformat()]
 
-            cur = conn.cursor()
+        if self._receipt_failures_in_a_row >= RECEIPT_FAILURE_BREAKER:
+            raise ReceiptCheckError('SOFTECH treated as down for the rest of this run')
+        try:
+            rows = self._query_receipt(conn, params)
+        except Exception as exc:
+            logger.warning('[sync_in_transit] _detect_receipt failed doc=%s: %s — '
+                           'reconnecting and retrying once', doc_num, exc)
             try:
-                cur.execute(_QUERY_RECEIPT, [
-                    recv_code, supply_code, doc_param, issue_date.isoformat(),
-                ])
-                rows = cur.fetchall() or []
-            finally:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
+                if hasattr(conn, 'reconnect'):
+                    conn.reconnect()
+                rows = self._query_receipt(conn, params)
+            except Exception as exc2:
+                self._receipt_failures_in_a_row += 1
+                logger.warning('[sync_in_transit] _detect_receipt retry failed doc=%s: %s',
+                               doc_num, exc2)
+                raise ReceiptCheckError(str(exc2)) from exc2
+        self._receipt_failures_in_a_row = 0
 
+        try:
             if not rows:
                 return None, ''
 
@@ -644,9 +712,20 @@ class Command(BaseCommand):
             return recv_date, receipt_doc
 
         except Exception as exc:
-            logger.warning('[sync_in_transit] _detect_receipt failed doc=%s: %s',
-                           doc_num, exc)
-            return None, ''
+            # The receipt row exists but couldn't be parsed — unknown, not "not received".
+            raise ReceiptCheckError(f'unparseable receipt row: {exc}') from exc
+
+    @staticmethod
+    def _query_receipt(conn, params):
+        cur = conn.cursor()
+        try:
+            cur.execute(_QUERY_RECEIPT, params)
+            return cur.fetchall() or []
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
 
     def _fetch_items(self, conn, doc_num: str, branch_code: str,
                      branch_map: dict, doccode: str = '125'):
@@ -819,12 +898,22 @@ class Command(BaseCommand):
         except Exception:
             pass
 
-    def _fire_alerts(self):
+    def _fire_alerts(self, verified_since=None):
         """
+        `verified_since`: only alert transfers whose "not received" status was
+        confirmed against SOFTECH at/after this time (this run). A transfer whose
+        receipt check failed is unknown — it must not alert.
+
         Scan in-transit records and fire notifications for:
         - day 4:  warning (first reminder)
         - day 7:  high priority alert
         - day 14: critical escalation
+
+        P-55 Part B: people get ONE DIGEST per receiving branch per day (count + oldest
+        age + deep link) — to that branch's managers (pharmacist / supervisor) and the
+        HQ coordinators (SystemSetting `transit_digest_recipients`, default all admins) —
+        instead of one notification per transfer per person per day. The per-transfer
+        note, audit event and alert guard fields are still written.
 
         Each transfer is alerted at its SINGLE highest applicable level, at most
         once per calendar day (guarded by last_alert_level/last_alert_sent_at, and
@@ -865,7 +954,10 @@ class Command(BaseCommand):
         ).filter(
             Q(days_in_transit__lte=max_days) | Q(issue_date__year__gte=2026)
         ).select_related('supplying_branch', 'receiving_branch')
+        if verified_since is not None:
+            qs = qs.filter(last_synced_at__gte=verified_since)
 
+        digest = {}   # receiving branch → [(transfer, level), ...]
         for transfer in qs:
             # Pick the single highest threshold this transfer has reached.
             for days_threshold, level, alert_label, body_fn, notif_type in thresholds:
@@ -883,40 +975,9 @@ class Command(BaseCommand):
                 continue
 
             body = body_fn(transfer)
-
-            # Notify receiving branch (they must receive it)
-            try:
-                from apps.notifications.models import Notification
-                target_branch = transfer.receiving_branch or transfer.supplying_branch
-                if target_branch:
-                    dedup = f'{notif_type}_{transfer.id}_{today.isoformat()}'
-                    Notification.send_to_branch(
-                        branch=target_branch,
-                        notification_type=notif_type,
-                        title=f'تحويل قيد النقل — {transfer.erp_doc_number}',
-                        body=body,
-                        dedup_key=dedup,
-                        include_admins=True,
-                        dedup_once=True,
-                    )
-            except Exception as exc:
-                logger.warning('[sync_in_transit] notification failed: %s', exc)
-
-            # Also notify supplying branch for critical
-            if level == 'd14' and transfer.supplying_branch:
-                try:
-                    from apps.notifications.models import Notification
-                    Notification.send_to_branch(
-                        branch=transfer.supplying_branch,
-                        notification_type=notif_type,
-                        title=f'🚨 تحويل حرج — {transfer.erp_doc_number}',
-                        body=body,
-                        dedup_key=f'{notif_type}_{transfer.id}_supply_{today.isoformat()}',
-                        include_admins=True,
-                        dedup_once=True,
-                    )
-                except Exception:
-                    pass
+            target_branch = transfer.receiving_branch or transfer.supplying_branch
+            if target_branch:
+                digest.setdefault(target_branch, []).append((transfer, notif_type))
 
             InTransitNote.objects.create(
                 transfer=transfer,
@@ -936,6 +997,55 @@ class Command(BaseCommand):
                 'last_alert_level', 'last_alert_sent_at',
                 'alert_notification_count', 'updated_at',
             ])
+
+        for branch, rows in digest.items():
+            try:
+                self._send_branch_digest(branch, rows, today)
+            except Exception as exc:
+                logger.warning('[sync_in_transit] digest for branch %s failed: %s', branch.pk, exc)
+
+    _DIGEST_RANK = {'transit_approaching_cancel': 0, 'transit_overdue': 1, 'transit_critical': 2}
+    DIGEST_BRANCH_ROLES = ('pharmacist', 'supervisor')
+
+    @classmethod
+    def _digest_recipients(cls, branch):
+        """The branch's managers + the HQ transfers coordinators."""
+        from apps.users.models import StaffProfile
+        try:
+            from apps.config.models import SystemSetting
+            coordinator_ids = SystemSetting.get('transit_digest_recipients')
+        except Exception:
+            coordinator_ids = None
+        managers = StaffProfile.objects.filter(branch=branch, is_active=True,
+                                               role__in=cls.DIGEST_BRANCH_ROLES)
+        if isinstance(coordinator_ids, list) and coordinator_ids:
+            hq = StaffProfile.objects.filter(pk__in=coordinator_ids, is_active=True)
+        else:
+            hq = StaffProfile.objects.filter(role='admin', is_active=True)
+        seen, out = set(), []
+        for staff in list(managers.select_related('branch')) + list(hq.select_related('branch')):
+            if staff.pk not in seen:
+                seen.add(staff.pk)
+                out.append(staff)
+        return out
+
+    def _send_branch_digest(self, branch, rows, today):
+        from apps.notifications.models import Notification
+        notif_type = max((t for _, t in rows), key=self._DIGEST_RANK.get)
+        oldest = max(t.days_in_transit for t, _ in rows)
+        name = branch.name_ar or branch.name
+        title = f'🚛 {len(rows)} تحويل في انتظار الاستلام — {name}'
+        docs = '، '.join(str(t.erp_doc_number) for t, _ in sorted(rows, key=lambda r: -r[0].days_in_transit)[:10])
+        body = (f'{len(rows)} تحويل لفرع {name} لسه ما اتسجّلش استلامه في SOFTECH — أقدمها من {oldest} يوم. '
+                f'سجّل مستند الاستلام (25) في SOFTECH. المستندات: {docs}. '
+                f'/transits?status=in_transit&branch={branch.pk}')
+        sent = 0
+        for staff in self._digest_recipients(branch):
+            if Notification.send_to_user(staff, notif_type, title, body,
+                                         dedup_key=f'transit_digest_{branch.pk}_{today.isoformat()}',
+                                         dedup_once=True):
+                sent += 1
+        return sent
 
 
     def _fire_local_receipt_alerts(self):

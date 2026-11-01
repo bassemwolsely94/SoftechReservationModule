@@ -87,7 +87,7 @@ export default function VendorTemplateEditor({ vendorId, sampleImageUrl, onClose
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs text-gray-500">الأعمدة (x من 0 يسار إلى 1 يمين):</div>
-              <button onClick={addBand} className="text-xs px-2 py-1 bg-gray-100 rounded-lg hover:bg-gray-200">+ عمود</button>
+              <button data-tour="invoices-main-template-add-column" onClick={addBand} className="text-xs px-2 py-1 bg-gray-100 rounded-lg hover:bg-gray-200">+ عمود</button>
             </div>
             <div className="space-y-1.5 max-h-[50vh] overflow-auto">
               {bands.map((b, i) => (
@@ -113,7 +113,7 @@ export default function VendorTemplateEditor({ vendorId, sampleImageUrl, onClose
 
         {err && <div className="mx-5 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</div>}
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={save} disabled={saving}
+          <button data-tour="invoices-main-template-save" onClick={save} disabled={saving}
             className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50 text-sm">
             {saving ? 'جارٍ الحفظ…' : 'حفظ القالب'}
           </button>

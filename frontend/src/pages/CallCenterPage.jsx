@@ -149,7 +149,7 @@ function CaseModal({ callId, customerId, onClose, onCreated }) {
         </div>
         <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
           <button onClick={onClose} className="btn-secondary text-sm">إلغاء</button>
-          <button onClick={submit} disabled={loading} className="btn-primary text-sm disabled:opacity-50">
+          <button data-tour="callcenter-operator-case-modal-submit" onClick={submit} disabled={loading} className="btn-primary text-sm disabled:opacity-50">
             {loading ? '...' : '🗂️ فتح الحالة'}
           </button>
         </div>
@@ -234,7 +234,7 @@ function FollowupModal({ callId, customerId, onClose, onCreated }) {
         </div>
         <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
           <button onClick={onClose} className="btn-secondary text-sm">إلغاء</button>
-          <button onClick={submit} disabled={loading} className="btn-primary text-sm disabled:opacity-50">
+          <button data-tour="callcenter-operator-followup-modal-submit" onClick={submit} disabled={loading} className="btn-primary text-sm disabled:opacity-50">
             {loading ? '...' : '🔔 جدولة'}
           </button>
         </div>
@@ -386,7 +386,7 @@ function CustomerPicker({ customers, onSelect }) {
       </div>
       <div className="grid gap-2">
         {customers.map(c => (
-          <button
+          <button data-tour="callcenter-operator-picker-pick"
             key={c.id}
             onClick={() => onSelect(c.id)}
             className="w-full text-right bg-white border border-gray-200 hover:border-brand-400
@@ -621,12 +621,12 @@ function CaseChatPanel({ caseId, onClose }) {
                 onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) addNote() }}
               />
               <div className="flex flex-col gap-1 shrink-0">
-                <button onClick={addNote}
+                <button data-tour="callcenter-operator-casechat-send" onClick={addNote}
                   disabled={(!noteText.trim() && !attachFile) || posting}
                   className="btn-primary text-xs px-3 py-1.5 disabled:opacity-40">
                   {posting ? '⏳' : '➤'}
                 </button>
-                <button
+                <button data-tour="callcenter-operator-casechat-voice"
                   onClick={recording ? stopRecording : startRecording}
                   className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all
                     ${recording
@@ -634,7 +634,7 @@ function CaseChatPanel({ caseId, onClose }) {
                       : 'border-gray-200 text-gray-400 hover:text-gray-600'}`}
                   title={recording ? 'إيقاف التسجيل' : 'تسجيل صوتي'}>🎙️
                 </button>
-                <button
+                <button data-tour="callcenter-operator-casechat-attach"
                   onClick={() => fileInputRef.current?.click()}
                   className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600"
                   title="إرفاق ملف">📎
@@ -649,18 +649,18 @@ function CaseChatPanel({ caseId, onClose }) {
             </div>
             <div className="flex gap-2 flex-wrap">
               {cas.status === 'open' && (
-                <button
+                <button data-tour="callcenter-operator-casechat-start"
                   onClick={() => doAction(callCenterApi.cases.assign, { staff_id: user?.staff_id || user?.id })}
                   className="btn-secondary text-xs py-1.5 px-2">⚙️ بدء المعالجة
                 </button>
               )}
               {['open', 'working', 'waiting'].includes(cas.status) && !showResolve && (
-                <button onClick={() => setShowResolve(true)}
+                <button data-tour="callcenter-operator-casechat-resolve" onClick={() => setShowResolve(true)}
                   className="btn-secondary text-xs py-1.5 px-2">✅ حل الحالة
                 </button>
               )}
               {cas.status === 'resolved' && (
-                <button onClick={() => doAction(callCenterApi.cases.close)}
+                <button data-tour="callcenter-operator-casechat-close" onClick={() => doAction(callCenterApi.cases.close)}
                   className="btn-secondary text-xs py-1.5 px-2">🔒 إغلاق
                 </button>
               )}
@@ -673,7 +673,7 @@ function CaseChatPanel({ caseId, onClose }) {
                   onChange={e => setResolveText(e.target.value)} />
                 <div className="flex gap-2">
                   <button onClick={() => setShowResolve(false)} className="btn-secondary text-xs">إلغاء</button>
-                  <button
+                  <button data-tour="callcenter-operator-casechat-resolve-confirm"
                     onClick={async () => {
                       if (!resolveText.trim()) return
                       await doAction(callCenterApi.cases.resolve, { resolution: resolveText })
@@ -731,7 +731,7 @@ function FBTSuggestionsRow({ itemId, onAdd, alreadyAdded = [], onDismiss }) {
         {recs.map(rec => {
           const alreadyIn = alreadyAdded.includes(rec.item_b_id)
           return (
-            <button
+            <button data-tour="callcenter-operator-fbt-add"
               key={rec.item_b_id}
               onClick={() => !alreadyIn && onAdd({ id: rec.item_b_id, name: rec.item_b_name, softech_id: rec.item_b_code })}
               disabled={alreadyIn}
@@ -782,7 +782,7 @@ function CustomerRecsPanel({ customerId, onAdd }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {visible.map(rec => (
-          <button
+          <button data-tour="callcenter-operator-recs-add"
             key={rec.item_id}
             onClick={() => onAdd && onAdd({ id: rec.item_id, name: rec.item_name, softech_id: rec.item_code })}
             title={`نقاط: ${rec.score?.toFixed ? rec.score.toFixed(2) : rec.score}`}
@@ -952,11 +952,29 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     }
   }
 
+  // a saved item's quantity is stored when the field is left, so a conversion uses it
+  const qtySave = useRef(Promise.resolve())
+  function saveQty(item) {
+    if (item._status !== 'saved' || !savedCallId) return
+    const current = dbItems.find(i => i.id === item.id)
+    if (!current) return
+    qtySave.current = doSaveQty(item.id, current.quantity)
+  }
+  async function doSaveQty(itemId, quantity) {
+    try {
+      await callCenterApi.updateItem(savedCallId, itemId, { quantity })
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر حفظ الكمية')
+      callCenterApi.getItems(savedCallId).then(r => setDbItems(r.data || [])).catch(() => {})
+    }
+  }
+
   async function handleConvert() {
     if (!savedCallId) return
     setConverting(true)
     setConvertResult(null)
     try {
+      await qtySave.current      // a quantity edited just before clicking is stored first
       let res
       if (showConvert === 'reservation') {
         res = await callCenterApi.convertToReservation(savedCallId, {
@@ -998,12 +1016,12 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
           )}
         </div>
         <div className="flex gap-1.5">
-          <button
+          <button data-tour="callcenter-operator-items-manual"
             onClick={() => { setShowManual(s => !s); setShowSearch(false) }}
             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg px-2 py-1 transition-all">
             ✏️ يدوي
           </button>
-          <button
+          <button data-tour="callcenter-operator-items-search"
             onClick={() => { setShowSearch(s => !s); setShowManual(false) }}
             className="text-xs bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg px-2 py-1 transition-all">
             🔍 بحث
@@ -1027,7 +1045,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
           {searchRes.length > 0 && (
             <div className="absolute z-20 top-full right-0 left-0 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
               {searchRes.slice(0, 15).map(item => (
-                <button
+                <button data-tour="callcenter-operator-items-result"
                   key={item.id}
                   onClick={() => addCatalogItem(item)}
                   className="w-full text-right px-3 py-2 hover:bg-brand-50 text-sm border-b border-gray-50 last:border-0 transition-colors">
@@ -1057,7 +1075,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
             onKeyDown={e => e.key === 'Enter' && addManualItem()}
             autoFocus
           />
-          <button onClick={addManualItem} disabled={!manualName.trim()}
+          <button data-tour="callcenter-operator-items-manual-add" onClick={addManualItem} disabled={!manualName.trim()}
             className="btn-primary text-xs px-3 disabled:opacity-40">إضافة</button>
         </div>
       )}
@@ -1096,10 +1114,11 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
                     className="w-14 text-center border border-gray-200 rounded-md text-xs py-0.5 bg-white"
                     value={item.quantity}
                     onChange={e => updateQty(item, parseFloat(e.target.value) || 1)}
+                    onBlur={() => saveQty(item)}
                   />
                 )}
                 {!isConverted && (
-                  <button onClick={() => removeItem(item)}
+                  <button data-tour="callcenter-operator-items-remove" onClick={() => removeItem(item)}
                     className="text-gray-300 hover:text-red-400 text-xs shrink-0">✕</button>
                 )}
               </div>
@@ -1122,7 +1141,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       {savedCallId && unconvertedCount > 0 && !convertResult && (
         <div className="border-t border-gray-100 pt-3 space-y-1.5" data-tour="callcenter-operator-convert">
           <div className="text-xs text-gray-400 mb-1.5">تحويل ({unconvertedCount} صنف)</div>
-          <button
+          <button data-tour="callcenter-operator-convert-reservation"
             onClick={() => setShowConvert(showConvert === 'reservation' ? null : 'reservation')}
             className={`w-full text-xs px-3 py-2 rounded-lg transition-all text-right
               ${showConvert === 'reservation'
@@ -1130,7 +1149,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
                 : 'bg-blue-50 hover:bg-blue-100 text-blue-700'}`}>
             📋 تحويل لحجوزات
           </button>
-          <button
+          <button data-tour="callcenter-operator-convert-transfer"
             onClick={() => setShowConvert(showConvert === 'transfer' ? null : 'transfer')}
             className={`w-full text-xs px-3 py-2 rounded-lg transition-all text-right
               ${showConvert === 'transfer'
@@ -1179,7 +1198,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
           <input className="input-field text-xs" placeholder="ملاحظات (اختياري)"
             value={convertForm.notes}
             onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))} />
-          <button onClick={handleConvert} disabled={!convertForm.branch_id || converting}
+          <button data-tour="callcenter-operator-convert-reservation-create" onClick={handleConvert} disabled={!convertForm.branch_id || converting}
             className="btn-primary text-xs w-full disabled:opacity-40">
             {converting ? '⏳...' : '📋 إنشاء الحجوزات'}
           </button>
@@ -1213,7 +1232,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
           <input className="input-field text-xs" placeholder="ملاحظات (اختياري)"
             value={convertForm.notes}
             onChange={e => setConvertForm(p => ({ ...p, notes: e.target.value }))} />
-          <button onClick={handleConvert} disabled={!convertForm.requesting_branch_id || converting}
+          <button data-tour="callcenter-operator-convert-transfer-create" onClick={handleConvert} disabled={!convertForm.requesting_branch_id || converting}
             className="btn-primary text-xs w-full disabled:opacity-40">
             {converting ? '⏳...' : '🔄 إنشاء طلب النقل'}
           </button>
@@ -1277,7 +1296,7 @@ function MyQueuePanel({ onOpenCase }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {cases.slice(0, 6).map(c => (
-            <button key={c.id} onClick={() => onOpenCase(c.id)}
+            <button data-tour="callcenter-operator-queue-case" key={c.id} onClick={() => onOpenCase(c.id)}
               className="text-right flex items-center gap-3 bg-gray-50 hover:bg-brand-50
                 border border-gray-200 hover:border-brand-300 rounded-xl px-3 py-2.5 transition-all group">
               <div className="flex-1 min-w-0">
@@ -1588,7 +1607,7 @@ export default function CallCenterPage() {
                   className="btn-secondary text-sm px-4 py-2.5 disabled:opacity-50 flex items-center gap-1.5">
                   {dialLoading ? '...' : '📞 اتصل'}
                 </button>
-                <button onClick={() => { setPhone(''); setSearchPhone(''); setSavedCallId(null); setAiDone(false) }}
+                <button data-tour="callcenter-operator-clear" onClick={() => { setPhone(''); setSearchPhone(''); setSavedCallId(null); setAiDone(false) }}
                   className="btn-secondary text-sm">
                   مسح
                 </button>
@@ -1644,7 +1663,7 @@ export default function CallCenterPage() {
                       <span className="text-gray-600 font-semibold">· {customer.name}</span>
                     )}
                     <span className="text-gray-300">|</span>
-                    <button
+                    <button data-tour="callcenter-operator-change-customer"
                       onClick={() => { setSelectedCustomerId(null); setSavedCallId(null); setFlashCase(null) }}
                       className="text-brand-600 hover:underline font-semibold"
                     >
@@ -1679,7 +1698,7 @@ export default function CallCenterPage() {
                           <span className="font-mono text-gray-600 text-sm" dir="ltr">
                             {customer.phone}
                           </span>
-                          <button
+                          <button data-tour="callcenter-operator-profile-dial"
                             onClick={() => handleDial(customer.phone)}
                             disabled={dialLoading}
                             title="اتصل بالعميل الآن"
@@ -1773,7 +1792,7 @@ export default function CallCenterPage() {
                     </div>
                     <div className="space-y-2">
                       {data.open_cases.map(c => (
-                        <button key={c.id}
+                        <button data-tour="callcenter-operator-open-case" key={c.id}
                           onClick={() => setSelectedCaseId(c.id)}
                           className="w-full text-right flex items-center gap-3 bg-purple-50 border border-purple-100
                             hover:bg-purple-100 hover:border-purple-200 rounded-xl px-3 py-2.5 transition-all group">
@@ -1962,7 +1981,7 @@ export default function CallCenterPage() {
                               </span>
                             )}
                             {c.has_recording && !c.has_transcript && (
-                              <button
+                              <button data-tour="callcenter-operator-transcribe"
                                 onClick={() => handleTranscribe(c.id)}
                                 disabled={!!transcribing[c.id]}
                                 title="تفريغ التسجيل وتلخيصه"
@@ -2002,7 +2021,7 @@ export default function CallCenterPage() {
                       <div className="text-xs text-gray-400 mt-1">
                         أو سجّل المكالمة بدون تحديد عميل:
                       </div>
-                      <button
+                      <button data-tour="callcenter-operator-unknown-caller"
                         onClick={() => setSelectedCustomerId('__unknown__')}
                         className="mt-3 btn-secondary text-xs py-1.5 px-4"
                       >
@@ -2062,7 +2081,7 @@ export default function CallCenterPage() {
                         </div>
                       )}
 
-                      <button onClick={() => { setSavedCallId(null); setAiDone(false); setFlashCase(null) }}
+                      <button data-tour="callcenter-operator-new-call" onClick={() => { setSavedCallId(null); setAiDone(false); setFlashCase(null) }}
                         className="btn-secondary text-sm w-full mt-1">
                         📞 تسجيل مكالمة أخرى
                       </button>

@@ -40,6 +40,18 @@ from core.errors import public_error
 logger = logging.getLogger('elrezeiky.invoices')
 
 
+_NO_SOFTECH_USER = 'لا يوجد كود مستخدم SofTech مربوط بحسابك — اطلب من المدير ربطه قبل الترحيل.'
+
+
+def _poster_usercode(request):
+    """The SofTech user code of the staff member posting (owner decision 2026-10-31):
+    SofTech stores it as the document user AND «مسئول الشراء» (doc 66178 → 1509).
+    None when the account has no SofTech code linked — posting then refuses."""
+    profile = getattr(request.user, 'staff_profile', None)
+    code = (getattr(profile, 'softech_user_id', '') or '').strip()
+    return code or None
+
+
 def _audit_invoice_push(request, invoice, result, force):
     """Who pushed this invoice into SOFTECH (Batch 2, P-16) — only when it really wrote."""
     if isinstance(result, dict) and result.get('wrote_to_softech'):
@@ -99,7 +111,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         'learn_mapping': ('edit',), 'update_header': ('edit',), 'reconcile': ('edit',),
         'delete_line': ('edit', 'delete'),
         # decisions — confirm is the only precondition of the SOFTECH push
-        'confirm': ('approve',), 'confirm_green': ('approve',), 'reject': ('approve',),
+        'confirm': ('approve',), 'confirm_green': ('approve',), 'reject': ('approve',), 'reopen': ('approve',),
         'create_return': ('approve',),
         # the SOFTECH write itself (also keeps its own _PUSH_ROLES check)
         'push': ('finalize',), 'push_batch': ('finalize',),
@@ -234,7 +246,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             if structured and structured.get('lines'):
                 header, candidates = parse_structured(structured)
                 invoice.raw_ocr_text = json.dumps(structured, ensure_ascii=False)[:20000]
-                self._apply_ocr_header(invoice, header)
+                self._apply_ocr_header(invoice, header, invoice.source_image.path)
             else:
                 raw_text   = extract_text(invoice.source_image.path)
                 invoice.raw_ocr_text = raw_text
@@ -264,11 +276,11 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             invoice.save(update_fields=['status', 'notes'])
 
     @staticmethod
-    def _apply_ocr_header(invoice, header):
+    def _apply_ocr_header(invoice, header, image_path=None):
         """Fill blank invoice header fields from the OCR'd header (never overwrite
         what a user already entered). Delegates to the shared pipeline."""
         from . import pipeline
-        pipeline.apply_ocr_header(invoice, header)
+        pipeline.apply_ocr_header(invoice, header, image_path)
 
     # ── Re-run OCR ────────────────────────────────────────────────────────────
 
@@ -629,6 +641,42 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             logger.warning('auto-learn on confirm failed for invoice %s: %s', invoice.pk, e)
         return Response({'detail': 'تم تأكيد الفاتورة', 'learned_mappings': learned})
 
+    # ── Back to editing ───────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'])
+    def reopen(self, request, pk=None):
+        """«↩ رجوع للتعديل»: take a confirmed / push-failed / queued invoice — or one stuck
+        in 'pushing' — back to review so its grid and header can be corrected. Nothing is
+        ever posted here. A 'pushing' invoice is first looked up in SOFTECH: if the document
+        is there it is recorded as posted instead (never reopened → never posted twice)."""
+        from . import writer
+        invoice = self.get_object()
+        was = invoice.status
+        if was in ('finalized',) or invoice.softech_docnumber:
+            return Response({'detail': 'الفاتورة مُرحّلة إلى SOFTECH — التصحيح يكون بمرتجع'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if was not in ('confirmed', 'push_failed', 'queued', 'pushing'):
+            return Response({'detail': 'الفاتورة قابلة للتعديل بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
+        if was == 'pushing':
+            try:
+                posted = writer.find_posted_document(invoice)
+            except Exception as e:
+                return Response({'detail': f'تعذّر التأكد من SOFTECH — لا يمكن الرجوع الآن: {public_error(request, e)}'},
+                                status=status.HTTP_502_BAD_GATEWAY)
+            if posted:
+                SupplierInvoice.objects.filter(pk=invoice.pk, status='pushing').update(
+                    status='finalized', softech_docnumber=posted)
+                return Response({'detail': f'المستند موجود بالفعل في SOFTECH برقم {posted} — سُجّلت الفاتورة كمُرحّلة',
+                                 'status': 'finalized', 'softech_docnumber': posted})
+        if not SupplierInvoice.objects.filter(pk=invoice.pk, status=was).update(status='review'):
+            return Response({'detail': 'تغيّرت حالة الفاتورة أثناء الطلب — حدّث الصفحة'},
+                            status=status.HTTP_409_CONFLICT)
+        from apps.audit.models import AuditLog
+        AuditLog.log('invoice_reopened', user=getattr(request.user, 'staff_profile', None), obj=invoice,
+                     changes={'status': [was, 'review']}, extra={'action': 'reopen'},
+                     note='رجوع للتعديل قبل الترحيل')
+        return Response({'detail': 'رجعت الفاتورة للمراجعة — عدّل ثم أكّد من جديد', 'status': 'review'})
+
     # ── Reject invoice ────────────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'])
@@ -654,7 +702,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         invoice = self.get_object()
         suppliers.ensure_invoice_vendor(invoice)
         try:
-            result = writer.push_final(invoice, dry_run=True)
+            result = writer.push_final(invoice, dry_run=True, usercode=_poster_usercode(request))
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         # surface a duplicate warning on the post button (our module + SOFTECH)
@@ -747,11 +795,15 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
             if (SupplierInvoice.objects
                     .filter(vendor_id=invoice.vendor_id, invoice_number=invoice.invoice_number)
                     .exclude(pk=invoice.pk)
+                    .filter(**writer.same_kind(invoice))
                     .filter(status__in=['queued', 'pushing', 'finalized']).exists()):
                 return Response({'detail': 'فاتورة بنفس المورد ورقم الفاتورة مُرحَّلة بالفعل من هذا النظام — أكِّد للمتابعة.',
                                  'duplicate': True}, status=status.HTTP_409_CONFLICT)
+        usercode = _poster_usercode(request)
+        if not usercode:
+            return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            result = writer.push_final(invoice, dry_run=False, force=force)
+            result = writer.push_final(invoice, dry_run=False, force=force, usercode=usercode)
             _audit_invoice_push(request, invoice, result, force)
         except writer.WriterDisabled as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
@@ -776,6 +828,9 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if not isinstance(ids, list) or not ids:
             return Response({'detail': 'لم يتم تحديد فواتير'}, status=status.HTTP_400_BAD_REQUEST)
         force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
+        usercode = _poster_usercode(request)
+        if not usercode:
+            return Response({'detail': _NO_SOFTECH_USER}, status=status.HTTP_400_BAD_REQUEST)
         found = {inv.pk: inv for inv in SupplierInvoice.objects.filter(pk__in=ids)}
 
         def _slim(r):
@@ -792,7 +847,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                 results.append({'id': iid, 'ok': False, 'skipped': True, 'status': inv.status,
                                 'error': 'يجب تأكيد الفاتورة قبل الترحيل'}); continue
             try:
-                r = writer.push_final(inv, dry_run=False, force=force)
+                r = writer.push_final(inv, dry_run=False, force=force, usercode=usercode)
                 _audit_invoice_push(request, inv, r, force)
                 results.append({'id': iid, 'ok': bool(r.get('ok', True)),
                                 'supplier': inv.supplier_name, **_slim(r)})
@@ -831,8 +886,14 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
                 vendor_item_code=l.vendor_item_code, batch_number=l.batch_number, expiry_date=l.expiry_date,
                 quantity=l.quantity, public_price=l.public_price, unit_price=l.unit_price,
                 discount_pct=l.discount_pct, extra_discount_pct=l.extra_discount_pct, vat_pct=l.vat_pct,
+                special_discount_pct=l.special_discount_pct, tax_from_cost=l.tax_from_cost,
+                distributor_margin_amt=l.distributor_margin_amt, pharmacist_margin_amt=l.pharmacist_margin_amt,
+                bonus_qty=l.bonus_qty,
                 match_score=1.0, is_confirmed=True, order=l.order,
             )
+        # At posting, every return line copies the ORIGINAL SofTech purchase line (cost,
+        # expiry, batch, VAT columns) — writer._mirror_original — so edits made to the
+        # purchase lines after it was posted can never leak into the return.
         return Response({'id': ret.id, 'detail': 'تم إنشاء مسودة مرتجع — عدّل الكميات ثم أكّد ورحّل'},
                         status=status.HTTP_201_CREATED)
 
@@ -860,7 +921,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
         if not (profile and getattr(profile, 'role', None) == 'admin'):
             return Response({'detail': 'مسموح للمدير فقط'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            result = writer.probe_invoice(invoice, confirm=True)
+            result = writer.probe_invoice(invoice, confirm=True, usercode=_poster_usercode(request))
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:

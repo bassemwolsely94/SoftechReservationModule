@@ -157,12 +157,12 @@ export default function ReplicationAuditPanel() {
             <div className="flex-1" />
             {selected.size > 0 && (
               <>
-                <button onClick={() => repair.mutate({ gap_ids: [...selected], mode: 'restamp' })}
+                <button data-tour="pricing-approvals-replication-resync-selected" onClick={() => repair.mutate({ gap_ids: [...selected], mode: 'restamp' })}
                   disabled={repair.isPending}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-60">
                   إعادة المزامنة المحددة ({selected.size}) — الدورة التالية
                 </button>
-                <button onClick={() => repair.mutate({ gap_ids: [...selected], mode: 'both' })}
+                <button data-tour="pricing-approvals-replication-fix-now-selected" onClick={() => repair.mutate({ gap_ids: [...selected], mode: 'both' })}
                   disabled={repair.isPending}
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-60">
                   إصلاح فوري + الدورة

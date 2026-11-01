@@ -276,12 +276,12 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
 
       {error && <div className="text-xs text-red-600">{error}</div>}
       <div className="flex items-center gap-2 sticky bottom-0 bg-surface py-2 border-t border-line">
-        <button type="button" disabled={busy} onClick={save}
+        <button data-tour="general-help-editor-save" type="button" disabled={busy} onClick={save}
                 className="text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 disabled:opacity-50">حفظ</button>
         <button type="button" disabled={busy} onClick={onDone}
                 className="text-sm border border-line rounded-lg px-3 py-1.5 text-content">إلغاء</button>
         {data.override && (
-          <button type="button" disabled={busy} onClick={revert}
+          <button data-tour="general-help-editor-revert" type="button" disabled={busy} onClick={revert}
                   className="text-xs text-red-600 hover:underline ms-auto">الرجوع للشرح الأصلي</button>
         )}
       </div>

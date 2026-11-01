@@ -1204,7 +1204,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
                 ? 'جارٍ التصدير...'
                 : `ورقة التجميع (${toLatinDigits(String(checkedIds.size))})`}
             </button>
-            <button
+            <button data-tour="transfers-transits-bulk-stocking"
               onClick={() => exportSheetBulk('stocking')}
               disabled={!!exporting}
               title="بترتيب أرفف الفرع المستلم"

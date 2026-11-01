@@ -292,7 +292,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                 onCommit={(v) => saveName(v)}
                 autoFocus={editingName}
                 className="border border-blue-300 rounded px-2 py-0.5 text-sm w-52" />
-              <button onClick={() => saveName()} disabled={savingName}
+              <button data-tour="insurance-claim-rx-name-save" onClick={() => saveName()} disabled={savingName}
                 className="text-[11px] bg-blue-600 text-white rounded px-1.5 py-0.5 disabled:opacity-50">
                 {savingName ? '…' : 'حفظ الاسم'}
               </button>
@@ -301,7 +301,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                   className="text-[11px] text-gray-400 hover:text-gray-600">إلغاء</button>
               )}
               {rx.softech_patient_name && rx.patient_name !== rx.softech_patient_name && (
-                <button onClick={revertName} disabled={savingName}
+                <button data-tour="insurance-claim-rx-name-revert" onClick={revertName} disabled={savingName}
                   title={`استرجاع اسم سوفتك الأصلي: ${rx.softech_patient_name}`}
                   className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1.5 py-0.5 disabled:opacity-50">
                   ↩ اسم سوفتك
@@ -311,18 +311,18 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
           ) : (
             <span className="inline-flex items-center gap-1 group flex-wrap">
               <span>{rx.patient_name || '—'}</span>
-              <button onClick={() => { setNameDraft(rx.patient_name || ''); setEditingName(true) }}
+              <button data-tour="insurance-claim-rx-name-edit" onClick={() => { setNameDraft(rx.patient_name || ''); setEditingName(true) }}
                 title="تعديل الاسم (بدون فتح قفل البنود)"
                 className="text-[11px] text-gray-300 hover:text-blue-600">✎</button>
               {sug && sug.type === 'complete' && (
-                <button onClick={() => saveName(sug.suggestion)} disabled={savingName}
+                <button data-tour="insurance-claim-rx-name-complete" onClick={() => saveName(sug.suggestion)} disabled={savingName}
                   title={`إكمال الاسم رباعياً من السجل — اضغط للتطبيق (قابل للتراجع):\n${sug.suggestion}`}
                   className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-1.5 py-0.5 hover:bg-emerald-100 disabled:opacity-50">
                   ⇢ إكمال: {sug.suggestion}
                 </button>
               )}
               {sug && sug.type === 'spelling' && (
-                <button onClick={() => saveName(sug.suggestion)} disabled={savingName}
+                <button data-tour="insurance-claim-rx-name-spelling" onClick={() => saveName(sug.suggestion)} disabled={savingName}
                   title={`تصحيح إملائى مقترح — اضغط للتطبيق (قابل للتراجع):\n${sug.suggestion}`}
                   className="text-[10px] bg-sky-50 border border-sky-200 text-sky-700 rounded px-1.5 py-0.5 hover:bg-sky-100 disabled:opacity-50">
                   ✎ {sug.suggestion}
@@ -377,12 +377,12 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
               })
               setShowAdjust(true)
             }} variant="warning" data-tour="insurance-claim-rx-adjust">تعديل</Btn>
-            {isAdjusted && <Btn onClick={removeAdjust} variant="secondary">× إزالة التعديل</Btn>}
+            {isAdjusted && <Btn data-tour="insurance-claim-rx-remove-adjust" onClick={removeAdjust} variant="secondary">× إزالة التعديل</Btn>}
             <Btn onClick={toggleExclude} variant={isExcluded ? 'secondary' : 'danger'} data-tour="insurance-claim-rx-exclude">
               {isExcluded ? 'إعادة إدراج' : 'استثناء'}
             </Btn>
             {rx.is_manual && (
-              <Btn variant="danger" onClick={async () => {
+              <Btn data-tour="insurance-claim-rx-delete-manual" variant="danger" onClick={async () => {
                 if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
                 await insuranceApi.deleteManualPrescription(claimId, rx.id)
                 onRefresh()
@@ -523,7 +523,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                           <input value={e.item_code ?? l.softech_itemcode} placeholder="كود جديد"
                             onChange={ev => setE({ item_code: ev.target.value })}
                             className="w-20 border border-gray-300 rounded px-1 py-0.5 font-mono" />
-                          <button onClick={() => lookupNewItem(l.id, (e.item_code ?? l.softech_itemcode).trim())}
+                          <button data-tour="insurance-claim-line-lookup" onClick={() => lookupNewItem(l.id, (e.item_code ?? l.softech_itemcode).trim())}
                             className="text-blue-600 hover:underline">بحث</button>
                         </div>
                         {e.lookup && (e.lookup.found
@@ -547,12 +547,12 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                       <td className="py-1 text-left font-mono font-semibold">{fmt(l.net_amount)}</td>
                       <td className="py-1 text-left">
                         <div className="flex gap-1">
-                          <button onClick={() => saveLine(l.id)} disabled={savingLine === l.id}
+                          <button data-tour="insurance-claim-line-save" onClick={() => saveLine(l.id)} disabled={savingLine === l.id}
                             className="bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700 disabled:opacity-50">
                             {savingLine === l.id ? '…' : 'حفظ'}
                           </button>
                           {l.is_manually_edited && (
-                            <button onClick={() => resetLine(l.id)} disabled={savingLine === l.id}
+                            <button data-tour="insurance-claim-line-reset" onClick={() => resetLine(l.id)} disabled={savingLine === l.id}
                               className="text-gray-500 hover:text-gray-800">استرجاع</button>
                           )}
                         </div>
@@ -601,7 +601,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                   onChange={e => setAdjForm(p => ({ ...p, reason: e.target.value }))} />
               </div>
               <div className="flex gap-2">
-                <Btn onClick={saveAdjust} disabled={saving || !adjForm.reason} variant="primary" size="md">
+                <Btn data-tour="insurance-claim-rx-adjust-save" onClick={saveAdjust} disabled={saving || !adjForm.reason} variant="primary" size="md">
                   {saving ? 'جارٍ الحفظ...' : 'حفظ التعديل'}
                 </Btn>
                 <Btn onClick={() => setShowAdjust(false)} variant="secondary" size="md">إلغاء</Btn>
@@ -694,9 +694,9 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
         <td className="px-3 py-2">
           <div className="flex gap-1">
             <Btn onClick={() => setShowLines(s => !s)} variant="secondary">{showLines ? '▲' : '▼'} بنود</Btn>
-            <Btn onClick={openEdit} variant="warning">تعديل</Btn>
-            <Btn onClick={onManage} variant="secondary">إدارة</Btn>
-            <Btn onClick={toggleExclude} variant={excluded ? 'secondary' : 'danger'}>
+            <Btn data-tour="insurance-claim-manual-edit" onClick={openEdit} variant="warning">تعديل</Btn>
+            <Btn data-tour="insurance-claim-manual-manage" onClick={onManage} variant="secondary">إدارة</Btn>
+            <Btn data-tour="insurance-claim-manual-exclude" onClick={toggleExclude} variant={excluded ? 'secondary' : 'danger'}>
               {excluded ? 'إعادة إدراج' : 'استثناء'}
             </Btn>
           </div>
@@ -748,7 +748,7 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
               إن تركت "الصافى المباشر" فارغاً يُحتسب تلقائياً: محلى×{'(1−'}نسبة المحلى{')'} + مستورد×… (معادلة Power Query).
             </p>
             <div className="flex gap-2 mt-2">
-              <Btn onClick={save} disabled={saving} variant="primary" size="md">{saving ? 'جارٍ الحفظ…' : 'حفظ التعديل'}</Btn>
+              <Btn data-tour="insurance-claim-manual-edit-save" onClick={save} disabled={saving} variant="primary" size="md">{saving ? 'جارٍ الحفظ…' : 'حفظ التعديل'}</Btn>
               <Btn onClick={() => setShowEdit(false)} variant="secondary" size="md">إلغاء</Btn>
             </div>
           </td>
@@ -818,11 +818,11 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
         <div className="flex items-center gap-3">
           <span className="text-sm font-mono text-gray-600">{fmt(sup.gross_before)} {fa()} <span className="font-semibold">{fmt(sup.net_after)}</span></span>
           <Btn variant="secondary" onClick={() => setShowLines(s => !s)}>{showLines ? '▲' : '▼'} بنود</Btn>
-          <Btn variant="warning" onClick={openEdit}>تعديل</Btn>
-          <Btn variant={excluded ? 'secondary' : 'danger'} onClick={toggleExclude}>
+          <Btn data-tour="insurance-claim-supplement-edit" variant="warning" onClick={openEdit}>تعديل</Btn>
+          <Btn data-tour="insurance-claim-supplement-exclude" variant={excluded ? 'secondary' : 'danger'} onClick={toggleExclude}>
             {excluded ? 'إعادة إدراج' : 'استثناء'}
           </Btn>
-          <Btn variant="danger" onClick={onDelete}>حذف</Btn>
+          <Btn data-tour="insurance-claim-supplement-delete" variant="danger" onClick={onDelete}>حذف</Btn>
         </div>
       </div>
 
@@ -868,7 +868,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
             الصافى المتوقع: <span className="font-mono">{fmt(previewNet)}</span> (محلى {rates.local}% · مستورد {rates.imported}% · ترسية {rates.tarsia}%)
           </p>
           <div className="flex gap-2 mt-2">
-            <Btn onClick={save} disabled={saving} variant="primary" size="md">{saving ? 'جارٍ الحفظ…' : 'حفظ التعديل'}</Btn>
+            <Btn data-tour="insurance-claim-supplement-save" onClick={save} disabled={saving} variant="primary" size="md">{saving ? 'جارٍ الحفظ…' : 'حفظ التعديل'}</Btn>
             <Btn onClick={() => setShowEdit(false)} variant="secondary" size="md">إلغاء</Btn>
           </div>
         </div>
@@ -931,6 +931,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
   }
 
   const delSup = async (id) => {
+    if (!window.confirm('حذف هذا الملحق نهائياً؟')) return
     await insuranceApi.deleteSupplement(claimId, id)
     load()
     onRefresh()
@@ -947,7 +948,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-semibold text-gray-700">الملاحق ({sups.length})</h3>
-        <Btn onClick={() => setShowAdd(!showAdd)} size="md">+ إضافة ملحق</Btn>
+        <Btn data-tour="insurance-claim-supplement-add" onClick={() => setShowAdd(!showAdd)} size="md">+ إضافة ملحق</Btn>
       </div>
 
       {showAdd && (
@@ -991,7 +992,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
           </div>
           {addError && <p className="text-red-600 text-sm mb-2">{addError}</p>}
           <div className="flex gap-2">
-            <Btn onClick={addSup} size="md">حفظ الملحق</Btn>
+            <Btn data-tour="insurance-claim-supplement-add-save" onClick={addSup} size="md">حفظ الملحق</Btn>
             <Btn onClick={() => setShowAdd(false)} variant="secondary" size="md">إلغاء</Btn>
           </div>
         </div>
@@ -1073,6 +1074,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
   }
 
   const removeRx = async (id) => {
+    if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
     await insuranceApi.removeManualRx(claimId, id)
     load(); onRefresh()
   }
@@ -1134,7 +1136,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
             <div className="mb-3">
               <label className="text-xs text-gray-600 mb-1 block">طريقة الإضافة</label>
               <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs">
-                <button type="button" onClick={() => setMode('simple')}
+                <button data-tour="insurance-claim-manual-mode" type="button" onClick={() => setMode('simple')}
                   className={`px-3 py-1.5 ${mode === 'simple' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   إجمالى فقط
                 </button>
@@ -1221,7 +1223,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-sm font-semibold">{fmt(mrx.net_after)}</span>
-                  <Btn variant="danger" onClick={() => removeRx(mrx.id)}>حذف</Btn>
+                  <Btn data-tour="insurance-claim-manual-delete" variant="danger" onClick={() => removeRx(mrx.id)}>حذف</Btn>
                 </div>
               </div>
             ))}
@@ -1423,7 +1425,7 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
             <span className="text-amber-600 mr-2">غير مخصص: {unassignedCount} روشتة</span>
           </p>
         </div>
-        <Btn onClick={() => setShowAdd(!showAdd)} size="md">+ فئة جديدة</Btn>
+        <Btn data-tour="insurance-claim-billing-new" onClick={() => setShowAdd(!showAdd)} size="md">+ فئة جديدة</Btn>
       </div>
 
       {showAdd && (
@@ -1460,7 +1462,7 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Btn onClick={addGroup} size="md">حفظ الفئة</Btn>
+            <Btn data-tour="insurance-claim-billing-save" onClick={addGroup} size="md">حفظ الفئة</Btn>
             <Btn onClick={() => setShowAdd(false)} variant="secondary" size="md">إلغاء</Btn>
           </div>
         </div>
@@ -1499,14 +1501,14 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <div className="flex gap-1.5">
-                    <Btn onClick={() => autoAssign(g.id)} variant="secondary">تخصيص تلقائي</Btn>
-                    <Btn onClick={() => { setAssignTarget(g.id); setSelectedRx(new Set()) }} variant="secondary">تخصيص يدوي</Btn>
+                    <Btn data-tour="insurance-claim-billing-auto-assign" onClick={() => autoAssign(g.id)} variant="secondary">تخصيص تلقائي</Btn>
+                    <Btn data-tour="insurance-claim-billing-manual-assign" onClick={() => { setAssignTarget(g.id); setSelectedRx(new Set()) }} variant="secondary">تخصيص يدوي</Btn>
                   </div>
                   <div className="flex gap-1.5">
-                    <Btn onClick={() => exportGroup(g.id, g.code)} variant="success" disabled={exporting === g.id}>
+                    <Btn data-tour="insurance-claim-billing-export" onClick={() => exportGroup(g.id, g.code)} variant="success" disabled={exporting === g.id}>
                       {exporting === g.id ? 'جارٍ...' : 'تصدير فاتورة'}
                     </Btn>
-                    <Btn onClick={() => delGroup(g.id)} variant="danger">حذف</Btn>
+                    <Btn data-tour="insurance-claim-billing-delete" onClick={() => delGroup(g.id)} variant="danger">حذف</Btn>
                   </div>
                 </div>
               </div>
@@ -1517,7 +1519,7 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
                   <div className="flex justify-between items-center mb-2">
                     <p className="text-xs font-semibold text-gray-600">اختر الروشتات غير المخصصة لإضافتها لهذه الفئة ({selectedRx.size} محدد)</p>
                     <div className="flex gap-1.5">
-                      <Btn onClick={saveAssignment} disabled={selectedRx.size === 0}>إضافة المحدد</Btn>
+                      <Btn data-tour="insurance-claim-billing-assign-save" onClick={saveAssignment} disabled={selectedRx.size === 0}>إضافة المحدد</Btn>
                       <Btn onClick={() => setAssignTarget(null)} variant="secondary">إغلاق</Btn>
                     </div>
                   </div>
@@ -1836,7 +1838,7 @@ export default function InsuranceClaimDetailPage() {
             <div className="mb-3 flex items-center gap-2 flex-wrap bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
               <span className="text-sm">🟢</span>
               {completeCount > 0 && (
-                <button onClick={() => setNameFilterMode(m => m === 'complete' ? '' : 'complete')}
+                <button data-tour="insurance-claim-rx-complete-filter" onClick={() => setNameFilterMode(m => m === 'complete' ? '' : 'complete')}
                   className={`text-xs font-semibold rounded px-2.5 py-1 border ${nameFilterMode === 'complete'
                     ? 'bg-emerald-600 text-white border-emerald-600'
                     : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-100'}`}>
@@ -1844,7 +1846,7 @@ export default function InsuranceClaimDetailPage() {
                 </button>
               )}
               {spellingCount > 0 && (
-                <button onClick={() => setNameFilterMode(m => m === 'spelling' ? '' : 'spelling')}
+                <button data-tour="insurance-claim-rx-spelling-filter" onClick={() => setNameFilterMode(m => m === 'spelling' ? '' : 'spelling')}
                   className={`text-xs font-semibold rounded px-2.5 py-1 border ${nameFilterMode === 'spelling'
                     ? 'bg-sky-600 text-white border-sky-600'
                     : 'bg-white text-sky-700 border-sky-300 hover:bg-sky-100'}`}>
@@ -2056,7 +2058,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
                   value={motalbaNo} onChange={e => setMotalbaNo(e.target.value)}
                   placeholder="مثال: 82" onKeyDown={e => e.key === 'Enter' && runPreview(motalbaNo.trim())} />
               </label>
-              <button onClick={() => runPreview(motalbaNo.trim())} disabled={loading || !motalbaNo.trim()}
+              <button data-tour="insurance-claim-resync-preview" onClick={() => runPreview(motalbaNo.trim())} disabled={loading || !motalbaNo.trim()}
                 className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">جلب ومقارنة</button>
               {!claim?.softech_motalba_no && (
                 <span className="text-[11px] text-amber-600">هذه المطالبة ليس لها رقم مطالبة سوفتك محفوظ — أدخله ليُحفظ عند التطبيق.</span>
@@ -2144,7 +2146,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
                     {r.status === 'reverted' && <span className="text-gray-400"> · مُتراجَع</span>}
                   </span>
                   {r.status === 'applied' && (
-                    <button onClick={() => revertRun(r.id)} disabled={busy}
+                    <button data-tour="insurance-claim-resync-revert" onClick={() => revertRun(r.id)} disabled={busy}
                       className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-50">↩ تراجع</button>
                   )}
                 </div>
@@ -2320,12 +2322,12 @@ function IssuanceWizard({ claim, onClose, onRefresh }) {
                 📦 تنزيل حزمة التقديم كاملة (Excel + خطاب التقديم)
               </button>
               <div className="flex gap-2">
-                <button disabled={busy}
+                <button data-tour="insurance-claim-issue-cover-letter" disabled={busy}
                   onClick={() => dl(() => insuranceApi.coverLetter(claimId), `خطاب_${claim.claim_number}.docx`)}
                   className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 disabled:opacity-50">
                   📄 خطاب التقديم (Word)
                 </button>
-                <button disabled={busy}
+                <button data-tour="insurance-claim-issue-tables" disabled={busy}
                   onClick={() => dl(() => insuranceApi.exportExcel(claimId, 'all'), `جداول_${claim.claim_number}.xlsx`)}
                   className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 disabled:opacity-50">
                   📊 الجداول (Excel)
@@ -2505,11 +2507,11 @@ function SeparationTab({ claimId, onRefresh }) {
           className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
           {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
         </button>
-        <button onClick={() => setReviewed([...sel], true)} disabled={sel.size === 0}
+        <button data-tour="insurance-claim-separation-mark-reviewed" onClick={() => setReviewed([...sel], true)} disabled={sel.size === 0}
           className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
           تعليم المحدد كمُراجَع ({sel.size})
         </button>
-        <button onClick={() => setReviewed(data.matches.map(m => m.prescription_id), true)}
+        <button data-tour="insurance-claim-separation-mark-all" onClick={() => setReviewed(data.matches.map(m => m.prescription_id), true)}
           className="px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50">
           تعليم الكل كمُراجَع
         </button>
@@ -2717,7 +2719,7 @@ function NameReviewTab({ claimId, onRefresh }) {
                   </td>
                   <td className="text-left">
                     {row.softech_name && row.current_name !== row.softech_name && (
-                      <button onClick={() => revertOne(row.rx_id)} disabled={busy}
+                      <button data-tour="insurance-claim-name-review-revert" onClick={() => revertOne(row.rx_id)} disabled={busy}
                         title={`استرجاع اسم سوفتك: ${row.softech_name}`}
                         className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-1.5 py-0.5">
                         ↩ سوفتك
@@ -2961,7 +2963,7 @@ function RevisionTab({ claimId }) {
                   <td className="px-2 py-1.5 text-center whitespace-nowrap">
                     {r.review_approved ? (
                       <div className="flex flex-col items-center gap-0.5">
-                        <button onClick={() => review(r, false)} disabled={saving === r.line_id}
+                        <button data-tour="insurance-claim-revision-unapprove" onClick={() => review(r, false)} disabled={saving === r.line_id}
                           className="text-[11px] text-green-700 bg-green-100 rounded px-2 py-0.5 hover:bg-green-200 disabled:opacity-50">
                           ✓ معتمَد
                         </button>
@@ -3051,8 +3053,8 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
         <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno} onChange={e => setDocno(e.target.value)} /></label>
         <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch} onChange={e => setBranch(e.target.value)} /></label>
         <label className="text-xs text-gray-500">التاريخ الجديد<input type="date" className={`${inp} w-40 block mt-0.5`} value={newDate} onChange={e => setNewDate(e.target.value)} /></label>
-        <button onClick={preview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة</button>
-        <button onClick={apply} disabled={busy || !newDate || claim?.status !== 'draft'} className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded disabled:opacity-50">تطبيق التاريخ</button>
+        <button data-tour="insurance-claim-date-preview" onClick={preview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة</button>
+        <button data-tour="insurance-claim-date-apply" onClick={apply} disabled={busy || !newDate || claim?.status !== 'draft'} className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded disabled:opacity-50">تطبيق التاريخ</button>
       </div>
       {pv && (
         <div className="mt-2 text-xs text-gray-700">
@@ -3073,7 +3075,7 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
                 {r.status === 'failed' && <span className="text-red-500"> · فشل</span>}
               </span>
               {r.status === 'applied' && (
-                <button onClick={() => revert(r.id)} disabled={busy} className="text-[11px] text-red-500 hover:text-red-700">↩ استرجاع التاريخ</button>
+                <button data-tour="insurance-claim-date-revert" onClick={() => revert(r.id)} disabled={busy} className="text-[11px] text-red-500 hover:text-red-700">↩ استرجاع التاريخ</button>
               )}
             </div>
           ))}
@@ -3230,7 +3232,7 @@ function SoftechRepriceTab({ claimId, claim }) {
             onChange={e => setDocno(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
           <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch}
             onChange={e => setBranch(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
-          <button onClick={fetchLines} disabled={busy || !docno.trim() || !branch.trim()}
+          <button data-tour="insurance-claim-reprice-fetch" onClick={fetchLines} disabled={busy || !docno.trim() || !branch.trim()}
             className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">جلب البنود</button>
         </div>
         {recLines && (
@@ -3269,7 +3271,7 @@ function SoftechRepriceTab({ claimId, claim }) {
         </table>
         <div className="flex gap-2">
           <button onClick={() => setRows(rs => [...rs, { itemcode: '', price: '' }])} className="text-xs text-blue-600">+ صنف</button>
-          <button onClick={doPreview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة (قراءة فقط)</button>
+          <button data-tour="insurance-claim-reprice-preview" onClick={doPreview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة (قراءة فقط)</button>
         </div>
       </div>
 
@@ -3279,11 +3281,11 @@ function SoftechRepriceTab({ claimId, claim }) {
         <div className="flex flex-wrap items-end gap-2 mb-2">
           <label className="text-xs text-gray-500">كود الصنف<input className={`${inp} w-36 block mt-0.5`} value={bCode}
             onChange={e => setBCode(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchItem()} /></label>
-          <button onClick={searchItem} disabled={busy || !bCode.trim()}
+          <button data-tour="insurance-claim-reprice-batch-search" onClick={searchItem} disabled={busy || !bCode.trim()}
             className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">بحث</button>
           {bList && bList.receipts.length > 0 && <>
             <label className="text-xs text-gray-500">السعر الجديد<input type="number" step="any" className={`${inp} w-28 block mt-0.5 text-left`} value={bPrice} onChange={e => setBPrice(e.target.value)} /></label>
-            <button onClick={applyBatch} disabled={busy || bSel.size === 0 || bPrice === '' || claim?.status !== 'draft'}
+            <button data-tour="insurance-claim-reprice-batch-apply" onClick={applyBatch} disabled={busy || bSel.size === 0 || bPrice === '' || claim?.status !== 'draft'}
               className="px-4 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-40"
               title={claim?.status !== 'draft' ? 'المطالبة ليست مسودة' : ''}>
               تطبيق دفعة على {bSel.size} إيصال
@@ -3373,7 +3375,7 @@ function SoftechRepriceTab({ claimId, claim }) {
           </div>
           {runs.length > 0 && (
             <div className="flex gap-2">
-              <button onClick={() => exportRuns()} className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+              <button data-tour="insurance-claim-reprice-export-log" onClick={() => exportRuns()} className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                 📥 تصدير السجل
               </button>
               {runs.some(r => r.status === 'failed') &&
@@ -3403,10 +3405,10 @@ function SoftechRepriceTab({ claimId, claim }) {
                   <td className="text-center">{r.cust_branch_code}</td>
                   <td className="text-left space-x-1 space-x-reverse">
                     {r.status === 'applied' && <>
-                      <button onClick={() => doRebalance(r)} disabled={busy || r.rebalanced} className="text-sky-600 disabled:text-gray-300"
+                      <button data-tour="insurance-claim-reprice-rebalance" onClick={() => doRebalance(r)} disabled={busy || r.rebalanced} className="text-sky-600 disabled:text-gray-300"
                         title="اختيارى وتقريبى — يصحّح رصيد الائتمان الداخلى فقط (لا يظهر على الإيصال المطبوع)">
                         {r.rebalanced ? '✓ أُعيد الضبط' : 'إعادة ضبط الرصيد (اختيارى)'}</button>
-                      <button onClick={() => doRevert(r)} disabled={busy} className="text-red-500">تراجع</button>
+                      <button data-tour="insurance-claim-reprice-revert" onClick={() => doRevert(r)} disabled={busy} className="text-red-500">تراجع</button>
                     </>}
                   </td>
                 </tr>
@@ -4081,7 +4083,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
                         </select>
                       </td>
                       <td className="px-2 py-1">
-                        <button onClick={() => applyReview(it.item_code, sel)} disabled={reviewBusy === it.item_code}
+                        <button data-tour="insurance-claim-discrepancy-review-apply" onClick={() => applyReview(it.item_code, sel)} disabled={reviewBusy === it.item_code}
                           className="px-2.5 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
                           {reviewBusy === it.item_code ? '…' : 'تطبيق'}
                         </button>
@@ -4289,7 +4291,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
                     تم التراجع{run.reverted_by ? ` — ${run.reverted_by}` : ''}
                   </span>
                 ) : (
-                  <button onClick={() => revertRun(run.id)}
+                  <button data-tour="insurance-claim-discrepancy-revert" onClick={() => revertRun(run.id)}
                     className="px-3 py-1 bg-amber-100 text-amber-700 text-xs rounded hover:bg-amber-200 shrink-0">
                     تراجع
                   </button>
@@ -4464,7 +4466,7 @@ function PivotTab({ claimId }) {
               <option value="">— اختر —</option>
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <button onClick={saveTemplate} title="حفظ الإعداد الحالي كقالب"
+            <button data-tour="insurance-claim-pivot-save-template" onClick={saveTemplate} title="حفظ الإعداد الحالي كقالب"
               className="px-2 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200">💾</button>
           </div>
         </div>
@@ -4474,7 +4476,7 @@ function PivotTab({ claimId }) {
               <p className="text-xs text-gray-500">الإجمالى الكلي</p>
               <p className="font-mono font-bold text-lg text-gray-900">{fmt(result.grand_total)}</p>
             </div>
-            <button onClick={exportExcel} disabled={exporting || !result.rows?.length}
+            <button data-tour="insurance-claim-pivot-export" onClick={exportExcel} disabled={exporting || !result.rows?.length}
               className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
               {exporting ? 'جارٍ التصدير…' : 'تصدير Excel'}
             </button>

@@ -77,7 +77,7 @@ export default function TrainingEditor({ index }) {
     <div ref={boxRef} className="rounded-xl border border-line bg-surface p-4 space-y-3" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-bold text-content flex-1">تعديل المسارات التدريبية والاختبارات</h3>
-        <div className="flex border border-line rounded-lg overflow-hidden text-xs">
+        <div data-tour="general-help-training-kind" className="flex border border-line rounded-lg overflow-hidden text-xs">
           {[['path', 'مسار دور'], ['quiz', 'اختبار موديول'], ['flow', 'جولة دورة عمل']].map(([k, t]) => (
             <button key={k} type="button" onClick={() => switchKind(k)}
                     className={`px-3 py-1.5 ${kind === k ? 'bg-brand-600 text-white' : 'text-muted hover:bg-surface-3'}`}>{t}</button>
@@ -119,10 +119,10 @@ export default function TrainingEditor({ index }) {
           <div className="flex flex-wrap items-center gap-2">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب التعديل (يظهر في السجل)"
                    className="flex-1 min-w-[200px] text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
-            <button type="button" disabled={busy} onClick={save}
+            <button data-tour="general-help-training-save" type="button" disabled={busy} onClick={save}
                     className="text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 disabled:opacity-50">حفظ</button>
             {data.override && (
-              <button type="button" disabled={busy} onClick={revert} className="text-sm border border-line rounded-lg px-3 py-1.5 hover:bg-surface-2">
+              <button data-tour="general-help-training-revert" type="button" disabled={busy} onClick={revert} className="text-sm border border-line rounded-lg px-3 py-1.5 hover:bg-surface-2">
                 الرجوع للنسخة الأصلية
               </button>
             )}
