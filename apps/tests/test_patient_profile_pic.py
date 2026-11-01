@@ -21,7 +21,7 @@ class PatientProfilePicTests(TestCase):
         self.cust = Customer.objects.create(name='صيدلية دكتور باسم', softech_pic='130HD14864', softech_id='14864')
         walk_in = Customer.objects.create(name='Walk-In Customer', softech_pic='ACCT-1510', is_account_placeholder=True)
         self.sale_days_ago = 26
-        when = timezone.now() - dt.timedelta(days=self.sale_days_ago)
+        self.when = when = timezone.now() - dt.timedelta(days=self.sale_days_ago)
         # a sale linked to the customer, and one still on the account placeholder but carrying their PIC
         for n, owner in ((1, self.cust), (2, walk_in)):
             ph = PurchaseHistory.objects.create(
@@ -56,4 +56,5 @@ class PatientProfilePicTests(TestCase):
         self.assertEqual(len(created), 1)
         task = FollowUpTask.objects.get()
         self.assertTrue(task.notes.startswith('phcode:130HD14864'))
-        self.assertEqual(task.source_sale_date, timezone.localdate() - dt.timedelta(days=self.sale_days_ago))
+        # Cairo-local date of the sale (plain date subtraction is off by one near midnight across a DST change)
+        self.assertEqual(task.source_sale_date, timezone.localdate(self.when))
