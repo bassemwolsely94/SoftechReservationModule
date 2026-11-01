@@ -211,9 +211,14 @@ def login_view(request):
     # enforcement is enabled), don't issue tokens yet — hand back a short-lived
     # pre-auth token the client exchanges at /auth/2fa/verify/ (or /enable/).
     from . import mfa as _mfa
+    login_note = ''
     if profile and profile.mfa_enabled:
         device_token = request.data.get('device_token', '')
-        if not _mfa.valid_device_token(device_token, user):
+        if _mfa.valid_device_token(device_token, user):
+            pass
+        elif _devices.mfa_remembered(request, profile):
+            login_note = 'mfa_skipped_device'
+        else:
             _log_auth('mfa_challenge', profile, ip, request=request)
             return Response({'mfa_required': True,
                              'mfa_token': _mfa.make_preauth_token(user, 'login')})
@@ -224,7 +229,7 @@ def login_view(request):
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
 
     device, device_secret = _mfa.enroll_login(request, user)
-    _log_auth('login_success', profile, ip, request=request, device=device)
+    _log_auth('login_success', profile, ip, note=login_note, request=request, device=device)
 
     refresh = RefreshToken.for_user(user)
     if device is not None:

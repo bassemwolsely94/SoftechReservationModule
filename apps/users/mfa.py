@@ -314,6 +314,8 @@ def verify_2fa_view(request):
     resp = build_login_response(user, request, device=device)
     if request.data.get('remember_device'):
         resp['device_token'] = make_device_token(user)
+        from apps.access import devices
+        devices.remember_mfa(device, profile)
     return session_response(resp, device_secret=device_secret)
 
 

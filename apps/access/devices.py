@@ -126,6 +126,45 @@ def enroll(request, profile):
         return None, None, False
 
 
+MFA_REMEMBER_DAYS = 30
+
+
+def remember_mfa(device, profile):
+    """Remember a completed 2FA on this device for the profile. Never raises."""
+    if device is None:
+        return
+    try:
+        from django.utils import timezone
+        from .models import DeviceUser
+        link, _ = DeviceUser.objects.get_or_create(device=device, user=profile)
+        link.mfa_remembered_at = timezone.now()
+        link.mfa_remembered_epoch = profile.mfa_device_epoch or 0
+        link.save(update_fields=['mfa_remembered_at', 'mfa_remembered_epoch'])
+    except Exception as exc:
+        logger.warning('remember_mfa skipped: %s', exc)
+
+
+def mfa_remembered(request, profile):
+    """True when the request's cookie device is approved and 2FA was remembered on it for this
+    profile within 30 days and at the current device epoch. Never raises."""
+    try:
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import DeviceUser
+        device = from_secret(request.COOKIES.get(COOKIE))
+        if device is None or device.status != 'approved':
+            return False
+        link = DeviceUser.objects.filter(device=device, user=profile).first()
+        if link is None or link.mfa_remembered_at is None:
+            return False
+        if timezone.now() - link.mfa_remembered_at > timedelta(days=MFA_REMEMBER_DAYS):
+            return False
+        return (link.mfa_remembered_epoch or 0) == (profile.mfa_device_epoch or 0)
+    except Exception as exc:
+        logger.debug('mfa_remembered skipped: %s', exc)
+        return False
+
+
 def notify_new_device(device, profile, net=None):
     """Tell the user and every active admin that a new device awaits approval. Never raises."""
     try:

@@ -397,3 +397,108 @@ class WhoamiDeviceTests(TestCase):
         self.assertEqual(r.data['device']['status'], 'pending')
         self.assertEqual(r.data['device']['status_label'], 'بانتظار الاعتماد')
         self.assertEqual(r.data['device']['name'], dev.name)
+
+
+# ── Task 4: "remember this device" on approved devices ────────────────────────────────
+
+from datetime import timedelta  # noqa: E402
+
+from django.utils import timezone  # noqa: E402
+
+
+class RememberDeviceTests(TestCase):
+
+    def setUp(self):
+        cache.clear()      # the per-IP login throttle is not under test
+        self.addCleanup(cache.clear)
+        self.user, self.profile, _ = make_user('rem_u1')
+        self.profile.mfa_enabled = True
+        self.profile.mfa_secret = pyotp.random_base32()
+        self.profile.save()
+
+    def _code(self):
+        return pyotp.TOTP(self.profile.mfa_secret).now()
+
+    def _verify(self, c, remember=True):
+        r = _login(c, 'rem_u1')
+        self.assertTrue(r.data.get('mfa_required'))
+        r2 = c.post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'], 'code': self._code(),
+                                              'remember_device': remember},
+                    format='json', HTTP_USER_AGENT=UA)
+        self.assertEqual(r2.status_code, 200, r2.data)
+        return r2
+
+    def _remembered_client(self, approve=True):
+        c = APIClient()
+        r2 = self._verify(c)
+        dev = Device.objects.get()
+        if approve:
+            dev.status = 'approved'
+            dev.save(update_fields=['status'])
+        c2 = APIClient()
+        c2.cookies[devices.COOKIE] = r2.cookies[devices.COOKIE].value
+        return c2, dev, r2
+
+    def test_remembered_on_approved_device_skips_2fa(self):
+        c2, dev, r2 = self._remembered_client()
+        link = DeviceUser.objects.get(device=dev, user=self.profile)
+        self.assertIsNotNone(link.mfa_remembered_at)
+        self.assertEqual(link.mfa_remembered_epoch, self.profile.mfa_device_epoch)
+        self.assertIn('device_token', r2.data)
+        r = _login(c2, 'rem_u1')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('mfa_required', r.data)
+        self.assertIn('access', r.data)
+        log = UserActivityLog.objects.filter(action='login_success').latest('id')
+        self.assertEqual(log.note, 'mfa_skipped_device')
+        self.assertEqual(log.device, dev)
+
+    def test_remembered_on_pending_device_still_challenged(self):
+        c2, dev, _ = self._remembered_client(approve=False)
+        r = _login(c2, 'rem_u1')
+        self.assertTrue(r.data.get('mfa_required'))
+
+    def test_forget_devices_cancels_device_remember(self):
+        from apps.users import mfa
+        c2, dev, _ = self._remembered_client()
+        mfa.forget_devices(self.profile, self.profile, '1.2.3.4')
+        r = _login(c2, 'rem_u1')
+        self.assertTrue(r.data.get('mfa_required'))
+
+    def test_blocked_device_cancels_remember(self):
+        c2, dev, _ = self._remembered_client()
+        dev.status = 'blocked'
+        dev.save(update_fields=['status'])
+        cache.clear()
+        r = _login(c2, 'rem_u1')
+        self.assertEqual(r.status_code, 401)
+        self.assertNotIn('access', r.data)
+
+    def test_remember_expires_after_30_days(self):
+        c2, dev, _ = self._remembered_client()
+        DeviceUser.objects.filter(device=dev).update(mfa_remembered_at=timezone.now() - timedelta(days=31))
+        r = _login(c2, 'rem_u1')
+        self.assertTrue(r.data.get('mfa_required'))
+        DeviceUser.objects.filter(device=dev).update(mfa_remembered_at=timezone.now() - timedelta(days=29))
+        cache.clear()
+        r = _login(c2, 'rem_u1')
+        self.assertNotIn('mfa_required', r.data)
+
+    def test_not_remembered_without_flag(self):
+        c = APIClient()
+        r2 = self._verify(c, remember=False)
+        dev = Device.objects.get()
+        dev.status = 'approved'
+        dev.save(update_fields=['status'])
+        c2 = APIClient()
+        c2.cookies[devices.COOKIE] = r2.cookies[devices.COOKIE].value
+        self.assertTrue(_login(c2, 'rem_u1').data.get('mfa_required'))
+
+    def test_legacy_device_token_still_works(self):
+        from apps.users import mfa
+        token = mfa.make_device_token(self.user)
+        r = APIClient().post('/api/auth/login/', {'username': 'rem_u1', 'password': 'TestPass123',
+                                                  'device_token': token},
+                             format='json', HTTP_USER_AGENT=UA)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('mfa_required', r.data)
