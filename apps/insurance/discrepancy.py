@@ -283,6 +283,7 @@ def compute_claim_discrepancy(claim: InsuranceClaim, tarsia_codes: set | None = 
             detail.append({
                 'line_id':         ln.pk,
                 'prescription_id': ln.prescription_id,
+                'sequence':        ln.prescription.sequence,
                 'docnumber':       ln.prescription.softech_docnumber,
                 'branchcode':      ln.prescription.softech_branchcode,
                 'patient_name':    ln.prescription.patient_name,

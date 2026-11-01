@@ -2215,7 +2215,7 @@ function IssuanceWizard({ claim, onClose, onRefresh }) {
       const url = URL.createObjectURL(new Blob([data]))
       const a = document.createElement('a'); a.href = url; a.download = fname
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)   // Edge reads the blob after click
     } finally { setBusy(false) }
   }
 
@@ -3389,21 +3389,220 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
   )
 }
 
+// ── SOFTECH re-price: step pills + the shared review → confirm → result panel ──
+function StepPills({ steps }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mb-3 text-[11px]">
+      {steps.map((s, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-gray-300">←</span>}
+          <span className={`px-2 py-0.5 rounded-full border ${
+            s.state === 'done' ? 'bg-green-50 border-green-300 text-green-700'
+            : s.state === 'current' ? 'bg-blue-600 border-blue-600 text-white'
+            : 'bg-white border-gray-200 text-gray-400'}`}>
+            {s.state === 'done' ? '✓' : i + 1} {s.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+const _issueCls = (lvl) => lvl === 'block'
+  ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-800'
+
+// The plan was built and guard-checked by the backend; this only displays it and
+// collects the typed confirmation (+ reason when it warned).  Nothing is written
+// until «تطبيق» and the server re-checks everything again.
+function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged }) {
+  const [typed, setTyped]   = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy]     = useState(false)
+  const [err, setErr]       = useState(null)
+  const [result, setResult] = useState(null)
+  const [undoArmed, setUndoArmed] = useState(false)
+  const [left, setLeft]     = useState(plan.expires_in)
+
+  useEffect(() => {
+    const deadline = Date.now() + plan.expires_in * 1000
+    const t = setInterval(() => setLeft(Math.max(0, Math.round((deadline - Date.now()) / 1000))), 1000)
+    return () => clearInterval(t)
+  }, [plan.id])   // eslint-disable-line
+
+  const applied  = plan.status === 'applied' || plan.status === 'reverted'
+  const receipts = plan.receipts || []
+  const blocks   = receipts.filter(r => r.blocked).length
+  const warns    = receipts.reduce((n, r) => n + r.issues.filter(i => i.level === 'warn').length, 0)
+                   + (plan.plan_issues || []).length
+  const reasonOk = !plan.needs_reason || reason.trim().length >= plan.reason_min_chars
+  const typedOk  = typed.trim() === String(plan.receipt_count)
+  const draft    = claim?.status === 'draft'
+  const canApply = !applied && !plan.blocked && plan.write_enabled && draft && left > 0 && typedOk && reasonOk && !busy
+  const step = applied ? 4 : plan.blocked ? 2 : 3
+
+  const apply = async () => {
+    setBusy(true); setErr(null)
+    try {
+      const { data } = await insuranceApi.repricePlanApply(claimId, plan.id, { confirm_count: typed.trim(), reason })
+      setResult(data); setPlan(data.plan); onChanged && onChanged()
+    } catch (e) { setErr(e?.response?.data?.detail || 'تعذّر التطبيق') }
+    finally { setBusy(false) }
+  }
+  const undoAll = async () => {
+    if (!undoArmed) { setUndoArmed(true); return }
+    setBusy(true); setErr(null); setUndoArmed(false)
+    try {
+      const { data } = await insuranceApi.repricePlanRevert(claimId, plan.id)
+      setResult(r => ({ ...(r || {}), undo: data })); setPlan(data.plan); onChanged && onChanged()
+    } catch (e) { setErr(e?.response?.data?.detail || 'تعذّر التراجع') }
+    finally { setBusy(false) }
+  }
+  const runOf = (r) => (plan.runs || []).find(x => String(x.docno) === String(r.docno) && String(x.branch) === String(r.branch))
+  const fmtLeft = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+
+  return (
+    <div className="bg-white border-2 border-blue-200 rounded-xl p-4 space-y-3" data-tour="insurance-claim-reprice-review">
+      <StepPills steps={[
+        { label: 'اختيار', state: 'done' },
+        { label: 'معاينة', state: step === 2 ? 'current' : 'done' },
+        { label: 'تأكيد', state: step === 3 ? 'current' : step > 3 ? 'done' : 'todo' },
+        { label: 'النتيجة', state: step === 4 ? 'current' : 'todo' },
+      ]} />
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">{plan.receipt_count} إيصال</span>
+        <span className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-mono" dir="ltr">Δ {plan.net_delta}</span>
+        {blocks > 0 && <span className="px-2 py-1 rounded bg-red-100 text-red-700">⛔ {blocks} إيصال مرفوض</span>}
+        {warns > 0 && <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">⚠ {warns} تحذير</span>}
+        {!applied && <span className={`px-2 py-1 rounded ${left > 60 ? 'bg-gray-50 text-gray-500' : 'bg-red-50 text-red-600'}`}>
+          صلاحية المعاينة {left > 0 ? fmtLeft : 'انتهت'}</span>}
+        {!applied && <button onClick={onBack} disabled={busy} className="mr-auto text-blue-600 hover:underline">← رجوع للتعديل</button>}
+      </div>
+
+      {(plan.plan_issues || []).map((i, k) =>
+        <div key={k} className={`text-xs border rounded px-2 py-1 ${_issueCls(i.level)}`}>{i.message}</div>)}
+
+      <div className="border border-gray-100 rounded-lg overflow-auto max-h-[50vh]">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 sticky top-0">
+            <tr>
+              <th className="text-right px-2 py-1.5">الإيصال</th>
+              <th className="text-right px-2 py-1.5">المريض</th>
+              <th className="text-right px-2 py-1.5">الصنف</th>
+              <th className="text-left px-2 py-1.5">سعر سوفتك</th>
+              <th className="text-left px-2 py-1.5">السعر الجديد</th>
+              <th className="text-left px-2 py-1.5">المطالبة / الكتالوج</th>
+              <th className="text-left px-2 py-1.5">صافى الإيصال</th>
+              <th className="text-right px-2 py-1.5">{applied ? 'النتيجة' : 'الفحص'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {receipts.map(r => {
+              const run = runOf(r)
+              return (r.items.length ? r.items : [{ itemcode: '—' }]).map((it, k) => (
+                <tr key={`${r.docno}-${r.branch}-${k}`} className={`border-t border-gray-100 align-top ${r.blocked ? 'bg-red-50/50' : ''}`}>
+                  {k === 0 && <>
+                    <td rowSpan={r.items.length || 1} className="px-2 py-1.5 font-mono whitespace-nowrap">#{r.docno}<div className="text-gray-400">فرع {r.branch}</div></td>
+                    <td rowSpan={r.items.length || 1} className="px-2 py-1.5 text-gray-700">{r.patient || '—'}<div className="text-gray-400 font-mono">{r.docdate || ''}</div></td>
+                  </>}
+                  <td className="px-2 py-1.5"><span className="font-mono text-gray-500">{it.itemcode}</span> <span className="text-gray-700">{it.item_name}</span></td>
+                  <td className="px-2 py-1.5 text-left font-mono">{it.softech_price ?? '—'}</td>
+                  <td className="px-2 py-1.5 text-left font-mono font-bold text-gray-900">{it.new_price}</td>
+                  <td className="px-2 py-1.5 text-left font-mono text-gray-500">{it.claim_price ?? '—'} / {it.catalog_price ?? '—'}</td>
+                  {k === 0 && <>
+                    <td rowSpan={r.items.length || 1} className="px-2 py-1.5 text-left font-mono whitespace-nowrap">
+                      {r.old_docvalue ?? '—'} {fa()} {r.new_docvalue ?? '—'}
+                      <div className={Number(r.net_delta) ? 'text-blue-700' : 'text-gray-400'} dir="ltr">Δ {r.net_delta}</div>
+                    </td>
+                    <td rowSpan={r.items.length || 1} className="px-2 py-1.5 min-w-[220px]">
+                      {applied && run ? (run.status === 'applied'
+                        ? <span className="text-green-700">✓ مُطبَّق #{run.id}</span>
+                        : run.status === 'reverted' ? <span className="text-gray-500">↩ مُتراجَع #{run.id}</span>
+                        : <span className="text-red-600" title={run.error}>✕ فشل: {run.error}</span>)
+                        : r.issues.length === 0 ? <span className="text-green-600">✓ سليم</span>
+                        : r.issues.map((i, j) => <div key={j} className={`border rounded px-1.5 py-0.5 mb-0.5 ${_issueCls(i.level)}`}>{i.message}</div>)}
+                    </td>
+                  </>}
+                </tr>
+              ))
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {err && <div className="text-sm rounded-lg p-2 bg-red-50 text-red-700">{err}</div>}
+
+      {!applied && (plan.blocked ? (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          ⛔ لا يمكن التطبيق: يوجد إيصال مرفوض. ارجع للتعديل وصحّح السعر أو ألغِ تحديد الإيصال المرفوض، ثم أعد المعاينة.
+        </div>
+      ) : (
+        <div className="rounded-lg border border-red-200 bg-red-50/40 p-3 space-y-2" data-tour="insurance-claim-reprice-confirm">
+          <div className="text-sm font-semibold text-red-800">③ تأكيد الكتابة إلى سوفتك</div>
+          <ul className="text-xs text-gray-700 list-disc pr-5 space-y-0.5">
+            <li>سيُعدَّل سعر الصنف داخل سوفتك على <b>HQ والفرع</b> (الإيصال + التحصيل + سطر المطالبة فى سوفتك).</li>
+            <li>كل إيصال عملية مستقلة قابلة للتراجع، و«تراجع عن الدفعة كلها» متاح بعد التطبيق.</li>
+            <li>راجع عمود «السعر الجديد»: هو سعر العبوة للجمهور — ليس رقم إيصال ولا كود صنف.</li>
+          </ul>
+          {!plan.write_enabled && <div className="text-xs text-red-700">الكتابة إلى سوفتك معطّلة على هذا السيرفر.</div>}
+          {!draft && <div className="text-xs text-red-700">المطالبة ليست مسودة — التعديل محظور.</div>}
+          {plan.needs_reason && (
+            <label className="block text-xs text-amber-800">
+              سبب تجاوز التحذيرات (إلزامى، {plan.reason_min_chars} أحرف على الأقل)
+              <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
+                className="mt-1 w-full border border-amber-300 rounded px-2 py-1 text-sm" />
+            </label>
+          )}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-gray-700">
+              للتأكيد اكتب عدد الإيصالات: <b className="font-mono">{plan.receipt_count}</b>
+              <input value={typed} onChange={e => setTyped(e.target.value)} inputMode="numeric" dir="ltr"
+                data-tour="insurance-claim-reprice-confirm-count"
+                className={`block mt-1 w-28 border rounded px-2 py-1.5 text-sm text-center font-mono ${typed && !typedOk ? 'border-red-400' : 'border-gray-300'}`} />
+            </label>
+            <button onClick={apply} disabled={!canApply} data-tour="insurance-claim-reprice-apply"
+              className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-40">
+              {busy ? 'جارٍ الكتابة…' : `تطبيق على سوفتك (${plan.receipt_count} إيصال)`}
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {applied && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 flex flex-wrap items-center gap-3 text-sm">
+          <span className="font-semibold">④ النتيجة:</span>
+          <span className="text-green-700">✓ {(plan.runs || []).filter(r => r.status === 'applied').length} مُطبَّق</span>
+          {(plan.runs || []).some(r => r.status === 'failed') && <span className="text-red-600">✕ {(plan.runs || []).filter(r => r.status === 'failed').length} فشل</span>}
+          {(plan.runs || []).some(r => r.status === 'reverted') && <span className="text-gray-500">↩ {(plan.runs || []).filter(r => r.status === 'reverted').length} مُتراجَع</span>}
+          {(plan.runs || []).some(r => r.status === 'applied') && (
+            <button onClick={undoAll} disabled={busy} data-tour="insurance-claim-reprice-undo-plan"
+              className={`px-3 py-1.5 text-xs rounded border ${undoArmed ? 'bg-red-600 text-white border-red-600' : 'border-red-300 text-red-600 hover:bg-red-50'}`}>
+              {undoArmed ? 'اضغط مرة أخرى لتأكيد التراجع عن الدفعة كلها' : '↩ تراجع عن الدفعة كلها'}
+            </button>
+          )}
+          <button onClick={onBack} className="mr-auto text-blue-600 text-xs hover:underline">معاينة جديدة</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SoftechRepriceTab({ claimId, claim }) {
   const [docno, setDocno]   = useState('')
   const [branch, setBranch] = useState('')
-  const [rows, setRows]     = useState([{ itemcode: '', price: '' }])
-  const [pv, setPv]         = useState(null)
+  const [recLines, setRecLines]   = useState(null)   // ① the receipt's SOFTECH lines
+  const [recPrices, setRecPrices] = useState({})     // ① itemcode → typed new price
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
   const [runs, setRuns]     = useState([])
-  const [recLines, setRecLines] = useState(null)   // fetched receipt lines to pick from
-  // item-code → multi-receipt batch
+  // ② item-code → multi-receipt batch
   const [bCode, setBCode]   = useState('')
   const [bList, setBList]   = useState(null)        // {receipts:[...]}
   const [bSel, setBSel]     = useState(new Set())
   const [bPrice, setBPrice] = useState('')
-  const [bRes, setBRes]     = useState(null)
+  // the previewed plan under review (one at a time) and which section built it
+  const [plan, setPlan]         = useState(null)
+  const [planFrom, setPlanFrom] = useState(null)
 
   const loadRuns = () => insuranceApi.repriceRuns(claimId).then(r => setRuns(r.data)).catch(() => {})
   useEffect(() => { loadRuns() }, [claimId])   // eslint-disable-line
@@ -3418,30 +3617,38 @@ function SoftechRepriceTab({ claimId, claim }) {
       a.href = url
       a.download = status === 'failed' ? `تعديلات_سوفتك_فاشلة_${claimId}.xlsx` : `تعديلات_سوفتك_${claimId}.xlsx`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)   // Edge reads the blob after click
     } catch { /* noop */ }
   }
 
+  const resetPlan = () => setPlan(null)
+
+  // ① receipt-driven: fetch the receipt's lines, type a new price next to each item to change
   const fetchLines = async () => {
     if (!docno.trim() || !branch.trim()) return
-    setBusy(true); setMsg(null); setRecLines(null)
+    setBusy(true); setMsg(null); setRecLines(null); setRecPrices({}); resetPlan()
     try {
       const { data } = await insuranceApi.repriceReceiptLines(claimId, docno.trim(), branch.trim())
       setRecLines(data.lines || [])
     } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر جلب البنود' }) }
     finally { setBusy(false) }
   }
-  const pickLine = (l) => {
-    setRows(rs => {
-      const empty = rs.findIndex(r => !r.itemcode.trim())
-      if (empty >= 0) return rs.map((r, i) => i === empty ? { ...r, itemcode: l.itemcode } : r)
-      return [...rs, { itemcode: l.itemcode, price: '' }]
-    })
+  const recTyped = Object.entries(recPrices).filter(([, v]) => String(v).trim() !== '')
+  const previewReceipt = async () => {
+    if (!recTyped.length) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await insuranceApi.repricePlan(claimId, { source: 'receipt',
+        receipts: [{ docno: docno.trim(), branch: branch.trim(), prices: Object.fromEntries(recTyped) }] })
+      setPlan(data); setPlanFrom('receipt')
+    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّرت المعاينة' }) }
+    finally { setBusy(false) }
   }
 
+  // ② item-driven: one item, many receipts of this claim, one new price
   const searchItem = async () => {
     if (!bCode.trim()) return
-    setBusy(true); setMsg(null); setBList(null); setBRes(null)
+    setBusy(true); setMsg(null); setBList(null); setBPrice(''); resetPlan()
     try {
       const { data } = await insuranceApi.repriceItemReceipts(claimId, bCode.trim())
       setBList(data)
@@ -3449,42 +3656,16 @@ function SoftechRepriceTab({ claimId, claim }) {
     } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر البحث' }) }
     finally { setBusy(false) }
   }
-  const applyBatch = async () => {
-    const receipts = (bList?.receipts || []).filter(r => bSel.has(`${r.docno}__${r.branch}`))
-    if (!receipts.length || bPrice === '') return
-    if (!window.confirm(`تطبيق سعر ${bPrice} للصنف ${bList.itemcode} على ${receipts.length} إيصال؟ كل إيصال عملية مستقلة قابلة للتراجع.`)) return
+  const bChosen = (bList?.receipts || []).filter(r => bSel.has(`${r.docno}__${r.branch}`))
+  const claimPrices = [...new Set(bChosen.map(r => String(Number(r.unit_price))))]
+  const previewBatch = async () => {
+    if (!bChosen.length || String(bPrice).trim() === '') return
     setBusy(true); setMsg(null)
     try {
-      const { data } = await insuranceApi.repriceApplyBatch(claimId, {
-        itemcode: bList.itemcode, new_price: bPrice,
-        receipts: receipts.map(r => ({ docno: r.docno, branch: r.branch })), confirm: true })
-      setBRes(data)
-      setMsg({ ok: `تم تطبيق ${data.applied} من ${receipts.length}${data.failed ? ` (فشل ${data.failed})` : ''}.` })
-      loadRuns()
-    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التطبيق الدفعى' }) }
-    finally { setBusy(false) }
-  }
-
-  const pricesObj = () => Object.fromEntries(
-    rows.filter(r => r.itemcode.trim() && r.price !== '').map(r => [r.itemcode.trim(), r.price]))
-
-  const doPreview = async () => {
-    setBusy(true); setMsg(null); setPv(null)
-    try {
-      const { data } = await insuranceApi.repricePreview(claimId, { docnumber: docno.trim(), branch: branch.trim(), prices: pricesObj() })
-      setPv(data)
+      const { data } = await insuranceApi.repricePlan(claimId, { source: 'item',
+        receipts: bChosen.map(r => ({ docno: r.docno, branch: r.branch, prices: { [bList.itemcode]: String(bPrice).trim() } })) })
+      setPlan(data); setPlanFrom('item')
     } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّرت المعاينة' }) }
-    finally { setBusy(false) }
-  }
-
-  const doApply = async () => {
-    if (!window.confirm(`تأكيد الكتابة إلى سوفتك (HQ + الفرع) للإيصال #${docno}؟`)) return
-    setBusy(true); setMsg(null)
-    try {
-      const { data } = await insuranceApi.repriceApply(claimId, { docnumber: docno.trim(), branch: branch.trim(), prices: pricesObj(), confirm: true })
-      setMsg({ ok: `تم التطبيق (عملية #${data.run_id}). صافى Δ ${data.net_delta}. إعادة ضبط الرصيد اختيارية من سجل العمليات بالأسفل.` })
-      loadRuns()
-    } catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التطبيق' }) }
     finally { setBusy(false) }
   }
 
@@ -3515,102 +3696,101 @@ function SoftechRepriceTab({ claimId, claim }) {
     finally { setBusy(false) }
   }
 
-  const inp = 'border border-gray-300 rounded px-2 py-1.5 text-sm'
-  const canApply = pv && pv.write_enabled && pv.branch_consistency?.reachable && claim?.status === 'draft'
+  const inp = 'border border-gray-300 rounded px-2 py-1.5 text-sm disabled:bg-gray-50'
+  const reviewing = !!plan
+  const pill = (done, current) => done ? 'done' : current ? 'current' : 'todo'
 
   return (
     <div className="space-y-4" dir="rtl">
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
         تعديل سعر إيصال داخل سوفتك (stktrans + stktransm + branchesales) على HQ والفرع، ليتطابق الإيصال المطبوع مع المطالبة بعد إعادة التسعير.
-        الكتابة معطّلة افتراضياً — المعاينة متاحة دائماً، والتطبيق يتطلب تفعيل العلم بالسيرفر + مطالبة مسودة + فرع متصل.
+        لا كتابة بدون معاينة: اختر ← عاين (قراءة فقط، مع فحص الأسعار) ← اكتب عدد الإيصالات للتأكيد ← تطبيق. كل إيصال قابل للتراجع.
       </div>
 
       <SoftechDateEditCard claimId={claimId} claim={claim} inp={inp} />
 
-
-      {/* ─── (1) Receipt-driven: fetch a receipt's lines and pick an item ─── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-medium text-gray-700 mb-2">١) تعديل بإيصال — اكتب رقم الإيصال والفرع، اجلب البنود، اختر الصنف واكتب السعر</div>
+      {/* ─── (1) Receipt-driven ─── */}
+      <fieldset disabled={reviewing || busy} className={`bg-white border rounded-xl p-4 ${planFrom === 'receipt' && reviewing ? 'border-blue-300' : 'border-gray-200'} ${reviewing && planFrom !== 'receipt' ? 'opacity-50' : ''}`}>
+        <div className="text-sm font-medium text-gray-700 mb-2">١) تعديل بإيصال — كل أصناف الإيصال الواحد فى عملية واحدة</div>
+        <StepPills steps={[
+          { label: 'الإيصال', state: pill(!!recLines, !recLines) },
+          { label: 'الأسعار الجديدة', state: pill(reviewing && planFrom === 'receipt', !!recLines && !(reviewing && planFrom === 'receipt')) },
+          { label: 'المعاينة والتأكيد', state: pill(false, reviewing && planFrom === 'receipt') },
+        ]} />
         <div className="flex flex-wrap items-end gap-2 mb-3">
-          <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno}
-            onChange={e => setDocno(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
-          <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch}
-            onChange={e => setBranch(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
-          <button onClick={fetchLines} disabled={busy || !docno.trim() || !branch.trim()}
+          <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno} dir="ltr"
+            onChange={e => { setDocno(e.target.value); setRecLines(null); setRecPrices({}) }}
+            onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
+          <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch} dir="ltr"
+            onChange={e => { setBranch(e.target.value); setRecLines(null); setRecPrices({}) }}
+            onKeyDown={e => e.key === 'Enter' && fetchLines()} /></label>
+          <button onClick={fetchLines} disabled={!docno.trim() || !branch.trim()}
             className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">جلب البنود</button>
         </div>
-        {recLines && (
-          <div className="mb-3 border border-gray-100 rounded-lg overflow-hidden">
-            {recLines.length === 0 ? <div className="text-xs text-gray-400 p-2">لا توجد بنود لهذا الإيصال.</div> : (
+        {recLines && (recLines.length === 0
+          ? <div className="text-xs text-gray-400">لا توجد بنود لهذا الإيصال.</div>
+          : <>
+            <div className="border border-gray-100 rounded-lg overflow-hidden mb-2">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-gray-500"><tr>
                   <th className="text-right px-2 py-1">الكود</th><th className="text-right px-2 py-1">الصنف</th>
-                  <th className="text-left px-2 py-1">كمية</th><th className="text-left px-2 py-1">السعر الحالى</th><th></th></tr></thead>
+                  <th className="text-left px-2 py-1">كمية</th><th className="text-left px-2 py-1">سعر سوفتك الحالى</th>
+                  <th className="text-left px-2 py-1">السعر الجديد (اتركه فارغاً بلا تغيير)</th></tr></thead>
                 <tbody>
                   {recLines.map((l, i) => (
-                    <tr key={i} className="border-t border-gray-100 hover:bg-sky-50/40">
+                    <tr key={i} className={`border-t border-gray-100 ${String(recPrices[l.itemcode] ?? '').trim() ? 'bg-sky-50/50' : ''}`}>
                       <td className="px-2 py-1 font-mono text-gray-500">{l.itemcode}</td>
                       <td className="px-2 py-1 text-gray-800">{l.item_name}</td>
                       <td className="px-2 py-1 text-left font-mono">{l.qty}</td>
                       <td className="px-2 py-1 text-left font-mono">{fmt(l.itemsaleprice)}</td>
-                      <td className="px-2 py-1 text-left"><button onClick={() => pickLine(l)} className="text-sky-600 text-xs hover:underline">اختيار ←</button></td>
+                      <td className="px-2 py-1 text-left">
+                        <input inputMode="decimal" dir="ltr" placeholder="—" value={recPrices[l.itemcode] ?? ''}
+                          onChange={e => setRecPrices(p => ({ ...p, [l.itemcode]: e.target.value }))}
+                          className={`${inp} w-28 text-left font-mono`} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
-        )}
-        <table className="text-sm mb-2">
-          <thead><tr className="text-xs text-gray-500"><th className="text-right px-2">كود الصنف</th><th className="text-right px-2">السعر الجديد</th><th></th></tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td className="px-2 py-1"><input className={`${inp} w-32`} value={r.itemcode} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, itemcode: e.target.value } : x))} /></td>
-                <td className="px-2 py-1"><input type="number" step="any" className={`${inp} w-28 text-left`} value={r.price} onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} /></td>
-                <td className="px-2 py-1">{rows.length > 1 && <button onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} className="text-red-500 text-xs">حذف</button>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="flex gap-2">
-          <button onClick={() => setRows(rs => [...rs, { itemcode: '', price: '' }])} className="text-xs text-blue-600">+ صنف</button>
-          <button onClick={doPreview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة (قراءة فقط)</button>
-        </div>
-      </div>
-
-      {/* ─── (2) Item-driven: batch re-price one item across many receipts ─── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-medium text-gray-700 mb-2">٢) تعديل صنف عبر عدة إيصالات — اكتب كود الصنف لعرض كل إيصالاته فى هذه المطالبة وتحديثها دفعة واحدة</div>
-        <div className="flex flex-wrap items-end gap-2 mb-2">
-          <label className="text-xs text-gray-500">كود الصنف<input className={`${inp} w-36 block mt-0.5`} value={bCode}
-            onChange={e => setBCode(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchItem()} /></label>
-          <button onClick={searchItem} disabled={busy || !bCode.trim()}
-            className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">بحث</button>
-          {bList && bList.receipts.length > 0 && <>
-            <label className="text-xs text-gray-500">السعر الجديد<input type="number" step="any" className={`${inp} w-28 block mt-0.5 text-left`} value={bPrice} onChange={e => setBPrice(e.target.value)} /></label>
-            <button onClick={applyBatch} disabled={busy || bSel.size === 0 || bPrice === '' || claim?.status !== 'draft'}
-              className="px-4 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-40"
-              title={claim?.status !== 'draft' ? 'المطالبة ليست مسودة' : ''}>
-              تطبيق دفعة على {bSel.size} إيصال
+            </div>
+            <button onClick={previewReceipt} disabled={!recTyped.length} data-tour="insurance-claim-reprice-preview"
+              className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-40">
+              معاينة {recTyped.length ? `(${recTyped.length} صنف)` : ''} — قراءة فقط
             </button>
-          </>}
+          </>)}
+      </fieldset>
+      {reviewing && planFrom === 'receipt' &&
+        <RepricePlanReview claimId={claimId} claim={claim} plan={plan} setPlan={setPlan} onBack={resetPlan} onChanged={loadRuns} />}
+
+      {/* ─── (2) Item-driven batch ─── */}
+      <fieldset disabled={reviewing || busy} className={`bg-white border rounded-xl p-4 ${planFrom === 'item' && reviewing ? 'border-blue-300' : 'border-gray-200'} ${reviewing && planFrom !== 'item' ? 'opacity-50' : ''}`}>
+        <div className="text-sm font-medium text-gray-700 mb-2">٢) تعديل صنف عبر عدة إيصالات — نفس السعر لصنف واحد فى إيصالات هذه المطالبة</div>
+        <StepPills steps={[
+          { label: 'الصنف', state: pill(!!bList, !bList) },
+          { label: 'الإيصالات والسعر', state: pill(reviewing && planFrom === 'item', !!bList && !(reviewing && planFrom === 'item')) },
+          { label: 'المعاينة والتأكيد', state: pill(false, reviewing && planFrom === 'item') },
+        ]} />
+        <div className="flex flex-wrap items-end gap-2 mb-2">
+          <label className="text-xs text-gray-500">كود الصنف<input className={`${inp} w-36 block mt-0.5`} value={bCode} dir="ltr"
+            onChange={e => { setBCode(e.target.value); setBList(null); setBPrice('') }}
+            onKeyDown={e => e.key === 'Enter' && searchItem()} /></label>
+          <button onClick={searchItem} disabled={!bCode.trim()}
+            className="px-3 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50">بحث</button>
         </div>
         {bList && (bList.receipts.length === 0
           ? <div className="text-xs text-gray-400">لا توجد إيصالات بهذا الصنف فى هذه المطالبة.</div>
-          : (
-          <div className="border border-gray-100 rounded-lg overflow-x-auto">
+          : <>
+          <div className="border border-gray-100 rounded-lg overflow-auto max-h-72 mb-2">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500"><tr>
-                <th className="px-2 py-1"><input type="checkbox" checked={bSel.size === bList.receipts.length}
+              <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
+                <th className="px-2 py-1"><input type="checkbox" checked={bSel.size === bList.receipts.length} title="تحديد الكل / إلغاء تحديد الكل"
                   onChange={() => setBSel(s => s.size === bList.receipts.length ? new Set() : new Set(bList.receipts.map(r => `${r.docno}__${r.branch}`)))} /></th>
                 <th className="text-right px-2 py-1">الإيصال</th><th className="text-center px-2 py-1">الفرع</th>
                 <th className="text-right px-2 py-1">التاريخ</th><th className="text-right px-2 py-1">المريض</th>
-                <th className="text-left px-2 py-1">السعر المجمّد</th><th className="text-left px-2 py-1">كمية</th><th className="px-2 py-1"></th></tr></thead>
+                <th className="text-left px-2 py-1">سعر المطالبة</th><th className="text-left px-2 py-1">كمية</th></tr></thead>
               <tbody>
                 {bList.receipts.map((r, i) => {
                   const key = `${r.docno}__${r.branch}`
-                  const res = bRes?.results?.find(x => String(x.docno) === String(r.docno) && String(x.branch) === String(r.branch))
                   return (
                     <tr key={i} className="border-t border-gray-100">
                       <td className="px-2 py-1 text-center"><input type="checkbox" checked={bSel.has(key)}
@@ -3621,53 +3801,31 @@ function SoftechRepriceTab({ claimId, claim }) {
                       <td className="px-2 py-1 text-gray-700">{r.patient || '—'}</td>
                       <td className="px-2 py-1 text-left font-mono">{fmt(r.unit_price)}</td>
                       <td className="px-2 py-1 text-left font-mono">{r.quantity}</td>
-                      <td className="px-2 py-1 text-left">{res && (res.ok
-                        ? <span className="text-green-600">✓ #{res.run_id} (Δ{res.net_delta})</span>
-                        : <span className="text-red-500" title={res.error}>✕ فشل</span>)}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-        ))}
-      </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-gray-500">السعر الجديد للعبوة (ليس رقم إيصال)
+              <input inputMode="decimal" dir="ltr" className={`${inp} w-32 block mt-0.5 text-left font-mono`} value={bPrice}
+                onChange={e => setBPrice(e.target.value)} /></label>
+            {claimPrices.length === 1 && Number(claimPrices[0]) > 0 && String(bPrice).trim() !== claimPrices[0] && (
+              <button onClick={() => setBPrice(claimPrices[0])} className="text-xs text-blue-600 hover:underline pb-2">
+                استخدم سعر المطالبة ({claimPrices[0]})</button>
+            )}
+            <button onClick={previewBatch} disabled={!bChosen.length || String(bPrice).trim() === ''} data-tour="insurance-claim-reprice-batch-preview"
+              className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-40">
+              معاينة {bChosen.length} إيصال — قراءة فقط
+            </button>
+          </div>
+          </>)}
+      </fieldset>
+      {reviewing && planFrom === 'item' &&
+        <RepricePlanReview claimId={claimId} claim={claim} plan={plan} setPlan={setPlan} onBack={resetPlan} onChanged={loadRuns} />}
 
       {msg && <div className={`text-sm rounded-lg p-2 ${msg.err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{msg.err || msg.ok}</div>}
-
-      {/* Preview result */}
-      {pv && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-sm space-y-3">
-          <div className="flex flex-wrap gap-3 text-xs">
-            <span className={`px-2 py-0.5 rounded ${pv.write_enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>الكتابة {pv.write_enabled ? 'مُفعّلة' : 'معطّلة'}</span>
-            <span className={`px-2 py-0.5 rounded ${pv.branch_consistency?.reachable ? (pv.branch_consistency.consistent ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700') : 'bg-amber-100 text-amber-700'}`}>
-              الفرع {pv.branch_consistency?.reachable ? (pv.branch_consistency.consistent ? 'متصل ومتطابق' : 'متصل لكن غير متطابق') : 'غير متصل'}
-            </span>
-            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700">عميل التعاقد {pv.cust_branch_code || '—'}</span>
-          </div>
-          {pv.lines.map((l, i) => (
-            <div key={i} className="border-b border-gray-100 pb-2">
-              <div className="font-medium">صنف {l.itemcode} <span className="text-xs text-gray-400">(ض {l.vat_rate}%, كمية {l.transqty})</span></div>
-              {Object.entries(l.changes).map(([f, ch]) => (
-                <div key={f} className="text-xs text-gray-600 flex gap-2"><span className="w-40">{f}</span><span className="font-mono">{ch.old} {fa()} <b className="text-gray-900">{ch.new}</b></span></div>
-              ))}
-            </div>
-          ))}
-          <div className="text-xs text-gray-700 grid grid-cols-2 gap-1 max-w-md">
-            {Object.entries(pv.header).map(([f, ch]) => <div key={f}><span className="text-gray-400">{f}</span> {ch.old} {fa()} <b>{ch.new}</b></div>)}
-            <div><span className="text-gray-400">docvalue2 (تكلفة)</span> {pv.docvalue2_cost} (ثابت)</div>
-            <div><span className="text-gray-400">التحصيل الجديد</span> {pv.tender_new}</div>
-            <div><span className="text-gray-400">صافى Δ</span> <b>{pv.net_delta}</b></div>
-            {pv.motalba_rows > 0 && <div className="text-blue-700">سيُحدَّث «المطلوب سداده» فى {pv.motalba_rows} مطالبة (سوفتك) ليطابق الصافى الجديد</div>}
-            <div className="text-gray-500">إعادة ضبط الرصيد التراكمى اختيارية (من سجل العمليات بعد التطبيق)</div>
-          </div>
-          <button onClick={doApply} disabled={busy || !canApply} data-tour="insurance-claim-reprice-apply"
-            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-40"
-            title={!canApply ? 'التطبيق محظور (الكتابة معطّلة / الفرع غير متصل / المطالبة ليست مسودة)' : ''}>
-            تطبيق على سوفتك (HQ + الفرع)
-          </button>
-        </div>
-      )}
 
       {/* Runs history */}
       <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -3691,7 +3849,7 @@ function SoftechRepriceTab({ claimId, claim }) {
         </div>
         {runs.length === 0 ? <div className="text-xs text-gray-400">لا توجد عمليات.</div> : (
           <table className="w-full text-xs">
-            <thead className="text-gray-500"><tr><th className="text-right py-1">التاريخ</th><th>الإيصال</th><th>الفرع</th><th>الحالة</th><th>صافى Δ</th><th>عميل التعاقد</th><th></th></tr></thead>
+            <thead className="text-gray-500"><tr><th className="text-right py-1">التاريخ</th><th>الإيصال</th><th>الفرع</th><th>الحالة</th><th>صافى Δ</th><th>عميل التعاقد</th><th>الخطة</th><th></th></tr></thead>
             <tbody>
               {runs.map(r => {
                 const statusLabel = { preview: 'معاينة', applied: 'مُطبَّق', reverted: 'مُتراجَع', failed: 'فشل' }[r.status] || r.status
@@ -3707,6 +3865,7 @@ function SoftechRepriceTab({ claimId, claim }) {
                   <td className={`text-center ${statusCls}`} title={r.status === 'failed' ? (r.error || '') : ''}>{statusLabel}</td>
                   <td className="text-center font-mono">{r.net_delta}</td>
                   <td className="text-center">{r.cust_branch_code}</td>
+                  <td className="text-center text-gray-500" title={r.reason || ''}>{r.plan_id ? `#${r.plan_id}${r.reason ? ' ✎' : ''}` : '—'}</td>
                   <td className="text-left space-x-1 space-x-reverse">
                     {r.status === 'applied' && <>
                       <button onClick={() => doRebalance(r)} disabled={busy || r.rebalanced} className="text-sky-600 disabled:text-gray-300"
@@ -4201,7 +4360,7 @@ function DiscrepancyTab({ claimId, onRefresh }) {
       const a = document.createElement('a')
       a.href = url; a.download = `فروقات_${claimId}.xlsx`
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)   // Edge reads the blob after click
     } finally { setExporting(false) }
   }
 
@@ -4710,7 +4869,7 @@ function PivotTab({ claimId }) {
       const link = document.createElement('a')
       link.href = url; link.download = `تحليل_${claimId}.xlsx`
       document.body.appendChild(link); link.click(); document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)   // Edge reads the blob after click
     } catch { setError('تعذّر تصدير الملف') } finally { setExporting(false) }
   }
 

@@ -1200,6 +1200,47 @@ class InsuranceAuditEvent(models.Model):
 # SOFTECH RE-PRICE WRITEBACK — audit + revert store for edits pushed INTO SOFTECH
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class SoftechWritePlan(models.Model):
+    """
+    A previewed set of SOFTECH receipt re-prices (one receipt or a batch).  Nothing is
+    written until this exact plan is applied: the apply must name a fresh, unblocked
+    plan, carry the typed receipt count (and a reason when the guard warned), and the
+    status flip previewed → applying is atomic so a double-click cannot post twice.
+    """
+    STATUS_PREVIEWED = 'previewed'
+    STATUS_APPLYING  = 'applying'
+    STATUS_APPLIED   = 'applied'
+    STATUS_REVERTED  = 'reverted'
+    STATUS_CHOICES = [
+        (STATUS_PREVIEWED, 'معاينة'), (STATUS_APPLYING, 'جارٍ التطبيق'),
+        (STATUS_APPLIED, 'مُطبَّق'), (STATUS_REVERTED, 'مُتراجَع'),
+    ]
+
+    claim        = models.ForeignKey('InsuranceClaim', on_delete=models.CASCADE,
+                                     related_name='softech_write_plans')
+    source       = models.CharField(max_length=20, default='receipt')   # receipt | item | catalog
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                                    default=STATUS_PREVIEWED, db_index=True)
+    plan         = models.JSONField(default=list)    # [{docno, branch, prices:{code: price}}]
+    preview      = models.JSONField(default=dict)    # per-receipt diff + guard issues + totals
+    blocked      = models.BooleanField(default=False)
+    needs_reason = models.BooleanField(default=False)
+    receipt_count = models.PositiveIntegerField(default=0)
+    net_delta    = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    reason       = models.TextField(blank=True)
+    created_by   = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True,
+                                     blank=True, related_name='+')
+    created_at   = models.DateTimeField(auto_now_add=True)
+    applied_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'خطة تعديل سوفتك'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'plan #{self.pk} claim={self.claim_id} [{self.status}] {self.receipt_count} rx'
+
+
 class SoftechRepriceRun(models.Model):
     """
     One writeback operation that edited an insurance receipt's price(s) in SOFTECH
@@ -1235,6 +1276,10 @@ class SoftechRepriceRun(models.Model):
     applied_at  = models.DateTimeField(auto_now_add=True)
     reverted_at = models.DateTimeField(null=True, blank=True)
     error       = models.TextField(blank=True)
+    plan        = models.ForeignKey(SoftechWritePlan, on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='runs')
+    reason      = models.TextField(blank=True, verbose_name='سبب التجاوز')
+    warnings    = models.JSONField(default=list, blank=True)   # guard warnings acknowledged
 
     class Meta:
         verbose_name = 'عملية تعديل سعر سوفتك'

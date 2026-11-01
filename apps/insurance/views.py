@@ -1136,41 +1136,73 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'itemcode مطلوب'}, status=400)
         return Response(find_item_receipts(claim, code))
 
+    # The direct write endpoints are retired: every SOFTECH re-price goes through a
+    # stored, guard-checked plan (preview → typed confirmation → apply).
     @action(detail=True, methods=['post'], url_path='softech-reprice/apply-batch')
     def softech_reprice_apply_batch(self, request, pk=None):
-        """GATED: apply one new price for an item across several receipts (each its own run)."""
-        from .reprice_service import apply_batch, RepriceError
-        claim = self.get_object()
-        d = request.data
-        try:
-            res = apply_batch(claim, str(d['itemcode']), d['new_price'],
-                              d.get('receipts') or [], user=request.user, confirm=bool(d.get('confirm')))
-            record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
-                         summary=f"تعديل سعر صنف {d['itemcode']} فى {res['applied']} إيصال (دفعة)",
-                         target_type='item', target_ref=str(d['itemcode']))
-            return Response(res)
-        except RepriceError as e:
-            return Response({'detail': str(e)}, status=400)
-        except KeyError:
-            return Response({'detail': 'itemcode, new_price, receipts مطلوبة'}, status=400)
+        return Response({'detail': 'استخدم المعاينة ثم التأكيد (softech-reprice/plan).'}, status=410)
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/apply')
     def softech_reprice_apply(self, request, pk=None):
-        """GATED write to SOFTECH (flag + confirm + draft-only + branch reachable)."""
-        from .reprice_service import apply_reprice, RepriceError
+        return Response({'detail': 'استخدم المعاينة ثم التأكيد (softech-reprice/plan).'}, status=410)
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan')
+    def softech_reprice_plan(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview a plan (one receipt or a batch) + guard checks.
+        Body: {source, receipts: [{docno, branch, prices: {itemcode: price}}]}"""
+        from .reprice_service import preview_plan, plan_payload, RepriceError
         claim = self.get_object()
-        d = request.data
         try:
-            res = apply_reprice(claim, str(d['docnumber']), str(d['branch']),
-                                d.get('prices') or {}, user=request.user,
-                                confirm=bool(d.get('confirm')), doccode=d.get('doccode', '115'))
-            record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
-                         summary=f"تعديل سعر سوفتك للإيصال #{d['docnumber']} (Δ{res['net_delta']})",
-                         target_type='receipt', target_ref=str(d['docnumber']),
-                         after={'run_id': res['run_id'], 'net_delta': res['net_delta']})
-            return Response(res)
+            plan = preview_plan(claim, request.data.get('receipts') or [], user=request.user,
+                                source=str(request.data.get('source') or 'receipt')[:20])
         except RepriceError as e:
             return Response({'detail': str(e)}, status=400)
+        except Exception as e:
+            return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
+        return Response(plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan/(?P<plan_id>[0-9]+)/apply')
+    def softech_reprice_plan_apply(self, request, pk=None, plan_id=None):
+        """GATED write: apply a previewed plan. Body: {confirm_count, reason}"""
+        from .models import SoftechWritePlan
+        from .reprice_service import apply_plan, plan_payload, RepriceError
+        claim = self.get_object()
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim).first()
+        if not plan:
+            return Response({'detail': 'المعاينة غير موجودة'}, status=404)
+        try:
+            res = apply_plan(plan, user=request.user, confirm_count=request.data.get('confirm_count'),
+                             reason=request.data.get('reason') or '')
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        failed = f" (فشل {res['failed']})" if res['failed'] else ''
+        record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
+                     summary=f"تعديل أسعار سوفتك — خطة #{plan.pk}: {res['applied']} إيصال{failed}"
+                             f" · صافى Δ {plan.net_delta}",
+                     target_type='plan', target_ref=str(plan.pk),
+                     after={'plan_id': plan.pk, 'applied': res['applied'], 'failed': res['failed'],
+                            'reason': plan.reason})
+        plan.refresh_from_db()
+        return Response({**res, 'plan': plan_payload(plan)})
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan/(?P<plan_id>[0-9]+)/revert')
+    def softech_reprice_plan_revert(self, request, pk=None, plan_id=None):
+        """GATED write: undo every applied run of a plan."""
+        from .models import SoftechWritePlan
+        from .reprice_service import revert_plan, plan_payload, RepriceError
+        claim = self.get_object()
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim).first()
+        if not plan:
+            return Response({'detail': 'المعاينة غير موجودة'}, status=404)
+        try:
+            res = revert_plan(plan, user=request.user)
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        record_audit(claim, 'other', actor=getattr(request.user, 'staff_profile', None),
+                     summary=f"تراجع عن خطة تعديل سوفتك #{plan.pk}: {res['reverted']} إيصال",
+                     target_type='plan', target_ref=str(plan.pk))
+        plan.refresh_from_db()
+        return Response({**res, 'plan': plan_payload(plan)})
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/runs/(?P<run_id>[0-9]+)/rebalance')
     def softech_reprice_rebalance(self, request, pk=None, run_id=None):
@@ -1270,7 +1302,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             'new_prices': r.new_prices, 'cust_branch_code': r.cust_branch_code,
             'rebalanced': r.rebalanced, 'applied_at': r.applied_at.isoformat(),
             'reverted_at': r.reverted_at.isoformat() if r.reverted_at else None,
-            'error': r.error,
+            'error': r.error, 'plan_id': r.plan_id, 'reason': r.reason, 'warnings': r.warnings,
         } for r in runs])
 
     @action(detail=True, methods=['get'], url_path='softech-reprice/runs/export')
@@ -1284,7 +1316,9 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         status_f = request.query_params.get('status')
         if status_f:
             runs = runs.filter(status=status_f)
-        return generate_reprice_runs_excel(runs, claim_number=claim.claim_number)
+        seq_map = {(str(d), str(b)): q for d, b, q in claim.prescriptions.values_list(
+            'softech_docnumber', 'softech_branchcode', 'sequence')}
+        return generate_reprice_runs_excel(runs, claim_number=claim.claim_number, seq_map=seq_map)
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/runs/(?P<run_id>[0-9]+)/revert')
     def softech_reprice_revert(self, request, pk=None, run_id=None):

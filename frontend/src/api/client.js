@@ -2288,8 +2288,10 @@ export const insuranceApi = {
   repricePreview:     (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/preview/`, data),
   repriceReceiptLines:(claimId, docno, branch) => api.get(`/insurance/claims/${claimId}/softech-reprice/receipt-lines/`, { params: { docno, branch } }),
   repriceItemReceipts:(claimId, itemcode)   => api.get(`/insurance/claims/${claimId}/softech-reprice/item-receipts/`, { params: { itemcode } }),
-  repriceApplyBatch:  (claimId, data)       => api.post(`/insurance/claims/${claimId}/softech-reprice/apply-batch/`, data),
-  repriceApply:       (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/apply/`, data),
+  // preview → typed confirmation → apply (the only write path; guard-checked server-side)
+  repricePlan:        (claimId, data)         => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/`, data),
+  repricePlanApply:   (claimId, planId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/apply/`, data),
+  repricePlanRevert:  (claimId, planId)       => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/revert/`),
   repriceRebalance:   (claimId, runId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/runs/${runId}/rebalance/`, data),
   dateEditPreview:    (claimId, params) => api.get(`/insurance/claims/${claimId}/softech-date/preview/`, { params }),
   dateEditApply:      (claimId, data) => api.post(`/insurance/claims/${claimId}/softech-date/apply/`, data),

@@ -131,9 +131,10 @@ WRITE_SITES = {
         trigger='via apply_reprice'),
     'apps/insurance/reprice_service.py::apply_reprice': WriteSite(
         tables=('motalba', 'stktrans', 'stktransm', 'branchesales'), flag='INSURANCE_SOFTECH_WRITE_ENABLED',
-        dry_run_default=True, idempotency='recomputed from live data (retry is a no-op in SOFTECH, new run row)',
-        audit='SoftechRepriceRun/Edit + InsuranceAuditEvent',
-        trigger='POST insurance claims <pk>/softech-reprice/apply|apply-batch/ (insurance edit)'),
+        dry_run_default=True, idempotency='plan previewed→applying atomic flip + preview docvalue re-check; '
+                                          'recomputed from live data (retry is a no-op in SOFTECH, new run row)',
+        audit='SoftechWritePlan + SoftechRepriceRun/Edit (reason, guard warnings) + InsuranceAuditEvent',
+        trigger='POST insurance claims <pk>/softech-reprice/plan/<id>/apply/ (insurance edit; softech_guard)'),
     'apps/insurance/reprice_service.py::_rebalance_locked': WriteSite(
         tables=('stktransm',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='run lock 7301007 + run re-read; PG record before SOFTECH commit (P-15)',
