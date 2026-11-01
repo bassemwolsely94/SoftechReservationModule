@@ -910,6 +910,8 @@ MIDDLEWARE += [
     'apps.access.middleware.AccessContextMiddleware',
     # Server-side RoleModuleAccess check for /api/<module>/ (see core/middleware/module_access.py)
     'core.middleware.module_access.ModuleAccessMiddleware',
+    # Zone policy (N3): narrows by access zone; mode NETWORK_POLICY_ENFORCEMENT off/log/enforce
+    'apps.access.policy_middleware.ZonePolicyMiddleware',
     # P-56: log API requests slower than SLOW_REQUEST_MS (route pattern only) for /sync
     'apps.sync.middleware.SlowRequestMiddleware',
 ]
