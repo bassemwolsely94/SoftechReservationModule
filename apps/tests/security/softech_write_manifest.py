@@ -275,8 +275,10 @@ WRITE_SITES = {
         trigger='cmd push_sales_rates --probe-branch/--probe-item', kind='rehearsal'),
     'apps/purchasing/shortage_writer.py::_write_softech': WriteSite(
         tables=('items',), flag='SHORTAGE_SOFTECH_WRITE_ENABLED', dry_run_default=False,
-        idempotency='absolute desired state; synced flag in PG',
-        audit='AuditLog softech_shortage_written (who, before → after) — P-16 (queue flush: no actor)',
+        idempotency='absolute desired state; synced flag in PG; read → write → verify on one connection; '
+                    'missing item refused (not marked synced)',
+        audit='AuditLog softech_shortage_written (who, real SOFTECH before → after; undo restores the recorded '
+              'pre-change values, Item.shortage_softech_before) — P-16, W2 (queue flush: no actor, retry=True)',
         trigger="POST purchasing shortage flag|unflag|dismiss|retrieve/ (shortage/approve, P-2); cmd sync_shortage_softech"),
     # ── sync investigations (all SOFTECH_PROBES_ENABLED, P-7) ───────────────────
     'apps/sync/management/commands/investigate_britems.py::Command._investigate': WriteSite(
