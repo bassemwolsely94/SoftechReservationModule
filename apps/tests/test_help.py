@@ -1753,6 +1753,17 @@ class ProductTourApiTests(TestCase):
         admin = self._client('admin', 'pt_admin')
         self.assertEqual(admin.get('/api/help/product-tour/?role=purchasing').json()['id'], 'product.purchasing.desktop')
 
+    def test_mobile_tour_stays_on_phone_screens(self):
+        """The help panel's «🗺️ جولة في موديولات دورك» on /m/ asks for shell=mobile: every stop is a
+        phone screen, and the welcome / finish point at the phone's help button."""
+        r = self._client('pharmacist', 'pt_ph_m').get('/api/help/product-tour/?shell=mobile')
+        self.assertEqual(r.status_code, 200)
+        j = r.json()
+        self.assertEqual((j['id'], j['shell']), ('product.pharmacist.mobile', 'mobile'))
+        self.assertGreater(len(j['steps']), 2)
+        self.assertTrue(all(any(rt.startswith('/m') for rt in st['routes']) for st in j['steps']), j['steps'])
+        self.assertEqual({j['steps'][0]['target'], j['steps'][-1]['target']}, {'general-help-center-open-help-mobile'})
+
     def test_no_tour_on_a_shell_is_404(self):
         c = self._client('viewer', 'pt_viewer')
         self.assertEqual(c.get('/api/help/product-tour/?shell=mobile').status_code, 404)
