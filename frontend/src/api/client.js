@@ -2290,6 +2290,7 @@ export const insuranceApi = {
   repriceItemReceipts:(claimId, itemcode)   => api.get(`/insurance/claims/${claimId}/softech-reprice/item-receipts/`, { params: { itemcode } }),
   // preview → typed confirmation → apply (the only write path; guard-checked server-side)
   repricePlan:        (claimId, data)         => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/`, data),
+  repricePlanFromCatalog: (claimId)          => api.post(`/insurance/claims/${claimId}/softech-reprice/plan-from-catalog/`),
   repricePlanApply:   (claimId, planId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/apply/`, data),
   repricePlanRevert:  (claimId, planId)       => api.post(`/insurance/claims/${claimId}/softech-reprice/plan/${planId}/revert/`),
   repriceRebalance:   (claimId, runId, data) => api.post(`/insurance/claims/${claimId}/softech-reprice/runs/${runId}/rebalance/`, data),

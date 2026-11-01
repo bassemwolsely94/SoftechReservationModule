@@ -631,6 +631,7 @@ def find_item_receipts(claim, itemcode):
             continue
         seen.add(key)
         out.append({
+            'sequence':   rx.sequence,
             'docno':      rx.softech_docnumber,
             'branch':     rx.softech_branchcode,
             'patient':    rx.patient_name,
@@ -639,7 +640,7 @@ def find_item_receipts(claim, itemcode):
             'unit_price': str(_d(ln.unit_price)),
             'quantity':   str(_d(ln.quantity)),
         })
-    out.sort(key=lambda r: (r['branch'] or '', str(r['docno'])))
+    out.sort(key=lambda r: (r['sequence'] or 0, r['branch'] or '', str(r['docno'])))   # م order
     return {'itemcode': code, 'receipts': out}
 
 
@@ -677,12 +678,16 @@ def _receipt_issues(claim, docno, branch, raw_prices, lines, net_delta):
         catalog_prices=catalog, net_delta=net_delta, known_numbers=numbers)
 
 
-def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE):
+def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE,
+                 skip_matching=False, info=None):
     """READ-ONLY on SOFTECH: preview every receipt of a plan on one HQ connection,
     run the guard, and store the result as a SoftechWritePlan the user may apply.
 
     plan = [{docno, branch, prices: {itemcode: price}}]  (one entry per receipt;
-    several items of one receipt go together in ONE run)."""
+    several items of one receipt go together in ONE run).
+    skip_matching drops items SOFTECH already has at the new price (and receipts
+    left with nothing to change) — used by the catalog sync, which re-offers its
+    whole plan however much of it was already written."""
     from .importer import _get_connection
     merged = {}
     for p in plan or []:
@@ -698,8 +703,8 @@ def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE):
         raise RepriceError('لا توجد إيصالات فى الخطة.')
 
     claim_px, catalog, numbers = _reference_prices(claim, list(merged))
-    rx_meta = {(str(d), str(b)): (n, dt) for d, b, n, dt in claim.prescriptions.values_list(
-        'softech_docnumber', 'softech_branchcode', 'patient_name', 'softech_docdate')}
+    rx_meta = {(str(d), str(b)): (n, dt, q) for d, b, n, dt, q in claim.prescriptions.values_list(
+        'softech_docnumber', 'softech_branchcode', 'patient_name', 'softech_docdate', 'sequence')}
     names = {}
     for d, b, code, nm in claim.prescriptions.values_list(
             'softech_docnumber', 'softech_branchcode', 'lines__softech_itemcode', 'lines__item_name'):
@@ -707,10 +712,11 @@ def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE):
             names[(str(d), str(b), str(code).strip())] = nm or ''
     hq = _get_connection(); hcur = hq.cursor()
     receipts, total = [], Decimal('0')
+    already = {'receipts': 0, 'items': 0}
     try:
         for (docno, branch), prices in merged.items():
-            name, ddate = rx_meta.get((docno, branch), ('', None))
-            entry = {'docno': docno, 'branch': branch, 'patient': name or '',
+            name, ddate, seq = rx_meta.get((docno, branch), ('', None, None))
+            entry = {'docno': docno, 'branch': branch, 'patient': name or '', 'sequence': seq,
                      'docdate': ddate.isoformat() if ddate else None,
                      'prices': prices, 'items': [], 'issues': [], 'net_delta': '0',
                      'old_docvalue': None, 'new_docvalue': None}
@@ -721,6 +727,15 @@ def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE):
                 softech = {}
                 for ln in lines:
                     softech.setdefault(str(ln['itemcode']).strip(), _d(ln['itemsaleprice']))
+                if skip_matching:
+                    same = [c for c, v in prices.items()
+                            if c in softech and guard._dec(v) is not None and r2(softech[c]) == r2(guard._dec(v))]
+                    already['items'] += len(same)
+                    prices = {c: v for c, v in prices.items() if c not in same}
+                    if not prices:
+                        already['receipts'] += 1
+                        continue
+                    entry['prices'] = prices
                 parsed = {k: guard._dec(v) for k, v in prices.items()}
                 delta = Decimal('0')
                 if all(v is not None and v > 0 for v in parsed.values()):
@@ -759,13 +774,15 @@ def preview_plan(claim, plan, user=None, source='receipt', doccode=_DOCCODE):
     finally:
         hcur.close(); hq.close()
 
+    receipts.sort(key=lambda r: (r['sequence'] or 0, r['branch'], r['docno']))   # م order
     plan_issues = guard.check_plan_total(total)
     summ = guard.summarize(plan_issues + [i for r in receipts for i in r['issues']])
     return SoftechWritePlan.objects.create(
         claim=claim, source=source,
         plan=[{'docno': r['docno'], 'branch': r['branch'], 'prices': r['prices']} for r in receipts],
         preview={'receipts': receipts, 'plan_issues': plan_issues,
-                 'user_id': getattr(user, 'pk', None)},
+                 'user_id': getattr(user, 'pk', None),
+                 'already_in_softech': already, 'info': info or {}},
         blocked=summ['blocked'], needs_reason=summ['needs_reason'],
         receipt_count=len(receipts), net_delta=r2(total),
         created_by=getattr(user, 'staff_profile', None) if user else None)

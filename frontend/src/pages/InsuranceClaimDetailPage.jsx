@@ -1949,7 +1949,7 @@ export default function InsuranceClaimDetailPage() {
       )}
 
       {tab === 'discrepancy' && (
-        <DiscrepancyTab claimId={id} onRefresh={load} />
+        <DiscrepancyTab claimId={id} claim={claim} onRefresh={load} />
       )}
 
       {tab === 'revision' && (
@@ -2429,7 +2429,7 @@ const _ROSTER_SCOPE = {
 // Sort values for the roster grid; category keeps the backend's priority order
 // (wrong → shared → sister → new), full matches before partial ones.
 const _ROSTER_RANK = { wrong: 0, shared: 1, sister: 2, new: 3 }
-const _ROSTER_NUMERIC = new Set(['category', 'where_count', 'here_count', 'gross_before', 'net_after'])
+const _ROSTER_NUMERIC = new Set(['sequence', 'category', 'where_count', 'here_count', 'gross_before', 'net_after'])
 const _rosterSortVal = (r, k) => {
   if (k === 'category')    return _ROSTER_RANK[r.category] * 2 + (r.confidence === 'full' ? 0 : 1)
   if (k === 'where')       return r.where[0]?.label || ''
@@ -2563,6 +2563,7 @@ function RosterCheckView({ claimId, onRefresh }) {
                   checked={rows.length > 0 && rows.every(r => sel.has(r.prescription_id))}
                   onChange={e => setSel(e.target.checked ? new Set(rows.map(r => r.prescription_id)) : new Set())} />
               </th>
+              <RosterTh k="sequence" align="center" {...{ sortKey, sortDir, sortBy }}>م</RosterTh>
               <RosterTh k="patient_name" {...{ sortKey, sortDir, sortBy }}>اسم المريض</RosterTh>
               <RosterTh k="category" align="center" {...{ sortKey, sortDir, sortBy }}>الحالة</RosterTh>
               <RosterTh k="where" {...{ sortKey, sortDir, sortBy }}>مُفوتر سابقاً على</RosterTh>
@@ -2586,6 +2587,7 @@ function RosterCheckView({ claimId, onRefresh }) {
                   <td className="px-2 py-1.5 text-center">
                     <input type="checkbox" checked={sel.has(r.prescription_id)} onChange={() => toggle(r.prescription_id)} />
                   </td>
+                  <td className="px-2 py-1.5 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
                   <td className="px-2 py-1.5 font-medium text-gray-800">{r.patient_name}</td>
                   <td className="px-2 py-1.5 text-center whitespace-nowrap">
                     <span className={`text-[10px] rounded px-1.5 py-0.5 ${cat.cls}`}>{cat.label}</span>
@@ -2629,7 +2631,7 @@ function RosterCheckView({ claimId, onRefresh }) {
               )
             })}
             {rows.length === 0 && (
-              <tr><td colSpan={13} className="px-3 py-8 text-center text-gray-400">لا أسماء في الفئات المختارة.</td></tr>
+              <tr><td colSpan={14} className="px-3 py-8 text-center text-gray-400">لا أسماء في الفئات المختارة.</td></tr>
             )}
           </tbody>
         </table>
@@ -2703,7 +2705,7 @@ function SeparationListsView({ claimId, onRefresh }) {
   if (loading) return <div className="px-6 py-6 text-sm text-gray-400">جارٍ فحص الأسماء…</div>
   if (!data)   return null
 
-  const NUMERIC = new Set(['gross_before', 'net_after', 'score'])
+  const NUMERIC = new Set(['sequence', 'gross_before', 'net_after', 'score'])
   const sortVal = (m) => {
     if (sortKey === 'match_type') return m.match_type === 'full' ? 0 : 1   // full first
     if (sortKey === 'reviewed')   return m.reviewed ? 1 : 0
@@ -2766,6 +2768,7 @@ function SeparationListsView({ claimId, onRefresh }) {
           <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
             <tr>
               <th className="px-2 py-2 w-8"></th>
+              <SortTh k="sequence" align="center">م</SortTh>
               <SortTh k="patient_name">اسم المريض (بالروشتة)</SortTh>
               <SortTh k="matched_name">الاسم في القائمة</SortTh>
               <SortTh k="match_type" align="center">المطابقة</SortTh>
@@ -2788,6 +2791,7 @@ function SeparationListsView({ claimId, onRefresh }) {
                     disabled={m.is_excluded}
                     onChange={() => toggle(m.prescription_id)} />
                 </td>
+                <td className="px-2 py-1.5 text-center font-mono text-gray-500">{m.sequence || '—'}</td>
                 <td className="px-2 py-1.5 font-medium text-gray-800">
                   {m.patient_name}
                   {m.dept_name && <span className="block text-[10px] text-gray-400">{m.dept_name}</span>}
@@ -2817,7 +2821,7 @@ function SeparationListsView({ claimId, onRefresh }) {
               </tr>
             ))}
             {data.matches.length === 0 && (
-              <tr><td colSpan={13} className="px-3 py-8 text-center text-gray-400">لا مطابقات في هذه المطالبة.</td></tr>
+              <tr><td colSpan={14} className="px-3 py-8 text-center text-gray-400">لا مطابقات في هذه المطالبة.</td></tr>
             )}
           </tbody>
         </table>
@@ -2842,7 +2846,7 @@ const _AUDIT_TONE = {
 // ── Name review: bulk-fix incomplete / misspelled patient names ────────────────
 const _NAME_TYPE_RANK = { complete: 0, spelling: 1, ambiguous: 2 }
 const _nameSortVal = (r, k, sel) => {
-  if (k === 'count')      return Number(r.count || 0)
+  if (k === 'count' || k === 'sequence') return Number(r[k] || 0)
   if (k === 'type')       return _NAME_TYPE_RANK[r.type] ?? 3
   if (k === 'selected')   return sel[r.rx_id] != null ? 0 : 1
   if (k === 'suggestion') return sel[r.rx_id] || r.suggestion || ''
@@ -2982,6 +2986,7 @@ function NameReviewTab({ claimId, onRefresh }) {
                   checked={allSelected}
                   onChange={e => e.target.checked ? selectAll() : setSel({})} />
               </th>
+              <RosterTh k="sequence" align="center" {...{ sortKey, sortDir, sortBy }}>م</RosterTh>
               <RosterTh k="date" {...{ sortKey, sortDir, sortBy }}>التاريخ</RosterTh>
               <RosterTh k="docnumber" {...{ sortKey, sortDir, sortBy }}>الإيصال</RosterTh>
               <RosterTh k="current_name" {...{ sortKey, sortDir, sortBy }}>الاسم الحالى</RosterTh>
@@ -3001,6 +3006,7 @@ function NameReviewTab({ claimId, onRefresh }) {
                   <td className="px-2 py-1.5 text-center">
                     <input type="checkbox" checked={checked} onChange={() => toggle(row)} />
                   </td>
+                  <td className="px-2 text-center font-mono text-xs text-gray-500">{row.sequence || '—'}</td>
                   <td className="px-2 text-xs text-gray-500 whitespace-nowrap">{row.date}</td>
                   <td className="px-2 text-xs font-mono text-gray-500">#{row.docnumber}</td>
                   <td className="px-2 text-gray-800">{row.current_name}</td>
@@ -3233,6 +3239,7 @@ function RevisionTab({ claimId }) {
                 {th('itemcode', 'الكود', 'text-right px-2')}
                 {th('item_name', 'الصنف', 'text-right px-2')}
                 {th('patient_name', 'المريض', 'text-right px-2')}
+                {th('sequence', 'م', 'text-center px-2')}
                 {th('docnumber', 'الروشتة', 'text-right px-2')}
                 {th('branchcode', 'الفرع', 'text-center px-2')}
                 {th('docdate', 'التاريخ', 'text-right px-2')}
@@ -3258,6 +3265,7 @@ function RevisionTab({ claimId }) {
                   <td className="px-2 py-1.5 font-mono text-gray-500">{r.itemcode}</td>
                   <td className="px-2 py-1.5 text-gray-800">{r.item_name}</td>
                   <td className="px-2 py-1.5 text-gray-600">{r.patient_name || '—'}</td>
+                  <td className="px-2 py-1.5 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
                   <td className="px-2 py-1.5 font-mono text-gray-500">{r.docnumber}</td>
                   <td className="px-2 py-1.5 text-center font-mono text-gray-600">{r.branchcode}</td>
                   <td className="px-2 py-1.5 font-mono text-gray-500 whitespace-nowrap">{r.docdate || '—'}</td>
@@ -3457,6 +3465,16 @@ function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged })
     } catch (e) { setErr(e?.response?.data?.detail || 'تعذّر التراجع') }
     finally { setBusy(false) }
   }
+  const previewWithoutBlocked = async () => {
+    const keep = new Set(receipts.filter(r => !r.blocked).map(r => `${r.docno}__${r.branch}`))
+    setBusy(true); setErr(null)
+    try {
+      const { data } = await insuranceApi.repricePlan(claimId, { source: plan.source,
+        receipts: (plan.plan || []).filter(p => keep.has(`${p.docno}__${p.branch}`)) })
+      setTyped(''); setReason(''); setPlan(data)
+    } catch (e) { setErr(e?.response?.data?.detail || 'تعذّرت المعاينة') }
+    finally { setBusy(false) }
+  }
   const runOf = (r) => (plan.runs || []).find(x => String(x.docno) === String(r.docno) && String(x.branch) === String(r.branch))
   const fmtLeft = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
 
@@ -3486,6 +3504,7 @@ function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged })
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500 sticky top-0">
             <tr>
+              <th className="text-center px-2 py-1.5">م</th>
               <th className="text-right px-2 py-1.5">الإيصال</th>
               <th className="text-right px-2 py-1.5">المريض</th>
               <th className="text-right px-2 py-1.5">الصنف</th>
@@ -3502,6 +3521,7 @@ function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged })
               return (r.items.length ? r.items : [{ itemcode: '—' }]).map((it, k) => (
                 <tr key={`${r.docno}-${r.branch}-${k}`} className={`border-t border-gray-100 align-top ${r.blocked ? 'bg-red-50/50' : ''}`}>
                   {k === 0 && <>
+                    <td rowSpan={r.items.length || 1} className="px-2 py-1.5 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
                     <td rowSpan={r.items.length || 1} className="px-2 py-1.5 font-mono whitespace-nowrap">#{r.docno}<div className="text-gray-400">فرع {r.branch}</div></td>
                     <td rowSpan={r.items.length || 1} className="px-2 py-1.5 text-gray-700">{r.patient || '—'}<div className="text-gray-400 font-mono">{r.docdate || ''}</div></td>
                   </>}
@@ -3532,9 +3552,27 @@ function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged })
 
       {err && <div className="text-sm rounded-lg p-2 bg-red-50 text-red-700">{err}</div>}
 
+      {plan.already_in_softech?.items > 0 && (
+        <div className="text-xs text-gray-500">
+          تم تخطّى {plan.already_in_softech.items} صنف مكتوب فى سوفتك بنفس السعر بالفعل
+          {plan.already_in_softech.receipts > 0 ? ` (${plan.already_in_softech.receipts} إيصال لا يحتاج تعديلاً)` : ''}.
+        </div>
+      )}
+      {(plan.info?.conflicts || []).length > 0 && (
+        <div className="text-xs border rounded px-2 py-1 bg-amber-50 border-amber-200 text-amber-800">
+          {plan.info.conflicts.length} صنف بسعرين مختلفين على نفس الإيصال — تُرك للتعديل اليدوى:
+          {' '}{plan.info.conflicts.map(c => `#${c.docno}/${c.itemcode}`).join('، ')}
+        </div>
+      )}
+
       {!applied && (plan.blocked ? (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-          ⛔ لا يمكن التطبيق: يوجد إيصال مرفوض. ارجع للتعديل وصحّح السعر أو ألغِ تحديد الإيصال المرفوض، ثم أعد المعاينة.
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 flex flex-wrap items-center gap-3">
+          <span>⛔ لا يمكن التطبيق: يوجد إيصال مرفوض. صحّح السعر، أو استبعد المرفوض وأعد المعاينة للباقى.</span>
+          {receipts.some(r => !r.blocked) && (
+            <button onClick={previewWithoutBlocked} disabled={busy} data-tour="insurance-claim-reprice-drop-blocked"
+              className="px-3 py-1.5 text-xs rounded bg-white border border-red-300 text-red-700 hover:bg-red-100">
+              استبعاد {blocks} مرفوض وإعادة المعاينة لـ {receipts.length - blocks} إيصال</button>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border border-red-200 bg-red-50/40 p-3 space-y-2" data-tour="insurance-claim-reprice-confirm">
@@ -3785,6 +3823,7 @@ function SoftechRepriceTab({ claimId, claim }) {
               <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
                 <th className="px-2 py-1"><input type="checkbox" checked={bSel.size === bList.receipts.length} title="تحديد الكل / إلغاء تحديد الكل"
                   onChange={() => setBSel(s => s.size === bList.receipts.length ? new Set() : new Set(bList.receipts.map(r => `${r.docno}__${r.branch}`)))} /></th>
+                <th className="text-center px-2 py-1">م</th>
                 <th className="text-right px-2 py-1">الإيصال</th><th className="text-center px-2 py-1">الفرع</th>
                 <th className="text-right px-2 py-1">التاريخ</th><th className="text-right px-2 py-1">المريض</th>
                 <th className="text-left px-2 py-1">سعر المطالبة</th><th className="text-left px-2 py-1">كمية</th></tr></thead>
@@ -3795,6 +3834,7 @@ function SoftechRepriceTab({ claimId, claim }) {
                     <tr key={i} className="border-t border-gray-100">
                       <td className="px-2 py-1 text-center"><input type="checkbox" checked={bSel.has(key)}
                         onChange={() => setBSel(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })} /></td>
+                      <td className="px-2 py-1 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
                       <td className="px-2 py-1 font-mono text-gray-600">#{r.docno}</td>
                       <td className="px-2 py-1 text-center font-mono">{r.branch}</td>
                       <td className="px-2 py-1 font-mono text-gray-500 whitespace-nowrap">{r.docdate || '—'}</td>
@@ -4272,8 +4312,12 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
 // and shows where category / discount / net drifted. Reuses <DataTable>.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function DiscrepancyTab({ claimId, onRefresh }) {
+function DiscrepancyTab({ claimId, claim, onRefresh }) {
   const [data, setData]       = useState(null)
+  // write the catalog-applied prices into SOFTECH (one guarded plan, all receipts)
+  const [syncPlan, setSyncPlan] = useState(null)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncMsg, setSyncMsg]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
   const [exporting, setExporting] = useState(false)
@@ -4338,6 +4382,19 @@ function DiscrepancyTab({ claimId, onRefresh }) {
       .finally(() => setLoading(false))
   }
   useEffect(() => { reload(); loadHistory(); loadOverrides(); loadReview() }, [claimId])
+  // refresh after a SOFTECH write without unmounting the open review
+  const refreshQuiet = () => insuranceApi.discrepancy(claimId).then(r => setData(r.data)).catch(() => {})
+
+  const startSync = async () => {
+    setSyncBusy(true); setSyncMsg(null); setSyncPlan(null)
+    try {
+      const { data: d } = await insuranceApi.repricePlanFromCatalog(claimId)
+      if (d.nothing_to_do) setSyncMsg({ ok: d.detail })
+      else setSyncPlan(d)
+    } catch (e) { setSyncMsg({ err: e?.response?.data?.detail || 'تعذّرت المعاينة' }) }
+    finally { setSyncBusy(false) }
+  }
+  const hasPriceApply = history.some(r => !r.reverted && r.apply_price)
 
   const revertRun = async (runId) => {
     if (!window.confirm('سيتم استرجاع القيم الأصلية لهذه العملية. متابعة؟')) return
@@ -4421,6 +4478,8 @@ function DiscrepancyTab({ claimId, onRefresh }) {
         <input type="checkbox" checked={selLines.has(r.line_id)}
           onChange={() => toggleLine(r.line_id)} disabled={!r.line_id} />
       ) },
+    { key: 'sequence', label: 'م', type: 'number', width: 45, align: 'center',
+      render: (v) => <span className="font-mono text-xs text-gray-500">{v || '—'}</span> },
     { key: 'docnumber', label: 'الفاتورة', type: 'text', width: 80,
       render: (v) => <span className="font-mono text-xs">#{v}</span> },
     { key: 'branchcode', label: 'الفرع', type: 'text', width: 55, align: 'center',
@@ -4623,6 +4682,33 @@ function DiscrepancyTab({ claimId, onRefresh }) {
         </div>
       )}
 
+      {hasPriceApply && (
+        <div className="mb-4 bg-white border border-blue-200 rounded-xl p-4" data-tour="insurance-claim-softech-sync">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">مزامنة سوفتك بنفس الأسعار</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                يكتب الأسعار التى حدّثها «تطبيق بيانات الكتالوج» على إيصالات سوفتك — كل إيصال بكل أصنافه فى عملية واحدة،
+                ويتخطّى ما هو مكتوب فى سوفتك بالفعل. معاينة قراءة فقط أولاً، ثم تأكيد بكتابة عدد الإيصالات.
+                {data?.softech_reconciliation?.pending_count > 0 &&
+                  <b className="text-blue-700"> · {data.softech_reconciliation.pending_count} روشتة بانتظار المزامنة</b>}
+              </p>
+            </div>
+            <button onClick={startSync} disabled={syncBusy || !!syncPlan} data-tour="insurance-claim-softech-sync-preview"
+              className="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg disabled:opacity-40 shrink-0">
+              {syncBusy ? 'جارٍ القراءة من سوفتك…' : 'معاينة المزامنة — قراءة فقط'}
+            </button>
+          </div>
+          {syncMsg && <div className={`mt-2 text-sm rounded-lg p-2 ${syncMsg.err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{syncMsg.err || syncMsg.ok}</div>}
+          {syncPlan && (
+            <div className="mt-3">
+              <RepricePlanReview claimId={claimId} claim={claim} plan={syncPlan} setPlan={setSyncPlan}
+                onBack={() => setSyncPlan(null)} onChanged={refreshQuiet} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* SOFTECH gross reconciliation — prescriptions whose gross disagrees with SOFTECH */}
       {data.softech_reconciliation?.can_check && (
         <div className="mb-4">
@@ -4644,30 +4730,51 @@ function DiscrepancyTab({ claimId, onRefresh }) {
               <p className="text-xs text-amber-700 mb-3">
                 نطبّق معادلة Power Query (محلى×0.83 + مستورد×0.94) وليس صافى سوفتك، لذا الاختلاف متوقع في {data.softech_reconciliation.mismatch_count} روشتة.
                 راجع الروشتات التالية وقرّر: احتفظ بقيمة Power Query (تجاوز) أو صحّح التصنيف يدوياً (تبويب البنود / تعديل الروشتة).
+                صافى سوفتك هنا يشمل تعديلات «تعديلات سوفتك» المُطبَّقة.
               </p>
+              <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
+                {data.softech_reconciliation.fixed_by_softech > 0 &&
+                  <span className="px-2 py-0.5 rounded bg-green-100 text-green-700">✓ {data.softech_reconciliation.fixed_by_softech} أُصلحت بتعديل سوفتك</span>}
+                {data.softech_reconciliation.pending_count > 0 &&
+                  <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700">⇢ {data.softech_reconciliation.pending_count} بانتظار المزامنة</span>}
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                  {data.softech_reconciliation.prescriptions.filter(r => r.softech_status !== 'pending').length} خصم — لا يُصلحه تعديل السعر</span>
+              </div>
               <div className="overflow-x-auto rounded-lg border border-amber-200 bg-white">
                 <table className="w-full text-xs">
                   <thead className="bg-amber-100/60 text-amber-900">
                     <tr>
+                      <th className="text-center px-2 py-2">م</th>
                       <th className="text-right px-3 py-2">الفاتورة</th>
                       <th className="text-right px-3 py-2">المريض</th>
                       <th className="text-right px-3 py-2">التاريخ</th>
                       <th className="text-left px-3 py-2">صافينا</th>
                       <th className="text-left px-3 py-2">صافى سوفتك</th>
                       <th className="text-left px-3 py-2">الفرق</th>
+                      <th className="text-center px-3 py-2">سوفتك</th>
                       <th className="text-right px-3 py-2">ملاحظة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-100">
                     {data.softech_reconciliation.prescriptions.map((r) => (
-                      <tr key={r.prescription_id} className="hover:bg-amber-50/50">
+                      <tr key={r.prescription_id} className={`hover:bg-amber-50/50 ${r.softech_status === 'pending' ? 'bg-blue-50/60' : ''}`}>
+                        <td className="px-2 py-2 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
                         <td className="px-3 py-2 font-mono">#{r.docnumber}</td>
                         <td className="px-3 py-2">{r.patient_name || '—'}</td>
                         <td className="px-3 py-2 text-gray-500">{r.docdate || '—'}</td>
                         <td className="px-3 py-2 text-left font-mono">{fmt(r.our_gross)}</td>
-                        <td className="px-3 py-2 text-left font-mono">{fmt(r.softech_gross)}</td>
+                        <td className="px-3 py-2 text-left font-mono"
+                          title={r.softech_gross !== r.softech_at_import ? `عند الاستيراد ${fmt(r.softech_at_import)}` : ''}>
+                          {fmt(r.softech_gross)}</td>
                         <td className="px-3 py-2 text-left font-mono font-bold text-amber-700">
                           {r.diff > 0 ? '+' : ''}{fmt(r.diff)}
+                        </td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap">
+                          {r.softech_status === 'pending'
+                            ? <span className="text-blue-700" title={`أصناف: ${(r.pending_items || []).join('، ')}`}>⇢ بانتظار المزامنة</span>
+                            : r.softech_status === 'edited'
+                            ? <span className="text-green-700" title={`عمليات #${(r.softech_runs || []).join('، #')}`}>✓ عُدِّل</span>
+                            : <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-600">{r.hint}</td>
                       </tr>

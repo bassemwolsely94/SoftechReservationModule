@@ -142,6 +142,7 @@ def find_separation_matches(claim, sep_list_id=None) -> dict:
                 'score':           round(score, 2),
                 'reviewed':        bool(getattr(rx, 'separation_reviewed', False)),
                 # ── Cross-check details ────────────────────────────────────────
+                'sequence':        rx.sequence,                   # م
                 'docnumber':       rx.softech_docnumber,          # رقم الفاتورة
                 'docdate':         rx.softech_docdate.isoformat() if rx.softech_docdate else None,
                 'branch':          rx.softech_branchcode,          # الفرع

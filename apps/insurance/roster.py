@@ -315,6 +315,7 @@ def check_claim_roster(claim) -> dict:
             'here_count':      here_n,
             'where':           where[:5],
             'group_label':     glabel,
+            'sequence':        rx.sequence,
             'docnumber':       rx.softech_docnumber,
             'docdate':         rx.softech_docdate.isoformat() if rx.softech_docdate else None,
             'branch':          rx.softech_branchcode,

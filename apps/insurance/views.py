@@ -718,6 +718,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 continue
             out.append({
                 'rx_id':        rx.id,
+                'sequence':     rx.sequence,
                 'docnumber':    rx.softech_docnumber,
                 'date':         rx.softech_docdate.isoformat() if rx.softech_docdate else None,
                 'branch':       rx.softech_branchcode,
@@ -1061,6 +1062,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             rows.append({
                 'line_id':        ln.pk,
                 'prescription_id': ln.prescription_id,
+                'sequence':       ln.prescription.sequence,
                 'docnumber':      ln.prescription.softech_docnumber,
                 'branchcode':     ln.prescription.softech_branchcode,
                 'docdate':        ln.prescription.softech_docdate.isoformat() if ln.prescription.softech_docdate else None,
@@ -1159,6 +1161,30 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=400)
         except Exception as e:
             return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
+        return Response(plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-reprice/plan-from-catalog')
+    def softech_reprice_plan_from_catalog(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview writing the prices «تطبيق بيانات الكتالوج» changed
+        on this claim into SOFTECH — one run per receipt with all its items; items SOFTECH
+        already has at that price are skipped. Applied like any plan (typed confirmation)."""
+        from .reprice_service import preview_plan, plan_payload, RepriceError
+        from .softech_sync import catalog_sync_receipts
+        claim = self.get_object()
+        receipts, info = catalog_sync_receipts(claim)
+        if not receipts:
+            return Response({'detail': 'لا توجد أسعار مُحدَّثة من الكتالوج على هذه المطالبة.', **info}, status=400)
+        try:
+            plan = preview_plan(claim, receipts, user=request.user, source='catalog',
+                                skip_matching=True, info=info)
+        except RepriceError as e:
+            return Response({'detail': str(e)}, status=400)
+        except Exception as e:
+            return Response({'detail': f'تعذّر الاتصال بسوفتك: {public_error(request, e)}'}, status=502)
+        if not plan.receipt_count:
+            plan.delete()
+            return Response({'detail': 'كل الأسعار المُحدَّثة موجودة فى سوفتك بالفعل — لا شيء للمزامنة.',
+                             'nothing_to_do': True, **info})
         return Response(plan_payload(plan))
 
     @action(detail=True, methods=['post'], url_path='softech-reprice/plan/(?P<plan_id>[0-9]+)/apply')

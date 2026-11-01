@@ -90,9 +90,19 @@ def compute_softech_gross_reconciliation(claim: InsuranceClaim,
     # reporting a phantom gap from the stale frozen snapshot.
     from .invoice_builder import _effective_rx_values
 
+    # rx.softech_net is SOFTECH's net AT IMPORT; a receipt we re-priced in SOFTECH since
+    # has a newer net (recorded on the run) — compare against that, and say per receipt
+    # whether the gap is a price still to sync or a discount a price write cannot fix.
+    try:
+        from .softech_sync import softech_status_map
+        sync = softech_status_map(claim)
+    except Exception:
+        sync = {}
+
     rows = []
     our_tot = soft_tot = Decimal('0')
     have_ref = False
+    fixed_by_softech = 0
     for rx in claim.prescriptions.all():
         if rx.id in excluded_ids:
             continue
@@ -101,23 +111,37 @@ def compute_softech_gross_reconciliation(claim: InsuranceClaim,
         have_ref = True
         eff = _effective_rx_values(rx, claim)
         our = Decimal(str(eff['net_after'] or 0))
-        sof = Decimal(str(rx.softech_net))
+        st = sync.get((str(rx.softech_docnumber), str(rx.softech_branchcode)), {})
+        sof = st.get('softech_net') if st.get('softech_net') is not None else Decimal(str(rx.softech_net))
         our_tot += our
         soft_tot += sof
         diff = (our - sof).quantize(_Q)
+        if st.get('softech_net') is not None and abs(diff) <= tol \
+                and abs((our - Decimal(str(rx.softech_net))).quantize(_Q)) > tol:
+            fixed_by_softech += 1
         if abs(diff) > tol:
-            hint = ('صافينا أعلى — سوفتك خصم أقل على بعض الأصناف'
-                    if diff > 0 else
-                    'صافينا أقل — سوفتك خصم أكبر على بعض الأصناف')
+            status = st.get('status') or 'none'
+            if status == 'pending':
+                hint = 'سعر مُحدَّث هنا ولم يُكتب فى سوفتك بعد — «مزامنة سوفتك بنفس الأسعار»'
+            else:
+                hint = ('صافينا أعلى — سوفتك خصم أقل على بعض الأصناف'
+                        if diff > 0 else
+                        'صافينا أقل — سوفتك خصم أكبر على بعض الأصناف')
             rows.append({
                 'prescription_id': rx.id,
+                'sequence':        rx.sequence,
                 'docnumber':       rx.softech_docnumber,
+                'branchcode':      rx.softech_branchcode,
                 'patient_name':    rx.patient_name,
                 'docdate':         rx.softech_docdate.isoformat() if rx.softech_docdate else None,
                 'our_gross':       _f(our),
                 'softech_gross':   _f(sof),
+                'softech_at_import': _f(Decimal(str(rx.softech_net))),
                 'diff':            _f(diff),
                 'hint':            hint,
+                'softech_status':  status,
+                'softech_runs':    st.get('run_ids', []),
+                'pending_items':   st.get('pending_items', []),
             })
 
     if not have_ref:
@@ -132,6 +156,8 @@ def compute_softech_gross_reconciliation(claim: InsuranceClaim,
         'softech_gross':  _f(soft_tot),
         'gross_delta':    _f(our_tot - soft_tot),
         'mismatch_count': len(rows),
+        'pending_count':  sum(1 for r in rows if r['softech_status'] == 'pending'),
+        'fixed_by_softech': fixed_by_softech,
         'tolerance':      _f(tol),
         'prescriptions':  rows,
     }
