@@ -6,7 +6,7 @@ transitions, delivery assign before «ready», follow-up WhatsApp preview, call-
 import datetime
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
@@ -50,7 +50,7 @@ class DisposalStatusTests(TestCase):
         from core.middleware import module_access
         module_access.clear_cache()
         for role in ('pharmacist', 'supervisor'):
-            # status changes need catalog edit / approve (BATCH_DISPOSAL — a view-only user can't cancel)
+            # drafters hold catalog edit; managers pass by role (CanChangeDisposalStatus)
             for action in ('view', 'edit'):
                 RoleModuleAccess.objects.create(role=role, module='catalog', action=action)
         self.addCleanup(module_access.clear_cache)
@@ -91,6 +91,55 @@ class DisposalStatusTests(TestCase):
         self.Rec.objects.filter(pk=self.rec.pk).update(status='cancelled')
         self.assertEqual(self._set(self.owner_c, 'draft').status_code, 403)
         self.assertEqual(self._set(self.mgr_c, 'draft').status_code, 200)
+
+
+@override_settings(RBAC_ENFORCEMENT='enforce')
+class DisposalManagersApproveTests(TestCase):
+    """Owner 2026-11-01: admin / quality manager / supervisor approve, finish and reopen disposals
+    with their real grants (catalog view only) — through the middleware and the view's gate."""
+
+    def setUp(self):
+        from apps.batches.models import ExpiryDisposalRecord
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        module_access.clear_cache()
+        for role in ('supervisor', 'quality_manager', 'viewer'):
+            RoleModuleAccess.objects.create(role=role, module='catalog', action='view')
+        for action in ('view', 'edit'):
+            RoleModuleAccess.objects.create(role='pharmacist', module='catalog', action=action)
+        self.addCleanup(module_access.clear_cache)
+        branch = make_branch()
+        _, self.owner, self.owner_c = make_user('dm_owner', role='pharmacist', branch=branch)
+        _, _, self.sup_c = make_user('dm_sup', role='supervisor', access_all=True)
+        _, _, self.qm_c = make_user('dm_qm', role='quality_manager', access_all=True)
+        _, _, self.viewer_c = make_user('dm_viewer', role='viewer', access_all=True)
+        self.Rec = ExpiryDisposalRecord
+        self.rec = ExpiryDisposalRecord.objects.create(item_code='A', branch_code=branch.softech_branch_id,
+                                                       qty=Decimal('2'), decision='dispose', created_by=self.owner)
+
+    def _set(self, client, status):
+        return client.post(f'/api/batches/stock-expiry/disposal/{self.rec.pk}/status/', {'status': status},
+                           format='json')
+
+    def test_supervisor_approves_and_finishes(self):
+        self.assertEqual(self._set(self.sup_c, 'approved').status_code, 200)
+        self.assertEqual(self._set(self.sup_c, 'done').status_code, 200)
+        self.rec.refresh_from_db()
+        self.assertEqual(self.rec.status, 'done')
+
+    def test_quality_manager_approves_and_reopens(self):
+        self.assertEqual(self._set(self.qm_c, 'approved').status_code, 200)
+        self.assertEqual(self._set(self.qm_c, 'draft').status_code, 200)
+
+    def test_drafter_still_cannot_approve_but_cancels_own_draft(self):
+        self.assertEqual(self._set(self.owner_c, 'approved').status_code, 403)
+        self.assertEqual(self._set(self.owner_c, 'cancelled').status_code, 200)
+
+    def test_viewer_cannot_change_status(self):
+        for status in ('approved', 'cancelled'):
+            self.assertEqual(self._set(self.viewer_c, status).status_code, 403)
+        self.rec.refresh_from_db()
+        self.assertEqual(self.rec.status, 'draft')
 
 
 class ReservationCancelReasonTests(TestCase):
