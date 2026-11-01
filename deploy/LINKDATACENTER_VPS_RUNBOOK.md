@@ -1082,6 +1082,20 @@ match the IP), so use curl with `--resolve`:
 
 Nginx needs to read static/media files: `sudo chmod 755 /opt/elrezeiky /opt/elrezeiky/app`.
 
+#### Batch N2 on the live server
+
+N2 adds the device registry (`erp_device` cookie, `access_device` tables). No nginx change.
+
+```bash
+cd /opt/elrezeiky/app && git pull
+venv/bin/python manage.py migrate
+sudo systemctl restart elrezeiky-web
+```
+Nothing is refused for a pending or unknown device; only blocked / retired devices lose access.
+Rollout: let staff sign in once from each PC, then open «الأجهزة» (`/access/devices`), filter by
+branch, tick all (Ctrl+A) and press «اعتماد المحدد». Name each branch PC clearly. Blocking a
+device ends its sessions on the next request.
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS

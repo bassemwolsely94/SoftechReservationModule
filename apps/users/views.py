@@ -501,7 +501,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     def activity_log(self, request, pk=None):
         """Return the audit log for a specific staff member."""
         profile = self.get_object()
-        logs    = UserActivityLog.objects.filter(target_user=profile).select_related('changed_by')[:100]
+        logs    = UserActivityLog.objects.filter(target_user=profile).select_related('changed_by', 'device')[:100]
         return Response(UserActivityLogSerializer(logs, many=True).data)
 
 

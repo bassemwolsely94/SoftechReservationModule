@@ -11,6 +11,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { accessApi } from '../api/client'
 
+/** The device word appended to the badge: only when the server reported a device. */
+export function deviceWord(info) {
+  const d = info?.device
+  if (!d) return ''
+  if (d.status === 'approved') return 'جهاز معتمد'
+  if (d.status === 'pending') return 'جهاز بانتظار الاعتماد'
+  return d.status_label || ''
+}
+
 export function networkBadgeParts(info) {
   if (!info) return null
   if (info.zone !== 'internal') return { icon: '🌐', text: 'خارج الشبكة', tone: 'ext' }
@@ -38,7 +47,8 @@ export default function NetworkBadge({ variant = 'desktop' }) {
   })
   const p = networkBadgeParts(data)
   if (!p) return null
-  const title = `${p.text}${data?.ip ? ` · ${data.ip}` : ''}`
+  const dev = deviceWord(data)
+  const title = `${p.text}${dev ? ` · ${dev}` : ''}${data?.ip ? ` · ${data.ip}` : ''}`
   if (variant === 'mobile') {
     return (
       <span data-tour="shell-network-badge" title={title} aria-label={title}
@@ -52,6 +62,7 @@ export default function NetworkBadge({ variant = 'desktop' }) {
           className={`hidden md:inline-flex items-center gap-1 text-xs border rounded-full px-2.5 py-1 whitespace-nowrap ${TONE[p.tone]}`}>
       <span>{p.icon}</span>
       <span>{p.text}</span>
+      {dev && <span className="opacity-80">· {dev}</span>}
     </span>
   )
 }

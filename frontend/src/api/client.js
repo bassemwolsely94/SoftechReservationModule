@@ -349,6 +349,12 @@ export const accessApi = {
   createNetwork: (data) => api.post('/access/networks/', data),
   updateNetwork: (id, data) => api.patch(`/access/networks/${id}/`, data),
   deleteNetwork: (id) => api.delete(`/access/networks/${id}/`),
+  devices:       (params) => api.get('/access/devices/', { params }),
+  updateDevice:  (id, data) => api.patch(`/access/devices/${id}/`, data),
+  approveDevice: (id) => api.post(`/access/devices/${id}/approve/`),
+  blockDevice:   (id, note) => api.post(`/access/devices/${id}/block/`, { note }),
+  retireDevice:  (id) => api.post(`/access/devices/${id}/retire/`),
+  bulkApproveDevices: (ids) => api.post('/access/devices/bulk-approve/', { ids }),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────

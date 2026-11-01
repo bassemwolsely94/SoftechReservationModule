@@ -514,6 +514,9 @@ function ActivityLogModal({ user, onClose }) {
                         {JSON.stringify(log.old_value)} {fa()} {JSON.stringify(log.new_value)}
                       </p>
                     )}
+                    {log.device_name && (
+                      <p className="text-xs text-gray-400">💻 {log.device_name}</p>
+                    )}
                     {(log.ip_address || log.network) && (
                       <p className="text-xs text-gray-400" title={log.user_agent || undefined}>
                         {log.ip_address}

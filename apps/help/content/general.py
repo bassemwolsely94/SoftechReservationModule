@@ -225,8 +225,8 @@ SCREENS = [
               'If the sync shows "failed" or the last update is old, stock figures may be out of date — tell the system admin.'),
             T('شريط «التحفيز» أعلى الصفحة يعرض مستواك ونقاط اليوم وسلسلة الأيام النظيفة وترتيبك في الفرع، وزر «بند ينتظرك» يفتح ما تبقّى عليك.',
               'The "Gamification" strip at the top shows your level, today\'s points, clean-day streak and branch rank; the "items waiting" button opens what is still on you.'),
-            T('الشارة الصغيرة في أعلى الشاشة «🏢 داخل الشبكة — فرع …» أو «🌐 خارج الشبكة» تقول من أين تتصل الآن؛ للعلم فقط ولا تمنع أي شغل.',
-              'The small badge at the top of the screen, "🏢 On the network — branch …" or "🌐 Outside the network", tells you where you are connecting from; information only, it blocks nothing.'),
+            T('الشارة الصغيرة في أعلى الشاشة «🏢 داخل الشبكة — فرع …» أو «🌐 خارج الشبكة» تقول من أين تتصل الآن؛ للعلم فقط ولا تمنع أي شغل. قد تجد بجانبها «جهاز معتمد» أو «جهاز بانتظار الاعتماد».',
+              'The small badge at the top of the screen, "🏢 On the network — branch …" or "🌐 Outside the network", tells you where you are connecting from; information only, it blocks nothing. Next to it you may see "Approved device" or "Device pending approval".'),
         ],
         'related': ['general.me', 'general.notifications', 'gamification.main'],
         'tour': [
@@ -333,8 +333,8 @@ SCREENS = [
              'warn': T('لو «فشلت» أو الوقت قديم، الأرصدة ممكن تكون غلط — بلّغ مسؤول النظام قبل ما تعتمد عليها.',
                        'If it says "failed" or the time is old, stock may be wrong — tell the system admin before relying on it.')},
         ],
-        'change_note': T('شارة «من أين أتصل؟» في أعلى الشاشة', 'The "where am I connecting from?" badge at the top of the screen'),
-        'updated': '2026-10-31',
+        'change_note': T('الشارة العلوية تذكر حالة الجهاز (معتمد / بانتظار الاعتماد)', 'The top badge now states the device status (approved / pending)'),
+        'updated': '2026-11-01',
     },
     {
         'key': 'general.me',

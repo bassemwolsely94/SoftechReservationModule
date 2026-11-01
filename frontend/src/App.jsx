@@ -26,6 +26,7 @@ import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
 import SyncPage from './pages/SyncPage'
 import TrustedNetworksPage from './pages/TrustedNetworksPage'
+import DevicesPage from './pages/DevicesPage'
 import TransfersPage from './pages/TransfersPage'
 import TransitsPage from './pages/TransitsPage'
 import NewTransferPage from './pages/NewTransferPage'
@@ -516,6 +517,8 @@ export default function App() {
             {/* trusted networks (security N1): admin only */}
             <Route path="access/networks"
               element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
+              <Route path="access/devices"
+                element={<RequireRole roles={['admin']}><DevicesPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />
