@@ -24,7 +24,12 @@ from . import test_replacement_workflow as TW
 from .test_replacement_workflow import PIC
 
 D = Decimal
-TODAY = timezone.localdate()
+_REAL_TODAY = timezone.localdate()
+# The clock is pinned to the 15th of the month (_MidMonthClock): «yesterday» must be in the same
+# month. On the 1st a 1-day backdate crosses a month end, which the owner matrix rightly sends to a
+# manager (level 2, HIGH) — the supervisor-band test then failed every 1st (first seen 2026-11-01).
+TODAY = _REAL_TODAY.replace(day=15)
+_SHIFT = TODAY - _REAL_TODAY
 YESTERDAY = TODAY - timedelta(days=1)
 CUTOVER = {'130': (TODAY - timedelta(days=20)).isoformat()}
 
@@ -33,15 +38,28 @@ def _at(day, h=9, mi=0):
     return datetime(day.year, day.month, day.day, h, mi, tzinfo=dt_tz.utc)
 
 
-# The backdate bands read today's date, so tests that claim a purchase pin it: a fixed mid-month
-# purchase claimed the next day (supervisor band). "Yesterday" broke on every 1st of the month,
-# when yesterday is in the previous month and the claim correctly needs the manager.
-P_DAY = date(2026, 10, 14)
-FIXED_CUTOVER = {'130': '2026-09-01'}
+class _MidMonthClock:
+    """Shifts django.utils.timezone.now (and so localdate) by _SHIFT for the whole class, test data
+    included — time keeps moving, so created_at ordering still works."""
+
+    @classmethod
+    def setUpClass(cls):
+        real_now = timezone.now
+        cls._clock = mock.patch('django.utils.timezone.now', lambda: real_now() + _SHIFT)
+        cls._clock.start()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            super().tearDownClass()
+        finally:
+            cls._clock.stop()
 
 
-class _Clock:
-    """`apps.replacement.workflow.timezone` with today pinned; everything else is the real module."""
+class _ApprovalDay:
+    """`apps.replacement.workflow.timezone` with the date the approval route reads pinned to `day`
+    (everything else is the real module) — for a band that needs a specific calendar day."""
     def __init__(self, day):
         self.day = day
 
@@ -52,12 +70,8 @@ class _Clock:
         return getattr(timezone, name)
 
 
-def _today(day):
-    return mock.patch.object(W, 'timezone', _Clock(day))
-
-
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstTests(TW._Base):
+class EntryFirstTests(_MidMonthClock, TW._Base):
     approved = TW.LegTests.approved
 
     def setUp(self):
@@ -99,25 +113,21 @@ class EntryFirstTests(TW._Base):
                              items=items if items is not None else [{'item_id': self.lokelma.pk, 'qty': 1}],
                              claim_of=src)
 
-    def _route_for_claim(self, purchase_day, today):
-        src = R.reconstruct_invoice(self.ap_invoice(docdate=purchase_day))['case']
+    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM={'130': '2026-09-01'})
+    def test_backdate_band_across_month_end_is_manager_even_one_day_later(self):
+        # a month-end purchase claimed the next morning: 1 day, but across the month end → manager
+        src = R.reconstruct_invoice(self.ap_invoice(docdate=date(2026, 9, 30)))['case']
         self.assertEqual(src.status, RC.STATUS_UNCLAIMED)
         c = self.calc(self.claim(src))
-        with _today(today):
-            return W.approval_route(RC.objects.get(pk=c.pk))
-
-    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=FIXED_CUTOVER)
-    def test_backdate_band_across_month_end_is_manager_even_one_day_later(self):
-        wf, reasons = self._route_for_claim(date(2026, 9, 30), date(2026, 10, 1))
+        with mock.patch.object(W, 'timezone', _ApprovalDay(date(2026, 10, 1))):
+            wf, reasons = W.approval_route(RC.objects.get(pk=c.pk))
         self.assertEqual(wf, 'replacement_manager', reasons)
         self.assertTrue(any('عبر نهاية الشهر' in r for r in reasons), reasons)
 
-    @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=FIXED_CUTOVER)
     def test_claim_links_purchase_on_approval_and_retires_the_unclaimed_record(self):
-        src = R.reconstruct_invoice(self.ap_invoice(docdate=P_DAY))['case']
+        src = R.reconstruct_invoice(self.ap_invoice())['case']
         X.objects.filter(case=src).update(status=X.STATUS_ACK)          # someone reviewed it — still claimable
-        with _today(P_DAY + timedelta(days=1)):                         # supervisor band (see P_DAY)
-            c = self.submit(self.calc(self.claim(src)))
+        c = self.submit(self.calc(self.claim(src)))
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
@@ -243,7 +253,7 @@ class EntryFirstTests(TW._Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-class OwnerApprovalMatrixTests(TW._Base):
+class OwnerApprovalMatrixTests(_MidMonthClock, TW._Base):
     """Owner 2026-10-26. _Base keeps the value band at 2,000 / 6,000 so these isolate each control."""
 
     def route(self, case):
@@ -289,7 +299,7 @@ class OwnerApprovalMatrixTests(TW._Base):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 @override_settings(REPLACEMENT_ENTRY_FIRST_FROM=CUTOVER)
-class EntryFirstApiTests(TW._Base):
+class EntryFirstApiTests(_MidMonthClock, TW._Base):
     def test_patient_lookup_by_mobile(self):
         from apps.customers.models import Customer
         Customer.objects.filter(softech_pic=PIC).update(phone='01001234567')
