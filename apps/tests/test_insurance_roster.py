@@ -249,3 +249,50 @@ class RosterBatch2Tests(TestCase):
         self.assertEqual(d['members'][0]['other_companies'], ['جهة ب'])
         self.assertEqual(self.api.get('/api/insurance/rosters/', {'client_id': self.a.client_id, 'q': 'زز'}).json()['counts']['members'], 0)
         self.assertEqual(self.api.get('/api/insurance/rosters/').status_code, 400)
+
+
+class BillingGroupSuggestionTests(TestCase):
+    """فئة فوترة: suggestions from earlier claims / lists; auto-assign leaves excluded out."""
+
+    def setUp(self):
+        self.a = _client('جهة أ')
+        hist = _claim(self.a)
+        g_hist = _group(hist, 'التشغيل', '101')
+        _rx(hist, 'علاء محمد عبد القادر لبيب', group=g_hist)
+        self.claim = _claim(self.a)
+        self.g_op = _group(self.claim, 'تشغيل', '101')
+        self.g_tel = _group(self.claim, 'إتصالات', '102')
+
+    def test_history_and_list_suggest_the_group(self):
+        from apps.insurance.roster import suggest_billing_groups
+        r1 = _rx(self.claim, 'علاء محمد عبدالقادر لبيب')
+        r2 = _rx(self.claim, 'سامح فؤاد نجيب حنا')
+        lst = m.InsuranceSeparationList.objects.create(label='اتصالات', target_client=self.a.client,
+                                                       target_group_label='الإتصالات')
+        m.InsuranceSeparationName.objects.create(sep_list=lst, name='سامح فؤاد نجيب حنا')
+        rows = {x['prescription_id']: x for x in suggest_billing_groups(self.claim)['rows']}
+        self.assertEqual(rows[r1.id]['suggested_group_id'], self.g_op.id)
+        self.assertEqual(rows[r2.id]['suggested_group_id'], self.g_tel.id)
+        self.assertTrue(rows[r2.id]['options'][0]['from_list'])
+
+    def test_auto_assign_skips_excluded_and_takes_manual(self):
+        keep = _rx(self.claim, 'اسم أول ثانى ثالث')
+        gone = _rx(self.claim, 'اسم مستبعد ثانى ثالث')
+        m.InsuranceClaimExclusion.objects.create(prescription=gone, reason='x')
+        mrx = m.InsuranceClaimManualRx.objects.create(
+            claim=self.claim, softech_docnumber='9', softech_docdate=date(2026, 10, 6),
+            softech_branchcode='160', patient_name='يدوى', net_after=30)
+        self.assertEqual(self.g_op.auto_assign_prescriptions(), 2)
+        keep.refresh_from_db(); gone.refresh_from_db(); mrx.refresh_from_db()
+        self.assertEqual((keep.billing_group_id, gone.billing_group_id, mrx.billing_group_id),
+                         (self.g_op.id, None, self.g_op.id))
+        self.g_op.refresh_from_db()
+        self.assertEqual(self.g_op.rx_count, 2)
+
+    def test_group_totals_ignore_excluded(self):
+        r = _rx(self.claim, 'اسم يخرج لاحقاً ثالث', group=self.g_tel)
+        self.g_tel.refresh_totals()
+        self.assertEqual(self.g_tel.rx_count, 1)
+        m.InsuranceClaimExclusion.objects.create(prescription=r, reason='x')
+        self.g_tel.refresh_totals()
+        self.assertEqual(self.g_tel.rx_count, 0)

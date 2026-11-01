@@ -2342,6 +2342,7 @@ export const insuranceApi = {
   // Parent clients (عميل أب)
   parentClients:      (params)              => api.get('/insurance/parent-clients/', { params }),
   rosters:            (params)              => api.get('/insurance/rosters/', { params }),
+  billingGroupSuggestions: (claimId)        => api.get(`/insurance/claims/${claimId}/billing-group-suggestions/`),
   createParentClient: (data)                => api.post('/insurance/parent-clients/', data),
   updateParentClient: (id, data)            => api.patch(`/insurance/parent-clients/${id}/`, data),
   deleteParentClient: (id)                  => api.delete(`/insurance/parent-clients/${id}/`),

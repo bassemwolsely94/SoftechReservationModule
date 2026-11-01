@@ -2399,6 +2399,13 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         from .roster import check_claim_roster
         return Response(check_claim_roster(claim))
 
+    @action(detail=True, methods=['get'], url_path='billing-group-suggestions')
+    def billing_group_suggestions(self, request, pk=None):
+        """READ-ONLY: the فئة فوترة each receipt's patient belongs to, from earlier
+        claims of the same جهة and from separation lists linked to a جهة + فئة فوترة."""
+        from .roster import suggest_billing_groups
+        return Response(suggest_billing_groups(self.get_object()))
+
     @action(detail=True, methods=['post'], url_path='roster-decision')
     def roster_decision(self, request, pk=None):
         """Record a reviewer verdict on patients of this claim (does NOT change totals).
@@ -3006,6 +3013,11 @@ class InsuranceClaimBillingGroupViewSet(viewsets.ModelViewSet):
         claim_id = self.kwargs.get('claim_pk') or self.request.query_params.get('claim_id')
         if claim_id:
             qs = qs.filter(claim_id=claim_id)
+            if self.action == 'list':
+                # stored totals go stale when a receipt is excluded or edited elsewhere —
+                # a claim has a handful of groups, so re-count them on every listing
+                for g in qs:
+                    g.refresh_totals()
         return qs.order_by('sort_order', 'code')
 
     @staticmethod

@@ -1338,6 +1338,119 @@ function PaymentsTab({ claim, onRefresh }) {
 
 // ── Billing Groups Tab ───────────────────────────────────────────────────────
 // Split a claim into sub-categories (sub-personcodes) and export each separately.
+// «اقتراحات من سجل المرضى»: the فئة فوترة each receipt's patient was billed under on
+// earlier claims of this جهة (or a list linked to a فئة). Nothing is pre-ticked.
+const _BG_STATUS = { full: 'مقترح', conflict: 'أكثر من فئة', none: 'بلا سجل', assigned: 'مُخصص' }
+function BillingGroupSuggestions({ claimId, onAssigned }) {
+  const [data, setData]   = useState(null)
+  const [busy, setBusy]   = useState(false)
+  const [sel, setSel]     = useState(() => new Set())
+  const [pick, setPick]   = useState({})          // rx id → chosen group id (conflicts / overrides)
+  const [show, setShow]   = useState('full')      // full | conflict | none | all
+  const [sortKey, setSortKey] = useState('sequence')
+  const [sortDir, setSortDir] = useState('asc')
+  const [msg, setMsg]     = useState(null)
+
+  const load = () => {
+    setBusy(true)
+    insuranceApi.billingGroupSuggestions(claimId)
+      .then(r => { setData(r.data); setSel(new Set()); setPick({}) })
+      .catch(() => setMsg('تعذّر تحميل الاقتراحات'))
+      .finally(() => setBusy(false))
+  }
+  useEffect(() => { load() }, [claimId])   // eslint-disable-line
+  if (!data) return busy ? <div className="text-xs text-gray-400 mb-3">جارٍ مطابقة المرضى مع سجل فئات الفوترة…</div> : null
+  if (!data.groups.length) return null
+
+  const target = (r) => pick[r.prescription_id] ?? r.suggested_group_id
+  const groupName = (id) => data.groups.find(g => g.id === Number(id))?.name || ''
+  const rows = data.rows
+    .filter(r => r.status !== 'assigned' && (show === 'all' || r.status === show))
+    .sort((a, b) => {
+      const va = sortKey === 'group' ? groupName(target(a)) : a[sortKey], vb = sortKey === 'group' ? groupName(target(b)) : b[sortKey]
+      const c = typeof va === 'number' ? va - vb : String(va ?? '').localeCompare(String(vb ?? ''), 'ar')
+      return sortDir === 'asc' ? c : -c
+    })
+  const sortBy = (k) => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc') } }
+  const Th = ({ k, children }) => (
+    <th onClick={() => sortBy(k)} className={`text-right px-2 py-1.5 cursor-pointer whitespace-nowrap ${sortKey === k ? 'text-blue-600' : ''}`}>
+      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}</th>
+  )
+  const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const ready = rows.filter(r => target(r))
+  const chosen = data.rows.filter(r => sel.has(r.prescription_id) && target(r))
+  const c = data.counts || {}
+
+  const assign = async () => {
+    const byGroup = {}
+    for (const r of chosen) (byGroup[target(r)] ||= []).push(r.prescription_id)
+    setBusy(true); setMsg(null)
+    try {
+      for (const [gid, ids] of Object.entries(byGroup)) await insuranceApi.assignRxToGroup(Number(gid), ids, [], [])
+      setMsg(`خُصّصت ${chosen.length} روشتة على ${Object.keys(byGroup).length} فئة`)
+      load(); onAssigned && onAssigned()
+    } catch (e) { setMsg(e.response?.data?.error || 'تعذّر التخصيص') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mb-4 bg-white border border-blue-200 rounded-xl p-3" data-tour="insurance-claim-billing-suggest">
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <span className="font-semibold text-gray-800 text-sm">اقتراحات من سجل المرضى</span>
+        {[['full', `مقترح ${c.full || 0}`], ['conflict', `أكثر من فئة ${c.conflict || 0}`], ['none', `بلا سجل ${c.none || 0}`], ['all', 'الكل']].map(([k, l]) => (
+          <button key={k} onClick={() => { setShow(k); setSel(new Set()) }}
+            className={`text-xs rounded px-2 py-0.5 border ${show === k ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
+        ))}
+        <span className="text-[11px] text-gray-400">من المطالبات السابقة لنفس الجهة وقوائم الفصل المرتبطة بفئة فوترة — لا يُحدَّد شىء تلقائياً</span>
+      </div>
+      {msg && <div className="mb-2 text-xs text-blue-800 bg-blue-50 rounded px-2 py-1">{msg}</div>}
+      <div className="flex gap-2 mb-2">
+        <button onClick={() => setSel(new Set(ready.map(r => r.prescription_id)))} disabled={busy || !ready.length}
+          className="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40">تحديد كل ما له فئة ({ready.length})</button>
+        <button onClick={() => setSel(new Set())} disabled={busy || !sel.size}
+          className="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40">إلغاء التحديد</button>
+        <button onClick={assign} disabled={busy || !chosen.length} data-tour="insurance-claim-billing-suggest-assign"
+          className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white disabled:opacity-40">تخصيص المحدد لفئته ({chosen.length})</button>
+      </div>
+      <div className="max-h-80 overflow-auto border border-gray-100 rounded">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr>
+            <th className="px-2 py-1.5 w-6"></th>
+            <Th k="sequence">م</Th><Th k="patient_name">المريض</Th><Th k="docnumber">الإيصال</Th>
+            <Th k="group">فئة الفوترة</Th><th className="text-right px-2 py-1.5">الدليل</th><Th k="net_after">الصافى</Th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map(r => (
+              <tr key={r.prescription_id} className={sel.has(r.prescription_id) ? 'bg-blue-50/50' : ''}>
+                <td className="px-2 py-1 text-center"><input type="checkbox" disabled={!target(r)}
+                  checked={sel.has(r.prescription_id)} onChange={() => toggle(r.prescription_id)} /></td>
+                <td className="px-2 py-1 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
+                <td className="px-2 py-1 text-gray-800">{r.patient_name}</td>
+                <td className="px-2 py-1 font-mono text-gray-500">#{r.docnumber}</td>
+                <td className="px-2 py-1">
+                  <select value={target(r) || ''} onChange={e => setPick(p => ({ ...p, [r.prescription_id]: e.target.value ? Number(e.target.value) : null }))}
+                    className={`border rounded px-1 py-0.5 text-xs ${r.status === 'conflict' && !pick[r.prescription_id] ? 'border-amber-400' : 'border-gray-300'}`}>
+                    <option value="">— اختر —</option>
+                    {data.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  {r.status !== 'full' && <span className="mr-1 text-[10px] text-gray-400">{_BG_STATUS[r.status]}</span>}
+                </td>
+                <td className="px-2 py-1 text-gray-500">
+                  {r.options.map((o, i) => (
+                    <div key={i}>{o.label}: {o.from_list ? 'قائمة' : `${o.count}× · ${o.last || ''}`}{o.match === 'partial' ? ' · جزئية' : ''}</div>
+                  ))}
+                  {!r.options.length && '—'}
+                </td>
+                <td className="px-2 py-1 text-left font-mono">{fmt(r.net_after)}</td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan={7} className="px-2 py-6 text-center text-gray-400">لا روشتات فى هذا التصنيف.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function BillingGroupsTab({ claim, claimId, onRefresh }) {
   const [groups, setGroups]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -1417,9 +1530,10 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
   const allRx = claim?.prescriptions || []
   const allManual = claim?.manual_rx || []
   const allSup = (claim?.supplements || []).filter(s => s.supplement_type !== 'standalone')
-  const unassignedRx     = allRx.filter(r => !r.billing_group)
-  const unassignedManual = allManual.filter(m => !m.billing_group)
-  const unassignedSup    = allSup.filter(s => !s.billing_group)
+  // excluded receipts are out of the claim — never offered, never counted as «غير مخصص»
+  const unassignedRx     = allRx.filter(r => !r.billing_group && !r.is_excluded)
+  const unassignedManual = allManual.filter(m => !m.billing_group && !m.is_excluded)
+  const unassignedSup    = allSup.filter(s => !s.billing_group && !s.is_excluded)
   const unassignedCount  = unassignedRx.length + unassignedManual.length + unassignedSup.length
   const totalNet = groups.reduce((s, g) => s + Number(g.net_after || 0), 0)
 
@@ -1435,6 +1549,8 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
         </div>
         <Btn onClick={() => setShowAdd(!showAdd)} size="md">+ فئة جديدة</Btn>
       </div>
+
+      <BillingGroupSuggestions claimId={claimId} onAssigned={() => { load(); onRefresh() }} />
 
       {showAdd && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">

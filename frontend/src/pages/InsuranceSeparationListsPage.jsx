@@ -77,6 +77,14 @@ export default function InsuranceSeparationListsPage() {
     loadLists(); setSel({ ...l, target_client })
     flash(target_client ? 'أسماء القائمة أصبحت ضمن سجل مرضى هذه الجهة' : 'أُلغي ربط القائمة بجهة')
   }
+  const [groupDraft, setGroupDraft] = useState('')
+  useEffect(() => { setGroupDraft(sel?.target_group_label || '') }, [sel?.id])   // eslint-disable-line
+  const saveGroupLabel = async () => {
+    const target_group_label = groupDraft.trim()
+    await insuranceApi.updateSeparationList(sel.id, { target_group_label })
+    loadLists(); setSel({ ...sel, target_group_label })
+    flash(target_group_label ? `أسماء القائمة تُقترح لفئة الفوترة «${target_group_label}»` : 'أُلغي ربط القائمة بفئة فوترة')
+  }
   const saveNameEdit = async (n) => {
     if (!editNameVal.trim()) return
     await insuranceApi.updateSeparationName(sel.id, n.id, { name: editNameVal.trim() })
@@ -153,6 +161,16 @@ export default function InsuranceSeparationListsPage() {
                   {clientOpts.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </div>
+              {sel.target_client && (
+                <div data-tour="insurance-separation-lists-group" className="mb-3 flex items-center gap-2 text-sm">
+                  <label className="text-xs text-gray-600 whitespace-nowrap">فئة الفوترة:</label>
+                  <input className="border border-gray-300 rounded px-2 py-1.5 text-sm flex-1" value={groupDraft}
+                    placeholder="مثال: تشغيل — يُطابق فئة الفوترة بنفس الاسم فى كل مطالبة"
+                    onChange={e => setGroupDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveGroupLabel()} />
+                  <button onClick={saveGroupLabel} disabled={groupDraft.trim() === (sel.target_group_label || '')}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded disabled:opacity-40">حفظ</button>
+                </div>
+              )}
               <div data-tour="insurance-separation-lists-add-names" className="mb-3">
                 <label className="block text-xs text-gray-600 mb-1">إضافة أسماء (اسم في كل سطر)</label>
                 <textarea className={inp + ' h-24 font-mono'} value={bulkText} data-tour="insurance-separation-lists-paste"

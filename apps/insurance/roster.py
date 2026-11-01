@@ -164,9 +164,11 @@ def build_roster(exclude_claim_id=None) -> _Roster:
     # Separation lists that name the insurer their names belong to
     for n in (InsuranceSeparationName.objects
               .filter(is_active=True, sep_list__is_active=True, sep_list__target_client__isnull=False)
-              .values('name', 'sep_list__target_client_id')):
+              .values('name', 'sep_list__target_client_id', 'sep_list__target_group_label')):
+        glabel = n['sep_list__target_group_label'] or ''
         r.add(name_key(n['name']), client_id=n['sep_list__target_client_id'], subclient_id=None,
-              gkey='', glabel='', display=n['name'], count=0, last=None, source='list')
+              gkey=group_key(glabel), glabel=glabel, display=n['name'], count=0, last=None,
+              source='list')
     # Reviewer-confirmed members
     from .models import InsuranceRosterDecision
     for d in InsuranceRosterDecision.objects.filter(verdict='member'):
@@ -449,3 +451,88 @@ def roster_for_unit(client_id, subclient_id=None, q=''):
         'members': members[:3000],
         'ruled_out': ruled_out,
     }
+
+
+# ── فئة فوترة suggestions (read-only) ───────────────────────────────────────
+
+def suggest_billing_groups(claim) -> dict:
+    """For every active receipt of `claim`, the billing group its patient belongs to,
+    learned from earlier claims of the same جهة (their receipts' فئة فوترة) and from
+    separation lists linked to a جهة + فئة فوترة. Read-only — assigning stays a user action.
+
+    rows: {prescription_id, sequence, patient_name, docnumber, docdate, branch, net_after,
+           current_group_id, suggested_group_id, confidence full|partial,
+           options [{group_id, label, count, from_list}], evidence [..], conflict}"""
+    groups = list(claim.billing_groups.all())
+    if not groups:
+        return {'groups': [], 'rows': [], 'counts': {}}
+    gkeys = [(g, group_key(g.name)) for g in groups]
+    here_client, here_sub = claim.subclient.client_id, claim.subclient_id
+    roster = build_roster(exclude_claim_id=claim.pk)
+    decisions = _decisions()
+
+    def to_group(occ_gkey):
+        hits = [g for g, gk in gkeys if gk and occ_gkey and same_group(gk, occ_gkey)]
+        return hits[0] if len(hits) == 1 else None
+
+    rows, counts = [], defaultdict(int)
+    qs = (claim.prescriptions.filter(exclusion__isnull=True)
+          .select_related('billing_group').order_by('sequence'))
+    for rx in qs:
+        toks = name_tokens(rx.patient_name)
+        if not toks:
+            continue
+        key = ' '.join(toks)
+        per_group = {}          # group id → evidence
+        best_type = {}
+        for cand in roster.candidates(toks):
+            ok, mtype, _ = match_name(toks, roster.tokens[cand])
+            if not ok:
+                continue
+            # (no 3-word downgrade here: inside one جهة a 3-word match is the same
+            # employee far more often than across companies)
+            for occ in roster.units[cand].values():
+                if occ['client_id'] != here_client or not occ['group_key']:
+                    continue
+                if occ['subclient_id'] not in (None, here_sub):
+                    continue
+                if unit_decision(decisions, occ['client_id'], occ['subclient_id'],
+                                 occ['group_key'], cand) == 'not_member':
+                    continue
+                g = to_group(occ['group_key'])
+                if g is None:
+                    continue
+                e = per_group.setdefault(g.id, {'group_id': g.id, 'label': g.name, 'count': 0,
+                                                'last': None, 'from_list': False, 'seen_as': set()})
+                e['count'] += occ['count'] or 0
+                e['from_list'] = e['from_list'] or 'list' in occ['sources']
+                e['seen_as'].add(occ['group_label'])
+                if occ['last'] and (e['last'] is None or occ['last'] > e['last']):
+                    e['last'] = occ['last']
+                if best_type.get(g.id) != 'full':
+                    best_type[g.id] = mtype
+        options = sorted(per_group.values(), key=lambda e: (best_type[e['group_id']] != 'full',
+                                                            not e['from_list'], -e['count']))
+        for o in options:
+            o['seen_as'] = sorted(x for x in o['seen_as'] if x)
+            o['last'] = o['last'].isoformat() if o['last'] else None
+            o['match'] = best_type[o['group_id']]
+        full = [o for o in options if o['match'] == 'full']
+        conflict = len(full) > 1 or (not full and len(options) > 1)
+        pick = full[0] if len(full) == 1 else (options[0] if len(options) == 1 else None)
+        status = ('assigned' if rx.billing_group_id else
+                  'none' if not options else 'conflict' if conflict else
+                  'full' if pick and pick['match'] == 'full' else 'partial')
+        counts[status] += 1
+        rows.append({
+            'prescription_id': rx.id, 'sequence': rx.sequence, 'patient_name': rx.patient_name,
+            'docnumber': rx.softech_docnumber, 'branch': rx.softech_branchcode,
+            'docdate': rx.softech_docdate.isoformat() if rx.softech_docdate else None,
+            'net_after': float(rx.net_after or 0),
+            'current_group_id': rx.billing_group_id,
+            'current_group': rx.billing_group.name if rx.billing_group_id else '',
+            'suggested_group_id': pick['group_id'] if pick and not conflict else None,
+            'status': status, 'options': options,
+        })
+    return {'groups': [{'id': g.id, 'code': g.code, 'name': g.name} for g in groups],
+            'rows': rows, 'counts': dict(counts)}

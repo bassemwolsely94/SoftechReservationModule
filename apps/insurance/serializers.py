@@ -372,5 +372,5 @@ class InsuranceSeparationListSerializer(serializers.ModelSerializer):
         from .models import InsuranceSeparationList
         model  = InsuranceSeparationList
         fields = ['id', 'label', 'description', 'is_active', 'target_client', 'target_client_name',
-                  'name_count', 'created_at']
+                  'target_group_label', 'name_count', 'created_at']
         read_only_fields = ['id', 'created_at']

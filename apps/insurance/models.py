@@ -877,9 +877,10 @@ class InsuranceClaimBillingGroup(models.Model):
         return f'{self.claim.claim_number} / {self.name}'
 
     def refresh_totals(self):
-        """Recompute denormalised totals from assigned prescriptions + manual Rx."""
+        """Recompute denormalised totals from assigned prescriptions + manual Rx.
+        Excluded receipts never count (they leave the claim, so they leave its groups)."""
         from django.db.models import Sum, Count
-        agg = self.prescriptions.aggregate(
+        agg = self.prescriptions.filter(exclusion__isnull=True).aggregate(
             cnt=Count('id'),
             gb=Sum('gross_before'),
             td=Sum('total_discount'),
@@ -907,14 +908,18 @@ class InsuranceClaimBillingGroup(models.Model):
 
     def auto_assign_prescriptions(self):
         """
-        Assign prescriptions that match this group's filter rules.
-        Skips prescriptions already assigned to another group.
-        Returns count of newly assigned prescriptions.
+        Assign what is left to this group: the claim's unassigned, NOT excluded receipts
+        that match the group's filter rules. With no filter rule set («add the rest») the
+        unassigned manual receipts and non-standalone supplements join too. Skips anything
+        already in another group. Returns the count newly assigned.
         """
         qs = InsuranceClaimPrescription.objects.filter(
             claim=self.claim,
             billing_group__isnull=True,
+            exclusion__isnull=True,
         )
+        has_filter = any([self.filter_relative_degree, self.filter_dept_name,
+                          self.filter_hi_type_code, self.filter_patient_no_prefix])
         if self.filter_relative_degree:
             qs = qs.filter(relative_degree=self.filter_relative_degree)
         if self.filter_dept_name:
@@ -924,6 +929,11 @@ class InsuranceClaimBillingGroup(models.Model):
         if self.filter_patient_no_prefix:
             qs = qs.filter(patient_no__startswith=self.filter_patient_no_prefix)
         count = qs.update(billing_group=self)
+        if not has_filter:     # manual entries / supplements carry none of those fields
+            count += self.claim.manual_rx.filter(billing_group__isnull=True, is_excluded=False) \
+                .update(billing_group=self)
+            count += self.claim.supplements.filter(billing_group__isnull=True, is_excluded=False) \
+                .exclude(supplement_type='standalone').update(billing_group=self)
         if count:
             self.refresh_totals()
         return count
@@ -1587,6 +1597,10 @@ class InsuranceSeparationList(models.Model):
     target_client = models.ForeignKey('InsuranceClient', on_delete=models.SET_NULL,
                                       null=True, blank=True, related_name='separation_lists',
                                       verbose_name='الجهة التي تتبعها الأسماء')
+    # …and the فئة فوترة (billing group) inside that جهة they belong to, e.g. «تشغيل».
+    # Matched loosely against each claim's billing groups (roster.same_group).
+    target_group_label = models.CharField(max_length=200, blank=True, default='',
+                                          verbose_name='فئة الفوترة التي تتبعها الأسماء')
     created_by  = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL,
                                     null=True, blank=True, related_name='+',
                                     verbose_name='أُنشئت بواسطة')
