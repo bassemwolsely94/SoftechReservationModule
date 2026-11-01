@@ -24,9 +24,42 @@ MAX_BODY_BYTES = 1024 * 1024
 ERROR_MESSAGE = 'تعذر التحقق من صلاحية الدخول — حاول مرة أخرى'
 
 
+UNSAFE_LOG_SECONDS = 600
+
+
+def enforce_problem():
+    """Why `enforce` cannot be trusted with the current settings (access.E004 / E003), else None."""
+    if not getattr(settings, 'NETWORK_ENFORCE_GUARD', True):
+        return None
+    if not getattr(settings, 'NETWORK_HEADER_TRUSTED', False):
+        return ('access.E004: NETWORK_HEADER_TRUSTED is False, so inside and outside cannot be told apart')
+    if not getattr(settings, 'NETWORK_PROXY_KEY', ''):
+        return ('access.E003: NETWORK_PROXY_KEY is empty, so anything reaching Daphne could claim '
+                'X-ElR-Network: internal')
+    return None
+
+
+def _log_unsafe(problem):
+    """The ERROR line for an unsafe enforce, at most once per UNSAFE_LOG_SECONDS per process."""
+    try:
+        if not cache.add(f'access:unsafe-enforce:{problem[:12]}', 1, UNSAFE_LOG_SECONDS):
+            return
+    except Exception:
+        pass
+    log.error('NETWORK_POLICY_ENFORCEMENT=enforce refused (%s) — running as log until fixed', problem)
+
+
 def _mode():
+    """off / log / enforce. An unknown value is log; enforce on an unsafe setup is log (I5)."""
     mode = str(getattr(settings, 'NETWORK_POLICY_ENFORCEMENT', 'log') or 'log').lower()
-    return mode if mode in ('off', 'log', 'enforce') else 'log'
+    if mode not in ('off', 'log', 'enforce'):
+        return 'log'
+    if mode == 'enforce':
+        problem = enforce_problem()
+        if problem:
+            _log_unsafe(problem)
+            return 'log'
+    return mode
 
 
 def _json_body(request):

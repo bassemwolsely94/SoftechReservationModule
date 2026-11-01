@@ -3,7 +3,6 @@ Attaches request.access, and files the request's SOFTECH load under network + ro
 """
 import logging
 
-from django.conf import settings
 from django.core.cache import cache
 
 from apps.sync import softech_load
@@ -40,7 +39,8 @@ class AccessContextMiddleware:
     @staticmethod
     def _log_external(request, ctx):
         try:
-            if (getattr(settings, 'NETWORK_POLICY_ENFORCEMENT', 'log') == 'log'
+            from .policy_middleware import _mode
+            if (_mode() == 'log'
                     and ctx.network.zone != 'internal' and request.path.startswith('/api/')):
                 role = ctx.role or 'anon'
                 key = f'access:extlog:{ctx.network.zone}:{ctx.network.ip}:{role}'

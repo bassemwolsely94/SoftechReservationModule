@@ -100,6 +100,20 @@ def default_env_path():
     return Path(settings.BASE_DIR) / '.env'
 
 
+def _zone_policy_startup_check():
+    """N3 (I5): enforce on an unsafe setup (access.E003 / E004) is not served as enforce — it runs as
+    log, and the ERROR line is written now, at start-up, as well as while serving."""
+    try:
+        from apps.access.policy_middleware import _mode, enforce_problem
+        mode = str(getattr(settings, 'NETWORK_POLICY_ENFORCEMENT', 'log') or 'log').lower()
+        if mode == 'enforce' and enforce_problem():
+            _mode()                  # writes the ERROR line
+        else:
+            logger.info('[access] zone policy mode: %s', _mode())
+    except Exception:
+        logger.error('[access] zone policy start-up check failed', exc_info=True)
+
+
 def run_startup_checks(env_path=None):
     import sys
     if env_path is None and len(sys.argv) > 1 and sys.argv[1] == 'test':
@@ -115,6 +129,7 @@ def run_startup_checks(env_path=None):
         raise ImproperlyConfigured(
             'WRITER_INSTANCE=True together with SOFTECH_READ_ONLY=True is contradictory: the writer '
             'instance could not write. Set one of them to False.')
+    _zone_policy_startup_check()
     on = flags_on()
     logger.info('[writers] WRITER_INSTANCE=%s SOFTECH_READ_ONLY=%s — %s',
                 writer_instance(), bool(getattr(settings, 'SOFTECH_READ_ONLY', False)),

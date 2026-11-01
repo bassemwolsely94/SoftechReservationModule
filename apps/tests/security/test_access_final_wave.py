@@ -80,3 +80,63 @@ class RiderEnrolmentTests(TestCase):
         from apps.help.content import general
         screen = next(s for s in general.SCREENS if s['key'] == 'general.security')
         self.assertIn('/rider/security', screen['routes'])
+
+
+class UnsafeEnforceTests(TestCase):
+    """I5: enforce on an unsafe setup (E003 / E004) runs as log, with an ERROR line — in the
+    middleware, at sign-in and at start-up (config.writers.run_startup_checks)."""
+
+    def setUp(self):
+        cache.clear()
+
+    def _mode(self):
+        from apps.access.policy_middleware import _mode
+        return _mode()
+
+    @override_settings(NETWORK_ENFORCE_GUARD=True, NETWORK_POLICY_ENFORCEMENT='enforce',
+                       NETWORK_HEADER_TRUSTED=False, NETWORK_PROXY_KEY='k')
+    def test_untrusted_header_degrades_to_log(self):
+        with self.assertLogs('elrezeiky.access', 'ERROR') as cm:
+            self.assertEqual(self._mode(), 'log')
+        self.assertIn('access.E004', cm.output[0])
+
+    @override_settings(NETWORK_ENFORCE_GUARD=True, NETWORK_POLICY_ENFORCEMENT='enforce',
+                       NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='')
+    def test_missing_key_degrades_to_log(self):
+        with self.assertLogs('elrezeiky.access', 'ERROR') as cm:
+            self.assertEqual(self._mode(), 'log')
+        self.assertIn('access.E003', cm.output[0])
+
+    @override_settings(NETWORK_ENFORCE_GUARD=True, NETWORK_POLICY_ENFORCEMENT='enforce',
+                       NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='k')
+    def test_safe_setup_keeps_enforce(self):
+        self.assertEqual(self._mode(), 'enforce')
+
+    @override_settings(NETWORK_ENFORCE_GUARD=True, NETWORK_POLICY_ENFORCEMENT='enforce',
+                       NETWORK_HEADER_TRUSTED=False, NETWORK_PROXY_KEY='', ACCESS_POLICY_TTL=0)
+    def test_middleware_does_not_refuse_when_unsafe(self):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from apps.access.policy_middleware import ZonePolicyMiddleware
+        user, _, _ = make_user('fw_unsafe', role='pharmacist')
+        req = RequestFactory().get('/api/customers/')
+        req.user = user
+        req.access = SimpleNamespace(zone='Z4', failed=False)
+        with self.assertLogs('elrezeiky.access', 'WARNING') as cm:
+            r = ZonePolicyMiddleware(lambda _r: HttpResponse('ok'))(req)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(any('ERROR' in line and 'E004' in line for line in cm.output), cm.output)
+        self.assertTrue(any('zone would-deny' in line for line in cm.output), cm.output)
+
+    @override_settings(NETWORK_ENFORCE_GUARD=True, NETWORK_POLICY_ENFORCEMENT='enforce',
+                       NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='', SOFTECH_READ_ONLY=False)
+    def test_startup_check_writes_the_error(self):
+        import tempfile
+        from pathlib import Path
+        from config import writers
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / '.env'
+            env.write_text('A=1\n', encoding='utf-8')
+            with self.assertLogs('elrezeiky.access', 'ERROR') as cm:
+                writers.run_startup_checks(env_path=env)
+        self.assertIn('access.E003', cm.output[0])

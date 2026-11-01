@@ -89,8 +89,8 @@ def _external():
     """N3 leakage control: True when the request comes from outside the network (Z3 / Z4) and the
     zone policy is enforced. In log mode nothing changes, so the log period never alters what
     staff see."""
-    from django.conf import settings
-    if getattr(settings, 'NETWORK_POLICY_ENFORCEMENT', 'log') != 'enforce':
+    from apps.access.policy_middleware import _mode
+    if _mode() != 'enforce':
         return False
     from apps.access import zones
     return zones.current_zone() in (zones.Z3, zones.Z4)

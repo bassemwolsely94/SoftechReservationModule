@@ -109,6 +109,9 @@ NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
 NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
+# Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
+NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
 # Seconds the trusted-network list is cached per process; 0 under tests.
 ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).
