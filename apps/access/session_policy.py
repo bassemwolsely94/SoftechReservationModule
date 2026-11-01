@@ -12,11 +12,12 @@ cap or blocked) happen only in `enforce`; `log` writes a "zone would-deny" line 
 """
 import logging
 import time
+from types import SimpleNamespace
 
 from django.conf import settings
 
 from .devices import COOKIE, from_secret
-from .network import request_network
+from .network import INTERNAL, request_network
 from .policy import REASON_MESSAGES, policy_for
 from .zones import Z3, Z4, ZONE_LABELS, zone_for
 
@@ -24,6 +25,7 @@ log = logging.getLogger('elrezeiky.access')
 
 EXTERNAL_ZONES = (Z3, Z4)
 EXPIRED_MESSAGE = 'انتهت مدة الجلسة المسموحة من خارج شبكة الشركة — سجّل الدخول من جديد'
+ENROL_INSIDE_MESSAGE = 'فعّل المصادقة الثنائية من داخل شبكة الشركة أولاً'
 ALERT_TITLE = 'دخول من خارج الشبكة'
 
 
@@ -37,20 +39,67 @@ def mode():
 
 
 def message(reason):
-    return EXPIRED_MESSAGE if reason == 'expired' else REASON_MESSAGES.get(reason, REASON_MESSAGES['blocked'])
+    if reason == 'expired':
+        return EXPIRED_MESSAGE
+    if reason == 'mfa_enrol_inside':
+        return ENROL_INSIDE_MESSAGE
+    return REASON_MESSAGES.get(reason, REASON_MESSAGES['blocked'])
+
+
+# ── who: the policy subject of a user ───────────────────────────────────────────────────
+
+def subject(user):
+    """What the zone policy is applied to for `user`: the StaffProfile; for a superuser without
+    one, the admin rows; for any other user without one, a subject blocked in enforce (F7)."""
+    if user is None:
+        return None
+    profile = getattr(user, 'staff_profile', None)
+    if profile is not None:
+        return profile
+    if getattr(user, 'is_superuser', False):
+        return SimpleNamespace(role='admin', user=user, no_profile=False,
+                               external_export=False, external_softech_write=False)
+    return SimpleNamespace(role=None, user=user, no_profile=True)
 
 
 # ── zone of a sign-in / refresh request ─────────────────────────────────────────────────
 
+def network_internal(request):
+    """True when the request's network is internal; False on any error. Never raises."""
+    try:
+        return request_network(request).zone == INTERNAL
+    except Exception:
+        return False
+
+
 def request_zone(request):
-    """Z1-Z4 from the request's network and its device cookie. Z4 on any error. Never raises."""
+    """Z1-Z4 from the request's network and its device cookie. Never raises: when the network
+    cannot be read the request is Z4; when only the device lookup fails on an internal network it
+    is Z2 (fail open inside, logged as an error - F3)."""
     try:
         net = request_network(request)
-        device = from_secret(request.COOKIES.get(COOKIE))
-        return zone_for(net.zone, device.status if device is not None else None)
     except Exception:
         log.warning('sign-in zone failed, treated as Z4', exc_info=True)
         return Z4
+    try:
+        device = from_secret(request.COOKIES.get(COOKIE))
+        return zone_for(net.zone, device.status if device is not None else None)
+    except Exception:
+        if net.zone == INTERNAL:
+            log.error('sign-in device lookup failed on an internal network, treated as Z2', exc_info=True)
+        else:
+            log.warning('sign-in device lookup failed, treated as Z4', exc_info=True)
+        return zone_for(net.zone, None)
+
+
+def _on_error(request, what):
+    """Enforce-mode lookup error: True = refuse. Fails open (ERROR log) on an internal network,
+    closed outside (F3)."""
+    if network_internal(request):
+        log.error('zone %s check failed on an internal network, allowed', what, exc_info=True)
+        return False
+    log.warning('zone %s check failed outside, refused', what, exc_info=True)
+    return True
 
 
 # ── claims ──────────────────────────────────────────────────────────────────────────────
@@ -70,7 +119,7 @@ def auth_at_of(token):
 # ── the policy for sessions ─────────────────────────────────────────────────────────────
 
 def _policy(profile, zone):
-    if profile is None:
+    if profile is None or getattr(profile, 'no_profile', False):
         return None
     return policy_for(profile.role, zone or Z4)     # signed-in, no zone = Z4
 
@@ -86,6 +135,8 @@ def mfa_required_in_zone(profile, zone):
 
 
 def blocked(profile, zone):
+    if getattr(profile, 'no_profile', False):
+        return True                                 # a user without a staff profile (F7)
     pol = _policy(profile, zone)
     return pol is not None and pol.access == 'none'
 
@@ -140,10 +191,25 @@ def login_refusal(request, profile, zone):
         if not blocked(profile, zone):
             return None
     except Exception:
-        log.warning('zone sign-in check failed', exc_info=True)
-        return 'blocked' if current == 'enforce' else None
+        if current != 'enforce':
+            log.warning('zone sign-in check failed', exc_info=True)
+            return None
+        return 'blocked' if _on_error(request, 'sign-in') else None
     would_deny(request, profile, zone, 'blocked', 'login')
     return 'blocked' if current == 'enforce' else None
+
+
+def enrol_refusal(request, profile, zone):
+    """'mfa_enrol_inside' when a first 2FA enrolment at sign-in comes from outside the network
+    (Z3/Z4, or no zone) and the policy is enforced, else None; log mode logs it (F1). Enrolment
+    from settings in a running session is not a sign-in and never comes here."""
+    current = mode()
+    if current == 'off' or profile is None:
+        return None
+    if (zone or Z4) not in EXTERNAL_ZONES:
+        return None
+    would_deny(request, profile, zone or Z4, 'mfa_enrol_inside', 'login-enrol')
+    return 'mfa_enrol_inside' if current == 'enforce' else None
 
 
 def login_needs_mfa(request, profile, zone):
@@ -155,8 +221,10 @@ def login_needs_mfa(request, profile, zone):
     try:
         needed = mfa_required_in_zone(profile, zone)
     except Exception:
-        log.warning('zone 2FA check failed', exc_info=True)
-        return current == 'enforce'
+        if current != 'enforce':
+            log.warning('zone 2FA check failed', exc_info=True)
+            return False
+        return _on_error(request, '2FA')
     if not needed:
         return False
     if current == 'enforce':
@@ -173,8 +241,10 @@ def refresh_refusal(request, profile, token, zone):
     try:
         ok, reason = refresh_allowed(profile, token, zone)
     except Exception:
-        log.warning('zone refresh check failed', exc_info=True)
-        return 'blocked' if current == 'enforce' else None
+        if current != 'enforce':
+            log.warning('zone refresh check failed', exc_info=True)
+            return None
+        return 'blocked' if _on_error(request, 'refresh') else None
     if ok:
         return None
     would_deny(request, profile, zone, reason, 'refresh')
@@ -184,10 +254,13 @@ def refresh_refusal(request, profile, token, zone):
 # ── external sign-in alert ──────────────────────────────────────────────────────────────
 
 def alert_external_login(profile, zone, request=None):
-    """Z3 / Z4 sign-in: tell the user (once per hour) and the admins (hourly digest), after
-    commit. Never raises."""
+    """Z3 / Z4 sign-in in enforce mode: tell the user (once per hour) and the admins (hourly
+    digest), after commit. Never raises. Off / log send nothing (F4): a wrong proxy setup in log
+    mode would otherwise alert every user every hour."""
     try:
-        if profile is None or zone not in EXTERNAL_ZONES:
+        if profile is None or getattr(profile, 'pk', None) is None or zone not in EXTERNAL_ZONES:
+            return
+        if mode() != 'enforce':
             return
         from django.db import transaction
         ip = ''
@@ -206,9 +279,9 @@ def _digest_body(who, where):
         from django.utils import timezone
         from apps.users.models import UserActivityLog
         start = timezone.now().replace(minute=0, second=0, microsecond=0)
-        n = UserActivityLog.objects.filter(action='login_success', network='external',
+        n = UserActivityLog.objects.filter(action__in=('login_success', 'mfa_verified'), network='external',
                                            created_at__gte=start).count()
-        return f'دخول من خارج الشبكة خلال هذه الساعة: {max(n, 1)} — أولها {who} ({where}) — راجع /access/devices'
+        return f'دخول من خارج الشبكة خلال هذه الساعة: {max(n, 1)} — آخرها {who} ({where}) — راجع /access/devices'
     except Exception:
         return f'{who} — {where}'
 
@@ -230,6 +303,6 @@ def _send_alert(profile, zone, ip):
         except Exception as exc:
             log.warning('external sign-in alert to user %s failed: %s', profile.pk, exc)
         devices.admin_digest(f'🌐 {ALERT_TITLE}', _digest_body(who, where),
-                             f'login_external_digest_{hour}', exclude_pk=profile.pk)
+                             f'login_external_digest_{hour}', exclude_pk=profile.pk, refresh_body=True)
     except Exception as exc:
         log.warning('external sign-in alert skipped: %s', exc)

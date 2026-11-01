@@ -213,16 +213,28 @@ def enroll_login(request, user):
     return device, secret
 
 
-def zone_refusal_response(request, profile, zone):
+def _zone_refused(request, user, zone, reason):
+    from apps.access import session_policy
+    _log('login_refused_zone', getattr(user, 'staff_profile', None), request, note=f'zone={zone} reason={reason}')
+    # 'error' (not 'detail'): the login page reads .error (ruling F6)
+    return Response({'error': session_policy.message(reason), 'zone': zone, 'reason': reason},
+                    status=status.HTTP_403_FORBIDDEN)
+
+
+def zone_refusal_response(request, user, zone):
     """403 (and a login_refused_zone log row) when the role is blocked in this zone and the policy
     is enforced, else None. Never counts toward the lockout (N3)."""
     from apps.access import session_policy
-    reason = session_policy.login_refusal(request, profile, zone)
-    if reason is None:
-        return None
-    _log('login_refused_zone', profile, request, note=f'zone={zone}')
-    return Response({'error': session_policy.message(reason), 'zone': zone, 'reason': reason},
-                    status=status.HTTP_403_FORBIDDEN)
+    reason = session_policy.login_refusal(request, session_policy.subject(user), zone)
+    return None if reason is None else _zone_refused(request, user, zone, reason)
+
+
+def enrol_refusal_response(request, user, zone):
+    """403 when a first 2FA enrolment at sign-in comes from outside the network and the policy is
+    enforced (F1: riders and everyone else enrol once inside), else None."""
+    from apps.access import session_policy
+    reason = session_policy.enrol_refusal(request, session_policy.subject(user), zone)
+    return None if reason is None else _zone_refused(request, user, zone, reason)
 
 
 def cookie_age(profile, zone, payload):
@@ -311,7 +323,7 @@ def verify_2fa_view(request):
         return refused
     from apps.access import session_policy
     zone = session_policy.request_zone(request)
-    refused = zone_refusal_response(request, profile, zone)
+    refused = zone_refusal_response(request, user, zone)
     if refused is not None:
         return refused
 
@@ -336,19 +348,24 @@ def verify_2fa_view(request):
         devices.remember_mfa(device, profile)     # approved devices only (N2)
     session_policy.alert_external_login(profile, zone, request)
     return session_response(resp, device_secret=device_secret,
-                            refresh_max_age=cookie_age(profile, zone, resp))
+                            refresh_max_age=cookie_age(session_policy.subject(user), zone, resp))
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def setup_2fa_view(request):
     """Generate a fresh (pending) TOTP secret + QR. Callable via JWT or enroll token."""
-    user, _ = _actor_from_request(request)
+    user, via_preauth = _actor_from_request(request)
     if not user:
         return Response({'error': 'غير مصرح'}, status=status.HTTP_401_UNAUTHORIZED)
     profile = getattr(user, 'staff_profile', None)
     if not profile:
         return Response({'error': 'لا يوجد ملف موظف لهذا الحساب'}, status=status.HTTP_400_BAD_REQUEST)
+    if via_preauth:              # enrolment at sign-in: only from inside the network (F1)
+        from apps.access import session_policy
+        refused = enrol_refusal_response(request, user, session_policy.request_zone(request))
+        if refused is not None:
+            return refused
     if profile.mfa_enabled:      # never replace a working authenticator (A-1) — disable it first
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل — أوقفها أولاً لربط هاتف جديد'},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -380,7 +397,8 @@ def enable_2fa_view(request):
             return refused
         from apps.access import session_policy
         zone = session_policy.request_zone(request)
-        refused = zone_refusal_response(request, profile, zone)
+        refused = (zone_refusal_response(request, user, zone)
+                   or enrol_refusal_response(request, user, zone))
         if refused is not None:
             return refused
     if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
@@ -405,7 +423,7 @@ def enable_2fa_view(request):
         resp.update(build_login_response(user, request, device=device, zone=zone))
         _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية', device=device)
         session_policy.alert_external_login(profile, zone, request)
-        max_age = cookie_age(profile, zone, resp)
+        max_age = cookie_age(session_policy.subject(user), zone, resp)
     return session_response(resp, device_secret=device_secret, refresh_max_age=max_age)
 
 

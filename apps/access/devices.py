@@ -198,9 +198,10 @@ def notify_new_device(device, profile, net=None):
         logger.warning('notify_new_device skipped: %s', exc)
 
 
-def admin_digest(title, body, dedup_key, exclude_pk=None):
+def admin_digest(title, body, dedup_key, exclude_pk=None, refresh_body=False):
     """One notification per active admin per `dedup_key` (time-bucketed by the caller, e.g. per
-    hour). Each admin is tried on its own. Never raises."""
+    hour). Each admin is tried on its own. Never raises. `refresh_body` rewrites the body of an
+    admin's digest already sent in this bucket, so a running count stays current."""
     try:
         from apps.notifications.models import Notification
         from apps.users.models import StaffProfile
@@ -209,6 +210,8 @@ def admin_digest(title, body, dedup_key, exclude_pk=None):
             admins = admins.exclude(pk=exclude_pk)
         for admin in admins:
             try:
+                if refresh_body and Notification.objects.filter(recipient=admin, dedup_key=dedup_key).update(body=body):
+                    continue
                 Notification.send_to_user(admin, 'system', title, body, dedup_key=dedup_key, dedup_once=True)
             except Exception as exc:
                 logger.warning('admin digest %s to admin %s failed: %s', dedup_key, admin.pk, exc)

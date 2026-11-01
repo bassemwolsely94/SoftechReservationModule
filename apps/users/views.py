@@ -210,12 +210,14 @@ def login_view(request):
         return Response({'error': _devices.BLOCKED_MESSAGE}, status=status.HTTP_401_UNAUTHORIZED)
 
     # ── Access zone (N3) ──────────────────────────────────────────────────────
-    # Only after the password succeeded (no account enumeration), before 2FA and tokens.
-    # A refusal happens in enforce mode only; log mode writes a line and goes on.
+    # Only after the password succeeded, before 2FA and tokens. A 403 here does tell the caller
+    # the password was right (a wrong one answers 401); the lockout bounds how many passwords
+    # can be tried. A refusal happens in enforce mode only; log mode writes a line and goes on.
     from . import mfa as _mfa
     from apps.access import session_policy as _session
     zone = _session.request_zone(request)
-    refused = _mfa.zone_refusal_response(request, profile, zone)
+    subj = _session.subject(user)
+    refused = _mfa.zone_refusal_response(request, user, zone)
     if refused is not None:
         return refused
 
@@ -232,8 +234,12 @@ def login_view(request):
             _log_auth('mfa_challenge', profile, ip, request=request)
             return Response({'mfa_required': True,
                              'mfa_token': _mfa.make_preauth_token(user, 'login')})
-    elif _mfa.mfa_required_for(profile) or _session.login_needs_mfa(request, profile, zone):
-        # Not yet enrolled and 2FA required (role enforcement, or the zone) → enrol now.
+    elif _mfa.mfa_required_for(profile) or _session.login_needs_mfa(request, subj, zone):
+        # Not yet enrolled and 2FA required (role enforcement, or the zone) → enrol now,
+        # but only from inside the network (F1).
+        refused = _mfa.enrol_refusal_response(request, user, zone)
+        if refused is not None:
+            return refused
         _log_auth('mfa_challenge', profile, ip, note='mfa_setup_required', request=request)
         return Response({'mfa_setup_required': True,
                          'mfa_token': _mfa.make_preauth_token(user, 'enroll')})
@@ -245,7 +251,7 @@ def login_view(request):
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
     return _mfa.session_response(payload, device_secret=device_secret,
-                                 refresh_max_age=_mfa.cookie_age(profile, zone, payload))
+                                 refresh_max_age=_mfa.cookie_age(subj, zone, payload))
 
 
 @api_view(['POST'])
@@ -325,7 +331,7 @@ def _old_token(raw):
 
 
 def _refresh_zone(request, raw):
-    """(zone, owner StaffProfile or None, auth_at) for a refresh. auth_at falls back to the old
+    """(zone, owner policy subject or None, auth_at) for a refresh. auth_at falls back to the old
     token's iat; an unreadable token gives (zone, None, None) — the serializer refuses it. Never raises."""
     from apps.access import session_policy as _session
     zone = _session.request_zone(request)
@@ -333,9 +339,9 @@ def _refresh_zone(request, raw):
         from rest_framework_simplejwt.settings import api_settings
         token = RefreshToken(raw)
         uid = token.get(api_settings.USER_ID_CLAIM)
-        profile = StaffProfile.objects.select_related('user').filter(
-            **{f'user__{api_settings.USER_ID_FIELD}': uid}).first()
-        return zone, profile, _session.auth_at_of(token)
+        user = User.objects.select_related('staff_profile').filter(
+            **{api_settings.USER_ID_FIELD: uid}).first()
+        return zone, _session.subject(user), _session.auth_at_of(token)
     except Exception:
         return zone, None, None
 
@@ -353,8 +359,20 @@ def _stamp_zone(access, refresh, zone, auth_at):
         new_a['zone'] = new_r['zone']
         new_a['auth_at'] = new_r['auth_at']
         return str(new_a), str(new_r)
-    except Exception as exc:
-        logger.warning('refresh zone stamp skipped: %s', exc)
+    except Exception:
+        logger.error('refresh zone stamp failed; carrying auth_at only', exc_info=True)
+    # F5: never let a rotated token start a fresh cap — carry the sign-in time (old iat) at least.
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        if auth_at is None:
+            return access, refresh
+        new_r = RefreshToken(refresh)
+        new_r['auth_at'] = int(auth_at)
+        new_a = AccessToken(access)
+        new_a['auth_at'] = int(auth_at)
+        return str(new_a), str(new_r)
+    except Exception:
+        logger.error('refresh auth_at carry failed', exc_info=True)
         return access, refresh
 
 

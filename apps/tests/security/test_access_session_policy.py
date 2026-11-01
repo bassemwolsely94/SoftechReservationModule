@@ -44,6 +44,23 @@ def _refresh(client, token, net=OUTSIDE):
     return client.post('/api/auth/refresh/', {}, format='json', HTTP_USER_AGENT=UA, **XHR, **net)
 
 
+def _remembered(username, role='admin'):
+    """An enrolled user whose 2FA is remembered on a fresh approved device: (cookie secret, profile)."""
+    _, profile, _ = make_user(username, role=role)
+    profile.mfa_enabled = True
+    profile.mfa_secret = pyotp.random_base32()
+    profile.save()
+    secret, dev = _approved_device()
+    devices.remember_mfa(dev, profile)
+    return secret, profile
+
+
+def _with_device(secret):
+    c = APIClient()
+    c.cookies[devices.COOKIE] = secret
+    return c
+
+
 def _token(user, zone, auth_at):
     t = RefreshToken.for_user(user)
     session_policy.stamp(t, zone, auth_at=auth_at)
@@ -220,8 +237,11 @@ class SignInTests(Base):
     def test_external_requires_2fa(self):
         user, profile, _ = make_user('sp_mfa', role='delivery')      # rider: allowed in Z4
         r = _login(APIClient(), 'sp_mfa')
-        self.assertTrue(r.data.get('mfa_setup_required'), r.data)
-        self.assertNotIn('access', r.data)
+        # F1: a first enrolment is made inside the network, never from Z3/Z4 with the password alone
+        self.assertEqual(r.status_code, 403, r.data)
+        self.assertEqual(r.data, {'error': 'فعّل المصادقة الثنائية من داخل شبكة الشركة أولاً',
+                                  'zone': 'Z4', 'reason': 'mfa_enrol_inside'})
+        self.assertTrue(UserActivityLog.objects.filter(action='login_refused_zone', target_user=profile).exists())
         inside = _login(APIClient(), 'sp_mfa', net=INSIDE)
         self.assertIn('access', inside.data)                         # Z2: no 2FA by zone
         profile.mfa_enabled = True
@@ -311,30 +331,44 @@ class SignInTests(Base):
         self.assertEqual(v.status_code, 200, v.data)
         self.assertNotIn('device_token', v.data)
 
-    @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce')
     def test_login_alert_external(self):
-        _, me, _ = make_user('sp_alert', role='admin')
+        secret, me = _remembered('sp_alert')
+        secret_b, _ = _remembered('sp_alert_b')
         _, other_admin, _ = make_user('sp_alert_adm', role='admin')
         title = 'دخول من خارج الشبكة'
         with self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(_login(APIClient(), 'sp_alert', net=INSIDE).status_code, 200)
+            self.assertEqual(_login(_with_device(secret), 'sp_alert', net=INSIDE).status_code, 200)
         self.assertFalse(Notification.objects.filter(title__contains=title).exists())   # inside: no alert
         for _ in range(2):
             with self.captureOnCommitCallbacks(execute=True):
-                r = _login(APIClient(), 'sp_alert')
+                r = _login(_with_device(secret), 'sp_alert')
             self.assertEqual(r.status_code, 200, r.data)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(_login(_with_device(secret_b), 'sp_alert_b').status_code, 200)
         mine = Notification.objects.filter(recipient=me, dedup_key__startswith='login_external_user_')
         self.assertEqual(mine.count(), 1)                               # dedup per hour
         digest = Notification.objects.filter(recipient=other_admin, title__contains=title,
                                              dedup_key__startswith='login_external_digest_')
         self.assertEqual(digest.count(), 1)
+        self.assertIn('خلال هذه الساعة: 3', digest.get().body)       # F2: the real count, kept current
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    def test_no_alert_in_log_mode(self):
+        make_user('sp_alert_log', role='admin')
+        make_user('sp_alert_log_adm', role='admin')
+        with self.captureOnCommitCallbacks(execute=True):
+            with self.assertLogs('elrezeiky.access', 'WARNING'):
+                r = _login(APIClient(), 'sp_alert_log')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertFalse(Notification.objects.filter(dedup_key__startswith='login_external_').exists())
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce')
     def test_alert_failure_never_breaks_sign_in(self):
-        make_user('sp_alert2', role='admin')
+        secret, _ = _remembered('sp_alert2')
         with mock.patch.object(Notification, 'send_to_user', side_effect=RuntimeError('down')):
             with self.captureOnCommitCallbacks(execute=True):
-                r = _login(APIClient(), 'sp_alert2')
+                r = _login(_with_device(secret), 'sp_alert2')
         self.assertEqual(r.status_code, 200, r.data)
 
     @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
@@ -347,3 +381,132 @@ class SignInTests(Base):
             r = _login(APIClient(), 'sp_fail', net=INSIDE)
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(RefreshToken(r.data['refresh'])['zone'], 'Z4')
+
+
+# ── review round 1 (F1, F3, F5, F7, F10) ────────────────────────────────────────────────
+
+@trusted
+@override_settings(NETWORK_POLICY_ENFORCEMENT='enforce')
+class ReviewRoundOneTests(Base):
+
+    def test_zone_change_between_password_and_verify(self):
+        user, profile, _ = make_user('sp_hop', role='pharmacist')
+        profile.mfa_enabled = True
+        profile.mfa_secret = pyotp.random_base32()
+        profile.save()
+        secret, _ = _approved_device()
+        r = _login(_with_device(secret), 'sp_hop', net=INSIDE)          # Z1: password step passes
+        self.assertTrue(r.data.get('mfa_required'), r.data)
+        v = APIClient().post('/api/auth/2fa/verify/', {'mfa_token': r.data['mfa_token'],
+                                                       'code': pyotp.TOTP(profile.mfa_secret).now()},
+                             format='json', **XHR, **OUTSIDE)            # Z4 at the code step
+        self.assertEqual(v.status_code, 403)
+        self.assertEqual(v.data['reason'], 'blocked')
+        self.assertNotIn('access', v.data)
+        self.assertNotIn('erp_access', v.cookies)
+
+    def test_enrol_at_sign_in_only_inside(self):
+        user, profile, _ = make_user('sp_enrol', role='delivery')
+        token = mfa.make_preauth_token(user, 'enroll')
+        s = APIClient().post('/api/auth/2fa/setup/', {'mfa_token': token}, format='json', **XHR, **OUTSIDE)
+        self.assertEqual(s.status_code, 403)
+        self.assertEqual(s.data['reason'], 'mfa_enrol_inside')
+        profile.refresh_from_db()
+        self.assertFalse(profile.mfa_secret)
+        s = APIClient().post('/api/auth/2fa/setup/', {'mfa_token': token}, format='json', **XHR, **INSIDE)
+        self.assertEqual(s.status_code, 200, s.data)
+        profile.refresh_from_db()
+        code = pyotp.TOTP(profile.mfa_secret).now()
+        e = APIClient().post('/api/auth/2fa/enable/', {'mfa_token': token, 'code': code},
+                             format='json', **XHR, **OUTSIDE)
+        self.assertEqual(e.status_code, 403)
+        self.assertEqual(e.data['reason'], 'mfa_enrol_inside')
+        profile.refresh_from_db()
+        self.assertFalse(profile.mfa_enabled)
+        e = APIClient().post('/api/auth/2fa/enable/', {'mfa_token': token, 'code': code},
+                             format='json', **XHR, **INSIDE)
+        self.assertEqual(e.status_code, 200, e.data)
+        self.assertIn('access', e.data)
+
+    def test_settings_enrolment_in_session_unaffected(self):
+        user, profile, c = make_user('sp_enrol_set', role='delivery')   # force-authenticated session
+        s = c.post('/api/auth/2fa/setup/', {}, format='json', **OUTSIDE)
+        self.assertEqual(s.status_code, 200, s.data)
+        profile.refresh_from_db()
+        e = c.post('/api/auth/2fa/enable/', {'code': pyotp.TOTP(profile.mfa_secret).now()},
+                   format='json', **OUTSIDE)
+        self.assertEqual(e.status_code, 200, e.data)
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='log')
+    def test_enrol_outside_log_mode_only_logs(self):
+        make_user('sp_enrol_log', role='admin')
+        with mock.patch('apps.users.mfa.mfa_required_for', return_value=True):
+            with self.assertLogs('elrezeiky.access', 'WARNING') as cm:
+                r = _login(APIClient(), 'sp_enrol_log')
+        self.assertTrue(r.data.get('mfa_setup_required'), r.data)
+        self.assertIn('mfa_enrol_inside', '\n'.join(cm.output))
+
+    def test_lookup_error_fails_open_inside(self):
+        make_user('sp_err_in', role='pharmacist')
+        with mock.patch('apps.access.session_policy.policy_for', side_effect=RuntimeError('db')):
+            with self.assertLogs('elrezeiky.access', 'ERROR'):
+                r = _login(APIClient(), 'sp_err_in', net=INSIDE)
+        self.assertEqual(r.status_code, 200, r.data)
+
+    def test_lookup_error_fails_closed_outside(self):
+        make_user('sp_err_out', role='admin')
+        with mock.patch('apps.access.session_policy.policy_for', side_effect=RuntimeError('db')):
+            r = _login(APIClient(), 'sp_err_out')
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data['reason'], 'blocked')
+
+    def test_device_lookup_error_inside_is_z2(self):
+        make_user('sp_err_dev', role='pharmacist')
+        with mock.patch('apps.access.session_policy.from_secret', side_effect=RuntimeError('db')):
+            with self.assertLogs('elrezeiky.access', 'ERROR'):
+                r = _login(APIClient(), 'sp_err_dev', net=INSIDE)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(RefreshToken(r.data['refresh'])['zone'], 'Z2')
+
+    def test_refresh_lookup_error_inside_open_outside_closed(self):
+        user, _, _ = make_user('sp_err_ref', role='pharmacist')
+        with mock.patch('apps.access.session_policy.policy_for', side_effect=RuntimeError('db')):
+            with self.assertLogs('elrezeiky.access', 'ERROR'):
+                ok = _refresh(APIClient(), _token(user, 'Z2', int(time.time())), net=INSIDE)
+            self.assertEqual(ok.status_code, 200, ok.data)
+            bad = _refresh(APIClient(), _token(user, 'Z2', int(time.time())))
+        self.assertEqual(bad.status_code, 401)
+        self.assertEqual(bad.data['reason'], 'blocked')
+
+    def test_failed_stamp_carries_old_iat(self):
+        user, _, _ = make_user('sp_carry', role='admin')
+        secret, _ = _approved_device()
+        t = RefreshToken.for_user(user)                 # pre-N3: no auth_at
+        old_iat = int(time.time()) - 2 * HOUR
+        t['iat'] = old_iat
+        with mock.patch('apps.access.session_policy.stamp', side_effect=RuntimeError('x')):
+            with self.assertLogs('apps.users.views', 'ERROR'):
+                r = _refresh(_with_device(secret), t)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(RefreshToken(r.cookies['erp_refresh'].value)['auth_at'], old_iat)
+        self.assertEqual(AccessToken(r.cookies['erp_access'].value)['auth_at'], old_iat)
+
+    def test_superuser_without_profile_gets_admin_rows(self):
+        from django.contrib.auth.models import User
+        User.objects.create_superuser('sp_root', password='TestPass123')
+        r = _login(APIClient(), 'sp_root')                              # admin @ Z4 = blocked
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data['reason'], 'blocked')
+        r = _login(APIClient(), 'sp_root', net=INSIDE)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(session_policy.cap_hours(session_policy.subject(User.objects.get(username='sp_root')), 'Z3'), 8)
+
+    def test_user_without_profile_blocked_in_enforce(self):
+        from django.contrib.auth.models import User
+        User.objects.create_user('sp_bare', password='TestPass123')
+        r = _login(APIClient(), 'sp_bare', net=INSIDE)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data['reason'], 'blocked')
+        with override_settings(NETWORK_POLICY_ENFORCEMENT='log'):
+            with self.assertLogs('elrezeiky.access', 'WARNING'):
+                self.assertEqual(_login(APIClient(), 'sp_bare', net=INSIDE).status_code, 200)
