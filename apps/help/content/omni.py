@@ -395,7 +395,6 @@ SCREENS = [
              'open_hint': T('بعد أول تحليل في «✨ مساعد الذكاء الاصطناعي».', 'After the first analysis in "✨ AI assistant".')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -855,7 +854,6 @@ SCREENS = [
              'open_hint': T('اضغط «❌ رفض» على حملة «بانتظار الموافقة».', 'Press "❌ Reject" on a "Pending approval" campaign.')},
         ],
         'updated': '2026-11-01',
-        'change_note': T('شرح لكل أزرار الشاشة في «💡 تلميحات الأزرار»', 'Every button on the screen explained in "💡 Button hints"'),
         'change_note': T('المجدولة بتستنى ميعادها قبل ما تدخل طابور واتساب، والإلغاء بيشيل الرسائل اللي لسه ماتبعتتش.', 'A scheduled campaign now waits for its time before entering the WhatsApp queue, and cancelling removes unsent messages.'),
     },
 ]
