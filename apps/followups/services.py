@@ -252,9 +252,12 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
     """
     Generate tasks for one specific customer.
     Used by the quick-followup API endpoint.
-    Searches by customer.softech_id OR linked LocalCustomer phcodes.
+    Searches the synced sales (PurchaseHistory) by the customer's PIC (softech_pic), linked
+    LocalCustomer and same-phone PICs — the old ERPTransaction mirror stopped 2026-04-30, and
+    softech_id is only the per-branch serial, never a phcode.
     """
-    from apps.erp.models import ERPTransaction, LocalCustomer
+    from apps.customers.models import PurchaseHistory
+    from apps.erp.models import LocalCustomer
 
     created = []
     today   = date.today()
@@ -266,8 +269,8 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
 
         # Find all phcodes for this customer
         phcodes = []
-        if customer.softech_id:
-            phcodes.append(customer.softech_id)
+        if customer.softech_pic and not customer.is_account_placeholder:
+            phcodes.append(customer.softech_pic)
 
         # Also check LocalCustomer linkage
         try:
@@ -289,16 +292,17 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
             return []
 
         for profile in profiles:
-            last_sale = ERPTransaction.objects.filter(
-                doccode='115',
-                phcode__in=phcodes,
+            last_sale = PurchaseHistory.objects.filter(
+                doc_code='115',
+                softech_phcode__in=phcodes,
                 lines__item=profile.item,
-            ).order_by('-transaction_date').first()
+                invoice_date__isnull=False,
+            ).order_by('-invoice_date').first()
 
             if not last_sale:
                 continue
 
-            sale_date    = last_sale.transaction_date.date()
+            sale_date    = timezone.localtime(last_sale.invoice_date).date()
             refill_date  = sale_date + timedelta(days=profile.expected_duration_days)
             trigger_date = sale_date + timedelta(days=profile.followup_trigger_day)
 
@@ -309,7 +313,7 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
 
             existing = FollowUpTask.objects.filter(
                 Q(customer=customer) |
-                Q(notes__startswith=f'phcode:{last_sale.phcode}'),
+                Q(notes__startswith=f'phcode:{last_sale.softech_phcode}'),
                 item=profile.item,
                 status__in=('pending', 'called'),
             ).exists()
@@ -330,7 +334,7 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
                 due_date=refill_date,
                 source_sale_date=sale_date,
                 notes=(
-                    f'phcode:{last_sale.phcode} '
+                    f'phcode:{last_sale.softech_phcode} '
                     f'آخر صرف: {sale_date} — '
                     f'المتوقع نفاد: {refill_date}'
                 ),
@@ -345,48 +349,80 @@ def generate_followup_tasks_for_customer(customer, branch=None, dry_run=False):
 
 # ── Auto-close: match new ERP sales to open follow-up tasks ──────────────────
 
-def auto_close_followup_tasks_from_erp(since_minutes=12):
+def _task_pic(task):
+    """The PIC a refill task is about: its phcode field, else the 'phcode:<pic>' notes prefix."""
+    if task.phcode:
+        return task.phcode
+    if (task.notes or '').startswith('phcode:'):
+        return task.notes[len('phcode:'):].split(' ', 1)[0]
+    return ''
+
+
+def _is_source_invoice(task, invoice_id):
+    """True when `invoice_id` ('<branch>-115-<docnumber>-<YYYYMMDD>') is the sale that created the
+    task. Tasks made from the old ERPTransaction mirror carry source_sale_date ONE DAY EARLY (UTC
+    date), so the date rule alone would let a task close on its own sale."""
+    parts = (invoice_id or '').split('-')
+    return (len(parts) == 4 and bool(task.source_erp_transaction)
+            and parts[2] == str(task.source_erp_transaction).strip()
+            and (not task.source_softech_branch_code or parts[0] == str(task.source_softech_branch_code).strip()))
+
+
+def _later_purchases(pics, item_ids, since_date):
+    """{(pic, item_id): [(sale_date, invoice_id), …]} — synced SOFTECH sales (PurchaseHistory,
+    kept current by the sales sync; the ERPTransaction mirror stopped 2026-04-30)."""
+    from collections import defaultdict
+    from apps.customers.models import PurchaseHistoryLine
+    out = defaultdict(list)
+    rows = (PurchaseHistoryLine.objects
+            .filter(purchase__doc_code='115', purchase__softech_phcode__in=pics, item_id__in=item_ids,
+                    purchase__invoice_date__date__gte=since_date)
+            .values_list('purchase__softech_phcode', 'item_id', 'purchase__invoice_date',
+                         'purchase__softech_invoice_id'))
+    for pic, item_id, when, inv in rows:
+        out[(pic, item_id)].append((timezone.localtime(when).date(), inv))
+    return out
+
+
+def auto_close_followup_tasks_from_erp(since_minutes=12, dry_run=False):
     """
-    Called after every sync. Looks at recent ERP sales and auto-closes
-    any matching open FollowUpTask where the same phcode bought the item.
+    Called after every sync. Auto-closes an open refill task when the same PIC bought the same
+    item AFTER the sale that created the task. Sales come from the synced PurchaseHistory and
+    are matched by sale DATE (a branch's sale can reach HQ hours late), looking back
+    `since_minutes` (whole days, +1 day margin). dry_run counts without saving.
     """
     closed = 0
     try:
-        from apps.erp.models import ERPTransaction
-        cutoff = timezone.now() - timedelta(minutes=since_minutes)
+        since_date = (timezone.now() - timedelta(minutes=since_minutes)).date() - timedelta(days=1)
+        tasks = [t for t in FollowUpTask.objects.filter(status__in=('pending', 'called'),
+                                                        item__isnull=False).select_related('item')
+                 if _task_pic(t)]
+        if not tasks:
+            return 0
+        bought = _later_purchases({_task_pic(t) for t in tasks}, {t.item_id for t in tasks}, since_date)
 
-        recent_sales = ERPTransaction.objects.filter(
-            doccode='115',
-            transaction_date__gte=cutoff,
-        ).prefetch_related('lines__item')
-
-        for sale in recent_sales:
-            phcode        = sale.phcode
-            sold_item_ids = {l.item_id for l in sale.lines.all() if l.item_id}
-            if not phcode or not sold_item_ids:
+        for task in tasks:
+            after = [s for s in bought.get((_task_pic(task), task.item_id), ())
+                     if not _is_source_invoice(task, s[1])
+                     and (task.source_sale_date is None or s[0] > task.source_sale_date)]
+            if not after:
                 continue
-
-            # Find open tasks matching this phcode (stored in notes)
-            tasks = FollowUpTask.objects.filter(
-                status__in=('pending', 'called'),
-                item_id__in=sold_item_ids,
-                notes__startswith=f'phcode:{phcode}',
+            sale_date, invoice = min(after)
+            closed += 1
+            if dry_run:
+                continue
+            task.status                  = 'auto_closed'
+            task.completed_at            = timezone.now()
+            task.closing_erp_transaction = invoice
+            task.result_note = (
+                f'أُغلق تلقائياً — SOFTECH أكّد بيع '
+                f'{task.item.name if task.item else ""} '
+                f'بتاريخ {sale_date}'
             )
-
-            for task in tasks:
-                task.status                   = 'auto_closed'
-                task.completed_at             = timezone.now()
-                task.closing_erp_transaction  = sale
-                task.result_note = (
-                    f'أُغلق تلقائياً — ERP أكّد بيع '
-                    f'{task.item.name if task.item else ""} '
-                    f'بتاريخ {sale.transaction_date.date()}'
-                )
-                task.save(update_fields=[
-                    'status', 'completed_at',
-                    'closing_erp_transaction', 'result_note', 'updated_at',
-                ])
-                closed += 1
+            task.save(update_fields=[
+                'status', 'completed_at',
+                'closing_erp_transaction', 'result_note', 'updated_at',
+            ])
 
     except Exception as e:
         logger.warning(f'auto_close_followup_tasks_from_erp (non-fatal): {e}')
@@ -858,12 +894,11 @@ def auto_close_with_substitute_detection(since_minutes: int = 60 * 24) -> dict:
     Returns {'exact_closed': N, 'substitute_closed': M}
     """
     from datetime import timedelta
-    from apps.erp.models import ERPTransaction, ERPTransactionLine
 
     exact_closed      = 0
     substitute_closed = 0
 
-    cutoff = timezone.now() - timedelta(minutes=since_minutes)
+    since_date = (timezone.now() - timedelta(minutes=since_minutes)).date() - timedelta(days=1)
 
     # ── Pass 1: exact item match (existing logic) ──────────────────────────────
     exact_closed = auto_close_followup_tasks_from_erp(since_minutes=since_minutes)
@@ -899,30 +934,19 @@ def auto_close_with_substitute_detection(since_minutes: int = 60 * 24) -> dict:
         .values_list('id', flat=True)
     )
 
-    recent_lines = (
-        ERPTransactionLine.objects
-        .filter(
-            transaction__doccode='115',
-            transaction__phcode__in=all_phcodes,
-            transaction__synced_at__gte=cutoff,
-            item_id__in=effect_item_ids,
-        )
-        .values('transaction__phcode', 'item_id', 'item__effect_code')
-        .distinct()
-    )
-
-    # (phcode, effect_code) → set of item_ids recently bought
-    recent_buys = defaultdict(set)
-    for row in recent_lines:
-        phcode     = row['transaction__phcode']
-        eff_code   = row['item__effect_code']
-        item_id    = row['item_id']
-        recent_buys[(phcode, eff_code)].add(item_id)
+    # synced SOFTECH sales (PurchaseHistory) — the ERPTransaction mirror stopped 2026-04-30
+    bought = _later_purchases(set(all_phcodes), effect_item_ids, since_date)
+    eff_of = dict(Item.objects.filter(id__in=effect_item_ids).values_list('id', 'effect_code'))
 
     to_close = []
     for (phcode, eff_code), tasks in effect_map.items():
-        bought_items = recent_buys.get((phcode, eff_code), set())
         for task in tasks:
+            # a DIFFERENT item with the same effect_code, bought after the task's own sale
+            bought_items = {iid for (pic, iid), sales in bought.items()
+                            if pic == phcode and eff_of.get(iid) == eff_code and any(
+                                not _is_source_invoice(task, inv)
+                                and (task.source_sale_date is None or d > task.source_sale_date)
+                                for d, inv in sales)}
             if task.item_id not in bought_items and bought_items:
                 # Bought a DIFFERENT item with same effect_code → substitute
                 task.status                  = 'auto_closed'
