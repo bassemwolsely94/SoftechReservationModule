@@ -301,20 +301,21 @@ export default function MobileNewReservationPage() {
       {/* Actions */}
       <div className="flex gap-2.5">
         <button data-tour="reservations-new-cancel" onClick={() => navigate('/m/reservations')} className="btn-secondary px-5">إلغاء</button>
-        <button
-          data-tour="reservations-mnew-submit"
-          onClick={() => submit(false)}
-          data-tour="reservations-new-submit"
-          disabled={submitting}
-          className="btn-primary flex-1 py-3 text-base disabled:opacity-50"
-        >
-          {submitting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              جارٍ الحفظ...
-            </span>
-          ) : '✅ إنشاء الحجز'}
-        </button>
+        <div data-tour="reservations-mnew-submit" className="flex-1 flex">
+          <button
+            onClick={() => submit(false)}
+            data-tour="reservations-new-submit"
+            disabled={submitting}
+            className="btn-primary flex-1 py-3 text-base disabled:opacity-50"
+          >
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                جارٍ الحفظ...
+              </span>
+            ) : '✅ إنشاء الحجز'}
+          </button>
+        </div>
       </div>
     </div>
   )
