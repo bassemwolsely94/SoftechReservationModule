@@ -335,6 +335,8 @@ export const syncApi = {
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
   softechLoad:  (hours = 24) => api.get('/sync/softech-load/', { params: { hours } }),
+  slowRequests: (days = 14) => api.get('/sync/slow-requests/', { params: { days } }),   // P-56
+  writerSwitches: () => api.get('/sync/writer-switches/'),                              // P-54
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
   // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').
@@ -398,6 +400,7 @@ export const helpApi = {
   saveTraining: (kind, key, data, note, public_note = '') => api.put(`/help/training/${kind}/${key}/`, { data, note, public_note }),
   revertTraining: (kind, key, note) => api.delete(`/help/training/${kind}/${key}/`, { data: { note } }),
   onboarding: (role)             => api.get('/help/onboarding/', { params: role ? { role } : {} }),
+  productTour: (params = {})     => api.get('/help/product-tour/', { params }),
   learned:    (screen_key, done = true) => api.post('/help/onboarding/learned/', { screen_key, done }),
   team:       (params = {})      => api.get('/help/onboarding/team/', { params }),
   remind:     (staff_ids)        => api.post('/help/onboarding/remind/', { staff_ids }),
@@ -836,6 +839,9 @@ export const supplyApi = {
   purchasePricesExcel: (params = {}) => api.get('/supply/purchase-prices/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   purchasePriceItem:   (code)        => api.get(`/supply/purchase-prices/item/${code}/`),
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
+  // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
+  receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
   supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
   supplierCodeReportExcel: (days) => api.get('/supply/reports/supplier-codes/',
@@ -968,6 +974,7 @@ export const invoicesApi = {
   // Status transitions
   confirm:       (id)           => api.post(`/invoices/invoices/${id}/confirm/`),
   reject:        (id)           => api.post(`/invoices/invoices/${id}/reject/`),
+  reopen:        (id)           => api.post(`/invoices/invoices/${id}/reopen/`),
 
   // SOFTECH writeback (final purchase doc, doccode 10/120)
   pushPreview:   (id)           => api.post(`/invoices/invoices/${id}/push-preview/`),
@@ -1096,6 +1103,9 @@ export const shortageApi = {
 
   // Internal stock check — returns transfer suggestions per confirmed item
   stockCheck:   (id)           => api.get(`/shortage/lists/${id}/stock-check/`),
+  // P-33 (a): the WhatsApp path's two-leg transfer proposals — plan (read only) and create
+  transferPlan: (id, params)   => api.get(`/shortage/lists/${id}/transfer-plan/`, { params }),
+  transfers:    (id, body)     => api.post(`/shortage/lists/${id}/transfers/`, body),
 
   // State transitions
   submit:       (id)           => api.post(`/shortage/lists/${id}/submit/`),
@@ -1787,6 +1797,7 @@ export const callCenterApi = {
   getItems:    (callId)         => api.get(`/callcenter/calls/${callId}/items/`),
   addItem:     (callId, data)   => api.post(`/callcenter/calls/${callId}/items/`, data),
   removeItem:  (callId, itemId) => api.delete(`/callcenter/calls/${callId}/items/${itemId}/`),
+  updateItem:  (callId, itemId, data) => api.patch(`/callcenter/calls/${callId}/items/${itemId}/`, data),
 
   // Quick-convert call items → Reservation(s)
   // data: { branch_id, notes?, priority?, channel?, item_ids? }
@@ -1830,6 +1841,10 @@ export const callCenterApi = {
 // ── Audit & Abuse Flags ───────────────────────────────────────────────────────
 
 export const auditApi = {
+  // P-57 screen-usage telemetry — the beacon every page sends + the usage report
+  screenView: (data)      => api.post('/audit/screen-view/', data),
+  usage:      (params)    => api.get('/audit/usage/', { params }),
+
   // Audit logs (read-only)
   logs:      (params)     => api.get('/audit/logs/', { params }),
   logForObject: (model, id) => api.get('/audit/logs/for-object/', { params: { model, id } }),
@@ -1916,8 +1931,9 @@ export const followupsApi = {
 
   // Feature 6: Grouped by customer + multi-item WhatsApp
   grouped:       (params) => api.get('/followups/tasks/grouped/', { params }),
-  multiWhatsapp: (taskIds, includeUpsell = false) => api.post('/followups/tasks/multi-whatsapp/', {
-    task_ids: taskIds, include_upsell: includeUpsell,
+  // markCalled: false = preview only; true when the user opens WhatsApp (marks the tasks called)
+  multiWhatsapp: (taskIds, includeUpsell = false, markCalled = false) => api.post('/followups/tasks/multi-whatsapp/', {
+    task_ids: taskIds, include_upsell: includeUpsell, mark_called: markCalled,
   }),
 
   // Feature 23: Create demand record
@@ -1967,6 +1983,32 @@ export const followupsApi = {
 // ── Finance Intelligence Platform ─────────────────────────────────────────────
 
 export const financeApi = {
+  // P-41 contract receivables («مستحقات التعاقدات»)
+  receivablesSummary:  ()       => api.get('/finance/receivables/summary/'),
+  receivablesInvoices: (pc)     => api.get(`/finance/receivables/${pc}/invoices/`),
+  receivablesTerms:    (body)   => api.patch('/finance/receivables/terms/', body),
+  receivablesExport:   ()       => api.get('/finance/receivables/export/', { responseType: 'blob' }),
+  receivablesRefresh:  ()       => api.post('/finance/receivables/refresh/'),
+  // P-40 13-week cash view («النقدية ١٣ أسبوع»)
+  cashView:          (params)       => api.get('/finance/cash-view/', { params }),
+  cashViewLine:      (key, params)  => api.get(`/finance/cash-view/lines/${key}/`, { params }),
+  cashOpening:       ()             => api.get('/finance/cash-view/opening-balance/'),
+  cashOpeningAdd:    (body)         => api.post('/finance/cash-view/opening-balance/', body),
+  cashFixed:         ()             => api.get('/finance/cash-view/fixed-outflows/'),
+  cashFixedAdd:      (body)         => api.post('/finance/cash-view/fixed-outflows/', body),
+  cashFixedUpdate:   (body)         => api.patch('/finance/cash-view/fixed-outflows/', body),
+  cashViewExport:    (params)       => api.get('/finance/cash-view/export/', { params, responseType: 'blob' }),
+  // P-42 supplier terms («شروط الموردين»)
+  supplierTerms:          ()       => api.get('/finance/supplier-terms/'),
+  supplierTermCreate:     (body)   => api.post('/finance/supplier-terms/', body),
+  supplierTermUpdate:     (body)   => api.patch('/finance/supplier-terms/', body),
+  supplierTermsCalendar:  (params) => api.get('/finance/supplier-terms/calendar/', { params }),
+  supplierTermsOnTime:    ()       => api.get('/finance/supplier-terms/on-time/'),
+  supplierTermsEarlyPay:  ()       => api.get('/finance/supplier-terms/early-pay/'),
+  supplierTermsResidue:   ()       => api.get('/finance/supplier-terms/residue/'),
+  supplierTermsExport:    (sheet)  => api.get('/finance/supplier-terms/export/', { params: { sheet }, responseType: 'blob' }),
+  supplierTermsRecompute: ()       => api.post('/finance/supplier-terms/recompute/'),
+  supplierTermsRecomputeStatus: () => api.get('/finance/supplier-terms/recompute/'),
   // Dashboard — consolidated KPIs for the current or specified period
   dashboard:       (params)       => api.get('/finance/dashboard/', { params }),
 
@@ -2580,6 +2622,14 @@ export const batchesApi = {
   purchaseExpirySync:       (body) => api.post('/batches/purchase-expiry/sync/', body || {}),
   // Spawn a physical count session: body { branch, from, to, item_codes?, categories?, name? }
   purchaseExpirySpawnCount: (body) => api.post('/batches/purchase-expiry/spawn-count/', body),
+  // Return-window calendar (P-29): params { month?, supplier?, location?, state?, branch? }
+  returnWindow:          (params) => api.get('/batches/return-window/', { params }),
+  returnWindowRequest:   (lines)  => api.post('/batches/return-window/request/', { lines }),
+  returnWindowAnswer:    (id, body) => api.post(`/batches/return-window/${id}/answer/`, body),
+  returnWindowPolicies:  ()       => api.get('/batches/return-window/policies/'),
+  returnWindowSavePolicy: (body)  => api.post('/batches/return-window/policies/', body),
+  returnWindowExport:    (body)   => api.post('/batches/return-window/export/', body, { responseType: 'blob' }),
+  returnWindowReconcile: ()       => api.post('/batches/return-window/reconcile/'),
 }
 
 // ── HR Workflow ───────────────────────────────────────────────────────────────

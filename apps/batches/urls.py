@@ -22,6 +22,8 @@ from .views import (
     expiry_disposal,
     expiry_disposal_status,
     export_disposal,
+    return_window_calendar, return_window_request, return_window_answer,
+    return_window_policies, return_window_export, return_window_reconcile,
 )
 
 router = DefaultRouter()
@@ -61,4 +63,11 @@ urlpatterns = [
     path('stock-expiry/disposal/', expiry_disposal, name='stock-expiry-disposal'),
     path('stock-expiry/disposal/export/', export_disposal, name='stock-expiry-disposal-export'),
     path('stock-expiry/disposal/<int:pk>/status/', expiry_disposal_status, name='stock-expiry-disposal-status'),
+    # Return-window calendar (P-29)
+    path('return-window/', return_window_calendar, name='return-window'),
+    path('return-window/request/', return_window_request, name='return-window-request'),
+    path('return-window/<int:pk>/answer/', return_window_answer, name='return-window-answer'),
+    path('return-window/policies/', return_window_policies, name='return-window-policies'),
+    path('return-window/export/', return_window_export, name='return-window-export'),
+    path('return-window/reconcile/', return_window_reconcile, name='return-window-reconcile'),
 ] + router.urls

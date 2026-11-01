@@ -76,7 +76,7 @@ export default function ErpPermissionsPage() {
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
               أكّد الربط الغامض: <b>transfers</b> يأتي من نظام المبيعات للفروع (MB). عدّل أدناه إن لزم.
             </div>
-            <div data-tour="admin-erp-permissions-add-map" className="bg-white rounded-xl border border-gray-200 p-4 flex items-end gap-2 flex-wrap">
+            <div data-tour="admin-erp-permissions-map-form" className="bg-white rounded-xl border border-gray-200 p-4 flex items-end gap-2 flex-wrap">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">نظام Softech</label>
                 <input value={newMap.system} onChange={e => setNewMap(s => ({ ...s, system: e.target.value.toUpperCase() }))}

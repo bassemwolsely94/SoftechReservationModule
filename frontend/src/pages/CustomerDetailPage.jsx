@@ -161,7 +161,7 @@ function TimelineEntry({ entry, navigate, onDeleteNote }) {
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{n.note}</p>
           </div>
           {onDeleteNote && (
-            <button
+            <button data-tour="customers-detail-note-delete"
               onClick={() => onDeleteNote(n.id)}
               className="text-xs text-gray-300 hover:text-red-400 mt-1 transition-colors"
             >
@@ -1007,7 +1007,7 @@ function PointsChip({ customerId, onDetails }) {
   const balance = data?.softech_points_balance ?? 0
 
   return (
-    <button
+    <button data-tour="customers-detail-points-chip"
       onClick={onDetails}
       className="w-full flex items-center justify-between bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl px-4 py-3 hover:from-green-700 hover:to-green-800 transition-all"
       dir="rtl"
@@ -1096,7 +1096,7 @@ function LoyaltyTab({ customerId }) {
           </div>
         </div>
         <div className="flex gap-2 mt-4">
-          <button
+          <button data-tour="customers-detail-points-refresh"
             onClick={() => refetchBal()}
             disabled={balLoading}
             className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
@@ -1206,8 +1206,8 @@ function ChronicConditionsWidget({ customerId, value, onSaved }) {
       await customersApi.updateConditions(customerId, text)
       onSaved(text)
       setEditing(false)
-    } catch {
-      /* silent */
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'تعذّر حفظ الأمراض المزمنة')   // the editor stays open — nothing typed is lost
     } finally { setSaving(false) }
   }
 
@@ -1242,7 +1242,7 @@ function ChronicConditionsWidget({ customerId, value, onSaved }) {
             autoFocus
           />
           <div className="flex gap-2 mt-2">
-            <button
+            <button data-tour="customers-detail-conditions-save"
               onClick={save}
               disabled={saving}
               className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg font-semibold disabled:opacity-50 transition-colors"
@@ -1354,6 +1354,7 @@ export default function CustomerDetailPage() {
   const deleteNoteMutation = useMutation({
     mutationFn: (noteId) => customersApi.deleteNote(id, noteId),
     onSuccess: () => qc.invalidateQueries(['customer', id]),
+    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر حذف الملاحظة'),
   })
 
   if (isLoading) return (
@@ -1467,7 +1468,9 @@ export default function CustomerDetailPage() {
                   notes={customer.notes || []}
                   reservations={reservations || []}
                   navigate={navigate}
-                  onDeleteNote={(noteId) => deleteNoteMutation.mutate(noteId)}
+                  onDeleteNote={(noteId) => {
+                    if (window.confirm('حذف هذه الملاحظة؟ يحذفها كاتبها أو المدير، وتُحفظ في سجل المراجعة.')) deleteNoteMutation.mutate(noteId)
+                  }}
                 />
               </>
             )}

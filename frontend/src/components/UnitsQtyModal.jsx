@@ -60,7 +60,7 @@ export default function UnitsQtyModal({ P, i, onClose, onApply }) {
         </div>
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 py-2 rounded border">إلغاء</button>
-          <button onClick={apply} className="flex-1 py-2 rounded text-white font-semibold" style={{ background: '#022871' }}>تطبيق</button>
+          <button data-tour="pos-order-units-apply" onClick={apply} className="flex-1 py-2 rounded text-white font-semibold" style={{ background: '#022871' }}>تطبيق</button>
         </div>
       </div>
     </div>

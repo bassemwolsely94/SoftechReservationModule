@@ -170,8 +170,13 @@ WRITE_SITES = {
         tables=('stktransm', 'stktrans'), flag='INVOICE_WRITER_ENABLED', dry_run_default=True,
         idempotency='see _run_write_batch', audit='see _run_write_batch',
         trigger='SQL builder — executed by _run_write_batch', kind='sql-builder'),
+    'apps/invoices/writer.py::_native_after_save': WriteSite(
+        tables=('personsdata', 'itemssuppliers', 'stktransm', 'stktrans'), flag='INVOICE_WRITER_ENABLED',
+        dry_run_default=True, idempotency='see _run_write_batch (same batch; @@rowcount must match or rollback)',
+        audit='see _run_write_batch',
+        trigger='SQL builder — native after-save steps, executed by _run_write_batch', kind='sql-builder'),
     'apps/invoices/writer.py::_run_write_batch': WriteSite(
-        tables=('stktransm', 'stktrans', 'lastdocnumbers'), flag='INVOICE_WRITER_ENABLED', dry_run_default=True,
+        tables=('stktransm', 'stktrans', 'lastdocnumbers', 'personsdata', 'itemssuppliers'), flag='INVOICE_WRITER_ENABLED', dry_run_default=True,
         idempotency='PG status/softech_docnumber; purchases: SOFTECH docnumber2 duplicate guard; returns: PG only; '
                     'vf2 token defined but never written',
         audit='SupplierInvoice erp_payload/readback + AuditLog softech_invoice_pushed (who) — P-16 (views)',

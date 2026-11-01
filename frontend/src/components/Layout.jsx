@@ -16,6 +16,7 @@ import CustomerDrawer from './CustomerDrawer'
 import BrandMark from './BrandMark'
 import HelpButton from '../help/HelpButton'
 import HelpPanel from '../help/HelpPanel'
+import useScreenUsage from '../hooks/useScreenUsage'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -96,7 +97,7 @@ const GroupIcon = ({ id, size = 20 }) => {
 /** «اعرض لي» anchor of a side-menu item: '/pos/exceptions' → 'nav-pos-exceptions'. */
 const navTourId = (to) => 'nav-' + to.replace(/^\//, '').replace(/[^a-z0-9]+/g, '-').replace(/-$/, '')
 
-const NAV_GROUPS = [
+export const NAV_GROUPS = [
   {
     id: 'home', label: 'الرئيسية', section: null,
     items: [
@@ -203,7 +204,8 @@ const NAV_GROUPS = [
     items: [
       { to: '/finance',        icon: '💹', label: 'الذكاء المالي',   roles: ['admin','purchasing','pharmacist','quality_manager'] },
       { to: '/cheques',        icon: '📝', label: 'تخطيط الشيكات',  roles: ['admin','purchasing','pharmacist'] },
-      { to: '/payments',       icon: '💳', label: 'متابعة المدفوعات', roles: ['admin','purchasing','pharmacist'] },
+      // P-43: /payments (external payments, no data yet) hidden from the menu — the
+      // route and code stay; re-add this line if finance asks for it.
       { to: '/payment-audit',  icon: '🏦', label: 'مراجعة الكشوف',  roles: ['admin','purchasing','pharmacist'] },
       { to: '/reconciliation', icon: '🔗', label: 'سداد الموردين',  roles: ['admin','purchasing','pharmacist'] },
       { to: '/insurance',      icon: '🏥', label: 'مطالبات التأمين', roles: ['admin','purchasing'] },
@@ -251,6 +253,7 @@ export default function Layout() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const userRole  = user?.role || 'viewer'
+  useScreenUsage()
 
   // Filter groups + items by role — or by a server-computed capability (`cap`), e.g.
   // /supply for SOFTECH groups مخزن/Administrator/Internal Auditor (purchasing/access.py)
@@ -395,7 +398,7 @@ export default function Layout() {
               </span>
             </div>
             {/* Logout */}
-            <button
+            <button data-tour="shell-logout"
               onClick={() => { logout(); navigate('/login') }}
               title="تسجيل الخروج"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
@@ -490,7 +493,7 @@ export default function Layout() {
 
           <div className="flex items-center gap-3">
             <button
-              data-tour="shell-search"
+              data-tour="general-dashboard-search"
               onClick={() => window.dispatchEvent(new Event('palette:open'))}
               title="بحث شامل (Ctrl+K)"
               className="hidden sm:flex items-center gap-2 text-xs text-faint bg-surface-2 hover:bg-surface-3 border border-line rounded-lg px-2.5 py-1.5 transition-colors"
@@ -511,7 +514,7 @@ export default function Layout() {
             <div className="w-px h-5 bg-line" />
             <NavLink
               to="/security"
-              data-tour="shell-security"
+              data-tour="general-security-open"
               title="أمان الحساب — المصادقة الثنائية"
               className="text-faint hover:text-brand-600 transition-colors p-1 rounded-lg hover:bg-brand-50"
             >
@@ -530,7 +533,7 @@ export default function Layout() {
                 <div className="text-xs text-faint">{user?.branch_name || user?.role}</div>
               </div>
             </div>
-            <button
+            <button data-tour="shell-logout"
               onClick={() => { logout(); navigate('/login') }}
               className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
               title="تسجيل الخروج"

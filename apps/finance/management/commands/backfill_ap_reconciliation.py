@@ -18,7 +18,7 @@ See docs/architecture/23_SOFTECH_AP_RECONCILIATION.md.
 import calendar
 import datetime
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -52,6 +52,10 @@ class Command(BaseCommand):
         from apps.finance import recon_ingest, recon_balances
 
         party_types = ['supplier', 'customer'] if o['party_type'] == 'both' else [o['party_type']]
+        if 'customer' in party_types:
+            # P-41: an unfiltered customer read pulls every retail sale and every non-supplier voucher.
+            raise CommandError('The customer side is loaded per contract account: '
+                               'sync_ap_reconciliation --party-type customer --contracts --from YYYY-MM-DD')
         windows = (_month_windows if o['chunk'] == 'month' else _year_windows)(
             o['from_year'], o['to_year'])
         windows = list(windows)

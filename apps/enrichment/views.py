@@ -192,7 +192,8 @@ class EnrichmentSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
             'status', 'approved_value', 'reviewed_by', 'reviewed_at',
         ])
 
-        # Apply to enrichment record (fill empty fields only)
+        # Apply to the enrichment record — replaces the field: the reviewer saw its
+        # current_value next to the suggestion and chose this one
         enrichment, _ = ItemEnrichment.objects.get_or_create(item=suggestion.item)
         old_val = getattr(enrichment, suggestion.field_name, '')
         setattr(enrichment, suggestion.field_name, value)

@@ -126,6 +126,8 @@ SC_MORE_MSTATUS = T(
 
 MODULE = {
     'key': 'stockcount', 'group': 'operations', 'icon': '📦',
+    'brief': T('جرد فعلي يتقارن برصيد SOFTECH المتجمّد لحظة البداية، فتعرف الفرق بدقة.',
+               'A physical count compared with the SOFTECH balance frozen at the start, so you see the exact difference.'),
     'title': T('الجرد الفعلي', 'Physical stock count'),
     'summary': T(
         'جرد المخزون الفعلي ومقارنته بأرصدة SOFTECH. الفكرة الأساسية «اللقطة»: نجمّد الكميات المتوقعة من SOFTECH في لحظة بعينها، '
@@ -346,8 +348,9 @@ MODULE = {
          'summary': T('افتح الجلسة، امسح الصنف، سجّل الكمية، وراجع الفروق. اللقطة لازم تكون اتاخدت من الكمبيوتر.',
                       'Open the session, scan the item, save the quantity and review differences. The snapshot must be taken on the desktop first.'),
          'steps': [
-            {'screen': 'stockcount.mobile', 'target': 'stockcount-mobile-card', 'perm': 'stockcount',
-             'text': T('اختار جلسة الفرع.', 'Choose the branch session.')},
+            {'screen': 'stockcount.mobile', 'target': 'stockcount-mobile-card', 'label': T('كارت الجلسة', 'Session card'), 'perm': 'stockcount',
+             'text': T('اختار جلسة الفرع.', 'Choose the branch session.'),
+             'when': T('أول ما تبدأ الجرد من الموبايل.', 'When you start counting from your phone.')},
             {'screen': 'stockcount.mobile', 'target': 'stockcount-mobile-count', 'perm': 'stockcount',
              'label': T('📷 جرد صنف (مسح/بحث)', '📷 Count an item (scan/search)'),
              'text': T('امسح أو ابحث عن الصنف واكتب الكمية المعدودة.', 'Scan or search the item and type the counted quantity.'),
@@ -428,13 +431,16 @@ SCREENS = [
              'text': T('ابحث عن جلسة بالاسم أو كود الفرع.', 'Find a session by name or branch code.'),
              'more': T(
                  'اكتب جزء من اسم الجلسة أو الفرع عشان تلاقيها بسرعة وسط الجلسات القديمة.\nالبحث بيغيّر العرض بس.',
-                 'Type part of the session name or branch to find it quickly among older sessions.\nSearch only changes the view.')},
-            {'target': 'stockcount-sessions-list',
+                 'Type part of the session name or branch to find it quickly among older sessions.\nSearch only changes the view.'),
+         },
+            {'target': 'stockcount-sessions-list', 'label': T('قائمة جلسات الجرد', 'Count sessions list'),
              'text': T('كل جلسة بحالتها ومراحلها وعدد الأصناف والزيادة والنقص والمطابق. اضغطها تفتح على «📸 اللقطة».',
                        'Each session with its status, stages, item count, surplus, deficit and matches. Click it to open on "📸 Snapshot".'),
+             'when': T('لما تكمّل جلسة شغالة أو تراجع نتيجة جلسة قديمة.', 'When continuing an open session or reviewing an old one.'),
              'more': T(
                  'كل كارت جلسة فيه حالتها وشريط المراحل والتاريخ.\n• اضغط الجلسة عشان تختارها — بتتفتح على تبويب «اللقطة» وتكمّل منه.\n• الجلسات الأحدث فوق.',
-                 'Each session card shows its status, the stage bar and the date.\n• Click a session to select it — it opens on the "Snapshot" tab and you continue from there.\n• The newest sessions are on top.')},
+                 'Each session card shows its status, the stage bar and the date.\n• Click a session to select it — it opens on the "Snapshot" tab and you continue from there.\n• The newest sessions are on top.'),
+         },
             {'target': 'stockcount-sessions-preview', 'label': T('🔍 معاينة الأصناف', '🔍 Preview items'),
              'text': T('يعرض الأصناف اللي هتدخل الجرد وكمياتها المتوقعة من SOFTECH دلوقتي، من غير ما يجمّد حاجة.',
                        'Shows the items that will be counted and their expected quantities from SOFTECH now, without freezing anything.'),
@@ -471,14 +477,23 @@ SCREENS = [
              'text': T('يقفل الجلسة نهائياً بعد ما تخلص المراجعة والتسوية.', 'Closes the session for good after review and adjustment are done.'),
              'warn': T('الإغلاق نهائي — مفيش تعديل أو رفع بعده.', 'Closing is final — no edits or uploads after it.'),
              'open_hint': T('تبويب «📉 الفروق» لما الحالة «الفروق جاهزة» (بعد رفع ملف النتائج).', '"📉 Variance" tab when the status is "Variance ready" (after uploading the results file).')},
-            {'target': 'stockcount-sessions-status',  # from the GitHub-side tour
+            {'target': 'stockcount-sessions-status', 'label': T('كل الحالات', 'All statuses'), 'when': T('لما تحب تشوف جلسات حالة معيّنة بس.', 'When you want to see sessions of one status only.'),  # from the GitHub-side tour
              'text': T('فلتر حسب حالة الجلسة.',
                        'Filter by session status.'),
              'more': T(
                  'اعرض الجلسات اللي في مرحلة معيّنة: مسودة، تم اللقطة، تم التصدير، تم الرفع، الفروق جاهزة، مغلق.\n• مثلاً «تم اللقطة» عشان تشوف الجلسات اللي مستنية عد.',
                  'Show the sessions at one stage: draft, snapshot taken, exported, uploaded, variance ready, closed.\n• For example "Snapshot taken" to see sessions waiting to be counted.')},
         ],
-        'updated': '2026-10-31',
+        'hints': [
+            {'target': 'stockcount-sessions-create', 'label': T('إنشاء الجلسة', 'Create session'),
+             'text': T('يحفظ جلسة الجرد بالفرع والنوع والفترة اللي اخترتها. مفيش أي حاجة بتتكتب في SOFTECH.', 'Saves the count session with the chosen branch, type and period. Nothing is written to SOFTECH.'),
+             'when': T('بعدها افتح الجلسة واضغط «📸 أخذ اللقطة» قبل ما العد يبدأ.', 'Then open the session and press "📸 Take snapshot" before counting starts.'),
+             'open_hint': T('اضغط «+ جلسة جديدة» الأول.', 'Press "+ New session" first.')},
+            {'target': 'stockcount-sessions-row', 'label': T('كارت الجلسة', 'Session card'),
+             'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
+             'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {
@@ -502,20 +517,25 @@ SCREENS = [
              'text': T('جلسات الجرد اللي اتعملت من الكمبيوتر.', 'The count sessions created on the desktop.'),
              'more': T(
                  'دي قائمة جلسات الجرد على الموبايل، الأحدث أولاً.\n• منها تفتح جلسة وتعدّ بالمسح وانت ماشي بين الرفوف.',
-                 'This is the list of count sessions on the phone, newest first.\n• From here you open a session and count by scanning as you walk the aisles.')},
-            {'target': 'stockcount-mobile-card',
+                 'This is the list of count sessions on the phone, newest first.\n• From here you open a session and count by scanning as you walk the aisles.'),
+         },
+            {'target': 'stockcount-mobile-card', 'label': T('كارت الجلسة', 'Session card'),
              'text': T('اضغط الجلسة عشان تبدأ العد فيها.', 'Tap a session to start counting in it.'),
+             'when': T('لما تكون عند الرف والموبايل معاك وجاهز تعد.', 'When you are at the shelf with your phone, ready to count.'),
              'more': T(
                  'اضغط الجلسة عشان تفتح شاشة العد بتاعتها.\n• جوه هتلاقي تقدّم الجرد، ومربع المسح/البحث، وقائمة الأصناف بفلتر عجز/فائض/مطابق.',
-                 'Tap the session to open its counting screen.\n• Inside you find the progress, the scan/search box, and the item list with deficit/surplus/match filters.')},
-            {'target': 'stockcount-mobile-status',
+                 'Tap the session to open its counting screen.\n• Inside you find the progress, the scan/search box, and the item list with deficit/surplus/match filters.'),
+         },
+            {'target': 'stockcount-mobile-status', 'label': T('حالة الجلسة', 'Session status'),
              'text': T('حالة الجلسة. العد متاح بعد أخذ اللقطة ولحد الإغلاق.', 'The session status. Counting is open after the snapshot and until closing.'),
              'when': T('«مسودة» يعني اللقطة لسه متاخدتش من الكمبيوتر.', '"Draft" means the snapshot was not taken on the desktop yet.'),
              'more': T(
                  'حالة الجلسة زي ما في الكمبيوتر.\n• «مسودة»: لسه اللقطة ما اتاخدتش — العد مقفول.\n• «مغلق»: خلصت — العد مقفول.\n• أي حالة بينهم: تقدر تعدّ.',
-                 'The session status, same as on the desktop.\n• "Draft": the snapshot is not taken yet — counting is locked.\n• "Closed": finished — counting is locked.\n• Any status in between: you can count.')},
-            {'target': 'stockcount-mobile-progress',
+                 'The session status, same as on the desktop.\n• "Draft": the snapshot is not taken yet — counting is locked.\n• "Closed": finished — counting is locked.\n• Any status in between: you can count.'),
+         },
+            {'target': 'stockcount-mobile-progress', 'label': T('تقدّم العد', 'Count progress'),
              'text': T('اسم الجلسة وحالتها وتقدّم العد: تم جرد كام صنف من كام.', 'Session name, status and count progress: how many items counted out of how many.'),
+             'when': T('وانت بتعد — تابعه عشان تعرف فاضل كام صنف.', 'While counting — watch it to know how many items remain.'),
              'open_hint': T('افتح أي جلسة من القائمة.', 'Open any session from the list.')},
             {'target': 'stockcount-mobile-count', 'label': T('📷 جرد صنف (مسح/بحث)', '📷 Count an item (scan/search)'),
              'text': T('امسح الباركود أو ابحث عن الصنف، واكتب «الكمية المعدودة».', 'Scan the barcode or search the item, then type the "Counted quantity".'),
@@ -529,14 +549,24 @@ SCREENS = [
             {'target': 'stockcount-mobile-filters', 'label': T('الكل · عجز · فائض · مطابق', 'All · Deficit · Surplus · Match'),
              'text': T('قائمة الأصناف بفلتر العجز والفائض والمطابق. أعد عدّ أي فرق شكله غلط.', 'The item list filtered by deficit, surplus or match. Recount any difference that looks wrong.'),
              'open_hint': T('تظهر بعد أول صنف يتسجل في الجلسة.', 'Shows after the first item is counted in the session.')},
-            {'target': 'stockcount-mobile-list',  # from the GitHub-side tour
+            {'target': 'stockcount-mobile-list', 'label': T('جلسات الجرد', 'Count sessions'), 'when': T('لما تحب تفتح جلسة جرد من الموبايل.', 'When you want to open a count session on mobile.'),  # from the GitHub-side tour
              'text': T('قائمة الجلسات.',
                        'The list of sessions.'),
              'more': T(
                  'أحدث جلسات الجرد، وكل كارت فيه اسم الجلسة والفرع والحالة.\n• العد من الموبايل بيشتغل بعد ما اللقطة تتاخد من شاشة الكمبيوتر، ولحد ما الجلسة تتقفل.',
                  'The latest count sessions; each card shows the session name, branch and status.\n• Counting on the phone works after the snapshot is taken on the desktop screen, and until the session is closed.')},
         ],
-        'updated': '2026-10-31',
+        'hints': [
+            {'target': 'item-search-advanced',
+             'label': T('🔍 بحث متقدم (Ctrl+F1)', '🔍 Advanced search (Ctrl+F1)'),
+             'text': T('يفتح البحث المتقدم عن الأصناف بفلاتر أكتر، والصنف اللي تختاره يتحط في خانة الكود.', 'Opens the advanced item search with more filters; the item you choose fills the code box.'),
+             'open_hint': T('«▼ الأصناف» ← «+ إضافة صنف».', '"▼ Items" → "+ Add item".')},
+            {'target': 'item-search-change',
+             'label': T('✕ تغيير', '✕ Change'),
+             'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
+             'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]

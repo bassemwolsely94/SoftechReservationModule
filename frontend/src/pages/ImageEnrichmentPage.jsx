@@ -302,7 +302,7 @@ function ReviewQueueTab({ onGallery }) {
                    onChange={e=>setMinScore(+e.target.value/100)}
                    style={{...input,width:60}}/>%
           </label>
-          <button style={btn('#6b7280',true,true)} onClick={()=>refetch()}>تحديث</button>
+          <button data-tour="catalog-images-review-refresh" style={btn('#6b7280',true,true)} onClick={()=>refetch()}>تحديث</button>
           <div style={{marginRight:'auto',fontSize:13,color:'#64748b'}}>
             {filtered.length} صورة • {Object.keys(byItem).length} منتج
           </div>
@@ -328,7 +328,7 @@ function ReviewQueueTab({ onGallery }) {
               {candidates[0]?.item_name}
               <span style={{color:'#94a3b8',fontWeight:400,marginRight:8}}>— {code}</span>
             </span>
-            <button style={{...btn('#8b5cf6',true,true),marginRight:'auto'}}
+            <button data-tour="catalog-images-review-gallery" style={{...btn('#8b5cf6',true,true),marginRight:'auto'}}
                     onClick={()=>onGallery&&onGallery(candidates[0]?.item)}>
               🖼️ معرض الصور
             </button>
@@ -513,7 +513,7 @@ function HistoryTab() {
     <div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
         {['','pending','running','done','failed','skipped','cancelled'].map(s=>(
-          <button key={s} onClick={()=>setSf(s)}
+          <button data-tour="catalog-images-history-filter" key={s} onClick={()=>setSf(s)}
                   style={btn(STATUS_COLOR[s]||'#64748b', sf!==s, true)}>
             {s||'الكل'}
           </button>
@@ -727,7 +727,7 @@ function ItemImageManager({ item, onClose }) {
                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                       فتح الصورة ↗
                     </a>
-                    <button style={btn('#dc2626', true, true)} disabled={busy}
+                    <button data-tour="catalog-images-gallery-delete-primary" style={btn('#dc2626', true, true)} disabled={busy}
                             onClick={() => handleDelete(primary.id, true)}>
                       🗑 حذف
                     </button>
@@ -760,11 +760,11 @@ function ItemImageManager({ item, onClose }) {
                       <div style={{padding:'6px 8px'}}>
                         <div style={{fontSize:10, color:'#94a3b8', marginBottom:5}}>{m.source}</div>
                         <div style={{display:'flex', gap:4, flexWrap:'wrap'}}>
-                          <button style={btn('#059669', false, true)} disabled={busy}
+                          <button data-tour="catalog-images-gallery-set-primary" style={btn('#059669', false, true)} disabled={busy}
                                   onClick={() => handleSetPrimary(m.id)}>
                             ⭐ افتراضية
                           </button>
-                          <button style={btn('#dc2626', true, true)} disabled={busy}
+                          <button data-tour="catalog-images-gallery-delete" style={btn('#dc2626', true, true)} disabled={busy}
                                   onClick={() => handleDelete(m.id, false)}>
                             🗑
                           </button>
@@ -785,7 +785,7 @@ function ItemImageManager({ item, onClose }) {
             <div style={{display:'flex', gap:4, marginBottom:12, flexWrap:'wrap'}}>
               {[['all','الكل'],['pending_review','بانتظار المراجعة'],['scored','تم التقييم'],
                 ['approved','مقبولة'],['auto_approved','تلقائية'],['rejected','مرفوضة']].map(([v,l]) => (
-                <button key={v} onClick={() => setCandStatus(v)}
+                <button data-tour="catalog-images-gallery-cand-filter" key={v} onClick={() => setCandStatus(v)}
                         style={btn(candStatus===v?'#2563eb':'#e2e8f0', candStatus!==v, true)}>
                   {l}
                 </button>
@@ -840,15 +840,15 @@ function ItemImageManager({ item, onClose }) {
                     </div>
                     {canAct && (
                       <div style={{display:'flex', gap:6}}>
-                        <button style={btn('#059669', false, true)} disabled={busy}
+                        <button data-tour="catalog-images-gallery-cand-approve" style={btn('#059669', false, true)} disabled={busy}
                                 onClick={() => handleApprove(c)}>
                           ✓ قبول كافتراضية
                         </button>
-                        <button style={btn('#dc2626', true, true)} disabled={busy}
+                        <button data-tour="catalog-images-gallery-cand-reject" style={btn('#dc2626', true, true)} disabled={busy}
                                 onClick={() => handleReject(c)}>
                           ✗ رفض
                         </button>
-                        <button style={btn('#6b7280', true, true)} disabled={busy}
+                        <button data-tour="catalog-images-gallery-cand-redownload" style={btn('#6b7280', true, true)} disabled={busy}
                                 onClick={() => imageApi.redownload(c.id).then(() => refetchCands())}>
                           ↻ إعادة تنزيل
                         </button>
@@ -906,7 +906,7 @@ function ItemImageManager({ item, onClose }) {
               </label>
 
               <div style={{display:'flex', gap:8, marginTop:14}}>
-                <button style={btn('#2563eb')} disabled={!uploadFile || busy} onClick={handleUpload}>
+                <button data-tour="catalog-images-gallery-upload" style={btn('#2563eb')} disabled={!uploadFile || busy} onClick={handleUpload}>
                   {busy ? 'جارٍ الرفع…' : '⬆️ رفع الصورة'}
                 </button>
                 {uploadFile && (
@@ -933,7 +933,7 @@ function ItemImageManager({ item, onClose }) {
               <div><strong>الكود:</strong> {item.softech_id}</div>
               <div><strong>الشركة:</strong> {item.producer_name || '—'}</div>
             </div>
-            <button style={btn('#2563eb')} disabled={busy} onClick={handleLaunchSearch}>
+            <button data-tour="catalog-images-gallery-search-launch" style={btn('#2563eb')} disabled={busy} onClick={handleLaunchSearch}>
               {busy ? 'جارٍ الإطلاق…' : '🔍 ابدأ البحث الآن'}
             </button>
           </div>

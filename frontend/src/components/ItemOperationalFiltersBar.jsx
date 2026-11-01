@@ -192,7 +192,7 @@ export default function ItemOperationalFiltersBar({ filters, onChange, options =
       {/* Header row */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-gray-600">⚙️ فلاتر الصنف التفصيلية</span>
-        <button type="button" onClick={() => setExpanded(e => !e)}
+        <button data-tour="item-filters-toggle" type="button" onClick={() => setExpanded(e => !e)}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border transition-colors
             ${active > 0
               ? 'border-brand-400 bg-brand-50 text-brand-700'
@@ -206,7 +206,7 @@ export default function ItemOperationalFiltersBar({ filters, onChange, options =
           <span className="text-gray-400 text-[10px]">{expanded ? '▲' : '▼'}</span>
         </button>
         {active > 0 && (
-          <button type="button" onClick={() => onChange(emptyItemFilters())}
+          <button data-tour="item-filters-clear" type="button" onClick={() => onChange(emptyItemFilters())}
             className="text-xs text-red-500 hover:text-red-700 underline">
             مسح الكل
           </button>

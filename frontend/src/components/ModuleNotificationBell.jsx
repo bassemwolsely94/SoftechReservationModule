@@ -58,7 +58,7 @@ export default function ModuleNotificationBell({ category, label = 'إشعارا
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={openPanel}
+      <button data-tour="module-bell-open" onClick={openPanel}
         className="btn-secondary text-sm relative"
         title={label}>
         {icon}
@@ -74,7 +74,7 @@ export default function ModuleNotificationBell({ category, label = 'إشعارا
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="text-sm font-bold text-gray-700">{label}</span>
             {count > 0 && (
-              <button onClick={() => markAll.mutate()} disabled={markAll.isPending}
+              <button data-tour="module-bell-read-all" onClick={() => markAll.mutate()} disabled={markAll.isPending}
                 className="text-xs text-brand-600 hover:underline disabled:opacity-50">
                 تعليم الكل كمقروء
               </button>

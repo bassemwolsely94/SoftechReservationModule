@@ -115,7 +115,7 @@ export default function NotificationPreferencesModal({ onClose }) {
 
       <div className="flex justify-end gap-2 mt-5">
         <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-xl hover:bg-gray-50">إلغاء</button>
-        <button onClick={handleSave} disabled={save.isPending}
+        <button data-tour="notification-prefs-save" onClick={handleSave} disabled={save.isPending}
           className="px-4 py-2 text-sm bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 font-medium">
           {save.isPending ? 'جارٍ الحفظ…' : 'حفظ'}
         </button>

@@ -1434,6 +1434,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
     CHEAPER_FILL = _f('DCFCE7')   # light green — a cheaper supplier exists
     FOC_FILL     = _f('FEF9C3')   # light yellow — bonus bought beyond 6 months of sales
 
+    from . import pivot_sheets as _pivot_sheets
+    sheet_lines = []                      # P-31: what this file asks for (positive Total gap)
+    sheet_covers = {}                     # P-31: items already well covered on this sheet
     for iid in item_order:
         item        = item_obj[iid]
         branch_data = pivot[iid]          # {branch_id: metric}
@@ -1468,7 +1471,13 @@ def _export_xlsx_pivot_v2(run, request, filename):
         # the network to the target with minimal over-buy); else sum the per-branch
         # rounded gaps.
         total_gap = _round_pack(sum(gap_raw.values())) if _round_at == 'total' else sum(gaps)
+        if total_gap and total_gap > 0:
+            sheet_lines.append({'item_code': item.softech_id, 'total_gap': total_gap,
+                                'supplier_code': item.supplier_code or ''})
         total_coverage = (total_stock / total_rate) if total_rate > 0 else None
+        _cv = _pivot_sheets.cover_entry(total_coverage, total_rate, total_stock)
+        if _cv is not None:
+            sheet_covers[item.softech_id] = _cv
         # معامل أولوية الطلب at NETWORK level = (1 − coverage) × gap. Priority always
         # uses the UNROUNDED effective demand, so pure rounding never shifts it and
         # the 1-month sheet stays byte-identical when no coverage override is passed.
@@ -1687,6 +1696,13 @@ def _export_xlsx_pivot_v2(run, request, filename):
     )
     resp['Content-Disposition'] = f'attachment; filename="{filename}"'
     logger.info('[PIVOT-V2] exported %d items, 138 cols', len(item_order))
+    # P-31: keep the sheet as sent — buyers order from its Total gap. Never breaks the download.
+    try:
+        _pivot_sheets.record_snapshot(sheet_lines, staff=getattr(request.user, 'staff_profile', None), run=run,
+                                      params={k: request.GET.get(k) for k in request.GET}, file_name=filename,
+                                      covers=sheet_covers)
+    except Exception:
+        logger.exception('[PIVOT-V2] need-sheet snapshot not recorded')
     return resp
 
 
@@ -2356,19 +2372,25 @@ def transfer_rec_update_status(request, pk):
             status=400,
         )
 
-    # Can only review pending items (guard against double-review)
-    if rec.status not in ('pending', 'approved') and new_status != 'executed':
+    # pending → approved / rejected · approved → rejected / executed · rejected and executed are final
+    nxt = {'pending': ('approved', 'rejected'), 'approved': ('rejected', 'executed')}
+    if new_status not in nxt.get(rec.status, ()):
         return Response(
             {'detail': f'لا يمكن تغيير الحالة من "{rec.get_status_display()}"'},
             status=400,
         )
 
     from django.utils import timezone as _tz
+    old_status      = rec.status
     rec.status      = new_status
     rec.reviewed_by = request.user
     rec.reviewed_at = _tz.now()
     rec.notes       = request.data.get('notes', rec.notes)
     rec.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'notes'])
+    from apps.audit.models import AuditLog
+    AuditLog.log('transfer_rec_status_changed', user=getattr(request.user, 'staff_profile', None),
+                 obj=rec, request=request, changes={'status': [old_status, new_status]},
+                 note=str(request.data.get('notes') or ''))
 
     logger.info(
         '[TransferRec] pk=%d → %s by %s', pk, new_status, request.user,

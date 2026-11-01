@@ -45,7 +45,7 @@ export default function BasketIntelPanel({ itemCodes = [], customerId, branchId,
           const reason = REASON[r.reasons?.[0]] || REASON.fbt
           const oos = typeof r.qty_at_branch === 'number' && r.qty_at_branch <= 0
           return (
-            <button
+            <button data-tour="pos-order-intel-add"
               key={r.item_id}
               onClick={() => onAdd && onAdd({ softech_id: r.softech_id, id: r.item_id, name: r.name, pack_price: r.pack_price })}
               title={oos ? 'غير متوفر بالفرع' : 'إضافة للسلة'}

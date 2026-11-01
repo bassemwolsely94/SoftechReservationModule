@@ -247,7 +247,7 @@ function ReferencesPanel({ canEdit }) {
               <label className="text-[11px] text-gray-500">نمو حقيقى مستهدف (مثال 0.15)
                 <input className="input-field !w-28 mt-0.5" type="number" step="0.01" value={rg} onChange={e => setRg(e.target.value)} placeholder={refs.real_growth ?? ''} />
               </label>
-              <button onClick={() => recompute.mutate()} disabled={recompute.isPending}
+              <button data-tour="analytics-scenarios-references-recompute" onClick={() => recompute.mutate()} disabled={recompute.isPending}
                       className="btn-primary text-xs !py-2 disabled:opacity-40">
                 {recompute.isPending ? '…' : 'إعادة الحساب / تحديث التضخم'}
               </button>
@@ -311,7 +311,7 @@ function ProfitExclusionPanel({ canEdit }) {
                   </td>
                   {canEdit && (
                     <td className="text-center">
-                      <button onClick={() => { if (confirm('حذف الاستثناء؟')) del.mutate(x.id) }}
+                      <button data-tour="analytics-scenarios-exclusion-delete" onClick={() => { if (confirm('حذف الاستثناء؟')) del.mutate(x.id) }}
                         className="text-gray-300 hover:text-red-500">✕</button>
                     </td>
                   )}
@@ -323,7 +323,7 @@ function ProfitExclusionPanel({ canEdit }) {
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <input className="input-field !w-28" placeholder="كود الصنف" value={code} onChange={e => setCode(e.target.value)} />
               <input className="input-field !w-64" placeholder="السبب (اختياري)" value={note} onChange={e => setNote(e.target.value)} />
-              <button onClick={() => add.mutate()} disabled={!code.trim() || add.isPending}
+              <button data-tour="analytics-scenarios-exclusion-add" onClick={() => add.mutate()} disabled={!code.trim() || add.isPending}
                 className="btn-primary text-xs !py-2 disabled:opacity-40">{add.isPending ? '…' : '+ إضافة'}</button>
               {err && <span className="text-[11px] text-red-600">{err}</span>}
             </div>
@@ -358,7 +358,7 @@ function NewScenarioForm({ onDone }) {
       <select className="input-field" value={f.model} onChange={e => set('model', e.target.value)}>
         {Object.entries(MODELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
-      <button onClick={() => create.mutate()} disabled={!f.name || create.isPending}
+      <button data-tour="analytics-scenarios-create" onClick={() => create.mutate()} disabled={!f.name || create.isPending}
         className="btn-primary text-sm md:col-span-5 disabled:opacity-40">
         {create.isPending ? 'جارٍ الإنشاء…' : 'إنشاء'}
       </button>
@@ -537,7 +537,7 @@ function ExportScenarioButton({ id, year, month }) {
   return (
     <div className="flex items-center gap-2">
       {err && <span className="text-[11px] text-red-600">{err}</span>}
-      <button onClick={run} disabled={busy}
+      <button data-tour="analytics-scenarios-export" onClick={run} disabled={busy}
         className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40">
         {busy ? '… جارٍ' : '⬇️ تصدير إكسل'}
       </button>

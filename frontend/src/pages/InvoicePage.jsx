@@ -242,7 +242,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           <div className="flex items-center gap-1 shrink-0">
             {editing ? (
               <>
-                <button onClick={save} disabled={saving}
+                <button data-tour="invoices-main-line-save" onClick={save} disabled={saving}
                   className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium">
                   {saving ? '...' : 'حفظ'}
                 </button>
@@ -251,13 +251,13 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
               </>
             ) : (
               <>
-                <button onClick={() => setEditing(true)}
+                <button data-tour="invoices-main-line-edit" onClick={() => setEditing(true)}
                   className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-1 rounded hover:bg-gray-100">✏️</button>
-                <button onClick={fetchMatches} disabled={loadingM}
+                <button data-tour="invoices-main-line-match" onClick={fetchMatches} disabled={loadingM}
                   className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">
                   {loadingM ? '...' : '🔍'}
                 </button>
-                <button onClick={() => onDelete(line.id)}
+                <button data-tour="invoices-main-line-delete" onClick={() => onDelete(line.id)}
                   className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">🗑</button>
               </>
             )}
@@ -279,7 +279,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           ) : (
             <div className="space-y-1">
               {matches.map(m => (
-                <button key={m.item_id} onClick={() => selectMatch(m)}
+                <button data-tour="invoices-main-line-pick-match" key={m.item_id} onClick={() => selectMatch(m)}
                   className="w-full text-right flex items-center justify-between px-3 py-2 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-colors">
                   <div>
                     <span className="text-sm font-medium text-gray-800">{m.item_name}</span>
@@ -368,7 +368,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
             </option>
           ))}
         </select>
-        <button onClick={save} disabled={!choice || saving}
+        <button data-tour="invoices-main-supplier-link-save" onClick={save} disabled={!choice || saving}
           className="px-2 py-1 bg-brand-600 text-white rounded-lg text-xs disabled:opacity-50">ربط</button>
         <button onClick={() => setOpen(false)}
           className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -387,7 +387,7 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
     <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
       غير مربوط بمورد SOFTECH
       {!locked && (
-        <button onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
+        <button data-tour="invoices-main-supplier-link" onClick={start} className="font-medium hover:underline mr-1">ربط المورد</button>
       )}
     </span>
   )
@@ -597,6 +597,21 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     }
   }
 
+  const [reopening, setReopening] = useState(false)
+  const handleReopen = async () => {
+    setReopening(true)
+    try {
+      const { data } = await invoicesApi.reopen(invoiceId)
+      showToast(data.detail || 'رجعت الفاتورة للمراجعة', data.status === 'finalized' ? 'error' : 'success')
+      setPreview(null); setPreviewVal(null)
+      await load()
+    } catch (e) {
+      showToast(e?.response?.data?.detail || 'تعذّر الرجوع للتعديل', 'error')
+    } finally {
+      setReopening(false)
+    }
+  }
+
   const handlePush = async (force = false) => {
     setPushing(true)
     try {
@@ -635,12 +650,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     setValidating(true)
     try {
       const { data } = await invoicesApi.validateErp(invoiceId)
-      const ne = data.errors?.length || 0, nw = data.warnings?.length || 0
-      if (ne === 0 && nw === 0) showToast('✓ لا توجد مخالفات — جاهزة للترحيل')
+      const ne = data.errors?.length || 0, nw = data.warnings?.length || 0, nn = data.notices?.length || 0
+      if (ne === 0 && nw === 0 && nn === 0) showToast('✓ لا توجد مخالفات — جاهزة للترحيل')
       else {
         const parts = []
         if (ne) parts.push('أخطاء (تمنع الترحيل):\n' + data.errors.map(e => '• ' + e.message).join('\n'))
         if (nw) parts.push('تحذيرات:\n' + data.warnings.map(w => '• ' + w.message).join('\n'))
+        if (nn) parts.push('تنبيهات (لا تمنع الترحيل):\n' + data.notices.map(w => '• ' + w.message).join('\n'))
         window.alert(parts.join('\n\n'))
         showToast(`${ne} خطأ / ${nw} تحذير`, ne ? 'error' : 'success')
       }
@@ -797,7 +813,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
               </ul>
 
               {/* SofTech-rule validation (credit limit, item allowed, price caps, expiry…) */}
-              {previewVal && ((previewVal.errors?.length || previewVal.warnings?.length) ? (
+              {previewVal && ((previewVal.errors?.length || previewVal.warnings?.length || previewVal.notices?.length) ? (
                 <div className="space-y-2">
                   {previewVal.errors?.length > 0 && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3">
@@ -817,6 +833,15 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                         <input type="checkbox" checked={ackWarnings} onChange={e => setAckWarnings(e.target.checked)} />
                         راجعت التحذيرات وأريد المتابعة
                       </label>
+                    </div>
+                  )}
+                  {/* notices: shown loudly, never block posting (owner decision 2026-10-31) */}
+                  {previewVal.notices?.length > 0 && (
+                    <div className="rounded-lg border border-rose-300 bg-rose-50 p-3">
+                      <div className="text-xs font-bold text-rose-700 mb-1">🔔 تنبيهات — لا تمنع الترحيل ({previewVal.notices.length})</div>
+                      <ul className="text-[11px] text-rose-700 list-disc pr-4 space-y-0.5">
+                        {previewVal.notices.map((w, i) => <li key={i}>{w.message}</li>)}
+                      </ul>
                     </div>
                   )}
                 </div>
@@ -869,7 +894,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* Anomaly check */}
             {lines.length > 0 && (
-              <button onClick={fetchAnomalies}
+              <button data-tour="invoices-main-anomalies" onClick={fetchAnomalies}
                 className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-medium hover:bg-amber-100">
                 ⚠ فحص الانحرافات
               </button>
@@ -877,7 +902,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* 3-way financial reconciliation */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
+              <button data-tour="invoices-main-three-way" onClick={async () => { try { const r = await invoicesApi.reconcile3way(invoiceId); setRecon(r.data) } catch { showToast('تعذّرت المطابقة المالية', 'error') } }}
                 className="px-3 py-1.5 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg text-xs font-medium hover:bg-indigo-100">
                 ⚖ المطابقة المالية
               </button>
@@ -885,7 +910,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
             {/* PO / goods-received (separate advisory check) */}
             {lines.length > 0 && (
-              <button onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
+              <button data-tour="invoices-main-po-match" onClick={async () => { try { const r = await invoicesApi.poMatch(invoiceId); setPoResult(r.data) } catch { showToast('تعذّرت مطابقة أمر الشراء', 'error') } }}
                 className="px-3 py-1.5 border border-gray-300 text-gray-600 bg-gray-50 rounded-lg text-xs font-medium hover:bg-gray-100">
                 🔗 أمر الشراء
               </button>
@@ -894,11 +919,11 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
             {/* Export buttons */}
             {lines.length > 0 && (
               <>
-                <button onClick={handleExportExcel} disabled={exporting === 'excel'}
+                <button data-tour="invoices-main-export-excel" onClick={handleExportExcel} disabled={exporting === 'excel'}
                   className="px-3 py-1.5 border border-green-300 text-green-700 bg-green-50 rounded-lg text-xs font-medium hover:bg-green-100">
                   {exporting === 'excel' ? '...' : '⬇ Excel'}
                 </button>
-                <button onClick={handleExportCsv} disabled={exporting === 'csv'}
+                <button data-tour="invoices-main-export-csv" onClick={handleExportCsv} disabled={exporting === 'csv'}
                   className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
                   {exporting === 'csv' ? '...' : '⬇ CSV'}
                 </button>
@@ -938,6 +963,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 title="فحص شامل على SofTech: رقم الفاتورة، الإجمالي، الأصناف، عددها، التاريخ وتاريخ الحفظ — قبل الترحيل لتجنّب التكرار"
                 className="px-3 py-1.5 border border-rose-300 text-rose-700 bg-rose-50 rounded-lg text-sm font-medium hover:bg-rose-100 disabled:opacity-50">
                 {dupChecking ? '...' : '🔎 فحص التكرار'}
+              </button>
+            )}
+            {['confirmed', 'push_failed', 'queued', 'pushing'].includes(inv.status) && !inv.softech_docnumber && (
+              <button data-tour="invoices-main-reopen" onClick={handleReopen} disabled={reopening || pushing}
+                title="إرجاع الفاتورة للمراجعة لتعديل الجدول أو بيانات الرأس قبل الترحيل — لا يُرحَّل شيء"
+                className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-50">
+                {reopening ? '...' : '↩ رجوع للتعديل'}
               </button>
             )}
             {['confirmed', 'push_failed', 'queued'].includes(inv.status) && (
@@ -1000,7 +1032,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 </div>
               ))}
               <div className="flex items-end gap-2">
-                <button onClick={saveHeader}
+                <button data-tour="invoices-main-header-save" onClick={saveHeader}
                   className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium">حفظ</button>
                 <button onClick={() => setHeaderEdit(false)}
                   className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs">إلغاء</button>
@@ -1012,15 +1044,23 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                 <span><span className="text-gray-400 text-xs">المورد: </span><span className="font-medium">{inv.supplier_name || '—'}</span></span>
                 <VendorLink inv={inv} editable={editable} onLinked={load} onNotify={showToast} />
               </div>
-              <div><span className="text-gray-400 text-xs">الفاتورة: </span><span className="font-mono">{inv.invoice_number || '—'}</span></div>
-              <div><span className="text-gray-400 text-xs">التاريخ: </span><span>{inv.invoice_date || '—'}</span></div>
+              <div><span className="text-gray-400 text-xs">الفاتورة: </span>
+                {inv.invoice_number
+                  ? <span className="font-mono">{inv.invoice_number}</span>
+                  : <span className="text-red-600 font-medium" title="لم يُقرأ رقم فاتورة المورد — أدخله من «تعديل»">⚠ غير مقروء</span>}
+              </div>
+              <div><span className="text-gray-400 text-xs">التاريخ: </span>
+                {inv.invoice_date
+                  ? <span>{inv.invoice_date}</span>
+                  : <span className="text-red-600 font-medium" title="لم يُقرأ تاريخ فاتورة المورد — يُحفظ في SofTech كـ «تاريخ مستند المورد»">⚠ غير مقروء</span>}
+              </div>
               <div><span className="text-gray-400 text-xs">الخصم: </span><span>{inv.global_discount_pct}%</span></div>
               <div className="font-bold text-gray-900">
                 <span className="text-gray-400 text-xs font-normal">الإجمالي: </span>
                 {Number(inv.total_after_discount || 0).toFixed(3)} {inv.currency}
               </div>
               {editable && (
-                <button onClick={() => setHeaderEdit(true)}
+                <button data-tour="invoices-main-header-edit" onClick={() => setHeaderEdit(true)}
                   className="text-xs text-brand-600 hover:underline mr-auto">تعديل</button>
               )}
             </div>
@@ -1033,7 +1073,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
           <span className="text-green-600">{confirmed} مُأكَّد</span>
           <span className="text-amber-600">{unmatched} بدون مطابقة</span>
           {editable && (
-            <button onClick={() => setAddLine(s => !s)}
+            <button data-tour="invoices-main-add-line" onClick={() => setAddLine(s => !s)}
               className="mr-auto px-3 py-1.5 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-brand-400 hover:text-brand-600 transition-colors">
               + إضافة سطر يدوي
             </button>
@@ -1068,7 +1108,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
                   onChange={e => setNewLine(n => ({ ...n, discount_pct: e.target.value }))}
                   className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
-              <button onClick={handleAddLine}
+              <button data-tour="invoices-main-add-line-save" onClick={handleAddLine}
                 className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm font-medium">إضافة</button>
               <button onClick={() => setAddLine(false)}
                 className="px-3 py-1.5 bg-white text-gray-500 rounded-lg text-sm border">إلغاء</button>

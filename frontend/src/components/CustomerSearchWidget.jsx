@@ -57,7 +57,7 @@ function SelectedCard({ customer, onClear, disabled }) {
         </div>
       </div>
       {!disabled && (
-        <button
+        <button data-tour="customer-search-change"
           type="button"
           onClick={onClear}
           className="flex-shrink-0 text-xs text-gray-400 hover:text-red-500 transition-colors mt-0.5 font-medium"
@@ -186,7 +186,7 @@ export default function CustomerSearchWidget({
           autoFocus
         />
         <div className="flex gap-2">
-          <button
+          <button data-tour="customer-search-manual-confirm"
             type="button"
             onClick={confirmManual}
             disabled={!manualPhone.trim()}
@@ -245,7 +245,7 @@ export default function CustomerSearchWidget({
             <div className="px-4 py-3 text-sm text-gray-400 text-center space-y-1">
               <div>لا توجد نتائج</div>
               {allowManual && (
-                <button
+                <button data-tour="customer-search-manual"
                   type="button"
                   onMouseDown={e => { e.preventDefault(); setManualMode(true); setOpen(false) }}
                   className="text-xs text-indigo-600 hover:underline block w-full"
@@ -267,7 +267,7 @@ export default function CustomerSearchWidget({
           {allowManual && (
             <>
               {' · '}
-              <button
+              <button data-tour="customer-search-manual"
                 type="button"
                 onClick={() => setManualMode(true)}
                 disabled={disabled}

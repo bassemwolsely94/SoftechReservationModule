@@ -730,9 +730,11 @@ class CallLogViewSet(viewsets.ModelViewSet):
         serializer.save(call_log=call)
         return Response(serializer.data, status=201)
 
-    @action(detail=True, methods=['delete'], url_path=r'items/(?P<item_id>[0-9]+)')
+    @action(detail=True, methods=['delete', 'patch'], url_path=r'items/(?P<item_id>[0-9]+)')
     def remove_item(self, request, pk=None, item_id=None):
-        """DELETE /api/callcenter/calls/{id}/items/{item_id}/"""
+        """DELETE /api/callcenter/calls/{id}/items/{item_id}/
+        PATCH  … { quantity } — change the quantity of an item not yet converted, so a reservation
+        or transfer made from the call uses the quantity on screen."""
         call = self.get_object()
         try:
             ci = call.items.get(pk=item_id)
@@ -740,10 +742,23 @@ class CallLogViewSet(viewsets.ModelViewSet):
             return Response(status=404)
 
         if ci.converted_to != 'none':
+            verb = 'تعديله' if request.method == 'PATCH' else 'حذفه'
             return Response(
-                {'detail': f'هذا الصنف تم تحويله بالفعل ({ci.get_converted_to_display()}) ولا يمكن حذفه'},
+                {'detail': f'هذا الصنف تم تحويله بالفعل ({ci.get_converted_to_display()}) ولا يمكن {verb}'},
                 status=400,
             )
+
+        if request.method == 'PATCH':
+            from decimal import Decimal, InvalidOperation
+            try:
+                qty = Decimal(str(request.data.get('quantity')))
+            except (InvalidOperation, ValueError, TypeError):
+                qty = None
+            if qty is None or not qty.is_finite() or qty <= 0 or qty >= Decimal('100000000'):
+                return Response({'detail': 'الكمية يجب أن تكون رقماً أكبر من صفر'}, status=400)
+            ci.quantity = qty.quantize(Decimal('0.01'))
+            ci.save(update_fields=['quantity'])
+            return Response(CallItemSerializer(ci).data)
 
         ci.delete()
         return Response(status=204)

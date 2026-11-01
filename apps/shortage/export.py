@@ -258,13 +258,20 @@ _GUIDE_NOTE = ('إرشادي فقط — بيانات الموردين والأس
                'والموزّعون يغيّرون أصنافهم باستمرار.')
 
 
+_SOURCE_NOTE = {'mirror': 'المصدر: نسخة بيانات SOFTECH لدينا (موردو الأصناف + فواتير الشراء).',
+                'live': 'المصدر: SOFTECH مباشرة (نسختنا لم تكن محدّثة).'}
+
+
 def _sourced_items(shortage_list, restrict_supplier=''):
-    """(list of ShortageItem, {softech_id: sourcing}) — only matched items are sourced."""
+    """(list of ShortageItem, {softech_id: sourcing}, guide note naming the source) — only matched
+    items are sourced; the note says whether the numbers came from our mirrors or live SOFTECH (P-33 d)."""
     from .supplier_sourcing import build_sourcing
     items = list(shortage_list.items.select_related('item').order_by('raw_name'))
     codes = [i.item.softech_id for i in items if i.item_id and i.item.softech_id]
-    sourcing = build_sourcing(codes, restrict_supplier=restrict_supplier) if codes else {}
-    return items, sourcing
+    meta = {}
+    sourcing = build_sourcing(codes, restrict_supplier=restrict_supplier, meta=meta) if codes else {}
+    note = _GUIDE_NOTE + (' ' + _SOURCE_NOTE[meta['source']] if meta.get('source') in _SOURCE_NOTE else '')
+    return items, sourcing, note
 
 
 def export_supplier_matrix(shortage_list) -> bytes:
@@ -272,7 +279,7 @@ def export_supplier_matrix(shortage_list) -> bytes:
     that supplier's code (✓ = carries it, no code yet), plus last-bought supplier,
     last cost, cheapest historical cost, and how many suppliers carry it."""
     from .supplier_sourcing import main_supplier_columns
-    items, sourcing = _sourced_items(shortage_list)
+    items, sourcing, guide = _sourced_items(shortage_list)
     mains = main_supplier_columns()   # [(personcode, name)]
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'موردون'
@@ -281,7 +288,7 @@ def export_supplier_matrix(shortage_list) -> bytes:
     tail  = ['آخر شراء من', 'آخر تكلفة', 'أقل تكلفة تاريخية', 'عدد الموردين']
     cols  = fixed + [n.replace('EGY DRUG - ', 'ED-').replace(' - ', ' ')[:14] for _, n in mains] + tail
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
-    note = ws.cell(row=1, column=1, value=_GUIDE_NOTE)
+    note = ws.cell(row=1, column=1, value=guide)
     _style(note, font=_BOLD_FONT, fill=_ORANGE_FILL, align=_RTL_ALIGN)
     _header_row(ws, 2, cols)
     _set_col_widths(ws, [5, 12, 34, 8] + [12] * len(mains) + [18, 11, 14, 10])
@@ -315,13 +322,13 @@ def export_supplier_po(shortage_list, suppcode: str, supplier_name: str = '') ->
     (paste-ready for their ERP). Items with no code yet are still included with our
     name + a 'no code' flag so nothing is dropped."""
     supp = str(suppcode).strip()
-    items, sourcing = _sourced_items(shortage_list, restrict_supplier=supp)
+    items, sourcing, guide = _sourced_items(shortage_list, restrict_supplier=supp)
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = f'طلب {supp}'
     ws.sheet_view.rightToLeft = True
     cols = ['#', 'كود المورد', 'اسم الصنف', 'الاسم العلمي', 'كود الصنف لدينا',
             'الكمية', 'آخر تكلفة من المورد', 'ملاحظة']
-    hdr = f'أمر شراء — {supplier_name or supp}   |   {_GUIDE_NOTE}'
+    hdr = f'أمر شراء — {supplier_name or supp}   |   {guide}'
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
     note = ws.cell(row=1, column=1, value=hdr)
     _style(note, fill=_SUBHDR_FILL, align=_RTL_ALIGN); note.font = _WHITE_FONT

@@ -51,7 +51,7 @@ function Card({ it, hereBranchId, nameOf, onPick, original = false }) {
         </div>
       </div>
       {onPick && (
-        <button type="button" onClick={() => onPick(it)}
+        <button data-tour="pos-order-alt-add" type="button" onClick={() => onPick(it)}
                 className="self-center shrink-0 rounded-lg bg-brand-600 text-white px-2.5 py-1.5 text-xs font-medium hover:bg-brand-700">إضافة</button>
       )}
     </div>
@@ -103,7 +103,7 @@ export default function PosAlternatives({ item, branchId, onPick, onClose, sheet
         )}
       </div>
       <div className="p-3 border-t flex items-center gap-2">
-        <button type="button" onClick={() => openDrugEye(item.name, setNote)}
+        <button data-tour="pos-order-alt-drugeye" type="button" onClick={() => openDrugEye(item.name, setNote)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">
           <Icon name="search" size={14} /> ابحث في DrugEye
         </button>
