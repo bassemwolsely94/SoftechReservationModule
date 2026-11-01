@@ -29,7 +29,8 @@ MODULE = {
                 {'key': 'missed', 'label': T('فائت — لا استجابة', 'Missed — no response'),
                  'desc': T('لم يستجب بعد عدة محاولات. مرحلة نهائية.', 'No response after several attempts. Final.')},
                 {'key': 'auto_closed', 'label': T('أُغلق تلقائياً — SOFTECH أكّد البيع', 'Auto-closed — SOFTECH confirmed the sale'),
-                 'desc': T('ظهرت فاتورة بيع جديدة للمريض لنفس الدواء، فأُغلقت المهمة بدون تدخل.', 'A new sale of the same medicine appeared for the patient, so the task closed by itself.')},
+                 'desc': T('ظهرت فاتورة بيع جديدة على نفس الـPIC لنفس الدواء (أو بديل بنفس التشخيص) بعد الفاتورة اللي طلّعت المهمة، فأُغلقت بدون تدخل. رقم الفاتورة بيتسجّل في المهمة.',
+                           'A new sale on the same PIC of the same medicine (or a same-diagnosis substitute) appeared after the sale that created the task, so it closed by itself. The invoice number is saved on the task.')},
                 {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('لم تعد مطلوبة (مثلاً الطبيب أوقف الدواء).', 'No longer needed (e.g. the doctor stopped the medicine).')},
             ],
         },
@@ -300,7 +301,7 @@ SCREENS = [
                        'It changes many task statuses at once — run it after the sales sync, not in the middle of the team\'s work.'),
              'open_hint': T('للمدير (admin) بس — في أعلى الشاشة.', 'Admins only — at the top of the screen.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

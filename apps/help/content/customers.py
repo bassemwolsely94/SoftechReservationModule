@@ -372,6 +372,8 @@ SCREENS = [
         'tips': [
             T('الملف الصحي معلومة حساسة — لا تشاركها خارج العمل.', 'The health profile is sensitive — never share it outside work.'),
             T('تعديل النقاط يؤثر على رصيد العميل في كل الفروع ويُسجَّل باسمك.', 'Adjusting points affects the customer\'s balance in all branches and is recorded under your name.'),
+            T('مبيعات العميل في «الجدول الزمني» = كل فواتير SOFTECH اللي عليها الـPIC بتاعه، من المزامنة اليومية (مش بس الفواتير المربوطة باسمه).',
+              'The customer\'s sales on the "Timeline" = every SOFTECH invoice carrying their PIC, from the daily sync (not only invoices linked to their name).'),
         ],
         'related': ['customers.list', 'reservations.new', 'followups.tasks', 'loyalty.program'],
         'workflows': [],
@@ -469,8 +471,8 @@ SCREENS = [
                  '«فاتورة» = عدد فواتيره، «إجمالي (ج.م)» = قيمة مشترياته، و«حجز نشط» بيتلوّن لو عنده حجز مفتوح.\n• تحته البطاقة الجانبية: الشريحة وخطر الانقطاع وأيام من آخر زيارة؛ ولو ظهر «⚡ يُنصح بالتواصل مع هذا العميل فوراً» كلّمه.',
                  '"Invoice" = number of invoices, "Total (EGP)" = their spend, and "Active reservation" is highlighted when one is open.\n• Below it is the side card: segment, churn risk and days since the last visit; if "⚡ Contact this customer now" shows, call them.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-01',
+        'change_note': T('الجدول الزمني يعرض كل مبيعات العميل بالـPIC من المزامنة اليومية', 'The timeline shows all of the customer\'s sales by PIC from the daily sync'),
     },
     {
         'key': 'customers.merge',
