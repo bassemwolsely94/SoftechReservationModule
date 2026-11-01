@@ -501,12 +501,10 @@ class ReviewRoundOneTests(Base):
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(session_policy.cap_hours(session_policy.subject(User.objects.get(username='sp_root')), 'Z3'), 8)
 
-    def test_user_without_profile_blocked_in_enforce(self):
+    def test_user_without_profile_follows_viewer_rows(self):
         from django.contrib.auth.models import User
         User.objects.create_user('sp_bare', password='TestPass123')
-        r = _login(APIClient(), 'sp_bare', net=INSIDE)
+        self.assertEqual(_login(APIClient(), 'sp_bare', net=INSIDE).status_code, 200)   # inside: as viewer
+        r = _login(APIClient(), 'sp_bare')                                               # outside: viewer = blocked
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.data['reason'], 'blocked')
-        with override_settings(NETWORK_POLICY_ENFORCEMENT='log'):
-            with self.assertLogs('elrezeiky.access', 'WARNING'):
-                self.assertEqual(_login(APIClient(), 'sp_bare', net=INSIDE).status_code, 200)

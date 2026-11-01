@@ -50,16 +50,18 @@ def message(reason):
 
 def subject(user):
     """What the zone policy is applied to for `user`: the StaffProfile; for a superuser without
-    one, the admin rows; for any other user without one, a subject blocked in enforce (F7)."""
+    one, the admin rows; for any other user without one, the viewer rows (the role the app already
+    shows such an account as), so a service account keeps working inside and is blocked outside."""
     if user is None:
         return None
     profile = getattr(user, 'staff_profile', None)
     if profile is not None:
         return profile
     if getattr(user, 'is_superuser', False):
-        return SimpleNamespace(role='admin', user=user, no_profile=False,
+        return SimpleNamespace(role='admin', user=user,
                                external_export=False, external_softech_write=False)
-    return SimpleNamespace(role=None, user=user, no_profile=True)
+    return SimpleNamespace(role='viewer', user=user,
+                           external_export=False, external_softech_write=False)
 
 
 # ── zone of a sign-in / refresh request ─────────────────────────────────────────────────
@@ -119,7 +121,7 @@ def auth_at_of(token):
 # ── the policy for sessions ─────────────────────────────────────────────────────────────
 
 def _policy(profile, zone):
-    if profile is None or getattr(profile, 'no_profile', False):
+    if profile is None:
         return None
     return policy_for(profile.role, zone or Z4)     # signed-in, no zone = Z4
 
@@ -135,8 +137,6 @@ def mfa_required_in_zone(profile, zone):
 
 
 def blocked(profile, zone):
-    if getattr(profile, 'no_profile', False):
-        return True                                 # a user without a staff profile (F7)
     pol = _policy(profile, zone)
     return pol is not None and pol.access == 'none'
 
