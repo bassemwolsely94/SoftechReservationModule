@@ -22,8 +22,8 @@ class _RS:
             def getColumnCount(self):
                 return 1
 
-            def getColumnTypeName(self, i):
-                return 'int'
+            def getColumnType(self, i):
+                return 4                    # java.sql.Types.INTEGER
         return M()
 
     def getObject(self, i):
