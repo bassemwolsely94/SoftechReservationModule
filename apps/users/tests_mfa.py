@@ -10,6 +10,7 @@ Covers the full login state machine:
 """
 import pyotp
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -19,6 +20,7 @@ from apps.users.models import StaffProfile
 
 class TwoFactorAuthTests(TestCase):
     def setUp(self):
+        cache.clear()                  # the per-IP login throttle is shared across the whole run
         self.client = APIClient()
         self.user = User.objects.create_user(username='approver', password='pw123456')
         self.profile = StaffProfile.objects.create(user=self.user, role='purchasing')
