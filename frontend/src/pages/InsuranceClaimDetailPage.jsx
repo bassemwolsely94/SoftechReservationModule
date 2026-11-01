@@ -2426,6 +2426,27 @@ const _ROSTER_SCOPE = {
   sister:   { label: 'نفس الشركة',    cls: 'text-yellow-700' },
 }
 
+// Sort values for the roster grid; category keeps the backend's priority order
+// (wrong → shared → sister → new), full matches before partial ones.
+const _ROSTER_RANK = { wrong: 0, shared: 1, sister: 2, new: 3 }
+const _ROSTER_NUMERIC = new Set(['category', 'where_count', 'here_count', 'gross_before', 'net_after'])
+const _rosterSortVal = (r, k) => {
+  if (k === 'category')    return _ROSTER_RANK[r.category] * 2 + (r.confidence === 'full' ? 0 : 1)
+  if (k === 'where')       return r.where[0]?.label || ''
+  if (k === 'where_count') return r.where[0]?.count || 0
+  if (_ROSTER_NUMERIC.has(k)) return Number(r[k] || 0)
+  return r[k] || ''
+}
+
+function RosterTh({ k, align = 'right', sortKey, sortDir, sortBy, children }) {
+  return (
+    <th onClick={() => sortBy(k)}
+      className={`text-${align} px-2 py-2 font-semibold cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 ${sortKey === k ? 'text-blue-600' : ''}`}>
+      {children}{sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : <span className="opacity-25"> ↕</span>}
+    </th>
+  )
+}
+
 // Wrong-allocation check: each receipt's patient vs the cumulative rosters built from
 // earlier motalbas (جهة → فئة → فئة فوترة). The backend classifies; we only display/act.
 function RosterCheckView({ claimId, onRefresh }) {
@@ -2435,6 +2456,13 @@ function RosterCheckView({ claimId, onRefresh }) {
   const [sel, setSel]     = useState(new Set())
   const [busy, setBusy]   = useState(false)
   const [msg, setMsg]     = useState(null)
+  const [sortKey, setSortKey] = useState('category')
+  const [sortDir, setSortDir] = useState('asc')
+
+  const sortBy = (k) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir(_ROSTER_NUMERIC.has(k) ? 'desc' : 'asc') }
+  }
 
   const load = () => {
     setLoad(true)
@@ -2449,7 +2477,11 @@ function RosterCheckView({ claimId, onRefresh }) {
   }
   useEffect(() => { load() }, [claimId])   // eslint-disable-line
 
-  const rows = (data?.rows || []).filter(r => cats.has(r.category))
+  const rows = (data?.rows || []).filter(r => cats.has(r.category)).sort((a, b) => {
+    const va = _rosterSortVal(a, sortKey), vb = _rosterSortVal(b, sortKey)
+    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ar')
+    return sortDir === 'asc' ? c : -c
+  })
   const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const kb = useGridKeyboard({
     rows, getKey: r => r.prescription_id,
@@ -2521,20 +2553,27 @@ function RosterCheckView({ claimId, onRefresh }) {
         </button>
       </div>
 
-      <div {...kb.containerProps} className="bg-white rounded-xl border border-gray-200 overflow-x-auto outline-none">
+      <div {...kb.containerProps} data-tour="insurance-claim-roster-grid"
+        className="bg-white rounded-xl border border-gray-200 overflow-auto max-h-[calc(100vh-320px)] outline-none">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs">
+          <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 text-xs sticky top-0 z-10">
             <tr>
-              <th className="px-2 py-2 w-8"></th>
-              <th className="text-right px-2 py-2">اسم المريض</th>
-              <th className="text-center px-2 py-2">الحالة</th>
-              <th className="text-right px-2 py-2">مُفوتر سابقاً على</th>
-              <th className="text-center px-2 py-2">مرات هنا</th>
-              <th className="text-right px-2 py-2">رقم الفاتورة</th>
-              <th className="text-right px-2 py-2">التاريخ</th>
-              <th className="text-center px-2 py-2">الفرع</th>
-              <th className="text-right px-2 py-2">فئة الفوترة</th>
-              <th className="text-left px-2 py-2">الصافى</th>
+              <th className="px-2 py-2 w-8">
+                <input type="checkbox" title="تحديد الكل"
+                  checked={rows.length > 0 && rows.every(r => sel.has(r.prescription_id))}
+                  onChange={e => setSel(e.target.checked ? new Set(rows.map(r => r.prescription_id)) : new Set())} />
+              </th>
+              <RosterTh k="patient_name" {...{ sortKey, sortDir, sortBy }}>اسم المريض</RosterTh>
+              <RosterTh k="category" align="center" {...{ sortKey, sortDir, sortBy }}>الحالة</RosterTh>
+              <RosterTh k="where" {...{ sortKey, sortDir, sortBy }}>مُفوتر سابقاً على</RosterTh>
+              <RosterTh k="where_count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات هناك</RosterTh>
+              <RosterTh k="here_count" align="center" {...{ sortKey, sortDir, sortBy }}>مرات هنا</RosterTh>
+              <RosterTh k="docnumber" {...{ sortKey, sortDir, sortBy }}>رقم الفاتورة</RosterTh>
+              <RosterTh k="docdate" {...{ sortKey, sortDir, sortBy }}>التاريخ</RosterTh>
+              <RosterTh k="branch" align="center" {...{ sortKey, sortDir, sortBy }}>الفرع</RosterTh>
+              <RosterTh k="group_label" {...{ sortKey, sortDir, sortBy }}>فئة الفوترة</RosterTh>
+              <RosterTh k="gross_before" align="left" {...{ sortKey, sortDir, sortBy }}>الإجمالى</RosterTh>
+              <RosterTh k="net_after" align="left" {...{ sortKey, sortDir, sortBy }}>الصافى</RosterTh>
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
@@ -2572,11 +2611,13 @@ function RosterCheckView({ claimId, onRefresh }) {
                     ))}
                     {r.where.length === 0 && <span className="text-gray-300">—</span>}
                   </td>
+                  <td className="px-2 py-1.5 text-center text-xs">{r.where[0] ? (r.where[0].from_list ? 'قائمة' : r.where[0].count) : '—'}</td>
                   <td className="px-2 py-1.5 text-center text-xs">{r.here_count || '—'}</td>
                   <td className="px-2 py-1.5 font-mono text-xs">{r.docnumber || '—'}</td>
                   <td className="px-2 py-1.5 text-xs text-gray-600">{r.docdate || '—'}</td>
                   <td className="px-2 py-1.5 text-center text-xs">{r.branch || '—'}</td>
                   <td className="px-2 py-1.5 text-xs text-gray-500">{r.group_label || '—'}</td>
+                  <td className="px-2 py-1.5 text-left font-mono text-gray-600">{fmt(r.gross_before)}</td>
                   <td className="px-2 py-1.5 text-left font-mono">{fmt(r.net_after)}</td>
                   <td className="px-2 py-1.5 text-xs whitespace-nowrap">
                     {r.decided && (
@@ -2588,7 +2629,7 @@ function RosterCheckView({ claimId, onRefresh }) {
               )
             })}
             {rows.length === 0 && (
-              <tr><td colSpan={11} className="px-3 py-8 text-center text-gray-400">لا أسماء في الفئات المختارة.</td></tr>
+              <tr><td colSpan={13} className="px-3 py-8 text-center text-gray-400">لا أسماء في الفئات المختارة.</td></tr>
             )}
           </tbody>
         </table>
