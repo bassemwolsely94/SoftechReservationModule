@@ -182,3 +182,70 @@ class RosterApiTests(TestCase):
         self._decide(verdict='not_member')
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.final_net_after, before)
+
+
+class RosterBatch2Tests(TestCase):
+    """Deductions as evidence, manual receipts, parent companies, per-payer roster."""
+
+    def setUp(self):
+        u = get_user_model().objects.create_user(username='r2', password='x',
+                                                  is_staff=True, is_superuser=True)
+        self.api = APIClient(); self.api.force_authenticate(u)
+        self.a = _client('جهة أ')
+        self.b = _client('جهة ب')
+        self.hist_a = _claim(self.a)
+        self.hist_rx = _rx(self.hist_a, 'كمال صبرى فهمى ناشد')
+        self.claim = _claim(self.b)
+
+    def test_not_member_deduction_rules_the_name_out_of_that_payer(self):
+        rx = _rx(self.claim, 'كمال صبرى فهمى ناشد')
+        self.assertEqual(_cat(check_claim_roster(self.claim), 'كمال صبرى فهمى ناشد'), 'wrong')
+        # the insurer deducted A's receipt: «المريض لا يتبع الجهة» → A's billing is not evidence
+        r = self.api.post(f'/api/insurance/claims/{self.hist_a.id}/deductions/',
+                          {'reason_code': 'not_member', 'amount': '10', 'docnumber': self.hist_rx.softech_docnumber},
+                          format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(m.InsuranceDeduction.objects.get().prescription_id, self.hist_rx.id)
+        self.assertEqual(_cat(check_claim_roster(self.claim), 'كمال صبرى فهمى ناشد'), 'new')
+        # and on A's own claim the receipt now shows as deducted / not a member
+        row = next(x for x in check_claim_roster(self.hist_a)['rows'] if x['prescription_id'] == self.hist_rx.id)
+        self.assertTrue(row['deducted'])
+        self.assertEqual(row['category'], 'wrong')
+        self.assertIsNotNone(rx)
+
+    def test_not_member_deduction_needs_its_receipt(self):
+        r = self.api.post(f'/api/insurance/claims/{self.hist_a.id}/deductions/',
+                          {'reason_code': 'not_member', 'amount': '10'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        r = self.api.post(f'/api/insurance/claims/{self.hist_a.id}/deductions/',
+                          {'reason_code': 'not_member', 'amount': '10', 'docnumber': '999999'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_manual_receipts_are_checked_and_decidable(self):
+        mrx = m.InsuranceClaimManualRx.objects.create(
+            claim=self.claim, softech_docnumber='777', softech_docdate=date(2026, 10, 6),
+            softech_branchcode='160', patient_name='كمال صبرى فهمى ناشد', net_after=50)
+        rows = check_claim_roster(self.claim)['rows']
+        row = next(x for x in rows if x['kind'] == 'manual')
+        self.assertEqual((row['manual_rx_id'], row['category']), (mrx.id, 'wrong'))
+        r = self.api.post(f'/api/insurance/claims/{self.claim.id}/roster-decision/',
+                          {'manual_rx_ids': [mrx.id], 'verdict': 'member'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertFalse(any(x['kind'] == 'manual' for x in check_claim_roster(self.claim)['rows']))
+
+    def test_parent_company_turns_wrong_into_sister(self):
+        _rx(self.claim, 'كمال صبرى فهمى ناشد')
+        parent = m.InsuranceParentClient.objects.create(name='شركة واحدة')
+        for sub in (self.a, self.b):
+            sub.client.parent = parent; sub.client.save()
+        self.assertEqual(_cat(check_claim_roster(self.claim), 'كمال صبرى فهمى ناشد'), 'sister')
+
+    def test_roster_page_lists_members_and_elsewhere(self):
+        _rx(_claim(self.b), 'كمال صبرى فهمى ناشد')
+        r = self.api.get('/api/insurance/rosters/', {'client_id': self.a.client_id})
+        self.assertEqual(r.status_code, 200, r.content)
+        d = r.json()
+        self.assertEqual(d['counts']['members'], 1)
+        self.assertEqual(d['members'][0]['other_companies'], ['جهة ب'])
+        self.assertEqual(self.api.get('/api/insurance/rosters/', {'client_id': self.a.client_id, 'q': 'زز'}).json()['counts']['members'], 0)
+        self.assertEqual(self.api.get('/api/insurance/rosters/').status_code, 400)

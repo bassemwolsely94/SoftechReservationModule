@@ -1880,7 +1880,20 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         claim = self.get_object()
         if request.method == 'GET':
             return Response(InsuranceDeductionSerializer(claim.deductions.all(), many=True).data)
-        ser = InsuranceDeductionSerializer(data=request.data)
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        docno = str(data.pop('docnumber', '') or '').strip().lstrip('#')
+        if isinstance(docno, list):
+            docno = docno[0] if docno else ''
+        if docno and not data.get('prescription'):
+            rxs = list(claim.prescriptions.filter(softech_docnumber=docno).values_list('id', flat=True)[:2])
+            if len(rxs) != 1:
+                return Response({'error': f'الإيصال #{docno} ' + ('غير موجود فى هذه المطالبة' if not rxs
+                                 else 'مكرر بأكثر من فرع — حدّده من الروشتات')}, status=status.HTTP_400_BAD_REQUEST)
+            data['prescription'] = rxs[0]
+        data['claim'] = claim.pk   # the claim is the URL's — the form never sent it, so every save failed
+        if data.get('reason_code') == 'not_member' and not data.get('prescription'):
+            return Response({'error': 'اكتب رقم إيصال المريض الذى لا يتبع الجهة'}, status=status.HTTP_400_BAD_REQUEST)
+        ser = InsuranceDeductionSerializer(data=data)
         ser.is_valid(raise_exception=True)
         staff = getattr(request.user, 'staff_profile', None)
         ded = ser.save(claim=claim, recorded_by=staff)
@@ -2390,22 +2403,24 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
     def roster_decision(self, request, pk=None):
         """Record a reviewer verdict on patients of this claim (does NOT change totals).
 
-        Body: { prescription_ids: [...], verdict: 'member'|'not_member'|'clear',
+        Body: { prescription_ids: [...], manual_rx_ids: [...], verdict: 'member'|'not_member'|'clear',
                 target: {client_id, subclient_id?, group_label?}?, note? }
         """
         claim = self.get_object()
         from .roster import record_decision
         ids = request.data.get('prescription_ids') or []
+        mids = request.data.get('manual_rx_ids') or []
         verdict = request.data.get('verdict')
         target = request.data.get('target') or None
         note = (request.data.get('note') or '').strip()
-        if not ids or verdict not in ('member', 'not_member', 'clear'):
+        if not (ids or mids) or verdict not in ('member', 'not_member', 'clear'):
             return Response({'error': 'prescription_ids و verdict مطلوبان'},
                             status=status.HTTP_400_BAD_REQUEST)
         if target is not None and not InsuranceClient.objects.filter(pk=target.get('client_id')).exists():
             return Response({'error': 'الجهة الهدف غير موجودة'}, status=status.HTTP_400_BAD_REQUEST)
         staff = getattr(request.user, 'staff_profile', None)
-        rxs = list(claim.prescriptions.filter(id__in=ids).select_related('billing_group'))
+        rxs = list(claim.prescriptions.filter(id__in=ids).select_related('billing_group')) + \
+            list(claim.manual_rx.filter(id__in=mids).select_related('billing_group'))
         for rx in rxs:
             record_decision(claim, rx, verdict, target=target, note=note, actor=staff)
         labels = {'member': 'يتبع هذه الجهة', 'not_member': 'لا يتبع هذه الجهة', 'clear': 'إلغاء القرار'}
@@ -2414,7 +2429,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                      reason=note,
                      meta={'verdict': verdict, 'target': target,
                            'names': [rx.patient_name for rx in rxs][:200],
-                           'prescription_ids': [rx.id for rx in rxs][:200]})
+                           'prescription_ids': [i for i in ids][:200], 'manual_rx_ids': mids[:200]})
         return Response({'updated': len(rxs), 'verdict': verdict})
 
     @action(detail=True, methods=['get'], url_path='audit-log')
@@ -2910,6 +2925,23 @@ class InsuranceSeparationListViewSet(viewsets.ModelViewSet):
             return Response({'error': 'القائمة الهدف غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
         n = InsuranceSeparationName.objects.filter(pk__in=ids, sep_list_id=pk).update(sep_list_id=target_id)
         return Response({'moved': n})
+
+
+class InsuranceRosterView(APIView):
+    """READ-ONLY: the cumulative patient roster of one جهة (optionally one فئة),
+    derived from earlier claims + lists + decisions, with names ruled out.
+    GET /api/insurance/rosters/?client_id=&subclient_id=&q="""
+    permission_classes = [InsuranceModuleAccess]
+
+    def get(self, request):
+        from .roster import roster_for_unit
+        try:
+            client_id = int(request.query_params.get('client_id'))
+        except (TypeError, ValueError):
+            return Response({'error': 'اختر الجهة'}, status=status.HTTP_400_BAD_REQUEST)
+        sub = request.query_params.get('subclient_id')
+        return Response(roster_for_unit(client_id, int(sub) if sub else None,
+                                        q=(request.query_params.get('q') or '').strip()))
 
 
 class InsuranceParentClientViewSet(viewsets.ModelViewSet):

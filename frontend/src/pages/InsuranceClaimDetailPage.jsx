@@ -1238,7 +1238,8 @@ function PaymentsTab({ claim, onRefresh }) {
   const [payments, setPayments]     = useState(claim.payments || [])
   const [deductions, setDeductions] = useState(claim.deductions || [])
   const [form, setForm]             = useState({ payment_date: '', amount: '', reference: '', notes: '' })
-  const [dedForm, setDedForm]       = useState({ reason_code: 'other', reason_detail: '', amount: '', item_name: '' })
+  const [dedForm, setDedForm]       = useState({ reason_code: 'other', reason_detail: '', amount: '', item_name: '', docnumber: '' })
+  const [dedErr, setDedErr]         = useState(null)
 
   const totalPaid     = payments.reduce((s, p) => s + Number(p.amount), 0)
   const totalDeducted = deductions.reduce((s, d) => s + Number(d.amount), 0)
@@ -1253,10 +1254,12 @@ function PaymentsTab({ claim, onRefresh }) {
   }
 
   const addDeduction = async () => {
-    await insuranceApi.addDeduction(claim.id, dedForm)
+    setDedErr(null)
+    try { await insuranceApi.addDeduction(claim.id, dedForm) }
+    catch (e) { setDedErr(e.response?.data?.error || 'تعذّر تسجيل الخصم'); return }
     const { data } = await insuranceApi.claimDetail(claim.id)
     setDeductions(data.deductions || [])
-    setDedForm({ reason_code: 'other', reason_detail: '', amount: '', item_name: '' })
+    setDedForm({ reason_code: 'other', reason_detail: '', amount: '', item_name: '', docnumber: '' })
     onRefresh()
   }
 
@@ -1300,12 +1303,19 @@ function PaymentsTab({ claim, onRefresh }) {
             <option value="over_limit">تجاوز الحد المسموح</option>
             <option value="missing_docs">وثائق ناقصة</option>
             <option value="classification">خطأ في التصنيف</option>
+            <option value="not_member">المريض لا يتبع الجهة</option>
             <option value="other">أخرى</option>
           </select>
+          {dedForm.reason_code === 'not_member' && (
+            <input placeholder="رقم إيصال المريض (إلزامى) — يُضاف لسجل المرضى كغير تابع" className={inp} dir="ltr"
+              data-tour="insurance-claim-deduction-docnumber"
+              value={dedForm.docnumber} onChange={e => setDedForm(p => ({...p, docnumber: e.target.value}))} />
+          )}
+          {dedErr && <div className="text-xs text-red-600">{dedErr}</div>}
           <input placeholder="الصنف المرفوض (اختياري)" className={inp} value={dedForm.item_name} onChange={e => setDedForm(p => ({...p, item_name: e.target.value}))} />
           <input placeholder="التفاصيل" className={inp} value={dedForm.reason_detail} onChange={e => setDedForm(p => ({...p, reason_detail: e.target.value}))} />
           <input type="number" step="any" placeholder="قيمة الخصم" className={inp} value={dedForm.amount} onChange={e => setDedForm(p => ({...p, amount: e.target.value}))} />
-          <Btn onClick={addDeduction} disabled={!dedForm.amount} variant="danger" size="md" data-tour="insurance-claim-deduction-add">+ تسجيل خصم</Btn>
+          <Btn onClick={addDeduction} disabled={!dedForm.amount || (dedForm.reason_code === 'not_member' && !dedForm.docnumber.trim())} variant="danger" size="md" data-tour="insurance-claim-deduction-add">+ تسجيل خصم</Btn>
         </div>
         {deductions.map(d => (
           <div key={d.id} className="border-b border-gray-100 py-2 flex justify-between text-sm">
@@ -2449,6 +2459,9 @@ function RosterTh({ k, align = 'right', sortKey, sortDir, sortBy, children }) {
 
 // Wrong-allocation check: each receipt's patient vs the cumulative rosters built from
 // earlier motalbas (جهة → فئة → فئة فوترة). The backend classifies; we only display/act.
+// receipts and manual receipts share the grid — one key for both
+const _rosterKey = (r) => r.kind === 'manual' ? `m${r.manual_rx_id}` : `r${r.prescription_id}`
+
 function RosterCheckView({ claimId, onRefresh }) {
   const [data, setData]   = useState(null)
   const [loading, setLoad] = useState(true)
@@ -2470,7 +2483,7 @@ function RosterCheckView({ claimId, onRefresh }) {
       .then(r => {
         setData(r.data)
         setSel(new Set(r.data.rows.filter(x => x.category === 'wrong' && x.confidence === 'full')
-          .map(x => x.prescription_id)))
+          .map(_rosterKey)))
       })
       .catch(e => setMsg(e.response?.data?.error || 'تعذّر فحص سجل المرضى'))
       .finally(() => setLoad(false))
@@ -2484,19 +2497,25 @@ function RosterCheckView({ claimId, onRefresh }) {
   })
   const toggle = (id) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const kb = useGridKeyboard({
-    rows, getKey: r => r.prescription_id,
-    onToggle: r => toggle(r.prescription_id),
-    onSelectAll: () => setSel(new Set(rows.map(r => r.prescription_id))),
+    rows, getKey: _rosterKey,
+    onToggle: r => toggle(_rosterKey(r)),
+    onSelectAll: () => setSel(new Set(rows.map(_rosterKey))),
   })
   const toggleCat = (c) => setCats(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n })
   const errText = (e, fb) => !e.response ? 'تعذّر الاتصال بالسيرفر'
     : (e.response.data?.error || e.response.data?.detail || `${fb} (خطأ ${e.response.status})`)
 
-  const decide = async (ids, verdict, target = null) => {
+  const picked = () => (data?.rows || []).filter(r => sel.has(_rosterKey(r)))
+  const idsOf = (rs) => ({
+    prescription_ids: rs.filter(r => r.kind !== 'manual').map(r => r.prescription_id),
+    manual_rx_ids:    rs.filter(r => r.kind === 'manual').map(r => r.manual_rx_id),
+  })
+  const decide = async (rs, verdict, target = null) => {
+    const ids = rs
     if (!ids.length) return
     setBusy(true); setMsg(null)
     try {
-      await insuranceApi.rosterDecision(claimId, { prescription_ids: ids, verdict, target })
+      await insuranceApi.rosterDecision(claimId, { ...idsOf(rs), verdict, target })
       setMsg(verdict === 'member' ? `سُجّل ${ids.length} اسم كتابع لهذه الجهة — لن يُعلَّم مجدداً`
         : verdict === 'clear' ? 'أُلغي القرار' : `سُجّل ${ids.length} اسم كغير تابع لهذه الجهة`)
       load()
@@ -2504,17 +2523,20 @@ function RosterCheckView({ claimId, onRefresh }) {
   }
 
   const doExclude = async () => {
-    const ids = [...sel]
-    if (!ids.length) return
-    const picked = data.rows.filter(r => sel.has(r.prescription_id))
-    const tops = [...new Set(picked.map(r => r.where[0]?.label).filter(Boolean))]
+    const rs = picked()
+    if (!rs.length) return
+    const ids = rs.filter(r => r.kind !== 'manual').map(r => r.prescription_id)
+    const manualIds = rs.filter(r => r.kind === 'manual').map(r => r.manual_rx_id)
+    const tops = [...new Set(rs.map(r => r.where[0]?.label).filter(Boolean))]
     const reason = tops.length === 1 ? `تخصيص خاطئ ← ${tops[0]}` : 'تخصيص خاطئ — يتبع جهة أخرى'
-    if (!window.confirm(`استبعاد ${ids.length} روشتة من هذه المطالبة لإعادة فوترتها على جهتها الصحيحة؟ يمكن التراجع بإعادة إدراجها.`)) return
+    if (!window.confirm(`استبعاد ${rs.length} روشتة من هذه المطالبة لإعادة فوترتها على جهتها الصحيحة؟ يمكن التراجع بإعادة إدراجها.`)) return
     setBusy(true); setMsg(null)
     try {
-      const { data: res } = await insuranceApi.bulkExclude(claimId, ids, reason)
-      await insuranceApi.rosterDecision(claimId, { prescription_ids: ids, verdict: 'not_member', note: reason })
-      setMsg(`تم استبعاد ${res.excluded} روشتة · الصافى الآن ${fmt(res.claim_net_after)}`)
+      let excluded = ids.length ? (await insuranceApi.bulkExclude(claimId, ids, reason)).data : null
+      for (const mid of manualIds) await insuranceApi.updateManualRx(claimId, mid, { is_excluded: true })
+      await insuranceApi.rosterDecision(claimId, { prescription_ids: ids, manual_rx_ids: manualIds, verdict: 'not_member', note: reason })
+      setMsg(`تم استبعاد ${(excluded?.excluded || 0) + manualIds.length} روشتة`
+        + (excluded ? ` · الصافى الآن ${fmt(excluded.claim_net_after)}` : ''))
       setSel(new Set()); load(); onRefresh && onRefresh()
     } catch (e) { setMsg(errText(e, 'تعذّر الاستبعاد')) } finally { setBusy(false) }
   }
@@ -2534,6 +2556,7 @@ function RosterCheckView({ claimId, onRefresh }) {
           </button>
         ))}
         <span className="text-xs text-gray-400">مطابق للسجل {c.known} · السجل {data.roster_names} اسم</span>
+        <a href={`/insurance/rosters`} className="text-xs text-blue-600 hover:underline mr-auto" data-tour="insurance-claim-roster-open-rosters">سجل مرضى الجهات ←</a>
       </div>
       <p className="text-xs text-gray-500 mb-3">
         كل اسم يُقارن بأسماء المطالبات السابقة لكل جهة وفئة وفئة فوترة (سجل يكبر تلقائياً كل شهر).
@@ -2547,7 +2570,7 @@ function RosterCheckView({ claimId, onRefresh }) {
           className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
           {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
         </button>
-        <button onClick={() => decide([...sel], 'member')} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-member"
+        <button onClick={() => decide(picked(), 'member')} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-member"
           className="px-3 py-2 bg-white border border-green-600 text-green-700 text-sm rounded hover:bg-green-50 disabled:opacity-50">
           يتبع هذه الجهة ({sel.size})
         </button>
@@ -2560,8 +2583,8 @@ function RosterCheckView({ claimId, onRefresh }) {
             <tr>
               <th className="px-2 py-2 w-8">
                 <input type="checkbox" title="تحديد الكل"
-                  checked={rows.length > 0 && rows.every(r => sel.has(r.prescription_id))}
-                  onChange={e => setSel(e.target.checked ? new Set(rows.map(r => r.prescription_id)) : new Set())} />
+                  checked={rows.length > 0 && rows.every(r => sel.has(_rosterKey(r)))}
+                  onChange={e => setSel(e.target.checked ? new Set(rows.map(_rosterKey)) : new Set())} />
               </th>
               <RosterTh k="sequence" align="center" {...{ sortKey, sortDir, sortBy }}>م</RosterTh>
               <RosterTh k="patient_name" {...{ sortKey, sortDir, sortBy }}>اسم المريض</RosterTh>
@@ -2583,12 +2606,16 @@ function RosterCheckView({ claimId, onRefresh }) {
               const cat = _ROSTER_CAT[r.category]
               const rp = kb.rowProps(r)
               return (
-                <tr key={r.prescription_id} {...rp} className={`hover:bg-gray-50 align-top ${rp.className}`}>
+                <tr key={_rosterKey(r)} {...rp} className={`hover:bg-gray-50 align-top ${rp.className}`}>
                   <td className="px-2 py-1.5 text-center">
-                    <input type="checkbox" checked={sel.has(r.prescription_id)} onChange={() => toggle(r.prescription_id)} />
+                    <input type="checkbox" checked={sel.has(_rosterKey(r))} onChange={() => toggle(_rosterKey(r))} />
                   </td>
                   <td className="px-2 py-1.5 text-center font-mono text-gray-500">{r.sequence || '—'}</td>
-                  <td className="px-2 py-1.5 font-medium text-gray-800">{r.patient_name}</td>
+                  <td className="px-2 py-1.5 font-medium text-gray-800">
+                    {r.patient_name}
+                    {r.kind === 'manual' && <span className="mr-1 text-[10px] rounded px-1 bg-gray-100 text-gray-600">يدوية</span>}
+                    {r.deducted && <span className="mr-1 text-[10px] rounded px-1 bg-red-100 text-red-700" title="سُجّل خصم «المريض لا يتبع الجهة» على هذه الروشتة">خصمتها الشركة</span>}
+                  </td>
                   <td className="px-2 py-1.5 text-center whitespace-nowrap">
                     <span className={`text-[10px] rounded px-1.5 py-0.5 ${cat.cls}`}>{cat.label}</span>
                     {r.confidence === 'partial' && <span className="block text-[10px] text-gray-400">مطابقة جزئية</span>}
@@ -2605,7 +2632,7 @@ function RosterCheckView({ claimId, onRefresh }) {
                         </span>
                         {r.category === 'wrong' && w.scope !== 'sister' && (
                           <button disabled={busy} title="تسجيل أن الاسم يتبع هذه الجهة (لا يغيّر المطالبة)"
-                            onClick={() => decide([r.prescription_id], 'not_member',
+                            onClick={() => decide([r], 'not_member',
                               { client_id: w.client_id, subclient_id: w.subclient_id, group_label: w.group_label })}
                             className="text-[10px] text-blue-600 hover:underline whitespace-nowrap">يتبعها</button>
                         )}
@@ -2623,7 +2650,7 @@ function RosterCheckView({ claimId, onRefresh }) {
                   <td className="px-2 py-1.5 text-left font-mono">{fmt(r.net_after)}</td>
                   <td className="px-2 py-1.5 text-xs whitespace-nowrap">
                     {r.decided && (
-                      <button disabled={busy} onClick={() => decide([r.prescription_id], 'clear')}
+                      <button disabled={busy} onClick={() => decide([r], 'clear')}
                         className="text-gray-400 hover:text-gray-700">↩ إلغاء القرار</button>
                     )}
                   </td>

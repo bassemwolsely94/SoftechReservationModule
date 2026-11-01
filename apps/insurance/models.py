@@ -700,6 +700,7 @@ class InsuranceDeduction(models.Model):
     REASON_OVER_LIMIT     = 'over_limit'
     REASON_MISSING_DOCS   = 'missing_docs'
     REASON_CLASSIFICATION = 'classification'
+    REASON_NOT_MEMBER     = 'not_member'    # patient billed to the wrong جهة/فئة — feeds the roster
     REASON_OTHER          = 'other'
 
     REASON_CHOICES = [
@@ -708,6 +709,7 @@ class InsuranceDeduction(models.Model):
         (REASON_OVER_LIMIT,     'تجاوز الحد المسموح'),
         (REASON_MISSING_DOCS,   'وثائق ناقصة'),
         (REASON_CLASSIFICATION, 'خطأ في التصنيف'),
+        (REASON_NOT_MEMBER,     'المريض لا يتبع الجهة'),
         (REASON_OTHER,          'أخرى'),
     ]
 

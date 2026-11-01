@@ -177,10 +177,29 @@ def build_roster(exclude_claim_id=None) -> _Roster:
 
 
 def _decisions():
-    """{(client_id, subclient_id|None, group_key, name_key): verdict}"""
-    from .models import InsuranceRosterDecision
-    return {(d.client_id, d.subclient_id, d.group_key, name_key(d.name)): d.verdict
-            for d in InsuranceRosterDecision.objects.all()}
+    """{(client_id, subclient_id|None, group_key, name_key): verdict}
+
+    Reviewer decisions, plus the insurer's own word: a deduction recorded as
+    «المريض لا يتبع الجهة» on a receipt says that patient is not this unit's member.
+    An explicit reviewer decision on the same unit + name wins."""
+    from .models import InsuranceDeduction, InsuranceRosterDecision
+    out = {}
+    for cid, sid, glabel, nm in (InsuranceDeduction.objects
+            .filter(reason_code=InsuranceDeduction.REASON_NOT_MEMBER, prescription__isnull=False)
+            .values_list('claim__subclient__client_id', 'claim__subclient_id',
+                         'prescription__billing_group__name', 'prescription__patient_name')):
+        if cid and nm:
+            out[(cid, sid, group_key(glabel or ''), name_key(nm))] = 'not_member'
+    out.update({(d.client_id, d.subclient_id, d.group_key, name_key(d.name)): d.verdict
+                for d in InsuranceRosterDecision.objects.all()})
+    return out
+
+
+def _deducted_rx_ids(claim):
+    from .models import InsuranceDeduction
+    return set(InsuranceDeduction.objects.filter(
+        claim=claim, reason_code=InsuranceDeduction.REASON_NOT_MEMBER,
+        prescription__isnull=False).values_list('prescription_id', flat=True))
 
 
 def unit_decision(decisions, client_id, subclient_id, gkey, key):
@@ -221,9 +240,13 @@ def check_claim_roster(claim) -> dict:
         return ' — '.join(p for p in parts if p)
 
     rows, counts = [], defaultdict(int)
-    qs = (claim.prescriptions.filter(exclusion__isnull=True)
-          .select_related('billing_group').order_by('softech_docdate', 'sequence'))
-    for rx in qs:
+    deducted = _deducted_rx_ids(claim)
+    qs = list(claim.prescriptions.filter(exclusion__isnull=True)
+              .select_related('billing_group').order_by('softech_docdate', 'sequence'))
+    manual = list(claim.manual_rx.filter(is_excluded=False).select_related('billing_group')
+                  .order_by('softech_docdate', 'sequence'))
+    for rx in qs + manual:
+        is_manual = rx in manual
         toks = name_tokens(rx.patient_name)
         if not toks:
             continue
@@ -306,7 +329,10 @@ def check_claim_roster(claim) -> dict:
                 'from_list':    'list' in occ['sources'],
             })
         rows.append({
-            'prescription_id': rx.id,
+            'prescription_id': None if is_manual else rx.id,
+            'manual_rx_id':    rx.id if is_manual else None,
+            'kind':            'manual' if is_manual else 'receipt',
+            'deducted':        (not is_manual) and rx.id in deducted,
             'patient_name':    rx.patient_name,
             'category':        cat,
             'decided':         verdict,
@@ -365,3 +391,61 @@ def record_decision(claim, rx, verdict, *, target=None, note='', actor=None):
             rx.patient_name, 'member', f'نُقل من {claim.claim_number}', claim, actor, tg)
         t.save()
     return d
+
+
+# ── Per-insurer roster (read-only page) ──────────────────────────────────────
+
+def roster_for_unit(client_id, subclient_id=None, q=''):
+    """The cumulative roster of one جهة (optionally one فئة): every name billed there
+    (non-excluded receipts of live claims), listed, or confirmed by a reviewer — with
+    where else it is billed — plus the names ruled out (decisions + deductions)."""
+    from .models import InsuranceClient, InsuranceSubClient
+    roster = build_roster()
+    decisions = _decisions()
+    clients = {c.id: c for c in InsuranceClient.objects.all()}
+    subs = dict(InsuranceSubClient.objects.values_list('id', 'name'))
+    here = clients.get(client_id)
+    if here is None:
+        return {'client': None, 'members': [], 'ruled_out': [], 'counts': {}}
+    here_co = company_key(here)
+    q_toks = name_tokens(q) if q else []
+
+    members = []
+    for key, units in roster.units.items():
+        if q_toks and not all(any(t.startswith(x) for t in roster.tokens[key]) for x in q_toks):
+            continue
+        mine = [o for o in units.values() if o['client_id'] == client_id
+                and (subclient_id is None or o['subclient_id'] in (subclient_id, None))]
+        if not mine:
+            continue
+        other_co = sorted({clients[o['client_id']].name for o in units.values()
+                           if o['client_id'] in clients and o['client_id'] != client_id
+                           and company_key(clients[o['client_id']]) != here_co})
+        for o in mine:
+            if unit_decision(decisions, o['client_id'], o['subclient_id'], o['group_key'], key) == 'not_member':
+                continue
+            sp = o['spellings']
+            members.append({
+                'name':         max(sp, key=sp.get) if sp else key,
+                'subclient':    subs.get(o['subclient_id'], '') if o['subclient_id'] else '',
+                'group_label':  o['group_label'],
+                'count':        o['count'],
+                'last':         o['last'].isoformat() if o['last'] else None,
+                'sources':      sorted(o['sources']),
+                'other_companies': other_co[:3],
+            })
+    members.sort(key=lambda m: (m['last'] or '', m['count']), reverse=True)
+
+    ruled_out = [{'name': k[3], 'subclient': subs.get(k[1], '') if k[1] else '', 'group_key': k[2]}
+                 for k, v in decisions.items()
+                 if v == 'not_member' and k[0] == client_id
+                 and (subclient_id is None or k[1] in (subclient_id, None))]
+    return {
+        'client': {'id': here.id, 'name': here.name, 'parent_id': here.parent_id},
+        'subclient': subs.get(subclient_id, '') if subclient_id else '',
+        'counts': {'members': len(members),
+                   'also_elsewhere': sum(1 for m in members if m['other_companies']),
+                   'ruled_out': len(ruled_out)},
+        'members': members[:3000],
+        'ruled_out': ruled_out,
+    }
