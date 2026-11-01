@@ -523,3 +523,10 @@ pharmacist GET /api/access/networks/
 pharmacist GET /api/access/networks/987654321/
 purchasing GET /api/access/networks/
 purchasing GET /api/access/networks/987654321/
+
+# reason: security N2 — the device registry (approve / block / retire a browser) is admin only
+#   (IsAdminRole, §7.2 owner decision) even for roles that can open settings.
+pharmacist GET /api/access/devices/
+pharmacist GET /api/access/devices/987654321/
+purchasing GET /api/access/devices/
+purchasing GET /api/access/devices/987654321/

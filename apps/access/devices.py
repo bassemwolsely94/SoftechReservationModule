@@ -275,3 +275,31 @@ def invalidate(device):
 
 def invalidate_signal(sender, instance, **kwargs):
     invalidate(instance)
+
+
+# -- Admin status changes (N2) -----------------------------------------------------------
+
+def set_status(device, status, by, note=''):
+    """Change a device's status: save (so the cache drops via post_save), audit, activity log.
+    Never use QuerySet.update here - it would skip the invalidation."""
+    from django.utils import timezone
+    from apps.audit.models import AuditLog
+    from apps.users.models import UserActivityLog
+    before = snapshot(device)
+    old_status = device.status
+    device.status = status
+    device.status_note = (note or '').strip()[:200]
+    device.updated_by = by
+    fields = ['status', 'status_note', 'updated_by']
+    if status == 'approved':
+        device.approved_by = by
+        device.approved_at = timezone.now()
+        fields += ['approved_by', 'approved_at']
+    device.save(update_fields=fields)
+    invalidate(device)
+    AuditLog.log('device_changed', user=by, obj=device,
+                 changes={'before': before, 'after': snapshot(device)}, note=device.status_note)
+    UserActivityLog.objects.create(target_user=device.owner, changed_by=by, action='device_status',
+                                   old_value=old_status, new_value=status, note=device.status_note,
+                                   device=device)
+    return device
