@@ -190,3 +190,72 @@ class ApiTests(TestCase):
         self.c.force_authenticate(self.admin)
         r = self.c.post(f'/api/purchasing/isr/pushes/{p.pk}/push/', {}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'duplicate_push'))
+
+
+class OverlapGuardTests(TestCase):
+    """P-32 §2.4: a draft that shares some items with an ISR pushed to the same destination in the last
+    DUP_PUSH_DAYS days. Off by default (SystemSetting isr_overlap_guard) until the owner confirms the rule."""
+
+    def _pushed(self, lines, days_ago=1, dest='160', kind=P.KIND_HQ_TO_BRANCH, source='100'):
+        return P.objects.create(branchcode=source, dest_branchcode=dest, kind=kind, status=P.STATUS_PUSHED,
+                                lines_snapshot=lines, isrdocnumber=26100700,
+                                pushed_at=timezone.now() - datetime.timedelta(days=days_ago))
+
+    def _approved(self, lines, dest='160'):
+        return P.objects.create(branchcode='100', dest_branchcode=dest, kind=P.KIND_HQ_TO_BRANCH,
+                                status=P.STATUS_APPROVED, lines_snapshot=lines)
+
+    def _on(self):
+        from apps.config.models import SystemSetting
+        SystemSetting.objects.update_or_create(key='isr_overlap_guard', defaults={'value': 'on'})
+
+    def test_overlap_lists_shared_items_only(self):
+        earlier = self._pushed(_lines(('A', 2), ('B', 1)))
+        rows = G.overlapping_pushed(self._approved(_lines(('A', 5), ('C', 1))))
+        self.assertEqual([(r['itemcode'], r['qty'], r['earlier_qty'], r['push_id']) for r in rows],
+                         [('A', 5, 2, earlier.pk)])
+
+    def test_other_destination_old_push_or_identical_are_not_overlaps(self):
+        self._pushed(_lines(('A', 2)), dest='150')                   # other branch
+        self._pushed(_lines(('A', 2)), days_ago=10)                  # older than the window
+        self._pushed(_lines(('B', 1)))                               # identical → duplicate guard, not this one
+        first = self._approved(_lines(('A', 2)))
+        self.assertEqual(G.overlapping_pushed(first), [])
+        first.delete()                                               # one live draft per route
+        self.assertEqual(G.overlapping_pushed(self._approved(_lines(('B', 1)))), [])
+
+    def test_off_by_default_then_refused_without_reason(self):
+        self._pushed(_lines(('A', 2), ('B', 1)))
+        p = self._approved(_lines(('A', 5), ('C', 1)))
+        G.check_push(p)                                              # switch off: passes as before
+        self._on()
+        with self.assertRaises(G.GuardError) as e:
+            G.check_push(p)
+        self.assertEqual(e.exception.code, 'overlap_push')
+        self.assertIn('A', str(e.exception))
+
+    def test_reason_lets_it_through_once_and_is_audited(self):
+        from apps.audit.models import AuditLog
+        self._on()
+        earlier = self._pushed(_lines(('A', 2)))
+        p = self._approved(_lines(('A', 5), ('C', 1)))
+        G.check_push(p, force_reason='الفرع طلب كمية إضافية من A')
+        p.refresh_from_db()
+        self.assertEqual(p.params['forced_overlap']['items'], ['A'])
+        self.assertEqual(p.params['forced_overlap']['earlier'], [earlier.pk])
+        self.assertEqual(AuditLog.objects.filter(action='isr_overlap_push_forced').count(), 1)
+
+
+class OverlapReportTests(TestCase):
+
+    def test_report_counts_pushes_that_repeated_items(self):
+        from io import StringIO
+        from django.core.management import call_command
+        now = timezone.now()
+        for days, lines in ((5, _lines(('A', 2), ('B', 1))), (3, _lines(('A', 1), ('C', 4))), (1, _lines(('D', 1)))):
+            P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                             status=P.STATUS_PUSHED, lines_snapshot=lines,
+                             pushed_at=now - datetime.timedelta(days=days))
+        out = StringIO()
+        call_command('report_isr_overlaps', days=30, stdout=out)
+        self.assertIn('pushes 3 · with overlap 1 · overlapping lines 1', out.getvalue())

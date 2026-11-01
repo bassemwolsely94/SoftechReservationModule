@@ -15,6 +15,9 @@ which was already PUSHED — approving either would have sent the same ISR again
     or cancelled first. A partial unique constraint backs this up in the database.
   • push guard — a draft whose lines are identical to an ISR pushed on the same route in
     the last DUP_PUSH_DAYS days is refused unless a reason is given (then recorded).
+  • overlap guard (P-32 §2.4) — a draft that shares SOME items with an ISR pushed to the same destination
+    (same kind) in the last DUP_PUSH_DAYS days is refused unless a reason is given (then recorded). Off until
+    the owner confirms the rule: SystemSetting `isr_overlap_guard` = on. `report_isr_overlaps` measures it.
   • leg order — the HQ → branch leg of a transfer is pushed only after its branch → HQ
     leg (the goods must be on their way to HQ before HQ sends them on).
   • cancel — any unpushed draft, with a reason, audited.
@@ -149,6 +152,40 @@ def duplicate_pushed(p):
     return None
 
 
+def overlap_guard_on():
+    from apps.config.models import SystemSetting
+    return str(SystemSetting.get('isr_overlap_guard', 'off') or 'off').strip().lower() == 'on'
+
+
+def _qty(line):
+    return int(round(float(line.get('itemqty') or 0)))
+
+
+def overlapping_pushed(p, *, since=None, pushed=None):
+    """Lines of draft `p` whose item is also in an ISR PUSHED to the same destination (same kind) in the last
+    DUP_PUSH_DAYS days. An identical ISR is the duplicate guard's case and is not listed here.
+    Returns [{itemcode, qty, earlier_qty, push_id, isrdocnumber, pushed_at}], first earlier push per item."""
+    from apps.purchasing.models import IsrPush as P
+    if pushed is None:
+        since = since or timezone.now() - timedelta(days=DUP_PUSH_DAYS)
+        pushed = (P.objects.filter(kind=p.kind, dest_branchcode=p.dest_branchcode, status=P.STATUS_PUSHED,
+                                   pushed_at__gte=since).exclude(pk=p.pk)
+                  .only('id', 'lines_snapshot', 'isrdocnumber', 'pushed_at').order_by('pushed_at'))
+    mine = {str(l.get('itemcode') or '').strip(): _qty(l) for l in (p.lines_snapshot or [])}
+    fp = fingerprint(p.lines_snapshot)
+    out, seen = [], set()
+    for o in pushed:
+        if fingerprint(o.lines_snapshot) == fp:
+            continue
+        for l in o.lines_snapshot or []:
+            code = str(l.get('itemcode') or '').strip()
+            if code in mine and code not in seen:
+                seen.add(code)
+                out.append({'itemcode': code, 'qty': mine[code], 'earlier_qty': _qty(l), 'push_id': o.pk,
+                            'isrdocnumber': o.isrdocnumber, 'pushed_at': o.pushed_at})
+    return sorted(out, key=lambda r: r['itemcode'])
+
+
 def check_push(p, *, user=None, force_reason=''):
     """Before writing a draft to SOFTECH: no identical recent ISR on the route (unless a
     reason is given), and a forwarding leg never goes before the leg that feeds it."""
@@ -172,3 +209,21 @@ def check_push(p, *, user=None, force_reason=''):
         p.params = params
         p.save(update_fields=['params'])
         _audit('isr_duplicate_push_forced', p, user=user, note=reason, extra={'duplicate_of': dup.pk})
+    if overlap_guard_on():
+        rows = overlapping_pushed(p)
+        if rows:
+            reason = (force_reason or '').strip()
+            shown = '، '.join(f"{r['itemcode']} (#{r['push_id']})" for r in rows[:10])
+            more = f' و{len(rows) - 10} صنف آخر' if len(rows) > 10 else ''
+            if len(reason) < MIN_REASON:
+                raise GuardError(f'{len(rows)} صنف في هذا الطلب رُحِّل بالفعل لنفس الفرع خلال آخر {DUP_PUSH_DAYS} أيام: '
+                                 f'{shown}{more}. لن يُرحَّل إلا بسبب مكتوب.', code='overlap_push',
+                                 other=rows[0]['push_id'])
+            earlier = sorted({r['push_id'] for r in rows})
+            params = dict(p.params or {})
+            params['forced_overlap'] = {'reason': reason, 'items': [r['itemcode'] for r in rows], 'earlier': earlier,
+                                        'by': getattr(user, 'username', None), 'at': timezone.now().isoformat()}
+            p.params = params
+            p.save(update_fields=['params'])
+            _audit('isr_overlap_push_forced', p, user=user, note=reason,
+                   extra={'earlier': earlier, 'items': len(rows)})

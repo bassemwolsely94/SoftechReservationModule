@@ -127,6 +127,13 @@ gate and guards. No new SOFTECH writer.
   pushed ISRs on the same destination in the last `DUP_PUSH_DAYS`. Overlapping lines are listed; the push is refused
   unless a reason is written (same rule and audit as the identical-lines guard). This catches a plan made before
   another push landed.
+- **Built 2026-11-01, switched OFF:** `isr_guards.overlapping_pushed` + the overlap step in `check_push`
+  (refused `overlap_push` without a reason; with a reason → `params.forced_overlap` + AuditLog
+  `isr_overlap_push_forced`). Overlap = same kind and destination, pushed in the last `DUP_PUSH_DAYS` (7), sharing
+  at least one item; an identical ISR stays with the duplicate guard. Switch: SystemSetting `isr_overlap_guard` = on.
+  `report_isr_overlaps --days 90` measures it read-only: on 2026-11-01 only 1 ISR was pushed from our side in 90 days
+  (0 overlaps), so the daily-route effect is unknown. Before switching on, the owner confirms whether a repeat of an
+  item already **dispensed** by HQ should count (IsrPush does not track dispensing).
 - **Draft expiry** (doc 30 §2.6): an unpushed general draft older than N days (default 7) is cancelled with audit by a
   daily PG-only job `isr_draft_expiry`. It never touches SOFTECH.
 - Regenerating a plan supersedes the old plan's drafts (same planner). It never duplicates them.

@@ -809,20 +809,26 @@ function IsrDetail({ push, gated, canWrite, onApprove, onPush, onCancel, approvi
           رُحِّل رغم تطابقه مع الطلب #{push.params.forced_push.duplicate_of} — السبب: {push.params.forced_push.reason}
         </div>
       )}
+      {push.params?.forced_overlap && (
+        <div className="px-3 py-2 border-b border-line text-xs text-amber-800 bg-amber-50">
+          رُحِّل رغم تكرار {push.params.forced_overlap.items.length} صنف من الطلب {push.params.forced_overlap.earlier.map(n => `#${n}`).join('، ')} — السبب: {push.params.forced_overlap.reason}
+        </div>
+      )}
       <IsrParamsSummary push={push} />
 
       {(actionError || push.error) && (
         <div className="px-3 py-2 text-xs text-rose-600 border-b border-line space-y-1.5">
           <div>{actionError?.response?.data?.detail || push.error || 'خطأ'}</div>
-          {errCode === 'duplicate_push' && push.status === 'approved' && (
-            // the guard refused an identical re-send — only a written reason lets it through
+          {(errCode === 'duplicate_push' || errCode === 'overlap_push') && push.status === 'approved' && (
+            // the guard refused an identical re-send (or, P-32, items already sent to this branch) —
+            // only a written reason lets it through
             <div className="flex flex-wrap items-center gap-2 text-content">
               <input value={forceReason} onChange={e => setForceReason(e.target.value)}
                 placeholder="سبب إعادة الإرسال عن قصد (مطلوب)"
                 className="border border-line rounded px-2 py-1 text-sm bg-surface text-content w-72" />
               <button onClick={() => onPush(forceReason)} disabled={pushing || forceReason.trim().length < 5}
                 className="px-3 py-1 rounded border border-rose-300 text-rose-700 text-sm disabled:opacity-50">
-                ترحيل رغم التطابق</button>
+                {errCode === 'overlap_push' ? 'ترحيل رغم التكرار' : 'ترحيل رغم التطابق'}</button>
             </div>
           )}
         </div>
