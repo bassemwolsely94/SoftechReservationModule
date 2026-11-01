@@ -109,6 +109,8 @@ NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
 NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
+# SOFTECH gate (N4): off | log | enforce. Per role x zone: may a SOFTECH connection open, and may it write.
+SOFTECH_GATE_ENFORCEMENT = config('SOFTECH_GATE_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
 # Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
 NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS

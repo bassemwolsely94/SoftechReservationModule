@@ -129,6 +129,7 @@ class AuditLog(models.Model):
 
         # Security N3
         ('zone_policy_changed',          'سياسة منطقة — تعديل'),
+        ('softech_gate_denied',          'SOFTECH — رفض حسب المنطقة'),
 
         # Return-window calendar (P-29)
         ('return_policy_changed',        'مرتجع — تعديل سياسة مورد'),
