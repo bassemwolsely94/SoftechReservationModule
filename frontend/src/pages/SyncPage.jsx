@@ -143,13 +143,16 @@ const LOAD_GROUPS = [['by_scope', 'حسب المهمة', 'scope'], ['by_caller',
 const n0 = v => (v || 0).toLocaleString('en-US')
 const secs = ms => (ms || 0) >= 60_000 ? `${n0(Math.round(ms / 60_000))} د` : `${n0(Math.round((ms || 0) / 1000))} ث`
 
+// roles the user screen does not offer in its picker, but whose traffic still shows here
+const EXTRA_ROLE_LABELS = { supervisor: 'مشرف', quality_manager: 'مدير الجودة' }
+
 function scopeLabel(s) {
   if (!s) return '—'
   if (s === 'web') return 'الشاشات (طلبات المستخدمين)'
   if (s.startsWith('web:')) {
     const [, zone, role] = s.split(':')
     const where = zone === 'internal' ? 'داخل الشبكة' : 'خارج الشبكة'
-    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : (ROLE_LABELS[role] || role)}`
+    return `الشاشات · ${where} · ${role === 'anon' ? 'غير مسجّل الدخول' : (ROLE_LABELS[role] || EXTRA_ROLE_LABELS[role] || role)}`
   }
   if (s.startsWith('job:')) return `مهمة مجدولة · ${s.slice(4)}`
   if (s.startsWith('cmd:')) return `أمر يدوي · ${s.slice(4)}`
