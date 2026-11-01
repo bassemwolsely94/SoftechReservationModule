@@ -146,6 +146,8 @@ gate and guards. No new SOFTECH writer.
 - **Built 2026-11-01 — draft expiry, OFF:** `isr_guards.expire_drafts` + daily 06:30 job `isr_draft_expiry` cancel
   (with audit) PROPOSED general drafts older than SystemSetting `isr_draft_expiry_days`; 0 / missing = off. Approved
   and request-tied drafts are never expired.
+- **Draft expiry switched ON 2026-11-01** by the owner: `isr_draft_expiry_days` = 7. First run would cancel the 3
+  proposed general drafts then open (#1 150 self and #2 170 self, 19 Sep; #31 100 → 150, 20 Oct).
 - **Draft expiry** (doc 30 §2.6): an unpushed general draft older than N days (default 7) is cancelled with audit by a
   daily PG-only job `isr_draft_expiry`. It never touches SOFTECH.
 - Regenerating a plan supersedes the old plan's drafts (same planner). It never duplicates them.
