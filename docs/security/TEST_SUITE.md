@@ -268,8 +268,9 @@ Batch 7 sets it), `bandit -b bandit-baseline.json`, `pip_audit_check.py`, and in
   took it from 35 to 2. Both left are react-router moderates fixed only in v7 (a major upgrade) and
   not reachable here: an open redirect through a backslash path (our `navigate()`/`<Link>` targets
   are app routes from our own server data, never a URL parameter) and SSR hydration (this is a
-  client-rendered SPA). Dev-only, not gated: vite 5 / esbuild dev-server advisories — fixed in
-  vite 6+ (major); never expose `npm run dev` beyond localhost.
+  client-rendered SPA). Dev tooling: vite 5 → 6.4.5 (+ plugin-react 4.7, esbuild 0.25) cleared the
+  9 dev-server advisories (8 vite, 1 esbuild), so the full `npm audit` (dev deps included) now shows only
+  the react-router pair. Still never expose `npm run dev` beyond localhost.
 - **OCR sidecar** (`ocr_sidecar/requirements.txt`, its own Python 3.10–3.12 venv, not in CI —
   audit by hand with `pip-audit -r ocr_sidecar/requirements.txt` under Python 3.12). Pillow floor
   raised to 13.0.0 (the only release with no open advisories; it decodes the uploaded image) and
