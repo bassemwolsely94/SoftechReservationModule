@@ -237,6 +237,14 @@ function RequireRole({ roles, children }) {
   return children
 }
 
+// A rider lives on /rider only (N3 H4): any other staff route sends the delivery role back there.
+// The server (zone policy, access='rider') is the real guard; this keeps the UI honest.
+function RiderHome({ children }) {
+  const { user } = useAuthStore()
+  if (user?.role === 'delivery') return <Navigate to="/rider" replace />
+  return children
+}
+
 export default function App() {
   const loadMe        = useAuthStore(s => s.loadMe)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -280,12 +288,12 @@ export default function App() {
             <Route path="loyalty"    element={<PortalLoyaltyPage />} />
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
-          <Route path="/rider" element={<RequireAuth><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireAuth>} />
+          <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
               Reached at /m — bookmark on a phone home screen. */}
-          <Route path="/m" element={<RequireAuth><MobileLayout title="صيدليات الرزيقي" tabs={MOBILE_TABS} /></RequireAuth>}>
+          <Route path="/m" element={<RequireAuth><RiderHome><MobileLayout title="صيدليات الرزيقي" tabs={MOBILE_TABS} /></RiderHome></RequireAuth>}>
             <Route index element={<Navigate to="/m/reservations" replace />} />
             <Route path="me"                element={<MyDashboardPage />} />
             <Route path="pos"               element={<MobilePOSOrderPage />} />
@@ -321,7 +329,7 @@ export default function App() {
 
           {/* printable training manual — own shell so it prints without the side menu */}
           <Route path="/help/manual" element={<RequireAuth><HelpManualPage /></RequireAuth>} />
-          <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
+          <Route path="/" element={<RequireAuth><RiderHome><Layout /></RiderHome></RequireAuth>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
 
             {/* ── Core ─────────────────────────────────────────────────── */}
