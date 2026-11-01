@@ -104,6 +104,9 @@ if BEHIND_HTTPS_PROXY:
 # there means external. Without nginx (dev, tests) NETWORK_UNTRUSTED_ZONE stands in.
 NETWORK_HEADER_TRUSTED = config('NETWORK_HEADER_TRUSTED', default=BEHIND_HTTPS_PROXY, cast=bool)
 NETWORK_UNTRUSTED_ZONE = config('NETWORK_UNTRUSTED_ZONE', default='internal')
+# Shared secret nginx adds as X-ElR-Proxy-Key (N3). When set, X-ElR-Network is believed only with a
+# matching key, so only our nginx can label a request internal. Empty = N1 behaviour. Never logged.
+NETWORK_PROXY_KEY = config('NETWORK_PROXY_KEY', default='')
 # off | log only in N1 — no request is refused because of its network.
 NETWORK_POLICY_ENFORCEMENT = config('NETWORK_POLICY_ENFORCEMENT', default='off' if _RUNNING_TESTS else 'log')
 # Seconds the trusted-network list is cached per process; 0 under tests.

@@ -1106,6 +1106,24 @@ Alerts: the user gets one alert per new device; each admin gets one digest per h
 («أجهزة جديدة بانتظار الاعتماد»), expect it to repeat during the first days of rollout. A refused
 blocked-device sign-in is logged as `login_refused_device` and never counts toward the account lockout.
 
+#### Batch N3 on the live server
+
+N3 turns the network label into a policy. Do the steps in order; each later task of the batch adds its own.
+
+**Step 1 - proxy key (only nginx can say "internal").**
+```bash
+KEY=$(openssl rand -hex 32)
+echo "proxy_set_header X-ElR-Proxy-Key \"$KEY\";" | sudo tee /etc/nginx/elrezeiky-proxy-key.conf >/dev/null
+sudo chmod 600 /etc/nginx/elrezeiky-proxy-key.conf
+echo "NETWORK_PROXY_KEY=$KEY" | sudo tee -a /opt/elrezeiky/app/.env >/dev/null   # never paste the key in chat or logs
+sudo cp /opt/elrezeiky/app/deploy/nginx-proxy-headers.conf /etc/nginx/elrezeiky-proxy-headers.conf
+sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl restart elrezeiky-web
+```
+Reload nginx **before** restarting the web service: with a key in `.env` that nginx does not send,
+every request counts as external. `manage.py check` warns (`access.W002`) while the header is trusted
+without a key, and refuses to start in `enforce` mode without one (`access.E003`).
+
 #### Company network through the tunnel (split DNS)
 
 Goal: a company device resolves `elrezeikyapp.dawalvry.com` to `10.50.50.77` and reaches the VPS
