@@ -1,6 +1,7 @@
 /**
  * Button emphasis outside a tour — both read the same «اعرض لي» text the tours use
- * (the screen's `tour` + its module's journey steps on this screen); no text of their own.
+ * (the screen's `tour` and `hints`, its module's journey steps on this screen, and the
+ * shell's buttons from `shell_hints`); no text of their own.
  *
  *   HintsLayer — «💡 تلميحات الأزرار» (Alt+F1 or the help panel): every explained
  *                element gets a dashed outline (amber when the step has a ⚠), and hovering
@@ -32,10 +33,12 @@ function useScreenHelp(key, enabled) {
   })
 }
 
-/** target → step: the screen's own tour wins over its hints, hints over a journey step. */
+/** target → step: the screen's own tour wins over its hints, hints over a journey step,
+ *  and those over the shell's buttons (bell, menu, help panel — on every screen). */
 export function hintSteps(data) {
   const map = new Map()
   if (!data) return map
+  for (const st of data.shell_hints || []) map.set(st.target, st)
   for (const j of data.module?.journeys || []) {
     for (const st of j.steps || []) if (st.screen === data.key && !map.has(st.target)) map.set(st.target, st)
   }
@@ -56,7 +59,7 @@ export function HintsLayer() {
   const hints = useHelpStore((s) => s.hints)
   const tour = useHelpStore((s) => s.tour)
   const { screen } = useCurrentHelp()
-  const on = hints && !tour && !!screen?.has_tour
+  const on = hints && !tour && !!screen?.key
   const { data } = useScreenHelp(screen?.key, on)
   const steps = useMemo(() => hintSteps(data), [data])
   if (!hints || tour) return null
