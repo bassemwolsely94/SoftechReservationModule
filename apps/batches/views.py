@@ -16,6 +16,21 @@ from core.permissions import matrix_allows, matrix_permission
 BATCH_READ     = matrix_permission('catalog', post=('view',))
 BATCH_DISPOSAL = matrix_permission('catalog', post=('edit', 'approve'))
 BATCH_MARKDOWN = matrix_permission('approvals', post=('create', 'approve'))
+DISPOSAL_MANAGERS = frozenset({'admin', 'quality_manager', 'supervisor'})
+
+
+class CanChangeDisposalStatus(BasePermission):
+    """Disposal status changes (owner 2026-11-01): admin / quality manager / supervisor approve,
+    finish and reopen — they hold catalog view only, so BATCH_DISPOSAL shut them out; the drafters
+    (catalog edit / approve) may still reach the view to cancel their own draft. The view keeps
+    the per-status rule."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        p = getattr(request.user, 'staff_profile', None)
+        if p is not None and p.is_active and p.role in DISPOSAL_MANAGERS:
+            return True
+        return matrix_allows(p, 'catalog', 'edit', 'approve')
 
 
 class CanSpawnExpiryCount(BasePermission):
@@ -912,7 +927,7 @@ def expiry_disposal(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, BATCH_DISPOSAL])   # was BATCH_READ: a viewer could cancel
+@permission_classes([IsAuthenticated, CanChangeDisposalStatus])
 def expiry_disposal_status(request, pk):
     """Transition a disposal record: approve / done / cancel / back to draft. No SOFTECH write.
     approve, done and draft (reopen) need admin / quality_manager / supervisor; the creator may
@@ -931,7 +946,7 @@ def expiry_disposal_status(request, pk):
 
     profile = getattr(request.user, 'staff_profile', None)
     role = getattr(profile, 'role', None)
-    manager = role in {'admin', 'quality_manager', 'supervisor'}
+    manager = role in DISPOSAL_MANAGERS
     if rec.status == 'done':
         return Response({'detail': 'تم تنفيذ القرار — لا يمكن تغيير حالته.'}, status=status.HTTP_400_BAD_REQUEST)
     if new_status == rec.status:
