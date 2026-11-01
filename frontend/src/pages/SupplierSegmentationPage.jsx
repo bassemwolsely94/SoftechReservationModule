@@ -175,7 +175,7 @@ export default function SupplierSegmentationPage() {
           </h2>
           <div className="flex items-center gap-2">
             <input data-tour="purchasing-segments-search" value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="بحث بالاسم أو الكود..." className="input-field text-sm w-48" />
-            {activeCategory && <button onClick={() => setActiveCategory('')} className="text-xs text-gray-400 hover:text-gray-600 underline">إلغاء الفلتر</button>}
+            {activeCategory && <button data-tour="purchasing-segments-filter-clear" onClick={() => setActiveCategory('')} className="text-xs text-gray-400 hover:text-gray-600 underline">إلغاء الفلتر</button>}
           </div>
         </div>
 

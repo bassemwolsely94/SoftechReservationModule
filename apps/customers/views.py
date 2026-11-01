@@ -17,6 +17,9 @@ from .serializers import (
     CustomerNoteSerializer, PurchaseHistorySerializer,
 )
 
+# who may delete someone else's customer note (the author always may delete their own)
+NOTE_DELETE_ROLES = ('admin', 'supervisor', 'quality_manager')
+
 
 def _profile(request):
     return getattr(request.user, 'staff_profile', None)
@@ -297,6 +300,17 @@ class CustomerViewSet(viewsets.ModelViewSet):
             note = CustomerNote.objects.get(pk=note_id, customer=customer)
         except CustomerNote.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+        # The author deletes their own note; a manager deletes anyone's. Kept in the audit log.
+        profile = getattr(request.user, 'staff_profile', None)
+        if profile is None or (note.created_by_id != profile.pk
+                               and profile.role not in NOTE_DELETE_ROLES):
+            return Response({'detail': 'يحذف الملاحظة كاتبها أو المدير فقط.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        from apps.audit.models import AuditLog
+        AuditLog.log('customer_note_deleted', user=profile, obj=customer, request=request,
+                     old_data={'note_id': note.pk, 'note': note.note,
+                               'created_by': getattr(note.created_by, 'full_name', None),
+                               'created_at': note.created_at.isoformat()})
         note.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

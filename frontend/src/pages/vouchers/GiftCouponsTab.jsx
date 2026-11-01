@@ -118,7 +118,7 @@ function SerialSearch() {
           onKeyDown={e => e.key === 'Enter' && search()} dir="ltr"
           placeholder="27301-ABC123 أو 27301"
           className="flex-1 border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-brand-500" />
-        <Btn variant="primary" onClick={search} disabled={loading}>{loading ? '...' : 'بحث'}</Btn>
+        <Btn data-tour="vouchers-main-coupon-serial-search" variant="primary" onClick={search} disabled={loading}>{loading ? '...' : 'بحث'}</Btn>
         {res && <Btn onClick={() => { setRes(null); setQ('') }}>مسح</Btn>}
       </div>
       <ErrorLine msg={error} />
@@ -185,7 +185,7 @@ function GuardTest() {
         <input value={f.serial} onChange={set('serial')} dir="ltr" placeholder="السريال 27301-ABC123" className={`${input} flex-1 min-w-[12rem]`} />
         <input value={f.branch} onChange={set('branch')} dir="ltr" placeholder="كود الفرع 130" className={`${input} w-32`} />
         <input value={f.pic} onChange={set('pic')} dir="ltr" placeholder="كود العميل PIC" className={`${input} w-40`} />
-        <Btn variant="primary" onClick={run} disabled={loading}>{loading ? '...' : 'فحص'}</Btn>
+        <Btn data-tour="vouchers-main-coupon-guard-test" variant="primary" onClick={run} disabled={loading}>{loading ? '...' : 'فحص'}</Btn>
       </div>
       <div className="text-xs text-gray-400 mt-1">
         اترك الفرع فارغًا لتجاهل شرط «موجود في مخزون الفرع»، واترك العميل فارغًا لترى لمن صُرف الكوبون.
@@ -408,7 +408,7 @@ function BatchRow({ b, canManage, writerEnabled, onChanged }) {
       {canManage && (
         <div className="flex flex-wrap gap-2 mt-2">
           <Btn data-tour="vouchers-main-coupon-print" onClick={() => run('print', () => download(b.id, 'print'))} disabled={!!busy}>🖨️ ملف الطباعة</Btn>
-          <Btn onClick={() => run('dl', () => download(b.id, 'dataload'))} disabled={!!busy}>ملف DataLoad</Btn>
+          <Btn data-tour="vouchers-main-coupon-dataload" onClick={() => run('dl', () => download(b.id, 'dataload'))} disabled={!!busy}>ملف DataLoad</Btn>
           {pending && (
             <Btn data-tour="vouchers-main-coupon-probe" onClick={() => run('probe', async () => setProbe((await couponsApi.probe(b.id)).data))} disabled={!!busy}>
               {busy === 'probe' ? 'جارٍ التجربة…' : 'تجربة بدون حفظ'}

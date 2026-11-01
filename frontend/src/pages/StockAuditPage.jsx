@@ -596,10 +596,10 @@ function RuleCard({ rule, branches, canEdit }) {
             </div>
             {canEdit && (
               <div className="mt-2 flex gap-2">
-                <button onClick={() => saveOv.mutate()} disabled={saveOv.isPending}
+                <button data-tour="stock-audit-main-branch-save" onClick={() => saveOv.mutate()} disabled={saveOv.isPending}
                   className="px-3 py-1.5 rounded-md border border-primary text-primary text-xs font-bold disabled:opacity-50">حفظ حدود الفرع</button>
                 {existing && (
-                  <button onClick={() => stockAuditApi.clearOverride(rule.code, branch).then(() => { pickBranch(''); saved() })}
+                  <button data-tour="stock-audit-main-branch-reset" onClick={() => stockAuditApi.clearOverride(rule.code, branch).then(() => { pickBranch(''); saved() })}
                     className="px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 text-xs">رجوع للحدود العامة</button>
                 )}
               </div>
@@ -646,7 +646,7 @@ function AccessPanel() {
           <div key={c.id} className="flex items-center gap-2 text-sm">
             <span>{c.name}</span><span className="text-xs text-gray-500">{c.branch}</span>
             {c.granted ? <span className="ms-auto text-xs text-emerald-700">✔ لديه الصلاحية</span>
-              : <button onClick={() => grant.mutate(c.id)} className="ms-auto px-2 py-0.5 rounded-md bg-primary text-white text-xs font-bold">منح الصلاحية</button>}
+              : <button data-tour="stock-audit-main-access-grant" onClick={() => grant.mutate(c.id)} className="ms-auto px-2 py-0.5 rounded-md bg-primary text-white text-xs font-bold">منح الصلاحية</button>}
           </div>
         ))}
       </div>

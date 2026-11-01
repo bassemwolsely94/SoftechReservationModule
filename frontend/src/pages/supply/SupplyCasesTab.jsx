@@ -77,18 +77,18 @@ export default function SupplyCasesTab() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {BUCKETS.map(([k, l, sk]) => (
-          <button key={k || 'all'} type="button" onClick={() => { setBucket(k); setPage(1); setSelected(null) }}
+          <button data-tour="purchasing-supply-cases-bucket" key={k || 'all'} type="button" onClick={() => { setBucket(k); setPage(1); setSelected(null) }}
             className={`text-xs px-2.5 py-1 rounded-full border transition ${bucket === k
               ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-content/70 hover:border-primary/50'}`}>
             {l} <span className="opacity-70">{s[sk] ?? 0}</span>
           </button>
         ))}
-        <button type="button" onClick={() => sweepM.mutate()} disabled={sweepM.isPending}
+        <button data-tour="purchasing-supply-cases-sweep" type="button" onClick={() => sweepM.mutate()} disabled={sweepM.isPending}
           className={`${btnGhost} text-xs mr-auto`}
           title="يحدّث إشارات الطلب ثم يقيّم كل الحالات الآن (يعمل تلقائياً يومياً 08:00)">
           {sweepM.isPending ? 'جارٍ التقييم…' : '↻ تقييم الآن'}
         </button>
-        <button type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
+        <button data-tour="purchasing-supply-cases-export" type="button" onClick={() => xlsM.mutate()} disabled={xlsM.isPending}
           className={`${btnGhost} text-xs`}
           title="كل حالات الفئة المختارة (كل الصفحات) مع «بيانات الصنف»">
           {xlsM.isPending ? '…' : '⬇ Excel'}
@@ -264,10 +264,10 @@ function CaseDetail({ id, onChanged }) {
                 اعتماد التحويل الداخلي ({q(c.internal_cover)})
               </button>)}
             {Number(c.residual_gap) > 0 && (
-              <button type="button" className={btnGhost} onClick={() => setOrdering(true)}>
+              <button data-tour="purchasing-supply-cases-order" type="button" className={btnGhost} onClick={() => setOrdering(true)}>
                 طلب شراء ({q(Math.ceil(Number(c.residual_gap) - 1e-9))})
               </button>)}
-            <button type="button" className={btnGhost} onClick={() => evaluateM.mutate()} disabled={evaluateM.isPending}>
+            <button data-tour="purchasing-supply-cases-evaluate" type="button" className={btnGhost} onClick={() => evaluateM.mutate()} disabled={evaluateM.isPending}>
               {evaluateM.isPending ? '…' : '↻ إعادة التقييم'}
             </button>
           </div>
@@ -288,7 +288,7 @@ function CaseDetail({ id, onChanged }) {
               {recQ.data && !recQ.data.allocation?.transfers?.length && (
                 <div className="text-xs text-amber-700">لا يوجد فائض قابل للتحويل الآن.</div>)}
               <div className="flex gap-2">
-                <button type="button" className={btnPrimary} onClick={() => approveM.mutate()}
+                <button data-tour="purchasing-supply-cases-transfer-confirm" type="button" className={btnPrimary} onClick={() => approveM.mutate()}
                   disabled={approveM.isPending || !recQ.data?.allocation?.transfers?.length}>
                   {approveM.isPending ? 'جارٍ الإنشاء…' : 'تأكيد وإنشاء المسودة'}
                 </button>
@@ -308,7 +308,7 @@ function CaseDetail({ id, onChanged }) {
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-content/50">نقل الحالة:</span>
               {c.allowed_transitions.map(s => (
-                <button key={s} type="button"
+                <button data-tour="purchasing-supply-cases-status" key={s} type="button"
                   onClick={() => (s === 'cancelled' ? setPendingStatus(s) : transitionM.mutate({ status: s, reason: '' }))}
                   className={`text-[11px] px-2 py-0.5 rounded border ${s === 'cancelled'
                     ? 'border-rose-200 text-rose-700' : 'border-line text-content/80 hover:border-primary'}`}>
@@ -321,7 +321,7 @@ function CaseDetail({ id, onChanged }) {
             <div className="flex gap-2">
               <input value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب الإلغاء (مطلوب)"
                 className={`${inputCls} text-xs flex-1`} />
-              <button type="button" className={btnPrimary} disabled={!reason.trim() || transitionM.isPending}
+              <button data-tour="purchasing-supply-cases-cancel-confirm" type="button" className={btnPrimary} disabled={!reason.trim() || transitionM.isPending}
                 onClick={() => transitionM.mutate({ status: 'cancelled', reason })}>تأكيد</button>
             </div>
           )}

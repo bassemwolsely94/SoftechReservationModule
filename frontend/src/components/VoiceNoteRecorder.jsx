@@ -157,7 +157,7 @@ export default function VoiceNoteRecorder({
         <div className="flex items-center gap-2">
           {/* Record button */}
           {isRecorderAvailable && (
-            <button
+            <button data-tour="voice-note-record"
               type="button"
               onClick={startRecording}
               disabled={disabled}
@@ -202,7 +202,7 @@ export default function VoiceNoteRecorder({
           <span className="text-xs text-red-600">جارٍ التسجيل…</span>
           <div className="flex-1" />
           <span className="text-xs text-red-400">الحد الأقصى {formatTime(maxSeconds)}</span>
-          <button
+          <button data-tour="voice-note-stop"
             type="button"
             onClick={stopRecording}
             className="bg-red-600 text-white text-xs px-3 py-1 rounded-lg hover:bg-red-700"
@@ -218,7 +218,7 @@ export default function VoiceNoteRecorder({
             <span className="text-xs font-medium text-green-800">
               {phase === 'upload_ready' ? '🎵 ملف صوتي جاهز' : `🎙️ مدة التسجيل: ${formatTime(elapsed)}`}
             </span>
-            <button
+            <button data-tour="voice-note-discard"
               type="button"
               onClick={discardRecording}
               className="text-xs text-red-500 hover:text-red-700"

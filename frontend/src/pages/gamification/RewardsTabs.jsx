@@ -148,7 +148,7 @@ export function RewardsTab({ t, lang }) {
       </p>
       <Flash msg={msg} />
       {cats.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div data-tour="gamification-main-reward-category" className="flex flex-wrap gap-1.5">
           {[['', 'الكل', 'All'], ...cats].map(([k, ar, en]) => (
             <button key={k} onClick={() => setCat(k)}
                     className={`text-xs font-bold rounded-full px-3 py-1 border ${cat === k ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-600 border-gray-200'}`}>
@@ -230,7 +230,7 @@ function RedemptionRow({ x, t, lang, canEdit, onFulfil, onCancel, busy }) {
                  placeholder={mode === 'fulfil'
                    ? t('تفاصيل التسليم (التاريخ، كود القسيمة…)', 'Delivery details (date, voucher code…)')
                    : t('سبب الإلغاء (إلزامي) — ستعود النقاط', 'Reason (required) — points are returned')} />
-          <button className="btn-primary text-xs" disabled={busy || (mode === 'cancel' && text.trim().length < 5)}
+          <button data-tour="gamification-main-redemption-confirm" className="btn-primary text-xs" disabled={busy || (mode === 'cancel' && text.trim().length < 5)}
                   onClick={() => (mode === 'fulfil' ? onFulfil : onCancel)(x.id, text, () => { setMode(null); setText('') })}>
             {t('تأكيد', 'Confirm')}
           </button>
@@ -322,7 +322,7 @@ function RewardForm({ initial, t, onSave, onCancel, busy }) {
       <label className="text-xs flex items-center gap-1.5"><input type="checkbox" checked={d.requires_approval} onChange={set('requires_approval')} />{t('يحتاج موافقة', 'Needs approval')}</label>
       <label className="text-xs flex items-center gap-1.5"><input type="checkbox" checked={d.is_active} onChange={set('is_active')} />{t('متاحة للموظفين', 'Visible to staff')}</label>
       <div className="col-span-2 sm:col-span-4 flex gap-2">
-        <button className="btn-primary text-xs" disabled={busy || !d.name_ar || !d.name_en || !d.cost} onClick={() => onSave(payload())}>{t('حفظ', 'Save')}</button>
+        <button data-tour="gamification-main-reward-save" className="btn-primary text-xs" disabled={busy || !d.name_ar || !d.name_en || !d.cost} onClick={() => onSave(payload())}>{t('حفظ', 'Save')}</button>
         <button className="btn-secondary text-xs" onClick={onCancel}>{t('تراجع', 'Back')}</button>
       </div>
     </div>
@@ -377,7 +377,7 @@ export function RewardCatalogEditor({ t, lang }) {
                       <input type="checkbox" checked={r.is_active} disabled={toggle.isPending} onChange={() => toggle.mutate(r)} />
                       {t('متاحة', 'On')}
                     </label>
-                    <button className="btn-secondary text-xs" onClick={() => setEditing(r.id)}>{t('تعديل', 'Edit')}</button>
+                    <button data-tour="gamification-main-reward-edit" className="btn-secondary text-xs" onClick={() => setEditing(r.id)}>{t('تعديل', 'Edit')}</button>
                   </span>
                 </div>
               )}

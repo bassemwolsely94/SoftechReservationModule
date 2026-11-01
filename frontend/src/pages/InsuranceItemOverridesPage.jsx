@@ -188,7 +188,7 @@ export default function InsuranceItemOverridesPage() {
                     <td className="px-3 py-2">
                       <div data-tour="insurance-item-overrides-actions" className="flex items-center gap-1 justify-end">
                         <Btn variant="secondary" onClick={() => toggleAffected(o)} data-tour="insurance-item-overrides-affected">المطالبات المتأثرة</Btn>
-                        <Btn variant="secondary" onClick={() => openEdit(o)}>تعديل</Btn>
+                        <Btn data-tour="insurance-item-overrides-edit" variant="secondary" onClick={() => openEdit(o)}>تعديل</Btn>
                         <Btn variant="danger" onClick={() => remove(o)} data-tour="insurance-item-overrides-delete">حذف</Btn>
                       </div>
                     </td>

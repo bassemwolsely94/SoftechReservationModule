@@ -464,7 +464,7 @@ export default function PrintReceiptModal({ type, docId, onClose }) {
           </h2>
           <div className="flex items-center gap-2">
             {data && !loading && (
-              <button
+              <button data-tour="print-receipt-print"
                 onClick={handlePrint}
                 className="flex items-center gap-1.5 bg-gray-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-gray-900 transition-colors"
               >

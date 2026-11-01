@@ -846,7 +846,7 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
         />
 
         {/* Advanced filters toggle */}
-        <button
+        <button data-tour="purchasing-engine-transfer-filters"
           onClick={() => setShowAdvanced(v => !v)}
           className={`text-xs px-2 py-1.5 rounded-lg border transition-colors ${
             showAdvanced
@@ -970,7 +970,7 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
                           >
                             ✓ موافق
                           </button>
-                          <button
+                          <button data-tour="purchasing-engine-transfer-reject"
                             onClick={() => handleReview(rec.id, 'rejected')}
                             disabled={reviewMutation.isLoading}
                             className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
@@ -980,7 +980,7 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
                         </div>
                       )}
                       {rec.status === 'approved' && (
-                        <button
+                        <button data-tour="purchasing-engine-transfer-executed"
                           onClick={() => handleReview(rec.id, 'executed')}
                           disabled={reviewMutation.isLoading}
                           className="text-xs px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
@@ -1272,7 +1272,7 @@ function AdvancedFiltersBar({ opts = {}, filters, onChange }) {
         <MultiSelect label="صلاحية العملاء" options={opts.trans_options} value={filters.customer_trans}
           onChange={v => set('customer_trans', v)} />
         {hasActive && (
-          <button onClick={() => onChange({ ...EMPTY_ITEM_FILTERS })}
+          <button data-tour="purchasing-engine-filters-clear" onClick={() => onChange({ ...EMPTY_ITEM_FILTERS })}
             className="text-xs text-red-500 hover:text-red-700 mr-auto whitespace-nowrap">
             ✕ مسح كل الفلاتر ({countActiveFilters(filters)})
           </button>
@@ -2093,7 +2093,7 @@ export default function PurchasingDashboard() {
                 </div>
 
                 {/* Reset all to defaults */}
-                <button
+                <button data-tour="purchasing-engine-settings-safety-reset"
                   type="button"
                   onClick={() => {
                     handleParamChange('ss_multiplier',     '1.0')
@@ -2217,7 +2217,7 @@ export default function PurchasingDashboard() {
                   </div>
                 </div>
 
-                <button
+                <button data-tour="purchasing-engine-settings-coverage-reset"
                   type="button"
                   onClick={() => {
                     handleParamChange('coverage_months_a', '1.0')
@@ -2260,7 +2260,7 @@ export default function PurchasingDashboard() {
             {/* Modal footer — sticky */}
             <div className="flex gap-2 px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl shrink-0">
               {/* Save as default (writes to DB) */}
-              <button
+              <button data-tour="purchasing-engine-settings-save"
                 onClick={handleSaveParams}
                 disabled={paramsSaving || !params}
                 className="flex-1 text-xs px-3 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800
@@ -2269,7 +2269,7 @@ export default function PurchasingDashboard() {
                 {paramsSaving ? '⏳ حفظ...' : '💾 حفظ كافتراضي'}
               </button>
               {/* Run now with these params as one-time overrides */}
-              <button
+              <button data-tour="purchasing-engine-settings-run"
                 onClick={handleRunWithParams}
                 disabled={triggerMutation.isLoading || !params || !weightsOk}
                 className="flex-1 text-xs px-3 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700
@@ -2364,7 +2364,7 @@ export default function PurchasingDashboard() {
                   </div>
 
                   <div className="flex gap-2 mb-2">
-                    <button
+                    <button data-tour="purchasing-engine-export-excel"
                       onClick={() => handleExport('xlsx')}
                       className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-emerald-600 text-white
                                  hover:bg-emerald-700 font-semibold flex items-center justify-center gap-1"
@@ -2374,7 +2374,7 @@ export default function PurchasingDashboard() {
                         <span className="text-[10px] bg-white/20 rounded px-1">{pivotCoverage}m</span>
                       )}
                     </button>
-                    <button
+                    <button data-tour="purchasing-engine-export-csv"
                       onClick={() => handleExport('csv')}
                       className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-gray-100 text-gray-700
                                  hover:bg-gray-200 font-semibold"
@@ -2409,7 +2409,7 @@ export default function PurchasingDashboard() {
                         className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:border-fuchsia-400" />
                       <span className="text-[10px] text-gray-400">ج.م</span>
                     </div>
-                    <button
+                    <button data-tour="purchasing-engine-advanced-export"
                       onClick={handleAdvancedExport}
                       className="w-full text-xs px-2 py-1.5 rounded-lg bg-fuchsia-600 text-white
                                  hover:bg-fuchsia-700 font-semibold flex items-center justify-center gap-1.5"
@@ -2419,7 +2419,7 @@ export default function PurchasingDashboard() {
                     </button>
                     <p className="text-[10px] text-gray-400 mt-1">حدّد ميزانية لترتيب المشتريات حسب العائد وتمييز الممول/المؤجل. على كل الفروع قد يستغرق دقيقة — اختر فرعاً للأسرع.</p>
 
-                    <button
+                    <button data-tour="purchasing-engine-advanced-pivot"
                       onClick={handleAdvancedPivotExport}
                       className="w-full mt-2 text-xs px-2 py-1.5 rounded-lg bg-fuchsia-100 text-fuchsia-800
                                  hover:bg-fuchsia-200 font-semibold flex items-center justify-center gap-1.5 border border-fuchsia-300"
@@ -2483,7 +2483,7 @@ export default function PurchasingDashboard() {
                 )}
 
                 {/* ── Items catalog sync ── new items + price/itemtrans/امر التوريد updates */}
-                <button
+                <button data-tour="purchasing-engine-items-sync"
                   onClick={() => {
                     if (itemsSyncMutation.isLoading) return
                     if (!window.confirm(

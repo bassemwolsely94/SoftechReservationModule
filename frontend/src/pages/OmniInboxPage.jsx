@@ -318,13 +318,13 @@ function AIAssistBar({ conv, onUseReply }) {
               <div className="space-y-1">
                 <p className="text-[11px] text-gray-400">ردود مقترحة (اضغط للاستخدام):</p>
                 {(r.suggested_replies || []).map((s, i) => (
-                  <button key={i} onClick={() => onUseReply(s)}
+                  <button key={i} onClick={() => onUseReply(s)} data-tour="omni-inbox-ai-reply"
                           className="block w-full text-right text-xs bg-white hover:bg-purple-100 border border-purple-100 rounded px-2 py-1.5 text-gray-700 transition-colors">
                     {s}
                   </button>
                 ))}
               </div>
-              <button onClick={run} className="text-[11px] text-purple-500 hover:underline">
+              <button onClick={run} data-tour="omni-inbox-ai-rerun" className="text-[11px] text-purple-500 hover:underline">
                 ↻ إعادة التحليل
               </button>
             </>

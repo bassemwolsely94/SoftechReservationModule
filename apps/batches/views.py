@@ -914,8 +914,10 @@ def expiry_disposal(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, BATCH_DISPOSAL])   # was BATCH_READ: a viewer could cancel
 def expiry_disposal_status(request, pk):
-    """Transition a disposal record: approve / done / cancel. approve+done are
-    gated to admin / quality_manager / supervisor. No SOFTECH write."""
+    """Transition a disposal record: approve / done / cancel / back to draft. No SOFTECH write.
+    approve, done and draft (reopen) need admin / quality_manager / supervisor; the creator may
+    cancel their own draft, a manager any record not yet done. A done record is final.
+    Every change is in the audit log."""
     from django.utils import timezone
     from .models import ExpiryDisposalRecord
     try:
@@ -929,12 +931,22 @@ def expiry_disposal_status(request, pk):
 
     profile = getattr(request.user, 'staff_profile', None)
     role = getattr(profile, 'role', None)
-    if new_status in {'approved', 'done'} and role not in {'admin', 'quality_manager', 'supervisor'}:
+    manager = role in {'admin', 'quality_manager', 'supervisor'}
+    if rec.status == 'done':
+        return Response({'detail': 'تم تنفيذ القرار — لا يمكن تغيير حالته.'}, status=status.HTTP_400_BAD_REQUEST)
+    if new_status == rec.status:
+        return Response({'detail': 'الحالة لم تتغير.'}, status=status.HTTP_400_BAD_REQUEST)
+    if new_status in {'approved', 'done', 'draft'} and not manager:
         return Response({'detail': 'يتطلب اعتماد الإتلاف/المرتجع صلاحية مدير/جودة.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    if new_status == 'cancelled' and not manager and not (
+            rec.status == 'draft' and profile is not None and rec.created_by_id == profile.pk):
+        return Response({'detail': 'يلغي القرار من سجّله وهو مسودة، أو مدير/جودة.'},
                         status=status.HTTP_403_FORBIDDEN)
     if new_status == 'done' and rec.status != 'approved':
         return Response({'detail': 'يجب اعتماد القرار قبل تنفيذه.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    old_status = rec.status
     rec.status = new_status
     if request.data.get('notes'):
         rec.reason = (rec.reason + f"\n[{new_status}] " + str(request.data['notes'])).strip()
@@ -942,6 +954,12 @@ def expiry_disposal_status(request, pk):
         rec.decided_by = profile
         rec.decided_at = timezone.now()
     rec.save(update_fields=['status', 'reason', 'decided_by', 'decided_at'])
+    from apps.audit.models import AuditLog
+    AuditLog.log('disposal_status_changed', user=profile, obj=rec, request=request,
+                 changes={'status': [old_status, new_status]},
+                 extra={'item_code': rec.item_code, 'branch_code': rec.branch_code, 'qty': float(rec.qty),
+                        'value': float(rec.value or 0), 'decision': rec.decision},
+                 note=str(request.data.get('notes') or ''))
     return Response(_disposal_dict(rec))
 
 

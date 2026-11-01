@@ -94,7 +94,7 @@ export default function DeliveryBackfillModal({ order, onClose, onDone }) {
         {save.isError && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-3">{save.error?.response?.data?.detail || 'تعذّر الحفظ'}</div>}
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={() => save.mutate()} disabled={save.isPending || (!confirmPickup && !confirmDelivery && !pin)}
+          <button onClick={() => save.mutate()} data-tour="delivery-dashboard-backfill-save" disabled={save.isPending || (!confirmPickup && !confirmDelivery && !pin)}
             className="btn-primary text-sm px-4 disabled:opacity-50">{save.isPending ? 'جارٍ…' : 'حفظ'}</button>
         </div>
       </div>

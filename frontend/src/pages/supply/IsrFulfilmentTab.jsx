@@ -141,7 +141,7 @@ export default function IsrFulfilmentTab() {
         </button>
         {plan && (
           <>
-            <button type="button" disabled={busy} onClick={() => planM.mutate({ refresh: true })}
+            <button data-tour="purchasing-supply-isrfill-refresh" type="button" disabled={busy} onClick={() => planM.mutate({ refresh: true })}
               className={btnGhost} title="إعادة قراءة الأرصدة الحالية من SOFTECH">
               تحديث من SOFTECH
             </button>
@@ -453,7 +453,7 @@ function IsrSection({ r, returns, canWrite, isrText, settings, setPlan, fallback
         <span className="text-xs text-content/60">{r.date} · قيمة الطلب {money(Math.round(r.value))} ج · المستخدم {userLabel(r.user, r.user_name)}</span>
         <div className="flex gap-1 ms-auto flex-wrap">
           {FILTERS.map(([k, l]) => (
-            <button key={k} onClick={() => setFilter(k)}
+            <button data-tour="purchasing-supply-isrfill-filter" key={k} onClick={() => setFilter(k)}
               className={`text-xs px-2 py-1 rounded border ${filter === k
                 ? 'border-primary text-primary bg-primary/5' : 'border-line text-content/70'}`}>
               {l} ({counts[k]})

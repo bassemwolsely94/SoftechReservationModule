@@ -441,7 +441,7 @@ function ResetPasswordModal({ user, onClose }) {
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm">إلغاء</button>
-            <button
+            <button data-tour="admin-users-reset-confirm"
               type="submit"
               disabled={mutation.isPending}
               className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50"

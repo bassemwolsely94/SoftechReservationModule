@@ -166,7 +166,6 @@ export default function FinanceSchemaPage() {
           {/* Row header */}
           <div data-tour="finance-schema-row"
             className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
-            data-tour="finance-schema-row"
             onClick={() => setExpanded(expanded === t.id ? null : t.id)}
           >
             <span className="text-gray-400">{expanded === t.id ? '▾' : '▸'}</span>

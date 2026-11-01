@@ -186,7 +186,7 @@ function CreateProgramModal({ onClose, onCreated }) {
         </div>
         <div className="flex justify-end gap-3 mt-5">
           <button className="btn-secondary" onClick={onClose}>إلغاء</button>
-          <button className="btn-primary" onClick={save} disabled={saving}>
+          <button data-tour="incentives-programs-create" className="btn-primary" onClick={save} disabled={saving}>
             {saving ? 'جارٍ الحفظ...' : 'إنشاء البرنامج'}
           </button>
         </div>
@@ -337,7 +337,7 @@ function CloneProgramModal({ source, onClose, onCloned }) {
         </div>
         <div className="flex justify-end gap-3 mt-5">
           <button className="btn-secondary" onClick={onClose}>إلغاء</button>
-          <button className="btn-primary" onClick={save} disabled={saving}>
+          <button data-tour="incentives-programs-clone-save" className="btn-primary" onClick={save} disabled={saving}>
             {saving ? 'جارٍ النسخ...' : 'نسخ البرنامج'}
           </button>
         </div>
@@ -519,12 +519,12 @@ function RuleItemsManager({ rule, onItemsChanged }) {
         </span>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {items.length > 0 && (
-            <button
+            <button data-tour="incentives-programs-items-delete-all"
               className="text-xs text-red-500 hover:text-red-700 px-2 py-0.5 border border-red-200 rounded"
               onClick={clearAll} disabled={busy}
             >حذف الكل</button>
           )}
-          <button
+          <button data-tour="incentives-programs-item-add"
             className="text-xs text-brand-600 hover:text-brand-800 px-2 py-0.5 border border-brand-200 rounded"
             onClick={() => setAdding(a => !a)}
           >{adding ? 'إلغاء' : '+ إضافة صنف'}</button>
@@ -566,7 +566,7 @@ function RuleItemsManager({ rule, onItemsChanged }) {
             </div>
           </div>
           <div className="flex justify-end">
-            <button
+            <button data-tour="incentives-programs-item-add-confirm"
               className="btn-primary text-xs py-1 px-3"
               disabled={!manualCode.trim() || busy}
               onClick={() => addItem(manualCode.trim(), manualName.trim(), manualOv)}
@@ -584,7 +584,7 @@ function RuleItemsManager({ rule, onItemsChanged }) {
           <option value="replace">استبدال الكل</option>
           <option value="append">إضافة للموجود</option>
         </select>
-        <button
+        <button data-tour="incentives-programs-items-csv"
           className="text-xs text-purple-600 hover:text-purple-800 px-2 py-0.5 border border-purple-200 rounded"
           onClick={() => csvRef.current?.click()}
           disabled={csvUploading}
@@ -593,7 +593,7 @@ function RuleItemsManager({ rule, onItemsChanged }) {
         </button>
         <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden"
           onChange={handleCsvUpload} />
-        <button
+        <button data-tour="incentives-programs-items-csv-template"
           className="text-xs text-gray-400 hover:text-gray-600 underline"
           onClick={() => {
             const csv = 'item_code,item_name,incentive_override\n1001,مثال صنف 1,\n1002,مثال صنف 2,5.5\n'
@@ -628,7 +628,7 @@ function RuleItemsManager({ rule, onItemsChanged }) {
                       : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-2 py-1.5 text-center">
-                    <button
+                    <button data-tour="incentives-programs-item-delete"
                       className="text-red-400 hover:text-red-600 text-xs"
                       onClick={() => removeItem(ri.item_code)} disabled={busy}
                     >✕</button>
@@ -974,7 +974,7 @@ function RuleForm({ programId, rule, onSaved, onCancel }) {
 
       <div className="flex justify-end gap-2 pt-1">
         <button className="btn-secondary text-sm" onClick={onCancel}>إلغاء</button>
-        <button className="btn-primary text-sm" onClick={save} disabled={saving}>
+        <button data-tour="incentives-programs-rule-save" className="btn-primary text-sm" onClick={save} disabled={saving}>
           {saving ? 'جارٍ الحفظ...' : rule?.id ? 'حفظ التعديلات' : 'إضافة القاعدة'}
         </button>
       </div>
@@ -1117,9 +1117,9 @@ function RulesTab({ selectedProgram }) {
                       >
                         {expandedId === r.id ? '▲ الأصناف' : `▼ الأصناف (${r.item_count ?? r.rule_items?.length ?? 0})`}
                       </button>
-                      <button className="text-xs text-blue-600 hover:text-blue-800 px-2"
+                      <button data-tour="incentives-programs-rule-edit" className="text-xs text-blue-600 hover:text-blue-800 px-2"
                         onClick={() => setEditingId(r.id)}>تعديل</button>
-                      <button className="text-xs text-red-500 hover:text-red-700 px-2"
+                      <button data-tour="incentives-programs-rule-delete" className="text-xs text-red-500 hover:text-red-700 px-2"
                         onClick={() => deleteRule(r.id)}>حذف</button>
                     </div>
                   </div>
@@ -1528,7 +1528,7 @@ function ReportTab({ selectedProgram }) {
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <button className="text-xs text-brand-600 hover:text-brand-800 underline"
+                        <button data-tour="incentives-programs-report-drill" className="text-xs text-brand-600 hover:text-brand-800 underline"
                           onClick={() => setDrillUser(r.user_id)}>تفصيل</button>
                       </td>
                     </tr>
@@ -1644,7 +1644,7 @@ function AdjustmentForm({ programId, adjustment, staffList, onSaved, onCancel })
       </div>
       <div className="flex justify-end gap-2 pt-1">
         <button className="btn-secondary text-sm" onClick={onCancel}>إلغاء</button>
-        <button className="btn-primary text-sm" onClick={save} disabled={saving}>
+        <button data-tour="incentives-programs-adjust-save" className="btn-primary text-sm" onClick={save} disabled={saving}>
           {saving ? 'جارٍ الحفظ...' : adjustment?.id ? 'حفظ التعديلات' : 'إضافة التسوية'}
         </button>
       </div>
@@ -1734,7 +1734,7 @@ function AdjustmentsTab({ selectedProgram }) {
           <input type="date" className="input" value={filterPeriod.end}
             onChange={e => setFilterPeriod(f => ({ ...f, end: e.target.value }))} />
         </div>
-        <RefreshButton loading={loading} onClick={load} size="sm">
+        <RefreshButton data-tour="incentives-programs-adjust-refresh" loading={loading} onClick={load} size="sm">
           ↻ تحديث
         </RefreshButton>
         {adjustments.length > 0 && (
@@ -1781,9 +1781,9 @@ function AdjustmentsTab({ selectedProgram }) {
                       <span className={`font-bold text-lg ${Number(a.amount) < 0 ? 'text-red-600' : 'text-green-700'}`}>
                         {Number(a.amount) > 0 ? '+' : ''}{fmt(a.amount)} ج.م
                       </span>
-                      <button className="text-xs text-blue-600 hover:text-blue-800"
+                      <button data-tour="incentives-programs-adjust-edit" className="text-xs text-blue-600 hover:text-blue-800"
                         onClick={() => setEditingId(a.id)}>تعديل</button>
-                      <button className="text-xs text-red-500 hover:text-red-700"
+                      <button data-tour="incentives-programs-adjust-delete" className="text-xs text-red-500 hover:text-red-700"
                         onClick={() => deleteAdj(a.id)}>حذف</button>
                     </div>
                   </div>
@@ -1846,7 +1846,7 @@ function ReceiptModal({ settlementId, onClose }) {
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-bold">إيصال تسوية الحوافز</h2>
           <div className="flex gap-2">
-            <button className="btn-secondary text-sm" onClick={handlePrint}>🖨 طباعة</button>
+            <button data-tour="incentives-programs-receipt-print" className="btn-secondary text-sm" onClick={handlePrint}>🖨 طباعة</button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
           </div>
         </div>
@@ -2001,7 +2001,7 @@ function SettlementsTab({ selectedProgram }) {
               settlements={settlements}
             />
           )}
-          <RefreshButton loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
+          <RefreshButton data-tour="incentives-programs-settlements-refresh" loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
         </div>
       </div>
 
@@ -2094,7 +2094,7 @@ function HistoryTab({ selectedProgram }) {
             <option value="calculate">احتساب فعلي</option>
             <option value="simulate">محاكاة</option>
           </select>
-          <RefreshButton loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
+          <RefreshButton data-tour="incentives-programs-history-refresh" loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
         </div>
       </div>
 
@@ -2280,7 +2280,7 @@ function NearExpiryTab({ selectedProgram }) {
                 onChange={e => setIncludeQuarantine(e.target.checked)} />
               <span className="text-xs text-gray-600">تضمين مخازن الحجر/التالف</span>
             </label>
-            <button className="btn-primary" onClick={loadStock} disabled={stockLoading}>
+            <button data-tour="incentives-programs-near-expiry-stock" className="btn-primary" onClick={loadStock} disabled={stockLoading}>
               {stockLoading ? 'جارٍ الاستعلام...' : 'استعلام'}
             </button>
           </div>
@@ -2425,7 +2425,7 @@ function NearExpiryTab({ selectedProgram }) {
               <input type="date" className="input" value={periodEnd}
                 onChange={e => setPeriodEnd(e.target.value)} />
             </div>
-            <button className="btn-primary" onClick={loadReport}
+            <button data-tour="incentives-programs-near-expiry-report" className="btn-primary" onClick={loadReport}
               disabled={reportLoading || !selectedProgram}>
               {reportLoading ? 'جارٍ التحميل...' : 'عرض التقرير'}
             </button>
@@ -2671,7 +2671,7 @@ function ROITab({ selectedProgram }) {
               value={compDays} onChange={e => setCompDays(e.target.value)}
               min="7" max="90" />
           </div>
-          <button className="btn-primary" onClick={load}
+          <button data-tour="incentives-programs-roi-run" className="btn-primary" onClick={load}
             disabled={loading || !selectedProgram}>
             {loading ? 'جارٍ الحساب...' : 'احسب ROI'}
           </button>
@@ -2865,7 +2865,7 @@ function SuggestionsTab({ selectedProgram }) {
               value={branchCode} onChange={e => setBranchCode(e.target.value)}
               placeholder="100" />
           </div>
-          <button className="btn-primary" onClick={load} disabled={loading}>
+          <button data-tour="incentives-programs-suggest-run" className="btn-primary" onClick={load} disabled={loading}>
             {loading ? 'جارٍ التحليل...' : 'تحليل وعرض'}
           </button>
         </div>
@@ -2896,7 +2896,7 @@ function SuggestionsTab({ selectedProgram }) {
                         </option>
                       ))}
                     </select>
-                    <button className="btn-primary text-xs py-1"
+                    <button data-tour="incentives-programs-suggest-add" className="btn-primary text-xs py-1"
                       onClick={addSelectedToRule} disabled={adding}>
                       {adding ? 'جارٍ الإضافة...' : `إضافة ${selected.size} للقاعدة`}
                     </button>

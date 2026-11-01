@@ -409,7 +409,23 @@ The two help lines were merged (branch `claude/help-reconcile`). Nothing was dro
 - ~~Rich tours + journeys for every module~~ ✅ done (batches 1–6, last 2026-10-30).
 - ~~Batch 7: every step names its element~~ ✅ done 2026-10-30 — 189 steps got a «label» (every one that had neither label nor «متى؟» also got a «متى؟» — 155);
   `test_every_step_names_its_element` keeps it so.
-- ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30. Still open:
-  anchor (and write steps for) the main buttons that have no `data-tour` yet (~half of all buttons).
+- ~~Batch 8: hints mode + once-per-screen «جديد هنا؟ اعرض لي» chip~~ ✅ built 2026-10-30.
+- ~~Anchor the untagged buttons~~ ✅ built 2026-11-01 — see «Button hints for every action» below.
 - ~~Batch 9: role module tour «🗺️ جولة في موديولات دورك»~~ ✅ built 2026-10-30 (desktop entry points; mobile
   entry still open).
+
+## Button hints for every action (built 2026-11-01)
+
+- A screen may carry `hints`: steps in the tour format (target, label, text, when, warn, open_hint) that
+  «💡 تلميحات الأزرار» explains but «اعرض لي» never walks through — the tour stays short, every action
+  button still gets a card. On a shared anchor the tour step wins over a hint, a hint over a journey step.
+  The printed manual lists tour + hints under «الأزرار».
+- 870 hints across all modules; close ✕, plain pagination, tab switches and sort headers stay untagged.
+  Shared components (item / customer search, module bell, freshness refresh, chatter, voice notes,
+  receipt print, WhatsApp share, filter bars) carry one wording copied onto every screen that shows them.
+- The hover card walks up from the hovered element to the nearest anchor the current screen explains,
+  so a shared component's own anchor never hides the screen's wrapper hint.
+- `test_hints_valid`: rich-step limits, «label», ⚠ for push / send / cancel … anchors, a real anchor,
+  no anchor twice in tour + hints. Adding a button: anchor it and add a hint to its screen.
+- Not covered: the desktop shell's logout / notification-panel anchors are explained on the dashboard
+  only (they sit in the layout on every screen).
