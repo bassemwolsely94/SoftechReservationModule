@@ -1369,6 +1369,9 @@ class SoftechDateEditRun(models.Model):
                                     null=True, blank=True, related_name='+')
     applied_at  = models.DateTimeField(auto_now_add=True)
     reverted_at = models.DateTimeField(null=True, blank=True)
+    plan        = models.ForeignKey('SoftechWritePlan', on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='date_runs')
+    reason      = models.TextField(blank=True, verbose_name='سبب التجاوز')
 
     class Meta:
         verbose_name = 'تعديل تاريخ إيصال سوفتك'

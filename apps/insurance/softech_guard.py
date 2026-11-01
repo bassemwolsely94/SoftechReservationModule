@@ -115,3 +115,34 @@ def summarize(issues):
 
 def reason_ok(reason):
     return len((reason or '').strip()) >= REASON_MIN_CHARS
+
+
+# ── receipt-date edit (📅 temporary printed date) ─────────────────────────────
+DATE_MAX_SHIFT_DAYS  = 60   # beyond this the "temporary reprint date" story does not hold → block
+DATE_WARN_SHIFT_DAYS = 14   # a normal re-entry gap is days, not weeks → reason
+
+
+def check_date(*, old, new, today, period_from=None, period_to=None):
+    """Issues for moving a receipt's printed date from `old` to `new` (dates)."""
+    if new is None:
+        return [_issue('block', 'date_invalid', 'اختر التاريخ الجديد.')]
+    if old is None:
+        return [_issue('block', 'date_missing', 'تعذّرت قراءة تاريخ الإيصال الحالى.')]
+    issues = []
+    shift = (new - old).days
+    if new > today:
+        issues.append(_issue('block', 'date_future', f'التاريخ {new} فى المستقبل.'))
+    if shift == 0:
+        issues.append(_issue('block', 'date_same', 'التاريخ الجديد يساوى التاريخ الحالى — لا يوجد تغيير.'))
+    if abs(shift) > DATE_MAX_SHIFT_DAYS:
+        issues.append(_issue('block', 'date_far',
+                             f'فرق {abs(shift)} يوم يتجاوز الحد ({DATE_MAX_SHIFT_DAYS} يوماً) لتعديل مؤقت للطباعة.'))
+    elif abs(shift) > DATE_WARN_SHIFT_DAYS:
+        issues.append(_issue('warn', 'date_shift', f'فرق {abs(shift)} يوم (أكثر من {DATE_WARN_SHIFT_DAYS}).'))
+    if shift > 0:
+        issues.append(_issue('warn', 'date_later',
+                             f'التاريخ الجديد بعد الحالى ({old} → {new}) — المعتاد تقديم التاريخ للخلف.'))
+    if period_from and period_to and not (period_from <= new <= period_to):
+        issues.append(_issue('warn', 'date_outside_period',
+                             f'التاريخ {new} خارج فترة المطالبة ({period_from} → {period_to}).'))
+    return issues

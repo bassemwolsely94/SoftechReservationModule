@@ -3316,41 +3316,52 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
   const [docno, setDocno]   = useState('')
   const [branch, setBranch] = useState('')
   const [newDate, setNewDate] = useState('')
-  const [pv, setPv]         = useState(null)
+  const [plan, setPlan]     = useState(null)      // previewed, guard-checked date change
+  const [typed, setTyped]   = useState('')
+  const [reason, setReason] = useState('')
   const [runs, setRuns]     = useState([])
   const [busy, setBusy]     = useState(false)
   const [msg, setMsg]       = useState(null)
+  const [armed, setArmed]   = useState(null)      // run id waiting for the second click
 
   const loadRuns = () => insuranceApi.dateEditRuns(claimId).then(r => setRuns(r.data)).catch(() => {})
   useEffect(() => { loadRuns() }, [claimId])   // eslint-disable-line
 
+  const back = () => { setPlan(null); setTyped(''); setReason('') }
   const preview = async () => {
-    if (!docno.trim() || !branch.trim()) return
-    setBusy(true); setMsg(null); setPv(null)
+    if (!docno.trim() || !branch.trim() || !newDate) return
+    setBusy(true); setMsg(null)
     try {
-      const { data } = await insuranceApi.dateEditPreview(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate })
-      setPv(data)
+      const { data } = await insuranceApi.dateEditPlan(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate })
+      setPlan(data); setTyped(''); setReason('')
     } catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّرت المعاينة' }) }
     finally { setBusy(false) }
   }
   const apply = async () => {
-    if (!newDate) { setMsg({ err: 'اختر التاريخ الجديد' }); return }
-    if (!window.confirm(`تغيير التاريخ المطبوع للإيصال #${docno} إلى ${newDate} على HQ والفرع؟ (مؤقت — استرجعه بعد الطباعة).`)) return
     setBusy(true); setMsg(null)
     try {
-      const { data } = await insuranceApi.dateEditApply(claimId, { docno: docno.trim(), branch: branch.trim(), new_date: newDate, confirm: true })
-      setMsg({ ok: `تم توحيد التاريخ (الإيصال + المطالبة): ${data.old_date} ${fa()} ${data.new_date}. اطبع الإيصال الآن ثم استرجع تاريخ الإيصال من السجل بالأسفل (يبقى تاريخ المطالبة مصححاً).` })
-      setPv(null); loadRuns()
+      const { data } = await insuranceApi.dateEditPlanApply(claimId, plan.id, { confirm_text: typed.trim(), reason })
+      setMsg({ ok: `تم توحيد التاريخ (الإيصال + المطالبة): ${data.old_date} ${fa()} ${data.new_date}. اطبع الإيصال الآن ثم استرجع تاريخ الإيصال من الشريط بالأعلى (يبقى تاريخ المطالبة مصححاً).` })
+      back(); loadRuns()
     } catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّر التطبيق' }) }
     finally { setBusy(false) }
   }
   const revert = async (runId) => {
-    if (!window.confirm('استرجاع التاريخ الأصلى للإيصال؟')) return
-    setBusy(true); setMsg(null)
+    if (armed !== runId) { setArmed(runId); return }
+    setArmed(null); setBusy(true); setMsg(null)
     try { await insuranceApi.dateEditRevert(claimId, runId); setMsg({ ok: 'تم استرجاع التاريخ الأصلى.' }); loadRuns() }
     catch (e) { setMsg({ err: e.response?.data?.error || 'تعذّر الاسترجاع' }) }
     finally { setBusy(false) }
   }
+
+  const open = runs.filter(r => r.status === 'applied')
+  const daysOpen = (r) => Math.floor((Date.now() - new Date(r.applied_at).getTime()) / 86400000)
+  const issues = plan?.issues || []
+  const typedOk = plan && typed.trim().replace(/^#/, '') === String(plan.docno)
+  const reasonOk = !plan?.needs_reason || reason.trim().length >= (plan?.reason_min_chars || 10)
+  const editable = ['draft', 'ready'].includes(claim?.status)
+  const canApply = plan && !plan.blocked && plan.write_enabled && editable && typedOk && reasonOk && !busy
+  const pill = (done, current) => done ? 'done' : current ? 'current' : 'todo'
 
   return (
     <div className="bg-white border border-purple-200 rounded-xl p-4">
@@ -3361,37 +3372,94 @@ function SoftechDateEditCard({ claimId, claim, inp }) {
         <br/>عند التطبيق: يُوحَّد التاريخ على <b>الإيصال (HQ + الفرع)</b> و<b>المطالبة (motalba)</b>.
         عند الاسترجاع: يُعاد <b>تاريخ الإيصال فقط</b> — بينما يبقى تاريخ المطالبة على القيمة المصححة. (لا يُمَس وقت المعاملة.)
       </p>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} value={docno} onChange={e => setDocno(e.target.value)} /></label>
-        <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} value={branch} onChange={e => setBranch(e.target.value)} /></label>
-        <label className="text-xs text-gray-500">التاريخ الجديد<input type="date" className={`${inp} w-40 block mt-0.5`} value={newDate} onChange={e => setNewDate(e.target.value)} /></label>
-        <button onClick={preview} disabled={busy || !docno.trim() || !branch.trim()} className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة</button>
-        <button onClick={apply} disabled={busy || !newDate || claim?.status !== 'draft'} className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded disabled:opacity-50">تطبيق التاريخ</button>
-      </div>
-      {pv && (
-        <div className="mt-2 text-xs text-gray-700">
-          التاريخ الحالى: <span className="font-mono">{pv.current_date}</span> {fa()} الجديد: <span className="font-mono">{pv.new_date || '—'}</span>
-          {' · '}الفرع {pv.branch_reachable ? <span className="text-green-600">متصل</span> : <span className="text-red-600">غير متاح</span>}
-          {!pv.write_enabled && <span className="text-amber-600"> · الكتابة معطّلة</span>}
-        </div>
-      )}
-      {msg?.ok && <div className="mt-2 text-xs text-green-700">{msg.ok}</div>}
-      {msg?.err && <div className="mt-2 text-xs text-red-600">{msg.err}</div>}
-      {runs.length > 0 && (
-        <div className="mt-3 border-t border-gray-100 pt-2">
-          <div className="text-xs font-medium text-gray-600 mb-1">سجل تعديلات التاريخ</div>
-          {runs.map(r => (
-            <div key={r.id} className="text-xs flex items-center justify-between border-b border-gray-100 py-1">
-              <span><span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} {fa()} {r.new_date}
-                {r.status === 'reverted' && <span className="text-gray-400"> · مُسترجَع</span>}
-                {r.status === 'failed' && <span className="text-red-500"> · فشل</span>}
+
+      {open.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2.5" data-tour="insurance-claim-date-open-edits">
+          <div className="text-xs font-semibold text-amber-800 mb-1">⚠ {open.length} إيصال تاريخه مُعدَّل ولم يُسترجع بعد — استرجعه بعد الطباعة</div>
+          {open.map(r => (
+            <div key={r.id} className="text-xs flex items-center justify-between gap-2 py-0.5">
+              <span>
+                {r.sequence ? <span className="font-mono text-gray-500">م {r.sequence} · </span> : null}
+                <span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} {fa()} {r.new_date}
+                <span className={daysOpen(r) >= 1 ? 'text-red-600' : 'text-gray-500'}> · منذ {daysOpen(r) === 0 ? 'اليوم' : `${daysOpen(r)} يوم`}</span>
               </span>
-              {r.status === 'applied' && (
-                <button onClick={() => revert(r.id)} disabled={busy} className="text-[11px] text-red-500 hover:text-red-700">↩ استرجاع التاريخ</button>
-              )}
+              <button onClick={() => revert(r.id)} disabled={busy}
+                className={`text-[11px] px-2 py-0.5 rounded border ${armed === r.id ? 'bg-red-600 text-white border-red-600' : 'border-red-300 text-red-600 hover:bg-red-50'}`}>
+                {armed === r.id ? 'اضغط مرة أخرى للتأكيد' : '↩ استرجاع التاريخ'}</button>
             </div>
           ))}
         </div>
+      )}
+
+      <StepPills steps={[
+        { label: 'الإيصال والتاريخ', state: pill(!!plan, !plan) },
+        { label: 'معاينة', state: pill(plan && !plan.blocked, !!plan && plan.blocked) },
+        { label: 'تأكيد', state: pill(false, !!plan && !plan.blocked) },
+      ]} />
+      <fieldset disabled={!!plan || busy} className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-gray-500">رقم الإيصال<input className={`${inp} w-32 block mt-0.5`} dir="ltr" value={docno} onChange={e => setDocno(e.target.value)} /></label>
+        <label className="text-xs text-gray-500">الفرع<input className={`${inp} w-24 block mt-0.5`} dir="ltr" value={branch} onChange={e => setBranch(e.target.value)} /></label>
+        <label className="text-xs text-gray-500">التاريخ الجديد<input type="date" className={`${inp} w-40 block mt-0.5`} value={newDate} onChange={e => setNewDate(e.target.value)} /></label>
+        <button onClick={preview} disabled={!docno.trim() || !branch.trim() || !newDate} data-tour="insurance-claim-date-preview"
+          className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded disabled:opacity-50">معاينة — قراءة فقط</button>
+      </fieldset>
+
+      {plan && (
+        <div className="mt-3 rounded-lg border-2 border-purple-200 p-3 space-y-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            {plan.sequence ? <span className="px-2 py-0.5 rounded bg-gray-100 font-mono">م {plan.sequence}</span> : null}
+            <span className="px-2 py-0.5 rounded bg-gray-100"><span className="font-mono">#{plan.docno}</span> فرع {plan.branch}</span>
+            {plan.patient && <span className="text-gray-700">{plan.patient}</span>}
+            <span className="font-mono text-gray-800">{plan.current_date} {fa()} <b>{plan.new_date}</b></span>
+            <span className={plan.branch_reachable ? 'text-green-600' : 'text-red-600'}>الفرع {plan.branch_reachable ? 'متصل' : 'غير متاح'}</span>
+            <button onClick={back} disabled={busy} className="mr-auto text-blue-600 hover:underline">← رجوع للتعديل</button>
+          </div>
+          {issues.length === 0
+            ? <div className="text-green-600">✓ التاريخ سليم</div>
+            : issues.map((i, k) => <div key={k} className={`border rounded px-2 py-1 ${_issueCls(i.level)}`}>{i.message}</div>)}
+          {plan.blocked ? (
+            <div className="rounded border border-red-300 bg-red-50 p-2 text-red-700">⛔ لا يمكن التطبيق — ارجع للتعديل وصحّح.</div>
+          ) : (
+            <div className="rounded border border-purple-200 bg-purple-50/40 p-2 space-y-2" data-tour="insurance-claim-date-confirm">
+              <div className="text-purple-900">سيتغيّر التاريخ المطبوع على HQ والفرع وفى المطالبة (motalba). الاسترجاع يعيد تاريخ الإيصال فقط.</div>
+              {!plan.write_enabled && <div className="text-red-700">الكتابة إلى سوفتك معطّلة على هذا السيرفر.</div>}
+              {!editable && <div className="text-red-700">المطالبة ليست مسودة/جاهزة — التعديل محظور.</div>}
+              {plan.needs_reason && (
+                <label className="block text-amber-800">سبب تجاوز التحذيرات (إلزامى، {plan.reason_min_chars} أحرف على الأقل)
+                  <textarea rows={2} value={reason} onChange={e => setReason(e.target.value)}
+                    className="mt-1 w-full border border-amber-300 rounded px-2 py-1 text-sm" /></label>
+              )}
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-gray-700">للتأكيد اكتب رقم الإيصال: <b className="font-mono">{plan.docno}</b>
+                  <input value={typed} onChange={e => setTyped(e.target.value)} dir="ltr" inputMode="numeric"
+                    data-tour="insurance-claim-date-confirm-docno"
+                    className={`block mt-1 w-32 border rounded px-2 py-1.5 text-sm text-center font-mono ${typed && !typedOk ? 'border-red-400' : 'border-gray-300'}`} /></label>
+                <button onClick={apply} disabled={!canApply} data-tour="insurance-claim-date-apply"
+                  className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-40">
+                  {busy ? 'جارٍ الكتابة…' : 'تطبيق التاريخ على سوفتك'}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {msg?.ok && <div className="mt-2 text-xs text-green-700">{msg.ok}</div>}
+      {msg?.err && <div className="mt-2 text-xs text-red-600">{msg.err}</div>}
+      {runs.length > 0 && (
+        <details className="mt-3 border-t border-gray-100 pt-2">
+          <summary className="text-xs font-medium text-gray-600 cursor-pointer">سجل تعديلات التاريخ ({runs.length})</summary>
+          {runs.map(r => (
+            <div key={r.id} className="text-xs flex items-center justify-between border-b border-gray-100 py-1">
+              <span>{r.sequence ? <span className="font-mono text-gray-500">م {r.sequence} · </span> : null}
+                <span className="font-mono">#{r.docnumber}</span> فرع {r.branch} · {r.old_date} {fa()} {r.new_date}
+                {r.status === 'applied' && <span className="text-amber-600"> · لم يُسترجع</span>}
+                {r.status === 'reverted' && <span className="text-gray-400"> · مُسترجَع</span>}
+                {r.status === 'failed' && <span className="text-red-500" title={r.error}> · فشل</span>}
+                {r.reason && <span className="text-gray-400" title={r.reason}> · ✎ سبب</span>}
+              </span>
+            </div>
+          ))}
+        </details>
       )}
     </div>
   )

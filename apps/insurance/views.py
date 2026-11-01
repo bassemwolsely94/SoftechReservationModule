@@ -1271,32 +1271,57 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='softech-date/apply')
     def softech_date_apply(self, request, pk=None):
-        """Set a receipt's printed date on HQ + branch (gated, revertible)."""
+        return Response({'error': 'استخدم المعاينة ثم التأكيد (softech-date/plan).'}, status=410)
+
+    @action(detail=True, methods=['post'], url_path='softech-date/plan')
+    def softech_date_plan(self, request, pk=None):
+        """READ-ONLY on SOFTECH: preview a receipt-date change + date guard. Body: {docno, branch, new_date}"""
         claim = self.get_object()
-        from .date_service import apply_date_edit
+        from .date_service import preview_date_plan, date_plan_payload
         from .reprice_service import RepriceError
         d = request.data
         try:
-            res = apply_date_edit(claim, str(d.get('docno', '')).strip(), str(d.get('branch', '')).strip(),
-                                  d.get('new_date'), user=request.user, confirm=bool(d.get('confirm')),
-                                  doccode=str(d.get('doccode', '115')))
+            plan = preview_date_plan(claim, d.get('docno', ''), d.get('branch', ''), d.get('new_date'),
+                                     user=request.user, doccode=str(d.get('doccode', '115')))
         except RepriceError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'تعذّرت المعاينة: {public_error(request, e)}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(date_plan_payload(plan))
+
+    @action(detail=True, methods=['post'], url_path='softech-date/plan/(?P<plan_id>[0-9]+)/apply')
+    def softech_date_plan_apply(self, request, pk=None, plan_id=None):
+        """GATED: apply a previewed date plan. Body: {confirm_text (the receipt number), reason}"""
+        claim = self.get_object()
+        from .models import SoftechWritePlan
+        from .date_service import apply_date_plan
+        from .reprice_service import RepriceError
+        plan = SoftechWritePlan.objects.filter(pk=plan_id, claim=claim, source='date').first()
+        if not plan:
+            return Response({'error': 'المعاينة غير موجودة'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            res = apply_date_plan(plan, user=request.user, confirm_text=request.data.get('confirm_text'),
+                                  reason=request.data.get('reason') or '')
+        except RepriceError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        docno = plan.plan[0]['docno']
         record_audit(claim, 'softech_date_edit', actor=getattr(request.user, 'staff_profile', None),
-                     summary=f'تعديل تاريخ إيصال سوفتك #{d.get("docno")}: {res["old_date"]} → {res["new_date"]}',
-                     target_type='receipt', target_ref=str(d.get('docno')))
+                     summary=f'تعديل تاريخ إيصال سوفتك #{docno}: {res["old_date"]} → {res["new_date"]}',
+                     target_type='receipt', target_ref=docno, reason=plan.reason)
         return Response(res)
 
     @action(detail=True, methods=['get'], url_path='softech-date/runs')
     def softech_date_runs(self, request, pk=None):
         claim = self.get_object()
         from .models import SoftechDateEditRun
+        seq = {(str(d), str(b)): q for d, b, q in claim.prescriptions.values_list(
+            'softech_docnumber', 'softech_branchcode', 'sequence')}
         return Response([{
             'id': r.pk, 'docnumber': r.docnumber, 'branch': r.branchcode, 'status': r.status,
             'old_date': r.old_date.isoformat(), 'new_date': r.new_date.isoformat(),
             'applied_at': r.applied_at.isoformat(),
             'reverted_at': r.reverted_at.isoformat() if r.reverted_at else None,
-            'error': r.error,
+            'error': r.error, 'reason': r.reason, 'sequence': seq.get((r.docnumber, r.branchcode)),
         } for r in SoftechDateEditRun.objects.filter(claim=claim)])
 
     @action(detail=True, methods=['post'], url_path='softech-date/runs/(?P<run_id>[0-9]+)/revert')

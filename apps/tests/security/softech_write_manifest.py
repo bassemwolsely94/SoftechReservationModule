@@ -116,11 +116,11 @@ WRITE_SITES = {
         tables=('stktransm', 'stktrans'), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='refused while an applied edit is open on the receipt; date-edit lock 7301008 (P-15)',
         audit='SoftechDateEditRun + InsuranceAuditEvent',
-        trigger='POST insurance claims <pk>/softech-date/apply|runs/<id>/revert/ (insurance edit)'),
+        trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply|runs/<id>/revert/ (insurance edit; softech_guard.check_date)'),
     'apps/insurance/date_service.py::_set_motalba_docdate': WriteSite(
         tables=('motalba',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency=None, audit='SoftechDateEditRun + InsuranceAuditEvent (motalba before-value not kept)',
-        trigger='POST insurance claims <pk>/softech-date/apply/'),
+        trigger='POST insurance claims <pk>/softech-date/plan/<id>/apply/'),
     'apps/insurance/management/commands/backfill_bonusqty.py::Command.handle': WriteSite(
         tables=('stktrans',), flag='INSURANCE_SOFTECH_WRITE_ENABLED', dry_run_default=True,
         idempotency='writes only drifted lines', audit='SoftechRepriceRun/Edit (no user)',
