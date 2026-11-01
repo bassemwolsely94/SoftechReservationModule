@@ -51,8 +51,9 @@ export default function ReplicationBadge({ requestId, isAdmin }) {
             <div key={b.code} className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5">
                 <span className={`w-2 h-2 rounded-full ${DOT[b.status]}`} />
-                <span className="font-mono">{b.code}</span>
-                <span className="text-gray-400 truncate max-w-[90px]">{b.name}</span>
+                <span className="truncate max-w-[170px]" title={`${b.code} · ${b.name || ''}`}>
+                  {b.name ? `${b.code} · ${b.name}` : b.code}
+                </span>
               </span>
               <span className={b.status === 'replicated' ? 'text-emerald-600' : 'text-amber-600'}>
                 {LABEL[b.status]}

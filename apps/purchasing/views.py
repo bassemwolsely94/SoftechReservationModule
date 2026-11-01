@@ -2372,19 +2372,25 @@ def transfer_rec_update_status(request, pk):
             status=400,
         )
 
-    # Can only review pending items (guard against double-review)
-    if rec.status not in ('pending', 'approved') and new_status != 'executed':
+    # pending → approved / rejected · approved → rejected / executed · rejected and executed are final
+    nxt = {'pending': ('approved', 'rejected'), 'approved': ('rejected', 'executed')}
+    if new_status not in nxt.get(rec.status, ()):
         return Response(
             {'detail': f'لا يمكن تغيير الحالة من "{rec.get_status_display()}"'},
             status=400,
         )
 
     from django.utils import timezone as _tz
+    old_status      = rec.status
     rec.status      = new_status
     rec.reviewed_by = request.user
     rec.reviewed_at = _tz.now()
     rec.notes       = request.data.get('notes', rec.notes)
     rec.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'notes'])
+    from apps.audit.models import AuditLog
+    AuditLog.log('transfer_rec_status_changed', user=getattr(request.user, 'staff_profile', None),
+                 obj=rec, request=request, changes={'status': [old_status, new_status]},
+                 note=str(request.data.get('notes') or ''))
 
     logger.info(
         '[TransferRec] pk=%d → %s by %s', pk, new_status, request.user,

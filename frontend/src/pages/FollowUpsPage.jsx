@@ -616,6 +616,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
   const [selectedItems, setSelectedItems] = useState([])   // task IDs to include in WA message
   const [waMsg,         setWaMsg]         = useState('')
   const [waUrl,         setWaUrl]         = useState('')
+  const [waSent,        setWaSent]        = useState(null)   // { ids, includeUpsell } of the preview
   const [composing,     setComposing]     = useState(false) // show WA composer panel
   const [building,      setBuilding]      = useState(false)
   const [batchRunning,  setBatchRunning]  = useState(false)
@@ -652,17 +653,24 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
     if (!ids.length) return
     setBuilding(true)
     try {
-      const res = await followupsApi.multiWhatsapp(ids, includeUpsell)
+      const res = await followupsApi.multiWhatsapp(ids, includeUpsell)   // preview: changes nothing
       setWaMsg(res.data.message)
       setWaUrl(res.data.whatsapp_url)
+      setWaSent({ ids, includeUpsell })
       setComposing(true)
       // Do NOT call onMutate() here — it invalidates followup-grouped which
       // re-renders all group cards and resets the composing state to false.
-      // The status update (tasks → 'called') already happened server-side.
       // onMutate() is called when the user explicitly closes the composer.
     } catch (e) {
       alert('فشل: ' + (e?.response?.data?.detail || e.message))
     } finally { setBuilding(false) }
+  }
+
+  // opening WhatsApp is the outreach: only now are the tasks marked called
+  const markWhatsappSent = () => {
+    if (!waSent) return
+    followupsApi.multiWhatsapp(waSent.ids, waSent.includeUpsell, true)
+      .catch(e => alert('فُتح واتساب لكن تعذّر تسجيل التواصل: ' + (e?.response?.data?.detail || e.message)))
   }
 
   const closeComposer = () => {
@@ -789,6 +797,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
           />
           <div className="flex gap-2">
             <a data-tour="followups-tasks-group-wa-send" href={waUrl} target="_blank" rel="noopener noreferrer"
+              onClick={markWhatsappSent}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition-colors">
               💬 إرسال عبر واتساب
             </a>
@@ -2607,7 +2616,7 @@ export default function FollowUpsPage() {
                     { action: 'mark_done',   label: '✅ اشتروا', bg: 'bg-green-600 hover:bg-green-500' },
                     { action: 'mark_missed', label: '❌ لا رد',   bg: 'bg-red-700   hover:bg-red-600'   },
                     { action: 'pin',         label: '📌 تثبيت',   bg: 'bg-amber-600 hover:bg-amber-500' },
-                    { action: 'unpin',       label: '📌 إلغاء',   bg: 'bg-gray-600  hover:bg-gray-500'  },
+                    { action: 'unpin',       label: '📌 إلغاء التثبيت',   bg: 'bg-gray-600  hover:bg-gray-500'  },
                     { action: 'cancel',      label: '🗑 إلغاء مهمة', bg: 'bg-rose-800 hover:bg-rose-700' },
                   ].map(b => (
                     <button data-tour="followups-tasks-bulk-status" key={b.action} disabled={batchRunning}

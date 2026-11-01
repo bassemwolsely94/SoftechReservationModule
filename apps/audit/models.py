@@ -99,6 +99,10 @@ class AuditLog(models.Model):
         # Customer account flags → branch copy (B7)
         ('customer_branch_copy_written', 'عميل — نسخ حالة الرئيسي لنسخة الفرع'),
         ('customer_points_removed',      'عميل — استبعاد من نظام النقاط وتصفير الرصيد'),
+        ('customer_note_deleted',        'عميل — حذف ملاحظة'),
+        # Expiry disposal / return decisions (apps/batches) and transfer suggestions (purchasing)
+        ('disposal_status_changed',      'إتلاف/مرتجع — تغيير حالة'),
+        ('transfer_rec_status_changed',  'توصية تحويل — تغيير حالة'),
 
 
         # Sales targets / KPI forecasting (doc 16) — assigned & approved figures

@@ -161,11 +161,13 @@ export default function MobileShortageDetailPage() {
   }
 
   async function removeItem(iid) {
+    if (!window.confirm('حذف هذا الصنف؟')) return        // as on the desktop list
     await shortageApi.deleteItem(id, iid)
     refresh()
   }
 
   async function submitList() {
+    if (!window.confirm('إرسال القائمة للمراجعة؟')) return
     await shortageApi.submit(id)
     refresh()
   }

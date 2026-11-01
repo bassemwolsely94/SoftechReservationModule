@@ -669,15 +669,18 @@ function NewOrderModal({ branches, onClose, onDone }) {
 // ORDER ROW ACTIONS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// a refused step says why (e.g. the pickup geofence: «خرج للتوصيل» needs the driver's GPS at the branch)
+const showError = (e) => alert(e?.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
+
 function OrderActions({ order, onAssign, onFail, onCancel, onCash, refetch }) {
   const mut = fn => useMutation({ mutationFn: fn, onSuccess: refetch }) // eslint-disable-line
-  const acceptMut      = useMutation({ mutationFn: () => deliveryApi.accept(order.id, {}),      onSuccess: refetch }) // eslint-disable-line
-  const dispatchMut    = useMutation({ mutationFn: () => deliveryApi.dispatch(order.id, {}),    onSuccess: refetch }) // eslint-disable-line
-  const completeMut    = useMutation({ mutationFn: () => deliveryApi.complete(order.id, {}),    onSuccess: refetch }) // eslint-disable-line
-  const partialMut     = useMutation({ mutationFn: () => deliveryApi.partial(order.id, {}),     onSuccess: refetch }) // eslint-disable-line
-  const unavailableMut = useMutation({ mutationFn: () => deliveryApi.unavailable(order.id, {}), onSuccess: refetch }) // eslint-disable-line
-  const closeMut       = useMutation({ mutationFn: () => deliveryApi.close(order.id, {}),       onSuccess: refetch }) // eslint-disable-line
-  const returnMut      = useMutation({ mutationFn: () => deliveryApi.return(order.id, {}),      onSuccess: refetch }) // eslint-disable-line
+  const acceptMut      = useMutation({ mutationFn: () => deliveryApi.accept(order.id, {}),      onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const dispatchMut    = useMutation({ mutationFn: () => deliveryApi.dispatch(order.id, {}),    onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const completeMut    = useMutation({ mutationFn: () => deliveryApi.complete(order.id, {}),    onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const partialMut     = useMutation({ mutationFn: () => deliveryApi.partial(order.id, {}),     onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const unavailableMut = useMutation({ mutationFn: () => deliveryApi.unavailable(order.id, {}), onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const closeMut       = useMutation({ mutationFn: () => deliveryApi.close(order.id, {}),       onSuccess: refetch, onError: showError }) // eslint-disable-line
+  const returnMut      = useMutation({ mutationFn: () => deliveryApi.return(order.id, {}),      onSuccess: refetch, onError: showError }) // eslint-disable-line
 
   const btn = (label, cls, onClick, disabled = false) => (
     <button onClick={onClick} disabled={disabled}

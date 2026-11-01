@@ -1268,6 +1268,7 @@ function DisposalTab() {
   const setStatus = useMutation({
     mutationFn: ({ id, status }) => batchesApi.expiryDisposalStatus(id, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', 'disposal'] }),
+    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر تغيير الحالة'),
   })
   const exp = useMutation({
     mutationFn: () => batchesApi.expiryDisposalExport({ items: rows }),
@@ -1337,7 +1338,7 @@ function DisposalTab() {
                       {r.status === 'approved' && canApprove &&
                         <button data-tour="batches-main-disposal-done" onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
                       {r.status !== 'cancelled' && r.status !== 'done' &&
-                        <button data-tour="batches-main-disposal-cancel" onClick={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
+                        <button data-tour="batches-main-disposal-cancel" onClick={() => window.confirm('إلغاء قرار الإتلاف/المرتجع ده؟') && setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
                     </div>
                   </td>
                 </tr>

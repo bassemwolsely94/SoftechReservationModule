@@ -13,6 +13,7 @@ import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder'
 import CanDo from '../components/CanDo'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -699,12 +700,15 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
   const qc = useQueryClient()
   const [newStatus, setNewStatus] = useState('')
   const [note, setNote] = useState('')
+  const [cancel, setCancel] = useState(EMPTY_CANCEL)
+  const isCancel = newStatus === 'cancelled'
+  const sendNote = isCancel ? cancelNote(cancel) : note
 
   const allowed = NEXT_STATUSES[reservation.status] || []
   const allowedOptions = STATUS_OPTIONS.filter(o => allowed.includes(o.value))
 
   const mutation = useMutation({
-    mutationFn: () => reservationsApi.changeStatus(reservation.id, newStatus, note),
+    mutationFn: () => reservationsApi.changeStatus(reservation.id, newStatus, sendNote),
     onSuccess: () => {
       qc.invalidateQueries(['reservation', String(reservation.id)])
       qc.invalidateQueries(['reservations-kanban'])
@@ -747,11 +751,18 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
             })}
           </div>
         </div>
-        <div className="mb-4">
-          <label className="label">ملاحظة (اختياري)</label>
-          <textarea rows={2} className="input-field" value={note}
-            onChange={e => setNote(e.target.value)} placeholder="سبب التغيير..." />
-        </div>
+        {isCancel ? (
+          <div className="mb-4">
+            <label className="label">سبب الإلغاء *</label>
+            <CancelReasonPicker value={cancel} onChange={setCancel} />
+          </div>
+        ) : (
+          <div className="mb-4">
+            <label className="label">ملاحظة (اختياري)</label>
+            <textarea rows={2} className="input-field" value={note}
+              onChange={e => setNote(e.target.value)} placeholder="سبب التغيير..." />
+          </div>
+        )}
         {mutation.isError && (
           <div className="text-red-600 text-xs mb-3 bg-red-50 rounded-lg px-3 py-2">
             {mutation.error?.response?.data?.detail || 'حدث خطأ'}
@@ -760,7 +771,7 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
         <div className="flex gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">إلغاء</button>
           <button data-tour="reservations-detail-status-confirm"
-            disabled={!newStatus || mutation.isPending}
+            disabled={!newStatus || mutation.isPending || (isCancel && !sendNote)}
             onClick={() => mutation.mutate()}
             className="btn-primary flex-1 disabled:opacity-50"
           >
@@ -1489,6 +1500,19 @@ export default function ReservationDetailPage() {
     qc.invalidateQueries(['reservation', id])
     qc.invalidateQueries(['reservations-kanban'])
   }
+  // role quick buttons: a status change shows its error; a cancel asks for the reason first
+  const [quickCancel, setQuickCancel] = useState(null)      // { reason, text } while asking
+  const [quickBusy, setQuickBusy] = useState(false)
+  const quickChange = async (status, note = '') => {
+    setQuickBusy(true)
+    try {
+      await reservationsApi.changeStatus(r.id, status, note)
+      setQuickCancel(null)
+      invalidate()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر تغيير الحالة')
+    } finally { setQuickBusy(false) }
+  }
 
   const handleDeleteActivity = async (activityId) => {
     if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
@@ -1649,9 +1673,8 @@ export default function ReservationDetailPage() {
                 return (
                   <button data-tour="reservations-detail-quick-status"
                     key={a.status}
-                    onClick={() => {
-                      reservationsApi.changeStatus(r.id, a.status, '').then(invalidate)
-                    }}
+                    disabled={quickBusy}
+                    onClick={() => a.status === 'cancelled' ? setQuickCancel(EMPTY_CANCEL) : quickChange(a.status)}
                     className="text-sm px-3 py-1.5 rounded-lg font-medium border transition-colors hover:opacity-90"
                     style={{
                       borderColor: asc.dot || '#d1d5db',
@@ -1671,6 +1694,21 @@ export default function ReservationDetailPage() {
               )}
             </CanDo>
           </div>
+          {quickCancel && (
+            <div className="mt-3 max-w-sm bg-red-50 border border-red-200 rounded-xl p-3 space-y-2" data-tour="reservations-detail-cancel-box">
+              <div className="text-xs font-semibold text-red-700">سبب إلغاء الحجز</div>
+              <CancelReasonPicker value={quickCancel} onChange={setQuickCancel} autoFocus compact />
+              <div className="flex gap-2">
+                <button data-tour="reservations-detail-cancel-confirm"
+                  disabled={quickBusy || !cancelNote(quickCancel)}
+                  onClick={() => quickChange('cancelled', cancelNote(quickCancel))}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white disabled:opacity-40">
+                  تأكيد الإلغاء
+                </button>
+                <button onClick={() => setQuickCancel(null)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600">رجوع</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

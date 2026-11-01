@@ -952,11 +952,29 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     }
   }
 
+  // a saved item's quantity is stored when the field is left, so a conversion uses it
+  const qtySave = useRef(Promise.resolve())
+  function saveQty(item) {
+    if (item._status !== 'saved' || !savedCallId) return
+    const current = dbItems.find(i => i.id === item.id)
+    if (!current) return
+    qtySave.current = doSaveQty(item.id, current.quantity)
+  }
+  async function doSaveQty(itemId, quantity) {
+    try {
+      await callCenterApi.updateItem(savedCallId, itemId, { quantity })
+    } catch (e) {
+      alert(e.response?.data?.detail || 'تعذّر حفظ الكمية')
+      callCenterApi.getItems(savedCallId).then(r => setDbItems(r.data || [])).catch(() => {})
+    }
+  }
+
   async function handleConvert() {
     if (!savedCallId) return
     setConverting(true)
     setConvertResult(null)
     try {
+      await qtySave.current      // a quantity edited just before clicking is stored first
       let res
       if (showConvert === 'reservation') {
         res = await callCenterApi.convertToReservation(savedCallId, {
@@ -1096,6 +1114,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
                     className="w-14 text-center border border-gray-200 rounded-md text-xs py-0.5 bg-white"
                     value={item.quantity}
                     onChange={e => updateQty(item, parseFloat(e.target.value) || 1)}
+                    onBlur={() => saveQty(item)}
                   />
                 )}
                 {!isConverted && (
