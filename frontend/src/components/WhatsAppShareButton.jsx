@@ -50,7 +50,7 @@ export default function WhatsAppShareButton({ type, docId, size = 'md', label, t
   const med   = 'text-sm px-4 py-2 border border-green-400 text-green-700 hover:bg-green-50'
 
   return (
-    <button
+    <button data-tour="whatsapp-share"
       type="button"
       onClick={handleShare}
       disabled={loading}

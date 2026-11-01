@@ -132,7 +132,7 @@ function NotifRow({ notif, onMarkRead, onClickNotif, onDelete, onSnooze }) {
           {/* Snooze ("remind me later") */}
           {onSnooze && (
             <div className="relative">
-              <button
+              <button data-tour="shell-notifications-snooze"
                 onClick={(e) => { e.stopPropagation(); setSnoozeOpen(o => !o) }}
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300
                   hover:text-amber-500 p-0.5 rounded"
@@ -158,7 +158,7 @@ function NotifRow({ notif, onMarkRead, onClickNotif, onDelete, onSnooze }) {
               )}
             </div>
           )}
-          <button
+          <button data-tour="shell-notifications-delete"
             onClick={(e) => { e.stopPropagation(); onDelete(notif.id) }}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300
               hover:text-red-500 p-0.5 rounded"
@@ -208,7 +208,7 @@ function RemindersSection() {
       <div className="flex gap-1.5">
         <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
           className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5" dir="ltr" />
-        <button onClick={add} disabled={!title.trim() || !when || create.isPending}
+        <button data-tour="shell-notifications-reminder-add" onClick={add} disabled={!title.trim() || !when || create.isPending}
           className="text-xs bg-amber-500 text-white rounded-lg px-3 font-medium disabled:opacity-40">إضافة</button>
       </div>
       <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
@@ -220,7 +220,7 @@ function RemindersSection() {
               <div className="text-xs font-medium text-gray-800 truncate">{r.title}</div>
               <div className="text-[10px] text-amber-600">{r.time_until}</div>
             </div>
-            <button onClick={() => del.mutate(r.id)} className="text-gray-300 hover:text-red-500 text-xs px-1 shrink-0">✕</button>
+            <button data-tour="shell-notifications-reminder-delete" onClick={() => del.mutate(r.id)} className="text-gray-300 hover:text-red-500 text-xs px-1 shrink-0">✕</button>
           </div>
         ))}
       </div>
@@ -286,7 +286,7 @@ export default function NotificationPanel({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button data-tour="shell-notifications-reminders"
             onClick={() => setShowReminders(s => !s)}
             className={`text-xs font-medium px-1.5 py-0.5 rounded ${showReminders ? 'bg-amber-100 text-amber-700' : 'text-amber-600 hover:bg-amber-50'}`}
             title="تذكيرات شخصية"
@@ -294,7 +294,7 @@ export default function NotificationPanel({
             ⏰ تذكير
           </button>
           {unreadCount > 0 && (
-            <button
+            <button data-tour="shell-notifications-read-all"
               onClick={onMarkAllRead}
               className="text-xs text-brand-600 hover:text-brand-800 font-medium"
             >
@@ -302,7 +302,7 @@ export default function NotificationPanel({
             </button>
           )}
           {notifications.length > 0 && (
-            <button
+            <button data-tour="shell-notifications-delete-all"
               onClick={handleClearAll}
               disabled={clearing}
               className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
@@ -397,10 +397,10 @@ export default function NotificationPanel({
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <div className="border-t border-gray-100 px-3 py-2 flex items-center justify-between">
         {onOpenInbox
-          ? <button onClick={onOpenInbox} className="text-xs text-brand-600 hover:text-brand-800 font-medium">📥 كل الإشعارات</button>
+          ? <button data-tour="shell-notifications-inbox" onClick={onOpenInbox} className="text-xs text-brand-600 hover:text-brand-800 font-medium">📥 كل الإشعارات</button>
           : <span className="text-xs text-gray-400">يتجدد تلقائياً</span>}
         {onOpenPrefs && (
-          <button onClick={onOpenPrefs} className="text-xs text-gray-500 hover:text-gray-800 font-medium">⚙️ الإعدادات</button>
+          <button data-tour="shell-notifications-prefs" onClick={onOpenPrefs} className="text-xs text-gray-500 hover:text-gray-800 font-medium">⚙️ الإعدادات</button>
         )}
       </div>
     </div>

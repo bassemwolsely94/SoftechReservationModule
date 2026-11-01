@@ -71,10 +71,14 @@ function HintsBody({ steps }) {
   const [active, setActive] = useState(null)        // { step, rect }
 
   useEffect(() => {
+    // nearest anchor that this screen explains — a shared component's own anchor that the
+    // screen has no step for must not hide the screen's wrapper (e.g. search inside pos-order-search)
     const find = (node) => {
-      const el = node?.closest?.('[data-tour]')
-      const step = el && steps.get(el.getAttribute('data-tour'))
-      return step ? { el, step } : null
+      for (let el = node?.closest?.('[data-tour]'); el; el = el.parentElement?.closest('[data-tour]')) {
+        const step = steps.get(el.getAttribute('data-tour'))
+        if (step) return { el, step }
+      }
+      return null
     }
     const show = (e) => {
       const hit = find(e.target)

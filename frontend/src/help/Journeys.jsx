@@ -93,7 +93,7 @@ function JourneyCard({ j, lang, canEdit }) {
           <p className="text-xs text-muted leading-5 mt-0.5 whitespace-pre-line">{pick(j.summary, lang)}</p>
         </div>
         {canEdit && (
-          <button type="button" onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline shrink-0">
+          <button data-tour="general-help-center-journey-edit" type="button" onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline shrink-0">
             ✏️ {en ? 'Edit' : 'تعديل'}
           </button>
         )}
@@ -151,10 +151,10 @@ function JourneyEditor({ j, onDone }) {
              className="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-surface text-content" />
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex gap-2">
-        <button type="button" disabled={busy} onClick={() => run(() => helpApi.saveJourney(j.id, { ...draft, steps }, note))}
+        <button data-tour="general-help-center-journey-save" type="button" disabled={busy} onClick={() => run(() => helpApi.saveJourney(j.id, { ...draft, steps }, note))}
                 className="text-xs bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 disabled:opacity-50">حفظ</button>
         {j.edited && (
-          <button type="button" disabled={busy} onClick={() => run(() => helpApi.revertJourney(j.id, note))}
+          <button data-tour="general-help-center-journey-revert" type="button" disabled={busy} onClick={() => run(() => helpApi.revertJourney(j.id, note))}
                   className="text-xs border border-line rounded-lg px-3 py-1.5 text-content hover:bg-surface-2">الرجوع للشرح الأصلي</button>
         )}
         <button type="button" onClick={onDone} className="ms-auto text-xs text-muted hover:underline">إلغاء</button>

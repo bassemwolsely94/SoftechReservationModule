@@ -396,7 +396,7 @@ export default function Layout() {
               </span>
             </div>
             {/* Logout */}
-            <button
+            <button data-tour="shell-logout"
               onClick={() => { logout(); navigate('/login') }}
               title="تسجيل الخروج"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
@@ -530,7 +530,7 @@ export default function Layout() {
                 <div className="text-xs text-faint">{user?.branch_name || user?.role}</div>
               </div>
             </div>
-            <button
+            <button data-tour="shell-logout"
               onClick={() => { logout(); navigate('/login') }}
               className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-red-50"
               title="تسجيل الخروج"

@@ -603,7 +603,7 @@ function SupplyKpiSection({ navigate }) {
   const go = (bucket) => () => navigate(`/supply?tab=cases${bucket ? `&bucket=${bucket}` : ''}`)
 
   return (
-    <div>
+    <div data-tour="general-dashboard-supply">
       <SectionTitle icon="🔄" action={
         <div className="flex items-center gap-2">
           <select value={days} onChange={e => setDays(Number(e.target.value))}
@@ -969,7 +969,7 @@ export default function DashboardPage() {
 
             {/* Purchasing shortcut (admin/purchasing only) */}
             {isAdminOrCC && user?.role !== 'call_center' && (
-              <button
+              <button data-tour="general-dashboard-purchasing"
                 onClick={() => navigate('/purchasing')}
                 className="w-full rounded-2xl p-4 border-2 text-right transition-all hover:shadow-md"
                 style={{ borderColor: tint(BRAND, 0.267), background: 'rgb(var(--c-brand-50))' }}

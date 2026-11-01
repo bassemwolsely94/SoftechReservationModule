@@ -281,7 +281,7 @@ function ReviewModal({ flag, onClose, onSaved }) {
 
         <div className="flex gap-2">
           <button onClick={onClose} className="btn-secondary text-sm px-4">إلغاء</button>
-          <button onClick={handleReview} disabled={saving}
+          <button data-tour="admin-audit-review-confirm" onClick={handleReview} disabled={saving}
             className="btn-primary text-sm flex-1 disabled:opacity-50">
             {saving ? 'جارٍ...' : 'تأكيد القرار'}
           </button>
