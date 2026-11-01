@@ -1,5 +1,6 @@
 """N3 final fix wave: rider 2FA enrolment (C1), admin Z2 recovery (I2), delivery Z2 = rider (I3)."""
 import importlib
+import json
 from types import SimpleNamespace
 
 from django.core.cache import cache
@@ -140,3 +141,164 @@ class UnsafeEnforceTests(TestCase):
             with self.assertLogs('elrezeiky.access', 'ERROR') as cm:
                 writers.run_startup_checks(env_path=env)
         self.assertIn('access.E003', cm.output[0])
+
+
+def _mw_call(user, access, path, method='get'):
+    from django.http import HttpResponse
+    from django.test import RequestFactory
+    from apps.access.policy_middleware import ZonePolicyMiddleware
+    req = getattr(RequestFactory(), method)(path)
+    req.user = user
+    req.access = access
+    return ZonePolicyMiddleware(lambda _r: HttpResponse('ok'))(req)
+
+
+@override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', ACCESS_POLICY_TTL=0)
+class MiddlewareParityTests(TestCase):
+    """M1: the middleware applies the same subject as sign-in / refresh; M2: a failed context is
+    open on an internal network (F3), closed outside."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_no_profile_account_follows_viewer_rows(self):
+        from django.contrib.auth.models import User
+        svc = User.objects.create_user('fw_svc', password='x')
+        with self.assertLogs('elrezeiky.access', 'WARNING'):
+            r = _mw_call(svc, SimpleNamespace(zone='Z4', failed=False), '/api/customers/')
+        self.assertEqual((r.status_code, json.loads(r.content)['reason']), (403, 'blocked'))
+        self.assertEqual(_mw_call(svc, SimpleNamespace(zone='Z1', failed=False), '/api/customers/').status_code, 200)
+
+    def test_superuser_without_profile_follows_admin_rows(self):
+        from django.contrib.auth.models import User
+        su = User.objects.create_superuser('fw_su', password='x')
+        self.assertEqual(_mw_call(su, SimpleNamespace(zone='Z3', failed=False), '/api/customers/').status_code, 200)
+        with self.assertLogs('elrezeiky.access', 'WARNING'):
+            r = _mw_call(su, SimpleNamespace(zone='Z4', failed=False), '/api/customers/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_failed_context_inside_is_open_and_logged(self):
+        from apps.access.network import NetworkInfo
+        user, _, _ = make_user('fw_ctx', role='pharmacist')
+        ctx = SimpleNamespace(zone=None, failed=True, network=NetworkInfo(zone='internal', ip=None, site=None))
+        with self.assertLogs('elrezeiky.access', 'ERROR'):
+            r = _mw_call(user, ctx, '/api/customers/', 'post')
+        self.assertEqual(r.status_code, 200)
+
+    def test_failed_context_outside_is_closed(self):
+        from apps.access.network import NetworkInfo
+        user, _, _ = make_user('fw_ctx2', role='pharmacist')
+        ctx = SimpleNamespace(zone=None, failed=True, network=NetworkInfo(zone='external', ip=None, site=None))
+        with self.assertLogs('elrezeiky.access', 'WARNING'):
+            r = _mw_call(user, ctx, '/api/customers/')
+        self.assertEqual((r.status_code, json.loads(r.content)['reason']), (403, 'blocked'))
+
+    @override_settings(NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='k')
+    def test_fallback_keeps_the_label_without_the_database(self):
+        from django.test import RequestFactory
+        from apps.access import context
+        req = RequestFactory().get('/api/x/', HTTP_X_ELR_NETWORK='internal', HTTP_X_ELR_PROXY_KEY='k')
+        ctx = context.fallback(req)
+        self.assertEqual((ctx.network.zone, ctx.failed, ctx.zone), ('internal', True, None))
+        forged = RequestFactory().get('/api/x/', HTTP_X_ELR_NETWORK='internal')
+        self.assertEqual(context.fallback(forged).network.zone, 'external')
+
+
+@override_settings(ACCESS_POLICY_TTL=0)
+class AlwaysOpenAndNoRowsTests(TestCase):
+    """M5: help + announcements are open for reading (and a few own-session writes) only; M6: a role
+    without rows is open inside and blocked outside."""
+
+    def test_help_and_announcements_reads_only(self):
+        ph = _p('pharmacist')
+        self.assertTrue(decide(ph, 'Z2', '/api/help/screens/x/', 'GET').allowed)
+        self.assertTrue(decide(ph, 'Z2', '/api/notifications/announcements/', 'GET').allowed)
+        for path in ('/api/help/onboarding/learned/', '/api/help/quizzes/pos/submit/',
+                     '/api/help/tour-event/', '/api/notifications/announcements/4/ack/',
+                     '/api/notifications/4/read/', '/api/notifications/preferences/'):
+            self.assertTrue(decide(ph, 'Z2', path, 'POST').allowed, path)
+        for path in ('/api/notifications/announcements/', '/api/notifications/announcements/4/',
+                     '/api/help/feedback/3/resolve/', '/api/help/training/screen/x/', '/api/help/glossary/2/'):
+            r = decide(ph, 'Z2', path, 'POST')
+            self.assertEqual((r.allowed, r.reason), (False, 'read_only'), path)
+        r = decide(_p('delivery'), 'Z4', '/api/help/glossary/2/', 'PATCH')
+        self.assertEqual((r.allowed, r.reason), (False, 'module'))
+
+    def test_role_without_rows(self):
+        from apps.access import session_policy
+        ZonePolicy.objects.filter(role='viewer').delete()
+        v = _p('viewer')
+        for zone in ('Z1', 'Z2'):
+            self.assertTrue(decide(v, zone, '/api/customers/', 'POST', 'customers').allowed, zone)
+            self.assertFalse(session_policy.blocked(v, zone), zone)
+        for zone in ('Z3', 'Z4', None):
+            r = decide(v, zone, '/api/customers/', 'GET', 'customers')
+            self.assertEqual((r.allowed, r.reason), (False, 'blocked'), zone)
+            self.assertTrue(session_policy.blocked(v, zone), zone)
+
+
+class MfaClaimTests(TestCase):
+    """M3: a session that never passed 2FA cannot be refreshed into a zone that requires it."""
+
+    def test_refresh_into_mfa_zone_needs_the_claim(self):
+        from apps.access import session_policy
+        _, admin, _ = make_user('fw_mfa_admin', role='admin')
+        self.assertEqual(session_policy.refresh_allowed(admin, {'mfa': False}, 'Z3'), (False, 'mfa'))
+        self.assertEqual(session_policy.refresh_allowed(admin, {}, 'Z3'), (False, 'mfa'))
+        ok, _ = session_policy.refresh_allowed(admin, {'mfa': True, 'iat': 9e9}, 'Z3')
+        self.assertTrue(ok)
+        self.assertEqual(session_policy.refresh_allowed(admin, {}, 'Z1'), (True, None))
+        self.assertEqual(session_policy.message('mfa'), session_policy.MFA_AGAIN_MESSAGE)
+
+    def test_claim_stamped_at_sign_in_and_carried_on_rotation(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.users.mfa import build_login_response
+        from apps.users.views import _stamp_zone
+        user, _, _ = make_user('fw_mfa_user', role='admin')
+        plain = build_login_response(user, zone='Z1')
+        self.assertFalse(RefreshToken(plain['refresh'])['mfa'])
+        passed = build_login_response(user, zone='Z1', mfa=True)
+        self.assertTrue(RefreshToken(passed['refresh'])['mfa'])
+        self.assertTrue(AccessToken(passed['access'])['mfa'])
+        access, refresh = _stamp_zone(passed['access'], passed['refresh'], 'Z3', 123, mfa=True)
+        self.assertTrue(RefreshToken(refresh)['mfa'])
+        self.assertEqual(RefreshToken(refresh)['zone'], 'Z3')
+        self.assertTrue(AccessToken(access)['mfa'])
+
+    @override_settings(NETWORK_POLICY_ENFORCEMENT='enforce', NETWORK_HEADER_TRUSTED=True, NETWORK_PROXY_KEY='',
+                       ACCESS_POLICY_TTL=0, ACCESS_NETWORKS_TTL=0)
+    def test_refresh_view_refuses_without_mfa_on_an_approved_device_outside(self):
+        from apps.access import devices
+        from apps.access.models import Device
+        from core.auth_cookies import REFRESH_COOKIE
+        from apps.users.mfa import build_login_response
+        user, _, _ = make_user('fw_mfa_ref', role='supervisor')      # Z3 read_only + require_mfa
+        secret = devices.new_secret()
+        Device.objects.create(secret_hash=devices.hash_secret(secret), name='lap', status='approved')
+        self.client.cookies[devices.COOKIE] = secret
+        self.client.cookies[REFRESH_COOKIE] = build_login_response(user, zone='Z1')['refresh']
+        with self.assertLogs('elrezeiky.access', 'WARNING'):
+            r = self.client.post('/api/auth/refresh/', {}, content_type='application/json',
+                                 HTTP_X_ELR_NETWORK='external')
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.json()['reason'], 'mfa')
+        self.client.cookies[REFRESH_COOKIE] = build_login_response(user, zone='Z3', mfa=True)['refresh']
+        r = self.client.post('/api/auth/refresh/', {}, content_type='application/json',
+                             HTTP_X_ELR_NETWORK='external')
+        self.assertEqual(r.status_code, 200, r.content)
+
+
+class ResolveOnceTests(TestCase):
+    """F6: the JWT user is worked out once per request, whoever asks."""
+
+    def test_user_from_request_memoised(self):
+        from django.test import RequestFactory
+        from core.auth_cookies import user_from_request
+        user, _, _ = make_user('fw_once', role='pharmacist')
+        req = RequestFactory().get('/api/x/', HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(user)}')
+        self.assertEqual(user_from_request(req), user)
+        with self.assertNumQueries(0):
+            self.assertEqual(user_from_request(req), user)
+        anon = RequestFactory().get('/api/x/')
+        self.assertIsNone(user_from_request(anon))
+        self.assertIsNone(user_from_request(anon))

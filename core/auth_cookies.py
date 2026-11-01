@@ -91,9 +91,25 @@ class CookieJWTAuthentication(JWTAuthentication):
         return user
 
 
+_USER_MEMO = '_elr_jwt_user'
+
+
 def user_from_request(request):
     """Header or cookie JWT → user, without the CSRF check (read-only callers
-    such as the RBAC middleware). None when absent/invalid."""
+    such as the RBAC middleware). None when absent/invalid. Worked out once per request: the
+    access-context, RBAC and zone-policy middlewares all ask (N3, F6)."""
+    memo = getattr(request, '__dict__', {})
+    if _USER_MEMO in memo:
+        return memo[_USER_MEMO]
+    user = _user_from_request(request)
+    try:
+        memo[_USER_MEMO] = user
+    except Exception:
+        pass
+    return user
+
+
+def _user_from_request(request):
     auth = CookieJWTAuthentication()
     try:
         if auth.get_header(request) is not None:

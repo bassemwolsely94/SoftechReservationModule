@@ -132,18 +132,23 @@ class DecideTests(TestCase):
 
     def test_always_open_allowed_everywhere(self):
         for p in ['/api/auth/me/', '/api/auth/refresh/', '/api/users/my-permissions/',
-                  '/api/notifications/', '/api/help/x/', '/api/access/whoami/', '/api/audit/screen-view/']:
+                  '/api/notifications/', '/api/access/whoami/', '/api/audit/screen-view/']:
             for role in ROLES:
                 for z in ('Z2', 'Z3', 'Z4'):
                     self.assertTrue(self.d(role, z, p, 'POST', 'pos').allowed, (p, role, z))
+        for role in ROLES:      # help + announcements: reads only (final wave M5)
+            for z in ('Z2', 'Z3', 'Z4'):
+                self.assertTrue(self.d(role, z, '/api/help/x/', 'GET', 'pos').allowed, (role, z))
 
     def test_zone_none(self):
         self.assertTrue(decide(None, None, '/api/pos-orders/', 'GET', 'pos', False).allowed)
         r = decide(_profile('admin'), None, '/api/pos-orders/', 'GET', 'pos', False)
         self.assertEqual((r.allowed, r.reason), (False, 'blocked'))   # context failure -> Z4
 
-    def test_no_policy_row_allowed(self):
-        self.assertTrue(decide(_profile('newrole'), 'Z4', '/api/pos-orders/', 'GET', 'pos', False).allowed)
+    def test_no_policy_row_open_inside_blocked_outside(self):     # final wave M6
+        self.assertTrue(decide(_profile('newrole'), 'Z1', '/api/pos-orders/', 'POST', 'pos', False).allowed)
+        r = decide(_profile('newrole'), 'Z4', '/api/pos-orders/', 'GET', 'pos', False)
+        self.assertEqual((r.allowed, r.reason), (False, 'blocked'))
 
     def test_listed_view_only_refuses_writes(self):
         ZonePolicy.objects.filter(role='call_center', zone='Z3').update(view_only=True)
@@ -193,10 +198,13 @@ EXPORT_ROUTES = [
     '/api/supply/availability/12/export/', '/api/supply/cases/export/',
     '/api/shortage/lists/13/export-excel/', '/api/shortage/lists/13/export-supplier-matrix/',
     '/api/shortage/lists/13/export-supplier-po/S1/', '/api/shortage/lists/export-aggregated/',
+    # final wave M4: printouts and letters carry the data out too
+    '/api/supply/order-list/excel/', '/api/reservations/3/print/', '/api/transfers/4/print/',
+    '/api/vouchers/documents/ABC123/print/', '/api/insurance/claims/9/cover-letter/',
 ]
 NON_EXPORT = ['/api/pos-orders/', '/api/customers/12/', '/api/purchasing/runs/latest/',
               '/api/products/exporter-list/', '/api/delivery/app/my-orders/',
-              '/api/reservations/', '/api/auth/me/']
+              '/api/reservations/', '/api/auth/me/', '/api/products/printers/', '/api/excel-import/']
 
 
 class ExportDetectionTests(SimpleTestCase):

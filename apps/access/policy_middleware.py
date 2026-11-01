@@ -12,9 +12,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
 
+from core.auth_cookies import user_from_request
 from core.middleware import module_access
 
-from . import policy
+from . import policy, session_policy
+from .network import INTERNAL
 
 log = logging.getLogger('elrezeiky.access')
 
@@ -79,6 +81,14 @@ def _json_body(request):
     return body if isinstance(body, dict) else forced
 
 
+def _user(request):
+    """The signed-in user: the session user, else the JWT (resolved once per request)."""
+    user = getattr(request, 'user', None)
+    if user is not None and getattr(user, 'is_authenticated', False):
+        return user
+    return user_from_request(request)
+
+
 def _scope(request, module):
     """Dedupe scope: the module, else the first two path segments after /api/."""
     if module:
@@ -102,10 +112,15 @@ class ZonePolicyMiddleware:
         if mode == 'off' or not request.path_info.startswith('/api/'):
             return None
         try:
-            profile = module_access._staff_profile(request)
+            # the same policy subject as sign-in and refresh: a superuser without a profile is
+            # admin, any other account without one is viewer (M1)
+            profile = session_policy.subject(_user(request))
             if profile is None:
                 return None
             access = getattr(request, 'access', None)
+            if getattr(access, 'failed', False) and access.network.zone == INTERNAL:
+                self._context_failed(request)      # F3 in the middleware too: open inside (M2)
+                return None
             zone = getattr(access, 'zone', None)
             path = request.path_info
             need = module_access.required(path, request.method)
@@ -126,6 +141,15 @@ class ZonePolicyMiddleware:
                 return JsonResponse({'detail': ERROR_MESSAGE, 'zone': None, 'reason': 'error'},
                                     status=403)
             return None
+
+    @staticmethod
+    def _context_failed(request):
+        try:
+            if cache.add('access:zone-noctx', 1, DENY_DEDUPE_SECONDS):
+                log.error('zone policy: no access context on an internal network, allowed (%s %s)',
+                          request.method, request.path_info)
+        except Exception:
+            log.error('zone policy: no access context on an internal network, allowed')
 
     @staticmethod
     def _log(mode, profile, zone, reason, request, scope):

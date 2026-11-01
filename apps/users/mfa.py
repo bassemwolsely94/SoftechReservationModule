@@ -248,10 +248,11 @@ def cookie_age(profile, zone, payload):
         return None
 
 
-def build_login_response(user, request=None, device=None, zone=None) -> dict:
+def build_login_response(user, request=None, device=None, zone=None, mfa=False) -> dict:
     """Tokens + user for a completed sign-in. `device` (from enroll_login) adds the `dev` claim;
     without a request or device there is no enrollment and no claim. Every token gets the `zone`
-    (worked out from the request when not given) and `auth_at` claims (N3)."""
+    (worked out from the request when not given), `auth_at` and `mfa` (this sign-in passed 2FA)
+    claims (N3)."""
     from rest_framework_simplejwt.tokens import RefreshToken
     from apps.access import session_policy
     from .views import _MeSerializer
@@ -261,7 +262,7 @@ def build_login_response(user, request=None, device=None, zone=None) -> dict:
         refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it
     if zone is None and request is not None:
         zone = session_policy.request_zone(request)
-    session_policy.stamp(refresh, zone)
+    session_policy.stamp(refresh, zone, mfa=mfa)
     return {
         'access':  str(refresh.access_token),
         'refresh': str(refresh),
@@ -342,7 +343,7 @@ def verify_2fa_view(request):
     cache.set(done_key, 1, _PREAUTH_MAX_AGE)
     device, device_secret = enroll_login(request, user)
     _log('mfa_verified', profile, request, device=device)
-    resp = build_login_response(user, request, device=device, zone=zone)
+    resp = build_login_response(user, request, device=device, zone=zone, mfa=True)
     if request.data.get('remember_device'):
         from apps.access import devices
         devices.remember_mfa(device, profile)     # approved devices only (N2)
@@ -420,7 +421,7 @@ def enable_2fa_view(request):
     if via_preauth:
         # Enrolled as part of a forced login → log them in now.
         device, device_secret = enroll_login(request, user)
-        resp.update(build_login_response(user, request, device=device, zone=zone))
+        resp.update(build_login_response(user, request, device=device, zone=zone, mfa=True))
         _log('login_success', profile, request, note='دخول بعد تفعيل المصادقة الثنائية', device=device)
         session_policy.alert_external_login(profile, zone, request)
         max_age = cookie_age(session_policy.subject(user), zone, resp)

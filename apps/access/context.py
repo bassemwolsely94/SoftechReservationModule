@@ -8,7 +8,7 @@ from core.auth_cookies import user_from_request
 
 from .devices import DeviceInfo
 from .devices import resolve as resolve_device
-from .network import EXTERNAL, NetworkInfo, request_network
+from .network import EXTERNAL, NetworkInfo, request_network, zone_from_request
 from .zones import zone_for
 
 access_context = contextvars.ContextVar('access_context', default=None)
@@ -21,6 +21,7 @@ class AccessContext:
     role: str | None
     device: DeviceInfo | None = None     # the device named by the erp_device cookie (N2)
     zone: str | None = None              # Z1-Z4 (N3); None for an anonymous request
+    failed: bool = False                 # the context could not be worked out (fallback)
 
 
 def current():
@@ -45,6 +46,15 @@ def for_request(request):
                          role=_role(user) if user else None, device=device, zone=zone)
 
 
-def fallback():
-    """What a request is treated as when its context could not be worked out."""
-    return AccessContext(network=NetworkInfo(zone=EXTERNAL, ip=None, site=None), user_id=None, role=None)
+def fallback(request=None):
+    """What a request is treated as when its context could not be worked out: no user, no device,
+    and the network from the nginx label alone (header + key, no database), else external. The zone
+    policy middleware lets an internal one through (F3: fail open inside, closed outside)."""
+    zone = EXTERNAL
+    if request is not None:
+        try:
+            zone = zone_from_request(request)
+        except Exception:
+            zone = EXTERNAL
+    return AccessContext(network=NetworkInfo(zone=zone, ip=None, site=None), user_id=None, role=None,
+                         failed=True)

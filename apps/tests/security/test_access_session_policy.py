@@ -61,9 +61,9 @@ def _with_device(secret):
     return c
 
 
-def _token(user, zone, auth_at):
+def _token(user, zone, auth_at, mfa=True):
     t = RefreshToken.for_user(user)
-    session_policy.stamp(t, zone, auth_at=auth_at)
+    session_policy.stamp(t, zone, auth_at=auth_at, mfa=mfa)   # mfa: the sign-in passed 2FA (final wave M3)
     return t
 
 
@@ -108,6 +108,7 @@ class InterfaceTests(Base):
         user, admin, _ = make_user('sp_iat', role='admin')
         t = RefreshToken.for_user(user)
         self.assertNotIn('auth_at', t.payload)
+        t['mfa'] = True
         t['iat'] = int(time.time()) - 9 * HOUR
         self.assertEqual(session_policy.refresh_allowed(admin, t, 'Z3'), (False, 'expired'))
         t['iat'] = int(time.time()) - 7 * HOUR
@@ -124,6 +125,7 @@ class InterfaceTests(Base):
         t = RefreshToken.for_user(user)
         old_iat = int(time.time()) - 2 * HOUR
         t['iat'] = old_iat
+        t['mfa'] = True
         c = APIClient()
         c.cookies[devices.COOKIE] = secret
         r = _refresh(c, t)
@@ -484,6 +486,7 @@ class ReviewRoundOneTests(Base):
         t = RefreshToken.for_user(user)                 # pre-N3: no auth_at
         old_iat = int(time.time()) - 2 * HOUR
         t['iat'] = old_iat
+        t['mfa'] = True
         with mock.patch('apps.access.session_policy.stamp', side_effect=RuntimeError('x')):
             with self.assertLogs('apps.users.views', 'ERROR'):
                 r = _refresh(_with_device(secret), t)

@@ -1,8 +1,10 @@
 """
 Sessions follow the access zone (N3).
 
-Every token carries `zone` (Z1-Z4 at the time it was issued or last refreshed) and `auth_at`
-(epoch seconds of the sign-in, kept across refresh rotation; old tokens fall back to `iat`).
+Every token carries `zone` (Z1-Z4 at the time it was issued or last refreshed), `auth_at`
+(epoch seconds of the sign-in, kept across refresh rotation; old tokens fall back to `iat`) and
+`mfa` (True when the sign-in passed 2FA - a code, or an approved device that remembers it; kept
+across rotation). A refresh into a zone that requires 2FA without it is refused in enforce.
 Sign-in and refresh re-evaluate the zone from the request itself (network + the erp_device
 cookie's status) - the sign-in request has no session yet.
 
@@ -25,6 +27,7 @@ log = logging.getLogger('elrezeiky.access')
 
 EXTERNAL_ZONES = (Z3, Z4)
 EXPIRED_MESSAGE = 'انتهت مدة الجلسة المسموحة من خارج شبكة الشركة — سجّل الدخول من جديد'
+MFA_AGAIN_MESSAGE = 'الدخول من خارج شبكة الشركة يحتاج رمز التحقق — سجّل الدخول من جديد'
 ENROL_INSIDE_MESSAGE = 'فعّل المصادقة الثنائية من داخل شبكة الشركة أولاً'
 ALERT_TITLE = 'دخول من خارج الشبكة'
 
@@ -43,6 +46,8 @@ def message(reason):
         return EXPIRED_MESSAGE
     if reason == 'mfa_enrol_inside':
         return ENROL_INSIDE_MESSAGE
+    if reason == 'mfa':
+        return MFA_AGAIN_MESSAGE
     return REASON_MESSAGES.get(reason, REASON_MESSAGES['blocked'])
 
 
@@ -106,10 +111,19 @@ def _on_error(request, what):
 
 # ── claims ──────────────────────────────────────────────────────────────────────────────
 
-def stamp(refresh, zone, auth_at=None):
-    """Set the `zone` and `auth_at` claims (call before .access_token, which copies them)."""
+def stamp(refresh, zone, auth_at=None, mfa=False):
+    """Set the `zone`, `auth_at` and `mfa` claims (call before .access_token, which copies them)."""
     refresh['zone'] = zone
     refresh['auth_at'] = int(auth_at if auth_at is not None else _now())
+    refresh['mfa'] = bool(mfa)
+
+
+def mfa_of(token):
+    """True when the token's sign-in passed 2FA (the `mfa` claim; absent = False)."""
+    try:
+        return bool(token.get('mfa')) if token is not None else False
+    except Exception:
+        return False
 
 
 def auth_at_of(token):
@@ -137,14 +151,21 @@ def mfa_required_in_zone(profile, zone):
 
 
 def blocked(profile, zone):
+    if profile is None:
+        return False
     pol = _policy(profile, zone)
-    return pol is not None and pol.access == 'none'
+    if pol is None:
+        return (zone or Z4) in EXTERNAL_ZONES     # a role without rows: closed outside only
+    return pol.access == 'none'
 
 
 def refresh_allowed(profile, token, zone):
-    """(True, None) or (False, 'blocked' | 'expired')."""
+    """(True, None) or (False, 'blocked' | 'mfa' | 'expired'). 'mfa': a session that never passed
+    2FA (signed in inside, or before the switch) carried into a zone that requires it (M3)."""
     if blocked(profile, zone):
         return False, 'blocked'
+    if mfa_required_in_zone(profile, zone) and not mfa_of(token):
+        return False, 'mfa'
     cap = cap_hours(profile, zone)
     if cap:
         auth_at = auth_at_of(token)
@@ -234,7 +255,7 @@ def login_needs_mfa(request, profile, zone):
 
 
 def refresh_refusal(request, profile, token, zone):
-    """'blocked' / 'expired' when this refresh must be refused (enforce only), else None."""
+    """'blocked' / 'mfa' / 'expired' when this refresh must be refused (enforce only), else None."""
     current = mode()
     if current == 'off' or profile is None:
         return None

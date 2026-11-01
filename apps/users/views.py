@@ -246,7 +246,8 @@ def login_view(request):
 
     device, device_secret = _mfa.enroll_login(request, user)
     _log_auth('login_success', profile, ip, note=login_note, request=request, device=device)
-    payload = _mfa.build_login_response(user, request, device=device, zone=zone)
+    payload = _mfa.build_login_response(user, request, device=device, zone=zone,
+                                        mfa=login_note == 'mfa_skipped_device')
     _session.alert_external_login(profile, zone, request)
     # The SPA uses the httpOnly cookies and ignores the body tokens (kept for
     # scripts / non-browser clients, which need the password anyway).
@@ -297,7 +298,8 @@ def refresh_view(request):
     # outside meets the outside rules; the zone's cap counts from the sign-in (auth_at).
     from apps.access import session_policy as _session
     zone, owner, auth_at = _refresh_zone(request, raw)
-    reason = _session.refresh_refusal(request, owner, _old_token(raw), zone) if owner is not None else None
+    old_token = _old_token(raw)
+    reason = _session.refresh_refusal(request, owner, old_token, zone) if owner is not None else None
     if reason is not None:
         return clear_auth_cookies(Response({'detail': _session.message(reason), 'zone': zone, 'reason': reason},
                                            status=status.HTTP_401_UNAUTHORIZED))
@@ -314,7 +316,8 @@ def refresh_view(request):
         # A session from before N2 has no device: enrol this browser now and stamp the rotated
         # tokens, so existing users reach the registry without a forced sign-in (I-2).
         access, new_refresh, device_secret = _stamp_device(request, raw, access, new_refresh)
-    access, new_refresh = _stamp_zone(access, new_refresh, zone, auth_at)
+    access, new_refresh = _stamp_zone(access, new_refresh, zone, auth_at,
+                                      mfa=_session.mfa_of(old_token))
     resp = Response({'access': access, 'refresh': new_refresh} if body_token and new_refresh
                     else ({'access': access} if body_token else {'ok': True}))
     if device_secret:
@@ -346,18 +349,19 @@ def _refresh_zone(request, raw):
         return zone, None, None
 
 
-def _stamp_zone(access, refresh, zone, auth_at):
-    """The rotated tokens with the current `zone` and the kept `auth_at`. Never raises."""
+def _stamp_zone(access, refresh, zone, auth_at, mfa=False):
+    """The rotated tokens with the current `zone` and the kept `auth_at` / `mfa`. Never raises."""
     try:
         from rest_framework_simplejwt.tokens import AccessToken
         from apps.access import session_policy as _session
         if not refresh:
             return access, refresh
         new_r = RefreshToken(refresh)
-        _session.stamp(new_r, zone, auth_at=auth_at)
+        _session.stamp(new_r, zone, auth_at=auth_at, mfa=mfa)
         new_a = AccessToken(access)
         new_a['zone'] = new_r['zone']
         new_a['auth_at'] = new_r['auth_at']
+        new_a['mfa'] = new_r['mfa']
         return str(new_a), str(new_r)
     except Exception:
         logger.error('refresh zone stamp failed; carrying auth_at only', exc_info=True)
@@ -368,8 +372,10 @@ def _stamp_zone(access, refresh, zone, auth_at):
             return access, refresh
         new_r = RefreshToken(refresh)
         new_r['auth_at'] = int(auth_at)
+        new_r['mfa'] = bool(mfa)
         new_a = AccessToken(access)
         new_a['auth_at'] = int(auth_at)
+        new_a['mfa'] = bool(mfa)
         return str(new_a), str(new_r)
     except Exception:
         logger.error('refresh auth_at carry failed', exc_info=True)

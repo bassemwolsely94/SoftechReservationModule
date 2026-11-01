@@ -10,16 +10,24 @@ from dataclasses import dataclass
 from django.conf import settings
 from django.core.cache import cache
 
-from .zones import Z2, Z3, Z4
+from .zones import Z1, Z2, Z3, Z4
 
-# Reachable in every zone for a signed-in user.
+# Reachable in every zone for a signed-in user: the user's own session (any method).
 ALWAYS_OPEN = (
     '/api/auth/',
     '/api/users/my-permissions/',
-    '/api/notifications/',
-    '/api/help/',
+    '/api/notifications/',          # own inbox; announcements/ is READ_OPEN below
     '/api/access/whoami/',
     '/api/audit/screen-view/',
+)
+# Reachable in every zone for reading only: company announcements and the help centre (their
+# create / edit / resolve calls follow the zone policy like any other write).
+READ_OPEN = ('/api/help/', '/api/notifications/announcements/')
+# ... plus these own-session writes under READ_OPEN.
+OWN_SESSION_WRITES = (
+    re.compile(r'^/api/notifications/announcements/\d+/ack/$'),
+    re.compile(r'^/api/help/(ask|tour-event|onboarding/learned)/$'),
+    re.compile(r'^/api/help/quizzes/[^/]+/submit/$'),
 )
 
 # The rider surface: (compiled regex on request.path_info, methods or None for any).
@@ -85,16 +93,19 @@ def policy_for(role, zone):
 # ── request classification ───────────────────────────────────────────────────
 
 EXPORT_FORMATS = ('xlsx', 'xls', 'csv', 'excel')
+# Whole path segments that mean a download: printouts and letters carry the same data out.
+EXPORT_SEGMENTS = ('export', 'excel', 'print', 'cover-letter')
 # POST routes where the body picks the export: path -> (key, value)
 BODY_EXPORTS = {'/api/reservations/bulk/': ('action', 'export')}
 
 
 def is_export(path, method=None, query=None, body=None):
-    """A download request: a path segment `export`, `export-*` or `*-export`; a `?format=` of
-    xlsx / xls / csv / excel; or a body-selected export (BODY_EXPORTS)."""
+    """A download request: a path segment in EXPORT_SEGMENTS (export, excel, print, cover-letter),
+    `export-*` or `*-export`; a `?format=` of xlsx / xls / csv / excel; or a body-selected export
+    (BODY_EXPORTS)."""
     path = path or ''
     for seg in path.split('/'):
-        if seg == 'export' or seg.startswith('export-') or seg.endswith('-export'):
+        if seg in EXPORT_SEGMENTS or seg.startswith('export-') or seg.endswith('-export'):
             return True
     if query is not None:
         fmt = query.get('format')
@@ -106,7 +117,9 @@ def is_export(path, method=None, query=None, body=None):
     return False
 
 
-def _is_always_open(path):
+def _is_always_open(path, method='GET'):
+    if path.startswith(READ_OPEN):
+        return method in _SAFE or any(rx.match(path) for rx in OWN_SESSION_WRITES)
     return path.startswith(ALWAYS_OPEN)
 
 
@@ -123,7 +136,7 @@ def softech_write_allowed(profile, zone):
     zone = zone or Z4   # signed-in context failure is Z4, as decide()
     pol = policy_for(profile.role, zone)
     if pol is None:
-        return True
+        return zone in (Z1, Z2)    # a role without rows: open inside, closed outside
     if pol.softech_write:
         return True
     return zone == Z3 and profile.role == 'admin' and bool(getattr(profile, 'external_softech_write', False))
@@ -137,14 +150,15 @@ def decide(profile, zone, path, method, module=None, export_request=False):
         return Decision(True, None, zone)          # anonymous: the view answers 401
     if zone is None:
         zone = Z4                                   # context failure: never "no policy"
-    if _is_always_open(path):
+    method = (method or 'GET').upper()
+    if _is_always_open(path, method):
         return Decision(True, None, zone)
     if zone == Z2 and profile.role == 'admin' and path.startswith(ADMIN_Z2_RECOVERY):
         return Decision(True, None, zone)
     pol = policy_for(profile.role, zone)
     if pol is None:
-        return Decision(True, None, zone)
-    method = (method or 'GET').upper()
+        # a role added later without its four rows: open inside, blocked outside (never wide open)
+        return Decision(zone in (Z1, Z2), None if zone in (Z1, Z2) else 'blocked', zone)
     safe = method in _SAFE
 
     def refuse(reason):

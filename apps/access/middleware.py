@@ -25,8 +25,9 @@ class AccessContextMiddleware:
         try:
             ctx = context.for_request(request)
         except Exception:
-            log.warning('access context failed; treating the request as external', exc_info=True)
-            ctx = context.fallback()
+            ctx = context.fallback(request)
+            log.error('access context failed; network %s from the label alone', ctx.network.zone,
+                      exc_info=True)
         request.access = ctx
         token = context.access_context.set(ctx)
         try:
