@@ -544,3 +544,11 @@ pharmacist GET /api/access/networks/
 pharmacist GET /api/access/networks/987654321/
 purchasing GET /api/access/networks/
 purchasing GET /api/access/networks/987654321/
+
+# reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
+#   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /
+#   supervisor (approve, done, reopen) and catalog editors (cancel their own draft).
+call_center POST /api/batches/stock-expiry/disposal/987654321/status/
+delivery POST /api/batches/stock-expiry/disposal/987654321/status/
+salesperson POST /api/batches/stock-expiry/disposal/987654321/status/
+viewer POST /api/batches/stock-expiry/disposal/987654321/status/
