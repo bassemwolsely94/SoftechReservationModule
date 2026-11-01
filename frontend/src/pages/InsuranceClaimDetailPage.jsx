@@ -2482,8 +2482,9 @@ function RosterCheckView({ claimId, onRefresh }) {
     insuranceApi.rosterCheck(claimId)
       .then(r => {
         setData(r.data)
-        setSel(new Set(r.data.rows.filter(x => x.category === 'wrong' && x.confidence === 'full')
-          .map(_rosterKey)))
+        // Nothing is ever ticked by itself — not on open, not after an action — so the
+        // next click can only act on rows the user picked. «تحديد المطابقات الكاملة» is explicit.
+        setSel(new Set())
       })
       .catch(e => setMsg(e.response?.data?.error || 'تعذّر فحص سجل المرضى'))
       .finally(() => setLoad(false))
@@ -2516,6 +2517,7 @@ function RosterCheckView({ claimId, onRefresh }) {
     setBusy(true); setMsg(null)
     try {
       await insuranceApi.rosterDecision(claimId, { ...idsOf(rs), verdict, target })
+      setSel(new Set())
       setMsg(verdict === 'member' ? `سُجّل ${ids.length} اسم كتابع لهذه الجهة — لن يُعلَّم مجدداً`
         : verdict === 'clear' ? 'أُلغي القرار' : `سُجّل ${ids.length} اسم كغير تابع لهذه الجهة`)
       load()
@@ -2561,7 +2563,7 @@ function RosterCheckView({ claimId, onRefresh }) {
       <p className="text-xs text-gray-500 mb-3">
         كل اسم يُقارن بأسماء المطالبات السابقة لكل جهة وفئة وفئة فوترة (سجل يكبر تلقائياً كل شهر).
         <span className="text-red-700"> «جهة/فئة خاطئة»</span> = الاسم لم يُفوتر هنا من قبل لكنه مُفوتر على جهة أو فئة أخرى — هذه هي الروشتات التي تُخصم ثم تُعاد.
-        المطابقة الكاملة مُحدَّدة تلقائياً.
+        لا يُحدَّد أى سطر تلقائياً — اختر بنفسك، أو «تحديد المطابقات الكاملة».
       </p>
       {msg && <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">{msg}</div>}
 
@@ -2569,6 +2571,12 @@ function RosterCheckView({ claimId, onRefresh }) {
         <button onClick={doExclude} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-exclude"
           className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
           {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
+        </button>
+        <button onClick={() => setSel(new Set(rows.filter(x => x.category === 'wrong' && x.confidence === 'full').map(_rosterKey)))}
+          disabled={busy || !rows.some(x => x.category === 'wrong' && x.confidence === 'full')}
+          data-tour="insurance-claim-roster-select-full"
+          className="px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 disabled:opacity-40">
+          تحديد المطابقات الكاملة ({rows.filter(x => x.category === 'wrong' && x.confidence === 'full').length})
         </button>
         <button onClick={() => decide(picked(), 'member')} disabled={busy || sel.size === 0} data-tour="insurance-claim-roster-member"
           className="px-3 py-2 bg-white border border-green-600 text-green-700 text-sm rounded hover:bg-green-50 disabled:opacity-50">
@@ -2689,8 +2697,7 @@ function SeparationListsView({ claimId, onRefresh }) {
     insuranceApi.separationMatches(claimId, lid || '')
       .then(r => {
         setData(r.data)
-        // pre-select the confident (full) non-excluded matches
-        setSel(new Set(r.data.matches.filter(m => m.match_type === 'full' && !m.is_excluded).map(m => m.prescription_id)))
+        setSel(new Set())   // never pre-ticked — see «تحديد المطابقات الكاملة»
       })
       .finally(() => setLoad(false))
   }
@@ -2771,7 +2778,7 @@ function SeparationListsView({ claimId, onRefresh }) {
       </div>
       <p className="text-xs text-gray-500 mb-3">
         الروشتات التي يطابق اسم مريضها اسماً في قائمة الفصل. راجع واختر ثم استبعدها من هذه المطالبة لإضافتها لاحقاً إلى مطالبتها الصحيحة.
-        <span className="text-green-700"> المطابقة الكاملة مُحدَّدة تلقائياً</span>، والجزئية تحتاج مراجعتك.
+        لا يُحدَّد أى سطر تلقائياً؛ المطابقة الجزئية تحتاج مراجعة خاصة.
       </p>
       {msg && <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">{msg}</div>}
 
@@ -2779,6 +2786,12 @@ function SeparationListsView({ claimId, onRefresh }) {
         <button onClick={doExclude} disabled={busy || sel.size === 0} data-tour="insurance-claim-separation-exclude"
           className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50">
           {busy ? 'جارٍ…' : `استبعاد المحدد (${sel.size})`}
+        </button>
+        <button onClick={() => setSel(new Set(data.matches.filter(m => m.match_type === 'full' && !m.is_excluded).map(m => m.prescription_id)))}
+          disabled={!data.matches.some(m => m.match_type === 'full' && !m.is_excluded)}
+          data-tour="insurance-claim-separation-select-full"
+          className="px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 disabled:opacity-40">
+          تحديد المطابقات الكاملة ({data.matches.filter(m => m.match_type === 'full' && !m.is_excluded).length})
         </button>
         <button onClick={() => setReviewed([...sel], true)} disabled={sel.size === 0}
           className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50">
@@ -2894,12 +2907,7 @@ function NameReviewTab({ claimId, onRefresh }) {
     insuranceApi.nameSuggestions(claimId)
       .then(r => {
         setRows(r.data.rows || [])
-        // preselect confident (non-ambiguous) suggestions
-        const pre = {}
-        for (const row of (r.data.rows || [])) {
-          if (row.suggestion && row.type !== 'ambiguous') pre[row.rx_id] = row.suggestion
-        }
-        setSel(pre)
+        setSel({})   // never pre-ticked: «تحديد الكل» picks the clear suggestions on purpose
       })
       .finally(() => setLoading(false))
   }
