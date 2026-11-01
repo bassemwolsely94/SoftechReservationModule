@@ -410,7 +410,7 @@ def build_supplier_item_mapping(run: ProcurementEngineRun) -> int:
     logger.info('[ProcurementEngine] Stage 4: building supplier-item mapping')
 
     from apps.catalog.models import Item
-    d365 = timezone.now().date() - _dt.timedelta(days=365)
+    d365 = timezone.localdate() - _dt.timedelta(days=365)
 
     agg = (
         PurchaseLine.objects
@@ -517,7 +517,7 @@ def compute_snapshot(run: ProcurementEngineRun) -> None:
     Compute and save today's ProcurementSnapshot.
     """
     logger.info('[ProcurementEngine] Stage 5: computing daily snapshot')
-    today = timezone.now().date()
+    today = timezone.localdate()
     d30   = today - _dt.timedelta(days=30)
     d90   = today - _dt.timedelta(days=90)
     d365  = today - _dt.timedelta(days=365)
@@ -600,7 +600,7 @@ def compute_buyer_performance(run: ProcurementEngineRun) -> int:
     Aggregate PurchaseLine → BuyerPerformance per buyer_code.
     """
     logger.info('[ProcurementEngine] Stage 6: computing buyer performance')
-    today = timezone.now().date()
+    today = timezone.localdate()
     d365  = today - _dt.timedelta(days=365)
 
     from apps.users.models import StaffProfile
@@ -664,7 +664,7 @@ def generate_alerts(run: ProcurementEngineRun) -> int:
     """
     logger.info('[ProcurementEngine] Stage 7: generating alerts')
     alerts = []
-    today = timezone.now().date()
+    today = timezone.localdate()
     d90   = today - _dt.timedelta(days=90)
     d30   = today - _dt.timedelta(days=30)
 
@@ -819,7 +819,7 @@ def enrich_purchase_lines(run: ProcurementEngineRun, lookback_days: int = DEFAUL
     """
     logger.info('[ProcurementEngine] Stage 1.5: enriching purchase lines (FOC detection, return types)')
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     since = today - _dt.timedelta(days=lookback_days)
 
     # ── FOC detection ─────────────────────────────────────────────────────────
@@ -991,7 +991,7 @@ def compute_enhanced_scores(run: ProcurementEngineRun) -> int:
     """
     logger.info('[ProcurementEngine] Stage 3.5: computing enhanced supplier scores')
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     d365  = today - _dt.timedelta(days=365)
 
     # Aggregate FOC and tax data from enriched PurchaseLine
@@ -1097,7 +1097,7 @@ def generate_advanced_alerts(run: ProcurementEngineRun) -> int:
     logger.info('[ProcurementEngine] Stage 7.5: generating advanced alerts')
 
     alerts = []
-    today = timezone.now().date()
+    today = timezone.localdate()
     d30   = today - _dt.timedelta(days=30)
     d90   = today - _dt.timedelta(days=90)
     d365  = today - _dt.timedelta(days=365)
