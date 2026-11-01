@@ -1507,11 +1507,11 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     r += 1  # spacer
 
     # ── Line table header ─────────────────────────────────────────────────────
-    headers = ['الفاتورة', 'الصنف', 'الكمية',
+    headers = ['الفاتورة', 'كود الصنف', 'الصنف', 'الكمية',
                'سعر مجمّد', 'سعر حالي', 'فرق السعر',
                'تصنيف مجمّد', 'تصنيف حالي',
                'صافى مجمّد', 'صافى حالي', 'فرق الصافى', 'السبب']
-    widths  = [12, 30, 8, 12, 12, 12, 12, 12, 12, 12, 12, 14]
+    widths  = [12, 11, 30, 8, 12, 12, 12, 12, 12, 12, 12, 12, 14]
     for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
         _w(ws, r, col_idx, h, font=FONT_HEADER, fill=FILL_HEADER, align=ALIGN_CENTER)
         ws.column_dimensions[get_column_letter(col_idx)].width = w
@@ -1527,18 +1527,19 @@ def generate_discrepancy_excel(report: dict, claim_number: str = '') -> HttpResp
     for row in rows:
         ws.row_dimensions[r].height = 15
         _w(ws, r, 1,  f"#{row.get('docnumber','')}", align=ALIGN_CENTER)
-        _w(ws, r, 2,  row.get('item_name', ''), align=ALIGN_RIGHT)
-        _w(ws, r, 3,  float(row.get('quantity', 0) or 0), align=ALIGN_CENTER, fmt='#,##0')
-        _w(ws, r, 4,  float(row.get('frozen_unit_price', 0) or 0),  align=_a('left','center'), fmt=money)
-        _w(ws, r, 5,  float(row.get('current_unit_price', 0) or 0), align=_a('left','center'), fmt=money)
-        _w(ws, r, 6,  float(row.get('price_delta', 0) or 0),        align=_a('left','center'), fmt=money)
-        _w(ws, r, 7,  row.get('frozen_category_label', ''),  align=ALIGN_CENTER)
-        _w(ws, r, 8,  row.get('current_category_label', ''), align=ALIGN_CENTER)
-        _w(ws, r, 9,  float(row.get('frozen_net', 0) or 0),  align=_a('left','center'), fmt=money)
-        _w(ws, r, 10, float(row.get('current_net', 0) or 0), align=_a('left','center'), fmt=money)
-        _w(ws, r, 11, float(row.get('net_delta', 0) or 0),
+        _w(ws, r, 2, row.get('itemcode') or '', align=ALIGN_CENTER)
+        _w(ws, r, 3, row.get('item_name', ''), align=ALIGN_RIGHT)
+        _w(ws, r, 4, float(row.get('quantity', 0) or 0), align=ALIGN_CENTER, fmt='#,##0')
+        _w(ws, r, 5, float(row.get('frozen_unit_price', 0) or 0),  align=_a('left','center'), fmt=money)
+        _w(ws, r, 6, float(row.get('current_unit_price', 0) or 0), align=_a('left','center'), fmt=money)
+        _w(ws, r, 7, float(row.get('price_delta', 0) or 0),        align=_a('left','center'), fmt=money)
+        _w(ws, r, 8, row.get('frozen_category_label', ''),  align=ALIGN_CENTER)
+        _w(ws, r, 9, row.get('current_category_label', ''), align=ALIGN_CENTER)
+        _w(ws, r, 10, float(row.get('frozen_net', 0) or 0),  align=_a('left','center'), fmt=money)
+        _w(ws, r, 11, float(row.get('current_net', 0) or 0), align=_a('left','center'), fmt=money)
+        _w(ws, r, 12, float(row.get('net_delta', 0) or 0),
            font=FONT_SUBTOTAL, fill=FILL_SUBTOTAL, align=_a('left','center'), fmt=money)
-        _w(ws, r, 12, reason_label.get(row.get('reason'), row.get('reason', '')), align=ALIGN_CENTER)
+        _w(ws, r, 13, reason_label.get(row.get('reason'), row.get('reason', '')), align=ALIGN_CENTER)
         r += 1
 
     ws.print_title_rows = f'{header_row}:{header_row}'
