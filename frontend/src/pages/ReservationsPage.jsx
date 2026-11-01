@@ -69,7 +69,7 @@ function FilterBar({ filters, onChange, branches }) {
         allLabel="كل الفروع"
         className="w-52"
       />
-      <button
+      <button data-tour="reservations-list-clear-filters"
         className="btn-secondary text-sm"
         onClick={() => onChange({ search: '', status: '', priority: '', branch: '', page: 1 })}
       >
@@ -317,7 +317,7 @@ export default function ReservationsPage() {
           <div className="p-10 text-center">
             <div className="text-3xl mb-2">⚠️</div>
             <div className="text-red-600 font-medium mb-3">حدث خطأ أثناء تحميل الحجوزات</div>
-            <button onClick={() => refetch()} className="btn-secondary text-sm">إعادة المحاولة</button>
+            <button data-tour="reservations-list-retry" onClick={() => refetch()} className="btn-secondary text-sm">إعادة المحاولة</button>
           </div>
         ) : isLoading ? (
           <div className="p-8 text-center text-gray-400">جارٍ التحميل...</div>

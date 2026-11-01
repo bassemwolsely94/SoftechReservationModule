@@ -99,7 +99,7 @@ function WhatsAppButton({ orderId, phone, size = 'sm' }) {
 
   if (!phone) return null
   return (
-    <button onClick={open} disabled={isLoading} className={cls}>
+    <button onClick={open} disabled={isLoading} className={cls} data-tour="delivery-dashboard-wa-button">
       {isLoading ? '⏳' : '💬'} واتساب {sent && '✓'}
     </button>
   )
@@ -517,7 +517,7 @@ function ReasonModal({ order, title, color, action, label, onClose, onDone }) {
         {mut.isError && <p className="text-xs text-red-500 mt-2">{mut.error?.response?.data?.detail || 'حدث خطأ'}</p>}
         <div className="flex gap-3 mt-4">
           <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">رجوع</button>
-          <button disabled={!reason.trim() || mut.isPending} onClick={() => mut.mutate()}
+          <button disabled={!reason.trim() || mut.isPending} onClick={() => mut.mutate()} data-tour="delivery-dashboard-reason-confirm"
             className={`flex-1 py-2 bg-${color}-600 text-white rounded-lg text-sm font-medium hover:bg-${color}-700 disabled:opacity-50`}>
             {mut.isPending ? 'جارٍ…' : label}
           </button>

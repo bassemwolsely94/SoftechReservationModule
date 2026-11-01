@@ -32,13 +32,14 @@ function useScreenHelp(key, enabled) {
   })
 }
 
-/** target → step: the screen's own tour wins over a journey step on the same anchor. */
+/** target → step: the screen's own tour wins over its hints, hints over a journey step. */
 export function hintSteps(data) {
   const map = new Map()
   if (!data) return map
   for (const j of data.module?.journeys || []) {
     for (const st of j.steps || []) if (st.screen === data.key && !map.has(st.target)) map.set(st.target, st)
   }
+  for (const st of data.hints || []) map.set(st.target, st)
   for (const st of data.tour || []) map.set(st.target, st)
   return map
 }

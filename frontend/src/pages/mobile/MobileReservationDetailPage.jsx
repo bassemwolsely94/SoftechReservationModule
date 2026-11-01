@@ -224,7 +224,7 @@ export default function MobileReservationDetailPage() {
             {error && <div className="text-sm text-red-600 mt-2 text-center">{error}</div>}
             <div className="flex gap-2 mt-4">
               <button onClick={() => setPendingStatus(null)} disabled={saving} className="btn-secondary flex-1 text-sm">إلغاء</button>
-              <button onClick={confirmChange} disabled={saving} className="btn-primary flex-1 text-sm disabled:opacity-50">
+              <button data-tour="reservations-detail-status-confirm" onClick={confirmChange} disabled={saving} className="btn-primary flex-1 text-sm disabled:opacity-50">
                 {saving ? 'جارٍ الحفظ...' : 'تأكيد'}
               </button>
             </div>

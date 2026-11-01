@@ -150,7 +150,7 @@ function LiveSessionCard({ session, onClick }) {
   }, [session.started_at])
 
   return (
-    <button
+    <button data-tour="callcenter-pbx-session"
       onClick={() => onClick(session)}
       className="w-full text-right bg-white border border-gray-200 rounded-lg p-3 hover:border-green-400 hover:shadow-md transition-all"
       dir="rtl"

@@ -148,7 +148,7 @@ export default function CustomersPage() {
               preset={debouncedSearch ? 'search' : 'customers'}
               action={
                 debouncedSearch ? (
-                  <button
+                  <button data-tour="customers-list-clear-search"
                     onClick={() => { setSearch(''); setDebouncedSearch('') }}
                     className="btn-secondary text-sm"
                   >

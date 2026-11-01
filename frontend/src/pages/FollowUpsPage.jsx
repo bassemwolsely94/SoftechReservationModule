@@ -249,7 +249,7 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
                 const cfg    = getChannelCfg(ch.code)
                 const active = (filters.sales_channel || []).includes(ch.code)
                 return (
-                  <button key={ch.code}
+                  <button data-tour="followups-tasks-filter-channel" key={ch.code}
                     onClick={() => toggleChannel(ch.code)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                       active ? 'ring-2 ring-offset-1' : 'opacity-60 hover:opacity-90'
@@ -264,7 +264,7 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
                   </button>
                 )
               })}
-              <button
+              <button data-tour="followups-tasks-filter-favoured"
                 onClick={() => set('favoured_only', !filters.favoured_only)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                   filters.favoured_only
@@ -386,7 +386,7 @@ function FilterPanel({ filters, setFilters, meta, branches }) {
           </div>
 
           {activeCount > 0 && (
-            <button onClick={reset}
+            <button data-tour="followups-tasks-filters-reset" onClick={reset}
               className="text-xs text-gray-400 hover:text-red-600 underline mt-1">
               مسح كل الفلاتر
             </button>
@@ -432,7 +432,7 @@ function PinButton({ task, onPinToggle }) {
   }
 
   return (
-    <button
+    <button data-tour="followups-tasks-pin"
       onClick={toggle}
       disabled={loading}
       title={isPinned ? 'إلغاء التثبيت' : 'تثبيت للمتابعة الشخصية'}
@@ -585,7 +585,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
         <PinButton task={task} onPinToggle={onPinToggle} />
 
         {waAvailable ? (
-          <button
+          <button data-tour="followups-tasks-card-whatsapp"
             onClick={() => onSelect(task)}
             className="text-green-500 hover:text-green-700 text-xl p-1 hover:bg-green-50 rounded-lg transition"
             title="إرسال واتساب">
@@ -762,7 +762,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-green-800">💬 رسالة واتساب — {selectedItems.length || activeTaskIds.length} دواء</span>
             <div className="flex gap-2">
-              <button onClick={() => buildMessage(true)} disabled={building}
+              <button data-tour="followups-tasks-group-wa-upsell" onClick={() => buildMessage(true)} disabled={building}
                 className="text-xs text-blue-600 hover:underline disabled:opacity-50">
                 + إضافة توصيات تكميلية
               </button>
@@ -788,11 +788,11 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
             }}
           />
           <div className="flex gap-2">
-            <a href={waUrl} target="_blank" rel="noopener noreferrer"
+            <a data-tour="followups-tasks-group-wa-send" href={waUrl} target="_blank" rel="noopener noreferrer"
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition-colors">
               💬 إرسال عبر واتساب
             </a>
-            <button onClick={() => navigator.clipboard?.writeText(waMsg)}
+            <button data-tour="followups-tasks-group-wa-copy" onClick={() => navigator.clipboard?.writeText(waMsg)}
               className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm">
               📋 نسخ
             </button>
@@ -833,12 +833,12 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
             <div className="flex-1" />
             {activeTaskIds.length > 0 && (
               <>
-                <button disabled={batchRunning}
+                <button data-tour="followups-tasks-group-called-all" disabled={batchRunning}
                   onClick={() => handleBatchStatus('mark_called')}
                   className="px-2 py-1 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50">
                   📞 اتصلت بالكل
                 </button>
-                <button disabled={batchRunning}
+                <button data-tour="followups-tasks-group-bought-all" disabled={batchRunning}
                   onClick={() => handleBatchStatus('mark_done')}
                   className="px-2 py-1 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50">
                   ✅ الكل اشترى
@@ -846,7 +846,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
               </>
             )}
             {(selectedItems.length > 0 || activeTaskIds.length > 0) && c.phone_available && canSeePhone && (
-              <button disabled={building}
+              <button data-tour="followups-tasks-group-wa-batch" disabled={building}
                 onClick={() => buildMessage(false)}
                 className="px-2 py-1 text-xs font-semibold rounded-lg bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 whitespace-nowrap">
                 💬 {selectedItems.length > 0 ? `واتساب (${selectedItems.length} دواء)` : 'واتساب الكل'}
@@ -1063,7 +1063,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
               </span>
             ))}
           </div>
-          <button
+          <button data-tour="followups-tasks-assign-clear"
             disabled={acting}
             onClick={() => doAction(() => followupsApi.clearAssignments(task.id))}
             className="text-xs text-red-400 hover:text-red-600 underline disabled:opacity-50">
@@ -1083,7 +1083,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
             { id: 'role_branch', icon: '🎯', label: 'دور + فرع' },
             { id: 'task_branch', icon: '📍', label: 'فرع المهمة' },
           ].map(m => (
-            <button key={m.id}
+            <button data-tour="followups-tasks-assign-mode" key={m.id}
               onClick={() => setMode(m.id)}
               className={`flex items-center gap-1.5 px-2 py-2 rounded-xl text-xs font-semibold border transition-all ${
                 mode === m.id
@@ -1184,7 +1184,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
       </label>
 
       {/* Submit */}
-      <button
+      <button data-tour="followups-tasks-assign-confirm"
         disabled={acting || !canSubmit}
         onClick={() => doAction(() => followupsApi.assign(task.id, buildPayload()))}
         className="w-full btn-primary text-sm py-2.5 disabled:opacity-50">
@@ -1407,7 +1407,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                             </div>
                           )}
                         </div>
-                        <button
+                        <button data-tour="followups-tasks-copy-docnumber"
                           onClick={() => navigator.clipboard?.writeText(r.docnumber)}
                           className="mt-1 text-xs text-slate-500 hover:text-brand-600 flex items-center gap-1">
                           📋 نسخ رقم المستند للبحث في SOFTECH
@@ -1438,7 +1438,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                   {/* Pin + Assign section */}
                   <Section title="📌 تثبيت وإسناد">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <button
+                      <button data-tour="followups-tasks-drawer-pin"
                         disabled={acting}
                         onClick={() => doAction(() =>
                           task.is_pinned
@@ -1540,7 +1540,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
 
                           {/* Submit button — only visible when preset is chosen */}
                           {outcomePreset && (
-                            <button
+                            <button data-tour="followups-tasks-drawer-outcome-save"
                               disabled={acting}
                               onClick={async () => {
                                 setActing(true)
@@ -1578,7 +1578,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                           <input type="text" className="input-field text-sm flex-1"
                             placeholder="كود القسيمة..."
                             id={`voucher-input-${task.id}`} />
-                          <button
+                          <button data-tour="followups-tasks-drawer-voucher"
                             disabled={acting}
                             onClick={async () => {
                               const code = document.getElementById(`voucher-input-${task.id}`)?.value?.trim()
@@ -1595,7 +1595,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                           </button>
                         </div>
                         {!task.demand_number && (
-                          <button disabled={acting}
+                          <button data-tour="followups-tasks-drawer-demand" disabled={acting}
                             onClick={() => doAction(() => followupsApi.createDemand(task.id))}
                             className="w-full text-xs py-2 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-all disabled:opacity-50">
                             📋 إنشاء طلب للصنف
@@ -1609,13 +1609,13 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                   <Section title="📞 إدارة الاتصال">
                     <div className="flex gap-2">
                       {!task.phone_invalid ? (
-                        <button disabled={acting}
+                        <button data-tour="followups-tasks-drawer-flag-phone" disabled={acting}
                           onClick={() => doAction(() => followupsApi.flagPhone(task.id))}
                           className="text-xs px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all disabled:opacity-50">
                           📵 تحديد الرقم كخاطئ
                         </button>
                       ) : (
-                        <button disabled={acting}
+                        <button data-tour="followups-tasks-drawer-unflag-phone" disabled={acting}
                           onClick={() => doAction(() => followupsApi.unflagPhone(task.id))}
                           className="text-xs px-3 py-2 rounded-xl border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-all disabled:opacity-50">
                           ✅ الرقم صحيح الآن
@@ -1706,20 +1706,20 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
 
                         {/* Action buttons */}
                         <div className="flex gap-2">
-                          <a
+                          <a data-tour="followups-tasks-drawer-wa-send"
                             href={`https://wa.me/${normalisePhone(c.whatsapp_phone || c.phone)}?text=${encodeURIComponent(waMsg || task.whatsapp_message || '')}`}
                             target="_blank" rel="noopener noreferrer"
                             onClick={() => doAction(() => followupsApi.whatsapp(task.id))}
                             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition-colors">
                             💬 إرسال عبر واتساب
                           </a>
-                          <button
+                          <button data-tour="followups-tasks-drawer-wa-copy"
                             onClick={() => navigator.clipboard?.writeText(waMsg || task.whatsapp_message || '')}
                             className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors"
                             title="نسخ الرسالة">
                             📋
                           </button>
-                          <button
+                          <button data-tour="followups-tasks-drawer-wa-reset"
                             onClick={() => setWaMsg(task.whatsapp_message || '')}
                             className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm transition-colors"
                             title="إعادة تعيين الرسالة الافتراضية">
@@ -1753,7 +1753,7 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                             { v: 'busy',      label: '📵 مشغول' },
                             { v: 'callback',  label: '🔄 معاد الاتصال' },
                           ].map(o => (
-                            <button key={o.v}
+                            <button data-tour="followups-tasks-drawer-call-status" key={o.v}
                               onClick={() => setCallStatus(o.v)}
                               className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                                 callStatus === o.v
@@ -1772,14 +1772,14 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                           value={callNotes} onChange={e => setCallNotes(e.target.value)} />
                       </div>
                       <div className="flex gap-2">
-                        <button disabled={acting}
+                        <button data-tour="followups-tasks-drawer-log-call" disabled={acting}
                           onClick={() => doAction(() => followupsApi.logCall(task.id, {
                             status: callStatus, notes: callNotes, mark_done: false,
                           }))}
                           className="flex-1 btn-secondary text-sm disabled:opacity-50">
                           {acting ? 'جارٍ...' : '📞 تسجيل مكالمة'}
                         </button>
-                        <button disabled={acting}
+                        <button data-tour="followups-tasks-drawer-log-call-done" disabled={acting}
                           onClick={() => doAction(() => followupsApi.logCall(task.id, {
                             status: callStatus, notes: callNotes, mark_done: true,
                           }))}
@@ -2247,7 +2247,7 @@ export default function FollowUpsPage() {
               </CanDo>
               {user?.role === 'admin' && (
                 <>
-                  <button
+                  <button data-tour="followups-tasks-admin-channels"
                     onClick={async () => {
                       try { await followupsApi.backfillChannels() } catch {}
                       qc.invalidateQueries(['followup-tasks'])
@@ -2255,7 +2255,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2">
                     🔧 تحديث القنوات
                   </button>
-                  <button
+                  <button data-tour="followups-tasks-admin-tx-detail"
                     onClick={async () => {
                       try {
                         const { data } = await followupsApi.backfillTxDetail()
@@ -2268,7 +2268,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2">
                     🧾 تحديث بيانات الفواتير
                   </button>
-                  <button
+                  <button data-tour="followups-tasks-admin-priorities"
                     onClick={async () => {
                       try {
                         const { data } = await followupsApi.updatePriorityScores()
@@ -2279,7 +2279,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2">
                     ⚡ تحديث الأولويات
                   </button>
-                  <button
+                  <button data-tour="followups-tasks-admin-cleanup"
                     onClick={async () => {
                       if (!confirm('سيتم إلغاء المهام المنتهية الصلاحية (5+ محاولات، 30+ يوم). متابعة؟')) return
                       try {
@@ -2291,7 +2291,7 @@ export default function FollowUpsPage() {
                     className="btn-secondary text-xs px-3 py-2 text-red-600">
                     🗑 تنظيف المهام الميتة
                   </button>
-                  <button
+                  <button data-tour="followups-tasks-admin-dedupe"
                     onClick={async () => {
                       try {
                         const { data } = await followupsApi.deduplicate({ dry_run: true })
@@ -2557,7 +2557,7 @@ export default function FollowUpsPage() {
                   <div className="text-xs font-bold text-gray-300 mb-2">اختر نتيجة لتطبيقها على {selectedIds.length} مهمة:</div>
                   <div className="flex flex-wrap gap-1.5">
                     {LOCAL_PRESETS.map(pr => (
-                      <button key={pr.id}
+                      <button data-tour="followups-tasks-bulk-preset-apply" key={pr.id}
                         disabled={batchRunning}
                         onClick={async () => {
                           setBatchRunning(true)
@@ -2610,7 +2610,7 @@ export default function FollowUpsPage() {
                     { action: 'unpin',       label: '📌 إلغاء',   bg: 'bg-gray-600  hover:bg-gray-500'  },
                     { action: 'cancel',      label: '🗑 إلغاء مهمة', bg: 'bg-rose-800 hover:bg-rose-700' },
                   ].map(b => (
-                    <button key={b.action} disabled={batchRunning}
+                    <button data-tour="followups-tasks-bulk-status" key={b.action} disabled={batchRunning}
                       onClick={async () => {
                         if (b.action === 'cancel' && !confirm(`إلغاء ${selectedIds.length} مهمة؟`)) return
                         setBatchRunning(true)
@@ -2629,7 +2629,7 @@ export default function FollowUpsPage() {
                   ))}
 
                   {/* Apply preset — opens inline picker */}
-                  <button disabled={batchRunning}
+                  <button data-tour="followups-tasks-bulk-preset" disabled={batchRunning}
                     onClick={() => setShowBatchPreset(p => !p)}
                     className={`px-3 py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40 ${
                       showBatchPreset
@@ -2643,7 +2643,7 @@ export default function FollowUpsPage() {
                 <div className="w-px h-6 bg-gray-700 flex-shrink-0" />
 
                 {/* Campaign button */}
-                <button disabled={batchRunning}
+                <button data-tour="followups-tasks-bulk-campaign" disabled={batchRunning}
                   onClick={async () => {
                     const campName = prompt('اسم الحملة:')
                     if (!campName) return

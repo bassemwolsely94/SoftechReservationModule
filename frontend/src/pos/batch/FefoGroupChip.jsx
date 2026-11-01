@@ -16,12 +16,12 @@ export default function FefoGroupChip({ g, P, className = '' }) {
         : <BatchBadge label={label} title={`توزيع تلقائي — الأقرب انتهاءً أولاً: ${exp}`} />}
       {!g.stale && <span className="text-[10px] text-gray-500 tabular-nums" dir="ltr">{exp}</span>}
       {g.shortfall > 0 && (
-        <button type="button" onClick={stop(() => P.reserveRemainder(g.group))}
+        <button data-tour="pos-order-fefo-reserve" type="button" onClick={stop(() => P.reserveRemainder(g.group))}
                 title="المتاح أقل من المطلوب — اضغط لإضافة الباقي كسطر حجز">
           <Badge tone="warn" icon="bookmark" size="xs" label={`ناقص ${g.shortfall} — حجز الباقي`} />
         </button>
       )}
-      <button type="button" onClick={stop(() => P.openBatchModal(g.group))}
+      <button data-tour="pos-order-fefo-batch" type="button" onClick={stop(() => P.openBatchModal(g.group))}
               title="تغيير التشغيلة يدويًا"
               className="inline-flex items-center gap-0.5 text-[10px] text-sky-700 hover:underline">
         <Icon name="package" size={10} />تغيير التشغيلة

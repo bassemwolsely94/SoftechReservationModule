@@ -172,7 +172,7 @@ function ExtraLineRow({ line, idx, branchId, onSelect, onClear, onUpdate, onRemo
             onClear={() => {}}
             placeholder="ابحث في الكتالوج..."
           />
-          <button type="button" onClick={() => onUpdate(idx, 'manualMode', true)}
+          <button data-tour="reservations-new-line-manual" type="button" onClick={() => onUpdate(idx, 'manualMode', true)}
             className="text-[11px] text-gray-400 hover:text-gray-600">✏️ اكتب الاسم يدوياً</button>
         </div>
       )}
@@ -199,7 +199,7 @@ function ExtraLineRow({ line, idx, branchId, onSelect, onClear, onUpdate, onRemo
           onChange={e => onUpdate(idx, 'quantity_requested', Number(e.target.value))}
         />
         <div className="flex-1" />
-        <button type="button" onClick={() => onRemove(idx)}
+        <button data-tour="reservations-new-line-remove" type="button" onClick={() => onRemove(idx)}
           className="text-xs text-gray-400 hover:text-red-500">🗑 حذف</button>
       </div>
     </div>
@@ -462,7 +462,7 @@ export default function NewReservationPage() {
               >
                 إلغاء
               </button>
-              <button
+              <button data-tour="reservations-new-dup-force"
                 onClick={() => { setDuplicateData(null); handleSubmit(true) }}
                 className="btn-primary flex-1 text-sm"
               >
@@ -596,7 +596,7 @@ export default function NewReservationPage() {
               </div>
             )}
 
-            <button
+            <button data-tour="reservations-new-add-line"
               type="button"
               onClick={addExtraLine}
               className="text-sm text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
@@ -669,7 +669,7 @@ export default function NewReservationPage() {
             {form.channel === 'contract_sales' && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1.5">
                 <p className="text-[11px] font-semibold text-gray-500 mb-2">نوع العميل / القناة</p>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div data-tour="reservations-new-contract-subtype" className="grid grid-cols-2 gap-1.5">
                   {[
                     { value: 'taakodat',         label: 'تعاقدات / آجل',                    icon: '📄' },
                     { value: 'loyal_customer',   label: 'عميل دائم',                        icon: '⭐' },
@@ -820,7 +820,7 @@ export default function NewReservationPage() {
 
         {/* Actions */}
         <div className="flex gap-3 pb-8">
-          <button onClick={() => navigate('/reservations')} className="btn-secondary px-6">
+          <button data-tour="reservations-new-cancel" onClick={() => navigate('/reservations')} className="btn-secondary px-6">
             إلغاء
           </button>
           <button
