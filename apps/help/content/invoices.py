@@ -30,11 +30,11 @@ INV_MORE_ACTIONS = T(
     'الأزرار هنا بتظهر حسب حالة الفاتورة:\n'
     '• «⚠ فحص الانحرافات» يطلع تقرير بالسطور المشكوك فيها (سعر بعيد عن الكتالوج، خصم عالي، صنف مكرر…)، و«🔄 إعادة OCR» لو القراءة وحشة.\n'
     '• «✓ تأكيد الفاتورة» بيغيّر الحالة لـ «مُأكَّدة» بس — مش بيكتب في SOFTECH.\n'
-    '• «🛡 فحص التحقق» ثم «⇪ ترحيل إلى ERP» بيفتح معاينة: الأخطاء بتمنع الترحيل والتحذيرات محتاجة «راجعت التحذيرات وأريد المتابعة». الترحيل للمدير والمشتريات والمشرف، ولو الفاتورة اترحّلت قبل كده مش بتتكتب تاني.',
+    '• «🛡 فحص التحقق» ثم «⇪ ترحيل إلى ERP» بيفتح معاينة: الأخطاء بتمنع الترحيل والتحذيرات محتاجة سبباً مكتوباً يُسجَّل مع الترحيل. الترحيل للمدير والمشتريات والمشرف، ولو الفاتورة اترحّلت قبل كده مش بتتكتب تاني.',
     'The buttons here depend on the invoice status:\n'
     '• "⚠ Check deviations" lists suspicious lines (price far from the catalog, high discount, duplicated item…), and "🔄 Re-run OCR" helps when the reading is poor.\n'
     '• "✓ Confirm invoice" only changes the status to "Confirmed" — it does not write to SOFTECH.\n'
-    '• "🛡 Validation check" then "⇪ Post to ERP" opens a preview: errors block posting and warnings need "I reviewed the warnings". Posting is for admin, purchasing and supervisors, and an invoice already posted is never written twice.')
+    '• "🛡 Validation check" then "⇪ Post to ERP" opens a preview: errors block posting and warnings need a written reason, recorded with the posting. Posting is for admin, purchasing and supervisors, and an invoice already posted is never written twice.')
 INV_MORE_HEADER = T(
     'دي بيانات رأس الفاتورة زي ما اتقرت: المورد، رقم وتاريخ الفاتورة، الخصم العام (نسبة أو مبلغ) والإجمالي.\n'
     '• قارنها بالورقة الأصلية قبل التأكيد.\n'
@@ -205,10 +205,10 @@ MODULE = {
                 {'target': 'invoices-main-actions', 'route': '/invoices',
                  'text': T('بعد التأكيد: «🛡 فحص التحقق» و«⇪ ترحيل إلى ERP».', 'After confirming: "🛡 Validation check" and "⇪ Post to ERP".'),
                  'more': T('«فحص التحقق» بيشغّل قواعد الحفظ بتاعة SOFTECH (حد الائتمان، الأصناف المسموحة، حدود السعر، الصلاحية، رقم الباتش للأصناف التي تشترطه مثل إنتريستو…) من غير ما يكتب حاجة.\n'
-                           '• «ترحيل إلى ERP» بيفتح معاينة للمستند: صحّح كل الأخطاء، وعلّم «راجعت التحذيرات وأريد المتابعة»، ثم «⇪ تأكيد الترحيل».\n'
+                           '• «ترحيل إلى ERP» بيفتح معاينة للمستند: صحّح كل الأخطاء، واكتب سبب تجاوز التحذيرات، ثم «⇪ تأكيد الترحيل».\n'
                            '• الترحيل للمدير والمشتريات والمشرف. لو الترحيل مش مفعّل بيشتغل «وضع المعاينة» بس، ولو الفاتورة مرحّلة قبل كده مش بتتكتب تاني.',
                            '"Validation check" runs SOFTECH\'s saving rules (credit limit, allowed items, price limits, expiry, the batch number for items that require it such as Entresto…) without writing anything.\n'
-                           '• "Post to ERP" opens a preview of the document: fix every error, tick "I reviewed the warnings and want to continue", then "⇪ Confirm posting".\n'
+                           '• "Post to ERP" opens a preview of the document: fix every error, write the reason for accepting the warnings, then "⇪ Confirm posting".\n'
                            '• Posting is for admin, purchasing and supervisors. If posting is not enabled it works in "preview mode" only, and an invoice already posted is never written twice.')},
                 {'target': 'invoices-main-actions', 'route': '/invoices',
                  'text': T('بعد الترحيل: رقم المستند و«🔄 تحقق» و«↩ إنشاء مرتجع».',
@@ -253,8 +253,8 @@ SCREENS = [
               '"↩ Back to editing": shown on a confirmed, failed-to-post or queued invoice, it returns it to review so the grid, expiries or header can be corrected and then confirmed again — nothing is posted. If it is stuck in "posting", SOFTECH is checked first: if the document is there, the invoice is recorded as posted with its number instead (never a double post).'),
             T('رقم وتاريخ فاتورة المورد يُقرآن آلياً من رأس الفاتورة (التاريخ يُقرأ حتى لو طُبع بدون عنوان)، ويُعدَّلان من «تعديل» في بطاقة الرأس. لو لم يُقرأ أحدهما يظهر «⚠ غير مقروء»؛ ورقم الفاتورة مطلوب للترحيل، والتاريخ يُحفظ في SOFTECH كـ «تاريخ مستند المورد».',
               'The supplier invoice number and date are read automatically from the invoice header (the date even when printed without a label) and edited from "Edit" on the header card. A field that was not read shows "⚠ not read"; the number is required to post, and the date is saved in SOFTECH as the supplier document date.'),
-            T('في معاينة الترحيل: «⛔ أخطاء» تمنع الترحيل، «⚠ تحذيرات» تحتاج «راجعت التحذيرات»، و«🔔 تنبيهات» للعلم فقط ولا تمنع الترحيل — مثل اختلاف ضريبة الصنف في كتالوج SOFTECH عن الفاتورة (يُرحَّل بضريبة الفاتورة)، أو صنف غير مربوط بالمورد (يُربط تلقائياً عند الترحيل).',
-              'In the posting preview: "⛔ errors" block posting, "⚠ warnings" need "I reviewed the warnings", and "🔔 notices" are for information only and never block — e.g. an item whose VAT in the SOFTECH catalog differs from the invoice (posted with the invoice VAT), or an item not yet linked to the supplier (linked automatically when posting).'),
+            T('في معاينة الترحيل: «⛔ أخطاء» تمنع الترحيل، «⚠ تحذيرات» تحتاج سبباً مكتوباً (مثل كمية أكبر من 3× أكبر شراء سابق)، و«🔔 تنبيهات» للعلم فقط ولا تمنع الترحيل — مثل اختلاف ضريبة الصنف في كتالوج SOFTECH عن الفاتورة (يُرحَّل بضريبة الفاتورة)، أو صنف غير مربوط بالمورد (يُربط تلقائياً عند الترحيل).',
+              'In the posting preview: "⛔ errors" block posting, "⚠ warnings" need a written reason (e.g. a quantity over 3× the largest earlier purchase), and "🔔 notices" are for information only and never block — e.g. an item whose VAT in the SOFTECH catalog differs from the invoice (posted with the invoice VAT), or an item not yet linked to the supplier (linked automatically when posting).'),
             T('الخصم الأساسي وتكلفة الوحدة الصافية مرتبطان دائماً: تعديل أحدهما يغيّر الآخر فوراً. تعديل «خصم إضافي» أو «خصم خاص» يُبقي التكلفة الصافية كما هي (المقروءة من الفاتورة) ويمتصّ «الخصم الأساسي» الفرق. الخصم الإضافي لا يتغيّر تلقائياً أبداً — فقط إذا كتبته أو قُرئ من الفاتورة.',
               'The basic discount and the net unit cost are always linked: changing one updates the other immediately. Changing the "extra" or "special" discount keeps the net cost (as read from the invoice) and the basic discount absorbs the difference. The extra discount is never changed automatically — only when you type it or it is read from the invoice.'),
             T('الصلاحية تُكتب يوم/شهر/سنة كما في SofTech، والفاصل نقطة أو شَرطة أو / (مثل 5-5-28 أو 09.09.2029)، والسنة رقمان أو أربعة. إن كانت الفاتورة تذكر الشهر والسنة فقط يصبح اليوم = الشهر (09.2029 ← 09/09/2029) منعاً للالتباس. التاريخ غير المفهوم تُحدَّد خانته بالأحمر ولا يُحفظ.',
@@ -274,7 +274,7 @@ SCREENS = [
             T('رصد التكرار تلقائياً: بمجرد انتهاء قراءة الفاتورة يفحص النظام SofTech في الخلفية، فتظهر في قائمة الفواتير شارة «⛔ مكرّرة» أو «⚠ تكرار محتمل» قبل أن تفتحها — لتتجنّب العمل على فاتورة مُدخلة من قبل.',
               'Automatic duplicate detection: as soon as an invoice is read, the system checks SofTech in the background, so the invoice list shows a "⛔ duplicate" or "⚠ likely duplicate" badge before you even open it — so you avoid working on an already-entered invoice.'),
             T('«فحص الانحرافات» ثم «تأكيد» الفاتورة.', '"Check deviations" then "Confirm" the invoice.'),
-            T('«معاينة الترحيل إلى ERP»: صحّح كل الأخطاء، راجع التحذيرات وعلّم «راجعت التحذيرات»، ثم «تأكيد الترحيل».', '"Preview ERP posting": fix every error, review warnings and tick "I reviewed the warnings", then "Confirm posting".'),
+            T('«معاينة الترحيل إلى ERP»: صحّح كل الأخطاء، راجع التحذيرات واكتب سبب تجاوزها، ثم «تأكيد الترحيل».', '"Preview ERP posting": fix every error, review warnings and write the reason for accepting them, then "Confirm posting".'),
             T('ترحيل دفعة: من قائمة الفواتير حدّد عدة فواتير مُأكَّدة (بمربع الاختيار) ثم «⇪ ترحيل المحدد» لترحيلها معاً — تُراجَع كل فاتورة على حدة أولاً، وتُرحَّل الدفعة دفعة واحدة. كل فاتورة لها حماية ضد الترحيل المزدوج، وفشل فاتورة لا يوقف الباقي.',
               'Batch posting: from the invoice list, tick several confirmed invoices then "⇪ Post selected" to post them together — each is reviewed individually first, then the group is posted in one go. Every invoice is protected against double-posting, and one failing invoice does not stop the rest.'),
             T('فحص التكرار (زر «🔎 فحص التكرار») — فحص شامل على SofTech قبل الترحيل: يبحث في مستندات المورد الأخيرة ويقارن بعدّة عوامل معاً — رقم فاتورة المورد (مطابق أو شبه مطابق)، الإجمالي النهائي، الأصناف وعددها، تاريخ الفاتورة، وتاريخ الحفظ القريب — ويعطي كل مستند مشابه نسبة تطابق، فيُكتشف التكرار حتى لو اختلف رقم الفاتورة بسبب القراءة الضوئية. يعمل الفحص أيضاً تلقائياً داخل «معاينة الترحيل» قبل الحفظ، والترحيل محمي ضد التكرار ويطلب تأكيداً إضافياً.',
@@ -351,10 +351,22 @@ SCREENS = [
             {'target': 'invoices-main-push-confirm', 'label': T('⇪ تأكيد الترحيل', '⇪ Confirm posting'),
              'text': T('يكتب مستند شراء نهائي (أو مرتجع) في SOFTECH: يدخل المخزون وتتغير التكلفة ورصيد المورد.',
                        'Writes a final purchase (or return) document into SOFTECH: stock is received and cost and supplier balance change.'),
-             'when': T('بعد تصحيح الأخطاء وتعليم «راجعت التحذيرات». تظهر رسالة برقم المستند.', 'After fixing errors and ticking "I reviewed the warnings". A message shows the document number.'),
+             'when': T('بعد تصحيح الأخطاء وكتابة سبب التحذيرات (وسبب التكرار إن ظهر). تظهر رسالة برقم المستند.', 'After fixing errors and writing the warnings reason (and the duplicate reason if shown). A message shows the document number.'),
              'warn': T('مستند نهائي في SOFTECH. محمي ضد الترحيل المزدوج، ولو الترحيل غير مُفعّل تبقى معاينة فقط.',
                        'A final SOFTECH document. Protected against double posting; if posting is not enabled it stays a preview only.'),
              'open_hint': T('يظهر داخل نافذة المعاينة بعد «⇪ ترحيل إلى ERP».', 'Shown inside the preview window after "⇪ Post to ERP".')},
+            {'target': 'invoices-main-push-warn-reason', 'label': T('سبب الترحيل رغم التحذيرات', 'Reason for posting despite warnings'),
+             'text': T('إلزامى عند وجود تحذيرات (10 أحرف على الأقل) ويُسجَّل مع الترحيل.', 'Required when there are warnings (10 characters at least) and recorded with the posting.'),
+             'warn': T('الترحيل نهائى فى SOFTECH — راجع كل تحذير قبل كتابة السبب.', 'Posting is final in SOFTECH — review every warning before writing the reason.'),
+             'open_hint': T('يظهر فى نافذة المعاينة عند وجود تحذيرات.', 'Appears in the preview window when there are warnings.')},
+            {'target': 'invoices-main-push-dup-reason', 'label': T('سبب ترحيل فاتورة مكررة', 'Reason for posting a duplicate'),
+             'text': T('يظهر لو نفس المورد ورقم الفاتورة مُرحَّل من قبل. الترحيل مسموح فقط بسبب مكتوب يُسجَّل.',
+                       'Appears when the same supplier and invoice number were posted before. Posting is allowed only with a written, recorded reason.'),
+             'warn': T('ترحيل مكرر = مخزون وتكلفة ورصيد مورد مضاعف فى SOFTECH.', 'A duplicate posting doubles stock, cost and supplier balance in SOFTECH.'),
+             'open_hint': T('يظهر فى نافذة المعاينة عند اكتشاف تكرار.', 'Appears in the preview window when a duplicate is found.')},
+            {'target': 'invoices-main-batch-confirm-count', 'label': T('اكتب عدد الفواتير', 'Type the invoice count'),
+             'text': T('تأكيد مقصود قبل ترحيل الدفعة: اكتب عدد الفواتير المحددة.', 'A deliberate confirmation before a batch posting: type the number of selected invoices.'),
+             'open_hint': T('حدّد فواتير مُأكَّدة لتظهر الشريطة.', 'Select confirmed invoices to show the bar.')},
             {'target': 'invoices-main-verify', 'label': T('🔄 تحقق', '🔄 Verify'),
              'text': T('قراءة فقط: يتأكد أن المستند ما زال موجوداً في SOFTECH، وهل له مرتجع مورد.',
                        'Read only: checks the document still exists in SOFTECH, and whether it has a supplier return.'),
@@ -371,8 +383,8 @@ SCREENS = [
              'text': T('يرحّل كل الفواتير المحددة إلى SOFTECH مرة واحدة ويعرض نتيجة كل فاتورة.',
                        'Posts every selected invoice to SOFTECH in one go and shows the result of each.'),
              'when': T('بعد مراجعة كل فاتورة وحدها. فشل فاتورة لا يوقف الباقي.', 'After reviewing each invoice on its own. One failure does not stop the rest.'),
-             'warn': T('بدون نافذة معاينة: كل فاتورة تُكتب نهائياً. أي فاتورة بها أخطاء أو تحذيرات تُرفض.',
-                       'No preview window: each invoice is written as final. Any invoice with errors or warnings is refused.'),
+             'warn': T('اكتب عدد الفواتير للتأكيد. الفاتورة المكررة تُرفض (رحّلها منفردة)، وذات التحذيرات تُرفض ما لم تكتب سبباً للدفعة.',
+                       'Type the invoice count to confirm. A duplicate is refused (post it on its own); warnings are refused unless you write a reason for the batch.'),
              'open_hint': T('حدّد مربع الاختيار على بطاقات الفواتير المُأكَّدة.', 'Tick the checkbox on confirmed invoice cards.')},
             {'target': 'invoices-main-list',  # from the GitHub-side tour
              'label': T('قائمة الفواتير', 'Invoice list'),
@@ -388,8 +400,8 @@ SCREENS = [
              'text': T('داخل الفاتورة: أزرار تتغير بالحالة مثل «⚠ فحص الانحرافات» و«✓ تأكيد الفاتورة»؛ الترحيل لـ ERP بمعاينة وصلاحية.',
                        'Inside an invoice: buttons change with status, e.g. "⚠ Check deviations" and "✓ Confirm"; ERP posting needs a preview and permission.'),
              'more': T(
-                 'الأزرار هنا بتظهر حسب حالة الفاتورة:\n• «⚠ فحص الانحرافات» يطلع تقرير بالسطور المشكوك فيها (سعر بعيد عن الكتالوج، خصم عالي، صنف مكرر…)، و«🔄 إعادة OCR» لو القراءة وحشة.\n• «✓ تأكيد الفاتورة» بيغيّر الحالة لـ «مُأكَّدة» بس — مش بيكتب في SOFTECH.\n• «🛡 فحص التحقق» ثم «⇪ ترحيل إلى ERP» بيفتح معاينة: الأخطاء بتمنع الترحيل والتحذيرات محتاجة «راجعت التحذيرات وأريد المتابعة». الترحيل للمدير والمشتريات والمشرف، ولو الفاتورة اترحّلت قبل كده مش بتتكتب تاني.',
-                 'The buttons here depend on the invoice status:\n• "⚠ Check deviations" lists suspicious lines (price far from the catalog, high discount, duplicated item…), and "🔄 Re-run OCR" helps when the reading is poor.\n• "✓ Confirm invoice" only changes the status to "Confirmed" — it does not write to SOFTECH.\n• "🛡 Validation check" then "⇪ Post to ERP" opens a preview: errors block posting and warnings need "I reviewed the warnings". Posting is for admin, purchasing and supervisors, and an invoice already posted is never written twice.')},
+                 'الأزرار هنا بتظهر حسب حالة الفاتورة:\n• «⚠ فحص الانحرافات» يطلع تقرير بالسطور المشكوك فيها (سعر بعيد عن الكتالوج، خصم عالي، صنف مكرر…)، و«🔄 إعادة OCR» لو القراءة وحشة.\n• «✓ تأكيد الفاتورة» بيغيّر الحالة لـ «مُأكَّدة» بس — مش بيكتب في SOFTECH.\n• «🛡 فحص التحقق» ثم «⇪ ترحيل إلى ERP» بيفتح معاينة: الأخطاء بتمنع الترحيل والتحذيرات محتاجة سبباً مكتوباً يُسجَّل مع الترحيل. الترحيل للمدير والمشتريات والمشرف، ولو الفاتورة اترحّلت قبل كده مش بتتكتب تاني.',
+                 'The buttons here depend on the invoice status:\n• "⚠ Check deviations" lists suspicious lines (price far from the catalog, high discount, duplicated item…), and "🔄 Re-run OCR" helps when the reading is poor.\n• "✓ Confirm invoice" only changes the status to "Confirmed" — it does not write to SOFTECH.\n• "🛡 Validation check" then "⇪ Post to ERP" opens a preview: errors block posting and warnings need a written reason, recorded with the posting. Posting is for admin, purchasing and supervisors, and an invoice already posted is never written twice.')},
             {'target': 'invoices-main-header-card',  # from the GitHub-side tour
              'label': T('بيانات رأس الفاتورة', 'Invoice header'),
              'when': T('لو المورد أو الرقم أو التاريخ أو الخصم اتقرا غلط.', 'If the supplier, number, date or discount was read wrongly.'),
@@ -407,7 +419,7 @@ SCREENS = [
                  'كل سطر: الصنف اللي النظام طابقه، الكمية، سعر الوحدة والخصم، ودرجة ثقة القراءة.\n• السطور منخفضة الثقة أو اللي الاسم العربي والعلمي فيها أشاروا لصنفين مختلفين محتاجة انتباهك.\n• بالكيبورد: ↑↓ للتنقل، Enter يأكّد الصنف المقترح وينقلك للسطر اللي بعده، M يعرض اقتراحات المطابقة.',
                  'Each line: the item the system matched, quantity, unit price and discount, and the reading confidence.\n• Lines with low confidence, or where the Arabic and scientific names point to different items, need your attention.\n• Keyboard: ↑↓ to move, Enter confirms the suggested item and moves to the next line, M shows match suggestions.')},
         ],
-        'updated': '2026-10-31',
-        'change_note': T('رجوع للتعديل، قراءة تاريخ الفاتورة، تنبيهات لا تمنع الترحيل، وتنقل وصلاحية كما في SofTech', 'Back to editing, invoice-date reading, non-blocking notices, SofTech-style movement and expiry'),
+        'updated': '2026-11-02',
+        'change_note': T('الترحيل: سبب مكتوب للتحذيرات وللتكرار، حد للكميات غير المعتادة، وعدد الفواتير لتأكيد الدفعة', 'Posting: a written reason for warnings and duplicates, limits on unusual quantities, and the invoice count to confirm a batch'),
     },
 ]

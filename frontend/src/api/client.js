@@ -983,8 +983,9 @@ export const invoicesApi = {
   listPurchaseOrders: (params)  => api.get('/invoices/purchase-orders/', { params }),
   createPurchaseOrder:(data)    => api.post('/invoices/purchase-orders/', data),
   validateErp:   (id)           => api.post(`/invoices/invoices/${id}/validate/`),
-  push:          (id, force)    => api.post(`/invoices/invoices/${id}/push/`, { force: !!force }),
-  pushBatch:     (ids, force)   => api.post(`/invoices/invoices/push-batch/`, { invoice_ids: ids, force: !!force }),
+  // overrides: {acknowledge_warnings, warnings_reason, override_duplicate, duplicate_reason}
+  push:          (id, overrides)  => api.post(`/invoices/invoices/${id}/push/`, { ...(overrides || {}) }),
+  pushBatch:     (ids, extra)     => api.post(`/invoices/invoices/push-batch/`, { invoice_ids: ids, ...(extra || {}) }),
   reconcile:     (id)           => api.post(`/invoices/invoices/${id}/reconcile/`),
   createReturn:  (id)           => api.post(`/invoices/invoices/${id}/create-return/`),
 

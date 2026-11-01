@@ -178,8 +178,9 @@ WRITE_SITES = {
         trigger='SQL builder — native after-save steps, executed by _run_write_batch', kind='sql-builder'),
     'apps/invoices/writer.py::_run_write_batch': WriteSite(
         tables=('stktransm', 'stktrans', 'lastdocnumbers', 'personsdata', 'itemssuppliers'), flag='INVOICE_WRITER_ENABLED', dry_run_default=True,
-        idempotency='PG status/softech_docnumber; purchases: SOFTECH docnumber2 duplicate guard; returns: PG only; '
-                    'vf2 token defined but never written',
+        idempotency='atomic PG flip into pushing (one writer per invoice); PG status/softech_docnumber; purchases: '
+                    'SOFTECH docnumber2 duplicate guard; returns: cumulative received − already-returned check; '
+                    'overrides need a written reason (duplicate / warnings, audited)',
         audit='SupplierInvoice erp_payload/readback + AuditLog softech_invoice_pushed (who) — P-16 (views)',
         trigger='POST invoices <pk>/push|push-batch/ (finalize + admin/purchasing/supervisor); probe → '
                 'SOFTECH_PROBES_ENABLED; coupons push/probe; cmd push_coupon_batch; cmd clone_purchase; replacement legs'),
