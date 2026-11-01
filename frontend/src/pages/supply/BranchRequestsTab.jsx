@@ -75,7 +75,7 @@ function RequestList({ list, loading, selected, onSelect }) {
         <button onClick={() => setOpen(o => !o)} className="text-sm font-medium text-content">
           {open ? '▾' : '▸'} الطلبات السابقة ({list.length})
         </button>
-        <button onClick={() => onSelect(null)} className={`${btnPrimary} ms-auto`}>+ طلب جديد</button>
+        <button data-tour="purchasing-supply-wa-new" onClick={() => onSelect(null)} className={`${btnPrimary} ms-auto`}>+ طلب جديد</button>
       </div>
       {open && (
         <div className="max-h-56 overflow-y-auto">
@@ -236,20 +236,20 @@ function Review({ id }) {
         {detail.shortage_list_id && <Chip tone="emerald">قائمة النواقص #{detail.shortage_list_id}</Chip>}
         <div className="ms-auto flex flex-wrap gap-2">
           {editable && <>
-            <button className={btnGhost} onClick={() => setShowMore(s => !s)}>+ رسائل</button>
-            <button className={btnGhost} onClick={() => fileRef.current?.click()} disabled={ocrM.isPending}>
+            <button data-tour="purchasing-supply-wa-add-text" className={btnGhost} onClick={() => setShowMore(s => !s)}>+ رسائل</button>
+            <button data-tour="purchasing-supply-wa-add-image" className={btnGhost} onClick={() => fileRef.current?.click()} disabled={ocrM.isPending}>
               {ocrM.isPending ? 'جاري قراءة الصورة…' : '+ صورة'}
             </button>
             <input ref={fileRef} type="file" accept="image/*" hidden
               onChange={e => { const f = e.target.files?.[0]; if (f) ocrM.mutate(f); e.target.value = '' }} />
-            <button className={btnGhost} onClick={() => safeM.mutate()} disabled={safeM.isPending}
+            <button data-tour="purchasing-supply-wa-confirm-safe" className={btnGhost} onClick={() => safeM.mutate()} disabled={safeM.isPending}
               title="يؤكّد كل سطر مطابق بلا تنبيهات وبنسبة تطابق جيدة">تأكيد الآمنة</button>
             <button data-tour="purchasing-supply-wa-create-list" className={btnPrimary} onClick={() => confirmM.mutate()}
               disabled={confirmM.isPending || items.length === pending.length}
               title="ينشئ قائمة نواقص الفرع من الأسطر المؤكَّدة ويُعلِّم المطابِق">
               {confirmM.isPending ? '…' : `إنشاء قائمة النواقص (${items.length - pending.length})`}
             </button>
-            <button className="text-xs text-rose-700 underline" onClick={() => cancelM.mutate()}>إلغاء الطلب</button>
+            <button data-tour="purchasing-supply-wa-cancel" className="text-xs text-rose-700 underline" onClick={() => cancelM.mutate()}>إلغاء الطلب</button>
           </>}
         </div>
       </div>
@@ -258,7 +258,7 @@ function Review({ id }) {
         <div className="flex gap-2 items-start">
           <textarea value={moreText} onChange={e => setMoreText(e.target.value)} rows={4} dir="auto"
             className={`${inputCls} grow font-mono text-[13px]`} placeholder="رسائل إضافية من نفس المجموعة" />
-          <button className={btnPrimary} onClick={() => textM.mutate()} disabled={!moreText.trim() || textM.isPending}>إضافة</button>
+          <button data-tour="purchasing-supply-wa-add-text-save" className={btnPrimary} onClick={() => textM.mutate()} disabled={!moreText.trim() || textM.isPending}>إضافة</button>
         </div>
       )}
       {editable && pending.length > 0 && (
@@ -292,12 +292,12 @@ function Review({ id }) {
           <div className="flex flex-wrap items-end gap-3 ms-auto">
             <PlanSettings value={settings} onChange={setSettings} />
           </div>
-          <button className={btnPrimary} onClick={() => analysisM.mutate({})} disabled={analysisM.isPending}>
+          <button data-tour="purchasing-supply-wa-analyze" className={btnPrimary} onClick={() => analysisM.mutate({})} disabled={analysisM.isPending}>
             {analysisM.isPending ? 'جاري التحليل…' : 'تحليل'}
           </button>
           {plan && <>
-            <button className={btnGhost} onClick={() => analysisM.mutate({ refresh: true })} disabled={analysisM.isPending}>تحديث من SOFTECH</button>
-            <button className={btnGhost} onClick={() => exportM.mutate()} disabled={exportM.isPending}>
+            <button data-tour="purchasing-supply-wa-refresh" className={btnGhost} onClick={() => analysisM.mutate({ refresh: true })} disabled={analysisM.isPending}>تحديث من SOFTECH</button>
+            <button data-tour="purchasing-supply-wa-export" className={btnGhost} onClick={() => exportM.mutate()} disabled={exportM.isPending}>
               {exportM.isPending ? 'جاري التصدير…' : 'تصدير Excel'}
             </button>
           </>}
@@ -386,7 +386,7 @@ function Line({ l, reqId, editable, busy, update, kb, openReq }) {
       <div className="px-3 py-1 flex items-center gap-2 text-xs text-content/50">
         <span className="w-16 shrink-0">{NOTE[(l.flags || [])[0]] || 'ملاحظة'}</span>
         <span dir="auto" className="grow">{l.raw_text}</span>
-        {editable && <button className="underline" onClick={() => update(l.id, { kind: 'item' })}>صنف؟</button>}
+        {editable && <button data-tour="purchasing-supply-wa-line-item" className="underline" onClick={() => update(l.id, { kind: 'item' })}>صنف؟</button>}
       </div>
     )
   }
@@ -420,7 +420,7 @@ function Line({ l, reqId, editable, busy, update, kb, openReq }) {
               <Chip tone="blue" title="العبوة المكتوبة غير موجودة بالكتالوج — اقتراح فقط، الكمية لا تتغير تلقائياً">
                 {l.pack_hint.written} قرص ≈ {l.pack_hint.packs} علب × {l.pack_hint.per_pack}
                 {editable && Number(l.qty) !== l.pack_hint.packs && (
-                  <button className="underline ms-1" onClick={() => update(l.id, { qty: l.pack_hint.packs })}>
+                  <button data-tour="purchasing-supply-wa-pack-hint" className="underline ms-1" onClick={() => update(l.id, { qty: l.pack_hint.packs })}>
                     اعتمد {l.pack_hint.packs}
                   </button>
                 )}
@@ -444,9 +444,9 @@ function Line({ l, reqId, editable, busy, update, kb, openReq }) {
         </div>
         {editable && (
           <div className="flex items-center gap-1">
-            <button className="text-xs underline text-content/60" onClick={() => setOpen(o => !o)}>{open ? 'إخفاء' : 'تغيير'}</button>
-            <button className="text-xs underline text-content/50" onClick={() => update(l.id, { kind: 'note' })}>ليس صنفاً</button>
-            <button disabled={!l.item || busy}
+            <button data-tour="purchasing-supply-wa-line-change" className="text-xs underline text-content/60" onClick={() => setOpen(o => !o)}>{open ? 'إخفاء' : 'تغيير'}</button>
+            <button data-tour="purchasing-supply-wa-line-note" className="text-xs underline text-content/50" onClick={() => update(l.id, { kind: 'note' })}>ليس صنفاً</button>
+            <button data-tour="purchasing-supply-wa-line-confirm" disabled={!l.item || busy}
               onClick={() => update(l.id, { confirmed: !l.confirmed })}
               className={`text-xs px-2 py-1 rounded border ${l.confirmed ? 'bg-emerald-600 text-white border-emerald-600' : 'border-line text-content'} disabled:opacity-40`}>
               {l.confirmed ? '✓ مؤكَّد' : 'تأكيد'}
@@ -486,7 +486,7 @@ function Choices({ l, reqId, update, busy }) {
         {(l.picks || []).map(p => (
           <span key={p.id} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5">
             <span className="font-mono text-content/50">{p.code}</span>{p.name}
-            <button disabled={busy} onClick={() => togglePick(p.id)} title="إزالة"
+            <button data-tour="purchasing-supply-wa-pick-remove" disabled={busy} onClick={() => togglePick(p.id)} title="إزالة"
               className="text-content/50 hover:text-rose-700 disabled:opacity-40">✕</button>
           </span>
         ))}
@@ -497,7 +497,7 @@ function Choices({ l, reqId, update, busy }) {
         <input value={term} onChange={e => setTerm(e.target.value)} dir="auto" placeholder="ابحث باسم آخر أو بالكود"
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (term.trim()) searchM.mutate() } }}
           className={`${inputCls} w-64`} />
-        <button className={btnGhost} onClick={() => searchM.mutate()} disabled={!term.trim() || searchM.isPending}>بحث</button>
+        <button data-tour="purchasing-supply-wa-search" className={btnGhost} onClick={() => searchM.mutate()} disabled={!term.trim() || searchM.isPending}>بحث</button>
         {results && <button className="text-xs underline" onClick={() => setResults(null)}>الاقتراحات</button>}
         {variants > 1 && (
           <label className="flex items-center gap-1 text-xs ms-auto">
@@ -541,7 +541,7 @@ function Choices({ l, reqId, update, busy }) {
                 <td className="px-2 py-1">{c.score == null ? '—' : `${Math.round(c.score * 100)}%`}</td>
                 <td className="px-2 py-1">
                   {!(picked && pickIds.length === 1) && (
-                    <button disabled={busy} title="اختيار هذا الصنف وحده بدل المختار"
+                    <button data-tour="purchasing-supply-wa-only-this" disabled={busy} title="اختيار هذا الصنف وحده بدل المختار"
                       onClick={(e) => { e.stopPropagation(); setPicks([c.id]) }}
                       className="text-[11px] underline text-content/60 hover:text-primary disabled:opacity-40">فقط هذا</button>
                   )}

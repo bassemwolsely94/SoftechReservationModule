@@ -58,7 +58,7 @@ function RunControls() {
 
         <div className="mr-auto flex gap-2">
           <button onClick={() => setDetails(d => !d)} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">تفاصيل آخر تشغيل</button>
-          {!okData && <button onClick={() => sync.mutate()} disabled={running || sync.isPending} className="px-3 py-1.5 text-sm border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-50">{sync.isPending ? '…' : '⏬ مزامنة المبيعات'}</button>}
+          {!okData && <button data-tour="shortage-market-sync-sales" onClick={() => sync.mutate()} disabled={running || sync.isPending} className="px-3 py-1.5 text-sm border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-50">{sync.isPending ? '…' : '⏬ مزامنة المبيعات'}</button>}
           <button onClick={() => run.mutate()} disabled={running || run.isPending} data-tour="shortage-market-run" className="px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50">{run.isPending || running ? 'جارٍ…' : '🔄 تشغيل المحرك ومزامنة البيانات'}</button>
         </div>
       </div>
@@ -196,7 +196,7 @@ function DismissModal({ item, onClose }) {
                 <p className="text-xs text-emerald-700 mb-1">💡 بدائل متوفرة مقترحة (نفس الاسم/العائلة):</p>
                 <div className="flex flex-wrap gap-1">
                   {sugg.suggestions.slice(0, 6).filter(s => !matches.find(m => m.item_id === s.item_id)).map(s => (
-                    <button key={s.item_id} onClick={() => addMatch({ item_id: s.item_id, code: s.code, name: s.name })}
+                    <button data-tour="shortage-market-dismiss-suggestion" key={s.item_id} onClick={() => addMatch({ item_id: s.item_id, code: s.code, name: s.name })}
                       className="px-2 py-1 text-xs bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100">
                       + {s.name.slice(0, 28)} {s.availability?.ok ? '✓' : `⚠${(s.availability?.missing || []).length}`}
                     </button>
@@ -227,7 +227,7 @@ function DismissModal({ item, onClose }) {
           className="w-full border rounded-lg px-3 py-2 text-sm mb-4" />
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
-          <button onClick={() => dismiss.mutate()} disabled={dismiss.isPending}
+          <button data-tour="shortage-market-dismiss-save" onClick={() => dismiss.mutate()} disabled={dismiss.isPending}
             className="px-5 py-2 text-sm bg-brand-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50">
             {dismiss.isPending ? 'جارٍ…' : 'استبعاد'}
           </button>
@@ -263,11 +263,11 @@ function WhatsAppModal({ params, onClose }) {
         <div className="flex items-center gap-2 mt-3">
           <input value={num} onChange={e => setNum(e.target.value)} placeholder="رقم المورد (مع كود الدولة، مثال 2010…)"
             className="flex-1 border rounded-lg px-3 py-2 text-sm" dir="ltr" />
-          <button onClick={openWa} disabled={isLoading} className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 whitespace-nowrap">فتح واتساب</button>
+          <button data-tour="shortage-market-wa-open" onClick={openWa} disabled={isLoading} className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 whitespace-nowrap">فتح واتساب</button>
         </div>
         <div className="flex gap-3 justify-end mt-4">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إغلاق</button>
-          <button onClick={copy} disabled={isLoading}
+          <button data-tour="shortage-market-wa-copy" onClick={copy} disabled={isLoading}
             className="px-5 py-2 text-sm bg-gray-700 text-white rounded-lg hover:opacity-90 disabled:opacity-50">
             {copied ? '✓ تم النسخ' : 'نسخ النص'}
           </button>
@@ -382,9 +382,9 @@ function CandidatesTab({ med, q }) {
   return (
     <div>
       <div className="flex flex-wrap gap-2 mb-3">
-        <button onClick={() => setTier('')} className={`px-3 py-1.5 text-sm rounded-lg border ${!tier ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>الكل ({data?.total ?? '—'})</button>
+        <button data-tour="shortage-market-tier-filter" onClick={() => setTier('')} className={`px-3 py-1.5 text-sm rounded-lg border ${!tier ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>الكل ({data?.total ?? '—'})</button>
         {TIERS.map(t => (
-          <button key={t.key} onClick={() => setTier(t.key)} className={`px-3 py-1.5 text-sm rounded-lg border ${tier === t.key ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>
+          <button data-tour="shortage-market-tier-filter" key={t.key} onClick={() => setTier(t.key)} className={`px-3 py-1.5 text-sm rounded-lg border ${tier === t.key ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>
             {t.label} ({counts[Object.keys(counts).find(k => k.startsWith(t.key))] ?? 0})
           </button>
         ))}
@@ -454,7 +454,7 @@ function ChangesTab({ med, q }) {
           {reEntered.map(c => (
             <div key={c.item_id} className="flex items-center justify-between px-4 py-2 text-sm">
               <span><TierBadge tier={c.tier} /> <span className="font-mono text-xs text-gray-400 mr-1">{c.code}</span> — {c.name}</span>
-              <button onClick={() => retrieve.mutate(c.item_id)} disabled={retrieve.isPending}
+              <button data-tour="shortage-market-reentered-retrieve" onClick={() => retrieve.mutate(c.item_id)} disabled={retrieve.isPending}
                 className="px-3 py-1 text-xs text-orange-700 border border-orange-300 rounded hover:bg-orange-50 disabled:opacity-50">
                 {retrieve.isPending && retrieve.variables === c.item_id ? '…' : 'استرجاع للمراجعة'}</button>
             </div>
@@ -544,7 +544,7 @@ function ConfirmedTab({ med, q }) {
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
                     <button data-tour="shortage-market-revert" onClick={() => clear.mutate(it.item_id)} className="px-3 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 whitespace-nowrap">تراجع</button>
-                    <button onClick={() => setDismissItem({ item_id: it.item_id, code: it.code, name: it.name })} className="px-3 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100 whitespace-nowrap">استبعاد</button>
+                    <button data-tour="shortage-market-dismiss" onClick={() => setDismissItem({ item_id: it.item_id, code: it.code, name: it.name })} className="px-3 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100 whitespace-nowrap">استبعاد</button>
                   </div>
                 </td>
               </tr>
@@ -572,9 +572,9 @@ function DismissedTab({ med, q }) {
   return (
     <div>
     <div className="flex flex-wrap gap-2 mb-3">
-      <button onClick={() => setReason('')} className={`px-3 py-1.5 text-sm rounded-lg border ${!reason ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>الكل ({data?.count ?? 0})</button>
+      <button data-tour="shortage-market-reason-filter" onClick={() => setReason('')} className={`px-3 py-1.5 text-sm rounded-lg border ${!reason ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>الكل ({data?.count ?? 0})</button>
       {(data?.reasons || []).map(([v, l]) => (
-        <button key={v} onClick={() => setReason(v)} className={`px-3 py-1.5 text-sm rounded-lg border ${reason === v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>{l} ({reasonCounts[v] || 0})</button>
+        <button data-tour="shortage-market-reason-filter" key={v} onClick={() => setReason(v)} className={`px-3 py-1.5 text-sm rounded-lg border ${reason === v ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600'}`}>{l} ({reasonCounts[v] || 0})</button>
       ))}
     </div>
     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">

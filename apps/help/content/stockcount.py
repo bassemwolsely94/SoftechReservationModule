@@ -483,7 +483,16 @@ SCREENS = [
                  'اعرض الجلسات اللي في مرحلة معيّنة: مسودة، تم اللقطة، تم التصدير، تم الرفع، الفروق جاهزة، مغلق.\n• مثلاً «تم اللقطة» عشان تشوف الجلسات اللي مستنية عد.',
                  'Show the sessions at one stage: draft, snapshot taken, exported, uploaded, variance ready, closed.\n• For example "Snapshot taken" to see sessions waiting to be counted.')},
         ],
-        'updated': '2026-10-29',
+        'hints': [
+            {'target': 'stockcount-sessions-create', 'label': T('إنشاء الجلسة', 'Create session'),
+             'text': T('يحفظ جلسة الجرد بالفرع والنوع والفترة اللي اخترتها. مفيش أي حاجة بتتكتب في SOFTECH.', 'Saves the count session with the chosen branch, type and period. Nothing is written to SOFTECH.'),
+             'when': T('بعدها افتح الجلسة واضغط «📸 أخذ اللقطة» قبل ما العد يبدأ.', 'Then open the session and press "📸 Take snapshot" before counting starts.'),
+             'open_hint': T('اضغط «+ جلسة جديدة» الأول.', 'Press "+ New session" first.')},
+            {'target': 'stockcount-sessions-row', 'label': T('كارت الجلسة', 'Session card'),
+             'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
+             'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

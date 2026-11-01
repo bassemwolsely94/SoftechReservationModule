@@ -212,7 +212,7 @@ function ActionBar({ demand, onAction, loading }) {
                 </option>
               ))}
             </select>
-            <button disabled={!assignee}
+            <button disabled={!assignee} data-tour="demand-detail-assign-confirm"
               onClick={() => { onAction('assign', { assigned_to: Number(assignee) }); setAssignForm(false) }}
               className="text-xs text-white px-2 py-1 rounded-lg disabled:opacity-50" style={{ background: BLUE }}>
               تأكيد
@@ -235,7 +235,7 @@ function ActionBar({ demand, onAction, loading }) {
           <input className="border border-brand-300 rounded-lg px-2 py-1 text-xs w-48 focus:outline-none"
             placeholder="ملاحظة التواصل..."
             value={noteInput} onChange={e => setNoteInput(e.target.value)} autoFocus />
-          <button onClick={() => { onAction('contact', { note: noteInput }); setShowNote(false) }}
+          <button onClick={() => { onAction('contact', { note: noteInput }); setShowNote(false) }} data-tour="demand-detail-contact-confirm"
             className="text-xs text-white px-2 py-1 rounded-lg" style={{ background: BRAND }}>
             تأكيد
           </button>
@@ -244,7 +244,7 @@ function ActionBar({ demand, onAction, loading }) {
       )}
 
       {/* Wait for stock */}
-      {canWait && btn('ينتظر المخزون', 'wait', {}, GRAY, '⏳')}
+      {canWait && <span data-tour="demand-detail-wait" className="inline-flex">{btn('ينتظر المخزون', 'wait', {}, GRAY, '⏳')}</span>}
 
       {/* Fulfill */}
       <CanDo module="demand" action="finalize">
@@ -260,7 +260,7 @@ function ActionBar({ demand, onAction, loading }) {
             <input className="border border-green-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none font-mono"
               placeholder="رقم الفاتورة (اختياري)" dir="ltr"
               value={erpInput} onChange={e => setErpInput(e.target.value)} />
-            <button onClick={() => { onAction('fulfill', { erp_invoice_ref: erpInput }); setShowERP(false) }}
+            <button onClick={() => { onAction('fulfill', { erp_invoice_ref: erpInput }); setShowERP(false) }} data-tour="demand-detail-fulfill-confirm"
               className="text-xs text-white px-2 py-1 rounded-lg" style={{ background: GREEN }}>
               تأكيد
             </button>
@@ -287,7 +287,7 @@ function ActionBar({ demand, onAction, loading }) {
             <input className="border border-red-300 rounded-lg px-2 py-1 text-xs w-36 focus:outline-none"
               placeholder="تفاصيل إضافية..."
               value={lostNotes} onChange={e => setLostNotes(e.target.value)} />
-            <button
+            <button data-tour="demand-detail-lost-confirm"
               disabled={!lostReason}
               onClick={() => {
                 onAction('markLost', { lost_reason: lostReason, note: lostNotes })
@@ -525,7 +525,7 @@ function DetailSubstitutesRow({ demand, line, onRefresh }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {subs.map(s => (
-          <button key={s.id} type="button" disabled={busy} onClick={() => add(s)}
+          <button key={s.id} type="button" disabled={busy} onClick={() => add(s)} data-tour="demand-detail-substitute-add"
             className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1 hover:bg-blue-100 text-blue-800 disabled:opacity-50 transition-colors"
             title={`متاح بالفرع: ${s.stock_at_branch} · الشبكة: ${s.stock_network} · ${s.pack_price} ج.م`}>
             + {s.name}
@@ -654,7 +654,7 @@ function ItemsTab({ demand, onRefresh }) {
                   </td>
                   {isEditable && (
                     <td className="py-3 px-2">
-                      <button onClick={async () => {
+                      <button data-tour="demand-detail-item-remove" onClick={async () => {
                         await demandApi.removeItem(demand.id, line.id)
                         onRefresh()
                       }} className="text-gray-300 hover:text-red-400 text-lg leading-none">✕</button>
@@ -699,7 +699,7 @@ function ItemsTab({ demand, onRefresh }) {
           </div>
           {err && <div className="text-xs text-red-600">{err}</div>}
           <div className="flex gap-2">
-            <button onClick={addItem} className="btn-primary text-xs px-3">إضافة</button>
+            <button onClick={addItem} data-tour="demand-detail-item-add-confirm" className="btn-primary text-xs px-3">إضافة</button>
             <button onClick={() => { setAdding(false); setSelItem(null); setErr('') }}
               className="btn-secondary text-xs px-3">إلغاء</button>
           </div>
@@ -835,7 +835,7 @@ function FollowUpsTab({ demand, onRefresh }) {
               value={fuNotes} onChange={e => setFuNotes(e.target.value)} />
           </div>
           <div className="flex gap-2">
-            <button onClick={addFollowUp} disabled={!fuDate}
+            <button onClick={addFollowUp} disabled={!fuDate} data-tour="demand-detail-followup-schedule"
               className="btn-primary text-xs px-3 disabled:opacity-50">جدولة</button>
             <button onClick={() => setShowAdd(false)} className="btn-secondary text-xs px-3">إلغاء</button>
           </div>
@@ -937,7 +937,7 @@ function LogsTab({ demand, onRefresh }) {
       <div className="border border-gray-200 rounded-xl p-3" data-tour="demand-detail-log-compose">
         <div className="flex gap-1 mb-2">
           {LOG_TYPE_OPTIONS.map(t => (
-            <button key={t.value} onClick={() => setLogType(t.value)}
+            <button key={t.value} onClick={() => setLogType(t.value)} data-tour="demand-detail-log-type"
               className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
                 logType === t.value ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
@@ -952,7 +952,7 @@ function LogsTab({ demand, onRefresh }) {
           placeholder="اكتب ملاحظة، سجل اتصال، أو رسالة واتساب... (Ctrl+Enter للإرسال)"
           className="w-full text-sm resize-none focus:outline-none placeholder-gray-300 leading-relaxed" />
         <div className="flex justify-end mt-2 pt-2 border-t border-gray-100">
-          <button onClick={send} disabled={!message.trim() || sending}
+          <button onClick={send} disabled={!message.trim() || sending} data-tour="demand-detail-log-send"
             className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
             {sending ? 'جارٍ...' : 'إرسال'}
           </button>
