@@ -82,6 +82,8 @@ class EntryFirstTests(TW._Base):
         self.assertEqual(c.status, RC.STATUS_AWAITING_APPROVAL)
         self.assertTrue(any('بأثر رجعي' in r for r in c.approval_request.context_data['reasons']))
         c = W.decide(c.pk, user=self.sup, version=c.version, approve=True)
+        if c.status == RC.STATUS_AWAITING_APPROVAL:     # on the 1st, yesterday is last month → manager step too
+            c = W.decide(c.pk, user=self.admin, version=c.version, approve=True)
 
         c.refresh_from_db()
         op = Op.objects.get(case=c, idempotency_key=f'{c.pk}:purchase')
