@@ -554,7 +554,17 @@ SCREENS = [
                  'أحدث جلسات الجرد، وكل كارت فيه اسم الجلسة والفرع والحالة.\n• العد من الموبايل بيشتغل بعد ما اللقطة تتاخد من شاشة الكمبيوتر، ولحد ما الجلسة تتقفل.',
                  'The latest count sessions; each card shows the session name, branch and status.\n• Counting on the phone works after the snapshot is taken on the desktop screen, and until the session is closed.')},
         ],
-        'updated': '2026-10-26',
+        'hints': [
+            {'target': 'item-search-advanced',
+             'label': T('🔍 بحث متقدم (Ctrl+F1)', '🔍 Advanced search (Ctrl+F1)'),
+             'text': T('يفتح البحث المتقدم عن الأصناف بفلاتر أكتر، والصنف اللي تختاره يتحط في خانة الكود.', 'Opens the advanced item search with more filters; the item you choose fills the code box.'),
+             'open_hint': T('«▼ الأصناف» ← «+ إضافة صنف».', '"▼ Items" → "+ Add item".')},
+            {'target': 'item-search-change',
+             'label': T('✕ تغيير', '✕ Change'),
+             'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
+             'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
+        ],
+        'updated': '2026-11-01',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
 ]
