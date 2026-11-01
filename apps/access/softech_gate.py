@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 
 from . import context as access_context
 from . import policy, session_policy
@@ -200,10 +201,13 @@ def note(decision, label, *, enforced, mode=None):
         if ctx is not None and ctx.user_id is not None:
             from apps.users.models import StaffProfile
             staff = StaffProfile.objects.filter(user_id=ctx.user_id).first()
-        AuditLog.log(AUDIT_ACTION, user=staff,
-                     note=f'{decision.reason} / {decision.zone}'[:255],
-                     extra={'scope': decision.scope, 'zone': decision.zone,
-                            'reason': decision.reason, 'label': label, 'mode': current_mode,
-                            'ip': ip, 'device_id': device_id, 'enforced': enforced})
+        # Own savepoint: connects happen inside writers' atomic blocks (the POS push), and a
+        # failed audit INSERT must not poison the caller's transaction.
+        with transaction.atomic():
+            AuditLog.log(AUDIT_ACTION, user=staff,
+                         note=f'{decision.reason} / {decision.zone}'[:255],
+                         extra={'scope': decision.scope, 'zone': decision.zone,
+                                'reason': decision.reason, 'label': label, 'mode': current_mode,
+                                'ip': ip, 'device_id': device_id, 'enforced': enforced})
     except Exception:
         log.error('softech gate: audit row lost (%s %s)', decision, label, exc_info=True)

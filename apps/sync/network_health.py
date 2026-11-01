@@ -61,7 +61,7 @@ def probe_all_nodes(record=True) -> dict:
     """
     Probe every node in parallel and return a results dict keyed by host:
 
-        { host: {'branch_id', 'ok', 'elapsed_ms', 'error'}, ... }
+        { host: {'branch_id', 'ok', 'elapsed_ms', 'error'[, 'denied']}, ... }
 
     When `record` is True (the scheduled path) the results are persisted through
     branch_watchdog.record_run so the health map, streak tracking, and outage
@@ -100,10 +100,18 @@ def probe_all_nodes(record=True) -> dict:
             except Exception as exc:      # a probe should never raise, but be safe
                 logger.warning('[network_health] probe crashed: %s', exc)
 
-    if record and results:
+    # N4: a probe the SOFTECH gate refused never looked at the node, so it says nothing about
+    # its health: return it flagged `denied`, but never record it (it would read "offline").
+    probed = {h: r for h, r in results.items() if not r.get('denied')}
+    denied = len(results) - len(probed)
+    if denied:
+        logger.info('[network_health] %d node probe(s) refused by the SOFTECH gate - not recorded',
+                    denied)
+
+    if record and probed:
         try:
             from apps.delivery.branch_watchdog import record_run
-            record_run(results)
+            record_run(probed)
         except Exception as exc:
             logger.warning('[network_health] record_run failed: %s', exc)
 

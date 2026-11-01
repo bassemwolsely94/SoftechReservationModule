@@ -222,6 +222,28 @@ class SoftechReadOnlyError(RuntimeError):
     """Raised when a write is attempted while SOFTECH_READ_ONLY is on."""
 
 
+def _gate():
+    """The SOFTECH gate (apps/access/softech_gate.py, N4) - imported lazily, like _load()."""
+    from apps.access import softech_gate
+    return softech_gate
+
+
+class SoftechAccessDenied(RuntimeError):
+    """N4: the gate refuses this request a SOFTECH connection (role x zone). Raised before
+    driver.connect(): nothing is opened, retried or recorded."""
+
+    def __init__(self, message=None, reason=None):
+        super().__init__(_gate().DENY_MESSAGE if message is None else message)
+        self.reason = reason
+
+
+class SoftechZoneWriteDenied(SoftechReadOnlyError):
+    """N4: the gate grants this request READ only, and it tried to write."""
+
+    def __init__(self, message=None):
+        super().__init__(_gate().WRITE_DENY_MESSAGE if message is None else message)
+
+
 # Literals and comments in ONE left-to-right pass: whichever starts first wins, so a '--'
 # or '/*' inside a quoted string can't swallow the rest of the statement (and a quote inside
 # a comment can't open a fake literal).
@@ -270,13 +292,14 @@ class _ReadOnlyStatement:
     (a prepared statement's SQL was checked at prepare time, so its no-argument execute()
     passes) and never hands out the raw connection."""
 
-    def __init__(self, stmt, conn=None):
+    def __init__(self, stmt, conn=None, check=_refuse_if_write):
         self._stmt = stmt
         self._conn = conn            # the guarded connection proxy this statement came from
+        self._check = check
 
     def _call(self, method, args):
         if args and isinstance(args[0], str):
-            _refuse_if_write(args[0])
+            self._check(args[0])
         return getattr(self._stmt, method)(*args)
 
     def execute(self, *args):
@@ -304,40 +327,88 @@ class _ReadOnlyStatement:
 
 
 class _ReadOnlyJavaConnection:
-    """java.sql.Connection proxy used when SOFTECH_READ_ONLY is on."""
+    """java.sql.Connection proxy used when SOFTECH_READ_ONLY is on, and (N4) when the gate
+    grants a request READ only.
 
-    def __init__(self, java_conn):
+    `check(sql)` vets every SQL string (default: the global SOFTECH_READ_ONLY refusal).
+    `enforce=False` is the gate's observe-only mode: `check` only records would-be writes, so
+    the proxy sets no read-only hint and does not block setReadOnly / unwrap. `refusal` builds
+    the exception for setReadOnly(False) / unwrap() when enforcing."""
+
+    def __init__(self, java_conn, check=_refuse_if_write, enforce=True, refusal=None):
         self._jc = java_conn
-        try:
-            java_conn.setReadOnly(True)   # driver hint only — the proxy is the real guard
-        except Exception:
-            pass
+        self._check = check
+        self._enforce = enforce
+        self._refusal = refusal or SoftechReadOnlyError
+        if enforce:
+            try:
+                java_conn.setReadOnly(True)   # driver hint only — the proxy is the real guard
+            except Exception:
+                pass
 
     def createStatement(self, *args):
-        return _ReadOnlyStatement(self._jc.createStatement(*args), self)
+        return _ReadOnlyStatement(self._jc.createStatement(*args), self, self._check)
 
     def prepareStatement(self, sql, *args):
-        _refuse_if_write(sql)
-        return _ReadOnlyStatement(self._jc.prepareStatement(sql, *args), self)
+        self._check(sql)
+        return _ReadOnlyStatement(self._jc.prepareStatement(sql, *args), self, self._check)
 
     def setReadOnly(self, flag):
+        if not self._enforce:
+            return self._jc.setReadOnly(flag)
         if not flag:
-            raise SoftechReadOnlyError('SOFTECH is in read-only mode; it cannot be switched off per connection.')
+            raise self._refusal('SOFTECH is in read-only mode; it cannot be switched off per connection.')
         self._jc.setReadOnly(True)
 
     def unwrap(self, *args):
-        raise SoftechReadOnlyError('SOFTECH is in read-only mode; the raw connection is not available.')
+        if not self._enforce:
+            return self._jc.unwrap(*args)
+        raise self._refusal('SOFTECH is in read-only mode; the raw connection is not available.')
 
     def prepareCall(self, sql, *args):
-        _refuse_if_write(f'EXEC {sql}')   # callable statements are procedures — never reads
+        self._check(f'EXEC {sql}')   # callable statements are procedures — never reads
         return self._jc.prepareCall(sql, *args)
 
     def __getattr__(self, name):
         return getattr(self._jc, name)
 
 
-def _guard(java_conn):
-    return _ReadOnlyJavaConnection(java_conn) if softech_read_only() else java_conn
+def _zone_write_check(decision, label, observe_only):
+    """The SQL check for a gate READ grant: enforce refuses a write (SoftechZoneWriteDenied);
+    observe-only (gate mode log) records it once and lets it through."""
+    def check(sql):
+        if is_read_only_sql(sql):
+            return
+        gate = _gate()
+        gate.note(decision, label, enforced=not observe_only,
+                  mode='log' if observe_only else 'enforce')
+        if observe_only:
+            return
+        snippet = ' '.join(str(sql or '').split())[:120]
+        logger.warning('[sybase] SOFTECH gate (read only) blocked statement%s: %s',
+                       f' [{label}]' if label else '', snippet)
+        raise SoftechZoneWriteDenied()
+    return check
+
+
+def _zone_refusal(_text):
+    return SoftechZoneWriteDenied()
+
+
+def _guard(java_conn, zone_grant: str = 'full', observe_only: bool = False,
+           decision=None, label=''):
+    """Wrap a fresh java connection. Order: the global SOFTECH_READ_ONLY proxy (stricter; its
+    message wins; wrapped once); then a gate READ grant (enforcing, or observe-only); FULL
+    returns the raw connection unchanged."""
+    if softech_read_only():
+        return _ReadOnlyJavaConnection(java_conn)
+    if zone_grant == 'read':
+        if decision is None:
+            decision = _gate().GateDecision('read', 'zone_no_write', '?', None)
+        return _ReadOnlyJavaConnection(
+            java_conn, check=_zone_write_check(decision, label, observe_only),
+            enforce=not observe_only, refusal=_zone_refusal)
+    return java_conn
 
 
 def _branch_host(db_host, db_port):
@@ -360,12 +431,22 @@ def _load():
 
 
 def _connect_with_retry(driver, jdbc_url, props, label=''):
-    """driver.connect() with bounded retries for the flaky branch link."""
+    """driver.connect() with bounded retries for the flaky branch link.
+
+    N4: the SOFTECH gate is consulted ONCE, before the loop. A refusal raises
+    SoftechAccessDenied at once (no connect, no retry, no telemetry); READ wraps the
+    connection read-only (observe-only unless the gate mode is enforce); FULL is unchanged."""
+    gate = _gate()
+    decision = gate.check(label)
+    if decision.grant == gate.NONE:
+        raise SoftechAccessDenied(reason=decision.reason)
+    observe_only = decision.grant == gate.READ and gate.mode() != 'enforce'
     last_exc = None
     for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
         t0, failed = time.monotonic(), False
         try:
-            return _guard(driver.connect(jdbc_url, props))
+            return _guard(driver.connect(jdbc_url, props), zone_grant=decision.grant,
+                          observe_only=observe_only, decision=decision, label=label)
         except Exception as exc:
             failed = True
             _load().record_connect(label, (time.monotonic() - t0) * 1000, False)
@@ -465,7 +546,14 @@ def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):
     instead of spending ~45s on retries. Never raises — returns a result dict:
 
         {'ok': bool, 'elapsed_ms': float, 'error': str | None}
+
+    N4: a request the SOFTECH gate refuses is not probed at all - it gets
+        {'ok': False, 'elapsed_ms': 0.0, 'error': <refusal copy>, 'denied': True}
+    and the health sweep must not record it (the node is not offline; we did not look).
     """
+    gate = _gate()
+    if gate.check(f'probe {host}').grant == gate.NONE:
+        return {'ok': False, 'elapsed_ms': 0.0, 'error': gate.DENY_MESSAGE, 'denied': True}
     host, port = _branch_host(host, port) if host != settings.SYBASE_HOST else (host, port)
     _ensure_jvm()
     jpype.imports.registerDomain('com')
