@@ -246,6 +246,35 @@ class OverlapGuardTests(TestCase):
         self.assertEqual(AuditLog.objects.filter(action='isr_overlap_push_forced').count(), 1)
 
 
+class OverlapDispensedTests(TestCase):
+    """Owner 2026-11-01: a repeat counts only while the earlier ISR is NOT dispensed. Dispensed = the source issued
+    that item to that destination (stock ledger doc 125, counterpart store = destination) after the earlier push."""
+
+    def setUp(self):
+        self.earlier = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                                        status=P.STATUS_PUSHED, lines_snapshot=_lines(('A', 2), ('B', 1)),
+                                        isrdocnumber=26100701,
+                                        pushed_at=timezone.now() - datetime.timedelta(days=3))
+        self.draft = P.objects.create(branchcode='100', dest_branchcode='160', kind=P.KIND_HQ_TO_BRANCH,
+                                      status=P.STATUS_APPROVED, lines_snapshot=_lines(('A', 5), ('B', 2)))
+
+    def _issue(self, item, days_ago, to='160'):
+        from apps.stock_audit.models import StockLedgerLine
+        at = timezone.now() - datetime.timedelta(days=days_ago)
+        StockLedgerLine.objects.create(branchcode='100', doccode='125', docnumber=90000 + int(days_ago * 10),
+                                       docdate=timezone.localdate(at), trans_time=at, storecode='100',
+                                       storecode2=to, personcode=to, itemcode=item, transqty=1, newqty=0)
+
+    def test_dispensed_item_is_not_an_overlap(self):
+        self._issue('A', 1)                                         # HQ sent A to 160 after the earlier push
+        self.assertEqual([r['itemcode'] for r in G.overlapping_pushed(self.draft)], ['B'])
+
+    def test_issue_before_the_push_or_to_another_branch_does_not_count(self):
+        self._issue('A', 5)                                         # before the earlier push
+        self._issue('B', 1, to='150')                               # to another branch
+        self.assertEqual([r['itemcode'] for r in G.overlapping_pushed(self.draft)], ['A', 'B'])
+
+
 class OverlapReportTests(TestCase):
 
     def test_report_counts_pushes_that_repeated_items(self):

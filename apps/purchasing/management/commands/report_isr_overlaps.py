@@ -1,6 +1,6 @@
 """
 P-32 §2.4 — how often did a pushed ISR repeat items already pushed to the same destination (same kind) in the
-DUP_PUSH_DAYS days before it? Read-only (PostgreSQL IsrPush history only). Run it before switching
+DUP_PUSH_DAYS days before it and not yet dispensed by then (owner 2026-11-01)? Read-only (PostgreSQL IsrPush history only). Run it before switching
 SystemSetting `isr_overlap_guard` on: a high count on the daily HQ → branch route means the rule as written would
 stop normal replenishment and needs the owner's refinement first.
 
@@ -40,7 +40,7 @@ class Command(BaseCommand):
             if p.pushed_at < since:
                 continue
             counted += 1
-            rows = G.overlapping_pushed(p, pushed=earlier)
+            rows = G.overlapping_pushed(p, pushed=earlier, before=p.pushed_at)   # dispensed before this push
             if rows:
                 with_overlap += 1
                 lines += len(rows)

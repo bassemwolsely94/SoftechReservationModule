@@ -132,8 +132,12 @@ gate and guards. No new SOFTECH writer.
   `isr_overlap_push_forced`). Overlap = same kind and destination, pushed in the last `DUP_PUSH_DAYS` (7), sharing
   at least one item; an identical ISR stays with the duplicate guard. Switch: SystemSetting `isr_overlap_guard` = on.
   `report_isr_overlaps --days 90` measures it read-only: on 2026-11-01 only 1 ISR was pushed from our side in 90 days
-  (0 overlaps), so the daily-route effect is unknown. Before switching on, the owner confirms whether a repeat of an
-  item already **dispensed** by HQ should count (IsrPush does not track dispensing).
+  (0 overlaps), so the daily-route effect is unknown.
+- **Owner 2026-11-01: a repeat counts only while the earlier ISR is not dispensed.** Dispensed = the earlier ISR's
+  source issued that item to that destination after the push (stock-ledger mirror, doc 125 «صرف لفرع», counterpart
+  store = destination — verified on HQ issue lines: `storecode2` and `personcode` = the receiving branch). SOFTECH
+  does not put the ISR number on the issue line (`s_doccode` empty, `r_doccode` points to purchases), so the rule is
+  item × route × time. The ledger refreshes every 2 h: a very recent issue still asks for a reason (safe side).
 - **Draft expiry** (doc 30 §2.6): an unpushed general draft older than N days (default 7) is cancelled with audit by a
   daily PG-only job `isr_draft_expiry`. It never touches SOFTECH.
 - Regenerating a plan supersedes the old plan's drafts (same planner). It never duplicates them.

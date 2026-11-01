@@ -16,7 +16,9 @@ which was already PUSHED — approving either would have sent the same ISR again
   • push guard — a draft whose lines are identical to an ISR pushed on the same route in
     the last DUP_PUSH_DAYS days is refused unless a reason is given (then recorded).
   • overlap guard (P-32 §2.4) — a draft that shares SOME items with an ISR pushed to the same destination
-    (same kind) in the last DUP_PUSH_DAYS days is refused unless a reason is given (then recorded). Off until
+    (same kind) in the last DUP_PUSH_DAYS days and not yet dispensed (owner 2026-11-01; dispensed = the source
+    issued the item to that destination after the push, stock-ledger doc 125) is refused unless a reason is
+    given (then recorded). Off until
     the owner confirms the rule: SystemSetting `isr_overlap_guard` = on. `report_isr_overlaps` measures it.
   • leg order — the HQ → branch leg of a transfer is pushed only after its branch → HQ
     leg (the goods must be on their way to HQ before HQ sends them on).
@@ -24,7 +26,8 @@ which was already PUSHED — approving either would have sent the same ISR again
 """
 import hashlib
 import logging
-from datetime import timedelta
+from collections import defaultdict
+from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
@@ -161,10 +164,33 @@ def _qty(line):
     return int(round(float(line.get('itemqty') or 0)))
 
 
-def overlapping_pushed(p, *, since=None, pushed=None):
+ISSUE_DOCCODE = '125'   # صرف لفرع — the source issues to the destination (counterpart store = destination)
+
+
+def _dispensed(rows, before):
+    """{(push_id, itemcode)} of `rows` the earlier ISR's source has already issued to the destination after that
+    push and before `before` (owner 2026-11-01: a repeat counts only while the earlier ISR is NOT dispensed).
+    From the stock ledger mirror (doc 125). SOFTECH does not put the ISR number on the issue line, so this is
+    item × route × time; the ledger refreshes every 2 hours, so a very recent issue still asks for a reason."""
+    from apps.stock_audit.models import StockLedgerLine
+    if not rows:
+        return set()
+    first = min(r['pushed_at'] for r in rows)
+    issues = defaultdict(list)
+    for src, dest, item, t, d in (StockLedgerLine.objects.filter(
+            doccode=ISSUE_DOCCODE, branchcode__in={r['source'] for r in rows},
+            storecode2__in={r['dest'] for r in rows}, itemcode__in={r['itemcode'] for r in rows},
+            docdate__gte=timezone.localdate(first))
+            .values_list('branchcode', 'storecode2', 'itemcode', 'trans_time', 'docdate')):
+        issues[(src, dest, item)].append(t or timezone.make_aware(datetime.combine(d, time.max)))
+    return {(r['push_id'], r['itemcode']) for r in rows
+            if any(r['pushed_at'] <= t < before for t in issues.get((r['source'], r['dest'], r['itemcode']), ()))}
+
+
+def overlapping_pushed(p, *, since=None, pushed=None, before=None):
     """Lines of draft `p` whose item is also in an ISR PUSHED to the same destination (same kind) in the last
-    DUP_PUSH_DAYS days. An identical ISR is the duplicate guard's case and is not listed here.
-    Returns [{itemcode, qty, earlier_qty, push_id, isrdocnumber, pushed_at}], first earlier push per item."""
+    DUP_PUSH_DAYS days and NOT yet dispensed (see _dispensed). An identical ISR is the duplicate guard's case and is
+    not listed here. Returns [{itemcode, qty, earlier_qty, push_id, isrdocnumber, pushed_at}], one row per item."""
     from apps.purchasing.models import IsrPush as P
     if pushed is None:
         since = since or timezone.now() - timedelta(days=DUP_PUSH_DAYS)
@@ -173,16 +199,23 @@ def overlapping_pushed(p, *, since=None, pushed=None):
                   .only('id', 'lines_snapshot', 'isrdocnumber', 'pushed_at').order_by('pushed_at'))
     mine = {str(l.get('itemcode') or '').strip(): _qty(l) for l in (p.lines_snapshot or [])}
     fp = fingerprint(p.lines_snapshot)
-    out, seen = [], set()
+    cand = []
     for o in pushed:
         if fingerprint(o.lines_snapshot) == fp:
             continue
         for l in o.lines_snapshot or []:
             code = str(l.get('itemcode') or '').strip()
-            if code in mine and code not in seen:
-                seen.add(code)
-                out.append({'itemcode': code, 'qty': mine[code], 'earlier_qty': _qty(l), 'push_id': o.pk,
-                            'isrdocnumber': o.isrdocnumber, 'pushed_at': o.pushed_at})
+            if code in mine:
+                cand.append({'itemcode': code, 'qty': mine[code], 'earlier_qty': _qty(l), 'push_id': o.pk,
+                             'isrdocnumber': o.isrdocnumber, 'pushed_at': o.pushed_at,
+                             'source': str(o.branchcode), 'dest': str(o.dest_branchcode or o.branchcode)})
+    done = _dispensed(cand, before or timezone.now())
+    out, seen = [], set()
+    for r in cand:
+        if (r['push_id'], r['itemcode']) in done or r['itemcode'] in seen:
+            continue
+        seen.add(r['itemcode'])
+        out.append(r)
     return sorted(out, key=lambda r: r['itemcode'])
 
 
