@@ -110,7 +110,13 @@ _UNREACHABLE_HINTS = ('connection timed out', 'connection refused', 'jz006', 'jz
 def _is_unreachable(exc):
     """True when the failure is a branch/SOFTECH connectivity problem (→ safe to QUEUE
     and retry), vs. a real data/logic error (→ push_failed). Connectivity errors never
-    allocate a serial, so queuing them cannot duplicate a document."""
+    allocate a serial, so queuing them cannot duplicate a document.
+
+    N4: a gate/read-only REFUSAL is never "unreachable" - a queued order is flushed later
+    with system rights, which would post an order the gate refused."""
+    from config.sybase import SoftechAccessDenied, SoftechReadOnlyError
+    if isinstance(exc, (SoftechAccessDenied, SoftechReadOnlyError)):
+        return False
     msg = str(exc).lower()
     return any(h in msg for h in _UNREACHABLE_HINTS)
 

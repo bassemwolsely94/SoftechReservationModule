@@ -316,6 +316,8 @@ REST_FRAMEWORK = {
     # ?format=csv / ?format=xlsx as their own file-type parameter without
     # DRF intercepting it and returning 404 for unknown renderer types.
     'URL_FORMAT_OVERRIDE': None,
+    # N4: an uncaught SOFTECH gate refusal -> 403 code 'softech_zone'; all else = DRF default.
+    'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler',
     # Gap-1: Throttle classes applied per-view; no global throttle to avoid
     # breaking authenticated API endpoints.
     'DEFAULT_THROTTLE_CLASSES': [],
